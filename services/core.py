@@ -8,7 +8,8 @@ import hmac
 
 from omero.model import MapAnnotationI
 from omero.model import NamedValue, ImageAnnotationLinkI
-from omero.rtypes import rstring
+from omero.rtypes import rstring, rlong
+from omero.sys import ParametersI
 from ..constants import (
     JOBS_DIR,
     MAP_NS,
@@ -116,34 +117,96 @@ def compute_plugin_hash(mapping):
     return f"{HASH_PREFIX}{digest}"
 
 
-def is_plugin_annotation(map_ann_obj):
+def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     """
     Return True if MapAnnotation was created by this plugin.
+
+    If map values are not preloaded on the MapAnnotation object, a QueryService
+    can be provided to fetch the pairs directly from the database.
+    The lookup path intentionally prefers preloaded values and only falls back
+    to the database when none are available, matching the merged behavior of
+    previous iterations of this function.
     """
+
+    def _unwrap(val):
+        if callable(getattr(val, "getValue", None)):
+            try:
+                return val.getValue()
+            except Exception:
+                pass
+        # Some OMERO rtypes expose `.val` instead of `.getValue()`
+        val = getattr(val, "val", val)
+        return val
+
+    def _extract_pair(nv):
+        """Return (name, value) tuple from a NamedValue or (name, value) pair."""
+
+        # NamedValue-like object
+        name = getattr(nv, "name", None)
+        if name is None and callable(getattr(nv, "getName", None)):
+            try:
+                name = nv.getName()
+            except Exception:
+                name = None
+        name = _unwrap(name)
+
+        value = getattr(nv, "value", None)
+        if value is None and callable(getattr(nv, "getValue", None)):
+            try:
+                value = nv.getValue()
+            except Exception:
+                value = None
+        value = _unwrap(value)
+
+        # Tuple/list fallback
+        if name is None and isinstance(nv, (list, tuple)) and len(nv) == 2:
+            name, value = nv
+            name = _unwrap(name)
+            value = _unwrap(value)
+
+        if name is None:
+            return None
+
+        return str(name), "" if value is None else str(value)
+
+    def _load_pairs_from_qs(aid):
+        if qs is None or aid is None:
+            return []
+
+        try:
+            params = ParametersI()
+            params.add("aid", rlong(int(aid)))
+            hql_kv = (
+                "select mv.name, mv.value "
+                "from MapAnnotation a "
+                "join a.mapValue mv "
+                "where a.id = :aid"
+            )
+            rows = qs.projection(hql_kv, params, service_opts) or []
+            return [tuple(rr[:2]) for rr in rows if rr]
+        except Exception:
+            return []
+
+    mapping = {}
+
     try:
         mv = map_ann_obj.getMapValue() or []
+        if hasattr(mv, "getValue"):
+            try:
+                mv = mv.getValue()
+            except Exception:
+                pass
 
-        def _extract_pair(nv):
-            """Return (name, value) tuple from a NamedValue or (name, value) pair."""
-            # NamedValue-like object
-            name = getattr(nv, "name", None)
-            if callable(getattr(name, "getValue", None)):
-                name = name.getValue()
+        if not mv:
+            aid = None
+            try:
+                gid = map_ann_obj.getId()
+                aid = gid.getValue() if hasattr(gid, "getValue") else gid
+            except Exception:
+                aid = getattr(map_ann_obj, "id", None)
 
-            value = getattr(nv, "value", None)
-            if callable(getattr(value, "getValue", None)):
-                value = value.getValue()
+            mv = _load_pairs_from_qs(aid)
 
-            # Tuple/list fallback
-            if name is None and isinstance(nv, (list, tuple)) and len(nv) == 2:
-                name, value = nv
-
-            if name is None:
-                return None
-
-            return str(name), "" if value is None else str(value)
-
-        mapping = {}
         for nv in mv:
             pair = _extract_pair(nv)
             if not pair:
@@ -498,6 +561,9 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         )
         return
 
+    qs = conn.getQueryService() if mode == "plugin" else None
+    service_opts = getattr(conn, "SERVICE_OPTS", None) if mode == "plugin" else None
+
     for ann in annotations:
         try:
             obj = getattr(ann, "_obj", None)
@@ -525,7 +591,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             if mode == "plugin":
                 if ns != MAP_NS:
                     continue
-                if is_plugin_annotation(obj):
+                if is_plugin_annotation(obj, qs=qs, service_opts=service_opts):
                     update.deleteObject(obj)
                 continue
 
