@@ -153,22 +153,29 @@ def index(request, conn=None, url=None, **kwargs):
                             📥 Copy acquisition metadata into key-value pairs
                         </button>
 
-                        <!-- RIGHT DELETE BUTTON -->
-                        <button onclick='deleteAllMetadata()'
-                                style='padding:8px 8px; font-size:14px; background:#dc3545; color:white;
+                        <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
+                        <button onclick='deletePluginMetadata()'
+                                style='padding:8px 8px; font-size:14px; background:#fd7e14; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            🗑 Delete ALL key-value pairs
+                            🗑 Delete ONLY internal key-value pairs
                         </button>
 
                     </div>
 
-                    <div style='clear:both;'></div>
+                    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
+                        <!-- BACK BUTTON -->
+                        <button onclick="goBack()"
+                                style='padding:10px 18px; font-size:14px;'>
+                            ← Back
+                        </button>
 
-                    <!-- BACK BUTTON -->
-                    <button onclick="goBack()"
-                            style='padding:10px 18px; margin-top:20px; font-size:14px;'>
-                        ← Back
-                    </button>
+                        <!-- DELETE ALL BUTTON -->
+                        <button onclick='deleteAllMetadata()'
+                                style='padding:10px 18px; font-size:14px; background:#dc3545; color:white;
+                                       border:none; border-radius:6px; cursor:pointer;'>
+                            🗑 Delete ALL key-value pairs
+                        </button>
+                    </div>
 
                     <!-- HIDDEN FIELDS -->
                     <input type='hidden' id='project_id' value='{project_id}'>
@@ -244,6 +251,43 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(data => {{
                         ctrls.forEach(x => x.disabled = false);
                         alert("Deleted annotations for " + data.deleted_count + " images.");
+                    }})
+                    .catch(err => {{
+                        ctrls.forEach(x => x.disabled = false);
+                        alert("ERROR: " + err);
+                    }});
+                }}
+
+
+                // -------------------------
+                // DELETE ONLY PLUGIN ANNOTATIONS
+                // -------------------------
+                function deletePluginMetadata() {{
+                    const projectId = document.getElementById('project_id').value;
+
+                    const pwd = window.prompt("Enter your Omero password to delete ONLY plugin key-value pairs:");
+                    if (!pwd) return;
+
+                    const ctrls = document.querySelectorAll("button,input,select");
+                    ctrls.forEach(x => x.disabled = true);
+
+                    fetch(BASE_URL + "/delete_plugin/", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        credentials: "same-origin",
+                        body: JSON.stringify({{
+                            project_id: projectId,
+                            password: pwd
+                        }})
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        ctrls.forEach(x => x.disabled = false);
+                        if (data.error) {{
+                            alert("ERROR: " + data.error);
+                            return;
+                        }}
+                        alert("Deleted plugin annotations for " + data.deleted_images + " images (" + data.deleted_annotations + " MapAnnotations).");
                     }})
                     .catch(err => {{
                         ctrls.forEach(x => x.disabled = false);
