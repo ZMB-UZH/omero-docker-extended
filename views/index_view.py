@@ -520,6 +520,7 @@ def index(request, conn=None, url=None, **kwargs):
                         if (data.error) {{
                             clearInterval(pollInterval);
                             pollInterval = null;
+                            currentJobId = null;
                             document.getElementById("progress-text").innerText = "Error: " + data.error;
                             return;
                         }}
@@ -544,6 +545,7 @@ def index(request, conn=None, url=None, **kwargs):
                         if (data.finished) {{
                             clearInterval(pollInterval);
                             pollInterval = null;
+                            currentJobId = null;
                             document.getElementById("progress-text").innerText =
                                 "Completed. Processed " + done + " images.";
                         }}
