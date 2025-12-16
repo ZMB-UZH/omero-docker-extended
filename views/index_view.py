@@ -91,7 +91,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <td style='padding:2px;'>{ds_label}</td>
                     <td style='padding:2px;'>{img_id}</td>
                     <td style='padding:2px;'>{fname}</td>
-                    <td style='padding:2px;'><code>{kv}</code></td>
+                    <td style='padding:2px;'>{kv}</td>
                 </tr>
                 """
 
@@ -118,10 +118,10 @@ def index(request, conn=None, url=None, **kwargs):
                     <p>Previewing {len(preview_rows)} images.</p>
                     <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; margin-bottom:10px;'>
                         <tr style='background:#007bff; color:white;'>
-                            <th style='padding:2px;'>Dataset</th>
-                            <th style='padding:2px;'>ID</th>
-                            <th style='padding:2px;'>Filename</th>
-                            <th style='padding:2px;'>Parsed variables</th>
+                            <th style='padding:3px;'>Dataset</th>
+                            <th style='padding:3px;'>ID</th>
+                            <th style='padding:3px;'>Filename</th>
+                            <th style='padding:3px;'>Parsed variables</th>
                         </tr>
                         {rows_html}
                     </table>
