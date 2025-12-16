@@ -9,7 +9,7 @@ from ..services.core import collect_images_in_project, get_id
 
 logger = logging.getLogger(__name__)
 
-# Use the correct Python venv path for OMERO CLI
+# Use the correct Python venv path for Omero CLI
 # ATTENTION!! Might change in future releases!
 OMERO = "/opt/omero/web/venv-3.12/bin/omero"
 
@@ -17,8 +17,8 @@ OMERO = "/opt/omero/web/venv-3.12/bin/omero"
 @login_required()
 def delete_all_metadata(request, conn=None, url=None, **kwargs):
     """
-    Delete ALL MapAnnotations for ALL images in a given project using OMERO CLI.
-    - Logs in once with the current OMERO.web user + provided password
+    Delete ALL MapAnnotations for ALL images in a given project using Omero CLI.
+    - Logs in once with the current OMERO web user + provided password
     - Deletes in batches for speed
     """
     try:
@@ -38,7 +38,7 @@ def delete_all_metadata(request, conn=None, url=None, **kwargs):
         if not password:
             return JsonResponse({"error": "Missing password"}, status=400)
 
-        # OMERO username from current web session
+        # Omero web username from current web session
         username = conn.getUser().getName()
 
         # 1) LOGIN to the SECURE server
@@ -61,7 +61,7 @@ def delete_all_metadata(request, conn=None, url=None, **kwargs):
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": "OMERO login failed",
+                    "error": "Omero web login failed",
                     "stdout": login.stdout,
                     "stderr": login.stderr,
                 }
