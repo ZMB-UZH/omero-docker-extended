@@ -236,7 +236,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                         update.saveAndReturnObject(link)
 
                         batch_logs.append(
-                            f"Image {iid}: saved {len(mapping)} acquisition entries."
+                            f"Image {iid} ({filename}): saved {len(mapping)} acquisition entries."
                         )
                     else:
                         batch_logs.append(
