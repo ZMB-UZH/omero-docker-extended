@@ -110,13 +110,13 @@ def index(request, conn=None, url=None, **kwargs):
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
                         <h2 style='color:#007bff; margin:0;'>📊 Preview parsed filenames</h2>
                         <button onclick='scrollToBottom()'
-                                style='padding:8px 8px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:12px;'>
                             ↓ Scroll to bottom
                         </button>
                     </div>
                     <p>Project: {project_label} | Separator(s): "{raw_seps}"</p>
                     <p>Previewing {len(preview_rows)} images.</p>
-                    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 11px; margin-bottom:10px;'>
+                    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10px; margin-bottom:10px;'>
                         <tr style='background:#007bff; color:white;'>
                             <th style='padding:3px;'>Dataset</th>
                             <th style='padding:3px;'>ID</th>
@@ -144,21 +144,21 @@ def index(request, conn=None, url=None, **kwargs):
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
                         <!-- LEFT SAVE BUTTON -->
                         <button onclick='startSaveJob()'
-                                style='padding:8px 8px; font-size:14px; background:#28a745; color:white;
+                                style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             💾 Save filename metadata into key-value pairs
                         </button>
 
                         <!-- CENTER ACQ BUTTON -->
                         <button onclick="startAcquisitionMetadataJob()"
-                                style='padding:8px 8px; font-size:14px; background:#0069d9; color:white;
+                                style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             📥 Copy acquisition metadata into key-value pairs
                         </button>
 
                         <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
                         <button onclick='deletePluginMetadata()'
-                                style='padding:8px 8px; font-size:14px; background:#fd7e14; color:white;
+                                style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             🗑 Delete ONLY internal key-value pairs
                         </button>
@@ -170,7 +170,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                         <!-- DELETE ALL BUTTON -->
                         <button onclick='deleteAllMetadata()'
-                                style='padding:8px 8px; font-size:14px; background:#dc3545; color:white;
+                                style='padding:8px 8px; font-size:12px; background:#dc3545; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             🗑 Delete ALL key-value pairs
                         </button>
@@ -179,7 +179,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
                         <!-- BACK BUTTON -->
                         <button onclick="goBack()"
-                                style='padding:8px 8px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:12px;'>
                             ← Go back to project selection
                         </button>
 
@@ -577,7 +577,7 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
 
                     <button type='submit'
-                            style='width:100%;padding:18px;font-size:18px;background:#007bff;color:white;
+                            style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
                                    border:none;border-radius:8px;'>
                         Load images & Preview
                     </button>
