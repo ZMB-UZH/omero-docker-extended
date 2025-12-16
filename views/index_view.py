@@ -108,14 +108,13 @@ def index(request, conn=None, url=None, **kwargs):
             return HttpResponse(f"""
                 <div style='padding:30px; font-family:sans-serif; max-width:1200px; margin:0 auto;'>
 
-                    <div style='display:flex; justify-content:flex-end; margin-bottom:10px;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px;'>
+                        <h2 style='color:#007bff; margin:0;'>📊 Preview parsed filenames</h2>
                         <button onclick='scrollToBottom()'
                                 style='padding:10px 18px; font-size:14px;'>
                             ↓ Scroll to bottom
                         </button>
                     </div>
-
-                    <h2 style='color:#007bff;'>📊 Preview parsed filenames</h2>
                     <p><em>Project: {project_label} | Separator(s): "{raw_seps}"</em></p>
                     <p>Previewing {len(preview_rows)} images.</p>
 
@@ -520,6 +519,7 @@ def index(request, conn=None, url=None, **kwargs):
                         if (data.error) {{
                             clearInterval(pollInterval);
                             pollInterval = null;
+                            currentJobId = null;
                             document.getElementById("progress-text").innerText = "Error: " + data.error;
                             return;
                         }}
@@ -544,6 +544,7 @@ def index(request, conn=None, url=None, **kwargs):
                         if (data.finished) {{
                             clearInterval(pollInterval);
                             pollInterval = null;
+                            currentJobId = null;
                             document.getElementById("progress-text").innerText =
                                 "Completed. Processed " + done + " images.";
                         }}
