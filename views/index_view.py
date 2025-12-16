@@ -250,6 +250,40 @@ def index(request, conn=None, url=None, **kwargs):
                 toggleVarNameInputs();
 
 
+                // Utility helpers for the progress UI
+                function resetProgressSection(initialText) {{
+                    document.getElementById("progress-section").style.display = "block";
+
+                    setProgress(0, initialText || "Working…");
+
+                    const logEl = document.getElementById("progress-log");
+                    if (logEl) {{
+                        logEl.textContent = "";
+                    }}
+                }}
+
+                function setProgress(percent, text) {{
+                    const bar = document.getElementById("progress-bar");
+                    const pctVal = Math.max(0, Math.min(100, Number(percent) || 0));
+                    const pctLabel = pctVal.toFixed(1) + "%";
+
+                    bar.style.width = pctLabel;
+                    bar.innerText = pctLabel;
+
+                    if (text) {{
+                        document.getElementById("progress-text").innerText = text;
+                    }}
+                }}
+
+                function appendProgressLog(line) {{
+                    const logEl = document.getElementById("progress-log");
+                    if (!logEl) return;
+
+                    logEl.textContent += line + "\n";
+                    logEl.scrollTop = logEl.scrollHeight;
+                }}
+
+
                 // -------------------------
                 // DELETE ALL ANNOTATIONS
                 // -------------------------
@@ -264,6 +298,10 @@ def index(request, conn=None, url=None, **kwargs):
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
 
+                    resetProgressSection("Preparing to delete ALL key-value pairs…");
+                    setProgress(5, "Logging into OMERO…");
+                    appendProgressLog("Requested full deletion for project " + projectId + " …");
+
                     fetch(BASE_URL + "/delete_all/", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
@@ -273,14 +311,36 @@ def index(request, conn=None, url=None, **kwargs):
                             password: pwd
                         }})
                     }})
-                    .then(r => r.json())
+                    .then(r => {{
+                        appendProgressLog("OMERO CLI HTTP status: " + r.status);
+                        return r.json();
+                    }})
                     .then(data => {{
-                        ctrls.forEach(x => x.disabled = false);
-                        alert("Deleted annotations for " + data.deleted_count + " images.");
+                        if (data.error) {{
+                            setProgress(0, "Error deleting annotations.");
+                            appendProgressLog("ERROR: " + data.error);
+                            return;
+                        }}
+
+                        setProgress(50, "Processing OMERO CLI response…");
+                        appendProgressLog("OMERO CLI responded. Deleted annotations for " + data.deleted_count + " images.");
+
+                        if (data.errors && data.errors.length > 0) {{
+                            appendProgressLog("Encountered " + data.errors.length + " errors during deletion.");
+                            data.errors.slice(0, 5).forEach((err, idx) => {{
+                                appendProgressLog("Error " + (idx + 1) + ": " + JSON.stringify(err));
+                            }});
+                            setProgress(100, "Deletion completed with errors. See log for details.");
+                        }} else {{
+                            setProgress(100, "Deletion complete. Processed " + data.deleted_count + " images.");
+                        }}
                     }})
                     .catch(err => {{
+                        setProgress(0, "Error deleting annotations.");
+                        appendProgressLog("ERROR: " + err);
+                    }})
+                    .finally(() => {{
                         ctrls.forEach(x => x.disabled = false);
-                        alert("ERROR: " + err);
                     }});
                 }}
 
@@ -299,6 +359,10 @@ def index(request, conn=None, url=None, **kwargs):
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
 
+                    resetProgressSection("Deleting ONLY plugin-generated key-value pairs…");
+                    setProgress(5, "Logging into OMERO…");
+                    appendProgressLog("Requested plugin-only deletion for project " + projectId + " …");
+
                     fetch(BASE_URL + "/delete_plugin/", {{
                         method: "POST",
                         headers: {{ "Content-Type": "application/json" }},
@@ -308,18 +372,36 @@ def index(request, conn=None, url=None, **kwargs):
                             password: pwd
                         }})
                     }})
-                    .then(r => r.json())
+                    .then(r => {{
+                        appendProgressLog("OMERO CLI HTTP status: " + r.status);
+                        return r.json();
+                    }})
                     .then(data => {{
-                        ctrls.forEach(x => x.disabled = false);
                         if (data.error) {{
-                            alert("ERROR: " + data.error);
+                            setProgress(0, "Error deleting plugin annotations.");
+                            appendProgressLog("ERROR: " + data.error);
                             return;
                         }}
-                        alert("Deleted plugin annotations for " + data.deleted_images + " images (" + data.deleted_annotations + " MapAnnotations).");
+
+                        setProgress(50, "Processing OMERO CLI response…");
+                        appendProgressLog("OMERO CLI responded. Deleted " + data.deleted_annotations + " annotations across " + data.deleted_images + " images.");
+
+                        if (data.errors && data.errors.length > 0) {{
+                            appendProgressLog("Encountered " + data.errors.length + " errors during deletion.");
+                            data.errors.slice(0, 5).forEach((err, idx) => {{
+                                appendProgressLog("Error " + (idx + 1) + ": " + JSON.stringify(err));
+                            }});
+                            setProgress(100, "Plugin-only deletion completed with errors. See log for details.");
+                        }} else {{
+                            setProgress(100, "Plugin-only deletion complete. Processed " + data.deleted_images + " images.");
+                        }}
                     }})
                     .catch(err => {{
+                        setProgress(0, "Error deleting plugin annotations.");
+                        appendProgressLog("ERROR: " + err);
+                    }})
+                    .finally(() => {{
                         ctrls.forEach(x => x.disabled = false);
-                        alert("ERROR: " + err);
                     }});
                 }}
 
