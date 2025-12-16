@@ -110,7 +110,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <div style='display:flex; justify-content:flex-end; margin-bottom:10px;'>
                         <button onclick='scrollToBottom()'
-                                style='padding:10px 18px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:14px;'>
                             ↓ Scroll to bottom
                         </button>
                     </div>
@@ -174,7 +174,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                         <!-- DELETE ALL BUTTON -->
                         <button onclick='deleteAllMetadata()'
-                                style='padding:10px 18px; font-size:14px; background:#dc3545; color:white;
+                                style='padding:8px 8px; font-size:14px; background:#dc3545; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             🗑 Delete ALL key-value pairs
                         </button>
@@ -183,13 +183,13 @@ def index(request, conn=None, url=None, **kwargs):
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
                         <!-- BACK BUTTON -->
                         <button onclick="goBack()"
-                                style='padding:10px 18px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:14px;'>
                             ← Go back to project selection
                         </button>
 
                         <!-- SCROLL TO TOP BUTTON -->
                         <button onclick='scrollToTop()'
-                                style='padding:10px 18px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:14px;'>
                             ↑ Scroll to top
                         </button>
                     </div>
