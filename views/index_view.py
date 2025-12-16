@@ -143,14 +143,14 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick='startSaveJob()'
                                 style='padding:8px 8px; font-size:14px; background:#28a745; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            💾 Save filename metadata
+                            💾 Save filename metadata into key-value pairs
                         </button>
 
                         <!-- CENTER ACQ BUTTON -->
                         <button onclick="startAcquisitionMetadataJob()"
                                 style='padding:8px 8px; font-size:14px; background:#0069d9; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            📥 Move acquisition metadata into annotations
+                            📥 Copy acquisition metadata into key-value pairs
                         </button>
 
                         <!-- RIGHT DELETE BUTTON -->
@@ -223,10 +223,10 @@ def index(request, conn=None, url=None, **kwargs):
                 function deleteAllMetadata() {{
                     const projectId = document.getElementById('project_id').value;
 
-                    const pwd = window.prompt("Enter your OMERO password to delete ALL annotations:");
+                    const pwd = window.prompt("Enter your Omero password to delete ALL key-value pairs:");
                     if (!pwd) return;
 
-                    if (!window.confirm("Are you absolutely sure?")) return;
+                    if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
 
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
