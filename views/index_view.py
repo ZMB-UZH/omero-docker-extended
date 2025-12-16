@@ -268,6 +268,8 @@ def index(request, conn=None, url=None, **kwargs):
                     const pwd = window.prompt("Enter your Omero password to delete ONLY plugin key-value pairs:");
                     if (!pwd) return;
 
+                    if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
+
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
 
