@@ -5,11 +5,11 @@ import subprocess
 import logging
 import json
 
-from omero.model import MapAnnotationI
-
-from ..services.core import collect_images_in_project, get_id, is_plugin_annotation
-from ..constants import MAP_NS
-
+from ..services.core import (
+    collect_images_in_project,
+    find_plugin_annotation_ids,
+    get_id,
+)
 logger = logging.getLogger(__name__)
 
 # Use the correct Python venv path for Omero CLI
@@ -79,50 +79,61 @@ def delete_plugin_metadata(request, conn=None, url=None, **kwargs):
                     }
                 )
 
-            update = conn.getUpdateService()
-            qs = conn.getQueryService()
-            service_opts = getattr(conn, "SERVICE_OPTS", None)
-
             deleted_annotations = 0
             deleted_images = 0
             errors = []
 
             for img in images:
                 try:
-                    annotations = list(img.listAnnotations())
+                    iid = get_id(img)
+                    plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
                 except Exception as e:
-                    logger.warning("Cannot list annotations for image %s: %s", get_id(img), e)
+                    logger.warning("Cannot resolve annotations for image %s: %s", get_id(img), e)
                     errors.append({"image": get_id(img), "error": str(e)})
+                    continue
+
+                if not plugin_ann_ids:
                     continue
 
                 removed_for_image = False
 
-                for ann in annotations:
+                for aid in plugin_ann_ids:
                     try:
-                        map_ann = getattr(ann, "_obj", ann)
-                        if not isinstance(map_ann, MapAnnotationI):
+                        cmd = [
+                            OMERO,
+                            "delete",
+                            f"Annotation:{aid}",
+                            "--force",
+                        ]
+
+                        result = subprocess.run(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                        )
+
+                        if result.returncode != 0:
+                            errors.append(
+                                {
+                                    "image": iid,
+                                    "annotation": aid,
+                                    "stdout": result.stdout,
+                                    "stderr": result.stderr,
+                                }
+                            )
                             continue
 
-                        try:
-                            ns_obj = map_ann.getNs()
-                            ns = ns_obj.getValue() if ns_obj else None
-                        except Exception:
-                            ns = None
-
-                        if ns != MAP_NS:
-                            continue
-
-                        if is_plugin_annotation(map_ann, qs=qs, service_opts=service_opts):
-                            update.deleteObject(map_ann)
-                            deleted_annotations += 1
-                            removed_for_image = True
+                        deleted_annotations += 1
+                        removed_for_image = True
                     except Exception as e:
                         logger.warning(
-                            "Error deleting plugin annotation on image %s: %s",
-                            get_id(img),
+                            "Error deleting plugin annotation %s on image %s: %s",
+                            aid,
+                            iid,
                             e,
                         )
-                        errors.append({"image": get_id(img), "error": str(e)})
+                        errors.append({"image": iid, "annotation": aid, "error": str(e)})
                         continue
 
                 if removed_for_image:
