@@ -80,6 +80,8 @@ def delete_plugin_metadata(request, conn=None, url=None, **kwargs):
                 )
 
             update = conn.getUpdateService()
+            qs = conn.getQueryService()
+            service_opts = getattr(conn, "SERVICE_OPTS", None)
 
             deleted_annotations = 0
             deleted_images = 0
@@ -110,7 +112,7 @@ def delete_plugin_metadata(request, conn=None, url=None, **kwargs):
                         if ns != MAP_NS:
                             continue
 
-                        if is_plugin_annotation(map_ann):
+                        if is_plugin_annotation(map_ann, qs=qs, service_opts=service_opts):
                             update.deleteObject(map_ann)
                             deleted_annotations += 1
                             removed_for_image = True
