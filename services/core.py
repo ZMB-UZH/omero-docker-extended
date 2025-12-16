@@ -122,10 +122,34 @@ def is_plugin_annotation(map_ann_obj):
     """
     try:
         mv = map_ann_obj.getMapValue() or []
-        mapping = {
-            str(nv.name): "" if nv.value is None else str(nv.value)
-            for nv in mv
-        }
+
+        def _extract_pair(nv):
+            """Return (name, value) tuple from a NamedValue or (name, value) pair."""
+            # NamedValue-like object
+            name = getattr(nv, "name", None)
+            if callable(getattr(name, "getValue", None)):
+                name = name.getValue()
+
+            value = getattr(nv, "value", None)
+            if callable(getattr(value, "getValue", None)):
+                value = value.getValue()
+
+            # Tuple/list fallback
+            if name is None and isinstance(nv, (list, tuple)) and len(nv) == 2:
+                name, value = nv
+
+            if name is None:
+                return None
+
+            return str(name), "" if value is None else str(value)
+
+        mapping = {}
+        for nv in mv:
+            pair = _extract_pair(nv)
+            if not pair:
+                continue
+            k, v = pair
+            mapping[k] = v
     except Exception:
         return False
 
