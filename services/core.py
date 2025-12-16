@@ -223,6 +223,83 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     expected = compute_plugin_hash(mapping)
     return hmac.compare_digest(str(marker), str(expected))
 
+
+def find_plugin_annotation_ids(conn, image_id):
+    """Return verified MapAnnotation IDs created by this plugin for an image."""
+
+    try:
+        iid = int(image_id)
+    except Exception:
+        return []
+
+    ann_ids = []
+
+    try:
+        qs = conn.getQueryService()
+        service_opts = getattr(conn, "SERVICE_OPTS", None)
+
+        params = ParametersI()
+        params.add("iid", rlong(iid))
+        params.add("hk", rstring(str(HASH_KEY)))
+
+        hql_ids = (
+            "select a.id "
+            "from ImageAnnotationLink l "
+            "join l.child a "
+            "join a.mapValue mv "
+            "where mv.name = :hk and l.parent.id = :iid"
+        )
+
+        rows = qs.projection(hql_ids, params, service_opts) or []
+        candidate_ids = [r[0].getValue() for r in rows if r and r[0]]
+
+        for aid in candidate_ids:
+            try:
+                p_ns = ParametersI()
+                p_ns.add("aid", rlong(int(aid)))
+
+                hql_ns = "select a.ns from MapAnnotation a where a.id = :aid"
+                ns_rows = qs.projection(hql_ns, p_ns, service_opts) or []
+                ns_val = ns_rows[0][0].getValue() if ns_rows and ns_rows[0] and ns_rows[0][0] else None
+
+                if ns_val != MAP_NS:
+                    continue
+
+                hql_kv = (
+                    "select mv.name, mv.value "
+                    "from MapAnnotation a "
+                    "join a.mapValue mv "
+                    "where a.id = :aid"
+                )
+                kv_rows = qs.projection(hql_kv, p_ns, service_opts) or []
+
+                mapping = {}
+                for rr in kv_rows:
+                    if not rr or len(rr) < 2:
+                        continue
+                    k = rr[0].getValue() if rr[0] else None
+                    v = rr[1].getValue() if rr[1] else None
+                    if k is None:
+                        continue
+                    mapping[str(k)] = "" if v is None else str(v)
+
+                stored = mapping.get(HASH_KEY)
+                if not stored:
+                    continue
+
+                expected = compute_plugin_hash(mapping)
+                if hmac.compare_digest(str(stored), str(expected)):
+                    ann_ids.append(int(aid))
+
+            except Exception:
+                logger.warning("Failed to verify annotation %s on image %s", aid, iid)
+                continue
+
+    except Exception as e:
+        logger.exception("Error locating plugin annotations for image %s: %s", image_id, e)
+
+    return ann_ids
+
 # --------------------------------------------------------------------------
 # DATASET-FIRST + IMAGE-ID-SORTED COLLECTION
 # --------------------------------------------------------------------------
