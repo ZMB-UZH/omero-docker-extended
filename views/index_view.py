@@ -108,6 +108,13 @@ def index(request, conn=None, url=None, **kwargs):
             return HttpResponse(f"""
                 <div style='padding:30px; font-family:sans-serif; max-width:1200px; margin:0 auto;'>
 
+                    <div style='display:flex; justify-content:flex-end; margin-bottom:10px;'>
+                        <button onclick='scrollToBottom()'
+                                style='padding:10px 18px; font-size:14px;'>
+                            ↓ Scroll to bottom
+                        </button>
+                    </div>
+
                     <h2 style='color:#007bff;'>📊 Preview parsed filenames</h2>
                     <p><em>Project: {project_label} | Separator(s): "{raw_seps}"</em></p>
                     <p>Previewing {len(preview_rows)} images.</p>
@@ -163,17 +170,27 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
 
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
-                        <!-- BACK BUTTON -->
-                        <button onclick="goBack()"
-                                style='padding:10px 18px; font-size:14px;'>
-                            ← Back
-                        </button>
+                        <div></div>
 
                         <!-- DELETE ALL BUTTON -->
                         <button onclick='deleteAllMetadata()'
                                 style='padding:10px 18px; font-size:14px; background:#dc3545; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             🗑 Delete ALL key-value pairs
+                        </button>
+                    </div>
+
+                    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
+                        <!-- BACK BUTTON -->
+                        <button onclick="goBack()"
+                                style='padding:10px 18px; font-size:14px;'>
+                            ← Go back to project selection
+                        </button>
+
+                        <!-- SCROLL TO TOP BUTTON -->
+                        <button onclick='scrollToTop()'
+                                style='padding:10px 18px; font-size:14px;'>
+                            ↑ Scroll to top
                         </button>
                     </div>
 
@@ -203,6 +220,15 @@ def index(request, conn=None, url=None, **kwargs):
 
                 function goBack() {{
                     window.location.href = BASE_URL + "/";
+                }}
+
+                function scrollToBottom() {{
+                    const target = document.documentElement.scrollHeight;
+                    window.scrollTo({{ top: target, behavior: "smooth" }});
+                }}
+
+                function scrollToTop() {{
+                    window.scrollTo({{ top: 0, behavior: "smooth" }});
                 }}
 
                 function toggleVarNameInputs() {{
