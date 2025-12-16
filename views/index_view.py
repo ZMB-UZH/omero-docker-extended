@@ -106,7 +106,7 @@ def index(request, conn=None, url=None, **kwargs):
                 """
 
             return HttpResponse(f"""
-                <div style='padding:10px; font-family:calibri; max-width:1200px; margin:0 auto;'>
+                <div style='padding:10px; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
                         <h2 style='color:#007bff; margin:0;'>📊 Preview parsed filenames</h2>
                         <button onclick='scrollToBottom()'
@@ -116,7 +116,7 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
                     <p>Project: {project_label} | Separator(s): "{raw_seps}"</p>
                     <p>Previewing {len(preview_rows)} images.</p>
-                    <table border='1' style='width:100%; border-collapse:collapse; font-family:calibri; margin-bottom:10px;'>
+                    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; margin-bottom:10px;'>
                         <tr style='background:#007bff; color:white;'>
                             <th style='padding:3px;'>Dataset</th>
                             <th style='padding:3px;'>ID</th>
@@ -142,7 +142,6 @@ def index(request, conn=None, url=None, **kwargs):
                     <hr>
 
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
-
                         <!-- LEFT SAVE BUTTON -->
                         <button onclick='startSaveJob()'
                                 style='padding:8px 8px; font-size:14px; background:#28a745; color:white;
@@ -404,8 +403,6 @@ def index(request, conn=None, url=None, **kwargs):
                         alert("ERROR: " + err);
                     }});
                 }}
-
-
                 // -------------------------
                 // START SAVE JOB (FIXED)
                 // -------------------------
@@ -559,7 +556,7 @@ def index(request, conn=None, url=None, **kwargs):
         )
 
         return HttpResponse(f"""
-            <div style='padding:40px; max-width:600px; margin:0 auto; font-family:calibri;'>
+            <div style='padding:40px; max-width:600px; margin:0 auto; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; --base-font-size:14px; font-size:var(--base-font-size);'>
                 <h1 style='color:#007bff;'>Filename-Metadata plugin</h1>
 
                 <form method='POST'
