@@ -251,8 +251,28 @@ def index(request, conn=None, url=None, **kwargs):
 
 
                 // -------------------------
-                // DELETE ALL ANNOTATIONS
+                // DELETE ALL KEY-VALUE PAIRS
                 // -------------------------
+                function showImmediateCompletionLog(lines) {{
+                    const progressSection = document.getElementById("progress-section");
+                    const progressText = document.getElementById("progress-text");
+                    const progressBar = document.getElementById("progress-bar");
+                    const progressLog = document.getElementById("progress-log");
+
+                    progressSection.style.display = "block";
+
+                    progressBar.style.width = "100%";
+                    progressBar.innerText = "100%";
+
+                    progressText.innerText = "Completed.";
+
+                    progressLog.textContent = "";
+                    for (let i = 0; i < lines.length; i++) {{
+                        progressLog.textContent += lines[i] + "\\n";
+                    }}
+                }}
+
+
                 function deleteAllMetadata() {{
                     const projectId = document.getElementById('project_id').value;
 
@@ -263,6 +283,17 @@ def index(request, conn=None, url=None, **kwargs):
 
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
+
+                    const progressSection = document.getElementById("progress-section");
+                    const progressText = document.getElementById("progress-text");
+                    const progressBar = document.getElementById("progress-bar");
+                    const progressLog = document.getElementById("progress-log");
+
+                    progressSection.style.display = "block";
+                    progressBar.style.width = "0%";
+                    progressBar.innerText = "0%";
+                    progressText.innerText = "Deleting ALL key-value pairs…";
+                    progressLog.textContent = "";
 
                     fetch(BASE_URL + "/delete_all/", {{
                         method: "POST",
@@ -276,7 +307,26 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         ctrls.forEach(x => x.disabled = false);
-                        alert("Deleted annotations for " + data.deleted_count + " images.");
+
+                        let logLines = [];
+
+                        if (data.errors && data.errors.length) {{
+                            logLines.push("Completed with errors.");
+                            for (let i = 0; i < data.errors.length; i++) {{
+                                logLines.push(
+                                    "ERROR ids=" +
+                                    (data.errors[i].ids || []).join(",")
+                                );
+                            }}
+                        }} else {{
+                            logLines.push(
+                                "Deleted annotations for " +
+                                data.deleted_count +
+                                " images."
+                            );
+                        }}
+
+                        showImmediateCompletionLog(logLines);
                     }})
                     .catch(err => {{
                         ctrls.forEach(x => x.disabled = false);
@@ -286,7 +336,7 @@ def index(request, conn=None, url=None, **kwargs):
 
 
                 // -------------------------
-                // DELETE ONLY PLUGIN ANNOTATIONS
+                // DELETE ONLY PLUGIN KEY-VALUE PAIRS
                 // -------------------------
                 function deletePluginMetadata() {{
                     const projectId = document.getElementById('project_id').value;
@@ -298,6 +348,17 @@ def index(request, conn=None, url=None, **kwargs):
 
                     const ctrls = document.querySelectorAll("button,input,select");
                     ctrls.forEach(x => x.disabled = true);
+
+                    const progressSection = document.getElementById("progress-section");
+                    const progressText = document.getElementById("progress-text");
+                    const progressBar = document.getElementById("progress-bar");
+                    const progressLog = document.getElementById("progress-log");
+
+                    progressSection.style.display = "block";
+                    progressBar.style.width = "0%";
+                    progressBar.innerText = "0%";
+                    progressText.innerText = "Deleting plugin key-value pairs…";
+                    progressLog.textContent = "";
 
                     fetch(BASE_URL + "/delete_plugin/", {{
                         method: "POST",
@@ -311,11 +372,35 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         ctrls.forEach(x => x.disabled = false);
+
+                        let logLines = [];
+
                         if (data.error) {{
-                            alert("ERROR: " + data.error);
+                            logLines.push("ERROR: " + data.error);
+                            showImmediateCompletionLog(logLines);
                             return;
                         }}
-                        alert("Deleted plugin annotations for " + data.deleted_images + " images (" + data.deleted_annotations + " MapAnnotations).");
+
+                        logLines.push(
+                            "Deleted plugin annotations for " +
+                            data.deleted_images +
+                            " images (" +
+                            data.deleted_annotations +
+                            " MapAnnotations)."
+                        );
+
+                        if (data.errors && data.errors.length) {{
+                            for (let i = 0; i < data.errors.length; i++) {{
+                                logLines.push(
+                                    "ERROR image=" +
+                                    data.errors[i].image +
+                                    " annotation=" +
+                                    data.errors[i].annotation
+                                );
+                            }}
+                        }}
+
+                        showImmediateCompletionLog(logLines);
                     }})
                     .catch(err => {{
                         ctrls.forEach(x => x.disabled = false);
@@ -507,4 +592,3 @@ def index(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unhandled error in index(): %s", e)
         return HttpResponse(f"<h2>Error: {e}</h2>")
-
