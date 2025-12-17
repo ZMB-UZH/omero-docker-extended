@@ -161,7 +161,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 <div>
                                     <label for='variable_set_select'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
-                                        Saved variable sets
+                                         Variable sets in storage
                                     </label>
                                     <div style='display:flex; align-items:stretch; gap:15px;'>
                                         <select id='variable_set_select'
@@ -173,6 +173,12 @@ def index(request, conn=None, url=None, **kwargs):
                                                 style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Load from database
+                                        </button>
+                                        <button id='delete_variable_set_btn'
+                                                onclick='deleteVariableSet()'
+                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
+                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Delete from database
                                         </button>
                                     </div>
                                 </div>
@@ -336,7 +342,8 @@ def index(request, conn=None, url=None, **kwargs):
                     const loadBtn = document.getElementById('load_variable_set_btn');
                     const nameInput = document.getElementById('variable_set_name');
                     const block = document.getElementById('variable-set-block');
-                    [select, saveBtn, loadBtn, nameInput].forEach(el => {{
+                    const deleteBtn = document.getElementById('delete_variable_set_btn');
+                    [select, saveBtn, loadBtn, deleteBtn, nameInput].forEach(el => {{
                         if (el) {{
                             el.disabled = !!disabled;
                         }}
@@ -518,9 +525,59 @@ def index(request, conn=None, url=None, **kwargs):
                     }});
                 }}
 
+                // -------------------------
+                // DELETE VARIABLE SET FROM DATABASE
+                // -------------------------
+                function deleteVariableSet() {{
+                    const useDefaults = document.getElementById('use_defaults').checked;
+                    if (useDefaults) {{
+                        return;
+                    }}
+
+                    const select = document.getElementById('variable_set_select');
+                    const selected = select ? (select.value || "").trim() : "";
+
+                    if (!selected) {{
+                        alert("Please select a set of variables from the dropdown menu.");
+                        return;
+                    }}
+
+                    if (!window.confirm(
+                        "Are you absolutely sure? This action is irreversible."
+                    )) {{
+                        return;
+                    }}
+
+                    fetch(BASE_URL + "/varsets/delete/", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        credentials: "same-origin",
+                        body: JSON.stringify({{
+                            set_name: selected
+                        }})
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.error) {{
+                            alert(data.error);
+                            return;
+                        }}
+
+                        fetchVariableSets();
+
+                        alert(
+                            'Deleted variable set "' +
+                            selected +
+                            '" from database.'
+                        );
+                    }})
+                    .catch(err => {{
+                        alert("Error deleting variable set: " + err);
+                    }});
+                }}
+
                 toggleVarNameInputs();
                 fetchVariableSets();
-
 
                 // -------------------------
                 // DELETE ALL KEY-VALUE PAIRS
