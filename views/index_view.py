@@ -411,7 +411,7 @@ def index(request, conn=None, url=None, **kwargs):
                             return;
                         }}
                         fetchVariableSets();
-                        alert("Saved variable set to database.");
+                        alert("Saved variable set "' + selected + '" to database.");
                     }})
                     .catch(err => {{
                         alert("Error saving variable set: " + err);
