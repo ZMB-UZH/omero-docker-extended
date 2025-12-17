@@ -1,4 +1,4 @@
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 import json
@@ -157,49 +157,62 @@ def index(request, conn=None, url=None, **kwargs):
                             
                             <div id='variable-set-block'
                                  style='display:flex; flex-direction:column; gap:15px;'>
+
                                 <div>
                                     <label for='variable_set_select'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
-                                         Variable sets in storage
+                                        Variable sets in storage
                                     </label>
+
                                     <div style='display:flex; align-items:center; gap:15px;'>
                                         <select id='variable_set_select'
-                                                style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
+                                                style='font-size:12px; flex:1; padding:8px 8px;
+                                                       border-radius:6px; border:1px solid #007bff;'>
                                             <option value=''>Select or create…</option>
                                         </select>
+
                                         <button id='load_variable_set_btn'
                                                 onclick='loadVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
+                                                style='font-size:12px; min-width:140px; padding:8px 8px;
+                                                       white-space:nowrap; background:#0069d9;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Load from database
                                         </button>
+                                    </div>
+
+                                    <div style='display:flex; justify-content:flex-end; margin-top:6px;'>
                                         <button id='delete_variable_set_btn'
                                                 onclick='deleteVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
+                                                style='font-size:12px; min-width:140px; padding:8px 8px;
+                                                       white-space:nowrap; background:#dc3545;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Delete from database
                                         </button>
                                     </div>
                                 </div>
 
-                                <div> 
+                                <div>
                                     <label for='variable_set_name'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
                                         Name to save
                                     </label>
-                                    <div style='display:flex; align-items:stretch; gap:15px;'>
+
+                                    <div style='display:flex; align-items:center; gap:15px;'>
                                         <input id='variable_set_name'
                                                type='text'
                                                placeholder='e.g. Electron microscopy'
-                                               style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
+                                               style='font-size:12px; flex:1; padding:8px 8px;
+                                                      border-radius:6px; border:1px solid #007bff;'>
+
                                         <button id='save_variable_set_btn'
                                                 onclick='saveVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#28a745;
+                                                style='font-size:12px; min-width:140px; padding:8px 8px;
+                                                       white-space:nowrap; background:#28a745;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Save to database
                                         </button>
+                                    </div>
                                 </div>
-                            </div>
 
                             </div>
                         </div>
