@@ -609,7 +609,7 @@ def index(request, conn=None, url=None, **kwargs):
                     const selected = select ? (select.value || "").trim() : "";
 
                     if (!selected) {{
-                        alert("Please select a variable set from the dropdown menu.");
+                        showNonBlockingModal("Please select a variable set from the dropdown menu.");
                         return;
                     }}
 
@@ -636,11 +636,8 @@ def index(request, conn=None, url=None, **kwargs):
 
                         fetchVariableSets();
 
-                        alert(
-                            'Deleted variable set "' +
-                            selected +
-                            '" from database.'
-                        );
+                        showNonBlockingModal('Deleted variable set "' + selected + '" from database.');
+
                     }})
                     .catch(err => {{
                         alert("Error deleting variable set: " + err);
