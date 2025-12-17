@@ -141,20 +141,20 @@ def index(request, conn=None, url=None, **kwargs):
                                 </div>
                             </div>
                             
-                            <div style='display:flex; flex-direction:column; gap:18px;'>
+                            <div style='display:flex; flex-direction:column; gap:15px;'>
                                 <div>
                                     <label for='variable_set_select'
-                                           style='font-size:12px; display:block; margin-bottom:6px;'>
+                                           style='font-size:12px; display:block; margin-bottom:5px;'>
                                         Saved variable sets
                                     </label>
-                                    <div style='display:flex; align-items:stretch; gap:20px;'>
+                                    <div style='display:flex; align-items:stretch; gap:15px;'>
                                         <select id='variable_set_select'
-                                                style='flex:1; padding:8px 8px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                                style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
                                             <option value=''>Select or create…</option>
                                         </select>
                                         <button id='load_variable_set_btn'
                                                 onclick='loadVariableSet()'
-                                                style='min-width:170px; padding:8px 8px; font-size:12px; white-space:nowrap; background:#0069d9;
+                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Load from database
                                         </button>
@@ -163,17 +163,17 @@ def index(request, conn=None, url=None, **kwargs):
 
                                 <div> 
                                     <label for='variable_set_name'
-                                           style='font-size:12px; display:block; margin-bottom:6px;'>
+                                           style='font-size:12px; display:block; margin-bottom:5px;'>
                                         Name to save
                                     </label>
-                                    <div style='display:flex; align-items:stretch; gap:20px;'>
+                                    <div style='display:flex; align-items:stretch; gap:15px;'>
                                         <input id='variable_set_name'
                                                type='text'
                                                placeholder='e.g. Electron microscopy'
-                                               style='flex:1; padding:8px 8px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                               style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
                                         <button id='save_variable_set_btn'
                                                 onclick='saveVariableSet()'
-                                                style='min-width:170px; padding:8px 8px; font-size:12px; white-space:nowrap; background:#28a745;
+                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#28a745;
                                                        color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Save to database
                                         </button>
