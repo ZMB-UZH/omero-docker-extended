@@ -109,7 +109,10 @@ def index(request, conn=None, url=None, **kwargs):
                 <div class="omeroweb-filenamemetadata"
                      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
-                        <h2 style='color:#007bff; margin:0;'>📊 Preview parsed filenames</h2>
+                        <h2 style='color:#007bff; margin:0;'>
+                            <span style="margin-right:6px;">📊</span>
+                            Preview parsed filenames
+                        </h2>
                         <button onclick='scrollToBottom()'
                                 style='padding:8px 8px; font-size:12px;'>
                             ↓ Scroll to bottom
