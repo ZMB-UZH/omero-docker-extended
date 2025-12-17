@@ -158,8 +158,8 @@ def index(request, conn=None, url=None, **kwargs):
                     <hr>
 
                     <div id='var-config' data-var-count='{max_vars}'>
-                        <div style='display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;'>
-                            <div style='flex:1 1 320px;'>
+                        <div style='display:flex; gap:5px; align-items:flex-start; flex-wrap:wrap;'>
+                            <div style='flex:1 1 200px;'>
                                 <h3>Variable names</h3>
                                 <label>
                                     <input type='checkbox' id='use_defaults' checked onclick='toggleVarNameInputs()'>
