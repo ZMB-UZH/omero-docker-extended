@@ -111,7 +111,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
                         <h2 style='color:#007bff; margin:0;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px;">
+                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
                                 📊
                             </span>
                             <span>
@@ -463,7 +463,7 @@ def index(request, conn=None, url=None, **kwargs):
                             return;
                         }}
                         fetchVariableSets();
-                        alert("Saved variable set "' + selected + '" to database.");
+                        alert('Saved variable set "' + setName + '" to database.');
                     }})
                     .catch(err => {{
                         alert("Error saving variable set: " + err);
