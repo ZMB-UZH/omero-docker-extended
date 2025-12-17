@@ -86,14 +86,26 @@ def index(request, conn=None, url=None, **kwargs):
                 kv = " | ".join(f"{k[3:]}='{v}'" for k, v in vars_dict.items())
                 rows_html += f"""
                 <tr>
-                    <td style='padding:2px;'>{ds_label}</td>
-                    <td style='padding:2px;'>{img_id}</td>
+                    <td style='padding:2px;'>
+                        <div class="clamp-2">
+                            {ds_label}
+                        </div>
+                    </td>
+                    <td style='padding:2px;'>
+                        <div class="clamp-2">
+                            {img_id}
+                        </div>
+                    </td>
                     <td style='padding:2px;'>
                         <div class="clamp-2">
                             {fname}
                         </div>
                     </td>
-                    <td style='padding:2px;'>{kv}</td>
+                    <td style='padding:2px;'>
+                        <div class="clamp-2">
+                            {kv}
+                        </div>
+                    </td>
                 </tr>
                 """
 
