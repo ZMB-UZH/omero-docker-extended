@@ -2,9 +2,6 @@ import logging
 import os
 from contextlib import contextmanager
 
-import psycopg2
-from psycopg2.extras import Json
-
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +10,39 @@ class VariableStoreError(Exception):
     """Raised when variable set persistence fails."""
 
 
+_psycopg2_mod = None
+_psycopg2_extras = None
+
+
+def _load_psycopg2():
+    global _psycopg2_mod, _psycopg2_extras
+
+    if _psycopg2_mod is not None and _psycopg2_extras is not None:
+        return _psycopg2_mod, _psycopg2_extras
+
+    try:
+        import psycopg2  # type: ignore
+        from psycopg2 import extras  # type: ignore
+    except ImportError:
+        raise VariableStoreError(
+            "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
+        )
+
+    _psycopg2_mod = psycopg2
+    _psycopg2_extras = extras
+    return _psycopg2_mod, _psycopg2_extras
+
+
 def _db_params():
     user = os.environ.get("FMP_DATA_USER")
     password = os.environ.get("FMP_DATA_PASS")
     host = os.environ.get("FMP_DATA_HOST", "database_plugin")
-    port = int(os.environ.get("FMP_DATA_PORT", "5432"))
+    port = int(os.environ.get("FMP_DATA_PORT", "5433"))
     dbname = os.environ.get("FMP_DATA_DB", "filename-metadata")
 
     if not user or not password:
         raise VariableStoreError("Database credentials are missing (FMP_DATA_USER/FMP_DATA_PASS).")
-
+        
     return {
         "user": user,
         "password": password,
@@ -34,6 +54,7 @@ def _db_params():
 
 @contextmanager
 def _connect():
+    psycopg2, _ = _load_psycopg2()  
     params = _db_params()
     conn = None
     try:
@@ -101,6 +122,7 @@ def list_variable_sets(username):
 
 def save_variable_set(username, set_name, var_names):
     try:
+        _, extras = _load_psycopg2()
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
@@ -141,3 +163,4 @@ def load_variable_set(username, set_name):
     except Exception as e:
         logger.exception("Failed to load variable set '%s' for %s: %s", set_name, username, e)
         raise VariableStoreError("Unable to load variable set.")
+
