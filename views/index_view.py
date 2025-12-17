@@ -141,7 +141,8 @@ def index(request, conn=None, url=None, **kwargs):
                                 </div>
                             </div>
                             
-                            <div style='display:flex; flex-direction:column; gap:15px;'>
+                            <div id='variable-set-block'
+                                 style='display:flex; flex-direction:column; gap:15px;'>
                                 <div>
                                     <label for='variable_set_select'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
@@ -255,6 +256,10 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
                 </div>
 
+                <style>
+                    .ui-faded {opacity: 0.45; filter: grayscale(100%); pointer-events: none;}
+                </style>
+
                 <script>
                 const BASE_URL = "/omeroweb_filenamemetadata";
                 const DEFAULT_VARS = ["A", "B", "C", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
@@ -278,12 +283,19 @@ def index(request, conn=None, url=None, **kwargs):
                     const saveBtn = document.getElementById('save_variable_set_btn');
                     const loadBtn = document.getElementById('load_variable_set_btn');
                     const nameInput = document.getElementById('variable_set_name');
-
+                    const block = document.getElementById('variable-set-block');
                     [select, saveBtn, loadBtn, nameInput].forEach(el => {{
                         if (el) {{
                             el.disabled = !!disabled;
                         }}
                     }});
+                    if (block) {{
+                        if (disabled) {{
+                            block.classList.add('ui-faded');
+                        }} else {{
+                            block.classList.remove('ui-faded');
+                        }}
+                    }}
                 }}
 
                 function toggleVarNameInputs() {{
