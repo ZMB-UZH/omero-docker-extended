@@ -116,7 +116,7 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
                     <p>Project: {project_label} | Separator(s): "{raw_seps}"</p>
                     <p>Previewing {len(preview_rows)} images.</p>
-                    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:10px; margin-bottom:10px;'>
+                    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
                         <tr style='background:#007bff; color:white;'>
                             <td style='padding:3px;'>Dataset</td>
                             <td style='padding:3px;'>ID</td>
@@ -231,7 +231,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                         <!-- SCROLL TO TOP BUTTON -->
                         <button onclick='scrollToTop()'
-                                style='padding:8px 8px; font-size:14px;'>
+                                style='padding:8px 8px; font-size:12px;'>
                             ↑ Scroll to top
                         </button>
                     </div>
