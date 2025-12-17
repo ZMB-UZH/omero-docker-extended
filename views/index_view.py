@@ -143,18 +143,19 @@ def index(request, conn=None, url=None, **kwargs):
 
                             <div style='display:flex; flex-direction:column; gap:10px; min-width:260px;'>
                                 <div>
-                                    <label for='variable_set_select' style='display:block; margin-bottom:2px;'>Saved variable sets</label>
-                                    <select id='variable_set_select' style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
-                                        <option value=''>Select or create…</option>
-                                    </select>
-                                    <button id='load_variable_set_btn' onclick='loadVariableSet()'
-                                            style='padding:8px 8px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                        Load from database
-                                    </button>
+                                    <label for='variable_set_select' style='font-size:11px; display:block; margin-bottom:2px;'>Saved variable sets</label>
+                                    <div style='display:flex; gap:6px;'>
+                                        <select id='variable_set_select' style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
+                                            <option value=''>Select or create…</option>
+                                        </select>
+                                        <button id='load_variable_set_btn' onclick='loadVariableSet()'
+                                                style='padding:8px 8px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Load from database
+                                        </button>
                                 </div>
 
                                 <div>
-                                    <label for='variable_set_name' style='display:block; margin-bottom:2px;'>Name to save</label>
+                                    <label for='variable_set_name' style='font-size:11px; display:block; margin-bottom:2px;'>Name to save</label>
                                     <div style='display:flex; gap:6px;'>
                                         <input id='variable_set_name' type='text' placeholder='e.g. Electron microscopy'
                                                style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
