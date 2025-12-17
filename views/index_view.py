@@ -112,10 +112,12 @@ def index(request, conn=None, url=None, **kwargs):
             var_inputs_html = ""
             for i in range(1, max_vars + 1):
                 var_inputs_html += f"""
-                <div style='margin-bottom:6px;'>
-                    <label style="display:inline-block; width:120px;">{i}:</label>
-                    <input id='var_name_{i}' type='text' value='Var{i}'
-                           style='padding:4px 8px; margin-left:6px; width:200px;'>
+                <div class="var-row">
+                    <div class="var-index">{i}:</div>
+                    <input id="var_name_{i}"
+                           type="text"
+                           value="Var{i}"
+                           class="var-input">
                 </div>
                 """
 
@@ -160,9 +162,12 @@ def index(request, conn=None, url=None, **kwargs):
                     <div id='var-config' data-var-count='{max_vars}'>
                         <div style='display:flex; gap:5px; align-items:flex-start; flex-wrap:wrap;'>
                             <div style='flex:1 1 200px;'>
-                                <h3>Variable names</h3>
-                                <label>
-                                    <input type='checkbox' id='use_defaults' checked onclick='toggleVarNameInputs()'>
+                                <label style="font-size:12px; display:block; margin-bottom:6px;">
+                                    Variable names
+                                </label>
+
+                                <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
+                                    <input type="checkbox" id="use_defaults" checked onclick="toggleVarNameInputs()">
                                     Use default names
                                 </label>
                                 <div id='var_name_inputs' style='margin-top:10px;'>
@@ -363,6 +368,11 @@ def index(request, conn=None, url=None, **kwargs):
                 </div>
 
                 <style>
+                    #var_name_inputs {{margin-top: 6px;}}
+                    .var-row {{display: grid; grid-template-columns: 2.5em auto; align-items: center; column-gap: 6px; margin-bottom: 4px;}}
+                    .var-index {{text-align: right; font-size: 12px; color: #212529;}}
+                    .var-input {{font-size: 12px; padding: 4px 8px; width: 200px; border: none; border-radius: 6px; background: #ffffff;
+                                 box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}}
                     .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
                     .nowrap-1 {{white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}}
                     .clamp-2 {{display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
