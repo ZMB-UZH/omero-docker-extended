@@ -37,34 +37,75 @@ def _db_params():
     user = os.environ.get("FMP_DATA_USER")
     password = os.environ.get("FMP_DATA_PASS")
     host = os.environ.get("FMP_DATA_HOST", "database_plugin")
-    port = int(os.environ.get("FMP_DATA_PORT", "5433"))
     dbname = os.environ.get("FMP_DATA_DB", "filename-metadata")
 
     if not user or not password:
         raise VariableStoreError("Database credentials are missing (FMP_DATA_USER/FMP_DATA_PASS).")
-        
-    return {
+
+    port_candidates = []
+    for candidate in (
+        os.environ.get("FMP_DATA_PORT"),
+        os.environ.get("PGPORT"),
+        "5433",
+        "5432",
+    ):
+        if not candidate:
+            continue
+
+        candidate_str = str(candidate).strip()
+        if not candidate_str:
+            continue
+
+        try:
+            port = int(candidate_str)
+        except ValueError:
+            logger.warning("Ignoring invalid port value '%s' for variable storage database.", candidate_str)
+            continue
+
+        if port not in port_candidates:
+            port_candidates.append(port)
+
+    if not port_candidates:
+        port_candidates.append(5432)
+
+    base_params = {
         "user": user,
         "password": password,
         "host": host,
-        "port": port,
         "dbname": dbname,
     }
+
+    return [{**base_params, "port": port} for port in port_candidates]
 
 
 @contextmanager
 def _connect():
-    psycopg2, _ = _load_psycopg2()  
-    params = _db_params()
+    psycopg2, _ = _load_psycopg2()
+    param_options = _db_params()
     conn = None
-    try:
-        conn = psycopg2.connect(**params)
-        yield conn
-    except VariableStoreError:
-        raise
-    except Exception as e:
-        logger.exception("Database connection failed: %s", e)
+    last_error = None
+
+    for params in param_options:
+        try:
+            conn = psycopg2.connect(**params)
+            break
+        except VariableStoreError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Database connection failed for %s:%s: %s",
+                params.get("host"),
+                params.get("port"),
+                e,
+            )
+            last_error = e
+
+    if conn is None:
+        logger.exception("Database connection failed for all configured hosts/ports: %s", last_error)
         raise VariableStoreError("Could not connect to the variable storage database.")
+
+    try:
+        yield conn
     finally:
         if conn is not None:
             try:
@@ -123,6 +164,7 @@ def list_variable_sets(username):
 def save_variable_set(username, set_name, var_names):
     try:
         _, extras = _load_psycopg2()
+        json_payload = extras.Json(var_names)
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
@@ -133,7 +175,7 @@ def save_variable_set(username, set_name, var_names):
                     ON CONFLICT (username, set_name)
                     DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
                     """,
-                    (username, set_name, Json(var_names)),
+                    (username, set_name, json_payload),
                 )
             conn.commit()
     except VariableStoreError:
@@ -163,4 +205,3 @@ def load_variable_set(username, set_name):
     except Exception as e:
         logger.exception("Failed to load variable set '%s' for %s: %s", set_name, username, e)
         raise VariableStoreError("Unable to load variable set.")
-
