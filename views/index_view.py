@@ -149,7 +149,8 @@ def index(request, conn=None, url=None, **kwargs):
                                             <option value=''>Select or create…</option>
                                         </select>
                                         <button id='load_variable_set_btn' onclick='loadVariableSet()'
-                                                style='padding:8px 8px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                style='font-size:12px; width:100%; white-space:nowrap; padding:8px 8px;
+                                                background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Load from database
                                         </button>
                                 </div>
@@ -160,7 +161,8 @@ def index(request, conn=None, url=None, **kwargs):
                                         <input id='variable_set_name' type='text' placeholder='e.g. Electron microscopy'
                                                style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
                                         <button id='save_variable_set_btn' onclick='saveVariableSet()'
-                                                style='padding:8px 8px; font-size:12px; background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                style='font-size:12px; width:100%, white-space:nowrap; padding:8px 8px;
+                                                background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Save to database
                                         </button>
                                     </div>
