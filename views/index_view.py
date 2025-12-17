@@ -490,7 +490,7 @@ def index(request, conn=None, url=None, **kwargs):
                     const selected = select ? (select.value || "").trim() : "";
 
                     if (!selected) {{
-                        alert("Please select a set of variables from the dropdown menu.");
+                        alert("Please select a variable set from the dropdown menu.");
                         return;
                     }}
 
@@ -538,7 +538,7 @@ def index(request, conn=None, url=None, **kwargs):
                     const selected = select ? (select.value || "").trim() : "";
 
                     if (!selected) {{
-                        alert("Please select a set of variables from the dropdown menu.");
+                        alert("Please select a variable set from the dropdown menu.");
                         return;
                     }}
 
