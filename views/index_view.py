@@ -88,7 +88,11 @@ def index(request, conn=None, url=None, **kwargs):
                 <tr>
                     <td style='padding:2px;'>{ds_label}</td>
                     <td style='padding:2px;'>{img_id}</td>
-                    <td style='padding:2px;'>{fname}</td>
+                    <td style='padding:2px;'>
+                        <div class="clamp-2">
+                            {fname}
+                        </div>
+                    </td>
                     <td style='padding:2px;'>{kv}</td>
                 </tr>
                 """
@@ -326,6 +330,8 @@ def index(request, conn=None, url=None, **kwargs):
 
                 <style>
                     .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
+                    .clamp-2 {{display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
+                               word-break: break-word; white-space: normal; overflow-wrap: anywhere;}}
                     .ui-faded {{opacity: 0.3; filter: grayscale(100%); pointer-events: none;}}
                 </style>
 
