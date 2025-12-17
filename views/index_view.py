@@ -1,16 +1,16 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+import json
 import logging
 import re
-
 from ..services.core import (
     get_id,
     get_text,
     collect_images_by_dataset_sorted,
     parse_filename,
 )
-
+from ..models import VariableSet
 logger = logging.getLogger(__name__)
 
 
@@ -168,18 +168,20 @@ def index(request, conn=None, url=None, **kwargs):
                                                 style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
                                             <option value=''>Select or create…</option>
                                         </select>
-                                        <button id='load_variable_set_btn'
-                                                onclick='loadVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
-                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                            Load from database
-                                        </button>
-                                        <button id='delete_variable_set_btn'
-                                                onclick='deleteVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
-                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                            Delete from database
-                                        </button>
+                                        <div style='display:flex; flex-direction:column; gap:6px;'>
+                                            <button id='load_variable_set_btn'
+                                                    onclick='loadVariableSet()'
+                                                    style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
+                                                           color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                Load from database
+                                            </button>
+                                            <button id='delete_variable_set_btn'
+                                                    onclick='deleteVariableSet()'
+                                                    style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
+                                                           color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                Delete from database
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -922,3 +924,33 @@ def index(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unhandled error in index(): %s", e)
         return HttpResponse(f"<h2>Error: {e}</h2>")
+
+
+@csrf_exempt
+@login_required()
+def delete_variable_set(request, conn=None, **kwargs):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method"}, status=405)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+        set_name = data.get("set_name")
+
+        if not set_name:
+            return JsonResponse({"error": "Missing set_name"}, status=400)
+
+        # TODO: replace with your actual storage logic
+        deleted = VariableSet.objects.filter(
+            owner=request.user,
+            name=set_name
+        ).delete()
+
+        if deleted[0] == 0:
+            return JsonResponse({"error": "Variable set not found"}, status=404)
+
+        return JsonResponse({"ok": True})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
