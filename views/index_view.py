@@ -548,9 +548,9 @@ def index(request, conn=None, url=None, **kwargs):
                             }}
                         }}
 
-                        requestAnimationFrame(() => {{
+                        setTimeout(() => {{
                             alert('Loaded variable set "' + selected + '" from database.');
-                        }});
+                        }}, 0);
                     }})
                     .catch(err => {{
                         alert("Error loading variable set: " + err);
