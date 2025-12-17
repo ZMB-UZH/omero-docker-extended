@@ -202,7 +202,7 @@ def index(request, conn=None, url=None, **kwargs):
                                                type='text'
                                                placeholder='e.g. Electron microscopy'
                                                style='font-size:12px; flex:1; padding:8px 8px;
-                                                      border-radius:6px; border:1px solid #007bff;'>
+                                                      border:none; border-radius:6px; background:#ffffff; box-shadow: inset 0 0 0 1px #007bff;'>
 
                                         <button id='save_variable_set_btn'
                                                 onclick='saveVariableSet()'
