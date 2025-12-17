@@ -340,6 +340,28 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
                 </div>
 
+                <!-- NON-BLOCKING MODAL -->
+                <div id="nb-modal-overlay"
+                     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+                            z-index:9999; align-items:center; justify-content:center;">
+
+                    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                                font-size:13px; min-width:300px; max-width:500px;">
+
+                        <div id="nb-modal-message"
+                             style="margin-bottom:16px;">
+                        </div>
+
+                        <div style="text-align:right;">
+                            <button onclick="hideNonBlockingModal()"
+                                    style="padding:6px 14px; font-size:12px;">
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <style>
                     .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
                     .nowrap-1 {{white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}}
@@ -507,6 +529,25 @@ def index(request, conn=None, url=None, **kwargs):
                     }});
                 }}
 
+                function showNonBlockingModal(message) {{
+                    const overlay = document.getElementById("nb-modal-overlay");
+                    const msg = document.getElementById("nb-modal-message");
+
+                    if (!overlay || !msg) {{
+                        return;
+                    }}
+
+                    msg.textContent = message;
+                    overlay.style.display = "flex";
+                }}
+
+                function hideNonBlockingModal() {{
+                    const overlay = document.getElementById("nb-modal-overlay");
+                    if (overlay) {{
+                        overlay.style.display = "none";
+                    }}
+                }}
+
                 function loadVariableSet() {{
                     const useDefaults = document.getElementById('use_defaults').checked;
                     if (useDefaults) return;
@@ -548,9 +589,7 @@ def index(request, conn=None, url=None, **kwargs):
                             }}
                         }}
 
-                        setTimeout(() => {{
-                            alert('Loaded variable set "' + selected + '" from database.');
-                        }}, 0);
+                        showNonBlockingModal('Loaded variable set "' + selected + '" from database.');
                     }})
                     .catch(err => {{
                         alert("Error loading variable set: " + err);
