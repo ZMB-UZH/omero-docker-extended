@@ -129,13 +129,43 @@ def index(request, conn=None, url=None, **kwargs):
                     <hr>
 
                     <div id='var-config' data-var-count='{max_vars}'>
-                        <h3>Variable names</h3>
-                        <label>
-                            <input type='checkbox' id='use_defaults' checked onclick='toggleVarNameInputs()'>
-                            Use default names
-                        </label>
-                        <div id='var_name_inputs' style='margin-top:10px;'>
-                            {var_inputs_html}
+                        <div style='display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;'>
+                            <div style='flex:1 1 320px;'>
+                                <h3>Variable names</h3>
+                                <label>
+                                    <input type='checkbox' id='use_defaults' checked onclick='toggleVarNameInputs()'>
+                                    Use default names
+                                </label>
+                                <div id='var_name_inputs' style='margin-top:10px;'>
+                                    {var_inputs_html}
+                                </div>
+                            </div>
+
+                            <div style='display:flex; flex-direction:column; gap:10px; min-width:260px;'>
+                                <div>
+                                    <label for='variable_set_select' style='font-weight:bold; display:block; margin-bottom:4px;'>Saved variable sets</label>
+                                    <select id='variable_set_select' style='width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;'>
+                                        <option value=''>Select or create…</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for='variable_set_name' style='font-weight:bold; display:block; margin-bottom:4px;'>Name for new set</label>
+                                    <div style='display:flex; gap:6px;'>
+                                        <input id='variable_set_name' type='text' placeholder='e.g. Electron Microscopy'
+                                               style='flex:1; padding:8px; border-radius:6px; border:1px solid #007bff;'>
+                                        <button id='save_variable_set_btn' onclick='saveVariableSet()'
+                                                style='padding:8px 10px; font-size:12px; background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Save to database
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button id='load_variable_set_btn' onclick='loadVariableSet()'
+                                        style='padding:10px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                    Load from database
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -213,6 +243,7 @@ def index(request, conn=None, url=None, **kwargs):
                 <script>
                 const BASE_URL = "/omeroweb_filenamemetadata";
                 const DEFAULT_VARS = ["A", "B", "C", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+                let availableVariableSets = [];
 
                 function goBack() {{
                     window.location.href = BASE_URL + "/";
@@ -225,6 +256,19 @@ def index(request, conn=None, url=None, **kwargs):
 
                 function scrollToTop() {{
                     window.scrollTo({{ top: 0, behavior: "smooth" }});
+                }}
+
+                function setVarSetControlsDisabled(disabled) {{
+                    const select = document.getElementById('variable_set_select');
+                    const saveBtn = document.getElementById('save_variable_set_btn');
+                    const loadBtn = document.getElementById('load_variable_set_btn');
+                    const nameInput = document.getElementById('variable_set_name');
+
+                    [select, saveBtn, loadBtn, nameInput].forEach(el => {{
+                        if (el) {{
+                            el.disabled = !!disabled;
+                        }}
+                    }});
                 }}
 
                 function toggleVarNameInputs() {{
@@ -242,8 +286,156 @@ def index(request, conn=None, url=None, **kwargs):
                             inp.disabled = false;
                         }}
                     }}
+
+                    setVarSetControlsDisabled(useDefaults);
                 }}
+
+                function populateVariableSetDropdown(sets) {{
+                    const select = document.getElementById('variable_set_select');
+                    if (!select) return;
+
+                    availableVariableSets = sets || [];
+                    select.innerHTML = "";
+
+                    if (!availableVariableSets.length) {{
+                        const opt = document.createElement('option');
+                        opt.value = "";
+                        opt.textContent = "No saved sets";
+                        select.appendChild(opt);
+                        return;
+                    }}
+
+                    const placeholder = document.createElement('option');
+                    placeholder.value = "";
+                    placeholder.textContent = "Select a saved set";
+                    select.appendChild(placeholder);
+
+                    availableVariableSets.forEach(name => {{
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    }});
+                }}
+
+                function fetchVariableSets() {{
+                    fetch(BASE_URL + "/varsets/", {{
+                        method: "GET",
+                        headers: {{ "Accept": "application/json" }},
+                        credentials: "same-origin",
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.error) {{
+                            console.warn("Unable to load variable sets", data.error);
+                            populateVariableSetDropdown([]);
+                            return;
+                        }}
+
+                        populateVariableSetDropdown(data.sets || []);
+                    }})
+                    .catch(err => {{
+                        console.warn("Error loading variable sets", err);
+                        populateVariableSetDropdown([]);
+                    }});
+                }}
+
+                function saveVariableSet() {{
+                    const useDefaults = document.getElementById('use_defaults').checked;
+                    if (useDefaults) return;
+
+                    const nameInput = document.getElementById('variable_set_name');
+                    const setName = (nameInput.value || "").trim();
+                    const container = document.getElementById('var-config');
+                    const count = parseInt(container.getAttribute('data-var-count'));
+
+                    let varNames = [];
+                    for (let i = 1; i <= count; i++) {{
+                        const inp = document.getElementById('var_name_' + i);
+                        varNames.push(inp ? (inp.value || "").trim() : "");
+                    }}
+
+                    const nonEmpty = varNames.filter(v => v !== "");
+                    if (!nonEmpty.length) {{
+                        alert("Cannot save to database. List of variables empty.");
+                        return;
+                    }}
+
+                    if (!setName) {{
+                        alert("Please provide a name for this set.");
+                        return;
+                    }}
+
+                    fetch(BASE_URL + "/varsets/save/", {{
+                        method: "POST",
+                        headers: {{ "Content-Type": "application/json" }},
+                        credentials: "same-origin",
+                        body: JSON.stringify({{ set_name: setName, var_names: varNames }})
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.error) {{
+                            alert(data.error);
+                            return;
+                        }}
+                        fetchVariableSets();
+                        alert("Saved variable set to database.");
+                    }})
+                    .catch(err => {{
+                        alert("Error saving variable set: " + err);
+                    }});
+                }}
+
+                function loadVariableSet() {{
+                    const useDefaults = document.getElementById('use_defaults').checked;
+                    if (useDefaults) return;
+
+                    if (!availableVariableSets.length) {{
+                        alert("Your user database is empty. Please save some variables first.");
+                        return;
+                    }}
+
+                    const select = document.getElementById('variable_set_select');
+                    const selected = select ? (select.value || "").trim() : "";
+
+                    if (!selected) {{
+                        alert("Please select a set of variables from the dropdown menu first.");
+                        return;
+                    }}
+
+                    fetch(BASE_URL + "/varsets/load/?set_name=" + encodeURIComponent(selected), {{
+                        method: "GET",
+                        headers: {{ "Accept": "application/json" }},
+                        credentials: "same-origin",
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.error) {{
+                            alert(data.error);
+                            return;
+                        }}
+
+                        const container = document.getElementById('var-config');
+                        const count = parseInt(container.getAttribute('data-var-count'));
+                        const saved = data.var_names || [];
+
+                        for (let i = 1; i <= count; i++) {{
+                            const val = saved[i - 1];
+                            const inp = document.getElementById('var_name_' + i);
+                            if (inp && val && String(val).trim() !== "") {{
+                                inp.value = val;
+                            }}
+                        }}
+
+                        alert("Loaded variable names from database.");
+                    }})
+                    .catch(err => {{
+                        alert("Error loading variable set: " + err);
+                    }});
+                }}
+
                 toggleVarNameInputs();
+                fetchVariableSets();
 
 
                 // -------------------------
