@@ -121,7 +121,7 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick='scrollToBottom()'
                                 style='padding:8px 8px; font-size:12px;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px;">
+                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
                                 ↓
                             </span>
                             <span>
@@ -208,7 +208,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px;">
+                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
                                 💾
                             </span>
                             <span>
@@ -221,7 +221,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px;">
+                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
                                 📥
                             </span>
                             <span>
@@ -234,7 +234,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px;">
+                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
                                 🗑
                             </span>
                             <span>
@@ -252,7 +252,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 style='padding:8px 8px; font-size:12px; background:#dc3545; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px;">
+                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
                                 🗑
                             </span>
                             <span>
@@ -266,7 +266,7 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick="goBack()"
                                 style='padding:8px 8px; font-size:12px;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px;">
+                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
                                 ←
                             </span>
                             <span>
@@ -278,7 +278,7 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick='scrollToTop()'
                                 style='padding:8px 8px; font-size:12px;'>
                             <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px;">
+                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
                                 ↑
                             </span>
                             <span>
