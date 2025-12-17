@@ -375,7 +375,7 @@ def index(request, conn=None, url=None, **kwargs):
                                  box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}}
                     .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
                     .nowrap-1 {{white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}}
-                    #variable-set-block * { min-width: 0;}
+                    #variable-set-block * {{min-width: 0;}}
                     .clamp-2 {{display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
                                word-break: break-word; white-space: normal; overflow-wrap: anywhere;}}
                     .ui-faded {{opacity: 0.3; filter: grayscale(100%); pointer-events: none;}}
