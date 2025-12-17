@@ -432,7 +432,7 @@ def index(request, conn=None, url=None, **kwargs):
                             }}
                         }}
 
-                        alert("Loaded variable names from database.");
+                        alert('Loaded variable set "' + selected + '" from database.');
                     }})
                     .catch(err => {{
                         alert("Error loading variable set: " + err);
