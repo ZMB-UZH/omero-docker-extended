@@ -294,6 +294,8 @@ def index(request, conn=None, url=None, **kwargs):
                     const select = document.getElementById('variable_set_select');
                     if (!select) return;
 
+                    const currentValue = select.value;
+
                     availableVariableSets = sets || [];
                     select.innerHTML = "";
 
@@ -314,6 +316,9 @@ def index(request, conn=None, url=None, **kwargs):
                         const opt = document.createElement('option');
                         opt.value = name;
                         opt.textContent = name;
+                        if (name === currentValue) {
+                            opt.selected = true;
+                        }
                         select.appendChild(opt);
                     }});
                 }}
