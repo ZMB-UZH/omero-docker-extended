@@ -160,7 +160,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <hr>
 
                     <div id='var-config' data-var-count='{max_vars}'>
-                        <div style='display:flex; gap:5px; align-items:flex-start; flex-wrap:wrap;'>
+                        <div style='display:flex; gap:5px; align-items:flex-start; flex-wrap:nowrap;'>
                             <div style='flex:0 0 350px;'>
                                 <label style="font-size:12px; display:block; margin-bottom:6px;">
                                     Variable names
