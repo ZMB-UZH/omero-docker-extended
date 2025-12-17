@@ -500,12 +500,12 @@ def index(request, conn=None, url=None, **kwargs):
 
                     const nonEmpty = varNames.filter(v => v !== "");
                     if (!nonEmpty.length) {{
-                        alert("Cannot save to database. List of variables empty.");
+                        showNonBlockingModal("Cannot save to database. List of variables empty.");
                         return;
                     }}
 
                     if (!setName) {{
-                        alert("Please provide a name for this variable set.");
+                        showNonBlockingModal("Please provide a name for this variable set.");
                         return;
                     }}
 
@@ -518,14 +518,14 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         if (data.error) {{
-                            alert(data.error);
+                            showNonBlockingModal(data.error);
                             return;
                         }}
                         fetchVariableSets();
-                        alert('Saved variable set "' + setName + '" to database.');
+                        showNonBlockingModal('Saved variable set "' + setName + '" to database.');
                     }})
                     .catch(err => {{
-                        alert("Error saving variable set: " + err);
+                        showNonBlockingModal("Error saving variable set: " + err);
                     }});
                 }}
 
@@ -553,7 +553,7 @@ def index(request, conn=None, url=None, **kwargs):
                     if (useDefaults) return;
 
                     if (!availableVariableSets.length) {{
-                        alert("Your user database is empty. Please save a variable set first.");
+                        showNonBlockingModal("Your user database is empty. Please save a variable set first.");
                         return;
                     }}
 
@@ -561,7 +561,7 @@ def index(request, conn=None, url=None, **kwargs):
                     const selected = select ? (select.value || "").trim() : "";
 
                     if (!selected) {{
-                        alert("Please select a variable set from the dropdown menu.");
+                        showNonBlockingModal("Please select a variable set from the dropdown menu.");
                         return;
                     }}
 
@@ -573,7 +573,7 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         if (data.error) {{
-                            alert(data.error);
+                            showNonBlockingModal(data.error);
                             return;
                         }}
 
@@ -592,7 +592,7 @@ def index(request, conn=None, url=None, **kwargs):
                         showNonBlockingModal('Loaded variable set "' + selected + '" from database.');
                     }})
                     .catch(err => {{
-                        alert("Error loading variable set: " + err);
+                        showNonBlockingModal("Error loading variable set: " + err);
                     }});
                 }}
 
@@ -630,7 +630,7 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         if (data.error) {{
-                            alert(data.error);
+                            showNonBlockingModal(data.error);
                             return;
                         }}
 
@@ -640,7 +640,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     }})
                     .catch(err => {{
-                        alert("Error deleting variable set: " + err);
+                        showNonBlockingModal("Error deleting variable set: " + err);
                     }});
                 }}
 
@@ -727,7 +727,7 @@ def index(request, conn=None, url=None, **kwargs):
                     }})
                     .catch(err => {{
                         ctrls.forEach(x => x.disabled = false);
-                        alert("ERROR: " + err);
+                        showNonBlockingModal("ERROR: " + err);
                     }});
                 }}
 
@@ -801,7 +801,7 @@ def index(request, conn=None, url=None, **kwargs):
                     }})
                     .catch(err => {{
                         ctrls.forEach(x => x.disabled = false);
-                        alert("ERROR: " + err);
+                        showNonBlockingModal("ERROR: " + err);
                     }});
                 }}
                 // -------------------------
@@ -813,7 +813,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                 function startSaveJob() {{
                     if (currentJobId) {{
-                        alert("Job already running.");
+                        showNonBlockingModal("Job already running.");
                         return;
                     }}
 
@@ -869,7 +869,7 @@ def index(request, conn=None, url=None, **kwargs):
                 // -------------------------
                 function startAcquisitionMetadataJob() {{
                     if (currentJobId) {{
-                        alert("Job already running.");
+                        showNonBlockingModal("Job already running.");
                         return;
                     }}
 
