@@ -257,7 +257,7 @@ def index(request, conn=None, url=None, **kwargs):
                 </div>
 
                 <style>
-                    .ui-faded {opacity: 0.45; filter: grayscale(100%); pointer-events: none;}
+                    .ui-faded {{opacity: 0.45; filter: grayscale(100%); pointer-events: none;}}
                 </style>
 
                 <script>
