@@ -316,9 +316,9 @@ def index(request, conn=None, url=None, **kwargs):
                         const opt = document.createElement('option');
                         opt.value = name;
                         opt.textContent = name;
-                        if (name === currentValue) {
+                        if (name === currentValue) {{
                             opt.selected = true;
-                        }
+                        }}
                         select.appendChild(opt);
                     }});
                 }}
