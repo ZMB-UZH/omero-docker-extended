@@ -1,7 +1,6 @@
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
-import json
 import logging
 import re
 from ..services.core import (
@@ -167,7 +166,7 @@ def index(request, conn=None, url=None, **kwargs):
                                     <div style='display:flex; align-items:center; gap:15px;'>
                                         <select id='variable_set_select'
                                                 style='font-size:12px; flex:1; padding:8px 8px;
-                                                       border-radius:6px; border:1px solid #007bff;'>
+                                                       border:none; border-radius:6px; background:#ffffff; box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;'>
                                             <option value=''>Select or create…</option>
                                         </select>
 
@@ -194,7 +193,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 <div>
                                     <label for='variable_set_name'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
-                                        Name to save
+                                        Variable set name for saving
                                     </label>
 
                                     <div style='display:flex; align-items:center; gap:15px;'>
@@ -202,7 +201,7 @@ def index(request, conn=None, url=None, **kwargs):
                                                type='text'
                                                placeholder='e.g. Electron microscopy'
                                                style='font-size:12px; flex:1; padding:8px 8px;
-                                                      border:none; border-radius:6px; background:#ffffff; box-shadow: inset 0 0 0 1px #007bff;'>
+                                                      border:none; border-radius:6px; background:#ffffff; box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;'>
 
                                         <button id='save_variable_set_btn'
                                                 onclick='saveVariableSet()'
