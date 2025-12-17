@@ -162,25 +162,23 @@ def index(request, conn=None, url=None, **kwargs):
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
                                          Variable sets in storage
                                     </label>
-                                    <div style='display:flex; align-items:stretch; gap:15px;'>
+                                    <div style='display:flex; align-items:center; gap:15px;'>
                                         <select id='variable_set_select'
                                                 style='font-size:12px; flex:1; padding:8px 8px; border-radius:6px; border:1px solid #007bff;'>
                                             <option value=''>Select or create…</option>
                                         </select>
-                                        <div style='display:flex; flex-direction:column; gap:6px;'>
-                                            <button id='load_variable_set_btn'
-                                                    onclick='loadVariableSet()'
-                                                    style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
-                                                           color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                                Load from database
-                                            </button>
-                                            <button id='delete_variable_set_btn'
-                                                    onclick='deleteVariableSet()'
-                                                    style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
-                                                           color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                                Delete from database
-                                            </button>
-                                        </div>
+                                        <button id='load_variable_set_btn'
+                                                onclick='loadVariableSet()'
+                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#0069d9;
+                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Load from database
+                                        </button>
+                                        <button id='delete_variable_set_btn'
+                                                onclick='deleteVariableSet()'
+                                                style='font-size:12px; min-width:140px; padding:8px 8px; white-space:nowrap; background:#dc3545;
+                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Delete from database
+                                        </button>
                                     </div>
                                 </div>
 
