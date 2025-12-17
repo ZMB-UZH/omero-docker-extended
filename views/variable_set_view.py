@@ -10,6 +10,7 @@ from ..services.data_store import (
     list_variable_sets,
     load_variable_set,
     save_variable_set,
+    delete_variable_set,
 )
 
 
@@ -119,3 +120,35 @@ def load_set(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unexpected error loading set: %s", e)
         return JsonResponse({"error": "Unexpected error."}, status=500)
+
+
+@csrf_exempt
+@login_required()
+def delete_set(request, conn=None, url=None, **kwargs):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    username = _current_username(request, conn)
+    if not username:
+        return JsonResponse({"error": "Unable to determine username."}, status=400)
+
+    try:
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except Exception:
+            data = request.POST
+
+        set_name = (data.get("set_name") or "").strip()
+        if not set_name:
+            return JsonResponse({"error": "Missing set_name"}, status=400)
+
+        delete_variable_set(username, set_name)
+
+        return JsonResponse({"ok": True})
+
+    except VariableStoreError as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    except Exception as e:
+        logger.exception("Unexpected error deleting set: %s", e)
+        return JsonResponse({"error": "Unexpected error."}, status=500)
+
