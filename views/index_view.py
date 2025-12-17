@@ -92,7 +92,7 @@ def index(request, conn=None, url=None, **kwargs):
                         </div>
                     </td>
                     <td style='padding:2px;'>
-                        <div class="clamp-2">
+                        <div class="nowrap-1">
                             {img_id}
                         </div>
                     </td>
@@ -342,6 +342,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                 <style>
                     .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
+                    .nowrap-1 {{white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}}
                     .clamp-2 {{display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
                                word-break: break-word; white-space: normal; overflow-wrap: anywhere;}}
                     .ui-faded {{opacity: 0.3; filter: grayscale(100%); pointer-events: none;}}
