@@ -10,7 +10,6 @@ from ..services.core import (
     collect_images_by_dataset_sorted,
     parse_filename,
 )
-from ..models import VariableSet
 logger = logging.getLogger(__name__)
 
 
@@ -924,33 +923,4 @@ def index(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unhandled error in index(): %s", e)
         return HttpResponse(f"<h2>Error: {e}</h2>")
-
-
-@csrf_exempt
-@login_required()
-def delete_variable_set(request, conn=None, **kwargs):
-    if request.method != "POST":
-        return JsonResponse({"error": "Invalid request method"}, status=405)
-
-    try:
-        data = json.loads(request.body.decode("utf-8"))
-        set_name = data.get("set_name")
-
-        if not set_name:
-            return JsonResponse({"error": "Missing set_name"}, status=400)
-
-        # TODO: replace with your actual storage logic
-        deleted = VariableSet.objects.filter(
-            owner=request.user,
-            name=set_name
-        ).delete()
-
-        if deleted[0] == 0:
-            return JsonResponse({"error": "Variable set not found"}, status=404)
-
-        return JsonResponse({"ok": True})
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
 
