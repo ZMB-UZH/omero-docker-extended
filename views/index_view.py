@@ -110,12 +110,23 @@ def index(request, conn=None, url=None, **kwargs):
                      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
                         <h2 style='color:#007bff; margin:0;'>
-                            <span style="margin-right:6px;">📊</span>
-                            Preview parsed filenames
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:6px;">
+                                📊
+                            </span>
+                            <span>
+                                Preview parsed filenames
+                            </span>
                         </h2>
                         <button onclick='scrollToBottom()'
                                 style='padding:8px 8px; font-size:12px;'>
-                            ↓ Scroll to bottom
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:4px;">
+                                ↓
+                            </span>
+                            <span>
+                                Scroll to bottom
+                            </span>
                         </button>
                     </div>
                     <p>Project: {project_label} | Separator(s): "{raw_seps}"</p>
@@ -196,21 +207,39 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick='startSaveJob()'
                                 style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            💾 Save filename metadata into key-value pairs
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:6px;">
+                                💾
+                            </span>
+                            <span>
+                                Save filename metadata into key-value pairs
+                            </span>
                         </button>
 
                         <!-- CENTER ACQ BUTTON -->
                         <button onclick="startAcquisitionMetadataJob()"
                                 style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            📥 Copy acquisition metadata into key-value pairs
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:6px;">
+                                📥
+                            </span>
+                            <span>
+                                Copy acquisition metadata into key-value pairs
+                            </span>
                         </button>
 
                         <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
                         <button onclick='deletePluginMetadata()'
                                 style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            🗑 Delete ONLY internal key-value pairs
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:6px;">
+                                🗑
+                            </span>
+                            <span>
+                                Delete ONLY internal key-value pairs
+                            </span>
                         </button>
 
                     </div>
@@ -222,7 +251,13 @@ def index(request, conn=None, url=None, **kwargs):
                         <button onclick='deleteAllMetadata()'
                                 style='padding:8px 8px; font-size:12px; background:#dc3545; color:white;
                                        border:none; border-radius:6px; cursor:pointer;'>
-                            🗑 Delete ALL key-value pairs
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:6px;">
+                                🗑
+                            </span>
+                            <span>
+                                Delete ALL key-value pairs
+                            </span>
                         </button>
                     </div>
 
@@ -230,13 +265,25 @@ def index(request, conn=None, url=None, **kwargs):
                         <!-- BACK BUTTON -->
                         <button onclick="goBack()"
                                 style='padding:8px 8px; font-size:12px;'>
-                            ← Go back to project selection
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:4px;">
+                                ←
+                            </span>
+                            <span>
+                                Go back to project selection
+                            </span>
                         </button>
 
                         <!-- SCROLL TO TOP BUTTON -->
                         <button onclick='scrollToTop()'
                                 style='padding:8px 8px; font-size:12px;'>
-                            ↑ Scroll to top
+                            <span aria-hidden="true"
+                                  style="display:inline-block; margin-right:4px;">
+                                ↑
+                            </span>
+                            <span>
+                                Scroll to top
+                            </span>
                         </button>
                     </div>
 
