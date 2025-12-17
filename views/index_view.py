@@ -141,7 +141,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 </div>
                             </div>
 
-                            <div style='display:grid; grid-template-columns: 1fr max-content; column-gap:40px; row-gap:6px; align-items:start;'>
+                            <div style='display:grid; grid-template-columns: 1fr max-content; column-gap:60px; row-gap:6px; align-items:start;'>
                                 <div>
                                     <label for='variable_set_select'
                                            style='font-size:12px; display:block;'>
@@ -149,12 +149,12 @@ def index(request, conn=None, url=None, **kwargs):
                                     </label>
                                     <div></div>
                                     <select id='variable_set_select'
-                                            style='width:120px; height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                            style='height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
                                         <option value=''>Select or create…</option>
                                     </select>
                                     <button id='load_variable_set_btn'
                                             onclick='loadVariableSet()'
-                                            style='width: 100px; height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#0069d9;
+                                            style='height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#0069d9;
                                                    color:white; border:none; border-radius:6px; cursor:pointer;'>
                                         Load from database
                                     </button>
@@ -166,10 +166,10 @@ def index(request, conn=None, url=None, **kwargs):
                                     <input id='variable_set_name'
                                            type='text'
                                            placeholder='e.g. Electron microscopy'
-                                           style='width:120px; height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                           style='height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
                                     <button id='save_variable_set_btn'
                                             onclick='saveVariableSet()'
-                                            style='width: 100px; height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#28a745;
+                                            style='height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#28a745;
                                                    color:white; border:none; border-radius:6px; cursor:pointer;'>
                                         Save to database
                                     </button>
