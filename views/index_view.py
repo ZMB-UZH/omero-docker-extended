@@ -240,7 +240,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <hr>
 
-                    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center; '>
                         <!-- LEFT SAVE BUTTON -->
                         <button onclick='startSaveJob()'
                                 style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
