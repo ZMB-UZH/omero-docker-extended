@@ -106,7 +106,8 @@ def index(request, conn=None, url=None, **kwargs):
                 """
 
             return HttpResponse(f"""
-                <div style='padding:10px; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
+                <div class="omeroweb-filenamemetadata"
+                     style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
                         <h2 style='color:#007bff; margin:0;'>📊 Preview parsed filenames</h2>
                         <button onclick='scrollToBottom()'
@@ -257,7 +258,8 @@ def index(request, conn=None, url=None, **kwargs):
                 </div>
 
                 <style>
-                    .ui-faded {{opacity: 0.45; filter: grayscale(100%); pointer-events: none;}}
+                    .omeroweb-filenamemetadata, .omeroweb-filenamemetadata * {{font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}}
+                    .ui-faded {{opacity: 0.3; filter: grayscale(100%); pointer-events: none;}}
                 </style>
 
                 <script>
@@ -780,7 +782,8 @@ def index(request, conn=None, url=None, **kwargs):
         )
 
         return HttpResponse(f"""
-            <div style='padding:40px; max-width:600px; margin:0 auto; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; --base-font-size:14px; font-size:var(--base-font-size);'>
+            <div class="omeroweb-filenamemetadata"
+                 style='padding:40px; max-width:600px; margin:0 auto; --base-font-size:14px; font-size:var(--base-font-size);'>
                 <h1 style='color:#007bff;'>Filename-Metadata plugin</h1>
 
                 <form method='POST'
