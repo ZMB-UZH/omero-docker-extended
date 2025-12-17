@@ -205,3 +205,39 @@ def load_variable_set(username, set_name):
     except Exception as e:
         logger.exception("Failed to load variable set '%s' for %s: %s", set_name, username, e)
         raise VariableStoreError("Unable to load variable set.")
+
+
+def delete_variable_set(username, set_name):
+    """
+    Delete a saved variable set for a user.
+    """
+    try:
+        with _connect() as conn:
+            _ensure_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM fmp_variable_sets
+                    WHERE username = %s AND set_name = %s
+                    """,
+                    (username, set_name),
+                )
+
+                if cur.rowcount == 0:
+                    raise VariableStoreError(
+                        f"Variable set '{set_name}' does not exist."
+                    )
+
+            conn.commit()
+
+    except VariableStoreError:
+        raise
+    except Exception as e:
+        logger.exception(
+            "Failed to delete variable set '%s' for %s: %s",
+            set_name,
+            username,
+            e,
+        )
+        raise VariableStoreError("Unable to delete variable set.")
+
