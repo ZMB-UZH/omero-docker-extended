@@ -140,39 +140,43 @@ def index(request, conn=None, url=None, **kwargs):
                                     {var_inputs_html}
                                 </div>
                             </div>
-
-                            <div style='display:grid; grid-template-columns: 1fr max-content; column-gap:60px; row-gap:6px; align-items:start;'>
+                            
+                            <div style='display:flex; flex-direction:column; gap:18px;'>
                                 <div>
                                     <label for='variable_set_select'
-                                           style='font-size:12px; display:block;'>
+                                           style='font-size:12px; display:block; margin-bottom:6px;'>
                                         Saved variable sets
                                     </label>
-                                    <div></div>
-                                    <select id='variable_set_select'
-                                            style='height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
-                                        <option value=''>Select or create…</option>
-                                    </select>
-                                    <button id='load_variable_set_btn'
-                                            onclick='loadVariableSet()'
-                                            style='height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#0069d9;
-                                                   color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                        Load from database
-                                    </button>
+                                    <div style='display:flex; align-items:stretch; gap:20px;'>
+                                        <select id='variable_set_select'
+                                                style='flex:1; padding:8px 8px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                            <option value=''>Select or create…</option>
+                                        </select>
+                                        <button id='load_variable_set_btn'
+                                                onclick='loadVariableSet()'
+                                                style='min-width:170px; padding:8px 8px; font-size:12px; white-space:nowrap; background:#0069d9;
+                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Load from database
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div> 
                                     <label for='variable_set_name'
-                                           style='font-size:12px; display:block;'>
+                                           style='font-size:12px; display:block; margin-bottom:6px;'>
                                         Name to save
                                     </label>
-                                    <div></div>
-                                    <input id='variable_set_name'
-                                           type='text'
-                                           placeholder='e.g. Electron microscopy'
-                                           style='height:28px; padding:2px 6px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
-                                    <button id='save_variable_set_btn'
-                                            onclick='saveVariableSet()'
-                                            style='height:30px; white-space:nowrap; font-size:12px; padding:0px 12px; background:#28a745;
-                                                   color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                        Save to database
-                                    </button>
+                                    <div style='display:flex; align-items:stretch; gap:20px;'>
+                                        <input id='variable_set_name'
+                                               type='text'
+                                               placeholder='e.g. Electron microscopy'
+                                               style='flex:1; padding:8px 8px; font-size:12px; border-radius:6px; border:1px solid #007bff;'>
+                                        <button id='save_variable_set_btn'
+                                                onclick='saveVariableSet()'
+                                                style='min-width:170px; padding:8px 8px; font-size:12px; white-space:nowrap; background:#28a745;
+                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            Save to database
+                                        </button>
                                 </div>
                             </div>
 
