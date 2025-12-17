@@ -143,28 +143,28 @@ def index(request, conn=None, url=None, **kwargs):
 
                             <div style='display:flex; flex-direction:column; gap:10px; min-width:260px;'>
                                 <div>
-                                    <label for='variable_set_select' style='font-weight:bold; display:block; margin-bottom:4px;'>Saved variable sets</label>
-                                    <select id='variable_set_select' style='width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;'>
+                                    <label for='variable_set_select' style='display:block; margin-bottom:2px;'>Saved variable sets</label>
+                                    <select id='variable_set_select' style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
                                         <option value=''>Select or create…</option>
                                     </select>
+                                    <button id='load_variable_set_btn' onclick='loadVariableSet()'
+                                            style='padding:8px 8px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                        Load from database
+                                    </button>
                                 </div>
 
                                 <div>
-                                    <label for='variable_set_name' style='font-weight:bold; display:block; margin-bottom:4px;'>Name for new set</label>
+                                    <label for='variable_set_name' style='display:block; margin-bottom:2px;'>Name to save</label>
                                     <div style='display:flex; gap:6px;'>
-                                        <input id='variable_set_name' type='text' placeholder='e.g. Electron Microscopy'
-                                               style='flex:1; padding:8px; border-radius:6px; border:1px solid #007bff;'>
+                                        <input id='variable_set_name' type='text' placeholder='e.g. Electron microscopy'
+                                               style='flex:1; padding:2px; font-size:10px; border-radius:6px; border:1px solid #007bff;'>
                                         <button id='save_variable_set_btn' onclick='saveVariableSet()'
-                                                style='padding:8px 10px; font-size:12px; background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                style='padding:8px 8px; font-size:12px; background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer;'>
                                             Save to database
                                         </button>
                                     </div>
                                 </div>
 
-                                <button id='load_variable_set_btn' onclick='loadVariableSet()'
-                                        style='padding:10px; font-size:12px; background:#0069d9; color:white; border:none; border-radius:6px; cursor:pointer;'>
-                                    Load from database
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -367,7 +367,7 @@ def index(request, conn=None, url=None, **kwargs):
                     }}
 
                     if (!setName) {{
-                        alert("Please provide a name for this set.");
+                        alert("Please provide a name for this variable set.");
                         return;
                     }}
 
@@ -396,7 +396,7 @@ def index(request, conn=None, url=None, **kwargs):
                     if (useDefaults) return;
 
                     if (!availableVariableSets.length) {{
-                        alert("Your user database is empty. Please save some variables first.");
+                        alert("Your user database is empty. Please save a variable set first.");
                         return;
                     }}
 
@@ -404,7 +404,7 @@ def index(request, conn=None, url=None, **kwargs):
                     const selected = select ? (select.value || "").trim() : "";
 
                     if (!selected) {{
-                        alert("Please select a set of variables from the dropdown menu first.");
+                        alert("Please select a set of variables from the dropdown menu.");
                         return;
                     }}
 
