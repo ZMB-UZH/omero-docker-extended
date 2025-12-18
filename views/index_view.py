@@ -184,13 +184,13 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <div id='var-config' data-var-count='{max_vars}'>
                         <div style='
-                                display:flex;
-                                gap:5px;
-                                align-items:flex-start;
-                                max-width:100%;
-                                overflow:hidden;
+                                display:grid;
+                                grid-template-columns: 300px minmax(0, 1fr);
+                                column-gap:15px;
+                                align-items:start;
+                                width:100%;
                             '>
-                            <div style='flex:0 0 300px; min-width:300px;'>
+                            <div style='min-width:300px;'>
                                 <label style="font-size:12px; display:block; margin-bottom:6px;">
                                     Variable names according to
                                     <a href="https://www.ebi.ac.uk/bioimage-archive/rembi-help-overview/"
@@ -214,13 +214,10 @@ def index(request, conn=None, url=None, **kwargs):
                             
                             <div id='variable-set-block'
                                 style="
-                                       display:flex;
-                                       flex-direction:column;
-                                       gap:15px;
-                                       flex:1 1 0;
+                                       display:grid;
+                                       grid-auto-rows:auto;
+                                       row-gap:15px;
                                        min-width:0;
-                                       max-width:100%;
-                                       overflow:hidden;
                                 ">
 
                                 <div>
@@ -230,28 +227,23 @@ def index(request, conn=None, url=None, **kwargs):
                                     </label>
 
                                 <div style='
-                                        display:flex;
+                                        display:grid;
+                                        grid-template-columns: minmax(180px, 240px) auto auto;
+                                        column-gap:15px;
                                         align-items:center;
-                                        gap:15px;
                                         width:100%;
-                                        max-width:100%;
-                                        min-width:0;
-                                        overflow:hidden;
-                                        box-sizing:border-box;
                                     '>
                                     <select id='variable_set_select'
                                             style='
                                                    font-size:12px;
-                                                   width:200px;
-                                                   min-width:0;
-                                                   max-width:100%;
+                                                   width:100%;
+                                                   max-width:240px;
                                                    padding:8px 8px;
                                                    border:none;
                                                    border-radius:6px;
                                                    background:#ffffff;
                                                    box-shadow: inset 0 0 0 1px #007bff;
                                                    box-sizing:border-box;
-                                                   flex:1 1 auto;
                                             '>
                                         <option value=''>Select or create…</option>
                                     </select>
