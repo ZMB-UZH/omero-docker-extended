@@ -270,7 +270,13 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <hr>
 
-                    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center;'>
+                    <div style='
+                            display:grid;
+                            grid-template-columns: auto auto auto;
+                            justify-content:center;
+                            align-items:center;
+                            column-gap:50px;
+                        '>
 
                         <div style="display:flex; justify-content:flex-start; align-items:center;">
                             <!-- LEFT SAVE BUTTON -->
