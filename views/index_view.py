@@ -124,19 +124,21 @@ def index(request, conn=None, url=None, **kwargs):
             return HttpResponse(f"""
                 <div class="omeroweb-filenamemetadata"
                      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
-                    <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
+                    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:8px; margin-bottom:10px;'>
 
-                        <h2 style='color:#007bff; margin:0;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
-                                📊
-                            </span>
-                            <span>
-                                Preview parsed filenames
-                            </span>
-                        </h2>
+                        <div style="display:flex; justify-content:flex-start; align-items:center;">
+                            <h2 style='color:#007bff; margin:0;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                                    📊
+                                </span>
+                                <span>
+                                    Preview parsed filenames
+                                </span>
+                            </h2>
+                        </div>
 
-                        <div style="flex:1; display:flex; justify-content:center;">
+                        <div style="display:flex; justify-content:center; align-items:center;">
                             <button onclick="goBack()"
                                     style='padding:8px 8px; font-size:12px;'>
                                 <span aria-hidden="true"
@@ -149,16 +151,18 @@ def index(request, conn=None, url=None, **kwargs):
                             </button>
                         </div>
 
-                        <button onclick='scrollToBottom()'
-                                style='padding:8px 8px; font-size:12px;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
-                                ↓
-                            </span>
-                            <span>
-                                Scroll to bottom
-                            </span>
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; align-items:center;">
+                            <button onclick='scrollToBottom()'
+                                    style='padding:8px 8px; font-size:12px;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                                    ↓
+                                </span>
+                                <span>
+                                    Scroll to bottom
+                                </span>
+                            </button>
+                        </div>
 
                     </div>
 
@@ -266,45 +270,52 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <hr>
 
-                    <div style='display:flex; justify-content:space-between; align-items:center; '>
-                        <!-- LEFT SAVE BUTTON -->
-                        <button onclick='startSaveJob()'
-                                style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
-                                       border:none; border-radius:6px; cursor:pointer;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
-                                💾
-                            </span>
-                            <span>
-                                Save filename metadata into key-value pairs
-                            </span>
-                        </button>
+                    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center;'>
 
-                        <!-- CENTER ACQ BUTTON -->
-                        <button onclick="startAcquisitionMetadataJob()"
-                                style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
-                                       border:none; border-radius:6px; cursor:pointer;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
-                                📥
-                            </span>
-                            <span>
-                                Copy acquisition metadata into key-value pairs
-                            </span>
-                        </button>
+                        <div style="display:flex; justify-content:flex-start; align-items:center;">
+                            <!-- LEFT SAVE BUTTON -->
+                            <button onclick='startSaveJob()'
+                                    style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
+                                           border:none; border-radius:6px; cursor:pointer;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                                    💾
+                                </span>
+                                <span>
+                                    Save filename metadata into key-value pairs
+                                </span>
+                            </button>
+                        </div>
 
-                        <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
-                        <button onclick='deletePluginMetadata()'
-                                style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
-                                       border:none; border-radius:6px; cursor:pointer;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:6px; pointer-events:none;">
-                                🗑
-                            </span>
-                            <span>
-                                Delete ONLY internal key-value pairs
-                            </span>
-                        </button>
+                        <div style="display:flex; justify-content:center; align-items:center;">
+                            <!-- CENTER ACQ BUTTON -->
+                            <button onclick="startAcquisitionMetadataJob()"
+                                    style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
+                                           border:none; border-radius:6px; cursor:pointer;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                                    📥
+                                </span>
+                                <span>
+                                    Copy acquisition metadata into key-value pairs
+                                </span>
+                            </button>
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end; align-items:center;">
+                            <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
+                            <button onclick='deletePluginMetadata()'
+                                    style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
+                                           border:none; border-radius:6px; cursor:pointer;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                                    🗑
+                                </span>
+                                <span>
+                                    Delete ONLY internal key-value pairs
+                                </span>
+                            </button>
+                        </div>
 
                     </div>
 
@@ -325,9 +336,11 @@ def index(request, conn=None, url=None, **kwargs):
                         </button>
                     </div>
 
-                    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
+                    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; margin-top:20px;'>
 
-                        <div style="flex:1; display:flex; justify-content:center;">
+                        <div></div>
+
+                        <div style="display:flex; justify-content:center; align-items:center;">
                             <button onclick="goBack()"
                                     style='padding:8px 8px; font-size:12px;'>
                                 <span aria-hidden="true"
@@ -340,16 +353,18 @@ def index(request, conn=None, url=None, **kwargs):
                             </button>
                         </div>
 
-                        <button onclick='scrollToTop()'
-                                style='padding:8px 8px; font-size:12px;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
-                                ↑
-                            </span>
-                            <span>
-                                Scroll to top
-                            </span>
-                        </button>
+                        <div style="display:flex; justify-content:flex-end; align-items:center;">
+                            <button onclick='scrollToTop()'
+                                    style='padding:8px 8px; font-size:12px;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                                    ↑
+                                </span>
+                                <span>
+                                    Scroll to top
+                                </span>
+                            </button>
+                        </div>
 
                     </div>
 
