@@ -238,21 +238,40 @@ def index(request, conn=None, url=None, **kwargs):
                                         Load from database
                                     </button>
 
-                                    <button id='delete_variable_set_btn'
-                                            onclick='deleteVariableSet()'
-                                            class="varset-btn varset-btn-red">
-                                        Delete from database
-                                    </button>
+                                    <div style="position:relative; display:inline-block;">
 
-                                    <a href="/static/omeroweb_filenamemetadata/help.pdf"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       class="varset-btn"
-                                       title="Help"
-                                       aria-label="Help"
-                                       style="background:#007bff; text-align:center; text-decoration:none;">
-                                        ?
-                                    </a>
+                                        <button id='delete_variable_set_btn'
+                                                onclick='deleteVariableSet()'
+                                                class="varset-btn varset-btn-red">
+                                            Delete from database
+                                        </button>
+
+                                        <a href="/static/omeroweb_filenamemetadata/help.pdf"
+                                           target="_blank"
+                                           rel="noopener noreferrer"
+                                           title="Help"
+                                           aria-label="Help"
+                                           style="
+                                                position:absolute;
+                                                top:-6px;
+                                                right:-6px;
+                                                width:18px;
+                                                height:18px;
+                                                border-radius:50%;
+                                                background:#007bff;
+                                                color:white;
+                                                font-size:12px;
+                                                font-weight:700;
+                                                line-height:18px;
+                                                text-align:center;
+                                                text-decoration:none;
+                                                box-shadow:0 0 0 2px white;
+                                                cursor:pointer;
+                                           ">
+                                            ?
+                                        </a>
+
+                                    </div>
                                     
                                 </div>
 
