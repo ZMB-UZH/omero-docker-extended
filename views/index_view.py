@@ -1094,9 +1094,36 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
 
                     <div style='margin-bottom:20px;'>
-                        <label><strong>Separators (chars):</strong></label><br>
-                        <input type='text' name='separator' value='_-'
-                               style='width:100%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
+                        <label><strong>Separators:</strong></label><br>
+
+                        <input type='hidden'
+                               name='separator_mode'
+                               id='separator_mode'
+                               value='chars'>
+
+                        <div style='display:flex; align-items:flex-start; gap:14px;'>
+                            <input type='text'
+                                   name='separator'
+                                   value='_-'
+                                   style='width:55%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
+
+                            <div style='display:flex; flex-direction:column; gap:8px; padding-top:4px;'>
+                                <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                                    <input type='checkbox'
+                                           id='sep_mode_chars'
+                                           checked
+                                           onclick='setSeparatorMode("chars")'>
+                                    <span>Characters</span>
+                                </label>
+
+                                <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                                    <input type='checkbox'
+                                           id='sep_mode_regex'
+                                           onclick='setSeparatorMode("regex")'>
+                                    <span>Regex pattern</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
 
                     <button type='submit'
@@ -1105,6 +1132,36 @@ def index(request, conn=None, url=None, **kwargs):
                         Load images & Preview
                     </button>
                 </form>
+
+                <script>
+                function setSeparatorMode(mode) {
+                    const chars = document.getElementById('sep_mode_chars');
+                    const regex = document.getElementById('sep_mode_regex');
+                    const hidden = document.getElementById('separator_mode');
+
+                    if (mode === 'regex') {
+                        regex.checked = true;
+                        chars.checked = false;
+                        hidden.value = 'regex';
+                    } else {
+                        chars.checked = true;
+                        regex.checked = false;
+                        hidden.value = 'chars';
+                    }
+                }
+
+                // Ensure exactly one mode is selected even if browser restores form state
+                (function initSeparatorMode() {
+                    const chars = document.getElementById('sep_mode_chars');
+                    const regex = document.getElementById('sep_mode_regex');
+                    if (regex && regex.checked) {
+                        setSeparatorMode('regex');
+                    } else {
+                        setSeparatorMode('chars');
+                    }
+                })();
+                </script>
+
             </div>
         """)
 
