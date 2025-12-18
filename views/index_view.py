@@ -183,8 +183,14 @@ def index(request, conn=None, url=None, **kwargs):
                     <hr>
 
                     <div id='var-config' data-var-count='{max_vars}'>
-                        <div style='display:flex; gap:5px; align-items:flex-start; '>
-                            <div style='flex:0 0 300px;'>
+                        <div style='
+                                display:flex;
+                                gap:5px;
+                                align-items:flex-start;
+                                max-width:100%;
+                                overflow:hidden;
+                            '>
+                            <div style='flex:0 0 300px; min-width:300px;'>
                                 <label style="font-size:12px; display:block; margin-bottom:6px;">
                                     Variable names according to
                                     <a href="https://www.ebi.ac.uk/bioimage-archive/rembi-help-overview/"
@@ -207,7 +213,15 @@ def index(request, conn=None, url=None, **kwargs):
                             </div>
                             
                             <div id='variable-set-block'
-                                style="display:flex; flex-direction:column; gap:15px; flex:1 1 auto; min-width:0;">
+                                style="
+                                       display:flex;
+                                       flex-direction:column;
+                                       gap:15px;
+                                       flex:1 1 0;
+                                       min-width:0;
+                                       max-width:100%;
+                                       overflow:hidden;
+                                ">
 
                                 <div>
                                     <label for='variable_set_select'
@@ -219,8 +233,11 @@ def index(request, conn=None, url=None, **kwargs):
                                         display:flex;
                                         align-items:center;
                                         gap:15px;
+                                        width:100%;
                                         max-width:100%;
+                                        min-width:0;
                                         overflow:hidden;
+                                        box-sizing:border-box;
                                     '>
                                     <select id='variable_set_select'
                                             style='
