@@ -92,7 +92,7 @@ def start_job(request, conn=None, url=None, **kwargs):
                         "image_ids": image_ids,
                         "total": len(image_ids),
                         "index": 0,
-                        "started": time.time()
+                        "started": time.time(),
                         "separator_mode": separator_mode,
                 }
 
@@ -197,6 +197,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
         var_names = job["var_names"]
         delete_mode = job["delete_mode"]
         raw_seps = job["separator"]
+        separator_mode = job.get("separator_mode", "chars")
         image_ids = job["image_ids"]
         started = job["started"]
 
