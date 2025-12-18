@@ -8,6 +8,9 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 # Chunk size for processing progress
 CHUNK_SIZE = 500
 
+# Default variable names (partially REMBI-aligned)
+DEFAULT_VARIABLE_NAMES = ["Project number", "Sample type", "Substrate", "Position", "Image acquisition", "Specific experimental conditions",]
+
 # Namespaces used for MapAnnotations
 MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in Omero Web
 
