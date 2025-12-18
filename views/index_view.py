@@ -497,6 +497,10 @@ def index(request, conn=None, url=None, **kwargs):
                             grid-column: auto;
                         }}
                     }}
+                    .help-btn {{width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
+                                line-height:26px; text-align:center; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.25); cursor:pointer;
+                                transition: background 0.15s ease, transform 0.1s ease;}}
+                    .help-btn:hover {{background:#0056b3; transform: translateY(-1px);}}
                 </style>
 
                 <script>
