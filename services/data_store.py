@@ -59,7 +59,7 @@ def _db_params():
         try:
             port = int(candidate_str)
         except ValueError:
-            logger.warning("Ignoring invalid port value '%s' for variable storage database.", candidate_str)
+            logger.warning("Ignoring invalid port value '%s' for database.", candidate_str)
             continue
 
         if port not in port_candidates:
@@ -102,7 +102,7 @@ def _connect():
 
     if conn is None:
         logger.exception("Database connection failed for all configured hosts/ports: %s", last_error)
-        raise VariableStoreError("Could not connect to the variable storage database.")
+        raise VariableStoreError("Could not connect to the database.")
 
     try:
         yield conn
