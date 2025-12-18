@@ -1149,32 +1149,32 @@ def index(request, conn=None, url=None, **kwargs):
                 </form>
 
                 <script>
-                function setSeparatorMode(mode) {
+                function setSeparatorMode(mode) {{
                     const chars = document.getElementById('sep_mode_chars');
                     const regex = document.getElementById('sep_mode_regex');
                     const hidden = document.getElementById('separator_mode');
 
-                    if (mode === 'regex') {
+                    if (mode === 'regex') {{
                         regex.checked = true;
                         chars.checked = false;
                         hidden.value = 'regex';
-                    } else {
+                    }} else {{
                         chars.checked = true;
                         regex.checked = false;
                         hidden.value = 'chars';
-                    }
-                }
+                    }}
+                }}
 
                 // Ensure exactly one mode is selected even if browser restores form state
-                (function initSeparatorMode() {
+                (function initSeparatorMode() {{
                     const chars = document.getElementById('sep_mode_chars');
                     const regex = document.getElementById('sep_mode_regex');
-                    if (regex && regex.checked) {
+                    if (regex && regex.checked) {{
                         setSeparatorMode('regex');
-                    } else {
+                    }} else {{
                         setSeparatorMode('chars');
-                    }
-                })();
+                    }}
+                }})();
                 </script>
 
             </div>
