@@ -274,10 +274,10 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <div style='
                             display:grid;
-                            grid-template-columns: auto auto auto;
-                            justify-content:center;
+                            grid-template-columns: 1fr auto 1fr;
                             align-items:center;
                             column-gap:50px;
+                            width:100%;
                         '>
 
                         <div style="display:flex; justify-content:flex-start; align-items:center;">
