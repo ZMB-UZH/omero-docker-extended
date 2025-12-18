@@ -182,7 +182,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <p>
                         Project: {project_label} |
                         Input type: {"Regex expression" if separator_mode == "regex" else "character(s)"} |
-                        Input field: "{raw_seps}"
+                        Input: "{raw_seps}"
                     </p>
                     <p>Previewing {len(preview_rows)} images.</p>
                     <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
@@ -1113,7 +1113,7 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
 
                     <div style='margin-bottom:20px;'>
-                        <label><strong>Input field:</strong></label><br>
+                        <label><strong>Input for filename parsing:</strong></label><br>
 
                         <input type='hidden'
                                name='separator_mode'
