@@ -4,6 +4,7 @@ from .views.job_view import start_job, job_progress, start_acq_job
 from .views.delete_all_view import delete_all_metadata
 from .views.delete_plugin_view import delete_plugin_metadata
 from .views.variable_set_view import list_sets, save_set, load_set, delete_set
+from .views.help_view import help_page
 
 urlpatterns = [
     path("", index, name="omeroweb_filenamemetadata_index"),
@@ -16,4 +17,5 @@ urlpatterns = [
     path("varsets/save/", save_set, name="omeroweb_filenamemetadata_save_set"),
     path("varsets/load/", load_set, name="omeroweb_filenamemetadata_load_set"),
     path("varsets/delete/", delete_set, name="omeroweb_filenamemetadata_delete_set"),
+    path("help/", help_page, name="omeroweb_filenamemetadata_help"),
 ]
