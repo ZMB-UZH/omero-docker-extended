@@ -231,48 +231,40 @@ def index(request, conn=None, url=None, **kwargs):
                                             class="varset-control">
                                         <option value=''>Select or create…</option>
                                     </select>
-
                                     <button id='load_variable_set_btn'
                                             onclick='loadVariableSet()'
                                             class="varset-btn varset-btn-blue">
                                         Load from database
                                     </button>
+                                    <button id='delete_variable_set_btn'
+                                            onclick='deleteVariableSet()'
+                                            class="varset-btn varset-btn-red">
+                                        Delete from database
+                                    </button>
+                                </div>
 
-                                    <div style="position:relative; display:inline-block;">
-
-                                        <button id='delete_variable_set_btn'
-                                                onclick='deleteVariableSet()'
-                                                class="varset-btn varset-btn-red">
-                                            Delete from database
-                                        </button>
-
-                                        <a href="/static/omeroweb_filenamemetadata/help.pdf"
-                                           target="_blank"
-                                           rel="noopener noreferrer"
-                                           title="Help"
-                                           aria-label="Help"
-                                           style="
-                                                position:absolute;
-                                                top:-6px;
-                                                right:-6px;
-                                                width:18px;
-                                                height:18px;
-                                                border-radius:50%;
-                                                background:#007bff;
-                                                color:white;
-                                                font-size:12px;
-                                                font-weight:700;
-                                                line-height:18px;
-                                                text-align:center;
-                                                text-decoration:none;
-                                                box-shadow:0 0 0 2px white;
-                                                cursor:pointer;
-                                           ">
-                                            ?
-                                        </a>
-
-                                    </div>
-                                    
+                                <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+                                    <a href="/static/omeroweb_filenamemetadata/help.pdf"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       title="Help"
+                                       aria-label="Help"
+                                       style="
+                                            width:26px;
+                                            height:26px;
+                                            border-radius:50%;
+                                            border:1px solid #007bff;
+                                            color:#007bff;
+                                            font-size:14px;
+                                            font-weight:600;
+                                            line-height:24px;
+                                            text-align:center;
+                                            text-decoration:none;
+                                            background:white;
+                                            cursor:pointer;
+                                       ">
+                                        ?
+                                    </a>
                                 </div>
 
                                 </div>
