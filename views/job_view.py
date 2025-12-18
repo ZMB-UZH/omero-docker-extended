@@ -215,6 +215,8 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     batch_logs.append(f"Image {iid}: not found.")
                     continue
 
+                filename = get_text(img.getName())
+                
                 # ---------------------------------------------------------
                 # ACQUISITION METADATA MODE (NO DELETION – ONLY APPEND)
                 # ---------------------------------------------------------
@@ -246,7 +248,6 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     # IMPORTANT: skip filename-processing logic
                     continue
 
-                filename = get_text(img.getName())
                 parts = parse_filename(filename, sep_pattern)
 
                 mapping = {}
