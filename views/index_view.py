@@ -125,7 +125,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             return HttpResponse(f"""
                 <div class="omeroweb-filenamemetadata"
-                     style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
+                     style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); min-width:900px; max-width:1200px; margin:0 auto;'>
                     <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:8px; margin-bottom:10px;'>
 
                         <div style="display:flex; justify-content:flex-start; align-items:center;">
