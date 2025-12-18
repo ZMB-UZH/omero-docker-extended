@@ -163,10 +163,129 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+@csrf_exempt
+@login_required()
+def start_delete_all_job(request, conn=None, url=None, **kwargs):
+    try:
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=400)
+
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except Exception:
+            data = request.POST
+
+        project_id = data.get("project_id")
+
+        if not project_id:
+            return JsonResponse({"error": "missing project_id"}, status=400)
+
+        images = collect_images_in_project(conn, project_id)
+
+        if not images:
+            images = list(conn.getObjects("Image"))
+
+        seen = set()
+        image_ids = []
+        for img in images:
+            try:
+                iid = get_id(img)
+                if iid and iid not in seen:
+                    seen.add(iid)
+                    image_ids.append(int(iid))
+            except Exception as e:
+                logger.warning("Could not read image id: %s", e)
+
+        image_ids.sort()
+
+        job_id = uuid.uuid4().hex
+
+        job = {
+            "job_id": job_id,
+            "type": "del_all",
+            "project_id": int(project_id),
+            "image_ids": image_ids,
+            "total": len(image_ids),
+            "index": 0,
+            "started": time.time(),
+            # ensure keys expected by job_progress also exist
+            "separator": "",
+            "var_names": [],
+            "delete_mode": "all",
+        }
+
+        save_job(job)
+
+        return JsonResponse({"job_id": job_id, "total": len(image_ids)})
+
+    except Exception as e:
+        logger.exception("start_delete_all_job() error")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@login_required()
+def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
+    try:
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=400)
+
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+        except Exception:
+            data = request.POST
+
+        project_id = data.get("project_id")
+
+        if not project_id:
+            return JsonResponse({"error": "missing project_id"}, status=400)
+
+        images = collect_images_in_project(conn, project_id)
+
+        if not images:
+            images = list(conn.getObjects("Image"))
+
+        seen = set()
+        image_ids = []
+        for img in images:
+            try:
+                iid = get_id(img)
+                if iid and iid not in seen:
+                    seen.add(iid)
+                    image_ids.append(int(iid))
+            except Exception as e:
+                logger.warning("Could not read image id: %s", e)
+
+        image_ids.sort()
+
+        job_id = uuid.uuid4().hex
+
+        job = {
+            "job_id": job_id,
+            "type": "del_plugin",
+            "project_id": int(project_id),
+            "image_ids": image_ids,
+            "total": len(image_ids),
+            "index": 0,
+            "started": time.time(),
+            # ensure keys expected by job_progress also exist
+            "separator": "",
+            "var_names": [],
+            "delete_mode": "plugin",
+        }
+
+        save_job(job)
+
+        return JsonResponse({"job_id": job_id, "total": len(image_ids)})
+
+    except Exception as e:
+        logger.exception("start_delete_plugin_job() error")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
 # ==============================================================================
 # JOB PROGRESS
 # ==============================================================================
-
 @csrf_exempt
 @login_required()
 def job_progress(request, job_id, conn=None, url=None, **kwargs):
@@ -232,7 +351,26 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     continue
 
                 filename = get_text(img.getName())
-                
+
+                # ---------------------------------------------------------
+                # DELETE MODE (ALL / PLUGIN) — JOB-BASED
+                # ---------------------------------------------------------
+                if job.get("type") == "del_all":
+                    try:
+                        delete_existing_annotations(conn, update, img, var_names, "all")
+                        batch_logs.append(f"Image {iid} ({filename}): deleted ALL MapAnnotations.")
+                    except Exception as e:
+                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL annotations: {e}")
+                    continue
+
+                if job.get("type") == "del_plugin":
+                    try:
+                        delete_existing_annotations(conn, update, img, var_names, "plugin")
+                        batch_logs.append(f"Image {iid} ({filename}): deleted ONLY plugin MapAnnotations.")
+                    except Exception as e:
+                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin annotations: {e}")
+                    continue
+
                 # ---------------------------------------------------------
                 # ACQUISITION METADATA MODE (NO DELETION – ONLY APPEND)
                 # ---------------------------------------------------------
