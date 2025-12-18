@@ -192,7 +192,7 @@ def index(request, conn=None, url=None, **kwargs):
                             '>
                             <div style='min-width:300px;'>
                                 <label style="font-size:12px; display:block; margin-bottom:6px;">
-                                    Variable names: for unified guidelines see 
+                                    Variable names: for guidelines see 
                                     <a href="https://www.ebi.ac.uk/bioimage-archive/rembi-help-overview/"
                                        target="_blank"
                                        rel="noopener noreferrer"
