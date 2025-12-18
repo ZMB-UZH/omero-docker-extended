@@ -1126,13 +1126,13 @@ def index(request, conn=None, url=None, **kwargs):
                                    value='_-'
                                    style='width:55%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
 
-                            <div style='display:flex; flex-direction:column; gap:8px; margin-top:-6px;'>
+                            <div style='display:flex; flex-direction:column; gap:8px; margin-top:-4px;'>
                                 <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
                                     <input type='checkbox'
                                            id='sep_mode_chars'
                                            checked
                                            onclick='setSeparatorMode("chars")'>
-                                    <span>Characters</span>
+                                    <span>Character(s)</span>
                                 </label>
 
                                 <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
