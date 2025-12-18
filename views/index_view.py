@@ -56,8 +56,7 @@ def index(request, conn=None, url=None, **kwargs):
             except Exception:
                 project_label = f"ID {project_id}"
 
-            seps_escaped = "".join(re.escape(c) for c in raw_seps)
-            sep_pattern = f"[{seps_escaped}]+"
+            sep_pattern = f"(?:{'|'.join(re.escape(c) for c in raw_seps)})+"
 
             ds_list = collect_images_by_dataset_sorted(conn, project_id, limit=50)
 
@@ -245,18 +244,6 @@ def index(request, conn=None, url=None, **kwargs):
 
                                 </div>
 
-                            <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
-                            <div style="display:flex; justify-content:flex-end; margin-top:6px;">
-                                <a href="/omeroweb_filenamemetadata/help/"
-                                   target="_blank"
-                                   rel="noopener noreferrer"
-                                   title="Help"
-                                   aria-label="Help"
-                                   class="help-btn">
-                                    ?
-                                </a>
-                            </div>
-
                                 <div>
                                     <label for='variable_set_name'
                                            style='font-size:12px; display:block; margin-bottom:5px;'>
@@ -279,6 +266,18 @@ def index(request, conn=None, url=None, **kwargs):
 
                             </div>
                         </div>
+                    </div>
+
+                    <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
+                    <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+                        <a href="/omeroweb_filenamemetadata/help/"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="Help"
+                           aria-label="Help"
+                           class="help-btn">
+                            ?
+                        </a>
                     </div>
 
                     <hr>
