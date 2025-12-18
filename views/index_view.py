@@ -330,7 +330,7 @@ def index(request, conn=None, url=None, **kwargs):
                                     🗑
                                 </span>
                                 <span>
-                                    Delete ONLY internal key-value pairs
+                                    Delete ONLY plugin key-value pairs
                                 </span>
                             </button>
                         </div>
@@ -875,7 +875,7 @@ def index(request, conn=None, url=None, **kwargs):
                     progressSection.style.display = "block";
                     progressBar.style.width = "0%";
                     progressBar.innerText = "0%";
-                    progressText.innerText = "Deleting plugin key-value pairs…";
+                    progressText.innerText = "Deleting ONLY plugin key-value pairs…";
                     progressLog.textContent = "";
 
                     fetch(BASE_URL + "/delete_plugin/", {{
@@ -934,7 +934,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                 function startSaveJob() {{
                     if (currentJobId) {{
-                        showNonBlockingModal("Job already running.");
+                        showNonBlockingModal("Another job is already running. Please be patient.");
                         return;
                     }}
 
@@ -990,7 +990,7 @@ def index(request, conn=None, url=None, **kwargs):
                 // -------------------------
                 function startAcquisitionMetadataJob() {{
                     if (currentJobId) {{
-                        showNonBlockingModal("Job already running.");
+                        showNonBlockingModal("Another job is already running. Please be patient.");
                         return;
                     }}
 
