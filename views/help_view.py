@@ -9,7 +9,4 @@ def help_page(request, **kwargs):
     if not os.path.exists(help_path):
         raise Http404("Help file not found")
 
-    return FileResponse(
-        open(help_path, "rb"),
-        content_type="application/pdf"
-    )
+    return FileResponse(open(help_path, "rb"), content_type="application/pdf")
