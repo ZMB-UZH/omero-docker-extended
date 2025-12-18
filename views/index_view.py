@@ -226,41 +226,21 @@ def index(request, conn=None, url=None, **kwargs):
                                         Variable sets in database
                                     </label>
 
-                                <div style='
-                                        display:grid;
-                                        grid-template-columns: minmax(180px, 240px) auto auto;
-                                        column-gap:15px;
-                                        align-items:center;
-                                        width:100%;
-                                    '>
+                                <div class="varset-row-3">
                                     <select id='variable_set_select'
-                                            style='
-                                                   font-size:12px;
-                                                   width:100%;
-                                                   max-width:240px;
-                                                   padding:8px 8px;
-                                                   border:none;
-                                                   border-radius:6px;
-                                                   background:#ffffff;
-                                                   box-shadow: inset 0 0 0 1px #007bff;
-                                                   box-sizing:border-box;
-                                            '>
+                                            class="varset-control">
                                         <option value=''>Select or create…</option>
                                     </select>
 
                                     <button id='load_variable_set_btn'
                                             onclick='loadVariableSet()'
-                                            style='font-size:12px; min-width:140px; padding:8px 8px;
-                                                   white-space:nowrap; background:#0069d9;
-                                                   color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            class="varset-btn varset-btn-blue">
                                         Load from database
                                     </button>
 
                                     <button id='delete_variable_set_btn'
                                             onclick='deleteVariableSet()'
-                                            style='font-size:12px; min-width:140px; padding:8px 8px;
-                                                   white-space:nowrap; background:#dc3545;
-                                                   color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                            class="varset-btn varset-btn-red">
                                         Delete from database
                                     </button>
                                 </div>
@@ -273,18 +253,15 @@ def index(request, conn=None, url=None, **kwargs):
                                         Variable set name for saving
                                     </label>
 
-                                    <div style='display:flex; align-items:center; gap:15px;'>
+                                    <div class="varset-row-2">
                                         <input id='variable_set_name'
                                                type='text'
                                                placeholder='e.g. Electron microscopy'
-                                               style='font-size:12px; width:200px; min-width:150; padding:8px 8px;
-                                                      border:none; border-radius:6px; background:#ffffff; box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;'>
+                                               class="varset-control">
 
                                         <button id='save_variable_set_btn'
                                                 onclick='saveVariableSet()'
-                                                style='font-size:12px; min-width:140px; padding:8px 8px;
-                                                       white-space:nowrap; background:#28a745;
-                                                       color:white; border:none; border-radius:6px; cursor:pointer;'>
+                                                class="varset-btn varset-btn-green">
                                             Save to database
                                         </button>
                                     </div>
@@ -454,6 +431,45 @@ def index(request, conn=None, url=None, **kwargs):
                     .clamp-2 {{display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
                                word-break: break-word; white-space: normal; overflow-wrap: anywhere;}}
                     .ui-faded {{opacity: 0.3; filter: grayscale(100%); pointer-events: none;}}
+                    .varset-control {{font-size: 12px; width: 240px; max-width: 240px; padding: 8px 8px; border: none; border-radius: 6px;
+                                      background: #ffffff; box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}}
+                    .varset-btn {{font-size: 12px; width: 140px; min-width: 140px; padding: 8px 8px; white-space: nowrap; color: white;
+                                  border: none; border-radius: 6px; cursor: pointer; justify-self: start;}}
+                    .varset-btn-blue {{background: #0069d9;}}
+                    .varset-btn-red  {{background: #dc3545;}}
+                    .varset-btn-green {{background: #28a745;}}
+                    .varset-row-3 {{display: grid; grid-template-columns: 240px 140px 140px; column-gap: 15px; row-gap: 10px; align-items: center;
+                                   justify-content: start; justify-items: start; width: 100%;}}
+                    .varset-row-2 {{display: grid; grid-template-columns: 240px 140px; column-gap: 15px; row-gap: 10px; align-items: center;
+                                    justify-content: start; justify-items: start; width: 100%;}}
+                    @media (max-width: 900px) {{
+                        .varset-row-3 {
+                            grid-template-columns: 240px 140px;
+                        }}
+                        #delete_variable_set_btn {{
+                            grid-column: 2;
+                        }}
+                    }}
+
+                    @media (max-width: 520px) {{
+                        .varset-row-3,
+                        .varset-row-2 {{
+                            grid-template-columns: 1fr;
+                        }}
+                        .varset-control {{
+                            width: 100%;
+                            max-width: none;
+                        }}
+                        .varset-btn {{
+                            width: 100%;
+                            min-width: 0;
+                        }}
+                        #delete_variable_set_btn,
+                        #load_variable_set_btn,
+                        #save_variable_set_btn {{
+                            grid-column: auto;
+                        }}
+                    }}
                 </style>
 
                 <script>
