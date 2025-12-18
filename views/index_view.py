@@ -181,7 +181,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     <p>
                         Project: {project_label} |
-                        Input type: {"Regex expression" if separator_mode == "regex" else "character(s)"} |
+                        Input type: {"Regex expression" if separator_mode == "regex" else "Character(s)"} |
                         Input: "{raw_seps}"
                     </p>
                     <p>Previewing {len(preview_rows)} images.</p>
@@ -980,7 +980,7 @@ def index(request, conn=None, url=None, **kwargs):
                     }};
 
                     document.getElementById("progress-section").style.display = "block";
-                    document.getElementById("progress-text").innerText = "Starting job…";
+                    document.getElementById("progress-text").innerText = 'Starting "Save filename metadata into key-value pairs" job…';
 
                     fetch(BASE_URL + "/start_job/", {{
                         method: "POST",
@@ -1021,7 +1021,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     document.getElementById("progress-section").style.display = "block";
                     document.getElementById("progress-text").innerText =
-                        "Starting acquisition metadata job…";
+                        'Starting "copy acquisition metadata into key-value pairs" job…';
 
                     fetch(BASE_URL + "/start_acq_job/", {{
                         method: "POST",
