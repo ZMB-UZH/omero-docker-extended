@@ -838,7 +838,7 @@ def index(request, conn=None, url=None, **kwargs):
                             }}
                         }} else {{
                             logLines.push(
-                                "Deleted annotations for " +
+                                "Deleted key-value pairs from " +
                                 data.deleted_count +
                                 " images."
                             );
@@ -900,11 +900,11 @@ def index(request, conn=None, url=None, **kwargs):
                         }}
 
                         logLines.push(
-                            "Deleted plugin annotations for " +
+                            "Deleted plugin key-value pairs from " +
                             data.deleted_images +
                             " images (" +
                             data.deleted_annotations +
-                            " MapAnnotations)."
+                            " pairs)."
                         );
 
                         if (data.errors && data.errors.length) {{
@@ -934,7 +934,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                 function startSaveJob() {{
                     if (currentJobId) {{
-                        showNonBlockingModal("Job already running.");
+                        showNonBlockingModal("Another job is already running. Please be patient.");
                         return;
                     }}
 
@@ -961,7 +961,7 @@ def index(request, conn=None, url=None, **kwargs):
                     }};
 
                     document.getElementById("progress-section").style.display = "block";
-                    document.getElementById("progress-text").innerText = "Starting job…";
+                    document.getElementById("progress-text").innerText = "Starting "save filename metadata into key-value pairs" job…"";
 
                     fetch(BASE_URL + "/start_job/", {{
                         method: "POST",
@@ -990,7 +990,7 @@ def index(request, conn=None, url=None, **kwargs):
                 // -------------------------
                 function startAcquisitionMetadataJob() {{
                     if (currentJobId) {{
-                        showNonBlockingModal("Job already running.");
+                        showNonBlockingModal("Another job is already running. Please be patient.");
                         return;
                     }}
 
@@ -1002,7 +1002,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     document.getElementById("progress-section").style.display = "block";
                     document.getElementById("progress-text").innerText =
-                        "Starting acquisition metadata job…";
+                        "Starting "copy acquisition metadata into key-value pairs" job…";
 
                     fetch(BASE_URL + "/start_acq_job/", {{
                         method: "POST",
