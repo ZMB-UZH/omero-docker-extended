@@ -420,6 +420,11 @@ def index(request, conn=None, url=None, **kwargs):
                 </div>
 
                 <style>
+                    html,
+                    body {{
+                        min-width: 1300px;
+                    }}
+
                     #var_name_inputs {{margin-top: 6px;}}
                     .var-row {{display: grid; grid-template-columns: 2.5em auto; align-items: center; column-gap: 6px; margin-bottom: 4px;}}
                     .var-index {{text-align: right; font-size: 12px; color: #212529;}}
