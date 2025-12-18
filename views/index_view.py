@@ -970,6 +970,7 @@ def index(request, conn=None, url=None, **kwargs):
                     let payload = {{
                         project_id: projectId,
                         separator: separator,
+                        separator_mode: separatorMode,
                         var_names: varNames,
                         delete_mode: "all"
                     }};
