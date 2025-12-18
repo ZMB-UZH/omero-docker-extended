@@ -162,8 +162,16 @@ def index(request, conn=None, url=None, **kwargs):
                     <div id='var-config' data-var-count='{max_vars}'>
                         <div style='display:flex; gap:5px; align-items:flex-start; '>
                             <div style='flex:0 0 300px;'>
-                                <label style="font-size:12px; display:block; margin-bottom:6px; padding-left:22px;">
-                                    Variable names
+                                <label style="font-size:12px; display:block; margin-bottom:6px;">
+                                    Variable names according to
+                                    <a href="https://www.ebi.ac.uk/bioimage-archive/rembi-help-overview/"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       style="color:#007bff; font-weight:600; text-decoration:none;
+                                              background:rgba(0,123,255,0.12); padding:1px 4px;
+                                              border-radius:4px;">
+                                        REMBI
+                                    </a>
                                 </label>
 
                                 <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
