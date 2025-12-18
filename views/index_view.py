@@ -443,7 +443,7 @@ def index(request, conn=None, url=None, **kwargs):
                     .varset-row-2 {{display: grid; grid-template-columns: 240px 140px; column-gap: 15px; row-gap: 10px; align-items: center;
                                     justify-content: start; justify-items: start; width: 100%;}}
                     @media (max-width: 900px) {{
-                        .varset-row-3 {
+                        .varset-row-3 {{
                             grid-template-columns: 240px 140px;
                         }}
                         #delete_variable_set_btn {{
