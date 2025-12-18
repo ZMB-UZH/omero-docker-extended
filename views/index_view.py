@@ -1,6 +1,7 @@
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+import json
 import logging
 import re
 from ..services.core import (
@@ -9,6 +10,7 @@ from ..services.core import (
     collect_images_by_dataset_sorted,
     parse_filename,
 )
+from ..constants import DEFAULT_VARIABLE_NAMES
 logger = logging.getLogger(__name__)
 
 
@@ -116,7 +118,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <div class="var-index">{i}:</div>
                     <input id="var_name_{i}"
                            type="text"
-                           value="Var{i}"
+                           value=""
                            class="var-input">
                 </div>
                 """
@@ -432,7 +434,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                 <script>
                 const BASE_URL = "/omeroweb_filenamemetadata";
-                const DEFAULT_VARS = ["A", "B", "C", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+                const DEFAULT_VARS = {json.dumps(DEFAULT_VARIABLE_NAMES)};
                 let availableVariableSets = [];
 
                 function goBack() {{
@@ -473,18 +475,18 @@ def index(request, conn=None, url=None, **kwargs):
                     let useDefaults = document.getElementById('use_defaults').checked;
                     let container = document.getElementById('var-config');
                     let count = parseInt(container.getAttribute('data-var-count'));
-
                     for (let i = 1; i <= count; i++) {{
                         let inp = document.getElementById('var_name_' + i);
-                        if (!inp) continue;
+                        if (!inp) {{
+                            continue;
+                        }}
                         if (useDefaults) {{
-                            inp.value = DEFAULT_VARS[i-1] || ("Var" + i);
+                            inp.value = DEFAULT_VARS[i - 1] || "empty";
                             inp.disabled = true;
                         }} else {{
                             inp.disabled = false;
                         }}
                     }}
-
                     setVarSetControlsDisabled(useDefaults);
                 }}
 
@@ -555,7 +557,8 @@ def index(request, conn=None, url=None, **kwargs):
                     let varNames = [];
                     for (let i = 1; i <= count; i++) {{
                         const inp = document.getElementById('var_name_' + i);
-                        varNames.push(inp ? (inp.value || "").trim() : "");
+                        const val = inp ? inp.value.trim() : "";
+                        varNames.push(val);
                     }}
 
                     const nonEmpty = varNames.filter(v => v !== "");
@@ -886,9 +889,9 @@ def index(request, conn=None, url=None, **kwargs):
 
                     let varNames = [];
                     for (let i = 1; i <= count; i++) {{
-                        let name = useDefaults ? ("Var" + i)
-                                               : document.getElementById('var_name_' + i).value.trim() || ("Var" + i);
-                        varNames.push(name);
+                        const inp = document.getElementById('var_name_' + i);
+                        const val = inp ? inp.value.trim() : "";
+                        varNames.push(val);
                     }}
 
                     // FIX: delete_mode *not* "keep", prevents double saves
