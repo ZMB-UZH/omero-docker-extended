@@ -607,7 +607,7 @@ def index(request, conn=None, url=None, **kwargs):
                     .then(r => r.json())
                     .then(data => {{
                         if (data.error) {{
-                            console.warn("Unable to load variable sets", data.error);
+                            console.warn("Unable to load variable sets.", data.error);
                             populateVariableSetDropdown([]);
                             return;
                         }}
