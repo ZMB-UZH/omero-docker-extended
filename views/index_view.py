@@ -125,6 +125,7 @@ def index(request, conn=None, url=None, **kwargs):
                 <div class="omeroweb-filenamemetadata"
                      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); max-width:1200px; margin:0 auto;'>
                     <div style='display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px;'>
+
                         <h2 style='color:#007bff; margin:0;'>
                             <span aria-hidden="true"
                                   style="display:inline-block; margin-right:6px; pointer-events:none;">
@@ -134,6 +135,20 @@ def index(request, conn=None, url=None, **kwargs):
                                 Preview parsed filenames
                             </span>
                         </h2>
+
+                        <div style="flex:1; display:flex; justify-content:center;">
+                            <button onclick="goBack()"
+                                    style='padding:8px 8px; font-size:12px;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                                    ←
+                                </span>
+                                <span>
+                                    Go back to project selection
+                                </span>
+                            </button>
+                        </div>
+
                         <button onclick='scrollToBottom()'
                                 style='padding:8px 8px; font-size:12px;'>
                             <span aria-hidden="true"
@@ -144,7 +159,9 @@ def index(request, conn=None, url=None, **kwargs):
                                 Scroll to bottom
                             </span>
                         </button>
+
                     </div>
+
                     <p>Project: {project_label} | Separator(s): "{raw_seps}"</p>
                     <p>Previewing {len(preview_rows)} images.</p>
                     <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
@@ -309,19 +326,20 @@ def index(request, conn=None, url=None, **kwargs):
                     </div>
 
                     <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
-                        <!-- BACK BUTTON -->
-                        <button onclick="goBack()"
-                                style='padding:8px 8px; font-size:12px;'>
-                            <span aria-hidden="true"
-                                  style="display:inline-block; margin-right:4px; pointer-events:none;">
-                                ←
-                            </span>
-                            <span>
-                                Go back to project selection
-                            </span>
-                        </button>
 
-                        <!-- SCROLL TO TOP BUTTON -->
+                        <div style="flex:1; display:flex; justify-content:center;">
+                            <button onclick="goBack()"
+                                    style='padding:8px 8px; font-size:12px;'>
+                                <span aria-hidden="true"
+                                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                                    ←
+                                </span>
+                                <span>
+                                    Go back to project selection
+                                </span>
+                            </button>
+                        </div>
+
                         <button onclick='scrollToTop()'
                                 style='padding:8px 8px; font-size:12px;'>
                             <span aria-hidden="true"
@@ -332,6 +350,7 @@ def index(request, conn=None, url=None, **kwargs):
                                 Scroll to top
                             </span>
                         </button>
+
                     </div>
 
                     <!-- HIDDEN FIELDS -->
