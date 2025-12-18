@@ -243,6 +243,17 @@ def index(request, conn=None, url=None, **kwargs):
                                             class="varset-btn varset-btn-red">
                                         Delete from database
                                     </button>
+
+                                    <a href="/static/omeroweb_filenamemetadata/help.pdf"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="varset-btn"
+                                       title="Help"
+                                       aria-label="Help"
+                                       style="background:#007bff; text-align:center; text-decoration:none;">
+                                        ?
+                                    </a>
+                                    
                                 </div>
 
                                 </div>
