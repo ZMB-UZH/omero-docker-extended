@@ -40,6 +40,7 @@ def index(request, conn=None, url=None, **kwargs):
         if request.method == "POST" and request.POST.get("action") != "save_job":
             project_id = request.POST.get("project")
             raw_seps = request.POST.get("separator", "_")
+            separator_mode = request.POST.get("separator_mode", "chars")
 
             if not project_id:
                 return HttpResponse(
@@ -56,7 +57,18 @@ def index(request, conn=None, url=None, **kwargs):
             except Exception:
                 project_label = f"ID {project_id}"
 
-            sep_pattern = f"(?:{'|'.join(re.escape(c) for c in raw_seps)})+"
+            if separator_mode == "regex":
+                sep_pattern = raw_seps
+                try:
+                    re.compile(sep_pattern)
+                except re.error as e:
+                    return HttpResponse(
+                        "<h2 style='color:red;'>Invalid regex pattern.</h2>"
+                        f"<p>{e}</p>"
+                        "<a href='.'>Back</a>"
+                    )
+            else:
+                sep_pattern = f"(?:{'|'.join(re.escape(c) for c in raw_seps)})+"
 
             ds_list = collect_images_by_dataset_sorted(conn, project_id, limit=50)
 
@@ -389,6 +401,7 @@ def index(request, conn=None, url=None, **kwargs):
                     <!-- HIDDEN FIELDS -->
                     <input type='hidden' id='project_id' value='{project_id}'>
                     <input type='hidden' id='separator' value='{raw_seps}'>
+                    <input type='hidden' id='separator_mode' value='{separator_mode}'>
 
                     <div id='progress-section' style='margin-top:30px; display:none;'>
                         <h3>Progress</h3>
@@ -940,6 +953,7 @@ def index(request, conn=None, url=None, **kwargs):
 
                     const projectId = document.getElementById('project_id').value;
                     const separator = document.getElementById('separator').value;
+                    const separatorMode = document.getElementById('separator_mode').value;
 
                     const container = document.getElementById('var-config');
                     const count = parseInt(container.getAttribute('data-var-count'));
