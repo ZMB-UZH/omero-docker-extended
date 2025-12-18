@@ -45,8 +45,18 @@ def start_job(request, conn=None, url=None, **kwargs):
 
                 project_id = data.get("project_id")
                 raw_seps = data.get("separator", "_")
+                separator_mode = data.get("separator_mode", "chars")
                 var_names = data.get("var_names") or []
                 delete_mode = data.get("delete_mode")
+
+                if separator_mode not in ("chars", "regex"):
+                        separator_mode = "chars"
+
+                if separator_mode == "regex":
+                        try:
+                                re.compile(raw_seps)
+                        except re.error as e:
+                                return JsonResponse({"error": f"Invalid regex pattern: {e}"}, status=400)
 
                 if delete_mode not in ("keep", "all", "plugin"):
                         delete_mode = "keep"
@@ -83,6 +93,7 @@ def start_job(request, conn=None, url=None, **kwargs):
                         "total": len(image_ids),
                         "index": 0,
                         "started": time.time()
+                        "separator_mode": separator_mode,
                 }
 
                 save_job(job)
@@ -200,7 +211,11 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             })
 
         seps_escaped = "".join(re.escape(c) for c in raw_seps)
-        sep_pattern = f"[{seps_escaped}]+"
+        if separator_mode == "regex":
+            sep_pattern = raw_seps
+        else:
+            seps_escaped = "".join(re.escape(c) for c in raw_seps)
+            sep_pattern = f"[{seps_escaped}]+"
 
         end = min(idx + CHUNK_SIZE, total)
         batch_ids = image_ids[idx:end]
