@@ -1,5 +1,4 @@
 from django.urls import path
-
 from .views.index_view import index
 from .views.job_view import start_job, job_progress, start_acq_job
 from .views.delete_all_view import delete_all_metadata
