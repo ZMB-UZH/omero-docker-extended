@@ -243,31 +243,19 @@ def index(request, conn=None, url=None, **kwargs):
                                     </button>
                                 </div>
 
-                                <div style="display:flex; justify-content:flex-end; margin-top:6px;">
-                                    <a href="/static/omeroweb_filenamemetadata/help.pdf"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       title="Help"
-                                       aria-label="Help"
-                                       style="
-                                            width:26px;
-                                            height:26px;
-                                            border-radius:50%;
-                                            border:1px solid #007bff;
-                                            color:#007bff;
-                                            font-size:14px;
-                                            font-weight:600;
-                                            line-height:24px;
-                                            text-align:center;
-                                            text-decoration:none;
-                                            background:white;
-                                            cursor:pointer;
-                                       ">
-                                        ?
-                                    </a>
                                 </div>
 
-                                </div>
+                            <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
+                            <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+                                <a href="/omeroweb_filenamemetadata/help/"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   title="Help"
+                                   aria-label="Help"
+                                   class="help-btn">
+                                    ?
+                                </a>
+                            </div>
 
                                 <div>
                                     <label for='variable_set_name'
