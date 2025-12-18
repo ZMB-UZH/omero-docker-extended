@@ -215,12 +215,27 @@ def index(request, conn=None, url=None, **kwargs):
                                         Variable sets in database
                                     </label>
 
-                                <div style='display:flex; align-items:center; gap:15px;'>
+                                <div style='
+                                        display:flex;
+                                        align-items:center;
+                                        gap:15px;
+                                        max-width:100%;
+                                        overflow:hidden;
+                                    '>
                                     <select id='variable_set_select'
-                                            style='font-size:12px; width:200px; min-width:150; padding:8px 8px;
-                                                   border:none; border-radius:6px; background:#ffffff;
+                                            style='
+                                                   font-size:12px;
+                                                   width:200px;
+                                                   min-width:0;
+                                                   max-width:100%;
+                                                   padding:8px 8px;
+                                                   border:none;
+                                                   border-radius:6px;
+                                                   background:#ffffff;
                                                    box-shadow: inset 0 0 0 1px #007bff;
-                                                   box-sizing:border-box;'>
+                                                   box-sizing:border-box;
+                                                   flex:1 1 auto;
+                                            '>
                                         <option value=''>Select or create…</option>
                                     </select>
 
