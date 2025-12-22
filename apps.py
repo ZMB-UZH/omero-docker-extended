@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
-class FilenameMetadataConfig(AppConfig):
-    name = "omeroweb_filenamemetadata"
-    label = "omeroweb_filenamemetadata"
-    verbose_name = "Filename-Metadata plugin"
+class ZMBPluginConfig(AppConfig):
+    name = "omeroweb_zmb_plugin"
+    label = "omeroweb_zmb_plugin"
+    verbose_name = "ZMB plugin"
 
