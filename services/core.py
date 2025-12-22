@@ -799,7 +799,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         plugin  – delete ONLY MapAnnotations created by this plugin
     """
     if mode == "keep":
-        return
+        return 0
 
     try:
         annotations = list(img.listAnnotations())
@@ -809,7 +809,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             get_id(img),
             e,
         )
-        return
+        return 0
 
     qs = conn.getQueryService()
     service_opts = getattr(conn, "SERVICE_OPTS", None)
@@ -872,10 +872,16 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         obj = getattr(ann_obj, "_obj", ann_obj)
         update.deleteObject(obj)
 
+    target_ids = set()
+
     for ann in annotations:
         try:
             obj = getattr(ann, "_obj", ann)
             if not hasattr(obj, "getMapValue"):
+                continue
+
+            ann_id = get_id(ann)
+            if ann_id is None:
                 continue
 
             # Best-effort namespace check
@@ -886,21 +892,15 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             except Exception:
                 pass
 
-            # --------------------------------------------------
-            # MODE: all (same behavior as before, but safe)
-            # --------------------------------------------------
             if mode == "all":
-                _delete_by_id(get_id(ann))
+                target_ids.add(ann_id)
                 continue
 
-            # --------------------------------------------------
-            # MODE: plugin (HASH-VERIFIED)
-            # --------------------------------------------------
             if mode == "plugin":
                 if ns != MAP_NS:
                     continue
                 if is_plugin_annotation(obj, qs=qs, service_opts=service_opts):
-                    _delete_by_id(get_id(ann))
+                    target_ids.add(ann_id)
                 continue
 
         except Exception as e:
@@ -913,14 +913,17 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
 
     if mode == "all":
         try:
-            for aid in find_map_annotation_ids(conn, get_id(img)):
-                _delete_by_id(aid)
+            target_ids.update(find_map_annotation_ids(conn, get_id(img)))
         except Exception:
             logger.warning("Failed to delete map annotations for image %s", get_id(img))
 
     if mode == "plugin":
         try:
-            for aid in find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True):
-                _delete_by_id(aid)
+            target_ids.update(find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True))
         except Exception:
             logger.warning("Failed to delete plugin annotations for image %s", get_id(img))
+
+    for aid in target_ids:
+        _delete_by_id(aid)
+
+    return len(target_ids)
