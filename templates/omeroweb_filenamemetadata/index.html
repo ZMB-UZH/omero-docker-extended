@@ -1,0 +1,87 @@
+<div class="omeroweb-filenamemetadata"
+     style='padding:40px; max-width:600px; margin:0 auto; --base-font-size:14px; font-size:var(--base-font-size);'>
+    <h1 style='color:#007bff;'>Filename-Metadata plugin</h1>
+
+    <form method='POST'
+          style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
+        <div style='margin-bottom:20px;'>
+            <label><strong>Project:</strong></label><br>
+            <select name='project'
+                    style='width:100%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
+                <option value=''>Select project…</option>
+                {% for pid, name in projects %}
+                    <option value='{{ pid }}'>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style='margin-bottom:20px;'>
+            <label><strong>Input for filename parsing:</strong></label><br>
+
+            <input type='hidden'
+                   name='separator_mode'
+                   id='separator_mode'
+                   value='chars'>
+
+            <div style='display:flex; align-items:flex-start; gap:14px;'>
+                <input type='text'
+                       name='separator'
+                       value='_-'
+                       style='width:55%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
+
+                <div style='display:flex; flex-direction:column; gap:8px; margin-top:-4px;'>
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_chars'
+                               checked
+                               onclick='setSeparatorMode("chars")'>
+                        <span>Character(s)</span>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_regex'
+                               onclick='setSeparatorMode("regex")'>
+                        <span>Regex pattern</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <button type='submit'
+                style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
+                       border:none;border-radius:8px;'>
+            Load images & Preview
+        </button>
+    </form>
+
+    <script>
+    function setSeparatorMode(mode) {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        const hidden = document.getElementById('separator_mode');
+
+        if (mode === 'regex') {
+            regex.checked = true;
+            chars.checked = false;
+            hidden.value = 'regex';
+        } else {
+            chars.checked = true;
+            regex.checked = false;
+            hidden.value = 'chars';
+        }
+    }
+
+    // Ensure exactly one mode is selected even if browser restores form state
+    (function initSeparatorMode() {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        if (regex && regex.checked) {
+            setSeparatorMode('regex');
+        } else {
+            setSeparatorMode('chars');
+        }
+    })();
+    </script>
+
+</div>
