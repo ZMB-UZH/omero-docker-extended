@@ -179,7 +179,7 @@
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
     const projectDataScript = document.getElementById('project-data');
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
-    const MAX_PROJECT_RESULTS = 200;
+    const MAX_PROJECT_RESULTS = 10;
     let projectFilterTimeout = null;
 
     function showNonBlockingModal(message) {
