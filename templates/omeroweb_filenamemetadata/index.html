@@ -6,13 +6,21 @@
           style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
-            <select name='project'
-                    style='width:100%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
-                <option value=''>Select project…</option>
-                {% for pid, name in projects %}
-                    <option value='{{ pid }}'>{{ name }}</option>
-                {% endfor %}
-            </select>
+            <div style='display:flex; align-items:center; gap:12px;'>
+                <select name='project'
+                        id='project_select'
+                        style='width:55%;padding:12px;border-radius:6px;border:1px solid #007bff;'>
+                    <option value=''>Select project…</option>
+                    {% for pid, name in projects %}
+                        <option value='{{ pid }}'>{{ name }}</option>
+                    {% endfor %}
+                </select>
+                <button type='button'
+                        id='dataset_selection_btn'
+                        style='padding:12px 16px;font-size:14px;background:#007bff;color:white;border:none;border-radius:8px;'>
+                    Dataset selection
+                </button>
+            </div>
         </div>
 
         <div style='margin-bottom:20px;'>
@@ -46,6 +54,33 @@
                     </label>
                 </div>
             </div>
+        </div>
+
+        <input type='hidden' name='selected_datasets' id='selected_datasets' value=''>
+
+        <div id='dataset_table_container'
+             style='display:none; margin-bottom:20px; border:1px solid #007bff; border-radius:8px; background:#fff;'>
+            <div style='padding:12px; border-bottom:1px solid #007bff; font-weight:600; color:#007bff;'>
+                Datasets in selected project
+            </div>
+            <div style='max-height:240px; overflow:auto;'>
+                <table style='width:100%; border-collapse:collapse; font-size:13px;'>
+                    <thead style='background:#f1f5f9; position:sticky; top:0;'>
+                    <tr>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0; width:40px;'>
+                            <input type='checkbox' id='datasets_select_all' checked>
+                        </th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Dataset</th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>ID</th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Images</th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Owner</th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody id='dataset_table_body'></tbody>
+                </table>
+            </div>
+            <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
         </div>
 
         <button type='submit'
@@ -82,6 +117,115 @@
             setSeparatorMode('chars');
         }
     })();
+
+    const datasetButton = document.getElementById('dataset_selection_btn');
+    const projectSelect = document.getElementById('project_select');
+    const datasetTableContainer = document.getElementById('dataset_table_container');
+    const datasetTableBody = document.getElementById('dataset_table_body');
+    const datasetTableMessage = document.getElementById('dataset_table_message');
+    const datasetSelectAll = document.getElementById('datasets_select_all');
+    const selectedDatasetsInput = document.getElementById('selected_datasets');
+
+    function updateSelectedDatasets() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        const ids = Array.from(checked).map((input) => input.dataset.datasetId);
+        selectedDatasetsInput.value = ids.join(',');
+        if (datasetSelectAll) {
+            const allBoxes = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]');
+            datasetSelectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+        }
+    }
+
+    function renderDatasetRows(datasets) {
+        datasetTableBody.innerHTML = '';
+        if (!datasets || datasets.length === 0) {
+            datasetTableMessage.textContent = 'No datasets found for this project.';
+            datasetTableMessage.style.display = 'block';
+            datasetSelectAll.checked = false;
+            selectedDatasetsInput.value = '';
+            return;
+        }
+        datasetTableMessage.style.display = 'none';
+        datasetSelectAll.checked = true;
+
+        datasets.forEach((ds) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">
+                    <input type="checkbox" data-dataset-id="${ds.id}" checked>
+                </td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.name || ''}</td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.id || ''}</td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.image_count}</td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.owner || ''}</td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.description || ''}</td>
+            `;
+            datasetTableBody.appendChild(row);
+        });
+
+        datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+            .forEach((input) => input.addEventListener('change', updateSelectedDatasets));
+
+        updateSelectedDatasets();
+    }
+
+    if (datasetSelectAll) {
+        datasetSelectAll.addEventListener('change', () => {
+            const checked = datasetSelectAll.checked;
+            datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+                .forEach((input) => {
+                    input.checked = checked;
+                });
+            updateSelectedDatasets();
+        });
+    }
+
+    if (datasetButton) {
+        datasetButton.addEventListener('click', () => {
+            const projectId = projectSelect.value;
+            if (!projectId) {
+                datasetTableContainer.style.display = 'block';
+                datasetTableBody.innerHTML = '';
+                datasetTableMessage.textContent = 'Select a project first to load datasets.';
+                datasetTableMessage.style.display = 'block';
+                datasetSelectAll.checked = false;
+                selectedDatasetsInput.value = '';
+                return;
+            }
+
+            datasetTableMessage.style.display = 'none';
+            datasetTableContainer.style.display = 'block';
+            datasetTableBody.innerHTML = '<tr><td colspan="6" style="padding:12px;">Loading datasets…</td></tr>';
+
+            const formData = new FormData();
+            formData.append('action', 'list_datasets');
+            formData.append('project', projectId);
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        datasetTableBody.innerHTML = '';
+                        datasetTableMessage.textContent = data.error;
+                        datasetTableMessage.style.display = 'block';
+                        datasetSelectAll.checked = false;
+                        selectedDatasetsInput.value = '';
+                        return;
+                    }
+                    renderDatasetRows(data.datasets || []);
+                })
+                .catch(() => {
+                    datasetTableBody.innerHTML = '';
+                    datasetTableMessage.textContent = 'Unable to load datasets. Please try again.';
+                    datasetTableMessage.style.display = 'block';
+                    datasetSelectAll.checked = false;
+                    selectedDatasetsInput.value = '';
+                });
+        });
+    }
     </script>
 
 </div>
