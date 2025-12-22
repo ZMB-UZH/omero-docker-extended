@@ -55,6 +55,7 @@ def index(request, conn=None, url=None, **kwargs):
             raw_seps = request.POST.get("separator", "_")
             separator_mode = request.POST.get("separator_mode", "chars")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
+            dataset_selection_opened = request.POST.get("dataset_selection_opened") == "1"
 
             if not project_id:
                 return render(
@@ -73,6 +74,15 @@ def index(request, conn=None, url=None, **kwargs):
                     {
                         "projects": projects,
                         "error_message": "The input field for filename parsing cannot be empty.",
+                    },
+                )
+            if dataset_selection_opened and not selected_dataset_ids_raw.strip():
+                return render(
+                    request,
+                    "omeroweb_filenamemetadata/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": "Please select one or more datasets first.",
                     },
                 )
 
