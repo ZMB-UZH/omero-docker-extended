@@ -511,7 +511,7 @@
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
             const projectName = getSelectedProjectName();
-            showNonBlockingModal(`No datasets found in project ${projectName}`);
+            showNonBlockingModal(`No datasets found in project "${projectName}"`);
             resetDatasetSelection();
             return;
         }
