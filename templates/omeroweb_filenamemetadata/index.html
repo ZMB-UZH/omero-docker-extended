@@ -287,12 +287,16 @@
         if (!option) return;
         const projectId = option.dataset.projectId || '';
         const projectName = option.dataset.projectName || option.textContent || '';
+        const previousProjectId = projectSelect?.value || '';
         if (projectSelect) {
             projectSelect.value = projectId;
         }
         if (projectSelectInput) {
             projectSelectInput.value = projectName;
             projectSelectInput.dataset.selectedName = projectName;
+        }
+        if (projectId && projectId !== previousProjectId) {
+            resetDatasetSelection();
         }
         closeProjectDropdown(false);
     }
@@ -474,14 +478,32 @@
         return projectSelectInput?.dataset.selectedName || '';
     }
 
+    function resetDatasetSelection() {
+        datasetSelectionOpenedInput.value = '0';
+        selectedDatasetsInput.value = '';
+        if (datasetSelectAll) {
+            datasetSelectAll.checked = false;
+        }
+        if (datasetTableBody) {
+            datasetTableBody.innerHTML = '';
+        }
+        if (datasetTableMessage) {
+            datasetTableMessage.style.display = 'none';
+        }
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'none';
+        }
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.remove('expanded');
+        }
+    }
+
     function renderDatasetRows(datasets) {
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
             const projectName = getSelectedProjectName();
-            datasetTableMessage.style.display = 'none';
             showNonBlockingModal(`No datasets found in project ${projectName}`);
-            datasetSelectAll.checked = false;
-            selectedDatasetsInput.value = '';
+            resetDatasetSelection();
             return;
         }
         datasetTableMessage.style.display = 'none';
