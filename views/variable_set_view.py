@@ -151,4 +151,3 @@ def delete_set(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unexpected error deleting set: %s", e)
         return JsonResponse({"error": "Unexpected error."}, status=500)
-
