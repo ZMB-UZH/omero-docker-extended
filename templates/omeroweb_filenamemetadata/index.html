@@ -25,21 +25,15 @@
                            id="project_select_input"
                            placeholder="Select project…"
                            autocomplete="off"
-                           style="width:100%; padding:12px;border-radius:6px;border:1px solid #007bff;">
+                           style="width:100%; padding:12px 34px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                    <span class="project-select-arrow" aria-hidden="true">▾</span>
                     <input type="hidden" name="project" id="project_select" value="">
                     <div id="project_select_dropdown"
                          style="display:none; position:absolute; left:0; right:0; top:100%;
                                 background:#fff; border:1px solid #007bff; border-top:none;
                                 max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
-                        {% for pid, name in projects %}
-                            <div class="project-option"
-                                 data-project-id="{{ pid }}"
-                                 data-project-name="{{ name|escape }}"
-                                 style="padding:8px 12px; cursor:pointer; white-space:nowrap;">
-                                {{ name }}
-                            </div>
-                        {% endfor %}
                     </div>
+                    {{ projects|json_script:"project-data" }}
                 </div>
                 <button type='button'
                         id='dataset_selection_btn'
@@ -139,6 +133,7 @@
                     transition: background 0.15s ease, transform 0.1s ease;}
         .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
         .omeroweb-filenamemetadata.expanded {width:900px; min-width:900px; max-width:900px;}
+        .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563; pointer-events:none;}
     </style>
 
     <script>
@@ -182,9 +177,10 @@
     const separatorInput = document.getElementById('separator_input');
     const filenameMetadataContainer = document.getElementById('filename_metadata_container');
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
-    const projectOptions = projectSelectDropdown
-        ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
-        : [];
+    const projectDataScript = document.getElementById('project-data');
+    const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    const MAX_PROJECT_RESULTS = 200;
+    let projectFilterTimeout = null;
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -221,13 +217,70 @@
     showNonBlockingModal("{{ error_message|escapejs }}");
     {% endif %}
 
+    function renderProjectOptions(query) {
+        if (!projectSelectDropdown) return;
+        const normalizedQuery = query.trim().toLowerCase();
+        const matches = [];
+        let totalMatches = 0;
+
+        for (let i = 0; i < allProjects.length; i += 1) {
+            const [projectId, projectName] = allProjects[i];
+            const name = projectName || '';
+            const id = projectId || '';
+            const isMatch = !normalizedQuery
+                || String(name).toLowerCase().includes(normalizedQuery)
+                || String(id).toLowerCase().includes(normalizedQuery);
+            if (isMatch) {
+                totalMatches += 1;
+                if (matches.length < MAX_PROJECT_RESULTS) {
+                    matches.push([projectId, projectName]);
+                }
+            }
+        }
+
+        projectSelectDropdown.innerHTML = '';
+
+        if (matches.length === 0) {
+            const emptyRow = document.createElement('div');
+            emptyRow.style.padding = '8px 12px';
+            emptyRow.style.color = '#6b7280';
+            emptyRow.textContent = 'No matching projects.';
+            projectSelectDropdown.appendChild(emptyRow);
+        } else {
+            matches.forEach(([projectId, projectName]) => {
+                const option = document.createElement('div');
+                option.className = 'project-option';
+                option.dataset.projectId = projectId;
+                option.dataset.projectName = projectName || '';
+                option.style.padding = '8px 12px';
+                option.style.cursor = 'pointer';
+                option.style.whiteSpace = 'nowrap';
+                option.textContent = projectName || projectId;
+                projectSelectDropdown.appendChild(option);
+            });
+        }
+
+        const statusRow = document.createElement('div');
+        statusRow.style.padding = '6px 12px';
+        statusRow.style.fontSize = '11px';
+        statusRow.style.color = '#6b7280';
+        if (totalMatches > MAX_PROJECT_RESULTS) {
+            statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
+        } else if (totalMatches > 0) {
+            statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found.`;
+        } else {
+            statusRow.textContent = 'No projects found.';
+        }
+        projectSelectDropdown.appendChild(statusRow);
+    }
+
     function openProjectDropdown() {
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'block';
         projectSelectInput.dataset.previousValue = projectSelectInput.value;
         projectSelectInput.value = '';
         projectSelectInput.placeholder = 'Search...';
-        filterProjectOptions('');
+        renderProjectOptions('');
     }
 
     function closeProjectDropdown(restoreSelection = true) {
@@ -241,15 +294,12 @@
     }
 
     function filterProjectOptions(query) {
-        const normalizedQuery = query.trim().toLowerCase();
-        projectOptions.forEach((option) => {
-            const name = option.dataset.projectName || '';
-            const id = option.dataset.projectId || '';
-            const matches = !normalizedQuery
-                || name.toLowerCase().includes(normalizedQuery)
-                || String(id).toLowerCase().includes(normalizedQuery);
-            option.style.display = matches ? 'block' : 'none';
-        });
+        if (projectFilterTimeout) {
+            window.clearTimeout(projectFilterTimeout);
+        }
+        projectFilterTimeout = window.setTimeout(() => {
+            renderProjectOptions(query);
+        }, 120);
     }
 
     if (projectSelectInput) {
