@@ -506,6 +506,13 @@
             resetDatasetSelection();
             return;
         }
+        datasetSelectionOpenedInput.value = '1';
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.add('expanded');
+        }
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'block';
+        }
         datasetTableMessage.style.display = 'none';
         datasetSelectAll.checked = true;
 
@@ -548,13 +555,8 @@
                 return;
             }
 
-            datasetSelectionOpenedInput.value = '1';
-            if (filenameMetadataContainer) {
-                filenameMetadataContainer.classList.add('expanded');
-            }
             datasetTableMessage.style.display = 'none';
-            datasetTableContainer.style.display = 'block';
-            datasetTableBody.innerHTML = '<tr><td colspan="5" style="padding:2px;">Loading datasets…</td></tr>';
+            datasetTableBody.innerHTML = '';
 
             const formData = new FormData();
             formData.append('action', 'list_datasets');
@@ -567,21 +569,15 @@
                 .then((resp) => resp.json())
                 .then((data) => {
                     if (data.error) {
-                        datasetTableBody.innerHTML = '';
-                        datasetTableMessage.textContent = data.error;
-                        datasetTableMessage.style.display = 'block';
-                        datasetSelectAll.checked = false;
-                        selectedDatasetsInput.value = '';
+                        showNonBlockingModal(data.error);
+                        resetDatasetSelection();
                         return;
                     }
                     renderDatasetRows(data.datasets || []);
                 })
                 .catch(() => {
-                    datasetTableBody.innerHTML = '';
-                    datasetTableMessage.textContent = 'Unable to load datasets. Please try again.';
-                    datasetTableMessage.style.display = 'block';
-                    datasetSelectAll.checked = false;
-                    selectedDatasetsInput.value = '';
+                    showNonBlockingModal('Unable to load datasets. Please try again.');
+                    resetDatasetSelection();
                 });
         });
     }
