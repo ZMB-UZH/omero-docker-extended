@@ -19,14 +19,28 @@
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
             <div style='display:flex; align-items:flex-start; gap:14px;'>
-                <select name='project'
-                        id='project_select'
-                        style='width:55%; flex:0 0 55%; padding:12px;border-radius:6px;border:1px solid #007bff;'>
-                    <option value=''>Select project…</option>
-                    {% for pid, name in projects %}
-                        <option value='{{ pid }}'>{{ name }}</option>
-                    {% endfor %}
-                </select>
+                <div id="project_select_wrapper"
+                     style="width:55%; flex:0 0 55%; position:relative;">
+                    <input type="text"
+                           id="project_select_input"
+                           placeholder="Select project…"
+                           autocomplete="off"
+                           style="width:100%; padding:12px;border-radius:6px;border:1px solid #007bff;">
+                    <input type="hidden" name="project" id="project_select" value="">
+                    <div id="project_select_dropdown"
+                         style="display:none; position:absolute; left:0; right:0; top:100%;
+                                background:#fff; border:1px solid #007bff; border-top:none;
+                                max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                        {% for pid, name in projects %}
+                            <div class="project-option"
+                                 data-project-id="{{ pid }}"
+                                 data-project-name="{{ name|escape }}"
+                                 style="padding:8px 12px; cursor:pointer; white-space:nowrap;">
+                                {{ name }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
                 <button type='button'
                         id='dataset_selection_btn'
                         style='padding:12px 16px;font-size:14px;background:#007bff;color:white;border:none;border-radius:8px; flex:0 0 auto;'>
@@ -158,6 +172,8 @@
 
     const datasetButton = document.getElementById('dataset_selection_btn');
     const projectSelect = document.getElementById('project_select');
+    const projectSelectInput = document.getElementById('project_select_input');
+    const projectSelectDropdown = document.getElementById('project_select_dropdown');
     const datasetTableContainer = document.getElementById('dataset_table_container');
     const datasetTableBody = document.getElementById('dataset_table_body');
     const datasetTableMessage = document.getElementById('dataset_table_message');
@@ -166,6 +182,9 @@
     const separatorInput = document.getElementById('separator_input');
     const filenameMetadataContainer = document.getElementById('filename_metadata_container');
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
+    const projectOptions = projectSelectDropdown
+        ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
+        : [];
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -202,6 +221,85 @@
     showNonBlockingModal("{{ error_message|escapejs }}");
     {% endif %}
 
+    function openProjectDropdown() {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'block';
+        projectSelectInput.dataset.previousValue = projectSelectInput.value;
+        projectSelectInput.value = '';
+        projectSelectInput.placeholder = 'Search...';
+        filterProjectOptions('');
+    }
+
+    function closeProjectDropdown(restoreSelection = true) {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'none';
+        if (restoreSelection && !projectSelectInput.value) {
+            const selectedName = projectSelectInput.dataset.selectedName || '';
+            projectSelectInput.value = selectedName;
+        }
+        projectSelectInput.placeholder = 'Select project…';
+    }
+
+    function filterProjectOptions(query) {
+        const normalizedQuery = query.trim().toLowerCase();
+        projectOptions.forEach((option) => {
+            const name = option.dataset.projectName || '';
+            const id = option.dataset.projectId || '';
+            const matches = !normalizedQuery
+                || name.toLowerCase().includes(normalizedQuery)
+                || String(id).toLowerCase().includes(normalizedQuery);
+            option.style.display = matches ? 'block' : 'none';
+        });
+    }
+
+    if (projectSelectInput) {
+        projectSelectInput.addEventListener('focus', () => {
+            openProjectDropdown();
+        });
+
+        projectSelectInput.addEventListener('click', () => {
+            if (projectSelectDropdown?.style.display !== 'block') {
+                openProjectDropdown();
+            }
+        });
+
+        projectSelectInput.addEventListener('input', (event) => {
+            filterProjectOptions(event.target.value);
+        });
+    }
+
+    if (projectSelectDropdown) {
+        projectSelectDropdown.addEventListener('click', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            const projectId = option.dataset.projectId || '';
+            const projectName = option.dataset.projectName || option.textContent || '';
+            if (projectSelect) {
+                projectSelect.value = projectId;
+            }
+            if (projectSelectInput) {
+                projectSelectInput.value = projectName;
+                projectSelectInput.dataset.selectedName = projectName;
+            }
+            closeProjectDropdown(false);
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        if (event.target.closest('#project_select_wrapper')) {
+            return;
+        }
+        closeProjectDropdown(true);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        if (projectSelectDropdown?.style.display === 'block') {
+            closeProjectDropdown(true);
+        }
+    });
+
     function updateSelectedDatasets() {
         const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
         const ids = Array.from(checked).map((input) => input.dataset.datasetId);
@@ -212,10 +310,15 @@
         }
     }
 
+    function getSelectedProjectName() {
+        return projectSelectInput?.dataset.selectedName || '';
+    }
+
     function renderDatasetRows(datasets) {
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
-            datasetTableMessage.textContent = 'No datasets found for this project.';
+            const projectName = getSelectedProjectName();
+            datasetTableMessage.textContent = `No datasets found in project ${projectName}`;
             datasetTableMessage.style.display = 'block';
             datasetSelectAll.checked = false;
             selectedDatasetsInput.value = '';
