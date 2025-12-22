@@ -331,6 +331,29 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
     return ann_ids
 
 
+def find_annotation_link_ids(conn, annotation_id):
+    """Return ImageAnnotationLink IDs for an annotation."""
+    try:
+        aid = int(annotation_id)
+    except Exception:
+        return []
+
+    try:
+        qs = conn.getQueryService()
+        service_opts = getattr(conn, "SERVICE_OPTS", None)
+
+        params = ParametersI()
+        params.add("aid", rlong(aid))
+
+        hql = "select l.id from ImageAnnotationLink l where l.child.id = :aid"
+
+        rows = qs.projection(hql, params, service_opts) or []
+        return [r[0].getValue() for r in rows if r and r[0]]
+    except Exception as e:
+        logger.exception("Error locating annotation links for %s: %s", annotation_id, e)
+        return []
+
+
 def find_map_annotation_ids(conn, image_id):
     """Return MapAnnotation IDs linked to an image (key-value pairs)."""
     try:
@@ -788,12 +811,41 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         )
         return
 
-    qs = conn.getQueryService() if mode == "plugin" else None
-    service_opts = getattr(conn, "SERVICE_OPTS", None) if mode == "plugin" else None
+    qs = conn.getQueryService()
+    service_opts = getattr(conn, "SERVICE_OPTS", None)
+
+    def _delete_links_for_annotation(aid):
+        if aid is None:
+            return
+        try:
+            params = ParametersI()
+            params.add("aid", rlong(int(aid)))
+            hql_links = (
+                "select l.id "
+                "from ImageAnnotationLink l "
+                "where l.child.id = :aid"
+            )
+            rows = qs.projection(hql_links, params, service_opts) or []
+            link_ids = [r[0].getValue() for r in rows if r and r[0]]
+            for lid in link_ids:
+                try:
+                    link_obj = conn.getObject("ImageAnnotationLink", int(lid))
+                except Exception:
+                    link_obj = None
+                if link_obj is None:
+                    continue
+                obj = getattr(link_obj, "_obj", link_obj)
+                update.deleteObject(obj)
+        except Exception as e:
+            logger.warning("Failed to delete annotation links for %s: %s", aid, e)
 
     def _delete_by_id(aid):
         if aid is None:
             return
+        try:
+            _delete_links_for_annotation(aid)
+        except Exception as e:
+            logger.warning("Failed to delete links for annotation %s: %s", aid, e)
         try:
             ann_obj = conn.getObject("MapAnnotation", int(aid))
         except Exception:
@@ -821,7 +873,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             # MODE: all (same behavior as before, but safe)
             # --------------------------------------------------
             if mode == "all":
-                update.deleteObject(obj)
+                _delete_by_id(get_id(ann))
                 continue
 
             # --------------------------------------------------
@@ -831,7 +883,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 if ns != MAP_NS:
                     continue
                 if is_plugin_annotation(obj, qs=qs, service_opts=service_opts):
-                    update.deleteObject(obj)
+                    _delete_by_id(get_id(ann))
                 continue
 
         except Exception as e:
