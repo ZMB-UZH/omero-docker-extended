@@ -1,6 +1,7 @@
 <div class="omeroweb-filenamemetadata"
+     id="filename_metadata_container"
      style='padding:40px; max-width:600px; margin:0 auto; --base-font-size:14px; font-size:var(--base-font-size);'>
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px;">
         <h1 style='color:#007bff; margin:0;'>Filename-Metadata plugin</h1>
         <a href="/omeroweb_filenamemetadata/help/"
            target="_blank"
@@ -50,7 +51,7 @@
                         <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>ID</th>
                         <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Images</th>
                         <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Owner</th>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Description</th>
+                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>File type(s)</th>
                     </tr>
                     </thead>
                     <tbody id='dataset_table_body'></tbody>
@@ -94,10 +95,11 @@
         </div>
 
         <input type='hidden' name='selected_datasets' id='selected_datasets' value=''>
+        <input type='hidden' name='dataset_selection_opened' id='dataset_selection_opened' value='0'>
 
         <button type='submit'
-                style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
-                       border:none;border-radius:8px;'>
+                style='width:80%;padding:18px;font-size:14px;background:#007bff;color:white;
+                       border:none;border-radius:8px; display:block; margin:0 auto;'>
             Load images & Preview
         </button>
     </form>
@@ -126,6 +128,7 @@
                     line-height:26px; text-align:center; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.25); cursor:pointer;
                     transition: background 0.15s ease, transform 0.1s ease;}
         .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+        .omeroweb-filenamemetadata.expanded {max-width:900px;}
     </style>
 
     <script>
@@ -165,6 +168,8 @@
     const datasetSelectAll = document.getElementById('datasets_select_all');
     const selectedDatasetsInput = document.getElementById('selected_datasets');
     const separatorInput = document.getElementById('separator_input');
+    const filenameMetadataContainer = document.getElementById('filename_metadata_container');
+    const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -183,6 +188,11 @@
             if (!projectSelect.value) {
                 event.preventDefault();
                 showNonBlockingModal("Select a project first.");
+                return;
+            }
+            if (datasetSelectionOpenedInput?.value === '1' && !selectedDatasetsInput.value) {
+                event.preventDefault();
+                showNonBlockingModal("Please select one or more datasets first.");
                 return;
             }
             if (!separatorInput.value.trim()) {
@@ -228,7 +238,7 @@
                 <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.id || ''}</td>
                 <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.image_count}</td>
                 <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.owner || ''}</td>
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.description || ''}</td>
+                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.file_types || ''}</td>
             `;
             datasetTableBody.appendChild(row);
         });
@@ -254,15 +264,14 @@
         datasetButton.addEventListener('click', () => {
             const projectId = projectSelect.value;
             if (!projectId) {
-                datasetTableContainer.style.display = 'block';
-                datasetTableBody.innerHTML = '';
-                datasetTableMessage.textContent = 'Select a project first to load datasets.';
-                datasetTableMessage.style.display = 'block';
-                datasetSelectAll.checked = false;
-                selectedDatasetsInput.value = '';
+                showNonBlockingModal("Select a project first.");
                 return;
             }
 
+            datasetSelectionOpenedInput.value = '1';
+            if (filenameMetadataContainer) {
+                filenameMetadataContainer.classList.add('expanded');
+            }
             datasetTableMessage.style.display = 'none';
             datasetTableContainer.style.display = 'block';
             datasetTableBody.innerHTML = '<tr><td colspan="6" style="padding:12px;">Loading datasets…</td></tr>';
