@@ -376,6 +376,103 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None):
     return out
 
 # --------------------------------------------------------------------------
+# DATASET-SELECTION COLLECTION
+# --------------------------------------------------------------------------
+def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=None):
+    """
+    Returns:
+        [(dataset_obj, [image_obj_sorted_by_ID]), ...]
+    Only includes datasets from dataset_ids, preserving project dataset order.
+    """
+    out = []
+    total = 0
+    if not dataset_ids:
+        return out
+
+    try:
+        wanted = {int(ds_id) for ds_id in dataset_ids}
+    except Exception:
+        wanted = set()
+
+    if not wanted:
+        return out
+
+    try:
+        prj = conn.getObject("Project", int(project_id))
+        if prj is None:
+            return out
+
+        for ds in prj.listChildren():
+            ds_id = get_id(ds)
+            if ds_id is None:
+                continue
+            try:
+                ds_id_int = int(ds_id)
+            except Exception:
+                continue
+            if ds_id_int not in wanted:
+                continue
+
+            imgs = list(ds.listChildren())
+            imgs_sorted = sorted(
+                imgs, key=lambda img: int(get_id(img)) if get_id(img) else 999999999
+            )
+
+            total += len(imgs_sorted)
+            if limit and total > limit:
+                remaining = limit - (total - len(imgs_sorted))
+                imgs_sorted = imgs_sorted[:remaining]
+                out.append((ds, imgs_sorted))
+                return out
+
+            out.append((ds, imgs_sorted))
+
+    except Exception as e:
+        logger.exception("Error collecting selected datasets: %s", e)
+
+    return out
+
+
+def collect_dataset_summaries(conn, project_id):
+    """
+    Returns list of dataset summaries for a project.
+    """
+    summaries = []
+    try:
+        prj = conn.getObject("Project", int(project_id))
+        if prj is None:
+            return summaries
+
+        for ds in prj.listChildren():
+            ds_id = get_id(ds)
+            ds_name = get_text(ds.getName())
+            description = get_text(ds.getDescription()) if ds.getDescription() else ""
+            owner = ""
+            try:
+                owner_obj = ds.getOwner()
+                owner = get_text(owner_obj.getOmeName()) if owner_obj else ""
+            except Exception:
+                owner = ""
+            try:
+                image_count = len(list(ds.listChildren()))
+            except Exception:
+                image_count = 0
+
+            summaries.append(
+                {
+                    "id": str(ds_id),
+                    "name": ds_name,
+                    "image_count": image_count,
+                    "description": description,
+                    "owner": owner,
+                }
+            )
+    except Exception as e:
+        logger.exception("Error collecting dataset summaries: %s", e)
+
+    return summaries
+
+# --------------------------------------------------------------------------
 # Legacy collector
 # --------------------------------------------------------------------------
 def collect_images_in_project(conn, project_id, limit=None):
