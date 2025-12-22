@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
     """
-    Filename metadata UI
+    ZMB filename+metadata harverster UI
     """
 
     try:
@@ -60,7 +60,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return render(
                     request,
-                    "omeroweb_filenamemetadata/index.html",
+                    "omeroweb_zmb_plugin/index.html",
                     {
                         "projects": projects,
                         "error_message": "Select a project first.",
@@ -70,7 +70,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not raw_seps or not raw_seps.strip():
                 return render(
                     request,
-                    "omeroweb_filenamemetadata/index.html",
+                    "omeroweb_zmb_plugin/index.html",
                     {
                         "projects": projects,
                         "error_message": "The input field for filename parsing cannot be empty.",
@@ -79,7 +79,7 @@ def index(request, conn=None, url=None, **kwargs):
             if dataset_selection_opened and not selected_dataset_ids_raw.strip():
                 return render(
                     request,
-                    "omeroweb_filenamemetadata/index.html",
+                    "omeroweb_zmb_plugin/index.html",
                     {
                         "projects": projects,
                         "error_message": "Please select one or more datasets first.",
@@ -179,7 +179,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             return render(
                 request,
-                "omeroweb_filenamemetadata/preview.html",
+                "omeroweb_zmb_plugin/preview.html",
                 context,
             )
 
@@ -188,7 +188,7 @@ def index(request, conn=None, url=None, **kwargs):
         # ----------------------------------------------------
         return render(
             request,
-            "omeroweb_filenamemetadata/index.html",
+            "omeroweb_zmb_plugin/index.html",
             {"projects": projects},
         )
 
