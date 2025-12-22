@@ -7,7 +7,7 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 
 # Chunk size for processing progress
 # Smaller chunks yield more responsive progress updates.
-_DEFAULT_CHUNK_SIZE = 10
+_DEFAULT_CHUNK_SIZE = 1
 try:
     CHUNK_SIZE = int(os.environ.get("FMP_CHUNK_SIZE", _DEFAULT_CHUNK_SIZE))
 except (TypeError, ValueError):
