@@ -50,6 +50,9 @@
     <p>Previewing {{ preview_count }} images.</p>
     <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
         <tr style='background:#007bff; color:white;'>
+            <td style='padding:3px; width:32px; text-align:center;'>
+                <input type='checkbox' id='images_select_all' checked>
+            </td>
             <td style='padding:3px;'>Dataset</td>
             <td style='padding:3px;'>ID</td>
             <td style='padding:3px;'>Filename</td>
@@ -57,6 +60,9 @@
         </tr>
         {% for row in preview_rows %}
         <tr>
+            <td style='padding:2px; text-align:center;'>
+                <input type='checkbox' data-image-id='{{ row.img_id }}' checked>
+            </td>
             <td style='padding:2px;'>
                 <div class="clamp-2">
                     {{ row.ds_label }}
@@ -583,6 +589,44 @@ function hideNonBlockingModal() {
     }
 }
 
+function getSelectedImageIds() {
+    const checked = document.querySelectorAll('input[type="checkbox"][data-image-id]:checked');
+    return Array.from(checked)
+        .map((input) => parseInt(input.dataset.imageId, 10))
+        .filter((val) => Number.isFinite(val));
+}
+
+function updateImageSelectAllState() {
+    const selectAll = document.getElementById('images_select_all');
+    if (!selectAll) {
+        return;
+    }
+    const allBoxes = document.querySelectorAll('input[type="checkbox"][data-image-id]');
+    const checked = document.querySelectorAll('input[type="checkbox"][data-image-id]:checked');
+    selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+}
+
+function initImageSelectionControls() {
+    const selectAll = document.getElementById('images_select_all');
+    const imageBoxes = document.querySelectorAll('input[type="checkbox"][data-image-id]');
+
+    imageBoxes.forEach((input) => {
+        input.addEventListener('change', updateImageSelectAllState);
+    });
+
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            const checked = selectAll.checked;
+            imageBoxes.forEach((input) => {
+                input.checked = checked;
+            });
+            updateImageSelectAllState();
+        });
+    }
+
+    updateImageSelectAllState();
+}
+
 function loadVariableSet() {
     const useDefaults = document.getElementById('use_defaults').checked;
     if (useDefaults) return;
@@ -681,6 +725,7 @@ function deleteVariableSet() {
 
 toggleVarNameInputs();
 fetchVariableSets();
+initImageSelectionControls();
 
 function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
     if (currentJobId) {
@@ -689,6 +734,11 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
     }
 
     const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal("Select at least one image to apply changes.");
+        return;
+    }
 
     const pwd = window.prompt(passwordPrompt);
     if (!pwd) return;
@@ -712,6 +762,7 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
         credentials: "same-origin",
         body: JSON.stringify({
             project_id: projectId,
+            image_ids: selectedImageIds,
             password: pwd
         })
     })
@@ -765,6 +816,11 @@ function startSaveJob() {
     }
 
     const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal("Select at least one image to apply changes.");
+        return;
+    }
     const separator = document.getElementById('separator').value;
     const separatorMode = document.getElementById('separator_mode').value;
 
@@ -785,7 +841,8 @@ function startSaveJob() {
         separator: separator,
         separator_mode: separatorMode,
         var_names: varNames,
-        delete_mode: "all"
+        delete_mode: "all",
+        image_ids: selectedImageIds
     };
 
     document.getElementById("progress-section").style.display = "block";
@@ -823,9 +880,15 @@ function startAcquisitionMetadataJob() {
     }
 
     const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal("Select at least one image to apply changes.");
+        return;
+    }
 
     let payload = {
-        project_id: projectId
+        project_id: projectId,
+        image_ids: selectedImageIds
     };
 
     document.getElementById("progress-section").style.display = "block";
