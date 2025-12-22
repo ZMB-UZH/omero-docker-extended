@@ -260,8 +260,8 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
     return hmac.compare_digest(str(marker), str(expected))
 
 
-def find_plugin_annotation_ids(conn, image_id):
-    """Return verified MapAnnotation IDs created by this plugin for an image."""
+def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
+    """Return MapAnnotation IDs created by this plugin for an image."""
 
     try:
         iid = int(image_id)
@@ -276,14 +276,13 @@ def find_plugin_annotation_ids(conn, image_id):
 
         params = ParametersI()
         params.add("iid", rlong(iid))
-        params.add("hk", rstring(str(HASH_KEY)))
+        params.add("ns", rstring(str(MAP_NS)))
 
         hql_ids = (
             "select a.id "
             "from ImageAnnotationLink l "
             "join l.child a "
-            "join a.mapValue mv "
-            "where mv.name = :hk and l.parent.id = :iid"
+            "where l.parent.id = :iid and a.ns = :ns"
         )
 
         rows = qs.projection(hql_ids, params, service_opts) or []
@@ -293,13 +292,6 @@ def find_plugin_annotation_ids(conn, image_id):
             try:
                 p_ns = ParametersI()
                 p_ns.add("aid", rlong(int(aid)))
-
-                hql_ns = "select a.ns from MapAnnotation a where a.id = :aid"
-                ns_rows = qs.projection(hql_ns, p_ns, service_opts) or []
-                ns_val = ns_rows[0][0].getValue() if ns_rows and ns_rows[0] and ns_rows[0][0] else None
-
-                if ns_val != MAP_NS:
-                    continue
 
                 hql_kv = (
                     "select mv.name, mv.value "
@@ -321,6 +313,8 @@ def find_plugin_annotation_ids(conn, image_id):
 
                 stored = mapping.get(HASH_KEY)
                 if not stored:
+                    if allow_legacy:
+                        ann_ids.append(int(aid))
                     continue
 
                 expected = compute_plugin_hash(mapping)
@@ -335,6 +329,35 @@ def find_plugin_annotation_ids(conn, image_id):
         logger.exception("Error locating plugin annotations for image %s: %s", image_id, e)
 
     return ann_ids
+
+
+def find_map_annotation_ids(conn, image_id):
+    """Return MapAnnotation IDs linked to an image (key-value pairs)."""
+    try:
+        iid = int(image_id)
+    except Exception:
+        return []
+
+    try:
+        qs = conn.getQueryService()
+        service_opts = getattr(conn, "SERVICE_OPTS", None)
+
+        params = ParametersI()
+        params.add("iid", rlong(iid))
+
+        hql_ids = (
+            "select distinct a.id "
+            "from ImageAnnotationLink l "
+            "join l.child a "
+            "join a.mapValue mv "
+            "where l.parent.id = :iid"
+        )
+
+        rows = qs.projection(hql_ids, params, service_opts) or []
+        return [r[0].getValue() for r in rows if r and r[0]]
+    except Exception as e:
+        logger.exception("Error locating map annotations for image %s: %s", image_id, e)
+        return []
 
 # --------------------------------------------------------------------------
 # DATASET-FIRST + IMAGE-ID-SORTED COLLECTION
@@ -768,6 +791,18 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
     qs = conn.getQueryService() if mode == "plugin" else None
     service_opts = getattr(conn, "SERVICE_OPTS", None) if mode == "plugin" else None
 
+    def _delete_by_id(aid):
+        if aid is None:
+            return
+        try:
+            ann_obj = conn.getObject("MapAnnotation", int(aid))
+        except Exception:
+            ann_obj = None
+        if ann_obj is None:
+            return
+        obj = getattr(ann_obj, "_obj", ann_obj)
+        update.deleteObject(obj)
+
     for ann in annotations:
         try:
             obj = getattr(ann, "_obj", ann)
@@ -806,3 +841,17 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 e,
             )
             continue
+
+    if mode == "all":
+        try:
+            for aid in find_map_annotation_ids(conn, get_id(img)):
+                _delete_by_id(aid)
+        except Exception:
+            logger.warning("Failed to delete map annotations for image %s", get_id(img))
+
+    if mode == "plugin":
+        try:
+            for aid in find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True):
+                _delete_by_id(aid)
+        except Exception:
+            logger.warning("Failed to delete plugin annotations for image %s", get_id(img))
