@@ -42,12 +42,26 @@
 
     </div>
 
-    <p>
-        Project: {{ project_label }} |
-        Input type: {% if separator_mode == "regex" %}Regex expression{% else %}Character(s){% endif %} |
-        Input: "{{ raw_seps }}"
-    </p>
-    <p>Previewing {{ preview_count }} images.</p>
+    <div style="display:grid; grid-template-columns: 1fr auto; align-items:start; column-gap:12px;">
+        <div>
+            <p>
+                Project: {{ project_label }} |
+                Input type: {% if separator_mode == "regex" %}Regex expression{% else %}Character(s){% endif %} |
+                Input: "{{ raw_seps }}"
+            </p>
+            <p>Previewing {{ preview_count }} images.</p>
+        </div>
+        <div style="display:flex; justify-content:flex-end; align-items:flex-start;">
+            <a href="/omeroweb_filenamemetadata/help/"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="Help"
+               aria-label="Help"
+               class="help-btn">
+                ?
+            </a>
+        </div>
+    </div>
     <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
         <tr style='background:#007bff; color:white;'>
             <td style='padding:3px; width:32px; text-align:center;'>
