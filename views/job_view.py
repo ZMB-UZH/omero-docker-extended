@@ -29,6 +29,23 @@ from ..services.core import (
 
 logger = logging.getLogger(__name__)
 
+def parse_image_ids(raw_ids):
+        if not raw_ids:
+                return []
+        image_ids = []
+        if isinstance(raw_ids, str):
+                raw_list = [val.strip() for val in raw_ids.split(",") if val.strip()]
+        elif isinstance(raw_ids, (list, tuple, set)):
+                raw_list = list(raw_ids)
+        else:
+                raw_list = []
+        for val in raw_list:
+                try:
+                        image_ids.append(int(val))
+                except (TypeError, ValueError):
+                        continue
+        return image_ids
+
 # ==============================================================================
 # START JOB
 # ==============================================================================
@@ -49,6 +66,7 @@ def start_job(request, conn=None, url=None, **kwargs):
                 separator_mode = data.get("separator_mode", "chars")
                 var_names = data.get("var_names") or []
                 delete_mode = data.get("delete_mode")
+                selected_image_ids = parse_image_ids(data.get("image_ids"))
 
                 if separator_mode not in ("chars", "regex"):
                         separator_mode = "chars"
@@ -62,24 +80,27 @@ def start_job(request, conn=None, url=None, **kwargs):
                 if delete_mode not in ("keep", "all", "plugin"):
                         delete_mode = "keep"
 
-                images = collect_images_in_project(conn, project_id)
-                if not images:
-                        images = list(conn.getObjects("Image"))
+                if selected_image_ids:
+                        image_ids = sorted(set(selected_image_ids))
+                else:
+                        images = collect_images_in_project(conn, project_id)
+                        if not images:
+                                images = list(conn.getObjects("Image"))
 
-                # Remove duplicates
-                seen = set()
-                image_ids = []
+                        # Remove duplicates
+                        seen = set()
+                        image_ids = []
 
-                for img in images:
-                        iid = get_id(img)
-                        if not iid:
-                                continue
-                        iid = int(iid)
-                        if iid not in seen:
-                                seen.add(iid)
-                                image_ids.append(iid)
+                        for img in images:
+                                iid = get_id(img)
+                                if not iid:
+                                        continue
+                                iid = int(iid)
+                                if iid not in seen:
+                                        seen.add(iid)
+                                        image_ids.append(iid)
 
-                image_ids.sort()
+                        image_ids.sort()
 
                 job_id = uuid.uuid4().hex
 
@@ -118,26 +139,30 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
             data = request.POST
 
         project_id = data.get("project_id")
+        selected_image_ids = parse_image_ids(data.get("image_ids"))
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
-        images = collect_images_in_project(conn, project_id)
+        if selected_image_ids:
+            image_ids = sorted(set(selected_image_ids))
+        else:
+            images = collect_images_in_project(conn, project_id)
 
-        if not images:
-            images = list(conn.getObjects("Image"))
+            if not images:
+                images = list(conn.getObjects("Image"))
 
-        seen = set()
-        image_ids = []
-        for img in images:
-            try:
-                iid = get_id(img)
-                if iid and iid not in seen:
-                    seen.add(iid)
-                    image_ids.append(int(iid))
-            except Exception as e:
-                logger.warning("Could not read image id: %s", e)
+            seen = set()
+            image_ids = []
+            for img in images:
+                try:
+                    iid = get_id(img)
+                    if iid and iid not in seen:
+                        seen.add(iid)
+                        image_ids.append(int(iid))
+                except Exception as e:
+                    logger.warning("Could not read image id: %s", e)
 
-        image_ids.sort()
+            image_ids.sort()
 
         job_id = uuid.uuid4().hex
 
@@ -177,27 +202,31 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
             data = request.POST
 
         project_id = data.get("project_id")
+        selected_image_ids = parse_image_ids(data.get("image_ids"))
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
 
-        images = collect_images_in_project(conn, project_id)
+        if selected_image_ids:
+            image_ids = sorted(set(selected_image_ids))
+        else:
+            images = collect_images_in_project(conn, project_id)
 
-        if not images:
-            images = list(conn.getObjects("Image"))
+            if not images:
+                images = list(conn.getObjects("Image"))
 
-        seen = set()
-        image_ids = []
-        for img in images:
-            try:
-                iid = get_id(img)
-                if iid and iid not in seen:
-                    seen.add(iid)
-                    image_ids.append(int(iid))
-            except Exception as e:
-                logger.warning("Could not read image id: %s", e)
+            seen = set()
+            image_ids = []
+            for img in images:
+                try:
+                    iid = get_id(img)
+                    if iid and iid not in seen:
+                        seen.add(iid)
+                        image_ids.append(int(iid))
+                except Exception as e:
+                    logger.warning("Could not read image id: %s", e)
 
-        image_ids.sort()
+            image_ids.sort()
 
         job_id = uuid.uuid4().hex
 
@@ -237,27 +266,31 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
             data = request.POST
 
         project_id = data.get("project_id")
+        selected_image_ids = parse_image_ids(data.get("image_ids"))
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
 
-        images = collect_images_in_project(conn, project_id)
+        if selected_image_ids:
+            image_ids = sorted(set(selected_image_ids))
+        else:
+            images = collect_images_in_project(conn, project_id)
 
-        if not images:
-            images = list(conn.getObjects("Image"))
+            if not images:
+                images = list(conn.getObjects("Image"))
 
-        seen = set()
-        image_ids = []
-        for img in images:
-            try:
-                iid = get_id(img)
-                if iid and iid not in seen:
-                    seen.add(iid)
-                    image_ids.append(int(iid))
-            except Exception as e:
-                logger.warning("Could not read image id: %s", e)
+            seen = set()
+            image_ids = []
+            for img in images:
+                try:
+                    iid = get_id(img)
+                    if iid and iid not in seen:
+                        seen.add(iid)
+                        image_ids.append(int(iid))
+                except Exception as e:
+                    logger.warning("Could not read image id: %s", e)
 
-        image_ids.sort()
+            image_ids.sort()
 
         job_id = uuid.uuid4().hex
 
