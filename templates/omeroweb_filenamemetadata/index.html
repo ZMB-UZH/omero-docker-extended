@@ -41,18 +41,17 @@
                 Datasets in selected project
             </div>
             <div style='max-height:240px; overflow:auto;'>
-                <table style='width:100%; border-collapse:collapse; font-size:13px;'>
-                    <thead style='background:#f1f5f9; position:sticky; top:0;'>
-                    <tr>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0; width:40px;'>
+                <table border='1'
+                       style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+                    <tr style='background:#007bff; color:white;'>
+                        <td style='padding:3px; width:32px; text-align:center;'>
                             <input type='checkbox' id='datasets_select_all' checked>
-                        </th>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Dataset</th>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>ID</th>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>Images</th>
-                        <th style='padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;'>File type(s)</th>
+                        </td>
+                        <td style='padding:3px;'>Dataset</td>
+                        <td style='padding:3px;'>ID</td>
+                        <td style='padding:3px;'>Images</td>
+                        <td style='padding:3px;'>File type(s)</td>
                     </tr>
-                    </thead>
                     <tbody id='dataset_table_body'></tbody>
                 </table>
             </div>
@@ -231,13 +230,13 @@
         datasets.forEach((ds) => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">
+                <td style="padding:2px; text-align:center;">
                     <input type="checkbox" data-dataset-id="${ds.id}" checked>
                 </td>
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.name || ''}</td>
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.id || ''}</td>
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.image_count}</td>
-                <td style="padding:8px; border-bottom:1px solid #e2e8f0;">${ds.file_types || ''}</td>
+                <td style="padding:2px;">${ds.name || ''}</td>
+                <td style="padding:2px;">${ds.id || ''}</td>
+                <td style="padding:2px;">${ds.image_count}</td>
+                <td style="padding:2px;">${ds.file_types || ''}</td>
             `;
             datasetTableBody.appendChild(row);
         });
@@ -273,7 +272,7 @@
             }
             datasetTableMessage.style.display = 'none';
             datasetTableContainer.style.display = 'block';
-            datasetTableBody.innerHTML = '<tr><td colspan="5" style="padding:12px;">Loading datasets…</td></tr>';
+            datasetTableBody.innerHTML = '<tr><td colspan="5" style="padding:2px;">Loading datasets…</td></tr>';
 
             const formData = new FormData();
             formData.append('action', 'list_datasets');
