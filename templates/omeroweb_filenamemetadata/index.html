@@ -25,7 +25,7 @@
                            id="project_select_input"
                            placeholder="Select project…"
                            autocomplete="off"
-                           style="width:100%; padding:12px 34px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                           style="width:100%; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
                     <span class="project-select-arrow" aria-hidden="true">▾</span>
                     <input type="hidden" name="project" id="project_select" value="">
                     <div id="project_select_dropdown"
@@ -133,7 +133,11 @@
                     transition: background 0.15s ease, transform 0.1s ease;}
         .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
         .omeroweb-filenamemetadata.expanded {width:900px; min-width:900px; max-width:900px;}
-        .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563; pointer-events:none;}
+        .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
+                               font-size:18px; font-weight:600; pointer-events:none;}
+        .project-option {transition: background 0.15s ease, color 0.15s ease;}
+        .project-option:hover,
+        .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
     </style>
 
     <script>
@@ -181,6 +185,7 @@
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
     const MAX_PROJECT_RESULTS = 10;
     let projectFilterTimeout = null;
+    let activeProjectIndex = -1;
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -217,6 +222,69 @@
     showNonBlockingModal("{{ error_message|escapejs }}");
     {% endif %}
 
+    function getProjectLabel(projectId, projectName) {
+        return String(projectName || projectId || '');
+    }
+
+    function getNumericSortValue(label) {
+        return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
+    }
+
+    function sortProjectMatches(matches) {
+        return matches.sort(([projectIdA, projectNameA], [projectIdB, projectNameB]) => {
+            const labelA = getProjectLabel(projectIdA, projectNameA);
+            const labelB = getProjectLabel(projectIdB, projectNameB);
+            const numericA = getNumericSortValue(labelA);
+            const numericB = getNumericSortValue(labelB);
+            if (numericA !== null && numericB !== null) {
+                return numericB - numericA;
+            }
+            if (numericA !== null) return -1;
+            if (numericB !== null) return 1;
+            const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+            if (labelCompare !== 0) return labelCompare;
+            return String(projectIdA || '').localeCompare(String(projectIdB || ''), undefined, { numeric: true, sensitivity: 'base' });
+        });
+    }
+
+    function getProjectOptions() {
+        return projectSelectDropdown
+            ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
+            : [];
+    }
+
+    function setActiveProjectIndex(index) {
+        const options = getProjectOptions();
+        if (options.length === 0) {
+            activeProjectIndex = -1;
+            return;
+        }
+        const clamped = Math.max(0, Math.min(index, options.length - 1));
+        options.forEach((option, idx) => {
+            if (idx === clamped) {
+                option.classList.add('is-active');
+                option.scrollIntoView({ block: 'nearest' });
+            } else {
+                option.classList.remove('is-active');
+            }
+        });
+        activeProjectIndex = clamped;
+    }
+
+    function selectProjectOption(option) {
+        if (!option) return;
+        const projectId = option.dataset.projectId || '';
+        const projectName = option.dataset.projectName || option.textContent || '';
+        if (projectSelect) {
+            projectSelect.value = projectId;
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = projectName;
+            projectSelectInput.dataset.selectedName = projectName;
+        }
+        closeProjectDropdown(false);
+    }
+
     function renderProjectOptions(query) {
         if (!projectSelectDropdown) return;
         const normalizedQuery = query.trim().toLowerCase();
@@ -238,6 +306,7 @@
             }
         }
 
+        sortProjectMatches(matches);
         projectSelectDropdown.innerHTML = '';
 
         if (matches.length === 0) {
@@ -272,6 +341,11 @@
             statusRow.textContent = 'No projects found.';
         }
         projectSelectDropdown.appendChild(statusRow);
+        if (matches.length > 0) {
+            setActiveProjectIndex(0);
+        } else {
+            activeProjectIndex = -1;
+        }
     }
 
     function openProjectDropdown() {
@@ -316,22 +390,40 @@
         projectSelectInput.addEventListener('input', (event) => {
             filterProjectOptions(event.target.value);
         });
+
+        projectSelectInput.addEventListener('keydown', (event) => {
+            if (projectSelectDropdown?.style.display !== 'block') return;
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const options = getProjectOptions();
+                if (options.length === 0) return;
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const nextIndex = activeProjectIndex === -1 ? 0 : activeProjectIndex + delta;
+                setActiveProjectIndex(nextIndex);
+            } else if (event.key === 'Enter') {
+                const options = getProjectOptions();
+                if (options.length === 0 || activeProjectIndex === -1) return;
+                event.preventDefault();
+                selectProjectOption(options[activeProjectIndex]);
+            }
+        });
     }
 
     if (projectSelectDropdown) {
         projectSelectDropdown.addEventListener('click', (event) => {
             const option = event.target.closest('.project-option');
             if (!option) return;
-            const projectId = option.dataset.projectId || '';
-            const projectName = option.dataset.projectName || option.textContent || '';
-            if (projectSelect) {
-                projectSelect.value = projectId;
+            selectProjectOption(option);
+        });
+
+        projectSelectDropdown.addEventListener('mousemove', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            const options = getProjectOptions();
+            const index = options.indexOf(option);
+            if (index !== -1) {
+                setActiveProjectIndex(index);
             }
-            if (projectSelectInput) {
-                projectSelectInput.value = projectName;
-                projectSelectInput.dataset.selectedName = projectName;
-            }
-            closeProjectDropdown(false);
         });
     }
 
