@@ -20,7 +20,7 @@
             <label><strong>Project:</strong></label><br>
             <div style='display:flex; align-items:flex-start; gap:14px;'>
                 <div id="project_select_wrapper"
-                     style="width:55%; flex:0 0 55%; position:relative;">
+                     style="width:55%; flex:0 0 55%; position:relative; z-index:1001;">
                     <input type="text"
                            id="project_select_input"
                            placeholder="Select project…"
@@ -107,6 +107,9 @@
         </button>
     </form>
 
+    <div id="project_dropdown_backdrop"
+         style="display:none; position:fixed; inset:0; z-index:900;"></div>
+
     <!-- NON-BLOCKING MODAL -->
     <div id="nb-modal-overlay"
          style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
@@ -138,6 +141,7 @@
         .project-option {transition: background 0.15s ease, color 0.15s ease;}
         .project-option:hover,
         .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
+        #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
     </style>
 
     <script>
@@ -182,6 +186,7 @@
     const filenameMetadataContainer = document.getElementById('filename_metadata_container');
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
     const projectDataScript = document.getElementById('project-data');
+    const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
     const MAX_PROJECT_RESULTS = 10;
     let projectFilterTimeout = null;
@@ -253,11 +258,18 @@
             : [];
     }
 
-    function setActiveProjectIndex(index) {
+    function setActiveProjectIndex(index, useKeyboard = false) {
         const options = getProjectOptions();
         if (options.length === 0) {
             activeProjectIndex = -1;
             return;
+        }
+        if (projectSelectDropdown) {
+            if (useKeyboard) {
+                projectSelectDropdown.classList.add('keyboard-active');
+            } else {
+                projectSelectDropdown.classList.remove('keyboard-active');
+            }
         }
         const clamped = Math.max(0, Math.min(index, options.length - 1));
         options.forEach((option, idx) => {
@@ -351,6 +363,10 @@
     function openProjectDropdown() {
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'block';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'block';
+        }
         projectSelectInput.dataset.previousValue = projectSelectInput.value;
         projectSelectInput.value = '';
         projectSelectInput.placeholder = 'Search...';
@@ -360,6 +376,10 @@
     function closeProjectDropdown(restoreSelection = true) {
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'none';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'none';
+        }
         if (restoreSelection && !projectSelectInput.value) {
             const selectedName = projectSelectInput.dataset.selectedName || '';
             projectSelectInput.value = selectedName;
@@ -399,7 +419,7 @@
                 if (options.length === 0) return;
                 const delta = event.key === 'ArrowDown' ? 1 : -1;
                 const nextIndex = activeProjectIndex === -1 ? 0 : activeProjectIndex + delta;
-                setActiveProjectIndex(nextIndex);
+                setActiveProjectIndex(nextIndex, true);
             } else if (event.key === 'Enter') {
                 const options = getProjectOptions();
                 if (options.length === 0 || activeProjectIndex === -1) return;
@@ -422,18 +442,16 @@
             const options = getProjectOptions();
             const index = options.indexOf(option);
             if (index !== -1) {
-                setActiveProjectIndex(index);
+                setActiveProjectIndex(index, false);
             }
         });
     }
 
-    document.addEventListener('click', (event) => {
-        if (!projectSelectDropdown || !projectSelectInput) return;
-        if (event.target.closest('#project_select_wrapper')) {
-            return;
-        }
-        closeProjectDropdown(true);
-    });
+    if (projectDropdownBackdrop) {
+        projectDropdownBackdrop.addEventListener('click', () => {
+            closeProjectDropdown(true);
+        });
+    }
 
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
@@ -460,8 +478,8 @@
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
             const projectName = getSelectedProjectName();
-            datasetTableMessage.textContent = `No datasets found in project ${projectName}`;
-            datasetTableMessage.style.display = 'block';
+            datasetTableMessage.style.display = 'none';
+            showNonBlockingModal(`No datasets found in project ${projectName}`);
             datasetSelectAll.checked = false;
             selectedDatasetsInput.value = '';
             return;
