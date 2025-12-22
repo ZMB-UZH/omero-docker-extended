@@ -217,12 +217,12 @@
         previewForm.addEventListener('submit', (event) => {
             if (!projectSelect.value) {
                 event.preventDefault();
-                showNonBlockingModal("Select a project first.");
+                showNonBlockingModal("Please select a project.");
                 return;
             }
             if (datasetSelectionOpenedInput?.value === '1' && !selectedDatasetsInput.value) {
                 event.preventDefault();
-                showNonBlockingModal("Please select one or more datasets first.");
+                showNonBlockingModal("Please select one or more datasets.");
                 return;
             }
             if (!separatorInput.value.trim()) {
@@ -560,7 +560,7 @@
         datasetButton.addEventListener('click', () => {
             const projectId = projectSelect.value;
             if (!projectId) {
-                showNonBlockingModal("Select a project first.");
+                showNonBlockingModal("Please select a project.");
                 return;
             }
 
