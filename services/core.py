@@ -770,14 +770,14 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
 
     for ann in annotations:
         try:
-            obj = getattr(ann, "_obj", None)
-            if not isinstance(obj, MapAnnotationI):
+            obj = getattr(ann, "_obj", ann)
+            if not hasattr(obj, "getMapValue"):
                 continue
 
             # Best-effort namespace check
             ns = None
             try:
-                ns_obj = ann.getNs()
+                ns_obj = ann.getNs() if hasattr(ann, "getNs") else obj.getNs()
                 ns = ns_obj.getValue() if ns_obj else None
             except Exception:
                 pass
@@ -806,4 +806,3 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 e,
             )
             continue
-
