@@ -65,6 +65,42 @@ def get_id(obj):
     except:
         return None
 
+def fetch_images_by_ids(conn, image_ids):
+    if not image_ids:
+        return {}
+
+    images = []
+    try:
+        images = list(conn.getObjects("Image", ids=image_ids))
+    except TypeError:
+        try:
+            images = list(conn.getObjects("Image", obj_ids=image_ids))
+        except Exception:
+            images = []
+    except Exception:
+        images = []
+
+    if not images:
+        for iid in image_ids:
+            try:
+                img = conn.getObject("Image", iid)
+            except Exception:
+                img = None
+            if img is not None:
+                images.append(img)
+
+    image_map = {}
+    for img in images:
+        iid = get_id(img)
+        if iid is None:
+            continue
+        try:
+            image_map[int(iid)] = img
+        except Exception:
+            image_map[iid] = img
+
+    return image_map
+
 # --------------------------------------------------------------------------
 # PLUGIN HASH MARKER HELPERS
 # --------------------------------------------------------------------------
