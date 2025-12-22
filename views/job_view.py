@@ -392,16 +392,42 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 # ---------------------------------------------------------
                 if job.get("type") == "del_all":
                     try:
-                        delete_existing_annotations(conn, update, img, var_names, "all")
-                        batch_logs.append(f"Image {iid} ({filename}): deleted ALL key-value pairs.")
+                        deleted_count = delete_existing_annotations(
+                            conn,
+                            update,
+                            img,
+                            var_names,
+                            "all",
+                        )
+                        if deleted_count:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): deleted ALL key-value pairs."
+                            )
+                        else:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                            )
                     except Exception as e:
                         batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs: {e}")
                     continue
 
                 if job.get("type") == "del_plugin":
                     try:
-                        delete_existing_annotations(conn, update, img, var_names, "plugin")
-                        batch_logs.append(f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs.")
+                        deleted_count = delete_existing_annotations(
+                            conn,
+                            update,
+                            img,
+                            var_names,
+                            "plugin",
+                        )
+                        if deleted_count:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs."
+                            )
+                        else:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                            )
                     except Exception as e:
                         batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs: {e}")
                     continue
@@ -500,4 +526,3 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             lk.release()
         except:
             pass
-
