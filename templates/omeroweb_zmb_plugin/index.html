@@ -220,9 +220,15 @@
                 showNonBlockingModal("Please select a project.");
                 return;
             }
-            if (datasetSelectionOpenedInput?.value === '1' && !selectedDatasetsInput.value) {
+            if (!selectedDatasetsInput.value) {
                 event.preventDefault();
                 showNonBlockingModal("Please select one or more datasets.");
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                event.preventDefault();
+                showNonBlockingModal("No data to process is available in the selected dataset(s).");
                 return;
             }
             if (!separatorInput.value.trim()) {
@@ -483,6 +489,14 @@
         }
     }
 
+    function getSelectedDatasetImageCount() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        return Array.from(checked).reduce((total, input) => {
+            const count = Number.parseInt(input.dataset.imageCount || '0', 10);
+            return total + (Number.isNaN(count) ? 0 : count);
+        }, 0);
+    }
+
     function getSelectedProjectName() {
         return projectSelectInput?.dataset.selectedName || '';
     }
@@ -529,7 +543,7 @@
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td style="padding:2px; text-align:center;">
-                    <input type="checkbox" data-dataset-id="${ds.id}" checked>
+                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" checked>
                 </td>
                 <td style="padding:2px;">${ds.name || ''}</td>
                 <td style="padding:2px;">${ds.id || ''}</td>

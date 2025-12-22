@@ -55,7 +55,6 @@ def index(request, conn=None, url=None, **kwargs):
             raw_seps = request.POST.get("separator", "_")
             separator_mode = request.POST.get("separator_mode", "chars")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
-            dataset_selection_opened = request.POST.get("dataset_selection_opened") == "1"
 
             if not project_id:
                 return render(
@@ -76,13 +75,13 @@ def index(request, conn=None, url=None, **kwargs):
                         "error_message": "The input field for filename parsing cannot be empty.",
                     },
                 )
-            if dataset_selection_opened and not selected_dataset_ids_raw.strip():
+            if not selected_dataset_ids_raw.strip():
                 return render(
                     request,
                     "omeroweb_zmb_plugin/index.html",
                     {
                         "projects": projects,
-                        "error_message": "Please select one or more datasets first.",
+                        "error_message": "Please select one or more datasets.",
                     },
                 )
 
@@ -119,15 +118,33 @@ def index(request, conn=None, url=None, **kwargs):
                     except ValueError:
                         continue
 
-            if selected_dataset_ids:
-                ds_list = collect_images_by_selected_datasets(
-                    conn,
-                    project_id,
-                    selected_dataset_ids,
-                    limit=50,
+            if not selected_dataset_ids:
+                return render(
+                    request,
+                    "omeroweb_zmb_plugin/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": "Please select one or more datasets.",
+                    },
                 )
-            else:
-                ds_list = collect_images_by_dataset_sorted(conn, project_id, limit=50)
+
+            ds_list = collect_images_by_selected_datasets(
+                conn,
+                project_id,
+                selected_dataset_ids,
+                limit=50,
+            )
+
+            total_images = sum(len(images) for _, images in ds_list)
+            if total_images == 0:
+                return render(
+                    request,
+                    "omeroweb_zmb_plugin/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": "No data to process is available in the selected dataset(s).",
+                    },
+                )
 
             preview_rows = []
             max_vars = 0
