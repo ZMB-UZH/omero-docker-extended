@@ -15,7 +15,7 @@ OMERO = "/opt/omero/web/venv-3.12/bin/omero"
 
 @csrf_exempt
 @login_required()
-def delete_all_metadata(request, conn=None, url=None, **kwargs):
+def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
     Delete ALL MapAnnotations for ALL images in a given project using Omero CLI.
     - Logs in once with the current OMERO web user + provided password
@@ -121,5 +121,5 @@ def delete_all_metadata(request, conn=None, url=None, **kwargs):
         )
 
     except Exception as e:
-        logger.exception("delete_all_metadata failed: %s", e)
+        logger.exception("delete_all_keyvaluepairs failed: %s", e)
         return JsonResponse({"error": str(e)}, status=500)
