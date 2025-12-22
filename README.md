@@ -1,1 +1,1 @@
-# omeroweb_filenamemetadata
+# omeroweb_zmb_plugin
