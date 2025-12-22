@@ -392,16 +392,17 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 # ---------------------------------------------------------
                 if job.get("type") == "del_all":
                     try:
-                        deleted_count = delete_existing_annotations(
+                        deleted_sets, deleted_pairs = delete_existing_annotations(
                             conn,
                             update,
                             img,
                             var_names,
                             "all",
                         )
-                        if deleted_count:
+                        if deleted_sets:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): deleted ALL key-value pairs."
+                                f"Image {iid} ({filename}): deleted ALL key-value pairs "
+                                f"({deleted_sets} sets, {deleted_pairs} pairs)."
                             )
                         else:
                             batch_logs.append(
@@ -413,16 +414,17 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
                 if job.get("type") == "del_plugin":
                     try:
-                        deleted_count = delete_existing_annotations(
+                        deleted_sets, deleted_pairs = delete_existing_annotations(
                             conn,
                             update,
                             img,
                             var_names,
                             "plugin",
                         )
-                        if deleted_count:
+                        if deleted_sets:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs."
+                                f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs "
+                                f"({deleted_sets} sets, {deleted_pairs} pairs)."
                             )
                         else:
                             batch_logs.append(
