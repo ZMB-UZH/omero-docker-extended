@@ -7,6 +7,7 @@ import json
 
 from ..services.core import (
     collect_images_in_project,
+    find_annotation_link_ids,
     find_plugin_annotation_ids,
     get_id,
 )
@@ -99,6 +100,43 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
                 for aid in plugin_ann_ids:
                     try:
+                        link_ids = find_annotation_link_ids(conn, aid)
+                        for lid in link_ids:
+                            link_cmd = [
+                                OMERO,
+                                "delete",
+                                f"ImageAnnotationLink:{lid}",
+                                "--force",
+                            ]
+                            link_result = subprocess.run(
+                                link_cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                            )
+                            if link_result.returncode != 0:
+                                errors.append(
+                                    {
+                                        "image": iid,
+                                        "annotation": aid,
+                                        "link": lid,
+                                        "stdout": link_result.stdout,
+                                        "stderr": link_result.stderr,
+                                    }
+                                )
+
+                        remaining_links = find_annotation_link_ids(conn, aid)
+                        if remaining_links:
+                            errors.append(
+                                {
+                                    "image": iid,
+                                    "annotation": aid,
+                                    "links_remaining": remaining_links,
+                                    "error": "Annotation links still exist; skipping delete.",
+                                }
+                            )
+                            continue
+
                         cmd = [
                             OMERO,
                             "delete",
@@ -120,6 +158,17 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                                     "annotation": aid,
                                     "stdout": result.stdout,
                                     "stderr": result.stderr,
+                                }
+                            )
+                            continue
+
+                        ann_obj = conn.getObject("MapAnnotation", int(aid))
+                        if ann_obj is not None:
+                            errors.append(
+                                {
+                                    "image": iid,
+                                    "annotation": aid,
+                                    "error": "Annotation still exists after delete.",
                                 }
                             )
                             continue
