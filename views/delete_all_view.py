@@ -91,6 +91,8 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 target,
                 "--include",
                 "MapAnnotation",
+                "--include",
+                "ImageAnnotationLink",
                 "--force",
             ]
 

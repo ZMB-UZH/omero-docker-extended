@@ -331,6 +331,29 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
     return ann_ids
 
 
+def find_annotation_link_ids(conn, annotation_id):
+    """Return ImageAnnotationLink IDs for an annotation."""
+    try:
+        aid = int(annotation_id)
+    except Exception:
+        return []
+
+    try:
+        qs = conn.getQueryService()
+        service_opts = getattr(conn, "SERVICE_OPTS", None)
+
+        params = ParametersI()
+        params.add("aid", rlong(aid))
+
+        hql = "select l.id from ImageAnnotationLink l where l.child.id = :aid"
+
+        rows = qs.projection(hql, params, service_opts) or []
+        return [r[0].getValue() for r in rows if r and r[0]]
+    except Exception as e:
+        logger.exception("Error locating annotation links for %s: %s", annotation_id, e)
+        return []
+
+
 def find_map_annotation_ids(conn, image_id):
     """Return MapAnnotation IDs linked to an image (key-value pairs)."""
     try:
