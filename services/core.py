@@ -806,3 +806,4 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 e,
             )
             continue
+
