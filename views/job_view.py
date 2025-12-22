@@ -360,17 +360,17 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 if job.get("type") == "del_all":
                     try:
                         delete_existing_annotations(conn, update, img, var_names, "all")
-                        batch_logs.append(f"Image {iid} ({filename}): deleted ALL MapAnnotations.")
+                        batch_logs.append(f"Image {iid} ({filename}): deleted ALL key-value pairs.")
                     except Exception as e:
-                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL annotations: {e}")
+                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs: {e}")
                     continue
 
                 if job.get("type") == "del_plugin":
                     try:
                         delete_existing_annotations(conn, update, img, var_names, "plugin")
-                        batch_logs.append(f"Image {iid} ({filename}): deleted ONLY plugin MapAnnotations.")
+                        batch_logs.append(f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs.")
                     except Exception as e:
-                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin annotations: {e}")
+                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs: {e}")
                     continue
 
                 # ---------------------------------------------------------
