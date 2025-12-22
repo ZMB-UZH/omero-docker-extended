@@ -799,7 +799,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         plugin  – delete ONLY MapAnnotations created by this plugin
     """
     if mode == "keep":
-        return 0
+        return 0, 0
 
     try:
         annotations = list(img.listAnnotations())
@@ -809,7 +809,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             get_id(img),
             e,
         )
-        return 0
+        return 0, 0
 
     qs = conn.getQueryService()
     service_opts = getattr(conn, "SERVICE_OPTS", None)
@@ -923,7 +923,19 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         except Exception:
             logger.warning("Failed to delete plugin annotations for image %s", get_id(img))
 
+    total_pairs = 0
     for aid in target_ids:
+        try:
+            ann_obj = conn.getObject("MapAnnotation", int(aid))
+        except Exception:
+            ann_obj = None
+        if ann_obj is not None:
+            try:
+                map_values = ann_obj.getMapValue() if hasattr(ann_obj, "getMapValue") else None
+                if map_values:
+                    total_pairs += len(map_values)
+            except Exception:
+                logger.warning("Failed to read map values for annotation %s", aid)
         _delete_by_id(aid)
 
-    return len(target_ids)
+    return len(target_ids), total_pairs
