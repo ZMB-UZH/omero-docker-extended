@@ -19,7 +19,7 @@ OMERO = "/opt/omero/web/venv-3.12/bin/omero"
 
 @csrf_exempt
 @login_required()
-def delete_plugin_metadata(request, conn=None, url=None, **kwargs):
+def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
         if request.method != "POST":
@@ -156,5 +156,5 @@ def delete_plugin_metadata(request, conn=None, url=None, **kwargs):
             )
 
     except Exception as e:
-        logger.exception("delete_plugin_metadata failed: %s", e)
+        logger.exception("delete_plugin_keyvaluepairs failed: %s", e)
         return JsonResponse({"error": str(e)}, status=500)
