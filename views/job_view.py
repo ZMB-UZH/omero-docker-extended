@@ -500,3 +500,4 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             lk.release()
         except:
             pass
+
