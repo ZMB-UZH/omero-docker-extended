@@ -405,6 +405,9 @@
 const BASE_URL = "/omeroweb_filenamemetadata";
 const DEFAULT_VARS = {{ default_vars_json|safe }};
 let availableVariableSets = [];
+let currentJobId = null;
+let totalImages = 0;
+let pollInterval = null;
 
 function goBack() {
     window.location.href = BASE_URL + "/";
@@ -679,39 +682,18 @@ function deleteVariableSet() {
 toggleVarNameInputs();
 fetchVariableSets();
 
-// -------------------------
-// DELETE ALL KEY-VALUE PAIRS
-// -------------------------
-function showImmediateCompletionLog(lines) {
-    const progressSection = document.getElementById("progress-section");
-    const progressText = document.getElementById("progress-text");
-    const progressBar = document.getElementById("progress-bar");
-    const progressLog = document.getElementById("progress-log");
-
-    progressSection.style.display = "block";
-
-    progressBar.style.width = "100%";
-    progressBar.innerText = "100%";
-
-    progressText.innerText = "Completed.";
-
-    progressLog.textContent = "";
-    for (let i = 0; i < lines.length; i++) {
-        progressLog.textContent += lines[i] + "\n";
+function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
+    if (currentJobId) {
+        showNonBlockingModal("Another job is already running. Please be patient.");
+        return;
     }
-}
 
-
-function deleteAllMetadata() {
     const projectId = document.getElementById('project_id').value;
 
-    const pwd = window.prompt("Enter your Omero password to delete ALL key-value pairs:");
+    const pwd = window.prompt(passwordPrompt);
     if (!pwd) return;
 
     if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
-
-    const ctrls = document.querySelectorAll("button,input,select");
-    ctrls.forEach(x => x.disabled = true);
 
     const progressSection = document.getElementById("progress-section");
     const progressText = document.getElementById("progress-text");
@@ -721,10 +703,10 @@ function deleteAllMetadata() {
     progressSection.style.display = "block";
     progressBar.style.width = "0%";
     progressBar.innerText = "0%";
-    progressText.innerText = "Deleting ALL key-value pairs…";
+    progressText.innerText = progressMessage;
     progressLog.textContent = "";
 
-    fetch(BASE_URL + "/delete_all/", {
+    fetch(BASE_URL + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -735,32 +717,31 @@ function deleteAllMetadata() {
     })
     .then(r => r.json())
     .then(data => {
-        ctrls.forEach(x => x.disabled = false);
-
-        let logLines = [];
-
-        if (data.errors && data.errors.length) {
-            logLines.push("Completed with errors.");
-            for (let i = 0; i < data.errors.length; i++) {
-                logLines.push(
-                    "ERROR ids=" +
-                    (data.errors[i].ids || []).join(",")
-                );
-            }
-        } else {
-            logLines.push(
-                "Deleted annotations for " +
-                data.deleted_count +
-                " images."
-            );
+        if (data.error) {
+            progressText.innerText = "Error: " + data.error;
+            return;
         }
 
-        showImmediateCompletionLog(logLines);
+        currentJobId = data.job_id;
+        totalImages = data.total;
+
+        progressText.innerText = "Job started for " + totalImages + " images.";
+        pollInterval = setInterval(pollProgress, 500);
     })
     .catch(err => {
-        ctrls.forEach(x => x.disabled = false);
         showNonBlockingModal("ERROR: " + err);
     });
+}
+
+// -------------------------
+// DELETE ALL KEY-VALUE PAIRS
+// -------------------------
+function deleteAllMetadata() {
+    startDeleteJob(
+        "/start_delete_all_job/",
+        "Enter your Omero password to delete ALL key-value pairs:",
+        "Deleting ALL key-value pairs…"
+    );
 }
 
 
@@ -768,81 +749,15 @@ function deleteAllMetadata() {
 // DELETE ONLY PLUGIN KEY-VALUE PAIRS
 // -------------------------
 function deletePluginMetadata() {
-    const projectId = document.getElementById('project_id').value;
-
-    const pwd = window.prompt("Enter your Omero password to delete ONLY plugin key-value pairs:");
-    if (!pwd) return;
-
-    if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
-
-    const ctrls = document.querySelectorAll("button,input,select");
-    ctrls.forEach(x => x.disabled = true);
-
-    const progressSection = document.getElementById("progress-section");
-    const progressText = document.getElementById("progress-text");
-    const progressBar = document.getElementById("progress-bar");
-    const progressLog = document.getElementById("progress-log");
-
-    progressSection.style.display = "block";
-    progressBar.style.width = "0%";
-    progressBar.innerText = "0%";
-    progressText.innerText = "Deleting ONLY plugin key-value pairs…";
-    progressLog.textContent = "";
-
-    fetch(BASE_URL + "/delete_plugin/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-            project_id: projectId,
-            password: pwd
-        })
-    })
-    .then(r => r.json())
-    .then(data => {
-        ctrls.forEach(x => x.disabled = false);
-
-        let logLines = [];
-
-        if (data.error) {
-            logLines.push("ERROR: " + data.error);
-            showImmediateCompletionLog(logLines);
-            return;
-        }
-
-        logLines.push(
-            "Deleted plugin annotations for " +
-            data.deleted_images +
-            " images (" +
-            data.deleted_annotations +
-            " MapAnnotations)."
-        );
-
-        if (data.errors && data.errors.length) {
-            for (let i = 0; i < data.errors.length; i++) {
-                logLines.push(
-                    "ERROR image=" +
-                    data.errors[i].image +
-                    " annotation=" +
-                    data.errors[i].annotation
-                );
-            }
-        }
-
-        showImmediateCompletionLog(logLines);
-    })
-    .catch(err => {
-        ctrls.forEach(x => x.disabled = false);
-        showNonBlockingModal("ERROR: " + err);
-    });
+    startDeleteJob(
+        "/start_delete_plugin_job/",
+        "Enter your Omero password to delete ONLY plugin key-value pairs:",
+        "Deleting ONLY plugin key-value pairs…"
+    );
 }
 // -------------------------
 // START SAVE JOB (FIXED)
 // -------------------------
-let currentJobId = null;
-let totalImages = 0;
-let pollInterval = null;
-
 function startSaveJob() {
     if (currentJobId) {
         showNonBlockingModal("Another job is already running. Please be patient.");
