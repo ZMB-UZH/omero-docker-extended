@@ -1,4 +1,4 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
@@ -11,6 +11,8 @@ from ..services.core import (
     get_id,
     get_text,
     collect_images_by_dataset_sorted,
+    collect_images_by_selected_datasets,
+    collect_dataset_summaries,
     parse_filename,
 )
 from ..constants import DEFAULT_VARIABLE_NAMES
@@ -40,10 +42,19 @@ def index(request, conn=None, url=None, **kwargs):
         # ----------------------------------------------------
         # PREVIEW MODE
         # ----------------------------------------------------
+        if request.method == "POST" and request.POST.get("action") == "list_datasets":
+            project_id = request.POST.get("project")
+            if not project_id:
+                return JsonResponse({"error": "Select a project first."}, status=400)
+
+            dataset_rows = collect_dataset_summaries(conn, project_id)
+            return JsonResponse({"datasets": dataset_rows})
+
         if request.method == "POST" and request.POST.get("action") != "save_job":
             project_id = request.POST.get("project")
             raw_seps = request.POST.get("separator", "_")
             separator_mode = request.POST.get("separator_mode", "chars")
+            selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
 
             if not project_id:
                 return HttpResponse(
@@ -73,7 +84,26 @@ def index(request, conn=None, url=None, **kwargs):
             else:
                 sep_pattern = f"(?:{'|'.join(re.escape(c) for c in raw_seps)})+"
 
-            ds_list = collect_images_by_dataset_sorted(conn, project_id, limit=50)
+            selected_dataset_ids = []
+            if selected_dataset_ids_raw:
+                for ds_id in selected_dataset_ids_raw.split(","):
+                    ds_id = ds_id.strip()
+                    if not ds_id:
+                        continue
+                    try:
+                        selected_dataset_ids.append(int(ds_id))
+                    except ValueError:
+                        continue
+
+            if selected_dataset_ids:
+                ds_list = collect_images_by_selected_datasets(
+                    conn,
+                    project_id,
+                    selected_dataset_ids,
+                    limit=50,
+                )
+            else:
+                ds_list = collect_images_by_dataset_sorted(conn, project_id, limit=50)
 
             preview_rows = []
             max_vars = 0
