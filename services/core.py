@@ -816,36 +816,53 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
 
     def _delete_links_for_annotation(aid):
         if aid is None:
-            return
+            return True
         try:
-            params = ParametersI()
-            params.add("aid", rlong(int(aid)))
-            hql_links = (
-                "select l.id "
-                "from ImageAnnotationLink l "
-                "where l.child.id = :aid"
-            )
-            rows = qs.projection(hql_links, params, service_opts) or []
-            link_ids = [r[0].getValue() for r in rows if r and r[0]]
+            link_ids = find_annotation_link_ids(conn, aid)
             for lid in link_ids:
                 try:
                     link_obj = conn.getObject("ImageAnnotationLink", int(lid))
                 except Exception:
                     link_obj = None
-                if link_obj is None:
+                if link_obj is not None:
+                    obj = getattr(link_obj, "_obj", link_obj)
+                    update.deleteObject(obj)
                     continue
-                obj = getattr(link_obj, "_obj", link_obj)
-                update.deleteObject(obj)
+
+                try:
+                    link_stub = ImageAnnotationLinkI()
+                    link_stub.setId(rlong(int(lid)))
+                    update.deleteObject(link_stub)
+                except Exception:
+                    logger.warning("Failed to build link stub for %s", lid)
+            remaining = find_annotation_link_ids(conn, aid)
+            if remaining:
+                logger.warning(
+                    "Annotation %s still has %s link(s) after delete attempt: %s",
+                    aid,
+                    len(remaining),
+                    remaining,
+                )
+                return False
+            return True
         except Exception as e:
             logger.warning("Failed to delete annotation links for %s: %s", aid, e)
+            return False
 
     def _delete_by_id(aid):
         if aid is None:
             return
         try:
-            _delete_links_for_annotation(aid)
+            links_deleted = _delete_links_for_annotation(aid)
         except Exception as e:
             logger.warning("Failed to delete links for annotation %s: %s", aid, e)
+            links_deleted = False
+        if not links_deleted:
+            logger.warning(
+                "Skipping annotation %s delete because links still exist.",
+                aid,
+            )
+            return
         try:
             ann_obj = conn.getObject("MapAnnotation", int(aid))
         except Exception:
