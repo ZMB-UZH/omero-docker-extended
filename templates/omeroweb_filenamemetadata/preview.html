@@ -564,6 +564,7 @@ function saveVariableSet() {
         }
         fetchVariableSets();
         showNonBlockingModal('Saved variable set "' + setName + '" to database.');
+        nameInput.value = "";
     })
     .catch(err => {
         showNonBlockingModal("Error saving variable set: " + err);
@@ -846,7 +847,11 @@ function startSaveJob() {
     };
 
     document.getElementById("progress-section").style.display = "block";
-    document.getElementById("progress-text").innerText = 'Starting "Save filename metadata into key-value pairs" job…';
+    document.getElementById("progress-text").innerText =
+        'Starting "Save filename metadata into key-value pairs" job…';
+    document.getElementById("progress-bar").style.width = "0%";
+    document.getElementById("progress-bar").innerText = "0%";
+    document.getElementById("progress-log").textContent = "";
 
     fetch(BASE_URL + "/start_job/", {
         method: "POST",
@@ -894,6 +899,9 @@ function startAcquisitionMetadataJob() {
     document.getElementById("progress-section").style.display = "block";
     document.getElementById("progress-text").innerText =
         'Starting "copy acquisition metadata into key-value pairs" job…';
+    document.getElementById("progress-bar").style.width = "0%";
+    document.getElementById("progress-bar").innerText = "0%";
+    document.getElementById("progress-log").textContent = "";
 
     fetch(BASE_URL + "/start_acq_job/", {
         method: "POST",
