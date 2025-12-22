@@ -34,17 +34,17 @@ def _load_psycopg2():
 
 
 def _db_params():
-    user = os.environ.get("FMP_DATA_USER")
-    password = os.environ.get("FMP_DATA_PASS")
-    host = os.environ.get("FMP_DATA_HOST", "database_plugin")
-    dbname = os.environ.get("FMP_DATA_DB", "filename-metadata")
+    user = os.environ.get("ZMB_DATA_USER")
+    password = os.environ.get("ZMB_DATA_PASS")
+    host = os.environ.get("ZMB_DATA_HOST", "database_plugin")
+    dbname = os.environ.get("ZMB_DATA_DB", "zmb-plugin")
 
     if not user or not password:
-        raise VariableStoreError("Database credentials are missing (FMP_DATA_USER/FMP_DATA_PASS).")
+        raise VariableStoreError("Database credentials (docker compose environment variables) are missing (ZMB_DATA_USER/ZMB_DATA_PASS).")
 
     port_candidates = []
     for candidate in (
-        os.environ.get("FMP_DATA_PORT"),
+        os.environ.get("ZMB_DATA_PORT"),
         os.environ.get("PGPORT"),
         "5433",
         "5432",
@@ -118,7 +118,7 @@ def _ensure_schema(conn):
     with conn.cursor() as cur:
         cur.execute(
             """
-            CREATE TABLE IF NOT EXISTS fmp_variable_sets (
+            CREATE TABLE IF NOT EXISTS zmb_variable_sets (
                 id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL,
                 set_name TEXT NOT NULL,
@@ -131,8 +131,8 @@ def _ensure_schema(conn):
         )
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS fmp_variable_sets_username_idx
-                ON fmp_variable_sets (username);
+            CREATE INDEX IF NOT EXISTS zmb_variable_sets_username_idx
+                ON zmb_variable_sets (username);
             """
         )
     conn.commit()
@@ -146,7 +146,7 @@ def list_variable_sets(username):
                 cur.execute(
                     """
                     SELECT set_name
-                    FROM fmp_variable_sets
+                    FROM zmb_variable_sets
                     WHERE username = %s
                     ORDER BY updated_at DESC, set_name ASC
                     """,
@@ -170,7 +170,7 @@ def save_variable_set(username, set_name, var_names):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO fmp_variable_sets (username, set_name, var_names, updated_at)
+                    INSERT INTO zmb_variable_sets (username, set_name, var_names, updated_at)
                     VALUES (%s, %s, %s, NOW())
                     ON CONFLICT (username, set_name)
                     DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
@@ -193,7 +193,7 @@ def load_variable_set(username, set_name):
                 cur.execute(
                     """
                     SELECT var_names
-                    FROM fmp_variable_sets
+                    FROM zmb_variable_sets
                     WHERE username = %s AND set_name = %s
                     """,
                     (username, set_name),
@@ -217,7 +217,7 @@ def delete_variable_set(username, set_name):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    DELETE FROM fmp_variable_sets
+                    DELETE FROM zmb_variable_sets
                     WHERE username = %s AND set_name = %s
                     """,
                     (username, set_name),
