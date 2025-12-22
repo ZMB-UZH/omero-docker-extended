@@ -21,6 +21,7 @@ from ..services.core import (
     get_id,
     get_text,
     parse_filename,
+    fetch_images_by_ids,
     compute_plugin_hash,
     delete_existing_annotations,
     extract_acquisition_metadata,
@@ -342,10 +343,11 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
         update = conn.getUpdateService()
         batch_logs = []
+        image_map = fetch_images_by_ids(conn, batch_ids)
 
         for iid in batch_ids:
             try:
-                img = conn.getObject("Image", iid)
+                img = image_map.get(iid)
                 if img is None:
                     batch_logs.append(f"Image {iid}: not found.")
                     continue
@@ -465,4 +467,3 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             lk.release()
         except:
             pass
-
