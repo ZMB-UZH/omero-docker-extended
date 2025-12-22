@@ -387,9 +387,20 @@
                    justify-content: start; justify-items: start; width: 100%;}
     .varset-row-2 {display: grid; grid-template-columns: 240px 140px; column-gap: 15px; row-gap: 10px; align-items: center;
                     justify-content: start; justify-items: start; width: 100%;}
+    .omeroweb-zmb-plugin button,
+    #nb-modal-overlay button,
+    .omeroweb-zmb-plugin .help-btn {
+        box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
+        transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
+    }
+    .omeroweb-zmb-plugin button:active,
+    #nb-modal-overlay button:active,
+    .omeroweb-zmb-plugin .help-btn:active {
+        transform: translateY(2px);
+        box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
+    }
     .help-btn {width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
-                line-height:26px; text-align:center; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.25); cursor:pointer;
-                transition: background 0.15s ease, transform 0.1s ease;}
+                line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
 </style>
 
