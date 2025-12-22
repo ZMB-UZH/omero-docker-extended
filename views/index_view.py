@@ -57,9 +57,23 @@ def index(request, conn=None, url=None, **kwargs):
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
 
             if not project_id:
-                return HttpResponse(
-                    "<h2 style='color:red;'>Select a project first.</h2>"
-                    "<a href='.'>Back</a>"
+                return render(
+                    request,
+                    "omeroweb_filenamemetadata/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": "Select a project first.",
+                    },
+                )
+
+            if not raw_seps or not raw_seps.strip():
+                return render(
+                    request,
+                    "omeroweb_filenamemetadata/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": "The input field for filename parsing cannot be empty.",
+                    },
                 )
 
             try:
