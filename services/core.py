@@ -446,12 +446,6 @@ def collect_dataset_summaries(conn, project_id):
         for ds in prj.listChildren():
             ds_id = get_id(ds)
             ds_name = get_text(ds.getName())
-            owner = ""
-            try:
-                owner_obj = ds.getOwner()
-                owner = get_text(owner_obj.getOmeName()) if owner_obj else ""
-            except Exception:
-                owner = ""
             try:
                 images = list(ds.listChildren())
                 image_count = len(images)
@@ -459,25 +453,12 @@ def collect_dataset_summaries(conn, project_id):
                 images = []
                 image_count = 0
 
-            file_types = set()
-            for img in images:
-                try:
-                    name = get_text(img.getName())
-                except Exception:
-                    continue
-                if not name or "." not in name:
-                    continue
-                ext = name.rsplit(".", 1)[-1].strip().lower()
-                if ext:
-                    file_types.add(ext)
-
             summaries.append(
                 {
                     "id": str(ds_id),
                     "name": ds_name,
                     "image_count": image_count,
-                    "file_types": ", ".join(sorted(file_types)),
-                    "owner": owner,
+                    "file_types": "",
                 }
             )
     except Exception as e:
