@@ -26,6 +26,7 @@ from ..services.core import (
     delete_existing_annotations,
     extract_acquisition_metadata,
 )
+from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,13 @@ def start_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
+
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -148,6 +156,13 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
+
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -188,6 +203,13 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         data = _load_request_payload(request)
 
@@ -230,6 +252,13 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         data = _load_request_payload(request)
 
