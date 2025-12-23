@@ -15,21 +15,21 @@
 
     <form method='POST'
           id="preview_form"
-          style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
+          style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff; width:490px; box-sizing:border-box; margin:0 auto;'>
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
             <div style='display:flex; align-items:center; gap:14px;'>
                 <div id="project_select_wrapper"
-                     style="width:320px; position:relative; z-index:1001;">
+                     style="width:300px; position:relative; z-index:1001;">
                     <input type="text"
                            id="project_select_input"
                            placeholder="Select project…"
                            autocomplete="off"
-                           style="width:320px; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff; box-sizing:border-box;">
+                           style="width:300px; height:44px; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff; box-sizing:border-box;">
                     <span class="project-select-arrow" aria-hidden="true">▾</span>
                     <input type="hidden" name="project" id="project_select" value="">
                     <div id="project_select_dropdown"
-                         style="display:none; position:absolute; left:0; right:0; top:100%;
+                         style="display:none; position:absolute; left:0; top:44px; width:300px;
                                 background:#fff; border:1px solid #007bff; border-top:none;
                                 max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
                     </div>
@@ -41,27 +41,6 @@
                     Dataset selection
                 </button>
             </div>
-        </div>
-
-        <div id='dataset_table_container'
-             style='display:none; margin-bottom:20px; background:#fff; overflow:hidden; width:100%;'>
-            <div style='max-height:520px; overflow-y:auto; overflow-x:hidden;'>
-                <table border='1'
-                       class="dataset-table"
-                       style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px; table-layout:fixed;'>
-                    <tr style='background:#007bff; color:white;'>
-                        <td class="col-check" style='padding:3px; width:32px; text-align:center;'>
-                            <input type='checkbox' id='datasets_select_all' checked>
-                        </td>
-                        <td class="col-dataset" style='padding:3px;'>Dataset</td>
-                        <td class="col-id" style='padding:3px;'>ID</td>
-                        <td class="col-images" style='padding:3px;'>Images</td>
-                        <td class="col-formats" style='padding:3px;'>Formats</td>
-                    </tr>
-                    <tbody id='dataset_table_body'></tbody>
-                </table>
-            </div>
-            <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
         </div>
 
         <div style='margin-bottom:20px;'>
@@ -79,7 +58,7 @@
                        id='separator_input'
                        name='separator'
                        value='_-'
-                       style='width:320px; padding:12px;border-radius:6px;border:1px solid #007bff; box-sizing:border-box;'>
+                       style='width:300px; height:44px; padding:12px;border-radius:6px;border:1px solid #007bff; box-sizing:border-box;'>
 
                 <div style='display:flex; flex-direction:column; gap:6px;'>
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
@@ -87,21 +66,21 @@
                                id='sep_mode_chars'
                                checked
                                onclick='setSeparatorMode("chars")'>
-                        <span>Characters</span>
+                        <span class="separator-option-text">Characters</span>
                     </label>
 
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
                         <input type='checkbox'
                                id='sep_mode_regex'
                                onclick='setSeparatorMode("regex")'>
-                        <span>Regex expression</span>
+                        <span class="separator-option-text">Regex expression</span>
                     </label>
 
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
                         <input type='checkbox'
                                id='sep_mode_ai_regex'
                                disabled>
-                        <span>AI-assisted Regex expression</span>
+                        <span class="separator-option-text">AI-assisted Regex expression</span>
                     </label>
                 </div>
             </div>
@@ -111,11 +90,32 @@
         <input type='hidden' name='dataset_selection_opened' id='dataset_selection_opened' value='0'>
 
         <button type='submit'
-                style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
+                style='width:490px;padding:18px;font-size:14px;background:#007bff;color:white;
                        border:none;border-radius:8px; display:block; margin:0;'>
             Load images & Preview
         </button>
     </form>
+
+    <div id='dataset_table_container'
+         style='display:none; margin:20px auto 0; background:#fff; overflow:hidden; width:1300px; max-width:1300px;'>
+        <div style='max-height:520px; overflow-y:auto; overflow-x:hidden; width:1300px;'>
+            <table border='1'
+                   class="dataset-table"
+                   style='width:1300px; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px; table-layout:fixed;'>
+                <tr style='background:#007bff; color:white;'>
+                    <td class="col-check" style='padding:3px; width:32px; text-align:center;'>
+                        <input type='checkbox' id='datasets_select_all' checked>
+                    </td>
+                    <td class="col-dataset" style='padding:3px;'>Dataset</td>
+                    <td class="col-id" style='padding:3px;'>ID</td>
+                    <td class="col-images" style='padding:3px;'>Images</td>
+                    <td class="col-formats" style='padding:3px;'>Formats</td>
+                </tr>
+                <tbody id='dataset_table_body'></tbody>
+            </table>
+        </div>
+        <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
+    </div>
 
     <div id="project_dropdown_backdrop"
          style="display:none; position:fixed; inset:0; z-index:900;"></div>
@@ -151,7 +151,7 @@
             transform: translateY(2px);
             box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
         }
-        .help-btn {width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
+        .help-btn {width:26px; height:26px; border-radius:13px; background:#007bff; color:white; font-size:14px; font-weight:700;
                     line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
         .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
         .omeroweb-omp-plugin.expanded {width:1300px; min-width:1300px; max-width:1300px;}
@@ -161,12 +161,13 @@
         .dataset-table .col-id {width:120px;}
         .dataset-table .col-images {width:100px;}
         .dataset-table .col-formats {width:220px;}
-        .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
+        .project-select-arrow {position:absolute; right:12px; top:22px; transform:translateY(0); color:#4b5563;
                                font-size:18px; font-weight:600; pointer-events:none;}
         .project-option {transition: background 0.15s ease, color 0.15s ease;}
         .project-option:hover,
         .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
         #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
+        .separator-option-text {white-space:nowrap;}
     </style>
 
     <script>
