@@ -22,7 +22,7 @@
                     ←
                 </span>
                 <span>
-                    Go back to main menu
+                    Go back to project selection
                 </span>
             </button>
         </div>
@@ -323,7 +323,7 @@
                     ←
                 </span>
                 <span>
-                    Go back to main menu
+                    Go back to project selection
                 </span>
             </button>
         </div>
@@ -860,7 +860,7 @@ function saveVariableSet() {
         const rawValue = inp ? inp.value : "";
         const trimmed = rawValue.trim();
         if (rawValue !== "" && trimmed === "") {
-            showNonBlockingModal("Variable names cannot consist of just empty spaces.");
+            showNonBlockingModal("Variable names cannot contain just empty spaces.");
             return;
         }
         varNames.push(trimmed);
@@ -1172,7 +1172,7 @@ function startSaveJob() {
         const trimmed = rawValue.trim();
         if (i <= MAX_PARSED_VARS && rawValue !== "" && trimmed === "") {
             showNonBlockingModal(
-                "Variable names for the first " + MAX_PARSED_VARS + " variables cannot consist of just empty spaces."
+                "Variable names for any of the first " + MAX_PARSED_VARS + " variables cannot contain just empty spaces."
             );
             return;
         }
