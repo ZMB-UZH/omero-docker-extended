@@ -442,9 +442,17 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
                 mapping = {}
                 for i, part in enumerate(parts):
-                    if i >= len(var_names):
-                        break
-                    mapping[var_names[i]] = str(part)
+                    if i < len(var_names) and str(var_names[i]).strip():
+                        base_key = str(var_names[i]).strip()
+                    else:
+                        base_key = f"Var{i + 1}"
+                    key = base_key
+                    if key in mapping:
+                        suffix = 2
+                        while f"{base_key}_{suffix}" in mapping:
+                            suffix += 1
+                        key = f"{base_key}_{suffix}"
+                    mapping[key] = str(part)
                 if mapping:
                     mapping[HASH_KEY] = compute_plugin_hash(mapping)
 
@@ -468,8 +476,9 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
                     saved = _save_annotation_link(update, link)
                     if saved:
+                        saved_total = len(parts) + 1
                         batch_logs.append(
-                            f"Image {iid} ({filename}): saved {len(mapping)} variables."
+                            f"Image {iid} ({filename}): saved {saved_total} variables."
                         )
                     else:
                         batch_logs.append(
