@@ -1,7 +1,9 @@
 from django.apps import AppConfig
 
-class ZMBPluginConfig(AppConfig):
-    name = "omeroweb_zmb_plugin"
-    label = "omeroweb_zmb_plugin"
-    verbose_name = "ZMB plugin"
+from .constants import PLUGIN_DISPLAY_NAME
 
+
+class OMPPluginConfig(AppConfig):
+    name = "omeroweb_omp_plugin"
+    label = "omeroweb_omp_plugin"
+    verbose_name = PLUGIN_DISPLAY_NAME

@@ -12,6 +12,7 @@ from ..services.data_store import (
     save_variable_set,
     delete_variable_set,
 )
+from ..constants import MAX_VARIABLE_SET_ENTRIES
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,19 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         if not set_name:
             return JsonResponse({"error": "Please provide a name for this set."}, status=400)
+
+        existing_sets = list_variable_sets(username)
+        normalized_existing = {str(name).strip() for name in existing_sets}
+        if set_name not in normalized_existing and len(existing_sets) >= MAX_VARIABLE_SET_ENTRIES:
+            return JsonResponse(
+                {
+                    "error": (
+                        "The maximum number of maximum entries in the database is 10. "
+                        "Please delete a variable set first."
+                    )
+                },
+                status=400,
+            )
 
         save_variable_set(username, set_name, var_names)
 
