@@ -145,23 +145,18 @@ def check_major_action_rate_limit(request, conn=None):
             )
             return False, remaining
 
-        if len(actions) >= MAJOR_ACTION_LIMIT:
-            blocked_until = now + MAJOR_ACTION_BLOCK_SECONDS
-            remaining = blocked_until - now
-            _cache_set(
-                key,
-                {"actions": actions, "blocked_until": blocked_until},
-                timeout=_cache_timeout_seconds(),
-            )
-            return False, remaining
+# Add the action FIRST
+actions.append(now)
 
-        actions.append(now)
-        _cache_set(
-            key,
-            {"actions": actions, "blocked_until": blocked_until},
-            timeout=_cache_timeout_seconds(),
-        )
-        return True, None
+# THEN check if limit exceeded
+if len(actions) > MAJOR_ACTION_LIMIT:  # Note: > not >=
+    blocked_until = now + MAJOR_ACTION_BLOCK_SECONDS
+    remaining = blocked_until - now
+    _cache_set(key, {"actions": actions, "blocked_until": blocked_until}, ...)
+    return False, remaining
+
+_cache_set(key, {"actions": actions, "blocked_until": blocked_until}, ...)
+return True, None
     except Exception as exc:
         logger.exception("Rate limit check failed: %s", exc)
         return False, MAJOR_ACTION_BLOCK_SECONDS
