@@ -15,7 +15,7 @@ from ..services.core import (
     collect_dataset_summaries,
     parse_filename,
 )
-from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+# REMOVED: rate limit imports - not needed for read-only operations
 from ..constants import DEFAULT_VARIABLE_NAMES
 logger = logging.getLogger(__name__)
 
@@ -48,9 +48,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return JsonResponse({"error": "Select a project first."}, status=400)
 
-            # ONLY CHANGE: REMOVED RATE LIMIT CHECK HERE (lines 51-56)
-            # This is just listing datasets - read-only operation
-
+            # NO RATE LIMIT - read-only operation
             dataset_rows = collect_dataset_summaries(conn, project_id)
             return JsonResponse({"datasets": dataset_rows})
 
@@ -132,17 +130,7 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            # KEPT EXACTLY AS IS: Rate limit for preview (line 139)
-            allowed, remaining = check_major_action_rate_limit(request, conn)
-            if not allowed:
-                return render(
-                    request,
-                    "omeroweb_omp_plugin/index.html",
-                    {
-                        "projects": projects,
-                        "error_message": build_rate_limit_message(remaining),
-                    },
-                )
+            # NO RATE LIMIT - preview is read-only
 
             ds_list = collect_images_by_selected_datasets(
                 conn,
