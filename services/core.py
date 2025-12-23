@@ -486,6 +486,33 @@ def collect_dataset_summaries(conn, project_id):
     summaries = []
 
     def _format_name_from_image(img):
+        if hasattr(img, "getFileset"):
+            try:
+                fileset = img.getFileset()
+            except Exception:
+                fileset = None
+            if fileset:
+                try:
+                    used_files = list(fileset.getUsedFiles())
+                except Exception:
+                    used_files = []
+                for original_file in used_files:
+                    try:
+                        fmt = original_file.getFormat()
+                    except Exception:
+                        fmt = None
+                    fmt_name = get_text(fmt) if fmt else ""
+                    if fmt_name:
+                        return fmt_name
+                    try:
+                        name = get_text(original_file.getName())
+                    except Exception:
+                        name = ""
+                    if name and "." in name:
+                        ext = name.rsplit(".", 1)[-1]
+                        if ext:
+                            return ext.upper()
+
         try:
             pixels = img.getPrimaryPixels()
         except Exception:
