@@ -449,6 +449,7 @@
 <script>
 const BASE_URL = "/omeroweb_omp_plugin";
 const DEFAULT_VARS = {{ default_vars_json|safe }};
+const MAX_PARSED_VARS = {{ max_vars }};
 const variableSetInput = document.getElementById('variable_set_input');
 const variableSetSelect = document.getElementById('variable_set_select');
 const variableSetDropdown = document.getElementById('variable_set_dropdown');
@@ -585,7 +586,7 @@ function addVariableRow() {
     if (!varNameInputs) return;
     const nextIndex = getVarRowCount() + 1;
     const useDefaults = document.getElementById('use_defaults').checked;
-    const defaultValue = useDefaults ? (DEFAULT_VARS[nextIndex - 1] || 'rename') : '';
+    const defaultValue = useDefaults ? (DEFAULT_VARS[nextIndex - 1] || 'rename') : 'rename';
     const row = createVarRow(nextIndex, defaultValue);
     const input = row.querySelector('.var-input');
     if (input) {
@@ -856,8 +857,13 @@ function saveVariableSet() {
     let varNames = [];
     for (let i = 1; i <= count; i++) {
         const inp = document.getElementById('var_name_' + i);
-        const val = inp ? inp.value.trim() : "";
-        varNames.push(val);
+        const rawValue = inp ? inp.value : "";
+        const trimmed = rawValue.trim();
+        if (rawValue !== "" && trimmed === "") {
+            showNonBlockingModal("Variable names cannot consist of just empty spaces.");
+            return;
+        }
+        varNames.push(trimmed);
     }
 
     const hasEmpty = varNames.some(v => v === "");
@@ -1152,11 +1158,31 @@ function startSaveJob() {
     const count = getVarRowCount();
     const useDefaults = document.getElementById('use_defaults').checked;
 
+    if (count < MAX_PARSED_VARS) {
+        showNonBlockingModal(
+            "Please populate at least " + MAX_PARSED_VARS + " variables and try again."
+        );
+        return;
+    }
+
     let varNames = [];
     for (let i = 1; i <= count; i++) {
         const inp = document.getElementById('var_name_' + i);
-        const val = inp ? inp.value.trim() : "";
-        varNames.push(val);
+        const rawValue = inp ? inp.value : "";
+        const trimmed = rawValue.trim();
+        if (i <= MAX_PARSED_VARS && rawValue !== "" && trimmed === "") {
+            showNonBlockingModal(
+                "Variable names for the first " + MAX_PARSED_VARS + " variables cannot consist of just empty spaces."
+            );
+            return;
+        }
+        if (i <= MAX_PARSED_VARS && rawValue === "") {
+            showNonBlockingModal(
+                "Variable names for the first " + MAX_PARSED_VARS + " variables cannot be empty."
+            );
+            return;
+        }
+        varNames.push(trimmed);
     }
 
     // FIX: delete_mode *not* "keep", prevents double saves
