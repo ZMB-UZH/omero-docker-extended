@@ -499,12 +499,32 @@ def collect_dataset_summaries(conn, project_id):
                 images = []
                 image_count = 0
 
+            format_names = set()
+            for img in images:
+                try:
+                    pixels = img.getPrimaryPixels()
+                except Exception:
+                    pixels = None
+                if not pixels:
+                    continue
+                try:
+                    fmt = pixels.getFormat()
+                except Exception:
+                    fmt = None
+                fmt_name = get_text(fmt) if fmt else ""
+                if fmt_name:
+                    format_names.add(fmt_name)
+
+            format_list = ", ".join(
+                sorted(format_names, key=lambda name: name.lower())
+            )
+
             summaries.append(
                 {
                     "id": str(ds_id),
                     "name": ds_name,
                     "image_count": image_count,
-                    "file_types": "",
+                    "formats": format_list,
                 }
             )
     except Exception as e:
