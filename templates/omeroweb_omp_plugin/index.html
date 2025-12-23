@@ -95,9 +95,11 @@
             Load images & Preview
         </button>
     </form>
+</div>
 
+<div class="dataset-table-wrapper">
     <div id='dataset_table_container'
-         style='display:none; margin:20px auto 0; background:#fff; overflow:hidden; width:100%;'>
+         style='display:none; background:#fff; overflow:hidden; width:100%;'>
         <div style='max-height:750px; overflow-y:auto; overflow-x:hidden;'>
             <table border='1'
                    class="dataset-table"
@@ -116,56 +118,58 @@
         </div>
         <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
     </div>
+</div>
 
-    <div id="project_dropdown_backdrop"
-         style="display:none; position:fixed; inset:0; z-index:900;"></div>
+<div id="project_dropdown_backdrop"
+     style="display:none; position:fixed; inset:0; z-index:900;"></div>
 
     <!-- NON-BLOCKING MODAL -->
-    <div id="nb-modal-overlay"
-         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
-                z-index:9999; align-items:center; justify-content:center;">
-        <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
-                    box-shadow:0 10px 30px rgba(0,0,0,0.25);
-                    font-size:13px; min-width:300px; max-width:500px;">
-            <div id="nb-modal-message"
-                 style="margin-bottom:16px;">
-            </div>
-            <div style="text-align:right;">
-                <button onclick="hideNonBlockingModal()"
-                        style="padding:6px 14px; font-size:12px;">
-                    OK
-                </button>
-            </div>
+<div id="nb-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:300px; max-width:500px;">
+        <div id="nb-modal-message"
+             style="margin-bottom:16px;">
+        </div>
+        <div style="text-align:right;">
+            <button onclick="hideNonBlockingModal()"
+                    style="padding:6px 14px; font-size:12px;">
+                OK
+            </button>
         </div>
     </div>
+</div>
 
-    <style>
-        html, body {min-width: 632px;}
-        .omeroweb-omp-plugin button,
-        .omeroweb-omp-plugin .help-btn {
-            box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
-            transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
-        }
-        .omeroweb-omp-plugin button:active,
-        .omeroweb-omp-plugin .help-btn:active {
-            transform: translateY(2px);
-            box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .help-btn {width:26px; height:26px; border-radius:13px; background:#007bff; color:white; font-size:14px; font-weight:700;
-                    line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
-        .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
-        .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
-        .dataset-table td {word-break: break-word; white-space: normal;}
-        .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
-                               font-size:18px; font-weight:600; pointer-events:none;}
-        .project-option {transition: background 0.15s ease, color 0.15s ease;}
-        .project-option:hover,
-        .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
-        #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
-        .separator-option-text {white-space:nowrap;}
-    </style>
+<style>
+    html, body {min-width: 632px;}
+    .omeroweb-omp-plugin button,
+    .omeroweb-omp-plugin .help-btn {
+        box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
+        transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
+    }
+    .omeroweb-omp-plugin button:active,
+    .omeroweb-omp-plugin .help-btn:active {
+        transform: translateY(2px);
+        box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .help-btn {width:26px; height:26px; border-radius:13px; background:#007bff; color:white; font-size:14px; font-weight:700;
+                line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
+    .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+    .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
+    .dataset-table-wrapper {max-width:1300px; margin:20px auto 0; width:100%; padding:0 12px;}
+    .dataset-table td {word-break: break-word; white-space: normal;}
+    .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
+                           font-size:18px; font-weight:600; pointer-events:none;}
+    .project-option {transition: background 0.15s ease, color 0.15s ease;}
+    .project-option:hover,
+    .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
+    #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
+    .separator-option-text {white-space:nowrap;}
+</style>
 
-    <script>
+<script>
     const previewForm = document.getElementById('preview_form');
     function setSeparatorMode(mode) {
         const chars = document.getElementById('sep_mode_chars');
@@ -617,5 +621,3 @@
         });
     }
     </script>
-
-</div>
