@@ -257,6 +257,7 @@ def check_major_action_rate_limit(request, conn=None):
     now = time.time()
     key = _get_user_key(request, conn=conn)
     
+    print(f"====== RATE LIMIT CHECK: {key} at {now} ======", flush=True)
     logger.info(f"[RATE_LIMIT] Checking for key: {key}")
     
     try:
