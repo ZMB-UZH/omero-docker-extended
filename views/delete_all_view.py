@@ -78,7 +78,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     {"ok": True, "deleted_count": 0, "errors": [], "note": "No images found"}
                 )
 
-            allowed, remaining = check_major_action_rate_limit(request)
+            allowed, remaining = check_major_action_rate_limit(request, conn)
             if not allowed:
                 return JsonResponse(
                     {"error": build_rate_limit_message(remaining)},

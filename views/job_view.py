@@ -121,7 +121,7 @@ def start_job(request, conn=None, url=None, **kwargs):
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
-        allowed, remaining = check_major_action_rate_limit(request)
+        allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:
             return JsonResponse(
                 {"error": build_rate_limit_message(remaining)},
@@ -168,7 +168,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": "missing project_id"}, status=400)
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
-        allowed, remaining = check_major_action_rate_limit(request)
+        allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:
             return JsonResponse(
                 {"error": build_rate_limit_message(remaining)},
@@ -217,7 +217,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
-        allowed, remaining = check_major_action_rate_limit(request)
+        allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:
             return JsonResponse(
                 {"error": build_rate_limit_message(remaining)},
@@ -266,7 +266,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
-        allowed, remaining = check_major_action_rate_limit(request)
+        allowed, remaining = check_major_action_rate_limit(request, conn)
         if not allowed:
             return JsonResponse(
                 {"error": build_rate_limit_message(remaining)},
