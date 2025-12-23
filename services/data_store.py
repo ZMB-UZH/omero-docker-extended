@@ -5,6 +5,13 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
+TABLE_NAME = "omp_variable_sets"
+ENV_USER = "OMP_DATA_USER"
+ENV_PASS = "OMP_DATA_PASS"
+ENV_HOST = "OMP_DATA_HOST"
+ENV_DB = "OMP_DATA_DB"
+ENV_PORT = "OMP_DATA_PORT"
+
 
 class VariableStoreError(Exception):
     """Raised when variable set persistence fails."""
@@ -34,17 +41,20 @@ def _load_psycopg2():
 
 
 def _db_params():
-    user = os.environ.get("ZMB_DATA_USER")
-    password = os.environ.get("ZMB_DATA_PASS")
-    host = os.environ.get("ZMB_DATA_HOST", "database_plugin")
-    dbname = os.environ.get("ZMB_DATA_DB", "zmb-plugin")
+    user = os.environ.get(ENV_USER)
+    password = os.environ.get(ENV_PASS)
+    host = os.environ.get(ENV_HOST, "database_plugin")
+    dbname = os.environ.get(ENV_DB, "omp-plugin")
 
     if not user or not password:
-        raise VariableStoreError("Database credentials (docker compose environment variables) are missing (ZMB_DATA_USER/ZMB_DATA_PASS).")
+        raise VariableStoreError(
+            "Database credentials (docker compose environment variables) are missing "
+            "(OMP_DATA_USER/OMP_DATA_PASS)."
+        )
 
     port_candidates = []
     for candidate in (
-        os.environ.get("ZMB_DATA_PORT"),
+        os.environ.get(ENV_PORT),
         os.environ.get("PGPORT"),
         "5433",
         "5432",
@@ -117,8 +127,8 @@ def _connect():
 def _ensure_schema(conn):
     with conn.cursor() as cur:
         cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS zmb_variable_sets (
+            f"""
+            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
                 id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL,
                 set_name TEXT NOT NULL,
@@ -130,9 +140,9 @@ def _ensure_schema(conn):
             """
         )
         cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS zmb_variable_sets_username_idx
-                ON zmb_variable_sets (username);
+            f"""
+            CREATE INDEX IF NOT EXISTS {TABLE_NAME}_username_idx
+                ON {TABLE_NAME} (username);
             """
         )
     conn.commit()
@@ -144,9 +154,9 @@ def list_variable_sets(username):
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    f"""
                     SELECT set_name
-                    FROM zmb_variable_sets
+                    FROM {TABLE_NAME}
                     WHERE username = %s
                     ORDER BY updated_at DESC, set_name ASC
                     """,
@@ -169,8 +179,8 @@ def save_variable_set(username, set_name, var_names):
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    INSERT INTO zmb_variable_sets (username, set_name, var_names, updated_at)
+                    f"""
+                    INSERT INTO {TABLE_NAME} (username, set_name, var_names, updated_at)
                     VALUES (%s, %s, %s, NOW())
                     ON CONFLICT (username, set_name)
                     DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
@@ -178,6 +188,19 @@ def save_variable_set(username, set_name, var_names):
                     (username, set_name, json_payload),
                 )
             conn.commit()
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT var_names
+                    FROM {TABLE_NAME}
+                    WHERE username = %s AND set_name = %s
+                    """,
+                    (username, set_name),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise VariableStoreError("Variable set was not persisted to the database.")
     except VariableStoreError:
         raise
     except Exception as e:
@@ -191,9 +214,9 @@ def load_variable_set(username, set_name):
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                    f"""
                     SELECT var_names
-                    FROM zmb_variable_sets
+                    FROM {TABLE_NAME}
                     WHERE username = %s AND set_name = %s
                     """,
                     (username, set_name),
@@ -216,8 +239,8 @@ def delete_variable_set(username, set_name):
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    DELETE FROM zmb_variable_sets
+                    f"""
+                    DELETE FROM {TABLE_NAME}
                     WHERE username = %s AND set_name = %s
                     """,
                     (username, set_name),
@@ -230,6 +253,18 @@ def delete_variable_set(username, set_name):
 
             conn.commit()
 
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT 1
+                    FROM {TABLE_NAME}
+                    WHERE username = %s AND set_name = %s
+                    """,
+                    (username, set_name),
+                )
+                if cur.fetchone():
+                    raise VariableStoreError("Variable set deletion could not be confirmed.")
+
     except VariableStoreError:
         raise
     except Exception as e:
@@ -240,4 +275,3 @@ def delete_variable_set(username, set_name):
             e,
         )
         raise VariableStoreError("Unable to delete variable set.")
-

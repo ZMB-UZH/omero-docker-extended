@@ -797,9 +797,12 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         keep    – keep everything
         all     – delete all MapAnnotations
         plugin  – delete ONLY MapAnnotations created by this plugin
+
+    Returns:
+        (confirmed_sets_deleted, confirmed_pairs_deleted, attempted_sets)
     """
     if mode == "keep":
-        return 0, 0
+        return 0, 0, 0
 
     try:
         annotations = list(img.listAnnotations())
@@ -809,7 +812,7 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             get_id(img),
             e,
         )
-        return 0, 0
+        return 0, 0, 0
 
     qs = conn.getQueryService()
     service_opts = getattr(conn, "SERVICE_OPTS", None)
@@ -849,9 +852,24 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             logger.warning("Failed to delete annotation links for %s: %s", aid, e)
             return False
 
+    def _annotation_exists(aid):
+        if aid is None:
+            return False
+        try:
+            params = ParametersI()
+            params.add("aid", rlong(int(aid)))
+            rows = qs.projection(
+                "select a.id from MapAnnotation a where a.id = :aid",
+                params,
+                service_opts,
+            )
+            return bool(rows)
+        except Exception:
+            return True
+
     def _delete_by_id(aid):
         if aid is None:
-            return
+            return False
         try:
             links_deleted = _delete_links_for_annotation(aid)
         except Exception as e:
@@ -862,15 +880,16 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 "Skipping annotation %s delete because links still exist.",
                 aid,
             )
-            return
+            return False
         try:
             ann_obj = conn.getObject("MapAnnotation", int(aid))
         except Exception:
             ann_obj = None
         if ann_obj is None:
-            return
+            return True
         obj = getattr(ann_obj, "_obj", ann_obj)
         update.deleteObject(obj)
+        return not _annotation_exists(aid)
 
     target_ids = set()
 
@@ -923,19 +942,24 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         except Exception:
             logger.warning("Failed to delete plugin annotations for image %s", get_id(img))
 
-    total_pairs = 0
+    deleted_sets = 0
+    deleted_pairs = 0
     for aid in target_ids:
         try:
             ann_obj = conn.getObject("MapAnnotation", int(aid))
         except Exception:
             ann_obj = None
+        pair_count = 0
         if ann_obj is not None:
             try:
                 map_values = ann_obj.getMapValue() if hasattr(ann_obj, "getMapValue") else None
                 if map_values:
-                    total_pairs += len(map_values)
+                    pair_count = len(map_values)
             except Exception:
                 logger.warning("Failed to read map values for annotation %s", aid)
-        _delete_by_id(aid)
+        deleted = _delete_by_id(aid)
+        if deleted:
+            deleted_sets += 1
+            deleted_pairs += pair_count
 
-    return len(target_ids), total_pairs
+    return deleted_sets, deleted_pairs, len(target_ids)

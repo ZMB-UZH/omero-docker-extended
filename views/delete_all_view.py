@@ -5,7 +5,7 @@ import subprocess
 import logging
 import json
 
-from ..services.core import collect_images_in_project, get_id
+from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +104,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     text=True,
                 )
 
-                if result.returncode == 0:
-                    deleted_count += len(chunk_ids)
-                else:
+                if result.returncode != 0:
                     errors.append(
                         {
                             "ids": chunk_ids,
@@ -114,6 +112,20 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                             "stderr": result.stderr,
                         }
                     )
+                    continue
+
+                for image_id in chunk_ids:
+                    remaining = find_map_annotation_ids(conn, image_id)
+                    if remaining:
+                        errors.append(
+                            {
+                                "ids": [image_id],
+                                "error": "Map annotations still present after delete.",
+                                "remaining": remaining,
+                            }
+                        )
+                        continue
+                    deleted_count += 1
 
             return JsonResponse(
                 {
