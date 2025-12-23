@@ -1,9 +1,12 @@
+import hashlib
+import json
 import logging
+import os
 import time
 from math import ceil
-from threading import Lock
 
 from django.core.cache import cache
+import portalocker
 try:
     from django.core.cache.backends.dummy import DummyCache
 except Exception:  # pragma: no cover - fallback for unexpected cache setups
@@ -18,34 +21,63 @@ from ..constants import (
 logger = logging.getLogger(__name__)
 
 _CACHE_PREFIX = "omp_rate_limit"
-_LOCAL_CACHE = {}
-_LOCAL_CACHE_LOCK = Lock()
+_FILE_CACHE_DIR = "/tmp/omp_rate_limit_cache"
+os.makedirs(_FILE_CACHE_DIR, exist_ok=True)
 
 
 def _is_dummy_cache():
     return DummyCache is not None and isinstance(cache, DummyCache)
 
 
-def _cache_get(key):
-    if _is_dummy_cache():
-        with _LOCAL_CACHE_LOCK:
-            entry = _LOCAL_CACHE.get(key)
-            if not entry:
+def _file_cache_path(key):
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return os.path.join(_FILE_CACHE_DIR, f"{digest}.json")
+
+
+def _file_cache_get(key):
+    path = _file_cache_path(key)
+    try:
+        with portalocker.Lock(path, mode="a+", timeout=1) as handle:
+            handle.seek(0)
+            raw = handle.read()
+            if not raw:
                 return None
-            data, expires_at = entry
+            payload = json.loads(raw)
+            data = payload.get("data")
+            expires_at = payload.get("expires_at")
             if expires_at is not None and time.time() > expires_at:
-                _LOCAL_CACHE.pop(key, None)
+                handle.seek(0)
+                handle.truncate()
                 return None
             return data
+    except Exception:
+        return None
+
+
+def _file_cache_set(key, value, timeout):
+    path = _file_cache_path(key)
+    expires_at = time.time() + timeout if timeout else None
+    payload = {"data": value, "expires_at": expires_at}
+    try:
+        with portalocker.Lock(path, mode="a+", timeout=1) as handle:
+            handle.seek(0)
+            handle.truncate()
+            handle.write(json.dumps(payload))
+            handle.flush()
+    except Exception:
+        return False
+    return True
+
+
+def _cache_get(key):
+    if _is_dummy_cache():
+        return _file_cache_get(key)
     return cache.get(key)
 
 
 def _cache_set(key, value, timeout):
     if _is_dummy_cache():
-        expires_at = time.time() + timeout if timeout else None
-        with _LOCAL_CACHE_LOCK:
-            _LOCAL_CACHE[key] = (value, expires_at)
-        return True
+        return _file_cache_set(key, value, timeout)
     cache.set(key, value, timeout=timeout)
     return True
 
@@ -54,12 +86,24 @@ def _cache_timeout_seconds():
     return max(MAJOR_ACTION_WINDOW_SECONDS, MAJOR_ACTION_BLOCK_SECONDS) * 2
 
 
-def _get_user_key(request):
-    user = getattr(request, "user", None)
-    if user and getattr(user, "is_authenticated", False):
-        identifier = getattr(user, "username", None) or getattr(user, "id", None)
-    else:
-        identifier = "anonymous"
+def _get_user_key(request, conn=None):
+    identifier = None
+    if conn is not None:
+        try:
+            user = conn.getUser()
+            if user:
+                identifier = user.getName()
+        except Exception:
+            identifier = None
+
+    if not identifier:
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            identifier = getattr(user, "username", None) or getattr(user, "id", None)
+
+    if not identifier:
+        identifier = request.META.get("REMOTE_ADDR") or "anonymous"
+
     return f"{_CACHE_PREFIX}:{identifier}"
 
 
@@ -73,9 +117,9 @@ def build_rate_limit_message(remaining_seconds):
     )
 
 
-def check_major_action_rate_limit(request):
+def check_major_action_rate_limit(request, conn=None):
     now = time.time()
-    key = _get_user_key(request)
+    key = _get_user_key(request, conn=conn)
     try:
         data = _cache_get(key) or {}
         actions = data.get("actions", [])

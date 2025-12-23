@@ -48,7 +48,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return JsonResponse({"error": "Select a project first."}, status=400)
 
-            allowed, remaining = check_major_action_rate_limit(request)
+            allowed, remaining = check_major_action_rate_limit(request, conn)
             if not allowed:
                 return JsonResponse(
                     {"error": build_rate_limit_message(remaining)},
@@ -136,7 +136,7 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            allowed, remaining = check_major_action_rate_limit(request)
+            allowed, remaining = check_major_action_rate_limit(request, conn)
             if not allowed:
                 return render(
                     request,
