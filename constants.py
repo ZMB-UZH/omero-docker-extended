@@ -1,6 +1,6 @@
 import os
 
-PLUGIN_DISPLAY_NAME = "ZMB plugin"
+PLUGIN_DISPLAY_NAME = "OMP plugin" # NOT applicable here: need to change the docker-compose file
 
 # Storage directory for job JSON files
 # Description: Create the directory. No error if it already exists. Root access to the host machine assumed.
