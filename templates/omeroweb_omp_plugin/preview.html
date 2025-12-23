@@ -1117,7 +1117,8 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
     .then(r => r.json())
     .then(data => {
         if (data.error) {
-            progressText.innerText = "Error: " + data.error;
+            showNonBlockingModal(data.error);
+            progressSection.style.display = "none";
             return;
         }
 
@@ -1230,7 +1231,8 @@ function startSaveJob() {
     .then(r => r.json())
     .then(data => {
         if (data.error) {
-            document.getElementById("progress-text").innerText = "Error: " + data.error;
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
             return;
         }
 
@@ -1280,8 +1282,8 @@ function startAcquisitionMetadataJob() {
     .then(r => r.json())
     .then(data => {
         if (data.error) {
-            document.getElementById("progress-text").innerText =
-                "Error: " + data.error;
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
             return;
         }
 
@@ -1308,7 +1310,8 @@ function pollProgress() {
             clearInterval(pollInterval);
             pollInterval = null;
             currentJobId = null;
-            document.getElementById("progress-text").innerText = "Error: " + data.error;
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
             return;
         }
 
