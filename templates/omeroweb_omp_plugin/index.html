@@ -55,7 +55,7 @@
                         <td style='padding:3px;'>Dataset</td>
                         <td style='padding:3px;'>ID</td>
                         <td style='padding:3px;'>Images</td>
-                        <td style='padding:3px;'>File type(s)</td>
+                        <td style='padding:3px;'>File types</td>
                     </tr>
                     <tbody id='dataset_table_body'></tbody>
                 </table>
@@ -86,7 +86,7 @@
                                id='sep_mode_chars'
                                checked
                                onclick='setSeparatorMode("chars")'>
-                        <span>Character(s)</span>
+                        <span>Characters</span>
                     </label>
 
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
@@ -237,7 +237,7 @@
             const selectedImageCount = getSelectedDatasetImageCount();
             if (selectedImageCount === 0) {
                 event.preventDefault();
-                showNonBlockingModal("No data to process is available in the selected dataset(s).");
+                showNonBlockingModal("No data to process is available in the selected datasets.");
                 return;
             }
             if (!separatorInput.value.trim()) {
