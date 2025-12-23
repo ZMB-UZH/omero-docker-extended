@@ -41,23 +41,20 @@ def index(request, conn=None, url=None, **kwargs):
             logger.exception("Error listing projects: %s", e)
 
         # ----------------------------------------------------
-        # PREVIEW MODE
+        # LIST DATASETS - NO RATE LIMIT (read-only action)
         # ----------------------------------------------------
         if request.method == "POST" and request.POST.get("action") == "list_datasets":
             project_id = request.POST.get("project")
             if not project_id:
                 return JsonResponse({"error": "Select a project first."}, status=400)
 
-            allowed, remaining = check_major_action_rate_limit(request, conn)
-            if not allowed:
-                return JsonResponse(
-                    {"error": build_rate_limit_message(remaining)},
-                    status=429,
-                )
-
+            # REMOVED RATE LIMITING - This is just viewing datasets, not a major action
             dataset_rows = collect_dataset_summaries(conn, project_id)
             return JsonResponse({"datasets": dataset_rows})
 
+        # ----------------------------------------------------
+        # PREVIEW MODE - NO RATE LIMIT (read-only action)
+        # ----------------------------------------------------
         if request.method == "POST" and request.POST.get("action") != "save_job":
             project_id = request.POST.get("project")
             raw_seps = request.POST.get("separator", "_")
@@ -136,17 +133,8 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            allowed, remaining = check_major_action_rate_limit(request, conn)
-            if not allowed:
-                return render(
-                    request,
-                    "omeroweb_omp_plugin/index.html",
-                    {
-                        "projects": projects,
-                        "error_message": build_rate_limit_message(remaining),
-                    },
-                )
-
+            # REMOVED RATE LIMITING - Preview is read-only, not a major action
+            
             ds_list = collect_images_by_selected_datasets(
                 conn,
                 project_id,
@@ -201,26 +189,23 @@ def index(request, conn=None, url=None, **kwargs):
                     }
                 )
 
-            context = {
-                "project_label": project_label,
-                "separator_mode": separator_mode,
-                "raw_seps": raw_seps,
-                "preview_count": len(preview_rows_payload),
-                "preview_rows": preview_rows_payload,
-                "max_vars": max_vars,
-                "var_range": range(1, max_vars + 1),
-                "project_id": project_id,
-                "default_vars_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-            }
-
             return render(
                 request,
-                "omeroweb_omp_plugin/preview.html",
-                context,
+                "omeroweb_omp_plugin/index.html",
+                {
+                    "projects": projects,
+                    "project_label": project_label,
+                    "num_images_processed": total_images,
+                    "rows": preview_rows_payload,
+                    "max_vars": max_vars,
+                    "separator": raw_seps,
+                    "separator_mode": separator_mode,
+                    "selected_datasets": selected_dataset_ids_raw,
+                },
             )
 
         # ----------------------------------------------------
-        # LANDING PAGE
+        # DEFAULT: RENDER EMPTY FORM
         # ----------------------------------------------------
         return render(
             request,
@@ -229,5 +214,5 @@ def index(request, conn=None, url=None, **kwargs):
         )
 
     except Exception as e:
-        logger.exception("Unhandled error in index(): %s", e)
-        return HttpResponse(f"<h2>Error: {e}</h2>")
+        logger.exception("index() error: %s", e)
+        return HttpResponse(f"Error: {e}", status=500)
