@@ -138,8 +138,22 @@
                                type="text"
                                value=""
                                class="var-input">
+                        <button type="button"
+                                class="var-row-btn var-row-remove"
+                                data-action="remove-var"
+                                aria-label="Remove variable">
+                            −
+                        </button>
                     </div>
                     {% endfor %}
+                </div>
+                <div class="var-row-actions">
+                    <button type="button"
+                            id="add_var_row_btn"
+                            class="var-row-btn var-row-add"
+                            aria-label="Add variable">
+                        +
+                    </button>
                 </div>
             </div>
 
@@ -381,10 +395,16 @@
     }
 
     #var_name_inputs {margin-top: 6px;}
-    .var-row {display: grid; grid-template-columns: 2.5em auto; align-items: center; column-gap: 6px; margin-bottom: 4px;}
+    .var-row {display: grid; grid-template-columns: 2.5em auto 30px; align-items: center; column-gap: 6px; margin-bottom: 4px;}
     .var-index {text-align: right; font-size: 12px; color: #212529;}
     .var-input {font-size: 12px; padding: 4px 8px; width: 200px; border: none; border-radius: 6px; background: #ffffff;
                  box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}
+    .var-row-actions {margin-top: 6px; display: flex; align-items: center; gap: 6px;}
+    .var-row-btn {width: 26px; height: 26px; border: none; border-radius: 6px; font-size: 16px; font-weight: 700; color: #fff;
+                  cursor: pointer; padding: 0; line-height: 26px; text-align: center;}
+    .var-row-add {background: #2f80ff;}
+    .var-row-remove {background: #dc3545;}
+    .var-row-btn:disabled {opacity: 0.4; cursor: not-allowed; box-shadow: none;}
     .omeroweb-omp-plugin, .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .nowrap-1 {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
     #variable-set-block * {min-width: 0;}
@@ -433,6 +453,8 @@ const variableSetInput = document.getElementById('variable_set_input');
 const variableSetSelect = document.getElementById('variable_set_select');
 const variableSetDropdown = document.getElementById('variable_set_dropdown');
 const variableSetWrapper = document.getElementById('variable_set_wrapper');
+const varNameInputs = document.getElementById('var_name_inputs');
+const addVarRowBtn = document.getElementById('add_var_row_btn');
 let availableVariableSets = [];
 let currentJobId = null;
 let totalImages = 0;
@@ -477,21 +499,134 @@ function setVarSetControlsDisabled(disabled) {
 
 function toggleVarNameInputs() {
     let useDefaults = document.getElementById('use_defaults').checked;
-    let container = document.getElementById('var-config');
-    let count = parseInt(container.getAttribute('data-var-count'));
+    let count = getVarRowCount();
     for (let i = 1; i <= count; i++) {
         let inp = document.getElementById('var_name_' + i);
         if (!inp) {
             continue;
         }
         if (useDefaults) {
-            inp.value = DEFAULT_VARS[i - 1] || "empty";
+            inp.value = DEFAULT_VARS[i - 1] || "rename";
             inp.disabled = true;
         } else {
             inp.disabled = false;
         }
     }
     setVarSetControlsDisabled(useDefaults);
+    updateVarRowControls();
+}
+
+function getVarRowCount() {
+    return varNameInputs ? varNameInputs.querySelectorAll('.var-row').length : 0;
+}
+
+function updateVarRowControls() {
+    if (!varNameInputs) return;
+    const useDefaults = document.getElementById('use_defaults').checked;
+    const removeButtons = Array.from(varNameInputs.querySelectorAll('.var-row-remove'));
+    const rowCount = getVarRowCount();
+    removeButtons.forEach(btn => {
+        btn.disabled = useDefaults || rowCount <= 1;
+    });
+    if (addVarRowBtn) {
+        addVarRowBtn.disabled = useDefaults;
+    }
+}
+
+function refreshVarRowIndices() {
+    if (!varNameInputs) return;
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    rows.forEach((row, index) => {
+        const number = index + 1;
+        const indexLabel = row.querySelector('.var-index');
+        const input = row.querySelector('.var-input');
+        if (indexLabel) {
+            indexLabel.textContent = number + ':';
+        }
+        if (input) {
+            input.id = 'var_name_' + number;
+        }
+    });
+    const container = document.getElementById('var-config');
+    if (container) {
+        container.setAttribute('data-var-count', rows.length);
+    }
+    updateVarRowControls();
+}
+
+function createVarRow(index, presetValue = '') {
+    const row = document.createElement('div');
+    row.className = 'var-row';
+
+    const indexLabel = document.createElement('div');
+    indexLabel.className = 'var-index';
+    indexLabel.textContent = index + ':';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'var_name_' + index;
+    input.className = 'var-input';
+    input.value = presetValue;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'var-row-btn var-row-remove';
+    removeBtn.dataset.action = 'remove-var';
+    removeBtn.setAttribute('aria-label', 'Remove variable');
+    removeBtn.textContent = '−';
+
+    row.appendChild(indexLabel);
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    return row;
+}
+
+function addVariableRow() {
+    if (!varNameInputs) return;
+    const nextIndex = getVarRowCount() + 1;
+    const useDefaults = document.getElementById('use_defaults').checked;
+    const defaultValue = useDefaults ? (DEFAULT_VARS[nextIndex - 1] || 'rename') : '';
+    const row = createVarRow(nextIndex, defaultValue);
+    const input = row.querySelector('.var-input');
+    if (input) {
+        input.disabled = useDefaults;
+    }
+    varNameInputs.appendChild(row);
+    refreshVarRowIndices();
+}
+
+function ensureVarRows(count) {
+    if (!varNameInputs) return;
+    const current = getVarRowCount();
+    if (count <= current) {
+        return;
+    }
+    for (let i = current + 1; i <= count; i++) {
+        const row = createVarRow(i, '');
+        varNameInputs.appendChild(row);
+    }
+    refreshVarRowIndices();
+}
+
+if (addVarRowBtn) {
+    addVarRowBtn.addEventListener('click', () => {
+        addVariableRow();
+    });
+}
+
+if (varNameInputs) {
+    varNameInputs.addEventListener('click', (event) => {
+        const button = event.target.closest('.var-row-remove');
+        if (!button) return;
+        const row = button.closest('.var-row');
+        if (!row) return;
+        if (getVarRowCount() <= 1) {
+            updateVarRowControls();
+            return;
+        }
+        row.remove();
+        refreshVarRowIndices();
+    });
 }
 
 function populateVariableSetDropdown(sets) {
@@ -716,8 +851,7 @@ function saveVariableSet() {
 
     const nameInput = document.getElementById('variable_set_name');
     const setName = (nameInput.value || "").trim();
-    const container = document.getElementById('var-config');
-    const count = parseInt(container.getAttribute('data-var-count'));
+    const count = getVarRowCount();
 
     let varNames = [];
     for (let i = 1; i <= count; i++) {
@@ -726,9 +860,9 @@ function saveVariableSet() {
         varNames.push(val);
     }
 
-    const nonEmpty = varNames.filter(v => v !== "");
-    if (!nonEmpty.length) {
-        showNonBlockingModal("Cannot save to database. List of variables empty.");
+    const hasEmpty = varNames.some(v => v === "");
+    if (hasEmpty) {
+        showNonBlockingModal("Variable names cannot be empty.");
         return;
     }
 
@@ -846,8 +980,9 @@ function loadVariableSet() {
         }
 
         const container = document.getElementById('var-config');
-        const count = parseInt(container.getAttribute('data-var-count'));
         const saved = data.var_names || [];
+        ensureVarRows(saved.length);
+        const count = getVarRowCount();
 
         for (let i = 1; i <= count; i++) {
             const val = saved[i - 1];
@@ -1014,8 +1149,7 @@ function startSaveJob() {
     const separator = document.getElementById('separator').value;
     const separatorMode = document.getElementById('separator_mode').value;
 
-    const container = document.getElementById('var-config');
-    const count = parseInt(container.getAttribute('data-var-count'));
+    const count = getVarRowCount();
     const useDefaults = document.getElementById('use_defaults').checked;
 
     let varNames = [];
