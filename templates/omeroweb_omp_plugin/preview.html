@@ -62,44 +62,46 @@
             </a>
         </div>
     </div>
-    <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
-        <tr style='background:#007bff; color:white;'>
-            <td style='padding:3px; width:32px; text-align:center;'>
-                <input type='checkbox' id='images_select_all' checked>
-            </td>
-            <td style='padding:3px;'>Dataset</td>
-            <td style='padding:3px;'>ID</td>
-            <td style='padding:3px;'>Filename</td>
-            <td style='padding:3px;'>Parsed variables</td>
-        </tr>
-        {% for row in preview_rows %}
-        <tr>
-            <td style='padding:2px; text-align:center;'>
-                <input type='checkbox' data-image-id='{{ row.img_id }}' checked>
-            </td>
-            <td style='padding:2px;'>
-                <div class="clamp-2">
-                    {{ row.ds_label }}
-                </div>
-            </td>
-            <td style='padding:2px;'>
-                <div class="nowrap-1">
-                    {{ row.img_id }}
-                </div>
-            </td>
-            <td style='padding:2px;'>
-                <div class="clamp-2">
-                    {{ row.filename }}
-                </div>
-            </td>
-            <td style='padding:2px;'>
-                <div class="clamp-2">
-                    {{ row.vars_display|safe }}
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div style="max-height:1250px; overflow:auto;">
+        <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+            <tr style='background:#007bff; color:white;'>
+                <td style='padding:3px; width:32px; text-align:center;'>
+                    <input type='checkbox' id='images_select_all' checked>
+                </td>
+                <td style='padding:3px;'>Dataset</td>
+                <td style='padding:3px;'>ID</td>
+                <td style='padding:3px;'>Filename</td>
+                <td style='padding:3px;'>Parsed variables</td>
+            </tr>
+            {% for row in preview_rows %}
+            <tr>
+                <td style='padding:2px; text-align:center;'>
+                    <input type='checkbox' data-image-id='{{ row.img_id }}' checked>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="clamp-2">
+                        {{ row.ds_label }}
+                    </div>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="nowrap-1">
+                        {{ row.img_id }}
+                    </div>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="clamp-2">
+                        {{ row.filename }}
+                    </div>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="clamp-2">
+                        {{ row.vars_display|safe }}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
 
     <hr>
 
