@@ -1,4 +1,4 @@
-<div class="omeroweb-zmb-plugin"
+<div class="omeroweb-omp-plugin"
      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); width:1200px; min-width:1200px; max-width:1200px; margin:0 auto;'>
     <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:8px; margin-bottom:10px;'>
 
@@ -52,7 +52,7 @@
             <p>Previewing {{ preview_count }} images.</p>
         </div>
         <div style="display:flex; justify-content:flex-end; align-items:flex-start;">
-            <a href="/omeroweb_zmb_plugin/help/"
+            <a href="/omeroweb_omp_plugin/help/"
                target="_blank"
                rel="noopener noreferrer"
                title="Help"
@@ -156,10 +156,21 @@
                     </label>
 
                 <div class="varset-row-3">
-                    <select id='variable_set_select'
-                            class="varset-control">
-                        <option value=''>Select or create…</option>
-                    </select>
+                    <div id="variable_set_wrapper" class="varset-select-wrapper">
+                        <input type="text"
+                               id="variable_set_input"
+                               placeholder="Select a saved set…"
+                               autocomplete="off"
+                               class="varset-control">
+                        <span class="varset-select-arrow" aria-hidden="true">▾</span>
+                        <input type="hidden" id="variable_set_select" value="">
+                        <div id="variable_set_dropdown"
+                             class="varset-dropdown"
+                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                                    background:#fff; border:1px solid #007bff; border-top:none;
+                                    max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                        </div>
+                    </div>
                     <button id='load_variable_set_btn'
                             onclick='loadVariableSet()'
                             class="varset-btn varset-btn-blue">
@@ -200,7 +211,7 @@
 
     <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
     <div style="display:flex; justify-content:flex-end; margin-top:6px;">
-        <a href="/omeroweb_zmb_plugin/help/"
+        <a href="/omeroweb_omp_plugin/help/"
            target="_blank"
            rel="noopener noreferrer"
            title="Help"
@@ -370,7 +381,7 @@
     .var-index {text-align: right; font-size: 12px; color: #212529;}
     .var-input {font-size: 12px; padding: 4px 8px; width: 200px; border: none; border-radius: 6px; background: #ffffff;
                  box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}
-    .omeroweb-zmb-plugin, .omeroweb-zmb-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
+    .omeroweb-omp-plugin, .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .nowrap-1 {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
     #variable-set-block * {min-width: 0;}
     .clamp-2 {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-overflow: ellipsis;
@@ -378,6 +389,13 @@
     .ui-faded {opacity: 0.3; filter: grayscale(100%); pointer-events: none;}
     .varset-control {font-size: 12px; width: 240px; max-width: 240px; padding: 8px 8px; border: none; border-radius: 6px;
                       background: #ffffff; box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}
+    .varset-select-wrapper {position: relative; width: 240px; max-width: 240px;}
+    .varset-select-arrow {position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #4b5563;
+                          font-size: 16px; font-weight: 600; pointer-events: none;}
+    .varset-option {transition: background 0.15s ease, color 0.15s ease;}
+    .varset-option:hover,
+    .varset-option.is-active {background: #e7f1ff; color: #1d4ed8;}
+    #variable_set_dropdown.keyboard-active .varset-option:hover {background: transparent; color: inherit;}
     .varset-btn {font-size: 12px; width: 140px; min-width: 140px; padding: 8px 8px; white-space: nowrap; color: white;
                   border: none; border-radius: 6px; cursor: pointer; justify-self: start;}
     .varset-btn-blue {background: #0069d9;}
@@ -387,15 +405,15 @@
                    justify-content: start; justify-items: start; width: 100%;}
     .varset-row-2 {display: grid; grid-template-columns: 240px 140px; column-gap: 15px; row-gap: 10px; align-items: center;
                     justify-content: start; justify-items: start; width: 100%;}
-    .omeroweb-zmb-plugin button,
+    .omeroweb-omp-plugin button,
     #nb-modal-overlay button,
-    .omeroweb-zmb-plugin .help-btn {
+    .omeroweb-omp-plugin .help-btn {
         box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
         transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
     }
-    .omeroweb-zmb-plugin button:active,
+    .omeroweb-omp-plugin button:active,
     #nb-modal-overlay button:active,
-    .omeroweb-zmb-plugin .help-btn:active {
+    .omeroweb-omp-plugin .help-btn:active {
         transform: translateY(2px);
         box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
     }
@@ -405,12 +423,18 @@
 </style>
 
 <script>
-const BASE_URL = "/omeroweb_zmb_plugin";
+const BASE_URL = "/omeroweb_omp_plugin";
 const DEFAULT_VARS = {{ default_vars_json|safe }};
+const variableSetInput = document.getElementById('variable_set_input');
+const variableSetSelect = document.getElementById('variable_set_select');
+const variableSetDropdown = document.getElementById('variable_set_dropdown');
+const variableSetWrapper = document.getElementById('variable_set_wrapper');
 let availableVariableSets = [];
 let currentJobId = null;
 let totalImages = 0;
 let pollInterval = null;
+let activeVariableSetIndex = -1;
+let variableSetFilterTimeout = null;
 
 function goBack() {
     window.location.href = BASE_URL + "/";
@@ -427,12 +451,13 @@ function scrollToTop() {
 
 function setVarSetControlsDisabled(disabled) {
     const select = document.getElementById('variable_set_select');
+    const input = document.getElementById('variable_set_input');
     const saveBtn = document.getElementById('save_variable_set_btn');
     const loadBtn = document.getElementById('load_variable_set_btn');
     const nameInput = document.getElementById('variable_set_name');
     const block = document.getElementById('variable-set-block');
     const deleteBtn = document.getElementById('delete_variable_set_btn');
-    [select, saveBtn, loadBtn, deleteBtn, nameInput].forEach(el => {
+    [select, input, saveBtn, loadBtn, deleteBtn, nameInput].forEach(el => {
         if (el) {
             el.disabled = !!disabled;
         }
@@ -466,35 +491,196 @@ function toggleVarNameInputs() {
 }
 
 function populateVariableSetDropdown(sets) {
-    const select = document.getElementById('variable_set_select');
-    if (!select) return;
-
-    const currentValue = select.value;
-
     availableVariableSets = sets || [];
-    select.innerHTML = "";
 
-    if (!availableVariableSets.length) {
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.textContent = "No saved sets";
-        select.appendChild(opt);
+    if (!variableSetInput || !variableSetDropdown || !variableSetSelect) {
         return;
     }
 
-    const placeholder = document.createElement('option');
-    placeholder.value = "";
-    placeholder.textContent = "Select a saved set";
-    select.appendChild(placeholder);
+    const currentValue = variableSetSelect.value;
+    const currentName = variableSetInput.dataset.selectedName || currentValue;
 
-    availableVariableSets.forEach(name => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        if (name === currentValue) {
-            opt.selected = true;
+    if (availableVariableSets.length && currentName && availableVariableSets.includes(currentName)) {
+        variableSetSelect.value = currentName;
+        variableSetInput.value = currentName;
+        variableSetInput.dataset.selectedName = currentName;
+    } else {
+        variableSetSelect.value = "";
+        variableSetInput.value = "";
+        variableSetInput.dataset.selectedName = "";
+    }
+
+    renderVariableSetOptions(variableSetInput.value || "");
+}
+
+function getVariableSetOptions() {
+    return variableSetDropdown
+        ? Array.from(variableSetDropdown.querySelectorAll('.varset-option'))
+        : [];
+}
+
+function setActiveVariableSetIndex(index, useKeyboard = false) {
+    const options = getVariableSetOptions();
+    if (options.length === 0) {
+        activeVariableSetIndex = -1;
+        return;
+    }
+    if (variableSetDropdown) {
+        if (useKeyboard) {
+            variableSetDropdown.classList.add('keyboard-active');
+        } else {
+            variableSetDropdown.classList.remove('keyboard-active');
         }
-        select.appendChild(opt);
+    }
+    const clamped = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, idx) => {
+        if (idx === clamped) {
+            option.classList.add('is-active');
+            option.scrollIntoView({ block: 'nearest' });
+        } else {
+            option.classList.remove('is-active');
+        }
+    });
+    activeVariableSetIndex = clamped;
+}
+
+function selectVariableSetOption(option) {
+    if (!option || !variableSetInput || !variableSetSelect) return;
+    const name = option.dataset.setName || option.textContent || '';
+    variableSetSelect.value = name;
+    variableSetInput.value = name;
+    variableSetInput.dataset.selectedName = name;
+    closeVariableSetDropdown(true);
+}
+
+function renderVariableSetOptions(query) {
+    if (!variableSetDropdown) return;
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = availableVariableSets.filter((name) => {
+        if (!normalizedQuery) return true;
+        return String(name || '').toLowerCase().includes(normalizedQuery);
+    });
+
+    variableSetDropdown.innerHTML = "";
+
+    if (availableVariableSets.length === 0) {
+        const emptyRow = document.createElement('div');
+        emptyRow.style.padding = '8px 12px';
+        emptyRow.style.color = '#6b7280';
+        emptyRow.textContent = 'No saved sets.';
+        variableSetDropdown.appendChild(emptyRow);
+        activeVariableSetIndex = -1;
+        return;
+    }
+
+    if (matches.length === 0) {
+        const emptyRow = document.createElement('div');
+        emptyRow.style.padding = '8px 12px';
+        emptyRow.style.color = '#6b7280';
+        emptyRow.textContent = 'No matching sets.';
+        variableSetDropdown.appendChild(emptyRow);
+        activeVariableSetIndex = -1;
+        return;
+    }
+
+    matches.forEach((name) => {
+        const option = document.createElement('div');
+        option.className = 'varset-option';
+        option.dataset.setName = name;
+        option.style.padding = '8px 12px';
+        option.style.cursor = 'pointer';
+        option.style.whiteSpace = 'nowrap';
+        option.textContent = name;
+        variableSetDropdown.appendChild(option);
+    });
+    setActiveVariableSetIndex(0);
+}
+
+function openVariableSetDropdown() {
+    if (!variableSetDropdown || !variableSetInput) return;
+    variableSetDropdown.style.display = 'block';
+    variableSetDropdown.classList.remove('keyboard-active');
+    variableSetInput.dataset.previousValue = variableSetInput.value;
+    variableSetInput.placeholder = 'Search...';
+    renderVariableSetOptions(variableSetInput.value || "");
+}
+
+function closeVariableSetDropdown(restoreSelection = true) {
+    if (!variableSetDropdown || !variableSetInput) return;
+    variableSetDropdown.style.display = 'none';
+    variableSetDropdown.classList.remove('keyboard-active');
+    if (restoreSelection && !variableSetInput.value) {
+        const selectedName = variableSetInput.dataset.selectedName || '';
+        variableSetInput.value = selectedName;
+    }
+    variableSetInput.placeholder = 'Select a saved set…';
+}
+
+function filterVariableSetOptions(query) {
+    if (variableSetFilterTimeout) {
+        window.clearTimeout(variableSetFilterTimeout);
+    }
+    variableSetFilterTimeout = window.setTimeout(() => {
+        renderVariableSetOptions(query);
+    }, 120);
+}
+
+if (variableSetInput) {
+    variableSetInput.addEventListener('focus', () => {
+        openVariableSetDropdown();
+    });
+
+    variableSetInput.addEventListener('click', () => {
+        if (variableSetDropdown?.style.display !== 'block') {
+            openVariableSetDropdown();
+        }
+    });
+
+    variableSetInput.addEventListener('input', (event) => {
+        filterVariableSetOptions(event.target.value);
+    });
+
+    variableSetInput.addEventListener('keydown', (event) => {
+        if (variableSetDropdown?.style.display !== 'block') return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const options = getVariableSetOptions();
+            if (options.length === 0) return;
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            const nextIndex = activeVariableSetIndex === -1 ? 0 : activeVariableSetIndex + delta;
+            setActiveVariableSetIndex(nextIndex, true);
+        } else if (event.key === 'Enter') {
+            const options = getVariableSetOptions();
+            if (options.length === 0 || activeVariableSetIndex === -1) return;
+            event.preventDefault();
+            selectVariableSetOption(options[activeVariableSetIndex]);
+        }
+    });
+}
+
+if (variableSetDropdown) {
+    variableSetDropdown.addEventListener('click', (event) => {
+        const option = event.target.closest('.varset-option');
+        if (!option) return;
+        selectVariableSetOption(option);
+    });
+
+    variableSetDropdown.addEventListener('mousemove', (event) => {
+        const option = event.target.closest('.varset-option');
+        if (!option) return;
+        const options = getVariableSetOptions();
+        const index = options.indexOf(option);
+        if (index !== -1) {
+            setActiveVariableSetIndex(index, false);
+        }
+    });
+}
+
+if (variableSetWrapper) {
+    document.addEventListener('click', (event) => {
+        if (!variableSetWrapper.contains(event.target)) {
+            closeVariableSetDropdown(true);
+        }
     });
 }
 
@@ -634,8 +820,9 @@ function loadVariableSet() {
         return;
     }
 
-    const select = document.getElementById('variable_set_select');
-    const selected = select ? (select.value || "").trim() : "";
+    const selected = variableSetSelect
+        ? (variableSetSelect.value || "").trim()
+        : (variableSetInput ? (variableSetInput.value || "").trim() : "");
 
     if (!selected) {
         showNonBlockingModal("Please select a variable set from the dropdown menu.");
@@ -682,8 +869,9 @@ function deleteVariableSet() {
         return;
     }
 
-    const select = document.getElementById('variable_set_select');
-    const selected = select ? (select.value || "").trim() : "";
+    const selected = variableSetSelect
+        ? (variableSetSelect.value || "").trim()
+        : (variableSetInput ? (variableSetInput.value || "").trim() : "");
 
     if (!selected) {
         showNonBlockingModal("Please select a variable set from the dropdown menu.");
