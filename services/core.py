@@ -482,79 +482,125 @@ def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=Non
 def collect_dataset_summaries(conn, project_id):
     """
     Returns list of dataset summaries for a project.
+    Each summary includes the Bio-Formats reader name.
     """
     summaries = []
 
-    def _format_name_from_image(img):
+    def _get_bioformat_from_image(img):
+        """
+        Get the Bio-Formats reader/format name for an image.
+        Returns names like: "OME-TIFF", "Zeiss CZI", "Leica LIF", "PNG", etc.
+        """
+        # METHOD 1: Get format from Fileset template prefix (most reliable!)
+        # This contains the actual Bio-Formats reader name
         if hasattr(img, "getFileset"):
             try:
                 fileset = img.getFileset()
-            except Exception:
-                fileset = None
-            if fileset:
-                try:
-                    used_files = list(fileset.getUsedFiles())
-                except Exception:
-                    used_files = []
-                for original_file in used_files:
+                if fileset:
                     try:
-                        fmt = original_file.getFormat()
+                        template_prefix = fileset.getTemplatePrefix()
+                        if template_prefix:
+                            # getTemplatePrefix() returns omero.rstring
+                            prefix_str = template_prefix.getValue() if hasattr(template_prefix, "getValue") else str(template_prefix)
+                            if prefix_str and prefix_str.strip():
+                                return prefix_str.strip()
                     except Exception:
-                        fmt = None
-                    fmt_name = get_text(fmt) if fmt else ""
-                    if fmt_name:
-                        return fmt_name
+                        pass
+            except Exception:
+                pass
+        
+        # METHOD 2: Get format from original file Format object
+        if hasattr(img, "getFileset"):
+            try:
+                fileset = img.getFileset()
+                if fileset:
                     try:
-                        name = get_text(original_file.getName())
+                        # Use copyUsedFiles() instead of getUsedFiles()
+                        used_files = fileset.copyUsedFiles()
+                        if used_files:
+                            for uf in used_files:
+                                try:
+                                    orig_file = uf.getOriginalFile()
+                                    if orig_file:
+                                        fmt = orig_file.getFormat()
+                                        if fmt:
+                                            fmt_val = fmt.getValue() if hasattr(fmt, "getValue") else get_text(fmt)
+                                            if fmt_val and fmt_val not in ["text/plain", "Directory", "Companion/Unknown"]:
+                                                # Some formats are MIME types, extract the useful part
+                                                if "/" in fmt_val:
+                                                    fmt_val = fmt_val.split("/")[-1]
+                                                return fmt_val
+                                except Exception:
+                                    continue
                     except Exception:
-                        name = ""
-                    if name and "." in name:
-                        ext = name.rsplit(".", 1)[-1]
-                        if ext:
-                            return ext.upper()
-
-        try:
-            pixels = img.getPrimaryPixels()
-        except Exception:
-            pixels = None
-
-        if pixels:
-            try:
-                fmt = pixels.getFormat()
+                        pass
             except Exception:
-                fmt = None
-            fmt_name = get_text(fmt) if fmt else ""
-            if fmt_name:
-                return fmt_name
-
+                pass
+        
+        # METHOD 3: Extract from original filename extension
+        if hasattr(img, "getFileset"):
             try:
-                pixels_type = pixels.getPixelsType()
+                fileset = img.getFileset()
+                if fileset:
+                    used_files = fileset.copyUsedFiles()
+                    if used_files:
+                        for uf in used_files:
+                            try:
+                                orig_file = uf.getOriginalFile()
+                                if orig_file:
+                                    orig_name = orig_file.getName()
+                                    if orig_name:
+                                        name_str = orig_name.getValue() if hasattr(orig_name, "getValue") else str(orig_name)
+                                        if name_str and "." in name_str:
+                                            # Handle compound extensions like .ome.tiff
+                                            parts = name_str.lower().split(".")
+                                            if len(parts) >= 3 and parts[-2] == "ome":
+                                                return "OME-TIFF"
+                                            # Single extension
+                                            ext = parts[-1].upper()
+                                            # Map to common Bio-Formats names
+                                            format_map = {
+                                                "TIF": "TIFF",
+                                                "TIFF": "TIFF",
+                                                "CZI": "Zeiss CZI",
+                                                "LIF": "Leica LIF",
+                                                "VSI": "CellSens VSI",
+                                                "ND2": "Nikon ND2",
+                                                "OIB": "Olympus OIB",
+                                                "OIF": "Olympus OIF",
+                                                "LSM": "Zeiss LSM",
+                                                "ZVI": "Zeiss ZVI",
+                                                "DV": "DeltaVision",
+                                                "ICS": "ICS",
+                                                "IMS": "Imaris",
+                                                "PNG": "PNG",
+                                                "JPG": "JPEG",
+                                                "JPEG": "JPEG",
+                                                "BMP": "BMP",
+                                                "GIF": "GIF",
+                                            }
+                                            return format_map.get(ext, ext)
+                            except Exception:
+                                continue
             except Exception:
-                pixels_type = None
-            pixels_type_name = get_text(pixels_type) if pixels_type else ""
-            if pixels_type_name:
-                return pixels_type_name
-
-        if hasattr(img, "getFormat"):
-            try:
-                fmt = img.getFormat()
-            except Exception:
-                fmt = None
-            fmt_name = get_text(fmt) if fmt else ""
-            if fmt_name:
-                return fmt_name
-
+                pass
+        
+        # METHOD 4: Fallback to image name extension
         if hasattr(img, "getName"):
             try:
-                name = get_text(img.getName())
+                img_name = img.getName()
+                name_str = img_name.getValue() if hasattr(img_name, "getValue") else get_text(img_name)
+                if name_str and "." in name_str:
+                    parts = name_str.lower().split(".")
+                    if len(parts) >= 3 and parts[-2] == "ome":
+                        return "OME-TIFF"
+                    ext = parts[-1].upper()
+                    if ext and len(ext) <= 10:
+                        return ext
             except Exception:
-                name = ""
-            if name and "." in name:
-                ext = name.rsplit(".", 1)[-1]
-                if ext:
-                    return ext.upper()
-
-        return ""
+                pass
+        
+        return "Unknown"
 
     try:
         prj = conn.getObject("Project", int(project_id))
@@ -573,9 +619,17 @@ def collect_dataset_summaries(conn, project_id):
 
             format_names = set()
             for img in images:
-                fmt_name = _format_name_from_image(img)
-                if fmt_name:
-                    format_names.add(fmt_name)
+                try:
+                    fmt_name = _get_bioformat_from_image(img)
+                    if fmt_name and fmt_name != "Unknown":
+                        format_names.add(fmt_name)
+                except Exception as e:
+                    logger.debug(f"Error getting format for image {get_id(img)}: {e}")
+                    continue
+            
+            # If no formats detected, mark as Unknown
+            if not format_names:
+                format_names.add("Unknown")
 
             format_list = ", ".join(
                 sorted(format_names, key=lambda name: name.lower())
