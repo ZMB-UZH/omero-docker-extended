@@ -257,15 +257,12 @@ def check_major_action_rate_limit(request, conn=None):
     now = time.time()
     key = _get_user_key(request, conn=conn)
     
-    print(f"====== RATE LIMIT CHECK: {key} at {now} ======", flush=True)
     logger.info(f"[RATE_LIMIT] Checking for key: {key}")
     
     try:
         # Get current state from cache
         data = _cache_get(key) or {}
         actions = data.get("actions", [])
-        
-        print(f"====== CACHE DATA: {data} ======", flush=True)
         
         # Validate and clean actions list
         if not isinstance(actions, list):
@@ -283,8 +280,7 @@ def check_major_action_rate_limit(request, conn=None):
         blocked_until = data.get("blocked_until", 0)
         if not isinstance(blocked_until, (int, float)):
             blocked_until = 0
-        
-        print(f"====== AFTER CLEANUP: {len(actions)} actions, blocked_until={blocked_until} ======", flush=True)
+
         
         logger.info(
             f"[RATE_LIMIT] Current state: {len(actions)} actions in window, "
@@ -294,7 +290,6 @@ def check_major_action_rate_limit(request, conn=None):
         # Check if user is currently in a blocked state
         if now < blocked_until:
             remaining = blocked_until - now
-            print(f"====== USER IS BLOCKED! Remaining: {remaining}s ======", flush=True)
             logger.warning(
                 f"[RATE_LIMIT] BLOCKED: {key} blocked for {remaining:.1f} more seconds"
             )
@@ -310,8 +305,6 @@ def check_major_action_rate_limit(request, conn=None):
         # Add the current action FIRST, then check limit
         actions.append(now)
         
-        print(f"====== AFTER ADDING ACTION: {len(actions)} total ======", flush=True)
-        
         logger.info(f"[RATE_LIMIT] After adding action: {len(actions)} total actions")
         
         # Check if we've now exceeded the limit (after adding current action)
@@ -319,8 +312,6 @@ def check_major_action_rate_limit(request, conn=None):
             # User has exceeded the limit - block them
             blocked_until = now + MAJOR_ACTION_BLOCK_SECONDS
             remaining = MAJOR_ACTION_BLOCK_SECONDS
-            
-            print(f"====== LIMIT EXCEEDED! {len(actions)} > {MAJOR_ACTION_LIMIT} ======", flush=True)
             
             logger.warning(
                 f"[RATE_LIMIT] LIMIT EXCEEDED for {key}! "
@@ -337,8 +328,6 @@ def check_major_action_rate_limit(request, conn=None):
             return False, remaining
 
         # User is within limits - allow the action
-        print(f"====== OK! {len(actions)}/{MAJOR_ACTION_LIMIT} ======", flush=True)
-        
         logger.info(
             f"[RATE_LIMIT] OK: {key} allowed. "
             f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT} "
@@ -355,7 +344,6 @@ def check_major_action_rate_limit(request, conn=None):
         
     except Exception as exc:
         # Log the error but fail closed (block on error for security)
-        print(f"====== EXCEPTION! {exc} ======", flush=True)
         logger.exception(f"[RATE_LIMIT] ERROR: Rate limit check failed for {key}: {exc}")
         return False, MAJOR_ACTION_BLOCK_SECONDS
 
