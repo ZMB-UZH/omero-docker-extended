@@ -11,6 +11,7 @@ from ..services.core import (
     find_plugin_annotation_ids,
     get_id,
 )
+from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 logger = logging.getLogger(__name__)
 
 # Use the correct Python venv path for Omero CLI
@@ -25,6 +26,13 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         try:
             data = json.loads(request.body.decode("utf-8"))

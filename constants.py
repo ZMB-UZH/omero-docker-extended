@@ -45,3 +45,10 @@ PLUGIN_ID = "omeroweb_omp_plugin"
 # Optional secret for hashing. If unset/empty, hashing falls back to plain SHA256, which anyone could theoretically forge.
 # Recommended: set this as an environment variable for Omero web container.
 HASH_SECRET_ENV = "FMP_HASH_SECRET"
+
+# -----------------------------------------------------------------------------
+# Major action rate limiting
+# -----------------------------------------------------------------------------
+MAJOR_ACTION_LIMIT = 6
+MAJOR_ACTION_WINDOW_SECONDS = 60
+MAJOR_ACTION_BLOCK_SECONDS = 60
