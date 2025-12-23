@@ -1064,7 +1064,18 @@ toggleVarNameInputs();
 fetchVariableSets();
 initImageSelectionControls();
 
-function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
+const JOB_START_MIN_MS = 2000;
+
+function startPollingAfterMinimumDelay(jobStartMessage) {
+    const progressText = document.getElementById("progress-text");
+    progressText.innerText = jobStartMessage;
+
+    setTimeout(() => {
+        pollInterval = setInterval(pollProgress, 500);
+    }, JOB_START_MIN_MS);
+}
+
+function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel) {
     if (currentJobId) {
         showNonBlockingModal("Another job is already running. Please be patient.");
         return;
@@ -1113,8 +1124,9 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage) {
         currentJobId = data.job_id;
         totalImages = data.total;
 
-        progressText.innerText = "Job started for " + totalImages + " images.";
-        pollInterval = setInterval(pollProgress, 500);
+        startPollingAfterMinimumDelay(
+            jobStartLabel + " job started for " + totalImages + " images..."
+        );
     })
     .catch(err => {
         showNonBlockingModal("ERROR: " + err);
@@ -1128,7 +1140,8 @@ function deleteAllKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_all_job/",
         "Enter your Omero password to delete ALL key-value pairs:",
-        "Deleting ALL key-value pairs…"
+        "Deleting ALL key-value pairs…",
+        "Delete ALL key-value pairs"
     );
 }
 
@@ -1140,7 +1153,8 @@ function deletePluginKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_plugin_job/",
         "Enter your Omero password to delete ONLY plugin key-value pairs:",
-        "Deleting ONLY plugin key-value pairs…"
+        "Deleting ONLY plugin key-value pairs…",
+        "Delete ONLY plugin key-value pairs"
     );
 }
 // -------------------------
@@ -1223,10 +1237,10 @@ function startSaveJob() {
         currentJobId = data.job_id;
         totalImages = data.total;
 
-        document.getElementById("progress-text").innerText =
-            "Job started for " + totalImages + " images.";
-
-        pollInterval = setInterval(pollProgress, 500);
+        startPollingAfterMinimumDelay(
+            "Save filename metadata into key-value pairs job started for " +
+            totalImages + " images..."
+        );
     });
 }
 
@@ -1274,7 +1288,10 @@ function startAcquisitionMetadataJob() {
         currentJobId = data.job_id;
         totalImages = data.total;
 
-        pollInterval = setInterval(pollProgress, 500);
+        startPollingAfterMinimumDelay(
+            "Copy acquisition metadata into key-value pairs job started for " +
+            totalImages + " images..."
+        );
     });
 }
 
