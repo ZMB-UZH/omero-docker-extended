@@ -105,13 +105,13 @@
                    class="dataset-table"
                    style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
                 <tr style='background:#007bff; color:white;'>
-                    <td class="col-check" style='padding:3px; width:20px; text-align:center;'>
+                    <td class="col-check" style='padding:3px; width:25px; text-align:center;'>
                         <input type='checkbox' id='datasets_select_all' checked>
                     </td>
                     <td class="col-dataset" style='padding:3px;'>Dataset</td>
-                    <td class="col-id" style='padding:3px;'>ID</td>
-                    <td class="col-images" style='padding:3px;'>Images</td>
-                    <td class="col-formats" style='padding:3px;'>Formats</td>
+                    <td class="col-id" style='padding:3px; width:60px;'>ID</td>
+                    <td class="col-images" style='padding:3px; width:25px;'>Nr. images</td>
+                    <td class="col-formats" style='padding:3px; width:300px;'>Formats</td>
                 </tr>
                 <tbody id='dataset_table_body'></tbody>
             </table>
@@ -158,7 +158,7 @@
                 line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
-    .dataset-table-wrapper {max-width:1300px; margin:20px auto 0; width:100%; padding:0 12px;}
+    .dataset-table-wrapper {min-width:1300px; max-width:1300px; margin:20px auto 0; width:100%; padding:0 12px;}
     .dataset-table td {word-break: break-word; white-space: normal;}
     .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
                            font-size:18px; font-weight:600; pointer-events:none;}
