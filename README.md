@@ -1,1 +1,1 @@
-# omeroweb_zmb_plugin
+# omeroweb_omp_plugin

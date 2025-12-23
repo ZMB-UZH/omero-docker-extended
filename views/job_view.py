@@ -29,22 +29,60 @@ from ..services.core import (
 
 logger = logging.getLogger(__name__)
 
+
 def parse_image_ids(raw_ids):
-        if not raw_ids:
-                return []
-        image_ids = []
-        if isinstance(raw_ids, str):
-                raw_list = [val.strip() for val in raw_ids.split(",") if val.strip()]
-        elif isinstance(raw_ids, (list, tuple, set)):
-                raw_list = list(raw_ids)
-        else:
-                raw_list = []
-        for val in raw_list:
-                try:
-                        image_ids.append(int(val))
-                except (TypeError, ValueError):
-                        continue
-        return image_ids
+    if not raw_ids:
+        return []
+    image_ids = []
+    if isinstance(raw_ids, str):
+        raw_list = [val.strip() for val in raw_ids.split(",") if val.strip()]
+    elif isinstance(raw_ids, (list, tuple, set)):
+        raw_list = list(raw_ids)
+    else:
+        raw_list = []
+    for val in raw_list:
+        try:
+            image_ids.append(int(val))
+        except (TypeError, ValueError):
+            continue
+    return image_ids
+
+
+def _load_request_payload(request):
+    try:
+        return json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return request.POST
+
+
+def _resolve_image_ids(conn, project_id, selected_image_ids):
+    if selected_image_ids:
+        return sorted(set(selected_image_ids))
+
+    images = collect_images_in_project(conn, project_id)
+    if not images:
+        images = list(conn.getObjects("Image"))
+
+    seen = set()
+    image_ids = []
+    for img in images:
+        iid = get_id(img)
+        if not iid:
+            continue
+        iid = int(iid)
+        if iid not in seen:
+            seen.add(iid)
+            image_ids.append(iid)
+
+    image_ids.sort()
+    return image_ids
+
+
+def _save_annotation_link(update, link):
+    saved_link = update.saveAndReturnObject(link)
+    if saved_link is None:
+        return False
+    return bool(get_id(saved_link))
 
 # ==============================================================================
 # START JOB
@@ -52,79 +90,56 @@ def parse_image_ids(raw_ids):
 @csrf_exempt
 @login_required()
 def start_job(request, conn=None, url=None, **kwargs):
-        try:
-                if request.method != "POST":
-                        return JsonResponse({"error": "POST required"}, status=400)
+    try:
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=400)
 
-                try:
-                        data = json.loads(request.body.decode("utf-8"))
-                except:
-                        data = request.POST
+        data = _load_request_payload(request)
 
-                project_id = data.get("project_id")
-                raw_seps = data.get("separator", "_")
-                separator_mode = data.get("separator_mode", "chars")
-                var_names = data.get("var_names") or []
-                delete_mode = data.get("delete_mode")
-                selected_image_ids = parse_image_ids(data.get("image_ids"))
+        project_id = data.get("project_id")
+        raw_seps = data.get("separator", "_")
+        separator_mode = data.get("separator_mode", "chars")
+        var_names = data.get("var_names") or []
+        delete_mode = data.get("delete_mode")
+        selected_image_ids = parse_image_ids(data.get("image_ids"))
 
-                if separator_mode not in ("chars", "regex"):
-                        separator_mode = "chars"
+        if separator_mode not in ("chars", "regex"):
+            separator_mode = "chars"
 
-                if separator_mode == "regex":
-                        try:
-                                re.compile(raw_seps)
-                        except re.error as e:
-                                return JsonResponse({"error": f"Invalid regex pattern: {e}"}, status=400)
+        if separator_mode == "regex":
+            try:
+                re.compile(raw_seps)
+            except re.error as e:
+                return JsonResponse({"error": f"Invalid regex pattern: {e}"}, status=400)
 
-                if delete_mode not in ("keep", "all", "plugin"):
-                        delete_mode = "keep"
+        if delete_mode not in ("keep", "all", "plugin"):
+            delete_mode = "keep"
 
-                if selected_image_ids:
-                        image_ids = sorted(set(selected_image_ids))
-                else:
-                        images = collect_images_in_project(conn, project_id)
-                        if not images:
-                                images = list(conn.getObjects("Image"))
+        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
-                        # Remove duplicates
-                        seen = set()
-                        image_ids = []
+        job_id = uuid.uuid4().hex
 
-                        for img in images:
-                                iid = get_id(img)
-                                if not iid:
-                                        continue
-                                iid = int(iid)
-                                if iid not in seen:
-                                        seen.add(iid)
-                                        image_ids.append(iid)
+        # *** FIXED: DO NOT OVERRIDE separator / var_names / delete_mode ***
+        job = {
+            "job_id": job_id,
+            "project_id": int(project_id),
+            "separator": raw_seps,
+            "var_names": var_names,
+            "delete_mode": delete_mode,
+            "image_ids": image_ids,
+            "total": len(image_ids),
+            "index": 0,
+            "started": time.time(),
+            "separator_mode": separator_mode,
+        }
 
-                        image_ids.sort()
+        save_job(job)
 
-                job_id = uuid.uuid4().hex
+        return JsonResponse({"job_id": job_id, "total": len(image_ids)})
 
-                # *** FIXED: DO NOT OVERRIDE separator / var_names / delete_mode ***
-                job = {
-                        "job_id": job_id,
-                        "project_id": int(project_id),
-                        "separator": raw_seps,
-                        "var_names": var_names,
-                        "delete_mode": delete_mode,
-                        "image_ids": image_ids,
-                        "total": len(image_ids),
-                        "index": 0,
-                        "started": time.time(),
-                        "separator_mode": separator_mode,
-                }
-
-                save_job(job)
-
-                return JsonResponse({"job_id": job_id, "total": len(image_ids)})
-
-        except Exception as e:
-                logger.exception("start_job() error: %s", e)
-                return JsonResponse({"error": str(e)}, status=500)
+    except Exception as e:
+        logger.exception("start_job() error: %s", e)
+        return JsonResponse({"error": str(e)}, status=500)
 
 @csrf_exempt
 @login_required()
@@ -133,36 +148,14 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception as e:
-            data = request.POST
+        data = _load_request_payload(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
-        if selected_image_ids:
-            image_ids = sorted(set(selected_image_ids))
-        else:
-            images = collect_images_in_project(conn, project_id)
-
-            if not images:
-                images = list(conn.getObjects("Image"))
-
-            seen = set()
-            image_ids = []
-            for img in images:
-                try:
-                    iid = get_id(img)
-                    if iid and iid not in seen:
-                        seen.add(iid)
-                        image_ids.append(int(iid))
-                except Exception as e:
-                    logger.warning("Could not read image id: %s", e)
-
-            image_ids.sort()
+        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         job_id = uuid.uuid4().hex
 
@@ -196,10 +189,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            data = request.POST
+        data = _load_request_payload(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
@@ -207,26 +197,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
 
-        if selected_image_ids:
-            image_ids = sorted(set(selected_image_ids))
-        else:
-            images = collect_images_in_project(conn, project_id)
-
-            if not images:
-                images = list(conn.getObjects("Image"))
-
-            seen = set()
-            image_ids = []
-            for img in images:
-                try:
-                    iid = get_id(img)
-                    if iid and iid not in seen:
-                        seen.add(iid)
-                        image_ids.append(int(iid))
-                except Exception as e:
-                    logger.warning("Could not read image id: %s", e)
-
-            image_ids.sort()
+        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         job_id = uuid.uuid4().hex
 
@@ -260,10 +231,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            data = request.POST
+        data = _load_request_payload(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
@@ -271,26 +239,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
 
-        if selected_image_ids:
-            image_ids = sorted(set(selected_image_ids))
-        else:
-            images = collect_images_in_project(conn, project_id)
-
-            if not images:
-                images = list(conn.getObjects("Image"))
-
-            seen = set()
-            image_ids = []
-            for img in images:
-                try:
-                    iid = get_id(img)
-                    if iid and iid not in seen:
-                        seen.add(iid)
-                        image_ids.append(int(iid))
-                except Exception as e:
-                    logger.warning("Could not read image id: %s", e)
-
-            image_ids.sort()
+        image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         job_id = uuid.uuid4().hex
 
@@ -392,21 +341,31 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 # ---------------------------------------------------------
                 if job.get("type") == "del_all":
                     try:
-                        deleted_sets, deleted_pairs = delete_existing_annotations(
+                        deleted_sets, deleted_pairs, attempted_sets = delete_existing_annotations(
                             conn,
                             update,
                             img,
                             var_names,
                             "all",
                         )
-                        if deleted_sets:
+                        if attempted_sets == 0:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                            )
+                        elif deleted_sets:
                             batch_logs.append(
                                 f"Image {iid} ({filename}): deleted ALL key-value pairs "
                                 f"({deleted_sets} sets, {deleted_pairs} pairs)."
                             )
+                            if deleted_sets < attempted_sets:
+                                batch_logs.append(
+                                    f"Image {iid} ({filename}): warning - only confirmed "
+                                    f"{deleted_sets} of {attempted_sets} deletions."
+                                )
                         else:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                                f"Image {iid} ({filename}): no key-value pairs deleted "
+                                "because deletions could not be confirmed."
                             )
                     except Exception as e:
                         batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs: {e}")
@@ -414,21 +373,31 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
                 if job.get("type") == "del_plugin":
                     try:
-                        deleted_sets, deleted_pairs = delete_existing_annotations(
+                        deleted_sets, deleted_pairs, attempted_sets = delete_existing_annotations(
                             conn,
                             update,
                             img,
                             var_names,
                             "plugin",
                         )
-                        if deleted_sets:
+                        if attempted_sets == 0:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                            )
+                        elif deleted_sets:
                             batch_logs.append(
                                 f"Image {iid} ({filename}): deleted ONLY plugin key-value pairs "
                                 f"({deleted_sets} sets, {deleted_pairs} pairs)."
                             )
+                            if deleted_sets < attempted_sets:
+                                batch_logs.append(
+                                    f"Image {iid} ({filename}): warning - only confirmed "
+                                    f"{deleted_sets} of {attempted_sets} deletions."
+                                )
                         else:
                             batch_logs.append(
-                                f"Image {iid} ({filename}): no key-value pairs to delete found."
+                                f"Image {iid} ({filename}): no key-value pairs deleted "
+                                "because deletions could not be confirmed."
                             )
                     except Exception as e:
                         batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs: {e}")
@@ -452,11 +421,15 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                         link = ImageAnnotationLinkI()
                         link.setParent(img._obj)
                         link.setChild(ann)
-                        update.saveAndReturnObject(link)
-
-                        batch_logs.append(
-                            f"Image {iid} ({filename}): saved {len(mapping)} acquisition entries."
-                        )
+                        saved = _save_annotation_link(update, link)
+                        if saved:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): saved {len(mapping)} acquisition entries."
+                            )
+                        else:
+                            batch_logs.append(
+                                f"Image {iid} ({filename}): ERROR confirming acquisition save."
+                            )
                     else:
                         batch_logs.append(
                             f"Image {iid}: no acquisition metadata."
@@ -493,11 +466,15 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     link.setParent(img._obj)
                     link.setChild(ann)
 
-                    update.saveAndReturnObject(link)
-
-                    batch_logs.append(
-                        f"Image {iid} ({filename}): saved {len(mapping)} variables."
-                    )
+                    saved = _save_annotation_link(update, link)
+                    if saved:
+                        batch_logs.append(
+                            f"Image {iid} ({filename}): saved {len(mapping)} variables."
+                        )
+                    else:
+                        batch_logs.append(
+                            f"Image {iid} ({filename}): ERROR confirming variable save."
+                        )
                 else:
                     batch_logs.append(f"Image {iid} ({filename}): no variables.")
 
