@@ -404,7 +404,7 @@
                   cursor: pointer; padding: 1; line-height: 16px; text-align: center;}
     .var-row-add {background: #2f80ff;}
     .var-row-remove {background: #dc3545;}
-    .var-row-btn:disabled {opacity: 0.4; cursor: not-allowed; box-shadow: none;}
+    .var-row-btn:disabled {opacity: 0.4; cursor: not-allowed; box-shadow: none; pointer-events: none;}
     .omeroweb-omp-plugin, .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .nowrap-1 {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
     #variable-set-block * {min-width: 0;}
@@ -611,6 +611,9 @@ function ensureVarRows(count) {
 
 if (addVarRowBtn) {
     addVarRowBtn.addEventListener('click', () => {
+        if (addVarRowBtn.disabled || document.getElementById('use_defaults').checked) {
+            return;
+        }
         addVariableRow();
     });
 }
@@ -619,6 +622,9 @@ if (varNameInputs) {
     varNameInputs.addEventListener('click', (event) => {
         const button = event.target.closest('.var-row-remove');
         if (!button) return;
+        if (button.disabled || document.getElementById('use_defaults').checked) {
+            return;
+        }
         const row = button.closest('.var-row');
         if (!row) return;
         if (getVarRowCount() <= 1) {
