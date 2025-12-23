@@ -478,7 +478,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     if saved:
                         saved_total = len(parts) + 1
                         batch_logs.append(
-                            f"Image {iid} ({filename}): saved {saved_total} variables."
+                            f"Image {iid} ({filename}): saved {saved_total-1}+1 variables."
                         )
                     else:
                         batch_logs.append(
