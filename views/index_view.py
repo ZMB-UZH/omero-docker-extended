@@ -15,7 +15,7 @@ from ..services.core import (
     collect_dataset_summaries,
     parse_filename,
 )
-# REMOVED: rate limit imports - not needed for read-only operations
+from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..constants import DEFAULT_VARIABLE_NAMES
 logger = logging.getLogger(__name__)
 
@@ -41,17 +41,20 @@ def index(request, conn=None, url=None, **kwargs):
             logger.exception("Error listing projects: %s", e)
 
         # ----------------------------------------------------
-        # PREVIEW MODE
+        # LIST DATASETS - NO RATE LIMIT (read-only, just listing)
         # ----------------------------------------------------
         if request.method == "POST" and request.POST.get("action") == "list_datasets":
             project_id = request.POST.get("project")
             if not project_id:
                 return JsonResponse({"error": "Select a project first."}, status=400)
 
-            # NO RATE LIMIT - read-only operation
+            # NO RATE LIMIT - just listing datasets
             dataset_rows = collect_dataset_summaries(conn, project_id)
             return JsonResponse({"datasets": dataset_rows})
 
+        # ----------------------------------------------------
+        # PREVIEW MODE - WITH RATE LIMIT (major action)
+        # ----------------------------------------------------
         if request.method == "POST" and request.POST.get("action") != "save_job":
             project_id = request.POST.get("project")
             raw_seps = request.POST.get("separator", "_")
@@ -130,7 +133,17 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            # NO RATE LIMIT - preview is read-only
+            # RATE LIMIT - preview is a major action (loads lots of data)
+            allowed, remaining = check_major_action_rate_limit(request, conn)
+            if not allowed:
+                return render(
+                    request,
+                    "omeroweb_omp_plugin/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": build_rate_limit_message(remaining),
+                    },
+                )
 
             ds_list = collect_images_by_selected_datasets(
                 conn,
