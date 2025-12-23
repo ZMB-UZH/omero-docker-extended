@@ -57,12 +57,12 @@ def get_text(value_obj):
 def get_id(obj):
     try:
         return obj._obj.id.val
-    except:
+    except (AttributeError, Exception):
         pass
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
-    except:
+    except (AttributeError, Exception):
         return None
 
 def fetch_images_by_ids(conn, image_ids):
