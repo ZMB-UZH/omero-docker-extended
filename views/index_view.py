@@ -44,30 +44,21 @@ def index(request, conn=None, url=None, **kwargs):
         # PREVIEW MODE
         # ----------------------------------------------------
         if request.method == "POST" and request.POST.get("action") == "list_datasets":
+            project_id = request.POST.get("project")
+            if not project_id:
+                return JsonResponse({"error": "Select a project first."}, status=400)
+
             allowed, remaining = check_major_action_rate_limit(request)
             if not allowed:
                 return JsonResponse(
                     {"error": build_rate_limit_message(remaining)},
                     status=429,
                 )
-            project_id = request.POST.get("project")
-            if not project_id:
-                return JsonResponse({"error": "Select a project first."}, status=400)
 
             dataset_rows = collect_dataset_summaries(conn, project_id)
             return JsonResponse({"datasets": dataset_rows})
 
         if request.method == "POST" and request.POST.get("action") != "save_job":
-            allowed, remaining = check_major_action_rate_limit(request)
-            if not allowed:
-                return render(
-                    request,
-                    "omeroweb_omp_plugin/index.html",
-                    {
-                        "projects": projects,
-                        "error_message": build_rate_limit_message(remaining),
-                    },
-                )
             project_id = request.POST.get("project")
             raw_seps = request.POST.get("separator", "_")
             separator_mode = request.POST.get("separator_mode", "chars")
@@ -142,6 +133,17 @@ def index(request, conn=None, url=None, **kwargs):
                     {
                         "projects": projects,
                         "error_message": "Please select one or more datasets.",
+                    },
+                )
+
+            allowed, remaining = check_major_action_rate_limit(request)
+            if not allowed:
+                return render(
+                    request,
+                    "omeroweb_omp_plugin/index.html",
+                    {
+                        "projects": projects,
+                        "error_message": build_rate_limit_message(remaining),
                     },
                 )
 

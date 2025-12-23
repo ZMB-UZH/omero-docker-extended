@@ -27,13 +27,6 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        allowed, remaining = check_major_action_rate_limit(request)
-        if not allowed:
-            return JsonResponse(
-                {"error": build_rate_limit_message(remaining)},
-                status=429,
-            )
-
         try:
             data = json.loads(request.body.decode("utf-8"))
         except Exception:
@@ -86,6 +79,13 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         "deleted_annotations": 0,
                         "errors": [],
                     }
+                )
+
+            allowed, remaining = check_major_action_rate_limit(request)
+            if not allowed:
+                return JsonResponse(
+                    {"error": build_rate_limit_message(remaining)},
+                    status=429,
                 )
 
             deleted_annotations = 0
