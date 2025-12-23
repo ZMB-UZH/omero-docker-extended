@@ -74,9 +74,9 @@ def save_set(request, conn=None, url=None, **kwargs):
         if not isinstance(var_names, list):
             return JsonResponse({"error": "Invalid variable payload."}, status=400)
 
-        non_empty = [v for v in var_names if str(v or "").strip()]
-        if not non_empty:
-            return JsonResponse({"error": "Cannot save to database. List of variables empty."}, status=400)
+        has_empty = any(not str(v or "").strip() for v in var_names)
+        if has_empty:
+            return JsonResponse({"error": "Variable names cannot be empty."}, status=400)
 
         if not set_name:
             return JsonResponse({"error": "Please provide a name for this set."}, status=400)
