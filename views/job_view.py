@@ -95,13 +95,6 @@ def start_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        allowed, remaining = check_major_action_rate_limit(request)
-        if not allowed:
-            return JsonResponse(
-                {"error": build_rate_limit_message(remaining)},
-                status=429,
-            )
-
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -123,7 +116,17 @@ def start_job(request, conn=None, url=None, **kwargs):
         if delete_mode not in ("keep", "all", "plugin"):
             delete_mode = "keep"
 
+        if not project_id:
+            return JsonResponse({"error": "missing project_id"}, status=400)
+
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         job_id = uuid.uuid4().hex
 
@@ -156,13 +159,6 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        allowed, remaining = check_major_action_rate_limit(request)
-        if not allowed:
-            return JsonResponse(
-                {"error": build_rate_limit_message(remaining)},
-                status=429,
-            )
-
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -171,6 +167,13 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         job_id = uuid.uuid4().hex
 
@@ -204,13 +207,6 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        allowed, remaining = check_major_action_rate_limit(request)
-        if not allowed:
-            return JsonResponse(
-                {"error": build_rate_limit_message(remaining)},
-                status=429,
-            )
-
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -220,6 +216,13 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": "missing project_id"}, status=400)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         job_id = uuid.uuid4().hex
 
@@ -253,13 +256,6 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=400)
 
-        allowed, remaining = check_major_action_rate_limit(request)
-        if not allowed:
-            return JsonResponse(
-                {"error": build_rate_limit_message(remaining)},
-                status=429,
-            )
-
         data = _load_request_payload(request)
 
         project_id = data.get("project_id")
@@ -269,6 +265,13 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": "missing project_id"}, status=400)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
+
+        allowed, remaining = check_major_action_rate_limit(request)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
 
         job_id = uuid.uuid4().hex
 
