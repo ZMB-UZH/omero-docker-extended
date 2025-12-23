@@ -4,7 +4,6 @@ import logging
 import threading
 import time
 from math import ceil
-from collections import defaultdict
 
 from django.core.cache import cache
 try:
@@ -120,7 +119,6 @@ def _cache_get(key):
     otherwise fall back to in-memory cache.
     """
     if _is_dummy_cache():
-        logger.debug(f"Using in-memory cache for get: {key}")
         return _memory_cache.get(key)
     return cache.get(key)
 
@@ -131,7 +129,6 @@ def _cache_set(key, value, timeout):
     otherwise fall back to in-memory cache.
     """
     if _is_dummy_cache():
-        logger.debug(f"Using in-memory cache for set: {key}")
         return _memory_cache.set(key, value, timeout)
     cache.set(key, value, timeout=timeout)
     return True
@@ -153,6 +150,7 @@ def _cache_timeout_seconds():
 def _get_user_key(request, conn=None):
     """
     Generate a unique, collision-resistant cache key for rate limiting.
+    ALL major actions share the SAME rate limit counter.
     
     Priority order:
     1. OMERO connection username (most reliable)
@@ -201,9 +199,8 @@ def _get_user_key(request, conn=None):
                 or "anonymous"
             )
         key_type = "ip"
-        logger.debug(f"Rate limiting by IP address: {identifier}")
 
-    # Create collision-resistant key with type prefix
+    # SINGLE SHARED KEY for all major actions
     return f"{_CACHE_PREFIX}:{key_type}:{identifier}"
 
 
@@ -243,6 +240,8 @@ def check_major_action_rate_limit(request, conn=None):
     - Allows up to MAJOR_ACTION_LIMIT actions per MAJOR_ACTION_WINDOW_SECONDS
     - Blocks users for MAJOR_ACTION_BLOCK_SECONDS when limit is exceeded
     
+    ALL major actions (save, delete, preview) share the SAME counter.
+    
     Args:
         request: Django HttpRequest object
         conn: Optional OMERO connection object
@@ -258,9 +257,7 @@ def check_major_action_rate_limit(request, conn=None):
     now = time.time()
     key = _get_user_key(request, conn=conn)
     
-    logger.debug(
-        f"Rate limit check for {key} at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}"
-    )
+    logger.info(f"[RATE_LIMIT] Checking for key: {key}")
     
     try:
         # Get current state from cache
@@ -284,20 +281,19 @@ def check_major_action_rate_limit(request, conn=None):
         if not isinstance(blocked_until, (int, float)):
             blocked_until = 0
         
-        logger.debug(
-            f"Current state for {key}: {len(actions)} actions in window, "
-            f"blocked_until={blocked_until:.2f}"
+        logger.info(
+            f"[RATE_LIMIT] Current state: {len(actions)} actions in window, "
+            f"blocked_until={blocked_until:.2f}, now={now:.2f}"
         )
 
         # Check if user is currently in a blocked state
         if now < blocked_until:
             remaining = blocked_until - now
             logger.warning(
-                f"User {key} is blocked for {remaining:.1f} more seconds "
-                f"({len(actions)} actions recorded)"
+                f"[RATE_LIMIT] BLOCKED: {key} blocked for {remaining:.1f} more seconds"
             )
             
-            # Update cache to maintain blocked state
+            # Update cache to maintain blocked state (but don't add action)
             _cache_set(
                 key,
                 {"actions": actions, "blocked_until": blocked_until},
@@ -305,10 +301,10 @@ def check_major_action_rate_limit(request, conn=None):
             )
             return False, remaining
 
-        # CRITICAL FIX: Add the current action FIRST, then check limit
+        # Add the current action FIRST, then check limit
         actions.append(now)
         
-        logger.debug(f"After adding current action: {len(actions)} total actions")
+        logger.info(f"[RATE_LIMIT] After adding action: {len(actions)} total actions")
         
         # Check if we've now exceeded the limit (after adding current action)
         if len(actions) > MAJOR_ACTION_LIMIT:
@@ -317,9 +313,9 @@ def check_major_action_rate_limit(request, conn=None):
             remaining = MAJOR_ACTION_BLOCK_SECONDS
             
             logger.warning(
-                f"Rate limit EXCEEDED for {key}. "
-                f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT} in last {MAJOR_ACTION_WINDOW_SECONDS}s. "
-                f"Blocking for {remaining:.0f}s until {time.strftime('%H:%M:%S', time.localtime(blocked_until))}"
+                f"[RATE_LIMIT] LIMIT EXCEEDED for {key}! "
+                f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT}. "
+                f"Blocking for {remaining:.0f}s"
             )
             
             # Save blocked state
@@ -331,8 +327,8 @@ def check_major_action_rate_limit(request, conn=None):
             return False, remaining
 
         # User is within limits - allow the action
-        logger.debug(
-            f"Rate limit OK for {key}. "
+        logger.info(
+            f"[RATE_LIMIT] OK: {key} allowed. "
             f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT} "
             f"({MAJOR_ACTION_LIMIT - len(actions)} remaining)"
         )
@@ -347,7 +343,7 @@ def check_major_action_rate_limit(request, conn=None):
         
     except Exception as exc:
         # Log the error but fail closed (block on error for security)
-        logger.exception(f"Rate limit check failed for {key}: {exc}")
+        logger.exception(f"[RATE_LIMIT] ERROR: Rate limit check failed for {key}: {exc}")
         return False, MAJOR_ACTION_BLOCK_SECONDS
 
 
