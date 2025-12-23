@@ -484,6 +484,51 @@ def collect_dataset_summaries(conn, project_id):
     Returns list of dataset summaries for a project.
     """
     summaries = []
+
+    def _format_name_from_image(img):
+        try:
+            pixels = img.getPrimaryPixels()
+        except Exception:
+            pixels = None
+
+        if pixels:
+            try:
+                fmt = pixels.getFormat()
+            except Exception:
+                fmt = None
+            fmt_name = get_text(fmt) if fmt else ""
+            if fmt_name:
+                return fmt_name
+
+            try:
+                pixels_type = pixels.getPixelsType()
+            except Exception:
+                pixels_type = None
+            pixels_type_name = get_text(pixels_type) if pixels_type else ""
+            if pixels_type_name:
+                return pixels_type_name
+
+        if hasattr(img, "getFormat"):
+            try:
+                fmt = img.getFormat()
+            except Exception:
+                fmt = None
+            fmt_name = get_text(fmt) if fmt else ""
+            if fmt_name:
+                return fmt_name
+
+        if hasattr(img, "getName"):
+            try:
+                name = get_text(img.getName())
+            except Exception:
+                name = ""
+            if name and "." in name:
+                ext = name.rsplit(".", 1)[-1]
+                if ext:
+                    return ext.upper()
+
+        return ""
+
     try:
         prj = conn.getObject("Project", int(project_id))
         if prj is None:
@@ -501,17 +546,7 @@ def collect_dataset_summaries(conn, project_id):
 
             format_names = set()
             for img in images:
-                try:
-                    pixels = img.getPrimaryPixels()
-                except Exception:
-                    pixels = None
-                if not pixels:
-                    continue
-                try:
-                    fmt = pixels.getFormat()
-                except Exception:
-                    fmt = None
-                fmt_name = get_text(fmt) if fmt else ""
+                fmt_name = _format_name_from_image(img)
                 if fmt_name:
                     format_names.add(fmt_name)
 
