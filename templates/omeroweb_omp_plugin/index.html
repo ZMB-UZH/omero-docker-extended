@@ -45,9 +45,9 @@
 
         <div id='dataset_table_container'
              style='display:none; margin-bottom:20px; background:#fff;'>
-            <div style='max-height:750px; overflow:auto;'>
+            <div style='max-height:520px; overflow-y:auto; overflow-x:visible;'>
                 <table border='1'
-                       style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+                       style='width:1300px; max-width:1300px; min-width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
                     <tr style='background:#007bff; color:white;'>
                         <td style='padding:3px; width:32px; text-align:center;'>
                             <input type='checkbox' id='datasets_select_all' checked>
@@ -55,7 +55,7 @@
                         <td style='padding:3px;'>Dataset</td>
                         <td style='padding:3px;'>ID</td>
                         <td style='padding:3px;'>Images</td>
-                        <td style='padding:3px;'>File types</td>
+                        <td style='padding:3px;'>Formats</td>
                     </tr>
                     <tbody id='dataset_table_body'></tbody>
                 </table>
@@ -557,7 +557,7 @@
                 <td style="padding:2px;">${ds.name || ''}</td>
                 <td style="padding:2px;">${ds.id || ''}</td>
                 <td style="padding:2px;">${ds.image_count}</td>
-                <td style="padding:2px;">${ds.file_types || ''}</td>
+                <td style="padding:2px;">${ds.formats || ''}</td>
             `;
             datasetTableBody.appendChild(row);
         });
