@@ -539,11 +539,25 @@ function updateVarRowControls() {
     const useDefaults = document.getElementById('use_defaults').checked;
     const removeButtons = Array.from(varNameInputs.querySelectorAll('.var-row-remove'));
     const rowCount = getVarRowCount();
+    
+    // Disable remove buttons if only 1 row or defaults enabled
     removeButtons.forEach(btn => {
         btn.disabled = useDefaults || rowCount <= 1;
     });
+    
+    // Disable and fade out add button if at limit or defaults enabled
     if (addVarRowBtn) {
-        addVarRowBtn.disabled = useDefaults;
+        const atLimit = rowCount >= MAX_PARSED_VARIABLES;
+        addVarRowBtn.disabled = useDefaults || atLimit;
+        
+        // Fade out when at limit (same as remove button fade)
+        if (atLimit) {
+            addVarRowBtn.style.opacity = '0.3';
+            addVarRowBtn.style.cursor = 'not-allowed';
+        } else {
+            addVarRowBtn.style.opacity = useDefaults ? '0.3' : '1';
+            addVarRowBtn.style.cursor = useDefaults ? 'not-allowed' : 'pointer';
+        }
     }
 }
 
@@ -597,7 +611,18 @@ function createVarRow(index, presetValue = '') {
 
 function addVariableRow() {
     if (!varNameInputs) return;
-    const nextIndex = getVarRowCount() + 1;
+    
+    // Check if at limit
+    const currentCount = getVarRowCount();
+    if (currentCount >= MAX_PARSED_VARIABLES) {
+        showNonBlockingModal(
+            `Maximum of ${MAX_PARSED_VARIABLES} variables allowed. ` +
+            `Cannot add more variable name fields.`
+        );
+        return;
+    }
+    
+    const nextIndex = currentCount + 1;
     const useDefaults = document.getElementById('use_defaults').checked;
     const defaultValue = useDefaults ? (DEFAULT_VARS[nextIndex - 1] || 'rename') : 'rename';
     const row = createVarRow(nextIndex, defaultValue);
@@ -607,19 +632,25 @@ function addVariableRow() {
     }
     varNameInputs.appendChild(row);
     refreshVarRowIndices();
+    updateVarRowControls();  // Update button states after adding
 }
 
 function ensureVarRows(count) {
     if (!varNameInputs) return;
+    
+    // Cap at MAX_PARSED_VARIABLES
+    const targetCount = Math.min(count, MAX_PARSED_VARIABLES);
+    
     const current = getVarRowCount();
-    if (count <= current) {
+    if (targetCount <= current) {
         return;
     }
-    for (let i = current + 1; i <= count; i++) {
+    for (let i = current + 1; i <= targetCount; i++) {
         const row = createVarRow(i, '');
         varNameInputs.appendChild(row);
     }
     refreshVarRowIndices();
+    updateVarRowControls();  // Update button states after ensuring rows
 }
 
 if (addVarRowBtn) {
@@ -646,6 +677,7 @@ if (varNameInputs) {
         }
         row.remove();
         refreshVarRowIndices();
+        updateVarRowControls();  // Update button states after removal
     });
 }
 
