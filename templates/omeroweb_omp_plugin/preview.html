@@ -130,9 +130,29 @@
                     <input type="checkbox" id="use_defaults" checked onclick="toggleVarNameInputs()">
                     Use default names
                 </label>
+                
+                <!-- Edit mode controls -->
+                <div class="var-edit-controls" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                    <button type="button"
+                            id="edit_rows_btn"
+                            class="var-edit-mode-btn"
+                            onclick="toggleEditMode()"
+                            style="display:none;">
+                        ✏️ Edit rows
+                    </button>
+                    <button type="button"
+                            id="finish_edit_btn"
+                            class="var-edit-mode-btn var-finish-btn"
+                            onclick="toggleEditMode()"
+                            style="display:none;">
+                        ✓ Finish
+                    </button>
+                </div>
+                
                 <div id='var_name_inputs' style='margin-top:10px;'>
                     {% for i in var_range %}
-                    <div class="var-row">
+                    <div class="var-row" draggable="false">
+                        <div class="var-drag-handle" title="Drag to reorder">⋮⋮</div>
                         <div class="var-index">{{ i }}:</div>
                         <input id="var_name_{{ i }}"
                                type="text"
@@ -141,13 +161,14 @@
                         <button type="button"
                                 class="var-row-btn var-row-remove"
                                 data-action="remove-var"
-                                aria-label="Remove variable">
+                                aria-label="Remove variable"
+                                style="display:none;">
                             −
                         </button>
                     </div>
                     {% endfor %}
                 </div>
-                <div class="var-row-actions">
+                <div class="var-row-actions" style="display:none;">
                     <button type="button"
                             id="add_var_row_btn"
                             class="var-row-btn var-row-add"
@@ -395,7 +416,99 @@
     }
 
     #var_name_inputs {margin-top: 6px;}
-    .var-row {display: grid; grid-template-columns: 2.5em auto 45px; align-items: center; column-gap: 6px; margin-bottom: 4px;}
+    
+    /* Variable row - updated for drag handle */
+    .var-row {
+        display: grid;
+        grid-template-columns: 0 2.5em auto 45px; /* 0 width for hidden handle */
+        align-items: center;
+        column-gap: 6px;
+        margin-bottom: 4px;
+        padding: 4px;
+        border-radius: 4px;
+        border: 2px solid transparent;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .var-row[draggable="true"] {
+        grid-template-columns: 24px 2.5em auto 45px; /* Show handle in edit mode */
+        cursor: grab;
+    }
+    
+    /* Drag handle */
+    .var-drag-handle {
+        font-size: 16px;
+        color: #ccc;
+        cursor: grab;
+        user-select: none;
+        padding: 2px;
+        opacity: 0;
+        transition: opacity 0.2s, color 0.2s;
+        line-height: 1;
+        letter-spacing: -1px;
+        text-align: center;
+    }
+    .var-row[draggable="true"] .var-drag-handle {
+        opacity: 1;
+    }
+    .var-row[draggable="true"]:hover .var-drag-handle {
+        color: #007bff;
+    }
+    .var-drag-handle:active {
+        cursor: grabbing;
+    }
+    
+    /* Drag states - smooth professional animations */
+    .var-row.dragging {
+        opacity: 0.6;
+        cursor: grabbing !important;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 2px dashed #2196f3;
+        transform: scale(1.03) rotate(1deg);
+        box-shadow: 0 8px 16px rgba(33, 150, 243, 0.3);
+        z-index: 1000;
+    }
+    .var-row.drag-over-top {
+        border-top: 3px solid #007bff;
+        margin-top: 6px;
+        transform: translateY(-2px);
+    }
+    .var-row.drag-over-bottom {
+        border-bottom: 3px solid #007bff;
+        margin-bottom: 6px;
+        transform: translateY(2px);
+    }
+    
+    /* Edit mode buttons */
+    .var-edit-mode-btn {
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        border: none;
+        border-radius: 5px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .var-edit-mode-btn:hover {
+        background: #0056b3;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    .var-edit-mode-btn:active {
+        transform: translateY(0);
+    }
+    .var-finish-btn {
+        background: #28a745;
+    }
+    .var-finish-btn:hover {
+        background: #218838;
+    }
+    
     .var-index {text-align: right; font-size: 12px; color: #212529;}
     .var-input {font-size: 12px; padding: 4px 8px; width: 200px; border: none; border-radius: 6px; background: #ffffff;
                  box-shadow: inset 0 0 0 1px #007bff; box-sizing: border-box;}
@@ -466,6 +579,11 @@ let pollInterval = null;
 let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
 
+// Edit mode and drag-and-drop state
+let isEditMode = false;
+let draggedElement = null;
+let draggedIndex = null;
+
 // Show warning if variable limit was exceeded
 if (VARS_LIMIT_EXCEEDED) {
     showNonBlockingModal(
@@ -474,6 +592,172 @@ if (VARS_LIMIT_EXCEEDED) {
         `Your filenames produced ${MAX_VARS_UNCAPPED} variables. ` +
         `Consider checking your parsing method and/or filenames.`
     );
+}
+
+// ============================================================================
+// EDIT MODE & DRAG-AND-DROP FUNCTIONALITY
+// ============================================================================
+
+function toggleEditMode() {
+    isEditMode = !isEditMode;
+    
+    const editBtn = document.getElementById('edit_rows_btn');
+    const finishBtn = document.getElementById('finish_edit_btn');
+    const addBtn = document.getElementById('add_var_row_btn');
+    const varRowActions = document.querySelector('.var-row-actions');
+    const rows = varNameInputs ? Array.from(varNameInputs.querySelectorAll('.var-row')) : [];
+    
+    if (isEditMode) {
+        // Enter edit mode
+        editBtn.style.display = 'none';
+        finishBtn.style.display = 'inline-flex';
+        varRowActions.style.display = 'flex';
+        
+        // Show +/- buttons and enable dragging
+        rows.forEach(row => {
+            row.setAttribute('draggable', 'true');
+            const removeBtn = row.querySelector('.var-row-remove');
+            if (removeBtn) {
+                removeBtn.style.display = 'block';
+            }
+        });
+        
+        // Setup drag and drop
+        setupDragAndDrop();
+        
+    } else {
+        // Exit edit mode
+        editBtn.style.display = 'inline-flex';
+        finishBtn.style.display = 'none';
+        varRowActions.style.display = 'none';
+        
+        // Hide +/- buttons and disable dragging
+        rows.forEach(row => {
+            row.setAttribute('draggable', 'false');
+            row.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+            const removeBtn = row.querySelector('.var-row-remove');
+            if (removeBtn) {
+                removeBtn.style.display = 'none';
+            }
+        });
+        
+        // Clean up drag listeners
+        cleanupDragAndDrop();
+    }
+    
+    updateVarRowControls();
+}
+
+function setupDragAndDrop() {
+    if (!varNameInputs) return;
+    
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    
+    rows.forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragend', handleDragEnd);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+    });
+}
+
+function cleanupDragAndDrop() {
+    if (!varNameInputs) return;
+    
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    
+    rows.forEach(row => {
+        row.removeEventListener('dragstart', handleDragStart);
+        row.removeEventListener('dragend', handleDragEnd);
+        row.removeEventListener('dragover', handleDragOver);
+        row.removeEventListener('dragenter', handleDragEnter);
+        row.removeEventListener('dragleave', handleDragLeave);
+        row.removeEventListener('drop', handleDrop);
+    });
+}
+
+function handleDragStart(e) {
+    draggedElement = this;
+    const rows = Array.from(varNameInputs.children);
+    draggedIndex = rows.indexOf(this);
+    
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    
+    // Remove all drag-over classes
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
+    draggedElement = null;
+    draggedIndex = null;
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnter(e) {
+    if (this === draggedElement) return;
+    
+    const rows = Array.from(varNameInputs.children);
+    const currentIndex = rows.indexOf(this);
+    
+    // Remove drag-over from all rows first
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
+    // Add appropriate class based on drag direction
+    if (currentIndex < draggedIndex) {
+        this.classList.add('drag-over-top');
+    } else {
+        this.classList.add('drag-over-bottom');
+    }
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    if (draggedElement !== this) {
+        // Get all rows
+        const rows = Array.from(varNameInputs.children);
+        const draggedIdx = rows.indexOf(draggedElement);
+        const targetIdx = rows.indexOf(this);
+        
+        // Reorder DOM elements
+        if (draggedIdx < targetIdx) {
+            // Moving down
+            this.parentNode.insertBefore(draggedElement, this.nextSibling);
+        } else {
+            // Moving up
+            this.parentNode.insertBefore(draggedElement, this);
+        }
+        
+        // Refresh indices after reordering
+        refreshVarRowIndices();
+    }
+    
+    this.classList.remove('drag-over-top', 'drag-over-bottom');
+    return false;
 }
 
 function goBack() {
@@ -512,6 +796,15 @@ function setVarSetControlsDisabled(disabled) {
 }
 
 function toggleVarNameInputs() {
+    // Check if in edit mode
+    if (isEditMode) {
+        showNonBlockingModal("Please exit variable edit mode first.");
+        // Prevent checkbox from changing
+        event.preventDefault();
+        document.getElementById('use_defaults').checked = !document.getElementById('use_defaults').checked;
+        return;
+    }
+    
     let useDefaults = document.getElementById('use_defaults').checked;
     let count = getVarRowCount();
     for (let i = 1; i <= count; i++) {
@@ -537,26 +830,34 @@ function getVarRowCount() {
 function updateVarRowControls() {
     if (!varNameInputs) return;
     const useDefaults = document.getElementById('use_defaults').checked;
+    const editBtn = document.getElementById('edit_rows_btn');
     const removeButtons = Array.from(varNameInputs.querySelectorAll('.var-row-remove'));
     const rowCount = getVarRowCount();
     
-    // Disable remove buttons if only 1 row or defaults enabled
-    removeButtons.forEach(btn => {
-        btn.disabled = useDefaults || rowCount <= 1;
-    });
+    // Show/hide edit button based on defaults checkbox
+    if (editBtn) {
+        editBtn.style.display = useDefaults ? 'none' : 'inline-flex';
+    }
     
-    // Disable and fade out add button if at limit or defaults enabled
-    if (addVarRowBtn) {
+    // Update remove buttons (only if in edit mode)
+    if (isEditMode) {
+        removeButtons.forEach(btn => {
+            btn.disabled = rowCount <= 1;
+        });
+    }
+    
+    // Disable and fade out add button if at limit (only if in edit mode)
+    if (addVarRowBtn && isEditMode) {
         const atLimit = rowCount >= MAX_PARSED_VARIABLES;
-        addVarRowBtn.disabled = useDefaults || atLimit;
+        addVarRowBtn.disabled = atLimit;
         
-        // Fade out when at limit (same as remove button fade)
+        // Fade out when at limit
         if (atLimit) {
             addVarRowBtn.style.opacity = '0.3';
             addVarRowBtn.style.cursor = 'not-allowed';
         } else {
-            addVarRowBtn.style.opacity = useDefaults ? '0.3' : '1';
-            addVarRowBtn.style.cursor = useDefaults ? 'not-allowed' : 'pointer';
+            addVarRowBtn.style.opacity = '1';
+            addVarRowBtn.style.cursor = 'pointer';
         }
     }
 }
@@ -585,6 +886,13 @@ function refreshVarRowIndices() {
 function createVarRow(index, presetValue = '') {
     const row = document.createElement('div');
     row.className = 'var-row';
+    row.setAttribute('draggable', 'false');
+    
+    // Drag handle
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'var-drag-handle';
+    dragHandle.textContent = '⋮⋮';
+    dragHandle.title = 'Drag to reorder';
 
     const indexLabel = document.createElement('div');
     indexLabel.className = 'var-index';
@@ -602,7 +910,9 @@ function createVarRow(index, presetValue = '') {
     removeBtn.dataset.action = 'remove-var';
     removeBtn.setAttribute('aria-label', 'Remove variable');
     removeBtn.textContent = '−';
+    removeBtn.style.display = 'none'; // Hidden by default
 
+    row.appendChild(dragHandle);
     row.appendChild(indexLabel);
     row.appendChild(input);
     row.appendChild(removeBtn);
@@ -630,9 +940,27 @@ function addVariableRow() {
     if (input) {
         input.disabled = useDefaults;
     }
+    
+    // If in edit mode, enable dragging for new row
+    if (isEditMode) {
+        row.setAttribute('draggable', 'true');
+        const removeBtn = row.querySelector('.var-row-remove');
+        if (removeBtn) {
+            removeBtn.style.display = 'block';
+        }
+        
+        // Setup drag listeners for new row
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragend', handleDragEnd);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+    }
+    
     varNameInputs.appendChild(row);
     refreshVarRowIndices();
-    updateVarRowControls();  // Update button states after adding
+    updateVarRowControls();
 }
 
 function ensureVarRows(count) {
