@@ -16,7 +16,7 @@ from ..services.core import (
     parse_filename,
 )
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..constants import DEFAULT_VARIABLE_NAMES
+from ..constants import DEFAULT_VARIABLE_NAMES, MAX_PARSED_VARIABLES
 logger = logging.getLogger(__name__)
 
 
@@ -163,8 +163,9 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            preview_rows = []
+preview_rows = []
             max_vars = 0
+            max_vars_uncapped = 0  # Track actual max before capping
 
             for ds, images in ds_list:
                 ds_name = get_text(ds.getName())
@@ -176,14 +177,24 @@ def index(request, conn=None, url=None, **kwargs):
                         iid = int(get_id(img))
                         fname = get_text(img.getName())
                         parts = parse_filename(fname, sep_pattern)
-                        max_vars = max(max_vars, len(parts))
-                        vars_dict = {f"Var{i+1}": p for i, p in enumerate(parts)}
+                        
+                        # Track actual max before capping
+                        max_vars_uncapped = max(max_vars_uncapped, len(parts))
+                        
+                        # Cap at MAX_PARSED_VARIABLES
+                        parts_capped = parts[:MAX_PARSED_VARIABLES]
+                        max_vars = max(max_vars, len(parts_capped))
+                        
+                        vars_dict = {f"Var{i+1}": p for i, p in enumerate(parts_capped)}
                         preview_rows.append((ds_label, iid, fname, vars_dict))
                     except Exception:
                         continue
 
             if max_vars == 0:
                 max_vars = 1
+
+            # Check if any filenames exceeded the limit
+            vars_limit_exceeded = max_vars_uncapped > MAX_PARSED_VARIABLES
 
             preview_rows_payload = []
             for ds_label, img_id, fname, vars_dict in preview_rows:
@@ -209,6 +220,9 @@ def index(request, conn=None, url=None, **kwargs):
                 "var_range": range(1, max_vars + 1),
                 "project_id": project_id,
                 "default_vars_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                "max_parsed_variables": MAX_PARSED_VARIABLES,
+                "vars_limit_exceeded": vars_limit_exceeded,
+                "max_vars_uncapped": max_vars_uncapped,
             }
 
             return render(
