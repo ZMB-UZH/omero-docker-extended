@@ -146,9 +146,24 @@
     html, body {min-width: 632px;}
     .omeroweb-omp-plugin button,
     .omeroweb-omp-plugin .help-btn {
-        cursor: pointer; /* Added for hand cursor on hover */
-        box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
-        transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
+        cursor: pointer;
+        /* Initial shadow */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+    }
+
+    /* THE FIX: Enhanced shadow and lift on hover */
+    .omeroweb-omp-plugin button:hover,
+    .omeroweb-omp-plugin .help-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        filter: brightness(105%); /* Makes colored buttons look interactive */
+    }
+
+    /* Active state for "clicked" feel */
+    .omeroweb-omp-plugin button:active {
+        transform: translateY(1px);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
 
     /* Explicitly ensure shadow/cursor on dataset selection and load buttons */
