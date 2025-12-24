@@ -430,17 +430,18 @@
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .var-row[draggable="true"] {
-        grid-template-columns: 24px 2.5em auto 45px; /* Show handle in edit mode */
+        grid-template-columns: 16px 2.5em auto 45px; /* Handle = 16px (same as + button) */
+        column-gap: 4px; /* Reduced gap for more compact layout */
         cursor: grab;
     }
     
     /* Drag handle */
     .var-drag-handle {
-        font-size: 16px;
+        font-size: 14px;
         color: #ccc;
         cursor: grab;
         user-select: none;
-        padding: 2px;
+        padding: 0;
         opacity: 0;
         transition: opacity 0.2s, color 0.2s;
         line-height: 1;
@@ -728,15 +729,15 @@ function handleDragOver(e) {
         row.classList.remove('drag-over-top', 'drag-over-bottom');
     });
     
-    // 35/65 threshold with 5px deadzone
-    // If dragged center is in top 35% of target → drop above
-    // If dragged center is in bottom 35% of target → drop below
-    // Middle 30% is deadzone (keeps current indicator)
+    // 45/55 threshold - small deadzone for easier dropping
+    // If dragged center is in top 45% of target → drop above
+    // If dragged center is in bottom 45% of target → drop below
+    // Middle 10% is deadzone (prevents flickering at exact center)
     
-    if (relativePosition < 0.35) {
+    if (relativePosition < 0.45) {
         // Drop above this row
         this.classList.add('drag-over-top');
-    } else if (relativePosition > 0.65) {
+    } else if (relativePosition > 0.55) {
         // Drop below this row
         this.classList.add('drag-over-bottom');
     }
