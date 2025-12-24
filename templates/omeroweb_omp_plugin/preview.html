@@ -93,8 +93,8 @@
                         {{ row.filename }}
                     </div>
                 </td>
-                <td style='padding:2px;'>
-                    <div class="clamp-2">
+                <td style='padding:2px; text-align: left;'>
+                    <div class="clamp-2" style="text-align: left; justify-content: flex-start;">
                         {{ row.vars_display|safe }}
                     </div>
                 </td>
@@ -433,7 +433,7 @@
         border: 2px solid transparent;
         transition: padding-left 0.15s ease, background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-.var-row[draggable="true"] { cursor: grab; padding-left: 14px; }
+    .var-row[draggable="true"] { cursor: grab; padding-left: 14px; }
     
     /* Drag handle */
     .var-drag-handle {
@@ -576,6 +576,16 @@
     .help-btn {width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
                 line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+/* Simple fix: Force variable display to the left in non-edit mode */
+    .clamp-2 {
+        text-align: left !important;
+        display: block !important; /* Ensures it doesn't behave like an inline element */
+    }
+
+    td:last-child {
+        text-align: left !important;
+        padding-left: 5px !important; /* Minimal padding to prevent sticking to the border */
+    }
 </style>
 
 <script>
