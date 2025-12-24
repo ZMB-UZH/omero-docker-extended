@@ -424,7 +424,7 @@
     /* Variable row - updated for drag handle */
     .var-row {
         display: grid;
-        grid-template-columns: 0 2.5em auto 45px; /* 0 width for hidden handle */
+        grid-template-columns: 9px 2.5em auto 45px; /* 0 width for hidden handle */
         align-items: center;
         column-gap: 6px;
         margin-bottom: 2px;
@@ -433,11 +433,9 @@
         border: 2px solid transparent;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .var-row[draggable="true"] {
-        grid-template-columns: 9px 2.5em auto 30px; /* Handle = 16px (same as + button) */
-        column-gap: 4px; /* Reduced gap for more compact layout */
-        cursor: grab;
-    }
+.var-row[draggable="true"] {
+    cursor: grab;
+}
     
     /* Drag handle */
     .var-drag-handle {
