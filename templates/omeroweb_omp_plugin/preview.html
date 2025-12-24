@@ -423,8 +423,8 @@
         grid-template-columns: 0 2.5em auto 45px; /* 0 width for hidden handle */
         align-items: center;
         column-gap: 6px;
-        margin-bottom: 4px;
-        padding: 4px;
+        margin-bottom: 5px;
+        padding: 2px;
         border-radius: 4px;
         border: 2px solid transparent;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -469,13 +469,13 @@
     }
     .var-row.drag-over-top {
         border-top: 3px solid #007bff;
-        margin-top: 6px;
-        transform: translateY(-2px);
+        margin-top: 3px;
+        transform: translateY(-1px);
     }
     .var-row.drag-over-bottom {
         border-bottom: 3px solid #007bff;
-        margin-bottom: 6px;
-        transform: translateY(2px);
+        margin-bottom: 3px;
+        transform: translateY(1px);
     }
     
     /* Edit mode buttons */
@@ -706,26 +706,48 @@ function handleDragOver(e) {
         e.preventDefault();
     }
     e.dataTransfer.dropEffect = 'move';
-    return false;
-}
-
-function handleDragEnter(e) {
-    if (this === draggedElement) return;
     
+    // Center-based drop indicator positioning
+    if (this === draggedElement) return false;
+    
+    // Get the bounding rectangles
+    const draggedRect = draggedElement.getBoundingClientRect();
+    const targetRect = this.getBoundingClientRect();
+    
+    // Calculate center of dragged element
+    const draggedCenter = draggedRect.top + (draggedRect.height / 2);
+    
+    // Calculate position relative to target row
+    const targetTop = targetRect.top;
+    const targetHeight = targetRect.height;
+    const relativePosition = (draggedCenter - targetTop) / targetHeight;
+    
+    // Remove all indicators first
     const rows = Array.from(varNameInputs.children);
-    const currentIndex = rows.indexOf(this);
-    
-    // Remove drag-over from all rows first
     rows.forEach(row => {
         row.classList.remove('drag-over-top', 'drag-over-bottom');
     });
     
-    // Add appropriate class based on drag direction
-    if (currentIndex < draggedIndex) {
+    // 35/65 threshold with 5px deadzone
+    // If dragged center is in top 35% of target → drop above
+    // If dragged center is in bottom 35% of target → drop below
+    // Middle 30% is deadzone (keeps current indicator)
+    
+    if (relativePosition < 0.35) {
+        // Drop above this row
         this.classList.add('drag-over-top');
-    } else {
+    } else if (relativePosition > 0.65) {
+        // Drop below this row
         this.classList.add('drag-over-bottom');
     }
+    // else: in deadzone, don't show indicator (smoother transition)
+    
+    return false;
+}
+
+function handleDragEnter(e) {
+    // Most logic moved to handleDragOver for smoother center-based positioning
+    if (this === draggedElement) return;
 }
 
 function handleDragLeave(e) {
@@ -738,25 +760,30 @@ function handleDrop(e) {
     }
     
     if (draggedElement !== this) {
-        // Get all rows
-        const rows = Array.from(varNameInputs.children);
-        const draggedIdx = rows.indexOf(draggedElement);
-        const targetIdx = rows.indexOf(this);
+        // Check which indicator was showing (top or bottom)
+        const dropAbove = this.classList.contains('drag-over-top');
+        const dropBelow = this.classList.contains('drag-over-bottom');
         
-        // Reorder DOM elements
-        if (draggedIdx < targetIdx) {
-            // Moving down
-            this.parentNode.insertBefore(draggedElement, this.nextSibling);
-        } else {
-            // Moving up
+        // Insert based on indicator position
+        if (dropAbove) {
+            // Drop above this row
             this.parentNode.insertBefore(draggedElement, this);
+        } else if (dropBelow) {
+            // Drop below this row
+            this.parentNode.insertBefore(draggedElement, this.nextSibling);
         }
+        // If no indicator (deadzone), don't move
         
         // Refresh indices after reordering
         refreshVarRowIndices();
     }
     
-    this.classList.remove('drag-over-top', 'drag-over-bottom');
+    // Clean up all indicators
+    const rows = Array.from(varNameInputs.children);
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
     return false;
 }
 
