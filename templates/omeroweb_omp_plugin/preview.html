@@ -830,7 +830,7 @@ function setVarSetControlsDisabled(disabled) {
 function toggleVarNameInputs() {
     // Check if in edit mode
     if (isEditMode) {
-        showNonBlockingModal("Please exit variable edit mode first.");
+        showNonBlockingModal("Please exit edit mode first.");
         // Prevent checkbox from changing
         event.preventDefault();
         document.getElementById('use_defaults').checked = !document.getElementById('use_defaults').checked;
