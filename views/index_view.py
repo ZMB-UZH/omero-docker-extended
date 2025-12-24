@@ -163,7 +163,7 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-preview_rows = []
+            preview_rows = []
             max_vars = 0
             max_vars_uncapped = 0  # Track actual max before capping
 
