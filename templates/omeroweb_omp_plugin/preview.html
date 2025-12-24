@@ -450,6 +450,9 @@
 const BASE_URL = "/omeroweb_omp_plugin";
 const DEFAULT_VARS = {{ default_vars_json|safe }};
 const MAX_PARSED_VARS = {{ max_vars }};
+const MAX_PARSED_VARIABLES = {{ max_parsed_variables }};  // Maximum allowed variables
+const VARS_LIMIT_EXCEEDED = {{ vars_limit_exceeded|lower }};  // Boolean flag
+const MAX_VARS_UNCAPPED = {{ max_vars_uncapped }};  // Actual max before capping
 const variableSetInput = document.getElementById('variable_set_input');
 const variableSetSelect = document.getElementById('variable_set_select');
 const variableSetDropdown = document.getElementById('variable_set_dropdown');
@@ -462,6 +465,16 @@ let totalImages = 0;
 let pollInterval = null;
 let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
+
+// Show warning if variable limit was exceeded
+if (VARS_LIMIT_EXCEEDED) {
+    showNonBlockingModal(
+        `Global variable parsing is capped at ${MAX_PARSED_VARIABLES}. ` +
+        `Only the first ${MAX_PARSED_VARIABLES} variables will be parsed. ` +
+        `Your filenames produced ${MAX_VARS_UNCAPPED} variables. ` +
+        `Consider checking your parsing method and/or filenames.`
+    );
+}
 
 function goBack() {
     window.location.href = BASE_URL + "/";
