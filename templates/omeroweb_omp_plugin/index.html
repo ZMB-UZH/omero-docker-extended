@@ -146,8 +146,15 @@
     html, body {min-width: 632px;}
     .omeroweb-omp-plugin button,
     .omeroweb-omp-plugin .help-btn {
+        cursor: pointer; /* Added for hand cursor on hover */
         box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
         transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
+    }
+
+    /* Explicitly ensure shadow/cursor on dataset selection and load buttons */
+    #dataset_button, #load_images_button {
+        cursor: pointer;
+        box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
     }
     .omeroweb-omp-plugin button:active,
     .omeroweb-omp-plugin .help-btn:active {
