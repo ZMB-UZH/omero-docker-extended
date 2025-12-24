@@ -126,7 +126,7 @@
                     </a>
                 </label>
 
-                <label style="font-size:12px; display:flex; align-items:center;">
+                <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
                     <input type="checkbox" id="use_defaults" checked onclick="toggleVarNameInputs()">
                     Use default names
                 </label>
@@ -430,7 +430,7 @@
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .var-row[draggable="true"] {
-        grid-template-columns: 11px 2.5em auto 15px; /* Handle = 16px (same as + button) */
+        grid-template-columns: 9px 2.5em auto 30px; /* Handle = 16px (same as + button) */
         column-gap: 4px; /* Reduced gap for more compact layout */
         cursor: grab;
     }
