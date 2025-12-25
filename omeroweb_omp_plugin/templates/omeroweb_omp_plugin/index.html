@@ -1,0 +1,645 @@
+<div class="omeroweb-omp-plugin"
+     id="filename_metadata_container"
+     style='padding:15px 15px 15px 15px; width:560px; min-width:560px; max-width:560px; margin:0 auto; --base-font-size:14px; font-size:var(--base-font-size);'>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+        <h1 style='color:#007bff; margin:0;'>Filename+metadata harvester</h1>
+        <a href="/omeroweb_omp_plugin/help/"
+           target="_blank"
+           rel="noopener noreferrer"
+           title="Help"
+           aria-label="Help"
+           class="help-btn">
+            ?
+        </a>
+    </div>
+
+    <form method='POST'
+          id="preview_form"
+          style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
+        <div style='margin-bottom:20px;'>
+            <label><strong>Project:</strong></label><br>
+            <div style='display:flex; align-items:center; gap:14px;'>
+                <div id="project_select_wrapper"
+                     style="width:55%; flex:0 0 55%; position:relative; z-index:1001;">
+                    <input type="text"
+                           id="project_select_input"
+                           placeholder="Select project…"
+                           autocomplete="off"
+                           style="width:100%; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                    <span class="project-select-arrow" aria-hidden="true">▾</span>
+                    <input type="hidden" name="project" id="project_select" value="">
+                    <div id="project_select_dropdown"
+                         style="display:none; position:absolute; left:0; right:0; top:100%;
+                                background:#fff; border:1px solid #007bff; border-top:none;
+                                max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                    </div>
+                    {{ projects|json_script:"project-data" }}
+                </div>
+                <button type='button'
+                        id='dataset_selection_btn'
+                        style='padding:12px 16px;font-size:14px;background:#007bff;color:white;border:none;border-radius:8px; flex:0 0 auto; white-space:nowrap;'>
+                    Dataset selection
+                </button>
+            </div>
+        </div>
+
+        <div style='margin-bottom:20px;'>
+            <label style="display:block; margin-bottom:-14px;">
+              <strong>Input for filename parsing:</strong>
+            </label>
+
+            <input type='hidden'
+                   name='separator_mode'
+                   id='separator_mode'
+                   value='chars'>
+
+            <div style='display:flex; align-items:center; gap:14px;'>
+                <input type='text'
+                       id='separator_input'
+                       name='separator'
+                       value='_-'
+                       style='width:55%; flex:0 0 55%; padding:12px;border-radius:6px;border:1px solid #007bff;'>
+
+                <div style='display:flex; flex-direction:column; gap:6px;'>
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_chars'
+                               checked
+                               onclick='setSeparatorMode("chars")'>
+                        <span class="separator-option-text">Characters</span>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_regex'
+                               onclick='setSeparatorMode("regex")'>
+                        <span class="separator-option-text">Regex expression</span>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_ai_regex'
+                               disabled>
+                        <span class="separator-option-text">AI-assisted Regex expression</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <input type='hidden' name='selected_datasets' id='selected_datasets' value=''>
+        <input type='hidden' name='dataset_selection_opened' id='dataset_selection_opened' value='0'>
+
+        <button type='submit'
+                style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
+                       border:none;border-radius:8px; display:block; margin:0;'>
+            Load images & Preview
+        </button>
+    </form>
+</div>
+
+<div class="dataset-table-wrapper">
+    <div id='dataset_table_container'
+         style='display:none; background:#fff; overflow:hidden; width:100%;'>
+        <div style='max-height:600px; overflow-y:auto; overflow-x:hidden;'>
+            <table border='1'
+                   class="dataset-table"
+                   style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+                <tr style='background:#007bff; color:white;'>
+                    <td class="col-check" style='padding:3px; width:20px; text-align:center;'>
+                        <input type='checkbox' id='datasets_select_all' checked>
+                    </td>
+                    <td class="col-dataset" style='padding:3px; width:500px;'>Dataset</td>
+                    <td class="col-id" style='padding:3px; width:65px;'>ID</td>
+                    <td class="col-images" style='padding:3px; width:65px;'>Nr. images</td>
+                    <td class="col-formats" style='padding:3px;'>Formats</td>
+                </tr>
+                <tbody id='dataset_table_body'></tbody>
+            </table>
+        </div>
+        <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
+    </div>
+</div>
+
+<div id="project_dropdown_backdrop"
+     style="display:none; position:fixed; inset:0; z-index:900;"></div>
+
+    <!-- NON-BLOCKING MODAL -->
+<div id="nb-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:300px; max-width:500px;">
+        <div id="nb-modal-message"
+             style="margin-bottom:16px;">
+        </div>
+        <div style="text-align:right;">
+            <button onclick="hideNonBlockingModal()"
+                    style="padding:6px 14px; font-size:12px;">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    html, body {min-width: 632px;}
+    .omeroweb-omp-plugin button,
+    .omeroweb-omp-plugin .help-btn {
+        cursor: pointer;
+        /* Initial shadow */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+    }
+
+    /* THE FIX: Enhanced shadow and lift on hover */
+    .omeroweb-omp-plugin button:hover,
+    .omeroweb-omp-plugin .help-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        filter: brightness(105%); /* Makes colored buttons look interactive */
+    }
+
+    /* Active state for "clicked" feel */
+    .omeroweb-omp-plugin button:active {
+        transform: translateY(1px);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    /* Explicitly ensure shadow/cursor on dataset selection and load buttons */
+    #dataset_button, #load_images_button {
+        cursor: pointer;
+        box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
+    }
+    .omeroweb-omp-plugin button:active,
+    .omeroweb-omp-plugin .help-btn:active {
+        transform: translateY(2px);
+        box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .help-btn {width:26px; height:26px; border-radius:13px; background:#007bff; color:white; font-size:14px; font-weight:700;
+                line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
+    .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+    .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
+    .dataset-table-wrapper {min-width:1200px; max-width:1200px; margin:20px auto 0; width:100%; padding:0 12px;}
+    .dataset-table td {word-break: break-word; white-space: normal;}
+    .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
+                           font-size:18px; font-weight:600; pointer-events:none;}
+    .project-option {transition: background 0.15s ease, color 0.15s ease;}
+    .project-option:hover,
+    .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
+    #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
+    .separator-option-text {white-space:nowrap;}
+</style>
+
+<script>
+    const previewForm = document.getElementById('preview_form');
+    function setSeparatorMode(mode) {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        const hidden = document.getElementById('separator_mode');
+
+        if (mode === 'regex') {
+            regex.checked = true;
+            chars.checked = false;
+            hidden.value = 'regex';
+        } else {
+            chars.checked = true;
+            regex.checked = false;
+            hidden.value = 'chars';
+        }
+    }
+
+    // Ensure exactly one mode is selected even if browser restores form state
+    (function initSeparatorMode() {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        if (regex && regex.checked) {
+            setSeparatorMode('regex');
+        } else {
+            setSeparatorMode('chars');
+        }
+    })();
+
+    const datasetButton = document.getElementById('dataset_selection_btn');
+    const projectSelect = document.getElementById('project_select');
+    const projectSelectInput = document.getElementById('project_select_input');
+    const projectSelectDropdown = document.getElementById('project_select_dropdown');
+    const datasetTableContainer = document.getElementById('dataset_table_container');
+    const datasetTableBody = document.getElementById('dataset_table_body');
+    const datasetTableMessage = document.getElementById('dataset_table_message');
+    const datasetSelectAll = document.getElementById('datasets_select_all');
+    const selectedDatasetsInput = document.getElementById('selected_datasets');
+    const separatorInput = document.getElementById('separator_input');
+    const filenameMetadataContainer = document.getElementById('filename_metadata_container');
+    const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
+    const projectDataScript = document.getElementById('project-data');
+    const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
+    const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    const MAX_PROJECT_RESULTS = 20;
+    let projectFilterTimeout = null;
+    let activeProjectIndex = -1;
+
+    function showNonBlockingModal(message) {
+        const overlay = document.getElementById("nb-modal-overlay");
+        const msg = document.getElementById("nb-modal-message");
+        if (msg) msg.innerText = message;
+        if (overlay) overlay.style.display = "flex";
+    }
+
+    function hideNonBlockingModal() {
+        const overlay = document.getElementById("nb-modal-overlay");
+        if (overlay) overlay.style.display = "none";
+    }
+
+    if (previewForm) {
+        previewForm.addEventListener('submit', (event) => {
+            if (!projectSelect.value) {
+                event.preventDefault();
+                showNonBlockingModal("Please select a project.");
+                return;
+            }
+            if (!selectedDatasetsInput.value) {
+                event.preventDefault();
+                showNonBlockingModal("Please select one or more datasets.");
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                event.preventDefault();
+                showNonBlockingModal("No data to process is available in the selected datasets.");
+                return;
+            }
+            if (!separatorInput.value.trim()) {
+                event.preventDefault();
+                showNonBlockingModal("The input field for filename parsing cannot be empty.");
+            }
+        });
+    }
+
+    {% if error_message %}
+    showNonBlockingModal("{{ error_message|escapejs }}");
+    {% endif %}
+
+    function getProjectLabel(projectId, projectName) {
+        return String(projectName || projectId || '');
+    }
+
+    function getNumericSortValue(label) {
+        return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
+    }
+
+    function sortProjectMatches(matches) {
+        return matches.sort(([projectIdA, projectNameA], [projectIdB, projectNameB]) => {
+            const labelA = getProjectLabel(projectIdA, projectNameA);
+            const labelB = getProjectLabel(projectIdB, projectNameB);
+            const numericA = getNumericSortValue(labelA);
+            const numericB = getNumericSortValue(labelB);
+            if (numericA !== null && numericB !== null) {
+                return numericB - numericA;
+            }
+            if (numericA !== null) return -1;
+            if (numericB !== null) return 1;
+            const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+            if (labelCompare !== 0) return labelCompare;
+            return String(projectIdA || '').localeCompare(String(projectIdB || ''), undefined, { numeric: true, sensitivity: 'base' });
+        });
+    }
+
+    function getProjectOptions() {
+        return projectSelectDropdown
+            ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
+            : [];
+    }
+
+    function setActiveProjectIndex(index, useKeyboard = false) {
+        const options = getProjectOptions();
+        if (options.length === 0) {
+            activeProjectIndex = -1;
+            return;
+        }
+        if (projectSelectDropdown) {
+            if (useKeyboard) {
+                projectSelectDropdown.classList.add('keyboard-active');
+            } else {
+                projectSelectDropdown.classList.remove('keyboard-active');
+            }
+        }
+        const clamped = Math.max(0, Math.min(index, options.length - 1));
+        options.forEach((option, idx) => {
+            if (idx === clamped) {
+                option.classList.add('is-active');
+                option.scrollIntoView({ block: 'nearest' });
+            } else {
+                option.classList.remove('is-active');
+            }
+        });
+        activeProjectIndex = clamped;
+    }
+
+    function selectProjectOption(option) {
+        if (!option) return;
+        const projectId = option.dataset.projectId || '';
+        const projectName = option.dataset.projectName || option.textContent || '';
+        const previousProjectId = projectSelect?.value || '';
+        if (projectSelect) {
+            projectSelect.value = projectId;
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = projectName;
+            projectSelectInput.dataset.selectedName = projectName;
+        }
+        if (projectId && projectId !== previousProjectId) {
+            resetDatasetSelection();
+        }
+        closeProjectDropdown(false);
+    }
+
+    function renderProjectOptions(query) {
+        if (!projectSelectDropdown) return;
+        const normalizedQuery = query.trim().toLowerCase();
+        const matches = [];
+        let totalMatches = 0;
+
+        for (let i = 0; i < allProjects.length; i += 1) {
+            const [projectId, projectName] = allProjects[i];
+            const name = projectName || '';
+            const id = projectId || '';
+            const isMatch = !normalizedQuery
+                || String(name).toLowerCase().includes(normalizedQuery)
+                || String(id).toLowerCase().includes(normalizedQuery);
+            if (isMatch) {
+                totalMatches += 1;
+                if (matches.length < MAX_PROJECT_RESULTS) {
+                    matches.push([projectId, projectName]);
+                }
+            }
+        }
+
+        sortProjectMatches(matches);
+        projectSelectDropdown.innerHTML = '';
+
+        if (matches.length === 0) {
+            const emptyRow = document.createElement('div');
+            emptyRow.style.padding = '8px 12px';
+            emptyRow.style.color = '#6b7280';
+            emptyRow.textContent = 'No matching projects.';
+            projectSelectDropdown.appendChild(emptyRow);
+        } else {
+            matches.forEach(([projectId, projectName]) => {
+                const option = document.createElement('div');
+                option.className = 'project-option';
+                option.dataset.projectId = projectId;
+                option.dataset.projectName = projectName || '';
+                option.style.padding = '8px 12px';
+                option.style.cursor = 'pointer';
+                option.style.whiteSpace = 'nowrap';
+                option.textContent = projectName || projectId;
+                projectSelectDropdown.appendChild(option);
+            });
+        }
+
+        const statusRow = document.createElement('div');
+        statusRow.style.padding = '6px 12px';
+        statusRow.style.fontSize = '11px';
+        statusRow.style.color = '#6b7280';
+        if (totalMatches > MAX_PROJECT_RESULTS) {
+            statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
+        } else if (totalMatches > 0) {
+            statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found.`;
+        } else {
+            statusRow.textContent = 'No projects found.';
+        }
+        projectSelectDropdown.appendChild(statusRow);
+        if (matches.length > 0) {
+            setActiveProjectIndex(0);
+        } else {
+            activeProjectIndex = -1;
+        }
+    }
+
+    function openProjectDropdown() {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'block';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'block';
+        }
+        projectSelectInput.dataset.previousValue = projectSelectInput.value;
+        projectSelectInput.value = '';
+        projectSelectInput.placeholder = 'Search...';
+        renderProjectOptions('');
+    }
+
+    function closeProjectDropdown(restoreSelection = true) {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'none';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'none';
+        }
+        if (restoreSelection && !projectSelectInput.value) {
+            const selectedName = projectSelectInput.dataset.selectedName || '';
+            projectSelectInput.value = selectedName;
+        }
+        projectSelectInput.placeholder = 'Select project…';
+    }
+
+    function filterProjectOptions(query) {
+        if (projectFilterTimeout) {
+            window.clearTimeout(projectFilterTimeout);
+        }
+        projectFilterTimeout = window.setTimeout(() => {
+            renderProjectOptions(query);
+        }, 120);
+    }
+
+    if (projectSelectInput) {
+        projectSelectInput.addEventListener('focus', () => {
+            openProjectDropdown();
+        });
+
+        projectSelectInput.addEventListener('click', () => {
+            if (projectSelectDropdown?.style.display !== 'block') {
+                openProjectDropdown();
+            }
+        });
+
+        projectSelectInput.addEventListener('input', (event) => {
+            filterProjectOptions(event.target.value);
+        });
+
+        projectSelectInput.addEventListener('keydown', (event) => {
+            if (projectSelectDropdown?.style.display !== 'block') return;
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const options = getProjectOptions();
+                if (options.length === 0) return;
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const nextIndex = activeProjectIndex === -1 ? 0 : activeProjectIndex + delta;
+                setActiveProjectIndex(nextIndex, true);
+            } else if (event.key === 'Enter') {
+                const options = getProjectOptions();
+                if (options.length === 0 || activeProjectIndex === -1) return;
+                event.preventDefault();
+                selectProjectOption(options[activeProjectIndex]);
+            }
+        });
+    }
+
+    if (projectSelectDropdown) {
+        projectSelectDropdown.addEventListener('click', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            selectProjectOption(option);
+        });
+
+        projectSelectDropdown.addEventListener('mousemove', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            const options = getProjectOptions();
+            const index = options.indexOf(option);
+            if (index !== -1) {
+                setActiveProjectIndex(index, false);
+            }
+        });
+    }
+
+    if (projectDropdownBackdrop) {
+        projectDropdownBackdrop.addEventListener('click', () => {
+            closeProjectDropdown(true);
+        });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        if (projectSelectDropdown?.style.display === 'block') {
+            closeProjectDropdown(true);
+        }
+    });
+
+    function updateSelectedDatasets() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        const ids = Array.from(checked).map((input) => input.dataset.datasetId);
+        selectedDatasetsInput.value = ids.join(',');
+        if (datasetSelectAll) {
+            const allBoxes = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]');
+            datasetSelectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+        }
+    }
+
+    function getSelectedDatasetImageCount() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        return Array.from(checked).reduce((total, input) => {
+            const count = Number.parseInt(input.dataset.imageCount || '0', 10);
+            return total + (Number.isNaN(count) ? 0 : count);
+        }, 0);
+    }
+
+    function getSelectedProjectName() {
+        return projectSelectInput?.dataset.selectedName || '';
+    }
+
+    function resetDatasetSelection() {
+        datasetSelectionOpenedInput.value = '0';
+        selectedDatasetsInput.value = '';
+        if (datasetSelectAll) {
+            datasetSelectAll.checked = false;
+        }
+        if (datasetTableBody) {
+            datasetTableBody.innerHTML = '';
+        }
+        if (datasetTableMessage) {
+            datasetTableMessage.style.display = 'none';
+        }
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'none';
+        }
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.remove('expanded');
+        }
+    }
+
+    function renderDatasetRows(datasets) {
+        datasetTableBody.innerHTML = '';
+        if (!datasets || datasets.length === 0) {
+            const projectName = getSelectedProjectName();
+            showNonBlockingModal(`No datasets found in project "${projectName}"`);
+            resetDatasetSelection();
+            return;
+        }
+        datasetSelectionOpenedInput.value = '1';
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.add('expanded');
+        }
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'block';
+        }
+        datasetTableMessage.style.display = 'none';
+        datasetSelectAll.checked = true;
+
+        datasets.forEach((ds) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="col-check" style="padding:2px; text-align:center;">
+                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" checked>
+                </td>
+                <td class="col-dataset" style="padding:2px;">${ds.name || ''}</td>
+                <td class="col-id" style="padding:2px;">${ds.id || ''}</td>
+                <td class="col-images" style="padding:2px;">${ds.image_count}</td>
+                <td class="col-formats" style="padding:2px;">${ds.formats || ''}</td>
+            `;
+            datasetTableBody.appendChild(row);
+        });
+
+        datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+            .forEach((input) => input.addEventListener('change', updateSelectedDatasets));
+
+        updateSelectedDatasets();
+    }
+
+    if (datasetSelectAll) {
+        datasetSelectAll.addEventListener('change', () => {
+            const checked = datasetSelectAll.checked;
+            datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+                .forEach((input) => {
+                    input.checked = checked;
+                });
+            updateSelectedDatasets();
+        });
+    }
+
+    if (datasetButton) {
+        datasetButton.addEventListener('click', () => {
+            const projectId = projectSelect.value;
+            if (!projectId) {
+                showNonBlockingModal("Please select a project.");
+                return;
+            }
+
+            datasetTableMessage.style.display = 'none';
+            datasetTableBody.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('action', 'list_datasets');
+            formData.append('project', projectId);
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        showNonBlockingModal(data.error);
+                        resetDatasetSelection();
+                        return;
+                    }
+                    renderDatasetRows(data.datasets || []);
+                })
+                .catch(() => {
+                    showNonBlockingModal('Unable to load datasets. Please try again.');
+                    resetDatasetSelection();
+                });
+        });
+    }
+    </script>
