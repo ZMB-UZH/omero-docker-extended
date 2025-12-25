@@ -1,0 +1,27 @@
+## ATTENTION!! Using the tag "latest" might be tempting but is extremely risky in production environments!
+# Needs to match the respective one in docker-compose.yml
+## ATTENTION!! The python venv lines will need to be changed to the correct/latest python venv and path
+# when the Omero developers update the container
+
+FROM openmicroscopy/omero-web-standalone:5
+
+# Run as root to avoid permission issues with deletion
+USER root
+
+# Remove old copies of the plugin inside the container (if any)
+RUN rm -rf /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+
+# Copy the whole plugin into the container site-packages
+COPY omeroweb_omp_plugin /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+
+# Install psycopg2-binary
+# Add redis and django-redis for shared cache across workers
+RUN /opt/omero/web/venv-3.12/bin/pip install --no-cache-dir \
+    psycopg2-binary \
+    redis>=5.0.0 \
+    django-redis>=5.4.0
+
+# Fix permissions: should be owned by user omero-web
+RUN chown -R omero-web:omero-web /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+
+USER omero-web
