@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ------------------------------------------------------------------
+# Root-only safety check
+# ------------------------------------------------------------------
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: This script must be run as root." >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------------
+BASE_DIR="/opt/omero-test"
+LOCAL_DIR="omeroweb_omp_plugin"
+REPO_URL="git@github.com:Stratos007/omero-omp-zmb-plugin.git"
+REPO_BRANCH="test"
+
+# ------------------------------------------------------------------
+# Workflow
+# ------------------------------------------------------------------
+cd "${BASE_DIR}"
+
+echo "Removing existing ${LOCAL_DIR}..."
+rm -rf "${LOCAL_DIR}"
+
+echo "Cloning repository (test branch)..."
+git clone -b "${REPO_BRANCH}" "${REPO_URL}" "${LOCAL_DIR}"
+
+echo "Building Omero container (no cache)..."
+docker compose build --no-cache omeroweb
+
+echo "Starting containers..."
+docker compose up -d
+
+echo "Done."
