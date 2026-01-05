@@ -58,6 +58,30 @@ _UNSUPPORTED_TEST_MESSAGE = {
 }
 
 
+def _extract_error_details(error):
+    if not error:
+        return None
+    try:
+        raw = error.read()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return raw.decode("utf-8", errors="ignore").strip() or None
+    if isinstance(payload, dict):
+        info = payload.get("error") or payload.get("message")
+        if isinstance(info, dict):
+            message = info.get("message")
+            if message:
+                return message
+        if isinstance(info, str):
+            return info
+    return None
+
+
 def _perform_connection_test(provider, api_key):
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
@@ -81,7 +105,15 @@ def _perform_connection_test(provider, api_key):
                 return True, "Connection test passed."
             return False, f"Connection test failed with status {status}."
     except urllib.error.HTTPError as e:
-        return False, f"Connection test failed with status {e.code}."
+        detail = _extract_error_details(e)
+        message = f"Connection test failed with status {e.code}."
+        if detail:
+            message = f"{message} {detail}"
+        if provider == "xai" and e.code == 403:
+            message = (
+                f"{message} xAI accounts need paid credits to access the API."
+            )
+        return False, message
     except Exception as e:
         logger.exception("AI credential connection test failed for %s: %s", provider, e)
         return False, "Connection test failed. Please verify the API key."
