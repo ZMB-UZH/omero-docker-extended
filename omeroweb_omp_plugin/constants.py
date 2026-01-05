@@ -4,6 +4,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Omero web virtualenv (used for CLI and other tooling).
+# Override via environment when the venv name changes.
+OMERO_WEB_ROOT = os.environ.get("OMERO_WEB_ROOT", "/opt/omero/web")
+OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
+OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
+
 # Storage directory for job JSON files
 # Create the directory. No error if it already exists. Root access to the host machine assumed.
 JOBS_DIR = "/tmp/omp_plugin_filename_metadata_jobs"
