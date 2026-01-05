@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
@@ -7,6 +8,7 @@ import logging
 import portalocker
 import re
 import json
+import omero
 
 from omero.model import MapAnnotationI, NamedValue, ImageAnnotationLinkI
 from omero.rtypes import rstring
@@ -55,6 +57,53 @@ def _load_request_payload(request):
         return json.loads(request.body.decode("utf-8"))
     except Exception:
         return request.POST
+
+
+def _resolve_omero_host_port(conn):
+    host = getattr(conn, "host", None) or getattr(conn, "_host", None)
+    port = getattr(conn, "port", None) or getattr(conn, "_port", None)
+
+    if not host:
+        host = getattr(settings, "OMERO_HOST", None)
+    if not port:
+        port = getattr(settings, "OMERO_PORT", None)
+
+    if port is not None:
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            port = None
+
+    return host, port
+
+
+def _validate_user_password(conn, password):
+    if not password:
+        return False, "Missing password"
+
+    username = conn.getUser().getName()
+    host, port = _resolve_omero_host_port(conn)
+    if not host or not port:
+        logger.error(
+            "Unable to resolve OMERO host/port for password validation (host=%s, port=%s).",
+            host,
+            port,
+        )
+        return False, "Unable to validate credentials. Please contact support."
+
+    client = omero.client(host=host, port=port)
+    try:
+        client.createSession(username, password)
+    except Exception as exc:
+        logger.warning("Password validation failed for user %s: %s", username, exc)
+        return False, "Invalid password."
+    finally:
+        try:
+            client.closeSession()
+        except Exception:
+            pass
+
+    return True, None
 
 
 def _resolve_image_ids(conn, project_id, selected_image_ids):
@@ -215,9 +264,14 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
+        password = data.get("password")
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
+
+        valid, error = _validate_user_password(conn, password)
+        if not valid:
+            return JsonResponse({"error": error}, status=403)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
@@ -265,9 +319,14 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
+        password = data.get("password")
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
+
+        valid, error = _validate_user_password(conn, password)
+        if not valid:
+            return JsonResponse({"error": error}, status=403)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
