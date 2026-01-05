@@ -9,6 +9,7 @@ from omeroweb.decorators import login_required
 
 from ..services.data_store import (
     AiCredentialStoreError,
+    get_ai_credential,
     list_ai_credentials,
     save_ai_credentials,
 )
@@ -134,6 +135,14 @@ def test_credentials(request, conn=None, url=None, **kwargs):
 
         provider = (data.get("provider") or "").strip()
         api_key = (data.get("api_key") or "").strip()
+        if not provider:
+            return JsonResponse({"error": "Provider and API key are required."}, status=400)
+        if not api_key:
+            username = _current_username(request, conn)
+            if username:
+                api_key = (get_ai_credential(username, provider) or "").strip()
+        if not api_key:
+            return JsonResponse({"error": "API key cannot be empty."}, status=400)
 
         ok, message = _perform_connection_test(provider, api_key)
         if not ok:
