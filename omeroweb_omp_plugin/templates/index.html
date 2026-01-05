@@ -727,10 +727,14 @@
     function toggleUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
         const willLock = !isUserDataMenuLocked;
-        isUserDataMenuLocked = willLock;
-        setUserDataMenuLockState(willLock);
-        deleteUserDataMenu.classList.toggle('menu-open', willLock);
-        deleteUserDataMenu.setAttribute('aria-expanded', willLock ? 'true' : 'false');
+        if (!willLock) {
+            closeUserDataSubmenu();
+            return;
+        }
+        isUserDataMenuLocked = true;
+        setUserDataMenuLockState(true);
+        deleteUserDataMenu.classList.add('menu-open');
+        deleteUserDataMenu.setAttribute('aria-expanded', 'true');
     }
 
     function updateAiProcessAvailability() {
