@@ -38,7 +38,7 @@
           style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
-            <div style='display:flex; align-items:center; gap:14px;'>
+            <div style='display:flex; align-items:flex-start; gap:14px;'>
                 <div id="project_select_wrapper"
                      style="width:55%; flex:0 0 55%; position:relative; z-index:1001;">
                     <input type="text"
@@ -99,7 +99,7 @@
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
                         <input type='checkbox'
                                id='sep_mode_ai_regex'
-                               onclick="toggleAiRegexOption()">
+                               onclick='setSeparatorMode("ai")'>
                         <span class="separator-option-text ai-option-text" id="ai_regex_text">AI-assisted Regex expression</span>
                         <button type="button"
                                 id="ai_regex_btn"
@@ -247,6 +247,7 @@
         </div>
         <div id="ai_credentials_status" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="ai_credentials_test">Test connection</button>
             <button type="button" id="ai_credentials_save">Save key</button>
         </div>
     </div>
@@ -375,26 +376,38 @@
     function setSeparatorMode(mode) {
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
+        const aiRegex = document.getElementById('sep_mode_ai_regex');
         const hidden = document.getElementById('separator_mode');
 
         if (mode === 'regex') {
-            regex.checked = true;
-            chars.checked = false;
-            hidden.value = 'regex';
+            if (regex) regex.checked = true;
+            if (chars) chars.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (hidden) hidden.value = 'regex';
+        } else if (mode === 'ai') {
+            if (aiRegex) aiRegex.checked = true;
+            if (chars) chars.checked = false;
+            if (regex) regex.checked = false;
+            if (hidden) hidden.value = 'regex';
         } else {
-            chars.checked = true;
-            regex.checked = false;
-            hidden.value = 'chars';
+            if (chars) chars.checked = true;
+            if (regex) regex.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (hidden) hidden.value = 'chars';
         }
+        updateAiRegexOption();
     }
 
     // Ensure exactly one mode is selected even if browser restores form state
     (function initSeparatorMode() {
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
-        if (regex && regex.checked) {
+        const aiRegex = document.getElementById('sep_mode_ai_regex');
+        if (aiRegex && aiRegex.checked) {
+            setSeparatorMode('ai');
+        } else if (regex && regex.checked) {
             setSeparatorMode('regex');
-        } else {
+        } else if (chars) {
             setSeparatorMode('chars');
         }
     })();
@@ -430,6 +443,7 @@
     const aiCredentialsClose = document.getElementById('ai_credentials_close');
     const aiCredentialsProvider = document.getElementById('ai_credentials_provider');
     const aiCredentialsKey = document.getElementById('ai_credentials_key');
+    const aiCredentialsTest = document.getElementById('ai_credentials_test');
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
@@ -449,7 +463,7 @@
         if (overlay) overlay.style.display = "none";
     }
 
-    function toggleAiRegexOption() {
+    function updateAiRegexOption() {
         if (!aiRegexCheckbox) return;
         if (aiRegexCheckbox.checked) {
             if (aiRegexButton) aiRegexButton.style.display = 'inline-flex';
@@ -466,8 +480,10 @@
     }
 
     const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
+    const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
     const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
     let aiCredentialProviders = new Set();
+    let aiCredentialsLastTest = { provider: null, key: null, passed: false };
 
     function updateAiModalStatus(message, isError = false) {
         if (!aiModalStatus) return;
@@ -479,6 +495,13 @@
         if (!aiCredentialsStatus) return;
         aiCredentialsStatus.textContent = message || '';
         aiCredentialsStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function resetAiCredentialTest() {
+        aiCredentialsLastTest = { provider: null, key: null, passed: false };
+        if (aiCredentialsSave) {
+            aiCredentialsSave.disabled = true;
+        }
     }
 
     function getSelectedDatasetIds() {
@@ -517,6 +540,7 @@
         if (aiCredentialsKey) {
             aiCredentialsKey.value = '';
         }
+        resetAiCredentialTest();
         refreshAiCredentials();
     }
 
@@ -820,8 +844,7 @@
     }
 
     if (aiRegexCheckbox) {
-        aiRegexCheckbox.addEventListener('change', toggleAiRegexOption);
-        toggleAiRegexOption();
+        updateAiRegexOption();
     }
 
     if (aiRegexButton) {
@@ -855,16 +878,72 @@
             if (aiCredentialsKey) {
                 aiCredentialsKey.value = '';
             }
+            resetAiCredentialTest();
             updateCredentialProviderStatus();
         });
     }
 
+    if (aiCredentialsKey) {
+        aiCredentialsKey.addEventListener('input', () => {
+            resetAiCredentialTest();
+        });
+    }
+
+    if (aiCredentialsTest) {
+        aiCredentialsTest.addEventListener('click', () => {
+            const provider = aiCredentialsProvider?.value;
+            const key = aiCredentialsKey?.value?.trim();
+            if (!provider) {
+                showNonBlockingModal('Please choose a provider.');
+                return;
+            }
+            if (!key) {
+                showNonBlockingModal('API key cannot be empty or only spaces.');
+                return;
+            }
+            updateAiCredentialsStatus('Testing connection...');
+            fetch(aiCredentialsTestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, api_key: key }),
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiCredentialsStatus(data.error, true);
+                        showNonBlockingModal(data.error);
+                        resetAiCredentialTest();
+                        return;
+                    }
+                    aiCredentialsLastTest = { provider, key, passed: true };
+                    if (aiCredentialsSave) {
+                        aiCredentialsSave.disabled = false;
+                    }
+                    updateAiCredentialsStatus(data.message || 'Connection test passed.');
+                })
+                .catch(() => {
+                    updateAiCredentialsStatus('Unable to test API key.', true);
+                    showNonBlockingModal('Unable to test API key.');
+                    resetAiCredentialTest();
+                });
+        });
+    }
+
     if (aiCredentialsSave) {
+        aiCredentialsSave.disabled = true;
         aiCredentialsSave.addEventListener('click', () => {
             const provider = aiCredentialsProvider?.value;
             const key = aiCredentialsKey?.value?.trim();
             if (!provider || !key) {
-                updateAiCredentialsStatus('Please choose a provider and enter an API key.', true);
+                showNonBlockingModal('Please choose a provider and enter an API key.');
+                return;
+            }
+            if (
+                !aiCredentialsLastTest.passed
+                || aiCredentialsLastTest.provider !== provider
+                || aiCredentialsLastTest.key !== key
+            ) {
+                showNonBlockingModal('Please run the connection test before saving this API key.');
                 return;
             }
             updateAiCredentialsStatus('Saving key...');
@@ -877,16 +956,22 @@
                 .then((data) => {
                     if (data.error) {
                         updateAiCredentialsStatus(data.error, true);
+                        showNonBlockingModal(data.error);
+                        resetAiCredentialTest();
                         return;
                     }
                     aiCredentialProviders.add(provider);
                     if (aiCredentialsKey) {
                         aiCredentialsKey.value = '';
                     }
+                    resetAiCredentialTest();
                     updateAiCredentialsStatus('API key saved.');
+                    showNonBlockingModal('API key saved to the database.');
                 })
                 .catch(() => {
                     updateAiCredentialsStatus('Unable to save API key.', true);
+                    showNonBlockingModal('Unable to save API key.');
+                    resetAiCredentialTest();
                 });
         });
     }
