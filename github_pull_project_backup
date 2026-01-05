@@ -14,7 +14,7 @@ fi
 # ------------------------------------------------------------------
 BASE_DIR="/opt/omero-test"
 LOCAL_DIR="omeroweb_omp_plugin"
-REPO_URL="git@github.com:Stratos007/omero-zmb-omp-plugin.git"
+REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 
 # ------------------------------------------------------------------
@@ -35,3 +35,4 @@ echo "Starting containers..."
 docker compose up -d
 
 echo "Done."
+
