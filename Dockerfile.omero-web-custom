@@ -5,23 +5,31 @@
 
 FROM openmicroscopy/omero-web-standalone:5
 
+ARG OMERO_WEB_ROOT=/opt/omero/web
+ARG OMERO_WEB_VENV=venv-3.12
+ARG OMERO_PYTHON_VERSION=3.12
+
+ENV OMERO_WEB_ROOT=${OMERO_WEB_ROOT} \
+    OMERO_WEB_VENV=${OMERO_WEB_VENV} \
+    OMERO_PYTHON_VERSION=${OMERO_PYTHON_VERSION}
+
 # Run as root to avoid permission issues with deletion
 USER root
 
 # Remove old copies of the plugin inside the container (if any)
-RUN rm -rf /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+RUN rm -rf ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
 
 # Copy the whole plugin into the container site-packages
-COPY omeroweb_omp_plugin /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+COPY omeroweb_omp_plugin ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
-RUN /opt/omero/web/venv-3.12/bin/pip install --no-cache-dir \
+RUN ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/bin/pip install --no-cache-dir \
     psycopg2-binary \
     redis>=5.0.0 \
     django-redis>=5.4.0
 
 # Fix permissions: should be owned by user omero-web
-RUN chown -R omero-web:omero-web /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb_omp_plugin
+RUN chown -R omero-web:omero-web ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
 
 USER omero-web
