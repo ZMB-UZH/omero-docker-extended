@@ -155,10 +155,10 @@ def start_job(request, conn=None, url=None, **kwargs):
         delete_mode = data.get("delete_mode")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
 
-        if separator_mode not in ("chars", "regex"):
+        if separator_mode not in ("chars", "regex", "ai_regex"):
             separator_mode = "chars"
 
-        if separator_mode == "regex":
+        if separator_mode in ("regex", "ai_regex"):
             try:
                 re.compile(raw_seps)
             except re.error as e:
@@ -411,7 +411,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             })
 
         seps_escaped = "".join(re.escape(c) for c in raw_seps)
-        if separator_mode == "regex":
+        if separator_mode in ("regex", "ai_regex"):
             sep_pattern = raw_seps
         else:
             seps_escaped = "".join(re.escape(c) for c in raw_seps)
