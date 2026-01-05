@@ -1518,7 +1518,11 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
     }
 
     const pwd = window.prompt(passwordPrompt);
-    if (!pwd) return;
+    if (pwd === null) return;
+    if (!pwd.trim()) {
+        showNonBlockingModal("Password cannot be empty.");
+        return;
+    }
 
     if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
 
