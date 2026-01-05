@@ -5,6 +5,7 @@ from .views.delete_all_view import delete_all_keyvaluepairs
 from .views.delete_plugin_view import delete_plugin_keyvaluepairs
 from .views.variable_set_view import list_sets, save_set, load_set, delete_set
 from .views.help_view import help_page
+from .views.ai_credentials_view import list_credentials, save_credentials
 
 urlpatterns = [
     path("", index, name="omeroweb_omp_plugin_index"),
@@ -19,5 +20,7 @@ urlpatterns = [
     path("varsets/save/", save_set, name="omeroweb_omp_plugin_save_set"),
     path("varsets/load/", load_set, name="omeroweb_omp_plugin_load_set"),
     path("varsets/delete/", delete_set, name="omeroweb_omp_plugin_delete_set"),
+    path("ai-credentials/", list_credentials, name="omeroweb_omp_plugin_list_ai_credentials"),
+    path("ai-credentials/save/", save_credentials, name="omeroweb_omp_plugin_save_ai_credentials"),
     path("help/", help_page, name="omeroweb_omp_plugin_help"),
 ]
