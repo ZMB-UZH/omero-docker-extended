@@ -14,7 +14,7 @@ from omero.model import MapAnnotationI, NamedValue, ImageAnnotationLinkI
 from omero.rtypes import rstring
 
 from ..constants import CHUNK_SIZE, MAP_NS, HASH_KEY
-from ..job_cleanup import cleanup_old_jobs
+from ..services.job_cleanup import cleanup_old_jobs
 
 from ..services.core import (
     load_job,

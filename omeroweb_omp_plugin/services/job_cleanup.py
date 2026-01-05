@@ -6,7 +6,7 @@ This module handles automatic cleanup of old job files to prevent RAM accumulati
 import os
 import time
 import logging
-from .constants import JOBS_DIR, JOB_MAX_AGE_SECONDS, JOB_CLEANUP_INTERVAL
+from ..constants import JOBS_DIR, JOB_MAX_AGE_SECONDS, JOB_CLEANUP_INTERVAL
 
 logger = logging.getLogger(__name__)
 
