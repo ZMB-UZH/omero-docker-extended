@@ -5,31 +5,32 @@
 
 FROM openmicroscopy/omero-web-standalone:5
 
-ARG OMERO_WEB_ROOT=/opt/omero/web
-ARG OMERO_WEB_VENV=venv-3.12
-ARG OMERO_PYTHON_VERSION=3.12
-
-ENV OMERO_WEB_ROOT=${OMERO_WEB_ROOT} \
-    OMERO_WEB_VENV=${OMERO_WEB_VENV} \
-    OMERO_PYTHON_VERSION=${OMERO_PYTHON_VERSION}
-
 # Run as root to avoid permission issues with deletion
 USER root
 
 # Remove old copies of the plugin inside the container (if any)
-RUN rm -rf ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
+RUN set -eux; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin"
 
-# Copy the whole plugin into the container site-packages
-COPY omeroweb_omp_plugin ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
+# Copy the whole plugin into the container (temporary, then moved into site-packages)
+COPY omeroweb_omp_plugin /tmp/omeroweb_omp_plugin
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
-RUN ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/bin/pip install --no-cache-dir \
-    psycopg2-binary \
-    redis>=5.0.0 \
-    django-redis>=5.4.0
-
-# Fix permissions: should be owned by user omero-web
-RUN chown -R omero-web:omero-web ${OMERO_WEB_ROOT}/${OMERO_WEB_VENV}/lib/python${OMERO_PYTHON_VERSION}/site-packages/omeroweb_omp_plugin
+# Fix permissions in the end (plugin should be owned by omero-web)
+RUN set -eux; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    cp -a /tmp/omeroweb_omp_plugin "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
+    "${VENV_DIR}/bin/pip" install --no-cache-dir \
+        psycopg2-binary \
+        redis>=5.0.0 \
+        django-redis>=5.4.0; \
+    chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
+    rm -rf /tmp/omeroweb_omp_plugin
 
 USER omero-web
