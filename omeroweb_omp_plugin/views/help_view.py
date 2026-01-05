@@ -9,7 +9,6 @@ def help_page(request, **kwargs):
     help_path = os.path.join(
         base_dir,
         "static",
-        "omeroweb_omp_plugin",
         "help.pdf",
     )
 
