@@ -933,7 +933,7 @@
                     }
                     aiCredentialsLastTest = { provider, key, passed: true };
                     if (aiCredentialsSave) {
-                        aiCredentialsSave.disabled = false;
+                        aiCredentialsSave.disabled = !key;
                     }
                     updateAiCredentialsStatus(data.message || 'Connection test passed.');
                 })
