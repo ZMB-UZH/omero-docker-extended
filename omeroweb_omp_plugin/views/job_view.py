@@ -89,14 +89,14 @@ def _validate_user_password(conn, password):
             host,
             port,
         )
-        return False, "Unable to validate credentials. Please contact support."
+        return False, "Unable to validate credentials. Please try again later or contact the administrator."
 
     client = omero.client(host=host, port=port)
     try:
         client.createSession(username, password)
     except Exception as exc:
         logger.warning("Password validation failed for user %s: %s", username, exc)
-        return False, "Invalid password."
+        return False, "Wrong password."
     finally:
         try:
             client.closeSession()
