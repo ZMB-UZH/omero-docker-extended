@@ -456,12 +456,19 @@
     }
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu) {
         pointer-events: none;
+        background: transparent !important;
+        color: #1f2937 !important;
+        box-shadow: none;
     }
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):hover,
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus,
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus-visible,
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus-within {
-        background: transparent;
-        color: #1f2937;
+        background: transparent !important;
+        color: #1f2937 !important;
+    }
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu) * {
+        pointer-events: none;
     }
     .settings-menu-item--submenu:hover,
     .settings-menu-item--submenu:focus,
@@ -666,6 +673,13 @@
                 item.dataset.prevTabindex = item.getAttribute('tabindex') || '';
                 item.setAttribute('tabindex', '-1');
                 item.setAttribute('aria-disabled', 'true');
+                if (item instanceof HTMLButtonElement) {
+                    item.dataset.prevDisabled = item.disabled ? 'true' : 'false';
+                    item.disabled = true;
+                }
+                if (typeof item.blur === 'function') {
+                    item.blur();
+                }
             } else {
                 if (Object.prototype.hasOwnProperty.call(item.dataset, 'prevTabindex')) {
                     const previous = item.dataset.prevTabindex;
@@ -679,6 +693,15 @@
                     item.removeAttribute('tabindex');
                 }
                 item.removeAttribute('aria-disabled');
+                if (item instanceof HTMLButtonElement) {
+                    if (Object.prototype.hasOwnProperty.call(item.dataset, 'prevDisabled')) {
+                        const wasDisabled = item.dataset.prevDisabled === 'true';
+                        item.disabled = wasDisabled;
+                        delete item.dataset.prevDisabled;
+                    } else {
+                        item.disabled = false;
+                    }
+                }
             }
         });
     }
