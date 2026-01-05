@@ -39,8 +39,17 @@ _PROVIDER_TESTS = {
         "headers": lambda key: {"Authorization": f"Bearer {key}"},
     },
     "perplexity": {
-        "url": "https://api.perplexity.ai/models",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "url": "https://api.perplexity.ai/chat/completions",
+        "method": "POST",
+        "payload": {
+            "model": "llama-3.1-sonar-small-128k-online",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        },
+        "headers": lambda key: {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
     },
     "groq": {
         "url": "https://api.groq.com/openai/v1/models",
@@ -97,7 +106,12 @@ def _perform_connection_test(provider, api_key):
 
     url = config["url"](api_key) if callable(config["url"]) else config["url"]
     headers = config["headers"](api_key)
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    method = config.get("method", "GET")
+    payload = config.get("payload")
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
             status = response.getcode()
