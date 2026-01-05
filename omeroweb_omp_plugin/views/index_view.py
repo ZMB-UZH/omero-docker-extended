@@ -16,6 +16,8 @@ from ..services.core import (
     collect_dataset_summaries,
     parse_filename,
 )
+from ..services.ai_assist import AiAssistError, generate_ai_regex
+from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..constants import DEFAULT_VARIABLE_NAMES, MAX_PARSED_VARIABLES
 logger = logging.getLogger(__name__)
@@ -92,6 +94,20 @@ def _suggest_separator_regex(filenames):
     return _regex_for_separators(candidates[:5], label_candidates[:6])
 
 
+def _current_username(request, conn):
+    try:
+        user = conn.getUser()
+        if user:
+            return user.getName()
+    except Exception:
+        pass
+
+    try:
+        return request.user.username
+    except Exception:
+        return None
+
+
 @csrf_exempt
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
@@ -127,6 +143,7 @@ def index(request, conn=None, url=None, **kwargs):
         if request.method == "POST" and request.POST.get("action") == "ai_regex":
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
+            provider = (request.POST.get("provider") or "local").strip().lower()
 
             if not project_id:
                 return JsonResponse({"error": "Select a project first."}, status=400)
@@ -167,7 +184,30 @@ def index(request, conn=None, url=None, **kwargs):
             if not filenames:
                 return JsonResponse({"error": "No filenames available in the selected datasets."}, status=400)
 
-            regex = _suggest_separator_regex(filenames)
+            if provider == "local":
+                regex = _suggest_separator_regex(filenames)
+                return JsonResponse({"regex": regex})
+
+            username = _current_username(request, conn)
+            if not username:
+                return JsonResponse({"error": "Unable to determine username."}, status=400)
+
+            try:
+                api_key = (get_ai_credential(username, provider) or "").strip()
+            except AiCredentialStoreError as e:
+                return JsonResponse({"error": str(e)}, status=500)
+
+            if not api_key:
+                return JsonResponse({"error": "Please add an API key for this provider in Settings."}, status=400)
+
+            try:
+                regex = generate_ai_regex(provider, api_key, filenames)
+            except AiAssistError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+            except Exception as e:
+                logger.exception("AI regex provider failure: %s", e)
+                return JsonResponse({"error": "Unable to process filenames."}, status=500)
+
             return JsonResponse({"regex": regex})
 
         # ----------------------------------------------------
