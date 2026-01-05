@@ -42,17 +42,21 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
         username = conn.getUser().getName()
 
+        # 1) LOGOUT first to clear any cached sessions
+        subprocess.run(
+            [OMERO, "logout"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # 2) LOGIN to the SECURE server (fresh login, no cached session)
         login_cmd = [
-            OMERO,
-            "login",
-            "-s",
-            "omeroserver",
-            "-u",
-            username,
-            "-w",
-            password,
-            "-p",
-            "4064",
+            OMERO, "login",
+            "-s", "omeroserver",
+            "-u", username,
+            "-w", password,
+            "-p", "4064",
         ]
 
         login = subprocess.run(
