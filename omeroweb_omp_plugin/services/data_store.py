@@ -6,6 +6,7 @@ from contextlib import contextmanager
 logger = logging.getLogger(__name__)
 
 TABLE_NAME = "omp_variable_sets"
+TABLE_NAME_AI_CREDENTIALS = "omp_ai_credentials"
 ENV_USER = "OMP_DATA_USER"
 ENV_PASS = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
@@ -15,6 +16,10 @@ ENV_PORT = "OMP_DATA_PORT"
 
 class VariableStoreError(Exception):
     """Raised when variable set persistence fails."""
+
+
+class AiCredentialStoreError(Exception):
+    """Raised when AI credential persistence fails."""
 
 
 _psycopg2_mod = None
@@ -148,6 +153,30 @@ def _ensure_schema(conn):
     conn.commit()
 
 
+def _ensure_ai_schema(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {TABLE_NAME_AI_CREDENTIALS} (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(username, provider)
+            );
+            """
+        )
+        cur.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS {TABLE_NAME_AI_CREDENTIALS}_username_idx
+                ON {TABLE_NAME_AI_CREDENTIALS} (username);
+            """
+        )
+    conn.commit()
+
+
 def list_variable_sets(username):
     try:
         with _connect() as conn:
@@ -275,4 +304,49 @@ def delete_variable_set(username, set_name):
             e,
         )
         raise VariableStoreError("Unable to delete variable set.")
+
+
+def list_ai_credentials(username):
+    try:
+        with _connect() as conn:
+            _ensure_ai_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT provider
+                    FROM {TABLE_NAME_AI_CREDENTIALS}
+                    WHERE username = %s
+                    ORDER BY provider ASC
+                    """,
+                    (username,),
+                )
+                rows = cur.fetchall()
+                return [r[0] for r in rows if r and r[0] is not None]
+    except AiCredentialStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to list AI credentials for %s: %s", username, e)
+        raise AiCredentialStoreError("Unable to fetch saved AI credentials.")
+
+
+def save_ai_credentials(username, provider, api_key):
+    try:
+        with _connect() as conn:
+            _ensure_ai_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {TABLE_NAME_AI_CREDENTIALS} (username, provider, api_key, updated_at)
+                    VALUES (%s, %s, %s, NOW())
+                    ON CONFLICT (username, provider)
+                    DO UPDATE SET api_key = EXCLUDED.api_key, updated_at = NOW()
+                    """,
+                    (username, provider, api_key),
+                )
+            conn.commit()
+    except AiCredentialStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save AI credentials for %s/%s: %s", username, provider, e)
+        raise AiCredentialStoreError("Could not save AI credentials.")
       
