@@ -99,6 +99,7 @@
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
                         <input type='checkbox'
                                id='sep_mode_ai_regex'
+                               onclick="toggleAiRegexOption()">
                                onclick='setSeparatorMode("ai")'>
                         <span class="separator-option-text ai-option-text" id="ai_regex_text">AI-assisted Regex expression</span>
                         <button type="button"
@@ -464,6 +465,9 @@
     }
 
     function updateAiRegexOption() {
+        const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
+        const aiRegexButton = document.getElementById('ai_regex_btn');
+        const aiRegexText = document.getElementById('ai_regex_text');
         if (!aiRegexCheckbox) return;
         if (aiRegexCheckbox.checked) {
             if (aiRegexButton) aiRegexButton.style.display = 'inline-flex';
