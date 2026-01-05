@@ -53,20 +53,22 @@ services:
   redis: # shared cache across Omero web workers (required for rate limiting)
     image: "redis:7-alpine"
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # Disable persistence for RAM storage only
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
     networks:
       - omero
+    tmpfs:
+      - /data:size=256m
     volumes:
-      - redis-data:/data
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
-      retries: 3
+      retries: 10
 
   omeroweb:
     build:
@@ -113,6 +115,8 @@ services:
       - /opt/omero-test/uzh-logo-black.png:/opt/omero/web/OMERO.web/var/static/branding/uzh-logo-black.png:ro # modify according to the path of the logo file
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+    tmpfs:
+      - /tmp/omp_plugin_filename_metadata_jobs:size=128m,mode=1777
 
   database_plugin: # database exclusive to the plugin
     image: "postgres:18"
@@ -144,4 +148,3 @@ volumes:
   database:
   omero:
   database_plugin:
-  redis-data:
