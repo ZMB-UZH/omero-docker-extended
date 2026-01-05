@@ -329,6 +329,28 @@ def list_ai_credentials(username):
         raise AiCredentialStoreError("Unable to fetch saved AI credentials.")
 
 
+def get_ai_credential(username, provider):
+    try:
+        with _connect() as conn:
+            _ensure_ai_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT api_key
+                    FROM {TABLE_NAME_AI_CREDENTIALS}
+                    WHERE username = %s AND provider = %s
+                    """,
+                    (username, provider),
+                )
+                row = cur.fetchone()
+                return row[0] if row and row[0] is not None else None
+    except AiCredentialStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to fetch AI credentials for %s/%s: %s", username, provider, e)
+        raise AiCredentialStoreError("Unable to fetch saved AI credentials.")
+
+
 def save_ai_credentials(username, provider, api_key):
     try:
         with _connect() as conn:

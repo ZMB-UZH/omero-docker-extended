@@ -912,8 +912,9 @@
                 showNonBlockingModal('Please choose a provider.');
                 return;
             }
-            if (!key) {
-                showNonBlockingModal('API key cannot be empty or only spaces.');
+            const hasSavedKey = aiCredentialProviders.has(provider);
+            if (!key && !hasSavedKey) {
+                showNonBlockingModal('API key cannot be empty.');
                 return;
             }
             updateAiCredentialsStatus('Testing connection...');
