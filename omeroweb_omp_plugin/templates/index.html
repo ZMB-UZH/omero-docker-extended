@@ -152,7 +152,7 @@
     <!-- NON-BLOCKING MODAL -->
 <div id="nb-modal-overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
-            z-index:9999; align-items:center; justify-content:center;">
+            z-index:11000; align-items:center; justify-content:center;">
     <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
                 box-shadow:0 10px 30px rgba(0,0,0,0.25);
                 font-size:13px; min-width:300px; max-width:500px;">
@@ -512,8 +512,18 @@
     }
 
     function openAiModal() {
-        if (!selectedDatasetsInput?.value) {
+        const projectId = projectSelect?.value;
+        if (!projectId) {
             showNonBlockingModal("Please select a project.");
+            return;
+        }
+        if (!selectedDatasetsInput?.value) {
+            showNonBlockingModal("Please select one or more datasets.");
+            return;
+        }
+        const selectedImageCount = getSelectedDatasetImageCount();
+        if (selectedImageCount === 0) {
+            showNonBlockingModal("No data to process is available in the selected datasets.");
             return;
         }
         updateAiModalStatus('');
@@ -1004,8 +1014,17 @@
             }
             const projectId = projectSelect?.value;
             const datasetIds = getSelectedDatasetIds();
-            if (!projectId || datasetIds.length === 0) {
-                updateAiModalStatus('Select a project and datasets first.', true);
+            if (!projectId) {
+                updateAiModalStatus('Please select a project.', true);
+                return;
+            }
+            if (datasetIds.length === 0) {
+                updateAiModalStatus('Please select one or more datasets.', true);
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                updateAiModalStatus('No data to process is available in the selected datasets.', true);
                 return;
             }
             updateAiModalStatus('Processing filenames...');
