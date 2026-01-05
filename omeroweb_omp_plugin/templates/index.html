@@ -248,7 +248,7 @@
             <button type="button" id="ai_credentials_close" class="text-link-btn">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
-            Save API keys for each provider. Keys are stored per user.
+            Save API keys for each external provider. Keys are stored per user.
         </div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:6px;">Provider</label>
@@ -454,6 +454,12 @@
         background: #e7f1ff;
         color: #1d4ed8;
     }
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):hover,
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus,
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus-within {
+        background: transparent;
+        color: #1f2937;
+    }
     .settings-menu-item--submenu:hover,
     .settings-menu-item--submenu:focus,
     .settings-menu-item--submenu:focus-within,
@@ -615,6 +621,7 @@
     const deleteAllUserDataUrl = new URL('user-data/delete-all/', window.location.href);
     let aiCredentialProviders = new Set();
     let aiCredentialsLastTest = { provider: null, key: null, passed: false };
+    let isUserDataMenuLocked = false;
 
     function isLocalProvider(provider) {
         return (provider || '').toLowerCase() === 'local';
@@ -641,15 +648,29 @@
 
     function closeUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
+        isUserDataMenuLocked = false;
+        if (settingsMenu) {
+            settingsMenu.classList.remove('menu-locked');
+        }
         deleteUserDataMenu.classList.remove('menu-open');
         deleteUserDataMenu.setAttribute('aria-expanded', 'false');
     }
 
     function toggleUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
-        const willOpen = !deleteUserDataMenu.classList.contains('menu-open');
-        deleteUserDataMenu.classList.toggle('menu-open', willOpen);
-        deleteUserDataMenu.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        const willLock = !isUserDataMenuLocked;
+        isUserDataMenuLocked = willLock;
+        if (settingsMenu) {
+            settingsMenu.classList.toggle('menu-locked', willLock);
+        }
+        deleteUserDataMenu.classList.toggle('menu-open', willLock);
+        deleteUserDataMenu.setAttribute('aria-expanded', willLock ? 'true' : 'false');
+    }
+
+    function updateAiProcessAvailability() {
+        if (!aiProcessBtn || !aiProviderSelect) return;
+        const isLocal = isLocalProvider(aiProviderSelect.value);
+        aiProcessBtn.disabled = !isLocal;
     }
 
     function confirmUserDataDelete(url, successMessage) {
@@ -703,6 +724,7 @@
         if (aiTransferBtn) {
             aiTransferBtn.disabled = true;
         }
+        updateAiProcessAvailability();
         if (aiModalOverlay) {
             aiModalOverlay.style.display = 'flex';
         }
@@ -746,10 +768,8 @@
                 if (aiModalOverlay?.style.display === 'flex' && aiProviderSelect) {
                     if (isLocalProvider(aiProviderSelect.value)) {
                         updateAiModalStatus('Local provider selected. Ready to process.');
-                    } else if (aiCredentialProviders.has(aiProviderSelect.value)) {
-                        updateAiModalStatus('API key on file. Ready to process.');
                     } else {
-                        updateAiModalStatus('Add an API key in Settings to continue.', true);
+                        updateAiModalStatus('Processing is currently available only for the local provider.', true);
                     }
                 }
             })
@@ -1199,12 +1219,11 @@
 
     if (aiProviderSelect) {
         aiProviderSelect.addEventListener('change', () => {
+            updateAiProcessAvailability();
             if (isLocalProvider(aiProviderSelect.value)) {
                 updateAiModalStatus('Local provider selected. Ready to process.');
-            } else if (aiCredentialProviders.has(aiProviderSelect.value)) {
-                updateAiModalStatus('API key on file. Ready to process.');
             } else {
-                updateAiModalStatus('Add an API key in Settings to continue.', true);
+                updateAiModalStatus('Processing is currently available only for the local provider.', true);
             }
         });
     }
@@ -1214,6 +1233,10 @@
             const provider = aiProviderSelect?.value;
             if (!provider) {
                 updateAiModalStatus('Please choose a provider.', true);
+                return;
+            }
+            if (!isLocalProvider(provider)) {
+                updateAiModalStatus('Processing is currently available only for the local provider.', true);
                 return;
             }
             if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
