@@ -64,7 +64,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": "Select a project first.",
@@ -74,7 +74,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not raw_seps or not raw_seps.strip():
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": "The input field for filename parsing cannot be empty.",
@@ -83,7 +83,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not selected_dataset_ids_raw.strip():
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": "Please select one or more datasets.",
@@ -126,7 +126,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not selected_dataset_ids:
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": "Please select one or more datasets.",
@@ -138,7 +138,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not allowed:
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": build_rate_limit_message(remaining),
@@ -156,7 +156,7 @@ def index(request, conn=None, url=None, **kwargs):
             if total_images == 0:
                 return render(
                     request,
-                    "omeroweb_omp_plugin/index.html",
+                    "index.html",
                     {
                         "projects": projects,
                         "error_message": "No data to process is available in the selected dataset(s).",
@@ -227,7 +227,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             return render(
                 request,
-                "omeroweb_omp_plugin/preview.html",
+                "preview.html",
                 context,
             )
 
@@ -236,7 +236,7 @@ def index(request, conn=None, url=None, **kwargs):
         # ----------------------------------------------------
         return render(
             request,
-            "omeroweb_omp_plugin/index.html",
+            "index.html",
             {"projects": projects},
         )
 
