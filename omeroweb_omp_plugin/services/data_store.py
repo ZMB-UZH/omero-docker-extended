@@ -22,6 +22,10 @@ class AiCredentialStoreError(Exception):
     """Raised when AI credential persistence fails."""
 
 
+class UserDataStoreError(Exception):
+    """Raised when user data deletion fails."""
+
+
 _psycopg2_mod = None
 _psycopg2_extras = None
 
@@ -371,4 +375,79 @@ def save_ai_credentials(username, provider, api_key):
     except Exception as e:
         logger.exception("Failed to save AI credentials for %s/%s: %s", username, provider, e)
         raise AiCredentialStoreError("Could not save AI credentials.")
+
+
+def delete_all_variable_sets(username):
+    try:
+        with _connect() as conn:
+            _ensure_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                deleted = cur.rowcount
+            conn.commit()
+            return deleted
+    except VariableStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete variable sets for %s: %s", username, e)
+        raise VariableStoreError("Unable to delete variable sets.")
+
+
+def delete_all_ai_credentials(username):
+    try:
+        with _connect() as conn:
+            _ensure_ai_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME_AI_CREDENTIALS}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                deleted = cur.rowcount
+            conn.commit()
+            return deleted
+    except AiCredentialStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete AI credentials for %s: %s", username, e)
+        raise AiCredentialStoreError("Unable to delete AI credentials.")
+
+
+def delete_all_user_data(username):
+    try:
+        with _connect() as conn:
+            _ensure_schema(conn)
+            _ensure_ai_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                variable_sets = cur.rowcount
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME_AI_CREDENTIALS}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                credentials = cur.rowcount
+            conn.commit()
+            return {"variable_sets": variable_sets, "ai_credentials": credentials}
+    except (VariableStoreError, AiCredentialStoreError):
+        raise UserDataStoreError("Unable to delete user data.")
+    except Exception as e:
+        logger.exception("Failed to delete user data for %s: %s", username, e)
+        raise UserDataStoreError("Unable to delete user data.")
       
