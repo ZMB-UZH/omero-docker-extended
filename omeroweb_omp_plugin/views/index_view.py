@@ -217,7 +217,7 @@ def index(request, conn=None, url=None, **kwargs):
             except Exception:
                 project_label = f"ID {project_id}"
 
-            if separator_mode == "regex":
+            if separator_mode in ("regex", "ai_regex"):
                 sep_pattern = raw_seps
                 try:
                     re.compile(sep_pattern)
