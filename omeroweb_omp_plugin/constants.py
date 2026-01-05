@@ -1,4 +1,8 @@
 import os
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Storage directory for job JSON files
 # Create the directory. No error if it already exists. Root access to the host machine assumed.
@@ -49,3 +53,6 @@ MAJOR_ACTION_LIMIT = 6
 MAJOR_ACTION_WINDOW_SECONDS = 60
 MAJOR_ACTION_BLOCK_SECONDS = 60
 
+# Job cleanup parameters (prevent RAM hogging)
+JOB_MAX_AGE_SECONDS = 7200  # Delete jobs older than 2 hours - increase if problem with ultralong jobs appear
+JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
