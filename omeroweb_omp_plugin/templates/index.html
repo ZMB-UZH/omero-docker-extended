@@ -186,7 +186,8 @@
              style="margin-bottom:16px;">
         </div>
         <div style="text-align:right;">
-            <button onclick="hideNonBlockingModal()"
+            <button id="nb-modal-ok"
+                    onclick="hideNonBlockingModal()"
                     style="padding:6px 14px; font-size:12px;">
                 OK
             </button>
@@ -592,8 +593,14 @@
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
         const msg = document.getElementById("nb-modal-message");
+        const okBtn = document.getElementById("nb-modal-ok");
         if (msg) msg.innerText = message;
         if (overlay) overlay.style.display = "flex";
+        if (okBtn) {
+            window.requestAnimationFrame(() => {
+                okBtn.focus();
+            });
+        }
     }
 
     function hideNonBlockingModal() {
@@ -708,6 +715,9 @@
 
     function closeUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
+        if (deleteUserDataMenu.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
         isUserDataMenuLocked = false;
         setUserDataMenuLockState(false);
         deleteUserDataMenu.classList.remove('menu-open');
@@ -1364,6 +1374,14 @@
     });
 
     document.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            const overlay = document.getElementById("nb-modal-overlay");
+            if (overlay?.style.display === 'flex') {
+                event.preventDefault();
+                hideNonBlockingModal();
+                return;
+            }
+        }
         if (event.key !== 'Escape') return;
         if (projectSelectDropdown?.style.display === 'block') {
             closeProjectDropdown(true);
