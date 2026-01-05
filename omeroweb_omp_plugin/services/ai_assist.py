@@ -63,6 +63,30 @@ def _clean_regex(text):
     return lines[0].strip().strip("'\"")
 
 
+def _extract_error_details(error):
+    if not error:
+        return None
+    try:
+        raw = error.read()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception:
+        return raw.decode("utf-8", errors="ignore").strip() or None
+    if isinstance(payload, dict):
+        info = payload.get("error") or payload.get("message")
+        if isinstance(info, dict):
+            message = info.get("message")
+            if message:
+                return message
+        if isinstance(info, str):
+            return info
+    return None
+
+
 def _post_json(url, headers, payload, timeout=15):
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -70,8 +94,20 @@ def _post_json(url, headers, payload, timeout=15):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        logger.warning("AI provider HTTP error %s from %s", exc.code, url)
-        raise AiAssistError(f"Provider returned status {exc.code}.")
+        detail = _extract_error_details(exc)
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        logger.warning(
+            "AI provider HTTP error %s from %s (detail=%s)",
+            exc.code,
+            url,
+            detail or "n/a",
+        )
+        message = f"Provider returned status {exc.code}."
+        if detail:
+            message = f"{message} {detail}"
+        if retry_after:
+            message = f"{message} Retry after {retry_after} seconds."
+        raise AiAssistError(message)
     except urllib.error.URLError as exc:
         logger.warning("AI provider connection error for %s: %s", url, exc)
         raise AiAssistError("Unable to reach the AI provider.")
