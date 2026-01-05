@@ -42,7 +42,15 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         # Omero web username from current web session
         username = conn.getUser().getName()
 
-        # 1) LOGIN to the SECURE server
+        # 1) LOGOUT first to clear any cached sessions
+        subprocess.run(
+            [OMERO, "logout"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        # 2) LOGIN to the SECURE server (fresh login, no cached session)
         login_cmd = [
             OMERO, "login",
             "-s", "omeroserver",
