@@ -32,32 +32,64 @@ def _extract_base_name(filename):
     return filename.rsplit(".", 1)[0]
 
 
-def _regex_for_separators(separators):
+def _regex_for_separators(separators, label_tokens=None):
     tokens = []
+    has_whitespace = False
     for char in separators:
         if char.isspace():
-            if r"\s" not in tokens:
-                tokens.append(r"\s")
+            has_whitespace = True
+        elif char == "-":
+            tokens.append(r"-(?![A-Za-z]+\d)")
         else:
             tokens.append(re.escape(char))
+    if has_whitespace:
+        tokens.append(r"\s")
     if not tokens:
         return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
-    return "(?:" + "|".join(tokens) + ")+"
+    sep_pattern = "(?:" + "|".join(tokens) + ")+"
+    if not label_tokens:
+        return sep_pattern
+    label_pattern = "(?:" + "|".join(re.escape(token) for token in label_tokens) + ")"
+    return (
+        "(?:"
+        + sep_pattern
+        + label_pattern
+        + sep_pattern
+        + "|"
+        + sep_pattern
+        + "|^"
+        + label_pattern
+        + sep_pattern
+        + "|"
+        + sep_pattern
+        + label_pattern
+        + "$)"
+    )
 
 
 def _suggest_separator_regex(filenames):
     counts = Counter()
+    token_counts = Counter()
     for name in filenames:
         base = _extract_base_name(name)
         for char in base:
             if not char.isalnum():
                 counts[char] += 1
+        for token in re.findall(r"[A-Za-z0-9]+", base):
+            if token.isalpha():
+                token_counts[token] += 1
     if not counts:
         return _regex_for_separators([])
     top = counts.most_common()
     max_count = top[0][1]
     candidates = [char for char, count in top if count >= max_count * 0.4]
-    return _regex_for_separators(candidates[:5])
+    label_min_count = max(2, int(len(filenames) * 0.4))
+    label_candidates = [
+        token
+        for token, count in token_counts.items()
+        if count >= label_min_count and 1 < len(token) <= 4
+    ]
+    return _regex_for_separators(candidates[:5], label_candidates[:6])
 
 
 @csrf_exempt
