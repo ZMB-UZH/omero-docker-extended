@@ -35,7 +35,7 @@
                      tabindex="0"
                      aria-haspopup="true"
                      aria-expanded="false">
-                    <span>Delete plugin user database</span>
+                    <span>Delete plugin user data</span>
                     <span class="submenu-arrow" aria-hidden="true">→</span>
                     <div class="settings-submenu" role="menu">
                         <button type="button"
@@ -394,6 +394,13 @@
     .submenu-arrow {
         font-size: 12px;
         color: #1f2937;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+    .settings-menu-item--submenu:hover .submenu-arrow,
+    .settings-menu-item--submenu:focus-within .submenu-arrow,
+    .settings-menu-item--submenu.menu-open .submenu-arrow {
+        opacity: 1;
     }
     .settings-submenu {
         position: absolute;
@@ -433,6 +440,14 @@
     .settings-menu-item--submenu:focus-within .settings-submenu,
     .settings-menu-item--submenu.menu-open .settings-submenu {
         display: block;
+    }
+    .settings-menu-item--submenu::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -6px;
+        width: 6px;
+        height: 100%;
     }
     .settings-menu-item:hover {
         background: #e7f1ff;
