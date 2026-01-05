@@ -605,6 +605,14 @@
         }
     }
 
+    if (separatorInput) {
+        separatorInput.addEventListener('input', () => {
+            if (aiRegexCheckbox && aiRegexCheckbox.checked) {
+                setSeparatorMode('regex');
+            }
+        });
+    }
+
     function showSettingsMenu(show) {
         if (!settingsMenu) return;
         settingsMenu.style.display = show ? 'block' : 'none';
@@ -1297,7 +1305,6 @@
                 return;
             }
             separatorInput.value = value;
-            setSeparatorMode('regex');
             closeAiModal();
         });
     }
