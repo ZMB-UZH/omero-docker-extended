@@ -4,7 +4,6 @@ from omeroweb.decorators import login_required
 import subprocess
 import logging
 import json
-
 from ..services.core import (
     collect_images_in_project,
     find_annotation_link_ids,
