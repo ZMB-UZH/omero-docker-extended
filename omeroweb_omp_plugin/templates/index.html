@@ -210,6 +210,7 @@
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:6px;">AI provider</label>
             <select id="ai_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                <option value="local">Local</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="google">Google Gemini</option>
@@ -611,6 +612,10 @@
     let aiCredentialProviders = new Set();
     let aiCredentialsLastTest = { provider: null, key: null, passed: false };
 
+    function isLocalProvider(provider) {
+        return (provider || '').toLowerCase() === 'local';
+    }
+
     function updateAiModalStatus(message, isError = false) {
         if (!aiModalStatus) return;
         aiModalStatus.textContent = message || '';
@@ -735,7 +740,9 @@
                 aiCredentialProviders = new Set(providers);
                 updateCredentialProviderStatus();
                 if (aiModalOverlay?.style.display === 'flex' && aiProviderSelect) {
-                    if (aiCredentialProviders.has(aiProviderSelect.value)) {
+                    if (isLocalProvider(aiProviderSelect.value)) {
+                        updateAiModalStatus('Local provider selected. Ready to process.');
+                    } else if (aiCredentialProviders.has(aiProviderSelect.value)) {
                         updateAiModalStatus('API key on file. Ready to process.');
                     } else {
                         updateAiModalStatus('Add an API key in Settings to continue.', true);
@@ -1188,7 +1195,9 @@
 
     if (aiProviderSelect) {
         aiProviderSelect.addEventListener('change', () => {
-            if (aiCredentialProviders.has(aiProviderSelect.value)) {
+            if (isLocalProvider(aiProviderSelect.value)) {
+                updateAiModalStatus('Local provider selected. Ready to process.');
+            } else if (aiCredentialProviders.has(aiProviderSelect.value)) {
                 updateAiModalStatus('API key on file. Ready to process.');
             } else {
                 updateAiModalStatus('Add an API key in Settings to continue.', true);
@@ -1199,7 +1208,11 @@
     if (aiProcessBtn) {
         aiProcessBtn.addEventListener('click', () => {
             const provider = aiProviderSelect?.value;
-            if (!provider || !aiCredentialProviders.has(provider)) {
+            if (!provider) {
+                updateAiModalStatus('Please choose a provider.', true);
+                return;
+            }
+            if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
                 updateAiModalStatus('Please add an API key for this provider in Settings.', true);
                 return;
             }
