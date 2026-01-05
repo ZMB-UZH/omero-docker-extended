@@ -7,6 +7,7 @@ from omeroweb.decorators import login_required
 import json
 import logging
 import re
+from collections import Counter
 from ..services.core import (
     get_id,
     get_text,
@@ -18,6 +19,45 @@ from ..services.core import (
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..constants import DEFAULT_VARIABLE_NAMES, MAX_PARSED_VARIABLES
 logger = logging.getLogger(__name__)
+
+
+def _extract_base_name(filename):
+    match = re.search(r"\[(.+?)\]", filename)
+    if match:
+        return match.group(1)
+    sanitized = filename.replace("\t", " ")
+    match = re.search(r".*\s+(.+?)\s*$", sanitized)
+    if match:
+        return match.group(1).rsplit(".", 1)[0]
+    return filename.rsplit(".", 1)[0]
+
+
+def _regex_for_separators(separators):
+    tokens = []
+    for char in separators:
+        if char.isspace():
+            if r"\s" not in tokens:
+                tokens.append(r"\s")
+        else:
+            tokens.append(re.escape(char))
+    if not tokens:
+        return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
+    return "(?:" + "|".join(tokens) + ")+"
+
+
+def _suggest_separator_regex(filenames):
+    counts = Counter()
+    for name in filenames:
+        base = _extract_base_name(name)
+        for char in base:
+            if not char.isalnum():
+                counts[char] += 1
+    if not counts:
+        return _regex_for_separators([])
+    top = counts.most_common()
+    max_count = top[0][1]
+    candidates = [char for char, count in top if count >= max_count * 0.4]
+    return _regex_for_separators(candidates[:5])
 
 
 @csrf_exempt
@@ -51,6 +91,52 @@ def index(request, conn=None, url=None, **kwargs):
             # NO RATE LIMIT - just listing datasets
             dataset_rows = collect_dataset_summaries(conn, project_id)
             return JsonResponse({"datasets": dataset_rows})
+
+        if request.method == "POST" and request.POST.get("action") == "ai_regex":
+            project_id = request.POST.get("project")
+            selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
+
+            if not project_id:
+                return JsonResponse({"error": "Select a project first."}, status=400)
+            if not selected_dataset_ids_raw.strip():
+                return JsonResponse({"error": "Please select one or more datasets."}, status=400)
+
+            selected_dataset_ids = []
+            for ds_id in selected_dataset_ids_raw.split(","):
+                ds_id = ds_id.strip()
+                if not ds_id:
+                    continue
+                try:
+                    selected_dataset_ids.append(int(ds_id))
+                except ValueError:
+                    continue
+
+            if not selected_dataset_ids:
+                return JsonResponse({"error": "Please select one or more datasets."}, status=400)
+
+            allowed, remaining = check_major_action_rate_limit(request, conn)
+            if not allowed:
+                return JsonResponse({"error": build_rate_limit_message(remaining)}, status=429)
+
+            ds_list = collect_images_by_selected_datasets(
+                conn,
+                project_id,
+                selected_dataset_ids,
+                limit=200,
+            )
+            filenames = []
+            for _, images in ds_list:
+                for img in images:
+                    try:
+                        filenames.append(get_text(img.getName()))
+                    except Exception:
+                        continue
+
+            if not filenames:
+                return JsonResponse({"error": "No filenames available in the selected datasets."}, status=400)
+
+            regex = _suggest_separator_regex(filenames)
+            return JsonResponse({"regex": regex})
 
         # ----------------------------------------------------
         # PREVIEW MODE - WITH RATE LIMIT (major action)
