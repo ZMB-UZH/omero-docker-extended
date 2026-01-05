@@ -29,6 +29,32 @@
                         class="settings-menu-item">
                     AI API credentials
                 </button>
+                <div class="settings-menu-item settings-menu-item--submenu"
+                     id="delete_user_data_menu"
+                     role="button"
+                     tabindex="0"
+                     aria-haspopup="true"
+                     aria-expanded="false">
+                    <span>Delete plugin user database</span>
+                    <span class="submenu-arrow" aria-hidden="true">→</span>
+                    <div class="settings-submenu" role="menu">
+                        <button type="button"
+                                id="delete_api_keys_btn"
+                                class="settings-submenu-item">
+                            API keys
+                        </button>
+                        <button type="button"
+                                id="delete_variable_sets_btn"
+                                class="settings-submenu-item">
+                            Variable sets
+                        </button>
+                        <button type="button"
+                                id="delete_all_user_data_btn"
+                                class="settings-submenu-item settings-submenu-item--danger">
+                            ALL USER DATA
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -358,6 +384,56 @@
         color: #1f2937;
         cursor: pointer;
     }
+    .settings-menu-item--submenu {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .submenu-arrow {
+        font-size: 12px;
+        color: #1f2937;
+    }
+    .settings-submenu {
+        position: absolute;
+        left: calc(100% + 6px);
+        top: 0;
+        min-width: 160px;
+        background: #ffffff;
+        border: 1px solid #007bff;
+        border-radius: 6px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        display: none;
+        z-index: 1300;
+    }
+    .settings-submenu-item {
+        width: 100%;
+        background: transparent;
+        border: none;
+        padding: 8px 12px;
+        text-align: left;
+        font: inherit;
+        font-weight: 600;
+        color: #1f2937;
+        cursor: pointer;
+    }
+    .settings-submenu-item:hover {
+        background: #e7f1ff;
+        color: #1d4ed8;
+    }
+    .settings-submenu-item--danger {
+        color: #b91c1c;
+    }
+    .settings-submenu-item--danger:hover {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+    .settings-menu-item--submenu:hover .settings-submenu,
+    .settings-menu-item--submenu:focus-within .settings-submenu,
+    .settings-menu-item--submenu.menu-open .settings-submenu {
+        display: block;
+    }
     .settings-menu-item:hover {
         background: #e7f1ff;
         color: #1d4ed8;
@@ -442,6 +518,10 @@
     const aiModalStatus = document.getElementById('ai_modal_status');
     const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
     const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
+    const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
+    const deleteApiKeysBtn = document.getElementById('delete_api_keys_btn');
+    const deleteVariableSetsBtn = document.getElementById('delete_variable_sets_btn');
+    const deleteAllUserDataBtn = document.getElementById('delete_all_user_data_btn');
     const aiCredentialsClose = document.getElementById('ai_credentials_close');
     const aiCredentialsProvider = document.getElementById('ai_credentials_provider');
     const aiCredentialsKey = document.getElementById('ai_credentials_key');
@@ -482,11 +562,17 @@
     function showSettingsMenu(show) {
         if (!settingsMenu) return;
         settingsMenu.style.display = show ? 'block' : 'none';
+        if (!show) {
+            closeUserDataSubmenu();
+        }
     }
 
     const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
     const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
     const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
+    const deleteApiKeysUrl = new URL('user-data/delete-api-keys/', window.location.href);
+    const deleteVariableSetsUrl = new URL('user-data/delete-variable-sets/', window.location.href);
+    const deleteAllUserDataUrl = new URL('user-data/delete-all/', window.location.href);
     let aiCredentialProviders = new Set();
     let aiCredentialsLastTest = { provider: null, key: null, passed: false };
 
@@ -507,6 +593,43 @@
         if (aiCredentialsSave) {
             aiCredentialsSave.disabled = true;
         }
+    }
+
+    function closeUserDataSubmenu() {
+        if (!deleteUserDataMenu) return;
+        deleteUserDataMenu.classList.remove('menu-open');
+        deleteUserDataMenu.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleUserDataSubmenu() {
+        if (!deleteUserDataMenu) return;
+        const willOpen = !deleteUserDataMenu.classList.contains('menu-open');
+        deleteUserDataMenu.classList.toggle('menu-open', willOpen);
+        deleteUserDataMenu.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    }
+
+    function confirmUserDataDelete(url, successMessage) {
+        if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
+            return;
+        }
+
+        fetch(url.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({})
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.error) {
+                showNonBlockingModal(data.error || 'Unable to delete data.');
+                return;
+            }
+            showNonBlockingModal(successMessage);
+        })
+        .catch(err => {
+            showNonBlockingModal("ERROR: " + err);
+        });
     }
 
     function getSelectedDatasetIds() {
@@ -879,6 +1002,36 @@
         aiCredentialsBtn.addEventListener('click', () => {
             showSettingsMenu(false);
             openCredentialsModal();
+        });
+    }
+
+    if (deleteUserDataMenu) {
+        deleteUserDataMenu.addEventListener('click', (event) => {
+            if (event.target.closest('.settings-submenu-item')) {
+                return;
+            }
+            toggleUserDataSubmenu();
+        });
+    }
+
+    if (deleteApiKeysBtn) {
+        deleteApiKeysBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteApiKeysUrl, 'API keys deleted from your user database.');
+        });
+    }
+
+    if (deleteVariableSetsBtn) {
+        deleteVariableSetsBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteVariableSetsUrl, 'Variable sets deleted from your user database.');
+        });
+    }
+
+    if (deleteAllUserDataBtn) {
+        deleteAllUserDataBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteAllUserDataUrl, 'All plugin user data deleted.');
         });
     }
 
