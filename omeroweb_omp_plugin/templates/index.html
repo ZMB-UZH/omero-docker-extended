@@ -454,6 +454,9 @@
         background: #e7f1ff;
         color: #1d4ed8;
     }
+    .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu) {
+        pointer-events: none;
+    }
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):hover,
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus,
     .settings-menu.menu-locked .settings-menu-item:not(#delete_user_data_menu):focus-within {
@@ -654,12 +657,36 @@
         }
     }
 
+    function setUserDataMenuLockState(locked) {
+        if (!settingsMenu) return;
+        settingsMenu.classList.toggle('menu-locked', locked);
+        const lockTargets = settingsMenu.querySelectorAll('.settings-menu-item:not(#delete_user_data_menu)');
+        lockTargets.forEach((item) => {
+            if (locked) {
+                item.dataset.prevTabindex = item.getAttribute('tabindex') || '';
+                item.setAttribute('tabindex', '-1');
+                item.setAttribute('aria-disabled', 'true');
+            } else {
+                if (Object.prototype.hasOwnProperty.call(item.dataset, 'prevTabindex')) {
+                    const previous = item.dataset.prevTabindex;
+                    if (previous) {
+                        item.setAttribute('tabindex', previous);
+                    } else {
+                        item.removeAttribute('tabindex');
+                    }
+                    delete item.dataset.prevTabindex;
+                } else {
+                    item.removeAttribute('tabindex');
+                }
+                item.removeAttribute('aria-disabled');
+            }
+        });
+    }
+
     function closeUserDataSubmenu() {
         if (!deleteUserDataMenu) return;
         isUserDataMenuLocked = false;
-        if (settingsMenu) {
-            settingsMenu.classList.remove('menu-locked');
-        }
+        setUserDataMenuLockState(false);
         deleteUserDataMenu.classList.remove('menu-open');
         deleteUserDataMenu.setAttribute('aria-expanded', 'false');
     }
@@ -668,9 +695,7 @@
         if (!deleteUserDataMenu) return;
         const willLock = !isUserDataMenuLocked;
         isUserDataMenuLocked = willLock;
-        if (settingsMenu) {
-            settingsMenu.classList.toggle('menu-locked', willLock);
-        }
+        setUserDataMenuLockState(willLock);
         deleteUserDataMenu.classList.toggle('menu-open', willLock);
         deleteUserDataMenu.setAttribute('aria-expanded', willLock ? 'true' : 'false');
     }
