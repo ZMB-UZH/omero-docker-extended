@@ -739,8 +739,24 @@
 
     function updateAiProcessAvailability() {
         if (!aiProcessBtn || !aiProviderSelect) return;
-        const isLocal = isLocalProvider(aiProviderSelect.value);
-        aiProcessBtn.disabled = !isLocal;
+        const provider = aiProviderSelect.value;
+        const isLocal = isLocalProvider(provider);
+        const hasKey = aiCredentialProviders.has(provider);
+        aiProcessBtn.disabled = !isLocal && !hasKey;
+    }
+
+    function updateAiProviderStatus() {
+        if (!aiProviderSelect) return;
+        const provider = aiProviderSelect.value;
+        if (isLocalProvider(provider)) {
+            updateAiModalStatus('Local provider selected. Ready to process.');
+            return;
+        }
+        if (aiCredentialProviders.has(provider)) {
+            updateAiModalStatus('API key on file. Ready to process.');
+            return;
+        }
+        updateAiModalStatus('Please add an API key for this provider in Settings.', true);
     }
 
     function confirmUserDataDelete(url, successMessage) {
@@ -836,11 +852,7 @@
                 aiCredentialProviders = new Set(providers);
                 updateCredentialProviderStatus();
                 if (aiModalOverlay?.style.display === 'flex' && aiProviderSelect) {
-                    if (isLocalProvider(aiProviderSelect.value)) {
-                        updateAiModalStatus('Local provider selected. Ready to process.');
-                    } else {
-                        updateAiModalStatus('Processing is currently available only for the local provider.', true);
-                    }
+                    updateAiProviderStatus();
                 }
             })
             .catch(() => {
@@ -1290,11 +1302,7 @@
     if (aiProviderSelect) {
         aiProviderSelect.addEventListener('change', () => {
             updateAiProcessAvailability();
-            if (isLocalProvider(aiProviderSelect.value)) {
-                updateAiModalStatus('Local provider selected. Ready to process.');
-            } else {
-                updateAiModalStatus('Processing is currently available only for the local provider.', true);
-            }
+            updateAiProviderStatus();
         });
     }
 
@@ -1303,10 +1311,6 @@
             const provider = aiProviderSelect?.value;
             if (!provider) {
                 updateAiModalStatus('Please choose a provider.', true);
-                return;
-            }
-            if (!isLocalProvider(provider)) {
-                updateAiModalStatus('Processing is currently available only for the local provider.', true);
                 return;
             }
             if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
