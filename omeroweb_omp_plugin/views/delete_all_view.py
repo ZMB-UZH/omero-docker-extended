@@ -6,13 +6,12 @@ import logging
 import json
 
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
+from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 
 logger = logging.getLogger(__name__)
 
-# Use the correct Python venv path for Omero CLI
-# ATTENTION!! Might change in future releases!
-OMERO = "/opt/omero/web/venv-3.12/bin/omero"
+OMERO = OMERO_CLI
 
 @csrf_exempt
 @login_required()
