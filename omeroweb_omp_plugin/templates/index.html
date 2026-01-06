@@ -168,21 +168,21 @@
                     <td class="col-check" style='padding:3px; width:20px; text-align:center;'>
                         <input type='checkbox' id='datasets_select_all' checked>
                     </td>
-                    <td class="col-dataset" style='padding:3px; width:500px;'>
+                    <td class="col-dataset sortable-header" data-sort-key="name" data-sort-type="text" style='padding:3px; width:500px;'>
                         Dataset
                         <span class="sort-indicator" aria-hidden="true">
                             <span class="sort-arrow sort-arrow--up"></span>
                             <span class="sort-arrow sort-arrow--down"></span>
                         </span>
                     </td>
-                    <td class="col-id" style='padding:3px; width:65px;'>
+                    <td class="col-id sortable-header" data-sort-key="id" data-sort-type="number" style='padding:3px; width:65px;'>
                         ID
                         <span class="sort-indicator" aria-hidden="true">
                             <span class="sort-arrow sort-arrow--up"></span>
                             <span class="sort-arrow sort-arrow--down"></span>
                         </span>
                     </td>
-                    <td class="col-images" style='padding:3px; width:65px;'>
+                    <td class="col-images sortable-header" data-sort-key="image_count" data-sort-type="number" style='padding:3px; width:65px;'>
                         Nr. img.
                         <span class="sort-indicator" aria-hidden="true">
                             <span class="sort-arrow sort-arrow--up"></span>
@@ -368,6 +368,7 @@
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
     .dataset-table-wrapper {min-width:1100px; max-width:1100px; margin:10px auto 0; width:100%; padding:0 12px;}
     .dataset-table td {word-break: break-word; white-space: normal;}
+    .sortable-header {cursor: pointer; user-select: none;}
     .sort-indicator {
         display: inline-flex;
         flex-direction: column;
@@ -380,6 +381,8 @@
         height: 0;
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
+        opacity: 0.55;
+        transition: opacity 0.15s ease, filter 0.15s ease;
     }
     .sort-arrow--up {
         border-bottom: 6px solid rgba(255, 255, 255, 0.9);
@@ -387,6 +390,12 @@
     }
     .sort-arrow--down {
         border-top: 6px solid rgba(255, 255, 255, 0.9);
+    }
+    .sortable-header.is-sorted .sort-arrow {opacity: 0.25;}
+    .sortable-header.is-sorted.sort-asc .sort-arrow--up,
+    .sortable-header.is-sorted.sort-desc .sort-arrow--down {
+        opacity: 1;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
     }
     .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
                            font-size:18px; font-weight:600; pointer-events:none;}
@@ -646,6 +655,7 @@
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
+    const datasetSortState = { key: null, direction: 'asc' };
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -889,13 +899,7 @@
         }
         if (Array.isArray(state.datasets) && state.datasets.length > 0) {
             lastDatasetRows = state.datasets;
-            renderDatasetRows(state.datasets);
-            const selected = new Set(state.selected_dataset_ids || []);
-            datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
-                .forEach((input) => {
-                    input.checked = selected.size === 0 ? true : selected.has(input.dataset.datasetId);
-                });
-            updateSelectedDatasets();
+            renderDatasetRows(state.datasets, { selectedIds: state.selected_dataset_ids || [] });
         } else if (state.dataset_selection_opened === '0') {
             resetDatasetSelection();
         }
@@ -1041,6 +1045,88 @@
 
     function getNumericSortValue(label) {
         return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
+    }
+
+    function setDatasetSortIndicator(key, direction) {
+        const headers = datasetTableContainer
+            ? datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]')
+            : [];
+        headers.forEach((header) => {
+            const isActive = header.dataset.sortKey === key;
+            header.classList.toggle('is-sorted', isActive);
+            header.classList.toggle('sort-asc', isActive && direction === 'asc');
+            header.classList.toggle('sort-desc', isActive && direction === 'desc');
+            if (isActive) {
+                header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+            } else {
+                header.removeAttribute('aria-sort');
+            }
+        });
+    }
+
+    function getDatasetSortValue(dataset, key) {
+        if (!dataset) return '';
+        if (key === 'id') return Number(dataset.id);
+        if (key === 'image_count') return Number(dataset.image_count);
+        return String(dataset.name || '').toLowerCase();
+    }
+
+    function compareDatasetValues(a, b, type) {
+        if (type === 'number') {
+            const numA = Number.isFinite(a) ? a : Number.NaN;
+            const numB = Number.isFinite(b) ? b : Number.NaN;
+            if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+            if (Number.isNaN(numA)) return 1;
+            if (Number.isNaN(numB)) return -1;
+            return numA - numB;
+        }
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    function sortDatasets(rows, key, direction) {
+        const header = datasetTableContainer?.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+        const type = header?.dataset.sortType || 'text';
+        const sorted = rows
+            .map((dataset, index) => ({
+                dataset,
+                index,
+                value: getDatasetSortValue(dataset, key)
+            }))
+            .sort((a, b) => {
+                const cmp = compareDatasetValues(a.value, b.value, type);
+                if (cmp !== 0) return direction === 'asc' ? cmp : -cmp;
+                return a.index - b.index;
+            })
+            .map((entry) => entry.dataset);
+        return sorted;
+    }
+
+    function isDatasetSorted(rows, key, direction) {
+        if (!rows || rows.length < 2) return false;
+        const header = datasetTableContainer?.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+        const type = header?.dataset.sortType || 'text';
+        for (let i = 1; i < rows.length; i += 1) {
+            const prevValue = getDatasetSortValue(rows[i - 1], key);
+            const currentValue = getDatasetSortValue(rows[i], key);
+            const cmp = compareDatasetValues(prevValue, currentValue, type);
+            if (cmp === 0) continue;
+            if (direction === 'asc' && cmp > 0) return false;
+            if (direction === 'desc' && cmp < 0) return false;
+        }
+        return true;
+    }
+
+    function detectDatasetSortState(rows) {
+        const keys = ['name', 'id', 'image_count'];
+        for (const key of keys) {
+            if (isDatasetSorted(rows, key, 'asc')) {
+                return { key, direction: 'asc' };
+            }
+            if (isDatasetSorted(rows, key, 'desc')) {
+                return { key, direction: 'desc' };
+            }
+        }
+        return { key: null, direction: 'asc' };
     }
 
     function sortProjectMatches(matches) {
@@ -1580,6 +1666,9 @@
         datasetSelectionOpenedInput.value = '0';
         selectedDatasetsInput.value = '';
         lastDatasetRows = [];
+        datasetSortState.key = null;
+        datasetSortState.direction = 'asc';
+        setDatasetSortIndicator(null, 'asc');
         if (datasetSelectAll) {
             datasetSelectAll.checked = false;
         }
@@ -1597,7 +1686,7 @@
         }
     }
 
-    function renderDatasetRows(datasets) {
+    function renderDatasetRows(datasets, options = {}) {
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
             const projectName = getSelectedProjectName();
@@ -1613,14 +1702,16 @@
             datasetTableContainer.style.display = 'block';
         }
         datasetTableMessage.style.display = 'none';
-        datasetSelectAll.checked = true;
+        const selectedIds = new Set(options.selectedIds || []);
+        const useDefaultSelection = selectedIds.size === 0;
         lastDatasetRows = Array.isArray(datasets) ? datasets : [];
 
         datasets.forEach((ds) => {
+            const isChecked = useDefaultSelection || selectedIds.has(String(ds.id));
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td class="col-check" style="padding:2px; text-align:center;">
-                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" checked>
+                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" ${isChecked ? 'checked' : ''}>
                 </td>
                 <td class="col-dataset" style="padding:2px;">${ds.name || ''}</td>
                 <td class="col-id" style="padding:2px;">${ds.id || ''}</td>
@@ -1634,6 +1725,39 @@
             .forEach((input) => input.addEventListener('change', updateSelectedDatasets));
 
         updateSelectedDatasets();
+
+        if (!datasetSortState.key) {
+            const detected = detectDatasetSortState(datasets);
+            datasetSortState.key = detected.key;
+            datasetSortState.direction = detected.direction;
+        }
+        setDatasetSortIndicator(datasetSortState.key, datasetSortState.direction);
+    }
+
+    function applyDatasetSort(key) {
+        if (!key || !Array.isArray(lastDatasetRows) || lastDatasetRows.length === 0) return;
+        const selectedIds = getSelectedDatasetIds();
+        const nextDirection = datasetSortState.key === key && datasetSortState.direction === 'asc' ? 'desc' : 'asc';
+        datasetSortState.key = key;
+        datasetSortState.direction = nextDirection;
+        const sorted = sortDatasets([...lastDatasetRows], key, nextDirection);
+        renderDatasetRows(sorted, { selectedIds });
+    }
+
+    function initDatasetSorting() {
+        if (!datasetTableContainer) return;
+        const headers = datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]');
+        headers.forEach((header) => {
+            header.setAttribute('role', 'button');
+            header.setAttribute('tabindex', '0');
+            header.addEventListener('click', () => applyDatasetSort(header.dataset.sortKey));
+            header.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    applyDatasetSort(header.dataset.sortKey);
+                }
+            });
+        });
     }
 
     if (datasetSelectAll) {
@@ -1704,5 +1828,6 @@
         });
     }
 
+    initDatasetSorting();
     restorePreviewState();
     </script>

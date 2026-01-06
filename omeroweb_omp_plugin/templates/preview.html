@@ -70,26 +70,27 @@
         </div>
     </div>
     <div style="max-height:1500px; overflow:auto;">
-        <table border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+        <table id="preview_table" border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+            <thead>
             <tr style='background:#007bff; color:white;'>
                 <td style='padding:3px; width:20px; text-align:center;'>
                     <input type='checkbox' id='images_select_all' checked>
                 </td>
-                <td style='padding:3px; width:500px;'>
+                <td class="sortable-header" data-sort-key="dataset" data-sort-type="text" style='padding:3px; width:500px;'>
                     Dataset
                     <span class="sort-indicator" aria-hidden="true">
                         <span class="sort-arrow sort-arrow--up"></span>
                         <span class="sort-arrow sort-arrow--down"></span>
                     </span>
                 </td>
-                <td style='padding:3px; width:50px;'>
+                <td class="sortable-header" data-sort-key="id" data-sort-type="number" style='padding:3px; width:50px;'>
                     ID
                     <span class="sort-indicator" aria-hidden="true">
                         <span class="sort-arrow sort-arrow--up"></span>
                         <span class="sort-arrow sort-arrow--down"></span>
                     </span>
                 </td>
-                <td style='padding:3px; width:500px;'>
+                <td class="sortable-header" data-sort-key="filename" data-sort-type="text" style='padding:3px; width:500px;'>
                     Filename
                     <span class="sort-indicator" aria-hidden="true">
                         <span class="sort-arrow sort-arrow--up"></span>
@@ -98,6 +99,8 @@
                 </td>
                 <td style='padding:3px;'>Parsed variables</td>
             </tr>
+            </thead>
+            <tbody id="preview_table_body">
             {% for row in preview_rows %}
             <tr>
                 <td style='padding:2px; text-align:center;'>
@@ -125,6 +128,7 @@
                 </td>
             </tr>
             {% endfor %}
+            </tbody>
         </table>
     </div>
 
@@ -447,6 +451,7 @@
 
     #var_name_inputs {margin-top: 6px;}
 
+    .sortable-header {cursor: pointer; user-select: none;}
     .sort-indicator {
         display: inline-flex;
         flex-direction: column;
@@ -459,6 +464,8 @@
         height: 0;
         border-left: 4px solid transparent;
         border-right: 4px solid transparent;
+        opacity: 0.55;
+        transition: opacity 0.15s ease, filter 0.15s ease;
     }
     .sort-arrow--up {
         border-bottom: 6px solid rgba(255, 255, 255, 0.9);
@@ -466,6 +473,12 @@
     }
     .sort-arrow--down {
         border-top: 6px solid rgba(255, 255, 255, 0.9);
+    }
+    .sortable-header.is-sorted .sort-arrow {opacity: 0.25;}
+    .sortable-header.is-sorted.sort-asc .sort-arrow--up,
+    .sortable-header.is-sorted.sort-desc .sort-arrow--down {
+        opacity: 1;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
     }
     
     /* Variable row - updated for drag handle */
@@ -648,12 +661,132 @@ const variableSetDropdown = document.getElementById('variable_set_dropdown');
 const variableSetWrapper = document.getElementById('variable_set_wrapper');
 const varNameInputs = document.getElementById('var_name_inputs');
 const addVarRowBtn = document.getElementById('add_var_row_btn');
+const previewTable = document.getElementById('preview_table');
+const previewTableBody = document.getElementById('preview_table_body');
 let availableVariableSets = [];
 let currentJobId = null;
 let totalImages = 0;
 let pollInterval = null;
 let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
+const previewSortState = { key: null, direction: 'asc' };
+
+function setPreviewSortIndicator(key, direction) {
+    if (!previewTable) return;
+    const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
+    headers.forEach((header) => {
+        const isActive = header.dataset.sortKey === key;
+        header.classList.toggle('is-sorted', isActive);
+        header.classList.toggle('sort-asc', isActive && direction === 'asc');
+        header.classList.toggle('sort-desc', isActive && direction === 'desc');
+        if (isActive) {
+            header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        } else {
+            header.removeAttribute('aria-sort');
+        }
+    });
+}
+
+function getPreviewRowValue(row, key) {
+    const cells = row?.cells;
+    if (!cells) return '';
+    if (key === 'dataset') return cells[1]?.textContent?.trim() || '';
+    if (key === 'id') return Number.parseInt(cells[2]?.textContent || '0', 10);
+    if (key === 'filename') return cells[3]?.textContent?.trim() || '';
+    return '';
+}
+
+function comparePreviewValues(a, b, type) {
+    if (type === 'number') {
+        const numA = Number.isFinite(a) ? a : Number.NaN;
+        const numB = Number.isFinite(b) ? b : Number.NaN;
+        if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+        if (Number.isNaN(numA)) return 1;
+        if (Number.isNaN(numB)) return -1;
+        return numA - numB;
+    }
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function sortPreviewRows(key, direction) {
+    if (!previewTableBody) return;
+    const header = previewTable.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+    const type = header?.dataset.sortType || 'text';
+    const rows = Array.from(previewTableBody.querySelectorAll('tr'));
+    const sorted = rows
+        .map((row, index) => ({
+            row,
+            index,
+            value: getPreviewRowValue(row, key)
+        }))
+        .sort((a, b) => {
+            const cmp = comparePreviewValues(a.value, b.value, type);
+            if (cmp !== 0) return direction === 'asc' ? cmp : -cmp;
+            return a.index - b.index;
+        })
+        .map((entry) => entry.row);
+    sorted.forEach((row) => previewTableBody.appendChild(row));
+}
+
+function isPreviewSorted(rows, key, direction) {
+    if (!rows || rows.length < 2) return false;
+    const header = previewTable.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+    const type = header?.dataset.sortType || 'text';
+    for (let i = 1; i < rows.length; i += 1) {
+        const prevValue = getPreviewRowValue(rows[i - 1], key);
+        const currentValue = getPreviewRowValue(rows[i], key);
+        const cmp = comparePreviewValues(prevValue, currentValue, type);
+        if (cmp === 0) continue;
+        if (direction === 'asc' && cmp > 0) return false;
+        if (direction === 'desc' && cmp < 0) return false;
+    }
+    return true;
+}
+
+function detectPreviewSortState() {
+    if (!previewTableBody) return { key: null, direction: 'asc' };
+    const rows = Array.from(previewTableBody.querySelectorAll('tr'));
+    const keys = ['dataset', 'id', 'filename'];
+    for (const key of keys) {
+        if (isPreviewSorted(rows, key, 'asc')) {
+            return { key, direction: 'asc' };
+        }
+        if (isPreviewSorted(rows, key, 'desc')) {
+            return { key, direction: 'desc' };
+        }
+    }
+    return { key: null, direction: 'asc' };
+}
+
+function applyPreviewSort(key) {
+    if (!previewTableBody) return;
+    const nextDirection = previewSortState.key === key && previewSortState.direction === 'asc' ? 'desc' : 'asc';
+    previewSortState.key = key;
+    previewSortState.direction = nextDirection;
+    sortPreviewRows(key, nextDirection);
+    setPreviewSortIndicator(previewSortState.key, previewSortState.direction);
+    updateImageSelectAllState();
+}
+
+function initPreviewSorting() {
+    if (!previewTable) return;
+    const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
+    headers.forEach((header) => {
+        header.setAttribute('role', 'button');
+        header.setAttribute('tabindex', '0');
+        header.addEventListener('click', () => applyPreviewSort(header.dataset.sortKey));
+        header.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                applyPreviewSort(header.dataset.sortKey);
+            }
+        });
+    });
+    const detected = detectPreviewSortState();
+    previewSortState.key = detected.key;
+    previewSortState.direction = detected.direction;
+    setPreviewSortIndicator(previewSortState.key, previewSortState.direction);
+}
 
 // Edit mode and drag-and-drop state
 let isEditMode = false;
@@ -1554,6 +1687,7 @@ function deleteVariableSet() {
 toggleVarNameInputs();
 fetchVariableSets();
 initImageSelectionControls();
+initPreviewSorting();
 
 const JOB_START_MIN_MS = 2000;
 
