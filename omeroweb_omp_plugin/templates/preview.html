@@ -655,6 +655,19 @@ const MAX_PARSED_VARS = {{ max_vars }};
 const MAX_PARSED_VARIABLES_DEFAULT = {{ max_parsed_variables }};  // Maximum allowed variables
 let MAX_PARSED_VARIABLES = MAX_PARSED_VARIABLES_DEFAULT;
 const USER_SETTINGS_STORAGE_KEY = 'omp_user_settings';
+
+// Load user's chunk size setting
+let CHUNK_SIZE_USER = {{ chunk_size }};
+try {
+    const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+    if (stored) {
+        const userSettings = JSON.parse(stored);
+        if (userSettings.jobBatchSize) {
+            CHUNK_SIZE_USER = userSettings.jobBatchSize;
+        }
+    }
+} catch (e) {}
+
 const VARS_LIMIT_EXCEEDED = {{ vars_limit_exceeded|lower }};  // Boolean flag
 const MAX_VARS_UNCAPPED = {{ max_vars_uncapped }};  // Actual max before capping
 const variableSetInput = document.getElementById('variable_set_input');
@@ -1486,12 +1499,29 @@ function saveVariableSet() {
         return;
     }
 
+    // Get user's max_sets setting
+    let maxSets = {{ max_variable_sets }};
+    try {
+        const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+        if (stored) {
+            const userSettings = JSON.parse(stored);
+            if (userSettings.maxVariableSets) {
+                maxSets = userSettings.maxVariableSets;
+            }
+        }
+    } catch (e) {}
+    
     fetch(BASE_URL + "/varsets/save/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ set_name: setName, var_names: varNames })
+        body: JSON.stringify({ 
+            set_name: setName, 
+            var_names: varNames,
+            max_sets: maxSets
+        })
     })
+
     .then(r => r.json())
     .then(data => {
         if (data.error) {
@@ -1836,7 +1866,8 @@ function startSaveJob() {
         separator_mode: separatorMode,
         var_names: varNames,
         delete_mode: "all",
-        image_ids: selectedImageIds
+        image_ids: selectedImageIds,
+        chunk_size: CHUNK_SIZE_USER
     };
 
     document.getElementById("progress-section").style.display = "block";
