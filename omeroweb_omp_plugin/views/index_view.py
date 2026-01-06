@@ -227,6 +227,27 @@ def index(request, conn=None, url=None, **kwargs):
             raw_seps = request.POST.get("separator", "_")
             separator_mode = request.POST.get("separator_mode", "chars")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
+            
+            # READ USER SETTINGS FROM REQUEST
+            user_chunk_size = request.POST.get("user_chunk_size")
+            user_max_parsed = request.POST.get("user_max_parsed")
+            user_max_sets = request.POST.get("user_max_sets")
+            
+            # Parse with fallback to constants
+            try:
+                chunk_size = int(user_chunk_size) if user_chunk_size else CHUNK_SIZE
+            except (ValueError, TypeError):
+                chunk_size = CHUNK_SIZE
+                
+            try:
+                max_parsed = int(user_max_parsed) if user_max_parsed else MAX_PARSED_VARIABLES
+            except (ValueError, TypeError):
+                max_parsed = MAX_PARSED_VARIABLES
+                
+            try:
+                max_sets = int(user_max_sets) if user_max_sets else MAX_VARIABLE_SET_ENTRIES
+            except (ValueError, TypeError):
+                max_sets = MAX_VARIABLE_SET_ENTRIES
 
             if not project_id:
                 return render(
