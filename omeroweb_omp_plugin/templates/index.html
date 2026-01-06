@@ -9,9 +9,7 @@
                     class="gear-btn"
                     title="Settings"
                     aria-label="Settings">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path d="M11.983 2.25c.35 0 .668.2.82.514l.432.89a7.494 7.494 0 0 1 1.809.747l.963-.321a.87.87 0 0 1 1.045.448l.75 1.47c.194.38.081.844-.27 1.116l-.762.588c.086.495.13 1.003.13 1.512s-.044 1.017-.13 1.512l.762.588c.351.272.464.736.27 1.116l-.75 1.47a.87.87 0 0 1-1.045.448l-.963-.321a7.494 7.494 0 0 1-1.809.747l-.432.89a.912.912 0 0 1-.82.514h-1.966a.912.912 0 0 1-.82-.514l-.432-.89a7.494 7.494 0 0 1-1.809-.747l-.963.321a.87.87 0 0 1-1.045-.448l-.75-1.47a.88.88 0 0 1 .27-1.116l.762-.588a7.526 7.526 0 0 1 0-3.024l-.762-.588a.88.88 0 0 1-.27-1.116l.75-1.47a.87.87 0 0 1 1.045-.448l.963.321a7.494 7.494 0 0 1 1.809-.747l.432-.89a.912.912 0 0 1 .82-.514h1.966Zm0 5.25a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/>
-                </svg>
+                <i class="fas fa-cog" aria-hidden="false"></i>
             </button>
             <a href="/omeroweb_omp_plugin/help/"
                target="_blank"
@@ -313,6 +311,8 @@
 
 <style>
     html, body {min-width: 632px;}
+    .omeroweb-omp-plugin,
+    .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .omeroweb-omp-plugin button,
     .omeroweb-omp-plugin .help-btn,
     .ai-option-btn {
@@ -392,10 +392,9 @@
         padding: 0;
         cursor: pointer;
     }
-    .gear-btn svg {
-        width: 16px;
-        height: 16px;
-        fill: #1d4ed8;
+    .gear-btn i {
+        font-size: 14px;
+        color: #1d4ed8;
     }
     .settings-menu {
         position: absolute;
