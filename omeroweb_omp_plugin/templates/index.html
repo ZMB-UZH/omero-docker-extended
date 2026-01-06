@@ -632,6 +632,7 @@
     const STATE_STORAGE_KEY = 'omp_preview_state';
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     let lastDatasetRows = [];
+    let aiRegexTransferred = false;
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -667,6 +668,7 @@
 
     if (separatorInput) {
         separatorInput.addEventListener('input', () => {
+            aiRegexTransferred = false;
             if (aiRegexCheckbox && aiRegexCheckbox.checked) {
                 setSeparatorMode('regex');
             }
@@ -1005,6 +1007,11 @@
             if (!separatorInput.value.trim()) {
                 event.preventDefault();
                 showNonBlockingModal("The input field for filename parsing cannot be empty.");
+                return;
+            }
+            if (aiRegexCheckbox?.checked && !aiRegexTransferred) {
+                event.preventDefault();
+                showNonBlockingModal("Please use the AI-assisted Regex expression routine first.");
                 return;
             }
             persistPreviewState();
@@ -1508,6 +1515,7 @@
                 return;
             }
             separatorInput.value = value;
+            aiRegexTransferred = true;
             closeAiModal();
         });
     }
