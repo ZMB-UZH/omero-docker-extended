@@ -19,7 +19,7 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 # Smaller chunks yield more responsive progress updates.
 CHUNK_SIZE = 5
 
-# Default variable names (partially REMBI-aligned)
+# Default variable names (REMBI-aligned)
 DEFAULT_VARIABLE_NAMES = [
     "Project number",
     "Sample type",
