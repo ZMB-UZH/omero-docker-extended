@@ -419,6 +419,31 @@
     </div>
 </div>
 
+<!-- CONFIRM MODAL -->
+<div id="confirm-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:11000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:300px; max-width:500px;">
+        <div id="confirm-modal-message"
+             style="margin-bottom:16px;">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button id="confirm-modal-cancel"
+                    type="button"
+                    style="padding:6px 14px; font-size:12px;">
+                Cancel
+            </button>
+            <button id="confirm-modal-ok"
+                    type="button"
+                    style="padding:6px 14px; font-size:12px;">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+
 <style>
     html,
     body {
@@ -1366,6 +1391,53 @@ function hideNonBlockingModal() {
     }
 }
 
+let confirmModalAction = null;
+
+function showConfirmModal(message, onConfirm) {
+    const overlay = document.getElementById("confirm-modal-overlay");
+    const msg = document.getElementById("confirm-modal-message");
+    const cancelBtn = document.getElementById("confirm-modal-cancel");
+
+    if (!overlay || !msg) {
+        return;
+    }
+
+    confirmModalAction = typeof onConfirm === 'function' ? onConfirm : null;
+    msg.textContent = message;
+    overlay.style.display = "flex";
+    if (cancelBtn) {
+        window.requestAnimationFrame(() => {
+            cancelBtn.focus();
+        });
+    }
+}
+
+function hideConfirmModal() {
+    const overlay = document.getElementById("confirm-modal-overlay");
+    if (overlay) {
+        overlay.style.display = "none";
+    }
+    confirmModalAction = null;
+}
+
+const confirmModalCancel = document.getElementById("confirm-modal-cancel");
+if (confirmModalCancel) {
+    confirmModalCancel.addEventListener('click', () => {
+        hideConfirmModal();
+    });
+}
+
+const confirmModalOk = document.getElementById("confirm-modal-ok");
+if (confirmModalOk) {
+    confirmModalOk.addEventListener('click', () => {
+        const action = confirmModalAction;
+        hideConfirmModal();
+        if (action) {
+            action();
+        }
+    });
+}
+
 document.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     const overlay = document.getElementById("nb-modal-overlay");
@@ -1481,35 +1553,34 @@ function deleteVariableSet() {
         return;
     }
 
-    if (!window.confirm(
-        "Are you absolutely sure? This action is irreversible."
-    )) {
-        return;
-    }
+    showConfirmModal(
+        "Are you absolutely sure? This action is irreversible.",
+        () => {
+            fetch(BASE_URL + "/varsets/delete/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                    set_name: selected
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    showNonBlockingModal(data.error);
+                    return;
+                }
 
-    fetch(BASE_URL + "/varsets/delete/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-            set_name: selected
-        })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showNonBlockingModal(data.error);
-            return;
+                fetchVariableSets();
+
+                showNonBlockingModal('Deleted variable set "' + selected + '" from database.');
+
+            })
+            .catch(err => {
+                showNonBlockingModal("Error deleting variable set: " + err);
+            });
         }
-
-        fetchVariableSets();
-
-        showNonBlockingModal('Deleted variable set "' + selected + '" from database.');
-
-    })
-    .catch(err => {
-        showNonBlockingModal("Error deleting variable set: " + err);
-    });
+    );
 }
 
 toggleVarNameInputs();
@@ -1547,46 +1618,46 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
         return;
     }
 
-    if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
+    showConfirmModal("Are you absolutely sure? This action is irreversible.", () => {
+        const progressSection = document.getElementById("progress-section");
+        const progressText = document.getElementById("progress-text");
+        const progressBar = document.getElementById("progress-bar");
+        const progressLog = document.getElementById("progress-log");
 
-    const progressSection = document.getElementById("progress-section");
-    const progressText = document.getElementById("progress-text");
-    const progressBar = document.getElementById("progress-bar");
-    const progressLog = document.getElementById("progress-log");
+        progressSection.style.display = "block";
+        progressBar.style.width = "0%";
+        progressBar.innerText = "0%";
+        progressText.innerText = progressMessage;
+        progressLog.textContent = "";
 
-    progressSection.style.display = "block";
-    progressBar.style.width = "0%";
-    progressBar.innerText = "0%";
-    progressText.innerText = progressMessage;
-    progressLog.textContent = "";
-
-    fetch(BASE_URL + endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-            project_id: projectId,
-            image_ids: selectedImageIds,
-            password: pwd
+        fetch(BASE_URL + endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+                project_id: projectId,
+                image_ids: selectedImageIds,
+                password: pwd
+            })
         })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showNonBlockingModal(data.error);
-            progressSection.style.display = "none";
-            return;
-        }
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showNonBlockingModal(data.error);
+                progressSection.style.display = "none";
+                return;
+            }
 
-        currentJobId = data.job_id;
-        totalImages = data.total;
+            currentJobId = data.job_id;
+            totalImages = data.total;
 
-        startPollingAfterMinimumDelay(
-            jobStartLabel + " job started for " + totalImages + " images..."
-        );
-    })
-    .catch(err => {
-        showNonBlockingModal("ERROR: " + err);
+            startPollingAfterMinimumDelay(
+                jobStartLabel + " job started for " + totalImages + " images..."
+            );
+        })
+        .catch(err => {
+            showNonBlockingModal("ERROR: " + err);
+        });
     });
 }
 
