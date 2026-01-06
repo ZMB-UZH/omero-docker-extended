@@ -650,9 +650,11 @@
 
 <script>
 const BASE_URL = "/omeroweb_omp_plugin";
-const DEFAULT_VARS = {{ default_vars_json|safe }};
+let DEFAULT_VARS = {{ default_vars_json|safe }};
 const MAX_PARSED_VARS = {{ max_vars }};
-const MAX_PARSED_VARIABLES = {{ max_parsed_variables }};  // Maximum allowed variables
+const MAX_PARSED_VARIABLES_DEFAULT = {{ max_parsed_variables }};  // Maximum allowed variables
+let MAX_PARSED_VARIABLES = MAX_PARSED_VARIABLES_DEFAULT;
+const USER_SETTINGS_STORAGE_KEY = 'omp_user_settings';
 const VARS_LIMIT_EXCEEDED = {{ vars_limit_exceeded|lower }};  // Boolean flag
 const MAX_VARS_UNCAPPED = {{ max_vars_uncapped }};  // Actual max before capping
 const variableSetInput = document.getElementById('variable_set_input');
@@ -670,6 +672,30 @@ let pollInterval = null;
 let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
 const previewSortState = { key: null, direction: 'asc', userSet: false };
+
+function loadUserSettings() {
+    try {
+        const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+        if (!stored) return null;
+        return JSON.parse(stored);
+    } catch (error) {
+        return null;
+    }
+}
+
+const storedUserSettings = loadUserSettings();
+if (storedUserSettings) {
+    if (Array.isArray(storedUserSettings.defaultVariableNames)) {
+        DEFAULT_VARS = storedUserSettings.defaultVariableNames;
+    }
+    if (Number.isInteger(storedUserSettings.maxParsedVariables)) {
+        const nextMax = Math.max(
+            MAX_PARSED_VARS,
+            Math.min(storedUserSettings.maxParsedVariables, MAX_PARSED_VARIABLES_DEFAULT),
+        );
+        MAX_PARSED_VARIABLES = nextMax;
+    }
+}
 
 function setPreviewSortIndicator(key, direction) {
     if (!previewTable) return;
