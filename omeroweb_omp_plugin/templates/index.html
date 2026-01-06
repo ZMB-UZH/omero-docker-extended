@@ -269,7 +269,7 @@
             z-index:10000; align-items:center; justify-content:center;">
     <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
                 box-shadow:0 10px 30px rgba(0,0,0,0.25);
-                font-size:13px; min-width:360px; max-width:520px;">
+                font-size:13px; min-width:420px; max-width:640px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <strong>User settings</strong>
             <button type="button" id="user_settings_close" class="ai-option-btn ai-option-btn--modal">Close</button>
@@ -291,9 +291,9 @@
             <div class="user-setting-row">
                 <div class="user-setting-input">
                     <label for="user_setting_default_vars">Default variable names</label>
-                    <input type="text"
-                           id="user_setting_default_vars"
-                           style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <textarea id="user_setting_default_vars"
+                              rows="5"
+                              style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff; resize:vertical; min-height:120px; max-height:360px;"></textarea>
                 </div>
                 <div class="user-setting-description">
                     <span>Comma-separated list of default names (inside double quotes " ") for the parsed variables.</span>
@@ -583,7 +583,8 @@
         color: #1f2937;
         white-space: nowrap;
     }
-    .user-setting-input input.user-setting-error {
+    .user-setting-input input.user-setting-error,
+    .user-setting-input textarea.user-setting-error {
         border-color: #dc2626;
         box-shadow: 0 0 0 1px #dc2626;
     }
@@ -755,6 +756,15 @@
         maxVariableSets: {{ max_variable_sets }},
         defaultVariableNames: {{ default_variable_names_json|safe }},
     };
+
+    function hasDuplicateCharacters(value) {
+        const seen = new Set();
+        for (const char of value) {
+            if (seen.has(char)) return true;
+            seen.add(char);
+        }
+        return false;
+    }
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -1246,6 +1256,12 @@
             if (!separatorInput.value.trim()) {
                 event.preventDefault();
                 showNonBlockingModal("The input field for filename parsing cannot be empty.");
+                return;
+            }
+            const separatorMode = document.getElementById('separator_mode')?.value || 'chars';
+            if (separatorMode === 'chars' && hasDuplicateCharacters(separatorInput.value)) {
+                event.preventDefault();
+                showNonBlockingModal("The input field cannot contain duplicate characters.");
                 return;
             }
             if (aiRegexCheckbox?.checked && !aiRegexTransferred) {
