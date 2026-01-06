@@ -70,6 +70,15 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         set_name = (data.get("set_name") or "").strip()
         var_names = data.get("var_names")
+        
+        # Read user's max_sets
+        user_max_sets = data.get("max_sets")
+        try:
+            max_sets = int(user_max_sets) if user_max_sets else MAX_VARIABLE_SET_ENTRIES
+            if max_sets < 5 or max_sets > 30:
+                max_sets = MAX_VARIABLE_SET_ENTRIES
+        except (ValueError, TypeError):
+            max_sets = MAX_VARIABLE_SET_ENTRIES
 
         if not isinstance(var_names, list):
             return JsonResponse({"error": "Invalid variable payload."}, status=400)
@@ -83,8 +92,8 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         existing_sets = list_variable_sets(username)
         normalized_existing = {str(name).strip() for name in existing_sets}
-        if set_name not in normalized_existing and len(existing_sets) >= MAX_VARIABLE_SET_ENTRIES:
-            return JsonResponse({"error": ("The maximum number of entries in the database is 10. Please delete a variable set first.")}, status=400)
+        if set_name not in normalized_existing and len(existing_sets) >= max_sets:
+            return JsonResponse({"error": f"The maximum number of entries in the database is {max_sets}. Please delete a variable set first."}, status=400)
 
         save_variable_set(username, set_name, var_names)
 
