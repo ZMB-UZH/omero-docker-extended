@@ -878,6 +878,7 @@
     const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
     const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
     const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
+    const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
     const deleteApiKeysUrl = new URL('user-data/delete-api-keys/', window.location.href);
     const deleteVariableSetsUrl = new URL('user-data/delete-variable-sets/', window.location.href);
     const deleteAllUserDataUrl = new URL('user-data/delete-all/', window.location.href);
@@ -1268,6 +1269,26 @@
             maxVariableSets: maxSetsValue,
             defaultVariableNames: parsedDefaults,
         };
+    }
+
+    function saveUserSettingsToDatabase(settings) {
+        return fetch(userSettingsSaveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ settings }),
+        })
+            .then((resp) => resp.json())
+            .then((data) => {
+                if (data.error) {
+                    showNonBlockingModal(data.error);
+                    return;
+                }
+                showNonBlockingModal('Saved user settings to database.');
+            })
+            .catch((err) => {
+                showNonBlockingModal('Error saving user settings: ' + err);
+            });
     }
 
     function refreshAiCredentials() {
@@ -1757,6 +1778,7 @@
                 // ignore storage errors
             }
             closeUserSettingsModal();
+            saveUserSettingsToDatabase(validated);
         });
     }
 
