@@ -370,7 +370,7 @@ def index(request, conn=None, url=None, **kwargs):
                         max_vars_uncapped = max(max_vars_uncapped, len(parts))
                         
                         # Cap at MAX_PARSED_VARIABLES
-                        parts_capped = parts[:MAX_PARSED_VARIABLES]
+                        parts_capped = parts[:max_parsed]
                         max_vars = max(max_vars, len(parts_capped))
                         
                         vars_dict = {f"Var{i+1}": p for i, p in enumerate(parts_capped)}
@@ -382,7 +382,7 @@ def index(request, conn=None, url=None, **kwargs):
                 max_vars = 1
 
             # Check if any filenames exceeded the limit
-            vars_limit_exceeded = max_vars_uncapped > MAX_PARSED_VARIABLES
+            vars_limit_exceeded = max_vars_uncapped > max_parsed
             preview_rows.sort(
                 key=lambda row: (row[0] or "").casefold(),
             )
