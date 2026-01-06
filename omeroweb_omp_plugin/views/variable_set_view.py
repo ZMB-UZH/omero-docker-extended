@@ -99,7 +99,7 @@ def save_set(request, conn=None, url=None, **kwargs):
         
         # Check max limit for new sets only
         if len(existing_sets) >= max_sets:
-            return JsonResponse({"error": f"The maximum number of entries in the database is {max_sets}. Please delete a variable set first."}, status=400)
+            return JsonResponse({"error": f"The maximum number of entries in the database is {max_sets}. Please delete a variable set first or check your user settings."}, status=400)
 
         save_variable_set(username, set_name, var_names)
 
