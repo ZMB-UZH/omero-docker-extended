@@ -86,6 +86,11 @@
                         style='padding:12px 16px;font-size:14px;background:#007bff;color:white;border:none;border-radius:8px; flex:0 0 auto; white-space:nowrap;'>
                     Dataset selection
                 </button>
+                <button type="button"
+                        id="dataset_clear_btn"
+                        style="padding:8px 8px; font-size:12px; flex:0 0 auto; white-space:nowrap;">
+                    Clear
+                </button>
             </div>
         </div>
 
@@ -561,6 +566,7 @@
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
     const projectDataScript = document.getElementById('project-data');
     const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
+    const datasetClearBtn = document.getElementById('dataset_clear_btn');
     const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
     const aiRegexButton = document.getElementById('ai_regex_btn');
     const aiRegexText = document.getElementById('ai_regex_text');
@@ -589,6 +595,9 @@
     const MAX_PROJECT_RESULTS = 20;
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
+    const STATE_STORAGE_KEY = 'omp_preview_state';
+    const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
+    let lastDatasetRows = [];
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -787,6 +796,65 @@
         return selectedDatasetsInput?.value ? selectedDatasetsInput.value.split(',').filter(Boolean) : [];
     }
 
+    function persistPreviewState() {
+        const state = {
+            project_id: projectSelect?.value || '',
+            project_name: projectSelectInput?.dataset.selectedName || '',
+            separator: separatorInput?.value || '',
+            separator_mode: document.getElementById('separator_mode')?.value || 'chars',
+            dataset_selection_opened: datasetSelectionOpenedInput?.value || '0',
+            datasets: Array.isArray(lastDatasetRows) ? lastDatasetRows : [],
+            selected_dataset_ids: getSelectedDatasetIds(),
+        };
+        window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function restorePreviewState() {
+        const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
+        if (!raw) return;
+        let state = null;
+        try {
+            state = JSON.parse(raw);
+        } catch (err) {
+            window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+            return;
+        }
+        if (projectSelect && state.project_id) {
+            projectSelect.value = state.project_id;
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = state.project_name || state.project_id || '';
+            projectSelectInput.dataset.selectedName = state.project_name || state.project_id || '';
+        }
+        if (separatorInput && typeof state.separator === 'string') {
+            separatorInput.value = state.separator;
+        }
+        if (state.separator_mode) {
+            if (state.separator_mode === 'ai_regex') {
+                setSeparatorMode('ai');
+            } else if (state.separator_mode === 'regex') {
+                setSeparatorMode('regex');
+            } else {
+                setSeparatorMode('chars');
+            }
+        }
+        if (Array.isArray(state.datasets) && state.datasets.length > 0) {
+            lastDatasetRows = state.datasets;
+            renderDatasetRows(state.datasets);
+            const selected = new Set(state.selected_dataset_ids || []);
+            datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+                .forEach((input) => {
+                    input.checked = selected.size === 0 ? true : selected.has(input.dataset.datasetId);
+                });
+            updateSelectedDatasets();
+        } else if (state.dataset_selection_opened === '0') {
+            resetDatasetSelection();
+        }
+        if (datasetSelectionOpenedInput && state.dataset_selection_opened) {
+            datasetSelectionOpenedInput.value = state.dataset_selection_opened;
+        }
+    }
+
     function openAiModal() {
         const projectId = projectSelect?.value;
         if (!projectId) {
@@ -891,7 +959,9 @@
             if (!separatorInput.value.trim()) {
                 event.preventDefault();
                 showNonBlockingModal("The input field for filename parsing cannot be empty.");
+                return;
             }
+            persistPreviewState();
         });
     }
 
@@ -1421,6 +1491,7 @@
     function resetDatasetSelection() {
         datasetSelectionOpenedInput.value = '0';
         selectedDatasetsInput.value = '';
+        lastDatasetRows = [];
         if (datasetSelectAll) {
             datasetSelectAll.checked = false;
         }
@@ -1455,6 +1526,7 @@
         }
         datasetTableMessage.style.display = 'none';
         datasetSelectAll.checked = true;
+        lastDatasetRows = Array.isArray(datasets) ? datasets : [];
 
         datasets.forEach((ds) => {
             const row = document.createElement('tr');
@@ -1521,4 +1593,28 @@
                 });
         });
     }
+
+    function resetAllSelections() {
+        if (projectSelect) {
+            projectSelect.value = '';
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = '';
+            projectSelectInput.dataset.selectedName = '';
+        }
+        if (separatorInput) {
+            separatorInput.value = defaultSeparatorValue;
+        }
+        setSeparatorMode('chars');
+        resetDatasetSelection();
+        window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+    }
+
+    if (datasetClearBtn) {
+        datasetClearBtn.addEventListener('click', () => {
+            resetAllSelections();
+        });
+    }
+
+    restorePreviewState();
     </script>
