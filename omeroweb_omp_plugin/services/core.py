@@ -491,25 +491,7 @@ def collect_dataset_summaries(conn, project_id):
         Get the Bio-Formats reader/format name for an image.
         Returns names like: "OME-TIFF", "Zeiss CZI", "Leica LIF", "PNG", etc.
         """
-        # METHOD 1: Get format from Fileset template prefix (most reliable!)
-        # This contains the actual Bio-Formats reader name
-        if hasattr(img, "getFileset"):
-            try:
-                fileset = img.getFileset()
-                if fileset:
-                    try:
-                        template_prefix = fileset.getTemplatePrefix()
-                        if template_prefix:
-                            # getTemplatePrefix() returns omero.rstring
-                            prefix_str = template_prefix.getValue() if hasattr(template_prefix, "getValue") else str(template_prefix)
-                            if prefix_str and prefix_str.strip():
-                                return prefix_str.strip()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        
-        # METHOD 2: Get format from original file Format object
+        # METHOD 1: Get format from original file Format object
         if hasattr(img, "getFileset"):
             try:
                 fileset = img.getFileset()
@@ -526,10 +508,34 @@ def collect_dataset_summaries(conn, project_id):
                                         if fmt:
                                             fmt_val = fmt.getValue() if hasattr(fmt, "getValue") else get_text(fmt)
                                             if fmt_val and fmt_val not in ["text/plain", "Directory", "Companion/Unknown"]:
-                                                # Some formats are MIME types, extract the useful part
+                                                fmt_val = fmt_val.strip()
                                                 if "/" in fmt_val:
                                                     fmt_val = fmt_val.split("/")[-1]
-                                                return fmt_val
+                                                fmt_val = fmt_val.upper()
+                                                format_map = {
+                                                    "OME-TIFF": "OME-TIFF",
+                                                    "OME-TIFFS": "OME-TIFF",
+                                                    "OMETIFF": "OME-TIFF",
+                                                    "TIFF": "TIFF",
+                                                    "TIF": "TIFF",
+                                                    "CZI": "Zeiss CZI",
+                                                    "LIF": "Leica LIF",
+                                                    "VSI": "CellSens VSI",
+                                                    "ND2": "Nikon ND2",
+                                                    "OIB": "Olympus OIB",
+                                                    "OIF": "Olympus OIF",
+                                                    "LSM": "Zeiss LSM",
+                                                    "ZVI": "Zeiss ZVI",
+                                                    "DV": "DeltaVision",
+                                                    "ICS": "ICS",
+                                                    "IMS": "Imaris",
+                                                    "PNG": "PNG",
+                                                    "JPG": "JPEG",
+                                                    "JPEG": "JPEG",
+                                                    "BMP": "BMP",
+                                                    "GIF": "GIF",
+                                                }
+                                                return format_map.get(fmt_val, fmt_val)
                                 except Exception:
                                     continue
                     except Exception:
@@ -537,7 +543,7 @@ def collect_dataset_summaries(conn, project_id):
             except Exception:
                 pass
         
-        # METHOD 3: Extract from original filename extension
+        # METHOD 2: Extract from original filename extension
         if hasattr(img, "getFileset"):
             try:
                 fileset = img.getFileset()
@@ -554,38 +560,38 @@ def collect_dataset_summaries(conn, project_id):
                                         if name_str and "." in name_str:
                                             # Handle compound extensions like .ome.tiff
                                             parts = name_str.lower().split(".")
-                                            if len(parts) >= 3 and parts[-2] == "ome":
-                                                return "OME-TIFF"
-                                            # Single extension
-                                            ext = parts[-1].upper()
-                                            # Map to common Bio-Formats names
-                                            format_map = {
-                                                "TIF": "TIFF",
-                                                "TIFF": "TIFF",
-                                                "CZI": "Zeiss CZI",
-                                                "LIF": "Leica LIF",
-                                                "VSI": "CellSens VSI",
-                                                "ND2": "Nikon ND2",
-                                                "OIB": "Olympus OIB",
-                                                "OIF": "Olympus OIF",
-                                                "LSM": "Zeiss LSM",
-                                                "ZVI": "Zeiss ZVI",
-                                                "DV": "DeltaVision",
-                                                "ICS": "ICS",
-                                                "IMS": "Imaris",
-                                                "PNG": "PNG",
-                                                "JPG": "JPEG",
-                                                "JPEG": "JPEG",
-                                                "BMP": "BMP",
-                                                "GIF": "GIF",
-                                            }
-                                            return format_map.get(ext, ext)
+                                                if len(parts) >= 3 and parts[-2] == "ome":
+                                                    return "OME-TIFF"
+                                                # Single extension
+                                                ext = parts[-1].upper()
+                                                # Map to common Bio-Formats names
+                                                format_map = {
+                                                    "TIF": "TIFF",
+                                                    "TIFF": "TIFF",
+                                                    "CZI": "Zeiss CZI",
+                                                    "LIF": "Leica LIF",
+                                                    "VSI": "CellSens VSI",
+                                                    "ND2": "Nikon ND2",
+                                                    "OIB": "Olympus OIB",
+                                                    "OIF": "Olympus OIF",
+                                                    "LSM": "Zeiss LSM",
+                                                    "ZVI": "Zeiss ZVI",
+                                                    "DV": "DeltaVision",
+                                                    "ICS": "ICS",
+                                                    "IMS": "Imaris",
+                                                    "PNG": "PNG",
+                                                    "JPG": "JPEG",
+                                                    "JPEG": "JPEG",
+                                                    "BMP": "BMP",
+                                                    "GIF": "GIF",
+                                                }
+                                                return format_map.get(ext, ext)
                             except Exception:
                                 continue
             except Exception:
                 pass
         
-        # METHOD 4: Fallback to image name extension
+        # METHOD 3: Fallback to image name extension
         if hasattr(img, "getName"):
             try:
                 img_name = img.getName()
