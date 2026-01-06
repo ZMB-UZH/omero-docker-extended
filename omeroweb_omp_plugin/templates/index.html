@@ -363,10 +363,24 @@
         </div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">API key</label>
-            <input type="password"
-                   id="ai_credentials_key"
-                   placeholder="Enter API key"
-                   style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+            <div class="ai-key-wrapper">
+                <input type="password"
+                       id="ai_credentials_key"
+                       placeholder="Enter API key"
+                       autocomplete="off"
+                       spellcheck="false"
+                       style="width:100%; padding:8px 36px 8px 8px; border-radius:6px; border:1px solid #007bff;">
+                <button type="button"
+                        id="ai_credentials_key_toggle"
+                        class="ai-key-toggle"
+                        aria-label="Show API key"
+                        aria-pressed="false">
+                    <svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div id="ai_credentials_status" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -424,6 +438,41 @@
         margin-left: 6px;
         vertical-align: middle;
         line-height: 1;
+    }
+    .ai-key-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .ai-key-toggle {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        padding: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af;
+        box-shadow: none;
+    }
+    .ai-key-toggle:hover {
+        color: #6b7280;
+        box-shadow: none;
+        transform: translateY(-50%);
+    }
+    .ai-key-toggle:active {
+        transform: translateY(calc(-50% + 1px));
+        box-shadow: none;
+    }
+    .ai-key-icon {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
     }
     .sort-arrow {
         width: 0;
@@ -737,6 +786,7 @@
     const aiCredentialsClose = document.getElementById('ai_credentials_close');
     const aiCredentialsProvider = document.getElementById('ai_credentials_provider');
     const aiCredentialsKey = document.getElementById('ai_credentials_key');
+    const aiCredentialsKeyToggle = document.getElementById('ai_credentials_key_toggle');
     const aiCredentialsTest = document.getElementById('ai_credentials_test');
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
@@ -796,6 +846,16 @@
             if (aiRegexButton) aiRegexButton.style.display = 'none';
             if (aiRegexText) aiRegexText.style.display = 'inline';
         }
+    }
+
+    function setAiKeyVisibility(showKey) {
+        if (!aiCredentialsKey || !aiCredentialsKeyToggle) return;
+        aiCredentialsKey.type = showKey ? 'text' : 'password';
+        aiCredentialsKeyToggle.setAttribute('aria-pressed', showKey ? 'true' : 'false');
+        aiCredentialsKeyToggle.setAttribute('aria-label', showKey ? 'Hide API key' : 'Show API key');
+        aiCredentialsKeyToggle.innerHTML = showKey
+            ? '<svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle><line x1="4" y1="4" x2="20" y2="20"></line></svg>'
+            : '<svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
     }
 
     if (separatorInput) {
@@ -1060,6 +1120,7 @@
         if (aiCredentialsKey) {
             aiCredentialsKey.value = '';
         }
+        setAiKeyVisibility(false);
         resetAiCredentialTest();
         refreshAiCredentials();
     }
@@ -1068,6 +1129,7 @@
         if (aiCredentialsOverlay) {
             aiCredentialsOverlay.style.display = 'none';
         }
+        setAiKeyVisibility(false);
     }
 
     function openUserSettingsModal() {
@@ -1626,6 +1688,13 @@
     if (aiCredentialsClose) {
         aiCredentialsClose.addEventListener('click', () => {
             closeCredentialsModal();
+        });
+    }
+
+    if (aiCredentialsKeyToggle) {
+        aiCredentialsKeyToggle.addEventListener('click', () => {
+            if (!aiCredentialsKey) return;
+            setAiKeyVisibility(aiCredentialsKey.type === 'password');
         });
     }
 
