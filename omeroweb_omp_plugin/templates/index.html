@@ -189,7 +189,7 @@
                             <span class="sort-arrow sort-arrow--down"></span>
                         </span>
                     </td>
-                    <td class="col-formats" style='padding:3px;'>Formats</td>
+                    <!-- <td class="col-formats" style='padding:3px;'>Formats</td> -->
                 </tr>
                 <tbody id='dataset_table_body'></tbody>
             </table>
@@ -429,7 +429,7 @@
                 line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
-    .dataset-table-wrapper {min-width:1100px; max-width:1100px; margin:10px auto 0; width:100%; padding:0 12px;}
+    .dataset-table-wrapper {min-width:1100px; max-width:650px; margin:10px auto 0; width:100%; padding:0 12px;}
     .dataset-table td {word-break: break-word; white-space: normal;}
     .sortable-header {cursor: pointer; user-select: none;}
     .sort-indicator {
@@ -2079,7 +2079,7 @@
                 <td class="col-dataset" style="padding:2px;">${ds.name || ''}</td>
                 <td class="col-id" style="padding:2px;">${ds.id || ''}</td>
                 <td class="col-images" style="padding:2px;">${ds.image_count}</td>
-                <td class="col-formats" style="padding:2px;">${ds.formats || ''}</td>
+                <!-- <td class="col-formats" style="padding:2px;">${ds.formats || ''}</td> -->
             `;
             datasetTableBody.appendChild(row);
         });
