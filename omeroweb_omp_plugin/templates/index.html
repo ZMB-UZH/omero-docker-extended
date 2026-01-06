@@ -254,7 +254,7 @@
             <button type="button" id="ai_credentials_close" class="text-link-btn">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
-            Save API keys for each external provider. Keys are stored per user.
+            Save API keys for external AI providers. For instructions on how to create an API key see Help.
         </div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:6px;">Provider</label>
@@ -932,7 +932,7 @@
         if (!aiCredentialsProvider) return;
         const provider = aiCredentialsProvider.value;
         if (aiCredentialProviders.has(provider)) {
-            updateAiCredentialsStatus('Key on file for this provider.');
+            updateAiCredentialsStatus('Key exists in database for this provider.');
         } else {
             updateAiCredentialsStatus('No key saved yet for this provider.');
         }
@@ -1235,14 +1235,14 @@
     if (deleteApiKeysBtn) {
         deleteApiKeysBtn.addEventListener('click', () => {
             showSettingsMenu(false);
-            confirmUserDataDelete(deleteApiKeysUrl, 'API keys deleted from your user database.');
+            confirmUserDataDelete(deleteApiKeysUrl, 'API keys deleted from database.');
         });
     }
 
     if (deleteVariableSetsBtn) {
         deleteVariableSetsBtn.addEventListener('click', () => {
             showSettingsMenu(false);
-            confirmUserDataDelete(deleteVariableSetsUrl, 'Variable sets deleted from your user database.');
+            confirmUserDataDelete(deleteVariableSetsUrl, 'Variable sets deleted from database.');
         });
     }
 
