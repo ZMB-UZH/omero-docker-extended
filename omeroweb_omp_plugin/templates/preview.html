@@ -1764,7 +1764,8 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
         body: JSON.stringify({
             project_id: projectId,
             image_ids: selectedImageIds,
-            password: pwd
+            password: pwd,
+            chunk_size: CHUNK_SIZE_USER
         })
     })
     .then(r => r.json())
@@ -1918,8 +1919,8 @@ function startAcquisitionMetadataJob() {
 
     let payload = {
         project_id: projectId,
-        image_ids: selectedImageIds
-        chunk_size: CHUNK_SIZE_USER
+        image_ids: selectedImageIds,
+        chunk_size: CHUNK_SIZE_USER,
     };
 
     document.getElementById("progress-section").style.display = "block";
