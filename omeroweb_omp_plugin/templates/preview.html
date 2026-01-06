@@ -669,7 +669,7 @@ let totalImages = 0;
 let pollInterval = null;
 let activeVariableSetIndex = -1;
 let variableSetFilterTimeout = null;
-const previewSortState = { key: null, direction: 'asc' };
+const previewSortState = { key: null, direction: 'asc', userSet: false };
 
 function setPreviewSortIndicator(key, direction) {
     if (!previewTable) return;
@@ -728,41 +728,12 @@ function sortPreviewRows(key, direction) {
     sorted.forEach((row) => previewTableBody.appendChild(row));
 }
 
-function isPreviewSorted(rows, key, direction) {
-    if (!rows || rows.length < 2) return false;
-    const header = previewTable.querySelector(`.sortable-header[data-sort-key="${key}"]`);
-    const type = header?.dataset.sortType || 'text';
-    for (let i = 1; i < rows.length; i += 1) {
-        const prevValue = getPreviewRowValue(rows[i - 1], key);
-        const currentValue = getPreviewRowValue(rows[i], key);
-        const cmp = comparePreviewValues(prevValue, currentValue, type);
-        if (cmp === 0) continue;
-        if (direction === 'asc' && cmp > 0) return false;
-        if (direction === 'desc' && cmp < 0) return false;
-    }
-    return true;
-}
-
-function detectPreviewSortState() {
-    if (!previewTableBody) return { key: null, direction: 'asc' };
-    const rows = Array.from(previewTableBody.querySelectorAll('tr'));
-    const keys = ['dataset', 'id', 'filename'];
-    for (const key of keys) {
-        if (isPreviewSorted(rows, key, 'asc')) {
-            return { key, direction: 'asc' };
-        }
-        if (isPreviewSorted(rows, key, 'desc')) {
-            return { key, direction: 'desc' };
-        }
-    }
-    return { key: null, direction: 'asc' };
-}
-
 function applyPreviewSort(key) {
     if (!previewTableBody) return;
     const nextDirection = previewSortState.key === key && previewSortState.direction === 'asc' ? 'desc' : 'asc';
     previewSortState.key = key;
     previewSortState.direction = nextDirection;
+    previewSortState.userSet = true;
     sortPreviewRows(key, nextDirection);
     setPreviewSortIndicator(previewSortState.key, previewSortState.direction);
     updateImageSelectAllState();
@@ -782,10 +753,7 @@ function initPreviewSorting() {
             }
         });
     });
-    const detected = detectPreviewSortState();
-    previewSortState.key = detected.key;
-    previewSortState.direction = detected.direction;
-    setPreviewSortIndicator(previewSortState.key, previewSortState.direction);
+    setPreviewSortIndicator(null, 'asc');
 }
 
 // Edit mode and drag-and-drop state
