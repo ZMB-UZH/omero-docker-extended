@@ -42,7 +42,7 @@ _PROVIDER_TESTS = {
         "url": "https://api.perplexity.ai/chat/completions",
         "method": "POST",
         "payload": {
-            "model": "llama-3.1-sonar-small-128k-online",
+            "model": "sonar",
             "messages": [{"role": "user", "content": "ping"}],
             "max_tokens": 1,
         },
