@@ -803,10 +803,10 @@ let draggedIndex = null;
 // Show warning if variable limit was exceeded
 if (VARS_LIMIT_EXCEEDED) {
     showNonBlockingModal(
-        `Global variable parsing is capped at ${MAX_PARSED_VARIABLES}. ` +
+        `Variable parsing is capped at ${MAX_PARSED_VARIABLES}. ` +
         `Only the first ${MAX_PARSED_VARIABLES} variables will be parsed. ` +
         `Your filenames produced ${MAX_VARS_UNCAPPED} variables. ` +
-        `Consider checking your parsing method and/or filenames.`
+        `Consider checking your parsing method, filenames and user settings.`
     );
 }
 
