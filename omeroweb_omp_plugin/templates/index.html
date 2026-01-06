@@ -170,7 +170,7 @@
                     </td>
                     <td class="col-dataset" style='padding:3px; width:500px;'>Dataset</td>
                     <td class="col-id" style='padding:3px; width:65px;'>ID</td>
-                    <td class="col-images" style='padding:3px; width:65px;'>Nr. images</td>
+                    <td class="col-images" style='padding:3px; width:65px;'>Nr. img.</td>
                     <td class="col-formats" style='padding:3px;'>Formats</td>
                 </tr>
                 <tbody id='dataset_table_body'></tbody>
@@ -321,8 +321,6 @@
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         transition: all 0.2s ease;
     }
-
-    /* THE FIX: Enhanced shadow and lift on hover */
     .omeroweb-omp-plugin button:hover,
     .omeroweb-omp-plugin .help-btn:hover,
     .ai-option-btn:hover {
@@ -330,15 +328,12 @@
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         filter: brightness(105%); /* Makes colored buttons look interactive */
     }
-
     /* Active state for "clicked" feel */
     .omeroweb-omp-plugin button:active,
     .ai-option-btn:active {
         transform: translateY(1px);
         box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
-
-    /* Explicitly ensure shadow/cursor on dataset selection and load buttons */
     #dataset_button, #load_images_button {
         cursor: pointer;
         box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
@@ -373,13 +368,8 @@
         cursor: pointer;
         line-height: 1.1;
     }
-    .ai-option-btn--modal {
-        font-size: 12px;
-    }
-    .ai-option-btn:hover {
-        color: #0f3ea8;
-        background: rgba(0,123,255,0.18);
-    }
+    .ai-option-btn--modal {font-size: 12px;}
+    .ai-option-btn:hover {color: #0f3ea8; background: rgba(0,123,255,0.18);}
     .gear-btn {
         width: 26px;
         height: 26px;
@@ -395,9 +385,7 @@
         color: #1d4ed8;
         line-height: 1;
     }
-    .gear-btn:hover {
-        background: #d0e7ff;
-    }
+    .gear-btn:hover {background: #d0e7ff;}
     .settings-menu {
         position: absolute;
         right: 0;
@@ -427,12 +415,7 @@
         justify-content: space-between;
         gap: 10px;
     }
-    .submenu-arrow {
-        font-size: 12px;
-        color: #1f2937;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-    }
+    .submenu-arrow {font-size: 12px;color: #1f2937;opacity: 0;transition: opacity 0.15s ease;}
     .settings-menu-item--submenu:hover .submenu-arrow,
     .settings-menu-item--submenu:focus-within .submenu-arrow,
     .settings-menu-item--submenu.menu-open .submenu-arrow {
@@ -461,17 +444,9 @@
         color: #1f2937;
         cursor: pointer;
     }
-    .settings-submenu-item:hover {
-        background: #e7f1ff;
-        color: #1d4ed8;
-    }
-    .settings-submenu-item--danger {
-        color: #b91c1c;
-    }
-    .settings-submenu-item--danger:hover {
-        background: #fee2e2;
-        color: #b91c1c;
-    }
+    .settings-submenu-item:hover {background: #e7f1ff; color: #1d4ed8;}
+    .settings-submenu-item--danger {color: #b91c1c;}
+    .settings-submenu-item--danger:hover {background: #fee2e2;color: #b91c1c;}
     .settings-menu-item--submenu:hover .settings-submenu,
     .settings-menu-item--submenu:focus-within .settings-submenu,
     .settings-menu-item--submenu.menu-open .settings-submenu {
