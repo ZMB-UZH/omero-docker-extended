@@ -27,7 +27,7 @@ _OPENAI_COMPATIBLE = {
     },
     "perplexity": {
         "base_url": "https://api.perplexity.ai",
-        "model": "llama-3.1-sonar-small-128k-online",
+        "model": "sonar",
     },
     "mistral": {
         "base_url": "https://api.mistral.ai/v1",
