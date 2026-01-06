@@ -92,7 +92,13 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         existing_sets = list_variable_sets(username)
         normalized_existing = {str(name).strip() for name in existing_sets}
-        if set_name not in normalized_existing and len(existing_sets) >= max_sets:
+        
+        # Check if name already exists - prevent overwrite
+        if set_name in normalized_existing:
+            return JsonResponse({"error": "A variable set with the same name already exists in database. Please rename or delete the existing set first."}, status=400)
+        
+        # Check max limit for new sets only
+        if len(existing_sets) >= max_sets:
             return JsonResponse({"error": f"The maximum number of entries in the database is {max_sets}. Please delete a variable set first."}, status=400)
 
         save_variable_set(username, set_name, var_names)
