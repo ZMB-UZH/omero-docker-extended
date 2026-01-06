@@ -25,6 +25,11 @@
                  class="settings-menu"
                  style="display:none;">
                 <button type="button"
+                        id="user_settings_btn"
+                        class="settings-menu-item">
+                    User settings
+                </button>
+                <button type="button"
                         id="ai_credentials_btn"
                         class="settings-menu-item">
                     AI API credentials
@@ -208,7 +213,7 @@
                 font-size:13px; min-width:360px; max-width:520px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <strong>AI-assisted Regex expression</strong>
-            <button type="button" id="ai_modal_close" class="ai-option-btn">Close</button>
+            <button type="button" id="ai_modal_close" class="ai-option-btn ai-option-btn--modal">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
             Select a provider, process the filenames, then transfer the suggested Regex.
@@ -243,6 +248,26 @@
     </div>
 </div>
 
+<div id="user-settings-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:360px; max-width:520px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>User settings</strong>
+            <button type="button" id="user_settings_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div style="margin-bottom:10px; color:#4b5563;">
+            Settings options will appear here.
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="user_settings_save">Save settings</button>
+            <button type="button" id="user_settings_restore">Restore defaults</button>
+        </div>
+    </div>
+</div>
+
 <div id="ai-credentials-overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
             z-index:10000; align-items:center; justify-content:center;">
@@ -251,7 +276,7 @@
                 font-size:13px; min-width:360px; max-width:520px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <strong>AI API credentials</strong>
-            <button type="button" id="ai_credentials_close" class="ai-option-btn">Close</button>
+            <button type="button" id="ai_credentials_close" class="ai-option-btn ai-option-btn--modal">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
             Save API keys for external AI providers. For instructions on how to create an API key see help.
@@ -289,7 +314,8 @@
 <style>
     html, body {min-width: 632px;}
     .omeroweb-omp-plugin button,
-    .omeroweb-omp-plugin .help-btn {
+    .omeroweb-omp-plugin .help-btn,
+    .ai-option-btn {
         cursor: pointer;
         /* Initial shadow */
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
@@ -298,14 +324,16 @@
 
     /* THE FIX: Enhanced shadow and lift on hover */
     .omeroweb-omp-plugin button:hover,
-    .omeroweb-omp-plugin .help-btn:hover {
+    .omeroweb-omp-plugin .help-btn:hover,
+    .ai-option-btn:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         filter: brightness(105%); /* Makes colored buttons look interactive */
     }
 
     /* Active state for "clicked" feel */
-    .omeroweb-omp-plugin button:active {
+    .omeroweb-omp-plugin button:active,
+    .ai-option-btn:active {
         transform: translateY(1px);
         box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
@@ -316,7 +344,8 @@
         box-shadow: 0 3px 0 rgba(0,0,0,0.25), 0 6px 10px rgba(0,0,0,0.2);
     }
     .omeroweb-omp-plugin button:active,
-    .omeroweb-omp-plugin .help-btn:active {
+    .omeroweb-omp-plugin .help-btn:active,
+    .ai-option-btn:active {
         transform: translateY(2px);
         box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
     }
@@ -339,18 +368,17 @@
         color: #1d4ed8;
         background: rgba(0,123,255,0.12);
         border: 0;
-        box-shadow: inset 0 0 0 1px rgba(0,123,255,0.25);
         border-radius: 4px;
         padding: 1px 4px;
         cursor: pointer;
         line-height: 1.1;
     }
+    .ai-option-btn--modal {
+        font-size: 12px;
+    }
     .ai-option-btn:hover {
         color: #0f3ea8;
         background: rgba(0,123,255,0.18);
-    }
-    .ai-option-btn:active {
-        transform: translateY(1px);
     }
     .gear-btn {
         width: 26px;
@@ -579,6 +607,11 @@
     const aiTransferBtn = document.getElementById('ai_transfer_btn');
     const aiRegexOutput = document.getElementById('ai_regex_output');
     const aiModalStatus = document.getElementById('ai_modal_status');
+    const userSettingsOverlay = document.getElementById('user-settings-overlay');
+    const userSettingsBtn = document.getElementById('user_settings_btn');
+    const userSettingsClose = document.getElementById('user_settings_close');
+    const userSettingsSave = document.getElementById('user_settings_save');
+    const userSettingsRestore = document.getElementById('user_settings_restore');
     const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
     const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
     const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
@@ -908,6 +941,18 @@
         }
     }
 
+    function openUserSettingsModal() {
+        if (userSettingsOverlay) {
+            userSettingsOverlay.style.display = 'flex';
+        }
+    }
+
+    function closeUserSettingsModal() {
+        if (userSettingsOverlay) {
+            userSettingsOverlay.style.display = 'none';
+        }
+    }
+
     function refreshAiCredentials() {
         return fetch(aiCredentialsListUrl, { method: 'GET' })
             .then((resp) => resp.json())
@@ -1216,6 +1261,13 @@
         });
     }
 
+    if (userSettingsBtn) {
+        userSettingsBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            openUserSettingsModal();
+        });
+    }
+
     if (aiCredentialsBtn) {
         aiCredentialsBtn.addEventListener('click', () => {
             showSettingsMenu(false);
@@ -1256,6 +1308,20 @@
     if (aiCredentialsClose) {
         aiCredentialsClose.addEventListener('click', () => {
             closeCredentialsModal();
+        });
+    }
+
+    if (userSettingsClose) {
+        userSettingsClose.addEventListener('click', () => {
+            closeUserSettingsModal();
+        });
+    }
+
+    if (userSettingsRestore) {
+        userSettingsRestore.addEventListener('click', () => {
+            if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
+                return;
+            }
         });
     }
 
