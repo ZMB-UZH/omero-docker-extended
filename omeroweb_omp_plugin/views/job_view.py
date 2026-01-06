@@ -225,6 +225,15 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
+        
+        # Read user's chunk size
+        user_chunk_size = data.get("chunk_size")
+        try:
+            chunk_size = int(user_chunk_size) if user_chunk_size else CHUNK_SIZE
+            if chunk_size < 1 or chunk_size > 100:
+                chunk_size = CHUNK_SIZE
+        except (ValueError, TypeError):
+            chunk_size = CHUNK_SIZE
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
@@ -251,6 +260,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
             "separator": "",
             "var_names": [],
             "delete_mode": "keep",
+            "chunk_size": chunk_size,
         }
 
         save_job(job)
@@ -275,6 +285,15 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
         password = data.get("password")
+        
+        # Read user's chunk size
+        user_chunk_size = data.get("chunk_size")
+        try:
+            chunk_size = int(user_chunk_size) if user_chunk_size else CHUNK_SIZE
+            if chunk_size < 1 or chunk_size > 100:
+                chunk_size = CHUNK_SIZE
+        except (ValueError, TypeError):
+            chunk_size = CHUNK_SIZE
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
@@ -306,6 +325,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
             "separator": "",
             "var_names": [],
             "delete_mode": "all",
+            "chunk_size": chunk_size,
         }
 
         save_job(job)
@@ -330,6 +350,15 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
         password = data.get("password")
+        
+        # Read user's chunk size
+        user_chunk_size = data.get("chunk_size")
+        try:
+            chunk_size = int(user_chunk_size) if user_chunk_size else CHUNK_SIZE
+            if chunk_size < 1 or chunk_size > 100:
+                chunk_size = CHUNK_SIZE
+        except (ValueError, TypeError):
+            chunk_size = CHUNK_SIZE
 
         if not project_id:
             return JsonResponse({"error": "missing project_id"}, status=400)
@@ -361,6 +390,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
             "separator": "",
             "var_names": [],
             "delete_mode": "plugin",
+            "chunk_size": chunk_size,
         }
 
         save_job(job)
