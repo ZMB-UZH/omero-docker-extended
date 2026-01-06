@@ -25,11 +25,6 @@
                  class="settings-menu"
                  style="display:none;">
                 <button type="button"
-                        id="user_settings_btn"
-                        class="settings-menu-item">
-                    User settings
-                </button>
-                <button type="button"
                         id="ai_credentials_btn"
                         class="settings-menu-item">
                     AI API credentials
@@ -205,31 +200,6 @@
     </div>
 </div>
 
-<!-- CONFIRM MODAL -->
-<div id="confirm-modal-overlay"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
-            z-index:11000; align-items:center; justify-content:center;">
-    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
-                box-shadow:0 10px 30px rgba(0,0,0,0.25);
-                font-size:13px; min-width:300px; max-width:500px;">
-        <div id="confirm-modal-message"
-             style="margin-bottom:16px;">
-        </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-            <button id="confirm-modal-cancel"
-                    type="button"
-                    style="padding:6px 14px; font-size:12px;">
-                Cancel
-            </button>
-            <button id="confirm-modal-ok"
-                    type="button"
-                    style="padding:6px 14px; font-size:12px;">
-                OK
-            </button>
-        </div>
-    </div>
-</div>
-
 <div id="ai-modal-overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
             z-index:10000; align-items:center; justify-content:center;">
@@ -269,26 +239,6 @@
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_process_btn">Process</button>
             <button type="button" id="ai_transfer_btn" disabled>Transfer</button>
-        </div>
-    </div>
-</div>
-
-<div id="user-settings-overlay"
-     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
-            z-index:10000; align-items:center; justify-content:center;">
-    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
-                box-shadow:0 10px 30px rgba(0,0,0,0.25);
-                font-size:13px; min-width:360px; max-width:520px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <strong>User settings</strong>
-            <button type="button" id="user_settings_close" class="ai-option-btn">Close</button>
-        </div>
-        <div style="margin-bottom:10px; color:#4b5563;">
-            User settings will be available here soon.
-        </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px;">
-            <button type="button" id="user_settings_save">Save settings</button>
-            <button type="button" id="user_settings_restore">Restore defaults</button>
         </div>
     </div>
 </div>
@@ -622,8 +572,6 @@
     const aiRegexText = document.getElementById('ai_regex_text');
     const settingsMenuBtn = document.getElementById('settings_menu_btn');
     const settingsMenu = document.getElementById('settings_menu');
-    const userSettingsBtn = document.getElementById('user_settings_btn');
-    const userSettingsOverlay = document.getElementById('user-settings-overlay');
     const aiModalOverlay = document.getElementById('ai-modal-overlay');
     const aiModalClose = document.getElementById('ai_modal_close');
     const aiProviderSelect = document.getElementById('ai_provider_select');
@@ -637,19 +585,12 @@
     const deleteApiKeysBtn = document.getElementById('delete_api_keys_btn');
     const deleteVariableSetsBtn = document.getElementById('delete_variable_sets_btn');
     const deleteAllUserDataBtn = document.getElementById('delete_all_user_data_btn');
-    const userSettingsClose = document.getElementById('user_settings_close');
-    const userSettingsSave = document.getElementById('user_settings_save');
-    const userSettingsRestore = document.getElementById('user_settings_restore');
     const aiCredentialsClose = document.getElementById('ai_credentials_close');
     const aiCredentialsProvider = document.getElementById('ai_credentials_provider');
     const aiCredentialsKey = document.getElementById('ai_credentials_key');
     const aiCredentialsTest = document.getElementById('ai_credentials_test');
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
-    const confirmModalOverlay = document.getElementById('confirm-modal-overlay');
-    const confirmModalMessage = document.getElementById('confirm-modal-message');
-    const confirmModalCancel = document.getElementById('confirm-modal-cancel');
-    const confirmModalOk = document.getElementById('confirm-modal-ok');
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
     const MAX_PROJECT_RESULTS = 20;
     let projectFilterTimeout = null;
@@ -674,25 +615,6 @@
     function hideNonBlockingModal() {
         const overlay = document.getElementById("nb-modal-overlay");
         if (overlay) overlay.style.display = "none";
-    }
-
-    let confirmModalAction = null;
-
-    function showConfirmModal(message, onConfirm) {
-        if (!confirmModalOverlay || !confirmModalMessage) return;
-        confirmModalAction = typeof onConfirm === 'function' ? onConfirm : null;
-        confirmModalMessage.innerText = message;
-        confirmModalOverlay.style.display = "flex";
-        if (confirmModalCancel) {
-            window.requestAnimationFrame(() => {
-                confirmModalCancel.focus();
-            });
-        }
-    }
-
-    function hideConfirmModal() {
-        if (confirmModalOverlay) confirmModalOverlay.style.display = "none";
-        confirmModalAction = null;
     }
 
     function updateAiRegexOption() {
@@ -847,24 +769,26 @@
     }
 
     function confirmUserDataDelete(url, successMessage) {
-        showConfirmModal("Are you absolutely sure? This action is irreversible.", () => {
-            fetch(url.toString(), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "same-origin",
-                body: JSON.stringify({})
-            })
-            .then(response => response.json().then(data => ({ ok: response.ok, data })))
-            .then(({ ok, data }) => {
-                if (!ok || data.error) {
-                    showNonBlockingModal(data.error || 'Unable to delete data.');
-                    return;
-                }
-                showNonBlockingModal(successMessage);
-            })
-            .catch(err => {
-                showNonBlockingModal("ERROR: " + err);
-            });
+        if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
+            return;
+        }
+
+        fetch(url.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({})
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.error) {
+                showNonBlockingModal(data.error || 'Unable to delete data.');
+                return;
+            }
+            showNonBlockingModal(successMessage);
+        })
+        .catch(err => {
+            showNonBlockingModal("ERROR: " + err);
         });
     }
 
@@ -981,18 +905,6 @@
     function closeCredentialsModal() {
         if (aiCredentialsOverlay) {
             aiCredentialsOverlay.style.display = 'none';
-        }
-    }
-
-    function openUserSettingsModal() {
-        if (userSettingsOverlay) {
-            userSettingsOverlay.style.display = 'flex';
-        }
-    }
-
-    function closeUserSettingsModal() {
-        if (userSettingsOverlay) {
-            userSettingsOverlay.style.display = 'none';
         }
     }
 
@@ -1304,13 +1216,6 @@
         });
     }
 
-    if (userSettingsBtn) {
-        userSettingsBtn.addEventListener('click', () => {
-            showSettingsMenu(false);
-            openUserSettingsModal();
-        });
-    }
-
     if (aiCredentialsBtn) {
         aiCredentialsBtn.addEventListener('click', () => {
             showSettingsMenu(false);
@@ -1345,44 +1250,6 @@
         deleteAllUserDataBtn.addEventListener('click', () => {
             showSettingsMenu(false);
             confirmUserDataDelete(deleteAllUserDataUrl, 'All plugin user data deleted.');
-        });
-    }
-
-    if (userSettingsClose) {
-        userSettingsClose.addEventListener('click', () => {
-            closeUserSettingsModal();
-        });
-    }
-
-    if (userSettingsSave) {
-        userSettingsSave.addEventListener('click', () => {
-            closeUserSettingsModal();
-            showNonBlockingModal('Settings saved.');
-        });
-    }
-
-    if (userSettingsRestore) {
-        userSettingsRestore.addEventListener('click', () => {
-            showConfirmModal("Are you absolutely sure? This action is irreversible.", () => {
-                closeUserSettingsModal();
-                showNonBlockingModal('Default settings restored.');
-            });
-        });
-    }
-
-    if (confirmModalCancel) {
-        confirmModalCancel.addEventListener('click', () => {
-            hideConfirmModal();
-        });
-    }
-
-    if (confirmModalOk) {
-        confirmModalOk.addEventListener('click', () => {
-            const action = confirmModalAction;
-            hideConfirmModal();
-            if (action) {
-                action();
-            }
         });
     }
 
