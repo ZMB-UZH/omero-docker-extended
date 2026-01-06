@@ -560,32 +560,32 @@ def collect_dataset_summaries(conn, project_id):
                                         if name_str and "." in name_str:
                                             # Handle compound extensions like .ome.tiff
                                             parts = name_str.lower().split(".")
-                                                if len(parts) >= 3 and parts[-2] == "ome":
-                                                    return "OME-TIFF"
-                                                # Single extension
-                                                ext = parts[-1].upper()
-                                                # Map to common Bio-Formats names
-                                                format_map = {
-                                                    "TIF": "TIFF",
-                                                    "TIFF": "TIFF",
-                                                    "CZI": "Zeiss CZI",
-                                                    "LIF": "Leica LIF",
-                                                    "VSI": "CellSens VSI",
-                                                    "ND2": "Nikon ND2",
-                                                    "OIB": "Olympus OIB",
-                                                    "OIF": "Olympus OIF",
-                                                    "LSM": "Zeiss LSM",
-                                                    "ZVI": "Zeiss ZVI",
-                                                    "DV": "DeltaVision",
-                                                    "ICS": "ICS",
-                                                    "IMS": "Imaris",
-                                                    "PNG": "PNG",
-                                                    "JPG": "JPEG",
-                                                    "JPEG": "JPEG",
-                                                    "BMP": "BMP",
-                                                    "GIF": "GIF",
-                                                }
-                                                return format_map.get(ext, ext)
+                                            if len(parts) >= 3 and parts[-2] == "ome":
+                                                return "OME-TIFF"
+                                            # Single extension
+                                            ext = parts[-1].upper()
+                                            # Map to common Bio-Formats names
+                                            format_map = {
+                                                "TIF": "TIFF",
+                                                "TIFF": "TIFF",
+                                                "CZI": "Zeiss CZI",
+                                                "LIF": "Leica LIF",
+                                                "VSI": "CellSens VSI",
+                                                "ND2": "Nikon ND2",
+                                                "OIB": "Olympus OIB",
+                                                "OIF": "Olympus OIF",
+                                                "LSM": "Zeiss LSM",
+                                                "ZVI": "Zeiss ZVI",
+                                                "DV": "DeltaVision",
+                                                "ICS": "ICS",
+                                                "IMS": "Imaris",
+                                                "PNG": "PNG",
+                                                "JPG": "JPEG",
+                                                "JPEG": "JPEG",
+                                                "BMP": "BMP",
+                                                "GIF": "GIF",
+                                            }
+                                            return format_map.get(ext, ext)
                             except Exception:
                                 continue
             except Exception:
