@@ -164,6 +164,7 @@
             <table border='1'
                    class="dataset-table"
                    style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+                <thead>
                 <tr style='background:#007bff; color:white;'>
                     <td class="col-check" style='padding:3px; width:20px; text-align:center;'>
                         <input type='checkbox' id='datasets_select_all' checked>
@@ -191,6 +192,7 @@
                     </td>
                     <!-- <td class="col-formats" style='padding:3px;'>Formats</td> -->
                 </tr>
+                </thead>
                 <tbody id='dataset_table_body'></tbody>
             </table>
         </div>
@@ -431,6 +433,12 @@
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
     .dataset-table-wrapper {min-width:650px; max-width:650px; margin:10px auto 0; width:100%; padding:0 12px;}
     .dataset-table td {word-break: break-word; white-space: normal;}
+    .dataset-table thead td {
+        position: sticky;
+        top: 0;
+        background: #007bff;
+        z-index: 2;
+    }
     .sortable-header {cursor: pointer; user-select: none;}
     .sort-indicator {
         display: inline-flex;
