@@ -1919,6 +1919,7 @@ function startAcquisitionMetadataJob() {
     let payload = {
         project_id: projectId,
         image_ids: selectedImageIds
+        chunk_size: CHUNK_SIZE_USER
     };
 
     document.getElementById("progress-section").style.display = "block";
