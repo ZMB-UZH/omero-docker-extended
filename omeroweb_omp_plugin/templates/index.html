@@ -655,7 +655,7 @@
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
-    const datasetSortState = { key: null, direction: 'asc' };
+    const datasetSortState = { key: null, direction: 'asc', userSet: false };
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -1099,34 +1099,6 @@
             })
             .map((entry) => entry.dataset);
         return sorted;
-    }
-
-    function isDatasetSorted(rows, key, direction) {
-        if (!rows || rows.length < 2) return false;
-        const header = datasetTableContainer?.querySelector(`.sortable-header[data-sort-key="${key}"]`);
-        const type = header?.dataset.sortType || 'text';
-        for (let i = 1; i < rows.length; i += 1) {
-            const prevValue = getDatasetSortValue(rows[i - 1], key);
-            const currentValue = getDatasetSortValue(rows[i], key);
-            const cmp = compareDatasetValues(prevValue, currentValue, type);
-            if (cmp === 0) continue;
-            if (direction === 'asc' && cmp > 0) return false;
-            if (direction === 'desc' && cmp < 0) return false;
-        }
-        return true;
-    }
-
-    function detectDatasetSortState(rows) {
-        const keys = ['name', 'id', 'image_count'];
-        for (const key of keys) {
-            if (isDatasetSorted(rows, key, 'asc')) {
-                return { key, direction: 'asc' };
-            }
-            if (isDatasetSorted(rows, key, 'desc')) {
-                return { key, direction: 'desc' };
-            }
-        }
-        return { key: null, direction: 'asc' };
     }
 
     function sortProjectMatches(matches) {
@@ -1668,6 +1640,7 @@
         lastDatasetRows = [];
         datasetSortState.key = null;
         datasetSortState.direction = 'asc';
+        datasetSortState.userSet = false;
         setDatasetSortIndicator(null, 'asc');
         if (datasetSelectAll) {
             datasetSelectAll.checked = false;
@@ -1704,9 +1677,13 @@
         datasetTableMessage.style.display = 'none';
         const selectedIds = new Set(options.selectedIds || []);
         const useDefaultSelection = selectedIds.size === 0;
-        lastDatasetRows = Array.isArray(datasets) ? datasets : [];
+        const normalizedDatasets = Array.isArray(datasets) ? datasets : [];
+        const displayDatasets = datasetSortState.userSet
+            ? normalizedDatasets
+            : sortDatasets([...normalizedDatasets], 'name', 'asc');
+        lastDatasetRows = displayDatasets;
 
-        datasets.forEach((ds) => {
+        displayDatasets.forEach((ds) => {
             const isChecked = useDefaultSelection || selectedIds.has(String(ds.id));
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -1726,12 +1703,11 @@
 
         updateSelectedDatasets();
 
-        if (!datasetSortState.key) {
-            const detected = detectDatasetSortState(datasets);
-            datasetSortState.key = detected.key;
-            datasetSortState.direction = detected.direction;
+        if (datasetSortState.userSet) {
+            setDatasetSortIndicator(datasetSortState.key, datasetSortState.direction);
+        } else {
+            setDatasetSortIndicator(null, 'asc');
         }
-        setDatasetSortIndicator(datasetSortState.key, datasetSortState.direction);
     }
 
     function applyDatasetSort(key) {
@@ -1740,6 +1716,7 @@
         const nextDirection = datasetSortState.key === key && datasetSortState.direction === 'asc' ? 'desc' : 'asc';
         datasetSortState.key = key;
         datasetSortState.direction = nextDirection;
+        datasetSortState.userSet = true;
         const sorted = sortDatasets([...lastDatasetRows], key, nextDirection);
         renderDatasetRows(sorted, { selectedIds });
     }

@@ -138,6 +138,10 @@ def index(request, conn=None, url=None, **kwargs):
 
             # NO RATE LIMIT - just listing datasets
             dataset_rows = collect_dataset_summaries(conn, project_id)
+            dataset_rows = sorted(
+                dataset_rows,
+                key=lambda row: (row.get("name") or "").casefold(),
+            )
             return JsonResponse({"datasets": dataset_rows})
 
         if request.method == "POST" and request.POST.get("action") == "ai_regex":
@@ -353,6 +357,9 @@ def index(request, conn=None, url=None, **kwargs):
 
             # Check if any filenames exceeded the limit
             vars_limit_exceeded = max_vars_uncapped > MAX_PARSED_VARIABLES
+            preview_rows.sort(
+                key=lambda row: (row[0] or "").casefold(),
+            )
 
             preview_rows_payload = []
             for ds_label, img_id, fname, vars_dict in preview_rows:
