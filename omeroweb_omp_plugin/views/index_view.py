@@ -390,7 +390,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "var_range": range(1, max_vars + 1),
                 "project_id": project_id,
                 "default_vars_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                "max_parsed_variables": MAX_PARSED_VARIABLES,
+                "max_parsed_variables": max_parsed,
                 "vars_limit_exceeded": vars_limit_exceeded,
                 "max_vars_uncapped": max_vars_uncapped,
             }
