@@ -19,13 +19,6 @@ os.makedirs(JOBS_DIR, exist_ok=True)
 # Smaller chunks yield more responsive progress updates.
 CHUNK_SIZE = 5
 
-# Maximum number of variable sets that can stored per user in the plugin database.
-# Limits both the number of variable name input fields and the number of parsed variables.
-MAX_VARIABLE_SET_ENTRIES = 10
-
-# Maximum number of variables that can be parsed from filenames
-MAX_PARSED_VARIABLES = 15
-
 # Default variable names (partially REMBI-aligned)
 DEFAULT_VARIABLE_NAMES = [
     "Project number",
@@ -35,6 +28,13 @@ DEFAULT_VARIABLE_NAMES = [
     "Image acquisition",
     "Specific experimental conditions",
 ]
+
+# Maximum number of variables that can be parsed from filenames
+MAX_PARSED_VARIABLES = 10
+
+# Maximum number of variable sets that can stored per user in the plugin database.
+# Limits both the number of variable name input fields and the number of parsed variables.
+MAX_VARIABLE_SET_ENTRIES = 10
 
 # Namespaces used for MapAnnotations
 MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in Omero Web
