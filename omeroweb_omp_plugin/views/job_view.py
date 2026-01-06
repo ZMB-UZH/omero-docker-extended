@@ -154,6 +154,15 @@ def start_job(request, conn=None, url=None, **kwargs):
         var_names = data.get("var_names") or []
         delete_mode = data.get("delete_mode")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
+        
+        # Read user's chunk size
+        user_chunk_size = data.get("chunk_size")
+        try:
+            chunk_size = int(user_chunk_size) if user_chunk_size else CHUNK_SIZE
+            if chunk_size < 1 or chunk_size > 100:
+                chunk_size = CHUNK_SIZE
+        except (ValueError, TypeError):
+            chunk_size = CHUNK_SIZE
 
         if separator_mode not in ("chars", "regex", "ai_regex"):
             separator_mode = "chars"
@@ -193,6 +202,7 @@ def start_job(request, conn=None, url=None, **kwargs):
             "index": 0,
             "started": time.time(),
             "separator_mode": separator_mode,
+            "chunk_size": chunk_size,
         }
 
         save_job(job)
@@ -417,7 +427,8 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             seps_escaped = "".join(re.escape(c) for c in raw_seps)
             sep_pattern = f"[{seps_escaped}]+"
 
-        end = min(idx + CHUNK_SIZE, total)
+        job_chunk_size = job.get("chunk_size", CHUNK_SIZE)
+        end = min(idx + job_chunk_size, total)
         batch_ids = image_ids[idx:end]
 
         update = conn.getUpdateService()
