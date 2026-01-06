@@ -254,7 +254,7 @@
             <button type="button" id="ai_credentials_close" class="ai-option-btn">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
-            Save API keys for external AI providers. For instructions on how to create an API key see Help.
+            Save API keys for external AI providers. For instructions on how to create an API key see help.
         </div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:3px;">AI provider</label>
@@ -765,7 +765,7 @@
             updateAiModalStatus('API key on file. Ready to process.');
             return;
         }
-        updateAiModalStatus('Please add an API key for this provider in Settings.', true);
+        updateAiModalStatus('Please add an API key for this provider in settings.', true);
     }
 
     function confirmUserDataDelete(url, successMessage) {
@@ -1384,7 +1384,7 @@
                 return;
             }
             if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
-                updateAiModalStatus('Please add an API key for this provider in Settings.', true);
+                updateAiModalStatus('Please add an API key for this provider in settings.', true);
                 return;
             }
             const projectId = projectSelect?.value;
