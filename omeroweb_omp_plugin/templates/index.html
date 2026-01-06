@@ -207,14 +207,14 @@
                 box-shadow:0 10px 30px rgba(0,0,0,0.25);
                 font-size:13px; min-width:360px; max-width:520px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <strong>AI-assisted regex</strong>
+            <strong>AI-assisted Regex expression</strong>
             <button type="button" id="ai_modal_close" class="text-link-btn">Close</button>
         </div>
         <div style="margin-bottom:10px; color:#4b5563;">
-            Select a provider, process the filenames, then transfer the suggested regex.
+            Select a provider, process the filenames, then transfer the suggested Regex.
         </div>
         <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:6px;">AI provider</label>
+            <label style="display:block; font-weight:600; margin-bottom:3px;">AI provider</label>
             <select id="ai_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
                 <option value="local">Local</option>
                 <option value="openai">OpenAI</option>
@@ -231,10 +231,10 @@
         </div>
         <div id="ai_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:6px;">Suggested regex</label>
+            <label style="display:block; font-weight:600; margin-bottom:3px;">Suggested Regex</label>
             <textarea id="ai_regex_output"
                       style="width:100%; min-height:80px; border-radius:6px; border:1px solid #007bff; padding:8px;"
-                      placeholder="Process to generate a regex suggestion."></textarea>
+                      placeholder="Process to generate a Regex expression."></textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_process_btn">Process</button>
@@ -257,7 +257,7 @@
             Save API keys for external AI providers. For instructions on how to create an API key see Help.
         </div>
         <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:6px;">Provider</label>
+            <label style="display:block; font-weight:600; margin-bottom:3px;">AI provider</label>
             <select id="ai_credentials_provider" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
@@ -272,7 +272,7 @@
             </select>
         </div>
         <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:6px;">API key</label>
+            <label style="display:block; font-weight:600; margin-bottom:3px;">API key</label>
             <input type="password"
                    id="ai_credentials_key"
                    placeholder="Enter API key"
@@ -1424,7 +1424,7 @@
                     if (aiTransferBtn) {
                         aiTransferBtn.disabled = !(data.regex && data.regex.trim());
                     }
-                    updateAiModalStatus('Regex suggestion ready.');
+                    updateAiModalStatus('Regex suggestion ready. Please repeat processing if not satisfactory.');
                 })
                 .catch(() => {
                     updateAiModalStatus('Unable to process filenames. Please try again.', true);
