@@ -3,6 +3,7 @@ import logging
 import re
 import urllib.error
 import urllib.request
+from collections import Counter
 
 
 logger = logging.getLogger(__name__)
@@ -36,12 +37,73 @@ _OPENAI_COMPATIBLE = {
 }
 
 
+def _extract_base_name(filename):
+    match = re.search(r"\[(.+?)\]", filename)
+    if match:
+        return match.group(1)
+    sanitized = filename.replace("\t", " ")
+    match = re.search(r".*\s+(.+?)\s*$", sanitized)
+    if match:
+        return match.group(1).rsplit(".", 1)[0]
+    return filename.rsplit(".", 1)[0]
+
+
+def _regex_for_separators(separators):
+    tokens = []
+    has_whitespace = False
+    for char in separators:
+        if char.isspace():
+            has_whitespace = True
+        elif char == "-":
+            tokens.append(r"-(?![A-Za-z]+\d)")
+        else:
+            tokens.append(re.escape(char))
+    if has_whitespace:
+        tokens.append(r"\s")
+    if not tokens:
+        return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
+    return "(?:" + "|".join(tokens) + ")+"
+
+
+def _suggest_separator_regex(filenames):
+    counts = Counter()
+    for name in filenames:
+        base = _extract_base_name(name)
+        for char in base:
+            if not char.isalnum():
+                counts[char] += 1
+    if not counts:
+        return _regex_for_separators([])
+    top = counts.most_common()
+    max_count = top[0][1]
+    candidates = [char for char, count in top if count >= max_count * 0.4]
+    return _regex_for_separators(candidates[:5])
+
+
+def _summarize_separators(filenames):
+    counts = Counter()
+    for name in filenames:
+        base = _extract_base_name(name)
+        for char in base:
+            if not char.isalnum():
+                counts[char] += 1
+    if not counts:
+        return ""
+    top = [char for char, _ in counts.most_common(6)]
+    return ", ".join(repr(char) for char in top)
+
+
 def _build_prompt(filenames):
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
+    separators = _summarize_separators(filenames)
+    separator_hint = f"Common separators observed: {separators}\n" if separators else ""
     return (
-        "You generate a single regex pattern to split filenames into tokens.\n"
+        "You generate a single regex pattern suitable for re.split.\n"
+        "The regex must match separators (not tokens) and avoid capturing groups.\n"
+        "Prefer a simple character-class or alternation using common delimiters.\n"
         "Return only the regex pattern with no explanation or code fences.\n"
+        f"{separator_hint}"
         "Filenames:\n"
         f"{list_block}\n"
         "Regex:"
@@ -126,7 +188,7 @@ def _openai_like(provider, api_key, prompt):
             },
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.2,
+        "temperature": 0.0,
         "max_tokens": 120,
     }
     headers = {
@@ -149,7 +211,7 @@ def _anthropic(api_key, prompt):
     payload = {
         "model": "claude-3-5-sonnet-20240620",
         "max_tokens": 120,
-        "temperature": 0.2,
+        "temperature": 0.0,
         "messages": [{"role": "user", "content": prompt}],
     }
     headers = {
@@ -171,7 +233,7 @@ def _anthropic(api_key, prompt):
 def _google(api_key, prompt):
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 120},
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 120},
     }
     url = (
         "https://generativelanguage.googleapis.com/v1beta/"
@@ -192,7 +254,7 @@ def _cohere(api_key, prompt):
     payload = {
         "model": "command-r",
         "message": prompt,
-        "temperature": 0.2,
+        "temperature": 0.0,
         "max_tokens": 120,
     }
     headers = {
@@ -209,6 +271,34 @@ def _cohere(api_key, prompt):
     return regex
 
 
+def _is_regex_reasonable(regex, filenames):
+    if not regex:
+        return False
+    sample = filenames[:30]
+    if not sample:
+        return True
+    has_separator = False
+    for name in sample:
+        base = _extract_base_name(name)
+        if any(not char.isalnum() for char in base):
+            has_separator = True
+            break
+    try:
+        split_counts = []
+        for name in sample:
+            base = _extract_base_name(name)
+            parts = [p for p in re.split(regex, base) if p]
+            split_counts.append(len(parts))
+    except re.error:
+        return False
+
+    if not has_separator:
+        return True
+
+    non_trivial = sum(count > 1 for count in split_counts)
+    return non_trivial / len(split_counts) >= 0.4
+
+
 def generate_ai_regex(provider, api_key, filenames):
     provider = (provider or "").strip().lower()
     if not provider:
@@ -217,11 +307,19 @@ def generate_ai_regex(provider, api_key, filenames):
         raise AiAssistError("Provider requires additional configuration.")
     prompt = _build_prompt(filenames)
     if provider in _OPENAI_COMPATIBLE:
-        return _openai_like(provider, api_key, prompt)
-    if provider == "anthropic":
-        return _anthropic(api_key, prompt)
-    if provider == "google":
-        return _google(api_key, prompt)
-    if provider == "cohere":
-        return _cohere(api_key, prompt)
-    raise AiAssistError(f"Provider '{provider}' is not supported.")
+        regex = _openai_like(provider, api_key, prompt)
+    elif provider == "anthropic":
+        regex = _anthropic(api_key, prompt)
+    elif provider == "google":
+        regex = _google(api_key, prompt)
+    elif provider == "cohere":
+        regex = _cohere(api_key, prompt)
+    else:
+        raise AiAssistError(f"Provider '{provider}' is not supported.")
+
+    if not _is_regex_reasonable(regex, filenames):
+        fallback = _suggest_separator_regex(filenames)
+        if fallback and fallback != regex:
+            logger.warning("AI regex looked unreliable; using heuristic suggestion.")
+            return fallback
+    return regex
