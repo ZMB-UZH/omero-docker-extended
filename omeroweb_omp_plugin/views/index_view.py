@@ -414,6 +414,8 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_parsed_variables": max_parsed,
                 "vars_limit_exceeded": vars_limit_exceeded,
                 "max_vars_uncapped": max_vars_uncapped,
+                "chunk_size": chunk_size,
+                "max_variable_sets": max_sets,
             }
 
             return render(
