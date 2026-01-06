@@ -19,7 +19,12 @@ from ..services.core import (
 from ..services.ai_assist import AiAssistError, generate_ai_regex
 from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..constants import DEFAULT_VARIABLE_NAMES, MAX_PARSED_VARIABLES
+from ..constants import (
+    CHUNK_SIZE,
+    DEFAULT_VARIABLE_NAMES,
+    MAX_PARSED_VARIABLES,
+    MAX_VARIABLE_SET_ENTRIES,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -402,7 +407,13 @@ def index(request, conn=None, url=None, **kwargs):
         return render(
             request,
             "index.html",
-            {"projects": projects},
+            {
+                "projects": projects,
+                "chunk_size": CHUNK_SIZE,
+                "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                "max_parsed_variables": MAX_PARSED_VARIABLES,
+                "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+            },
         )
 
     except Exception as e:
