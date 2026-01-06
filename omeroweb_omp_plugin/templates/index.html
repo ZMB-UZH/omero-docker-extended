@@ -274,8 +274,57 @@
             <strong>User settings</strong>
             <button type="button" id="user_settings_close" class="ai-option-btn ai-option-btn--modal">Close</button>
         </div>
-        <div style="margin-bottom:10px; color:#4b5563;">
-            Settings options will appear here.
+        <div class="user-settings-grid">
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_job_batch">Job batch size</label>
+                    <input type="text"
+                           id="user_setting_job_batch"
+                           inputmode="numeric"
+                           style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[1-100]</span>
+                    <span>Set higher for very large datasets at the expense of progress bar update frequency.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_default_vars">Default variable names</label>
+                    <input type="text"
+                           id="user_setting_default_vars"
+                           style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span>Comma-separated list of default names (inside double quotes " ") for the parsed variables.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_max_parsed">Max nr. of parsed variables</label>
+                    <input type="text"
+                           id="user_setting_max_parsed"
+                           inputmode="numeric"
+                           style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[3-15]</span>
+                    <span>Increase if needed for very long or complex filenames.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_max_sets">Max nr. of variable sets in database</label>
+                    <input type="text"
+                           id="user_setting_max_sets"
+                           inputmode="numeric"
+                           style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[5-30]</span>
+                    <span>Increase if you run out of variable set storage slots.</span>
+                </div>
+            </div>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="user_settings_save">Save settings</button>
@@ -499,6 +548,45 @@
     .settings-menu-item--submenu.menu-open .settings-submenu {
         display: block;
     }
+    .user-settings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .user-setting-row {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .user-setting-input {
+        flex: 1 1 240px;
+    }
+    .user-setting-input label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .user-setting-description {
+        flex: 1 1 220px;
+        color: #4b5563;
+        font-size: 12px;
+        line-height: 1.35;
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+        justify-content: flex-start;
+    }
+    .user-setting-limit {
+        font-weight: 600;
+        color: #1f2937;
+        white-space: nowrap;
+    }
+    .user-setting-input input.user-setting-error {
+        border-color: #dc2626;
+        box-shadow: 0 0 0 1px #dc2626;
+    }
     .settings-menu-item--submenu::after {
         content: '';
         position: absolute;
@@ -635,6 +723,10 @@
     const userSettingsClose = document.getElementById('user_settings_close');
     const userSettingsSave = document.getElementById('user_settings_save');
     const userSettingsRestore = document.getElementById('user_settings_restore');
+    const userSettingJobBatchInput = document.getElementById('user_setting_job_batch');
+    const userSettingDefaultVarsInput = document.getElementById('user_setting_default_vars');
+    const userSettingMaxParsedInput = document.getElementById('user_setting_max_parsed');
+    const userSettingMaxSetsInput = document.getElementById('user_setting_max_sets');
     const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
     const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
     const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
@@ -656,6 +748,13 @@
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
+    const userSettingsStorageKey = 'omp_user_settings';
+    const userSettingsDefaults = {
+        jobBatchSize: {{ chunk_size }},
+        maxParsedVariables: {{ max_parsed_variables }},
+        maxVariableSets: {{ max_variable_sets }},
+        defaultVariableNames: {{ default_variable_names_json|safe }},
+    };
 
     function showNonBlockingModal(message) {
         const overlay = document.getElementById("nb-modal-overlay");
@@ -971,6 +1070,129 @@
         if (userSettingsOverlay) {
             userSettingsOverlay.style.display = 'none';
         }
+    }
+
+    function formatDefaultVariableNames(names) {
+        const list = Array.isArray(names) ? names : [];
+        return list.map((name) => `"${name}"`).join(', ');
+    }
+
+    function parseQuotedVariableNames(rawValue) {
+        const trimmed = rawValue.trim();
+        if (!trimmed) return null;
+        const parts = trimmed.split(',').map((part) => part.trim()).filter((part) => part.length > 0);
+        if (parts.length === 0) return null;
+        const parsed = [];
+        for (const part of parts) {
+            if (!(part.startsWith('"') && part.endsWith('"')) || part.length < 3) {
+                return null;
+            }
+            const inner = part.slice(1, -1).trim();
+            if (!inner) {
+                return null;
+            }
+            parsed.push(inner);
+        }
+        return parsed;
+    }
+
+    function setUserSettingError(input, hasError) {
+        if (!input) return;
+        input.classList.toggle('user-setting-error', hasError);
+    }
+
+    function clearUserSettingErrors() {
+        [userSettingJobBatchInput, userSettingDefaultVarsInput, userSettingMaxParsedInput, userSettingMaxSetsInput]
+            .forEach((input) => setUserSettingError(input, false));
+    }
+
+    function loadUserSettings() {
+        try {
+            const stored = window.localStorage?.getItem(userSettingsStorageKey);
+            if (!stored) return null;
+            return JSON.parse(stored);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function applyUserSettingsValues(settings) {
+        if (!settings) return;
+        if (userSettingJobBatchInput) {
+            userSettingJobBatchInput.value = `${settings.jobBatchSize ?? ''}`;
+        }
+        if (userSettingMaxParsedInput) {
+            userSettingMaxParsedInput.value = `${settings.maxParsedVariables ?? ''}`;
+        }
+        if (userSettingMaxSetsInput) {
+            userSettingMaxSetsInput.value = `${settings.maxVariableSets ?? ''}`;
+        }
+        if (userSettingDefaultVarsInput) {
+            const defaultVars = Array.isArray(settings.defaultVariableNames)
+                ? formatDefaultVariableNames(settings.defaultVariableNames)
+                : (settings.defaultVariableNames ?? '');
+            userSettingDefaultVarsInput.value = defaultVars;
+        }
+    }
+
+    function resetUserSettingsToDefaults() {
+        applyUserSettingsValues({
+            jobBatchSize: userSettingsDefaults.jobBatchSize,
+            maxParsedVariables: userSettingsDefaults.maxParsedVariables,
+            maxVariableSets: userSettingsDefaults.maxVariableSets,
+            defaultVariableNames: userSettingsDefaults.defaultVariableNames,
+        });
+        clearUserSettingErrors();
+    }
+
+    function populateUserSettings() {
+        const stored = loadUserSettings();
+        if (stored) {
+            applyUserSettingsValues(stored);
+            return;
+        }
+        resetUserSettingsToDefaults();
+    }
+
+    function validateUserSettings() {
+        let hasError = false;
+        const jobBatchRaw = userSettingJobBatchInput?.value?.trim() ?? '';
+        const maxParsedRaw = userSettingMaxParsedInput?.value?.trim() ?? '';
+        const maxSetsRaw = userSettingMaxSetsInput?.value?.trim() ?? '';
+        const defaultVarsRaw = userSettingDefaultVarsInput?.value ?? '';
+
+        const numericPattern = /^\d+$/;
+        const jobBatchValue = numericPattern.test(jobBatchRaw) ? parseInt(jobBatchRaw, 10) : NaN;
+        const maxParsedValue = numericPattern.test(maxParsedRaw) ? parseInt(maxParsedRaw, 10) : NaN;
+        const maxSetsValue = numericPattern.test(maxSetsRaw) ? parseInt(maxSetsRaw, 10) : NaN;
+
+        const parsedDefaults = parseQuotedVariableNames(defaultVarsRaw);
+
+        const jobBatchValid = Number.isInteger(jobBatchValue) && jobBatchValue >= 1 && jobBatchValue <= 100;
+        const maxParsedValid = Number.isInteger(maxParsedValue) && maxParsedValue >= 3 && maxParsedValue <= 15;
+        const maxSetsValid = Number.isInteger(maxSetsValue) && maxSetsValue >= 5 && maxSetsValue <= 30;
+        const defaultVarsValid = Array.isArray(parsedDefaults);
+
+        setUserSettingError(userSettingJobBatchInput, !jobBatchValid);
+        setUserSettingError(userSettingMaxParsedInput, !maxParsedValid);
+        setUserSettingError(userSettingMaxSetsInput, !maxSetsValid);
+        setUserSettingError(userSettingDefaultVarsInput, !defaultVarsValid);
+
+        if (!jobBatchValid || !maxParsedValid || !maxSetsValid || !defaultVarsValid) {
+            hasError = true;
+        }
+
+        if (hasError) {
+            showNonBlockingModal("Formatting error(s). Please try again.");
+            return null;
+        }
+
+        return {
+            jobBatchSize: jobBatchValue,
+            maxParsedVariables: maxParsedValue,
+            maxVariableSets: maxSetsValue,
+            defaultVariableNames: parsedDefaults,
+        };
     }
 
     function refreshAiCredentials() {
@@ -1343,6 +1565,7 @@
     if (userSettingsBtn) {
         userSettingsBtn.addEventListener('click', () => {
             showSettingsMenu(false);
+            populateUserSettings();
             openUserSettingsModal();
         });
     }
@@ -1401,8 +1624,36 @@
             if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
                 return;
             }
+            try {
+                window.localStorage?.removeItem(userSettingsStorageKey);
+            } catch (error) {
+                // ignore storage errors
+            }
+            resetUserSettingsToDefaults();
         });
     }
+
+    if (userSettingsSave) {
+        userSettingsSave.addEventListener('click', () => {
+            clearUserSettingErrors();
+            const validated = validateUserSettings();
+            if (!validated) return;
+            try {
+                window.localStorage?.setItem(userSettingsStorageKey, JSON.stringify(validated));
+            } catch (error) {
+                // ignore storage errors
+            }
+            closeUserSettingsModal();
+        });
+    }
+
+    [userSettingJobBatchInput, userSettingDefaultVarsInput, userSettingMaxParsedInput, userSettingMaxSetsInput]
+        .filter(Boolean)
+        .forEach((input) => {
+            input.addEventListener('input', () => {
+                setUserSettingError(input, false);
+            });
+        });
 
     if (aiCredentialsProvider) {
         aiCredentialsProvider.addEventListener('change', () => {
