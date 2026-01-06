@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 TABLE_NAME = "omp_variable_sets"
 TABLE_NAME_AI_CREDENTIALS = "omp_ai_credentials"
+TABLE_NAME_USER_SETTINGS = "omp_user_settings"
 ENV_USER = "OMP_DATA_USER"
 ENV_PASS = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
@@ -20,6 +21,10 @@ class VariableStoreError(Exception):
 
 class AiCredentialStoreError(Exception):
     """Raised when AI credential persistence fails."""
+
+
+class UserSettingsStoreError(Exception):
+    """Raised when user settings persistence fails."""
 
 
 class UserDataStoreError(Exception):
@@ -176,6 +181,28 @@ def _ensure_ai_schema(conn):
             f"""
             CREATE INDEX IF NOT EXISTS {TABLE_NAME_AI_CREDENTIALS}_username_idx
                 ON {TABLE_NAME_AI_CREDENTIALS} (username);
+            """
+        )
+    conn.commit()
+
+
+def _ensure_user_settings_schema(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {TABLE_NAME_USER_SETTINGS} (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                settings JSONB NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            """
+        )
+        cur.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS {TABLE_NAME_USER_SETTINGS}_username_idx
+                ON {TABLE_NAME_USER_SETTINGS} (username);
             """
         )
     conn.commit()
@@ -377,6 +404,65 @@ def save_ai_credentials(username, provider, api_key):
         raise AiCredentialStoreError("Could not save AI credentials.")
 
 
+def save_user_settings(username, settings_payload):
+    try:
+        _, extras = _load_psycopg2()
+        json_payload = extras.Json(settings_payload)
+        with _connect() as conn:
+            _ensure_user_settings_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {TABLE_NAME_USER_SETTINGS} (username, settings, updated_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (username)
+                    DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+                    """,
+                    (username, json_payload),
+                )
+            conn.commit()
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT settings
+                    FROM {TABLE_NAME_USER_SETTINGS}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise UserSettingsStoreError("User settings were not persisted to the database.")
+    except UserSettingsStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save user settings for %s: %s", username, e)
+        raise UserSettingsStoreError("Could not save user settings.")
+
+
+def delete_all_user_settings(username):
+    try:
+        with _connect() as conn:
+            _ensure_user_settings_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME_USER_SETTINGS}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                deleted = cur.rowcount
+            conn.commit()
+            return deleted
+    except UserSettingsStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete user settings for %s: %s", username, e)
+        raise UserSettingsStoreError("Unable to delete user settings.")
+
+
 def delete_all_variable_sets(username):
     try:
         with _connect() as conn:
@@ -426,6 +512,7 @@ def delete_all_user_data(username):
         with _connect() as conn:
             _ensure_schema(conn)
             _ensure_ai_schema(conn)
+            _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
@@ -443,9 +530,21 @@ def delete_all_user_data(username):
                     (username,),
                 )
                 credentials = cur.rowcount
+                cur.execute(
+                    f"""
+                    DELETE FROM {TABLE_NAME_USER_SETTINGS}
+                    WHERE username = %s
+                    """,
+                    (username,),
+                )
+                user_settings = cur.rowcount
             conn.commit()
-            return {"variable_sets": variable_sets, "ai_credentials": credentials}
-    except (VariableStoreError, AiCredentialStoreError):
+            return {
+                "variable_sets": variable_sets,
+                "ai_credentials": credentials,
+                "user_settings": user_settings,
+            }
+    except (VariableStoreError, AiCredentialStoreError, UserSettingsStoreError):
         raise UserDataStoreError("Unable to delete user data.")
     except Exception as e:
         logger.exception("Failed to delete user data for %s: %s", username, e)
