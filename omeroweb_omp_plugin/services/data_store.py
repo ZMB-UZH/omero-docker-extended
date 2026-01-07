@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from contextlib import contextmanager
 
 
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 TABLE_NAME = "omp_variable_sets"
 TABLE_NAME_AI_CREDENTIALS = "omp_ai_credentials"
 TABLE_NAME_USER_SETTINGS = "omp_user_settings"
+TABLE_PREFIX = "omp_"
 ENV_USER = "OMP_DATA_USER"
 ENV_PASS = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
@@ -510,43 +512,43 @@ def delete_all_ai_credentials(username):
 def delete_all_user_data(username):
     try:
         with _connect() as conn:
-            _ensure_schema(conn)
-            _ensure_ai_schema(conn)
-            _ensure_user_settings_schema(conn)
+            tables = _list_user_scoped_tables(conn)
+            deleted_counts = {}
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME}
-                    WHERE username = %s
-                    """,
-                    (username,),
-                )
-                variable_sets = cur.rowcount
-                cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME_AI_CREDENTIALS}
-                    WHERE username = %s
-                    """,
-                    (username,),
-                )
-                credentials = cur.rowcount
-                cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME_USER_SETTINGS}
-                    WHERE username = %s
-                    """,
-                    (username,),
-                )
-                user_settings = cur.rowcount
+                for table in tables:
+                    cur.execute(
+                        f"""
+                        DELETE FROM {table}
+                        WHERE username = %s
+                        """,
+                        (username,),
+                    )
+                    deleted_counts[table] = cur.rowcount
             conn.commit()
-            return {
-                "variable_sets": variable_sets,
-                "ai_credentials": credentials,
-                "user_settings": user_settings,
-            }
+            return deleted_counts
     except (VariableStoreError, AiCredentialStoreError, UserSettingsStoreError):
         raise UserDataStoreError("Unable to delete user data.")
     except Exception as e:
         logger.exception("Failed to delete user data for %s: %s", username, e)
         raise UserDataStoreError("Unable to delete user data.")
-      
+
+
+def _list_user_scoped_tables(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT table_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND column_name = 'username'
+              AND table_name LIKE %s
+            """,
+            (f"{TABLE_PREFIX}%",),
+        )
+        rows = cur.fetchall()
+
+    tables = []
+    for (table_name,) in rows:
+        if re.match(r"^omp_[A-Za-z0-9_]+$", table_name):
+            tables.append(table_name)
+    return sorted(tables)
