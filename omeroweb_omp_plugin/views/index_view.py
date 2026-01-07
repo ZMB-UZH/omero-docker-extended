@@ -144,7 +144,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             if provider == "local":
                 regex = _suggest_separator_regex(filenames)
-                return JsonResponse({"regex": regex})
+                return JsonResponse({"regex": regex, "source": "local"})
 
             username = _current_username(request, conn)
             if not username:
@@ -159,14 +159,14 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": "Please add an API key for this provider in Settings."}, status=400)
 
             try:
-                regex = generate_ai_regex(provider, api_key, filenames)
+                result = generate_ai_regex(provider, api_key, filenames)
             except AiAssistError as e:
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
                 logger.exception("AI regex provider failure: %s", e)
                 return JsonResponse({"error": "Unable to process filenames."}, status=500)
 
-            return JsonResponse({"regex": regex})
+            return JsonResponse(result)
 
         # ----------------------------------------------------
         # PREVIEW MODE - WITH RATE LIMIT (major action)
