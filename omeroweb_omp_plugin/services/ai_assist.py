@@ -296,7 +296,13 @@ def generate_ai_regex(provider, api_key, filenames):
 
     if not _is_regex_reasonable(regex, filenames):
         fallback = _suggest_separator_regex(filenames)
-        if fallback and fallback != regex:
-            logger.warning("AI regex looked unreliable; using heuristic suggestion.")
-            return fallback
-    return regex
+        if fallback:
+            if fallback != regex:
+                logger.warning("AI regex looked unreliable; using heuristic suggestion.")
+            return {
+                "regex": fallback,
+                "source": "fallback",
+                "ai_regex": regex,
+                "fallback_reason": "ai_regex_unreliable",
+            }
+    return {"regex": regex, "source": "ai", "ai_regex": regex}
