@@ -70,51 +70,16 @@ JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 # ==============================================================================
 # HYPHEN PROTECTION PATTERNS FOR SCIENTIFIC NOMENCLATURE
 # ==============================================================================
-# Comprehensive patterns based on:
-# - REMBI (Recommended Metadata for Biological Images) standards
-# - OME (Open Microscopy Environment) conventions
-# - IUPAC chemical nomenclature
-# - Common microscopy/biology/chemistry filename patterns
-# - ISO 8601 date/time formats
-# 
-# These patterns protect hyphens that are part of scientific terms rather than
-# field separators in filenames.
-# ==============================================================================
-
 PROTECTED_HYPHEN_PATTERNS = [
-    # =========================================================================
-    # CORE PATTERN - Chemical compound protection
-    # =========================================================================
-    # Protects: DMSO-d6, 5-HT2A, ATP-2 (letters immediately followed by digits)
-    # Allows split: sample-001, ec-01, test-case (normal separators)
-    r'[A-Za-z]+\d',
-    
-    # =========================================================================
-    # ADDITIONAL SPECIFIC SCIENTIFIC PATTERNS
-    # =========================================================================
-    # Only fixed-width lookbehinds are used to avoid regex errors
-    
-    # Chemical compounds with digit prefix (5-HT, 20-HETE)
-    r'(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)',
-    
-    # Microscopy dimensional notation
-    r'(?<=[ZTC])(?:stack|series|plane|projection)',  # Z-stack, T-series, C-plane
-    
-    # Magnification and optics
-    r'(?<=x)(?:objective|oil|water)',                # 20x-objective, 100x-oil
-    r'(?<=X)(?:objective|lens)',                     # 20X-objective, 40X-lens
-    
-    # Wavelength notation
-    r'(?<=m)(?:laser|channel|filter)',               # 488nm-laser, 561nm-channel
-    
-    # Biology single-letter prefixes
-    r'(?<=[TB])cell',                                 # T-cell, B-cell
-    r'(?<=[NOHSC])(?:terminus|terminal|bond|linked)', # N-terminus, H-bond, O-linked
-    
-    # Protein tags
-    r'(?<=P)(?:GFP|RFP|YFP)',                        # anti-GFP, anti-RFP
-    
-    # Statistics
-    r'(?<=t)test',                                    # t-test
-    r'(?<=p)value',                                   # p-value
+    r'[A-Za-z]+\d+',                                    # Chemical: DMSO-d6, 5-HT2A
+    r'(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)',              # After digit: 5-HT, 20-HETE
+    r'(?<=[ZTC])(?:stack|series|plane|projection)',     # Z-stack, T-series
+    r'(?<=x)(?:objective|oil|water)',                   # 20x-objective
+    r'(?<=X)(?:objective|lens)',                        # 20X-objective
+    r'(?<=m)(?:laser|channel|filter)',                  # 488nm-laser
+    r'(?<=[TB])cell',                                    # T-cell, B-cell
+    r'(?<=[NOHSC])(?:terminus|terminal|bond|linked)',   # N-terminus, H-bond
+    r'(?<=P)(?:GFP|RFP|YFP)',                           # anti-GFP
+    r'(?<=t)test',                                       # t-test
+    r'(?<=p)value',                                      # p-value
 ]
