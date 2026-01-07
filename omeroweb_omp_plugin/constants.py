@@ -36,6 +36,10 @@ MAX_PARSED_VARIABLES = 10
 # Limits both the number of variable name input fields and the number of parsed variables.
 MAX_VARIABLE_SET_ENTRIES = 10
 
+# Whitelist of common, safe separators for filename parsing
+# Prevents weird Unicode characters from being chosen as separators
+COMMON_SEPARATORS = ['_', '-', '.', ' ', '__']
+
 # Namespaces used for MapAnnotations
 MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in Omero Web
 
