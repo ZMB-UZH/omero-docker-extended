@@ -66,3 +66,123 @@ MAJOR_ACTION_BLOCK_SECONDS = 60
 # Job cleanup parameters (prevent RAM hogging)
 JOB_MAX_AGE_SECONDS = 7200  # Delete jobs older than 2 hours - increase if problem with ultralong jobs appear
 JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
+
+# ==============================================================================
+# HYPHEN PROTECTION PATTERNS FOR SCIENTIFIC NOMENCLATURE
+# ==============================================================================
+# Comprehensive patterns based on:
+# - REMBI (Recommended Metadata for Biological Images) standards
+# - OME (Open Microscopy Environment) conventions
+# - IUPAC chemical nomenclature
+# - Common microscopy/biology/chemistry filename patterns
+# - ISO 8601 date/time formats
+# 
+# These patterns protect hyphens that are part of scientific terms rather than
+# field separators in filenames.
+# ==============================================================================
+
+PROTECTED_HYPHEN_PATTERNS = [
+    # -------------------------------------------------------------------------
+    # NUMBERS & MATHEMATICS
+    # -------------------------------------------------------------------------
+    r'\d',                                      # Negative numbers: -5, -0.25, -100
+    
+    # -------------------------------------------------------------------------
+    # CHEMICAL NOMENCLATURE (IUPAC)
+    # -------------------------------------------------------------------------
+    r'[A-Z]{1,4}(?:\d+[A-Z]*)?(?=[^a-z]|$)',   # Chemical compounds: 5-HT, 5-HT2A, 3-MA, 20-HETE
+    r'd\d+',                                    # Deuterated solvents: DMSO-d6, CDCl3-d1, MeOD-d4
+    r'\d+(?=[^a-zA-Z]|$)',                     # Chemical codes: ATP-2, DMSO-5, NADPH-1
+    
+    # -------------------------------------------------------------------------
+    # SCIENTIFIC MEASUREMENTS
+    # -------------------------------------------------------------------------
+    r'\d+\.?\d*(?=[^a-zA-Z]|$)',               # pH values: pH-7.4, pH-8.0, pH-6.5
+    r'[CcFfKk](?=[^a-zA-Z]|$)',                # Temperature: -20C, 37C, 273K, -80F, 98.6F
+    
+    # -------------------------------------------------------------------------
+    # BIOLOGY - GREEK LETTER PREFIXES
+    # -------------------------------------------------------------------------
+    r'[A-Za-z]{2,}',                            # After Greek: α-SMA, β-actin, γ-tubulin, δ-opioid
+    
+    # -------------------------------------------------------------------------
+    # BIOLOGY - SINGLE LETTER SCIENTIFIC NOTATION
+    # -------------------------------------------------------------------------
+    r'[a-z]+',                                  # T-cell, B-cell, N-terminus, C-terminus, H-bond
+    r'[A-Z]+(?=[^a-z]|$)',                     # X-RAY, UV-A, UV-B, UV-C, T-TEST, P-VALUE
+    
+    # -------------------------------------------------------------------------
+    # MICROSCOPY - FLUOROPHORES & DYES
+    # -------------------------------------------------------------------------
+    r'[A-Z][A-Z]+',                             # Cy5-NHS, FITC-BSA, TRITC-dextran, DAPI-stained
+    r'[a-z]+(?:ed|ing|ate|able|ated)',         # conjugated, tagged, stained, labeled, activated
+    r'[A-Za-z]+\d+',                            # Alexa488-NHS, Alexa647-conjugated, Atto565-maleimide
+    
+    # -------------------------------------------------------------------------
+    # MICROSCOPY - WAVELENGTH & DIMENSIONS
+    # -------------------------------------------------------------------------
+    r'[a-z]+',                                  # 488nm-laser, 561nm-channel, 10um-section, 100nm-beads
+    
+    # -------------------------------------------------------------------------
+    # MICROSCOPY - MAGNIFICATION & OPTICS
+    # -------------------------------------------------------------------------
+    r'[a-z]+',                                  # 20x-objective, 40X-lens, 100x-oil, 63x-water
+    
+    # -------------------------------------------------------------------------
+    # MICROSCOPY - DIMENSIONAL NOTATION (REMBI/OME)
+    # -------------------------------------------------------------------------
+    r'[a-z]+',                                  # Z-stack, T-series, C-plane, Z-projection
+    r'(?:image|frame|plane|slice|section)',     # Z01-image, T05-frame, C03-plane, Z10-slice
+    
+    # -------------------------------------------------------------------------
+    # MOLECULAR BIOLOGY - PROTEIN TAGS & CONSTRUCTS
+    # -------------------------------------------------------------------------
+    r'(?:tagged|fusion|expressing|driven|positive|negative)', # GFP-tagged, mCherry-fusion
+    r'[Ll]ox',                                  # Cre-lox, flox-FRT, loxP-flanked
+    r'(?:GFP|RFP|YFP|CFP|BFP)',                # anti-GFP, pro-RFP, EGFP-N1
+    
+    # -------------------------------------------------------------------------
+    # CHEMISTRY - PREFIXES & MODIFICATIONS
+    # -------------------------------------------------------------------------
+    r'(?:terminus|terminal|bond|linked|directed)',  # N-terminus, C-terminal, H-bond, O-linked
+    r'glycosylation',                           # O-glycosylation, N-glycosylation
+    r'(?:acetyl|methyl|ethyl|phospho)',        # N-acetyl, O-methyl, S-ethyl, O-phospho
+    
+    # -------------------------------------------------------------------------
+    # DATE & TIME FORMATS (ISO 8601)
+    # -------------------------------------------------------------------------
+    r'\d{2}(?:-\d{2})?',                       # 2024-01-15, 2024-01, 15-01-2024
+    r'\d+[hms](?:r)?',                         # 24h-timepoint, 5min-interval, 30s-exposure, 2hr-treatment
+    
+    # -------------------------------------------------------------------------
+    # STATISTICS & MATHEMATICS
+    # -------------------------------------------------------------------------
+    r'(?:test|tailed|way|sided|value)',        # t-test, two-tailed, one-way, double-sided, p-value
+    
+    # -------------------------------------------------------------------------
+    # BIOLOGY - SAMPLE & STRAIN NOTATION
+    # -------------------------------------------------------------------------
+    r'(?:WT|KO|HET|background|type)',          # wild-type, knock-out, C57BL/6-background, mock-treated
+    
+    # -------------------------------------------------------------------------
+    # ANTIBODIES & IMMUNOLOGY
+    # -------------------------------------------------------------------------
+    r'[A-Za-z]+(?:\d+)?',                      # anti-CD4, anti-mouse, anti-rabbit, anti-IgG
+    
+    # -------------------------------------------------------------------------
+    # EXPERIMENTAL CONDITIONS
+    # -------------------------------------------------------------------------
+    r'(?:treated|starved|stimulated|induced|depleted|supplemented)',  # serum-starved, drug-treated
+    r'(?:free|containing|rich|poor)',          # serum-free, glucose-containing, nutrient-rich
+    
+    # -------------------------------------------------------------------------
+    # CELLULAR COMPARTMENTS & ORGANELLES
+    # -------------------------------------------------------------------------
+    r'(?:associated|bound|localized|resident)', # membrane-associated, ER-resident, nucleus-localized
+    
+    # -------------------------------------------------------------------------
+    # IMAGING MODALITIES & TECHNIQUES
+    # -------------------------------------------------------------------------
+    r'(?:FRET|FLIM|FRAP|TIRF|SIM|STED|PALM|STORM)', # FRET-imaging, TIRF-microscopy
+    r'(?:confocal|widefield|lightsheet)',       # confocal-microscopy, light-sheet imaging
+]
