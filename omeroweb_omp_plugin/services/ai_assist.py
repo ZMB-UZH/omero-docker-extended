@@ -4,7 +4,7 @@ import re
 import urllib.error
 import urllib.request
 from collections import Counter
-
+from ..constants import COMMON_SEPARATORS
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def _suggest_separator_regex(filenames):
     for name in filenames:
         base = _extract_base_name(name)
         for char in base:
-            if not char.isalnum():
+            if char in COMMON_SEPARATORS:
                 counts[char] += 1
     if not counts:
         return _regex_for_separators([])
@@ -85,7 +85,7 @@ def _summarize_separators(filenames):
     for name in filenames:
         base = _extract_base_name(name)
         for char in base:
-            if not char.isalnum():
+            if char in COMMON_SEPARATORS:
                 counts[char] += 1
     if not counts:
         return ""
