@@ -69,43 +69,25 @@ def detect_label_value_pairs(filenames):
 def build_hyphen_protection_pattern(detected_labels=None):
     """
     Build comprehensive hyphen protection pattern.
-    
+
     Args:
         detected_labels: Optional set of detected label tokens for label-value pairs
-    
+
     Returns:
         str: Pattern for use in re.split()
     """
     # Start with base scientific protection patterns
-    base_patterns = [f'(?:{p})' for p in PROTECTED_HYPHEN_PATTERNS]
+    base_patterns = [f"(?:{p})" for p in PROTECTED_HYPHEN_PATTERNS]
     base_pattern = f"-(?!{'|'.join(base_patterns)})"
-    
-    # If label-value pairs detected, build special pattern
+
+    # If label-value pairs detected, remove labels as separators
     if detected_labels:
-        # Build pattern to protect label-value hyphens
-        # Pattern: Split on hyphens EXCEPT those in label-value pairs
-        
-        # Group labels by length for fixed-width lookbehinds
-        labels_2char = sorted([l for l in detected_labels if len(l) == 2])
-        labels_3char = sorted([l for l in detected_labels if len(l) == 3])
-        
-        label_parts = []
-        if labels_2char:
-            label_parts.extend(labels_2char)
-        if labels_3char:
-            label_parts.extend(labels_3char)
-        
+        label_parts = sorted(detected_labels)
         if label_parts:
-            # Build the intelligent pattern
-            label_alternation = '|'.join(re.escape(l) for l in label_parts)
-            
-            # Pattern: Split on hyphen if:
-            # - After label but NOT before digit, OR
-            # - NOT after any label
-            label_value_pattern = f"(?<={label_alternation})-(?!\\d)|(?<!{label_alternation})-"
-            
-            return label_value_pattern
-    
+            label_alternation = "|".join(re.escape(l) for l in label_parts)
+            label_pattern = rf"(?:^|-)(?:{label_alternation})-"
+            return f"(?:{label_pattern}|{base_pattern})"
+
     # No label-value pairs, use base pattern
     return base_pattern
 
