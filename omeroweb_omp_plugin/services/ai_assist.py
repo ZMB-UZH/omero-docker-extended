@@ -78,7 +78,8 @@ def _build_prompt(filenames):
     return (
         "You generate a single regex pattern suitable for re.split.\n"
         "The regex must match separators (not tokens) and avoid capturing groups.\n"
-        "Prefer a simple character-class or alternation using common delimiters.\n"
+        "Prefer a simple character-class or alternation using delimiters that appear.\n"
+        "Avoid complex lookarounds unless absolutely required.\n"
         "Return only the regex pattern with no explanation or code fences.\n"
         f"{separator_hint}"
         "Filenames:\n"
@@ -94,12 +95,19 @@ def _clean_regex(text):
     fenced = re.search(r"```(?:regex)?\s*([\s\S]+?)```", cleaned, re.IGNORECASE)
     if fenced:
         cleaned = fenced.group(1).strip()
+    else:
+        inline = re.search(r"`([^`]+)`", cleaned)
+        if inline:
+            cleaned = inline.group(1).strip()
     if cleaned.lower().startswith("regex:"):
         cleaned = cleaned.split(":", 1)[1].strip()
     lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
     if not lines:
         return ""
-    return lines[0].strip().strip("'\"")
+    first = lines[0]
+    if "regex:" in first.lower():
+        first = first.split(":", 1)[1].strip()
+    return first.strip().strip("'\"")
 
 
 def _extract_error_details(error):
@@ -273,7 +281,9 @@ def _is_regex_reasonable(regex, filenames):
         return True
 
     non_trivial = sum(count > 1 for count in split_counts)
-    return non_trivial / len(split_counts) >= 0.4
+    if non_trivial == 0:
+        return False
+    return non_trivial / len(split_counts) >= 0.1
 
 
 def generate_ai_regex(provider, api_key, filenames):
@@ -296,7 +306,13 @@ def generate_ai_regex(provider, api_key, filenames):
 
     if not _is_regex_reasonable(regex, filenames):
         fallback = _suggest_separator_regex(filenames)
-        if fallback and fallback != regex:
-            logger.warning("AI regex looked unreliable; using heuristic suggestion.")
-            return fallback
-    return regex
+        if fallback:
+            if fallback != regex:
+                logger.warning("AI regex looked unreliable; using heuristic suggestion.")
+            return {
+                "regex": fallback,
+                "source": "fallback",
+                "ai_regex": regex,
+                "fallback_reason": "ai_regex_unreliable",
+            }
+    return {"regex": regex, "source": "ai", "ai_regex": regex}
