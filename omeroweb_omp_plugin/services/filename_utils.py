@@ -1,149 +1,152 @@
 """
-Filename parsing utilities for OMERO metadata plugin.
-
-Provides shared functions for extracting base names and building regex patterns
-with intelligent hyphen protection for scientific nomenclature.
+Filename parsing utilities with intelligent label-value pair detection.
 """
 
 import re
+from collections import Counter
 from ..constants import PROTECTED_HYPHEN_PATTERNS
 
 
 def extract_base_name(filename):
-    """
-    Extract the meaningful base name from a filename.
-    
-    Handles common microscopy filename formats:
-    - Bracketed names: "prefix [basename].ext" -> "basename"
-    - Whitespace-delimited: "prefix basename.ext" -> "basename"
-    - Simple names: "basename.ext" -> "basename"
-    
-    Args:
-        filename (str): The filename to process
-        
-    Returns:
-        str: The extracted base name without extension
-        
-    Examples:
-        >>> extract_base_name("IMG [sample-001].tif")
-        'sample-001'
-        >>> extract_base_name("20240115 experiment-A.tif")
-        'experiment-A'
-        >>> extract_base_name("image_001.tif")
-        'image_001'
-    """
-    # Check for bracketed format: "prefix [basename].ext"
+    """Extract the meaningful base name from a filename."""
     match = re.search(r"\[(.+?)\]", filename)
     if match:
         return match.group(1)
-    
-    # Normalize tabs to spaces
     sanitized = filename.replace("\t", " ")
-    
-    # Check for whitespace-delimited format: "prefix basename.ext"
     match = re.search(r".*\s+(.+?)\s*$", sanitized)
     if match:
         return match.group(1).rsplit(".", 1)[0]
-    
-    # Fall back to simple format: "basename.ext"
     return filename.rsplit(".", 1)[0]
 
 
-def build_hyphen_protection_pattern():
+def detect_label_value_pairs(filenames):
     """
-    Build comprehensive negative lookahead pattern for hyphen protection.
-    
-    Combines all protected patterns from PROTECTED_HYPHEN_PATTERNS into a single
-    regex that identifies hyphens that should NOT be treated as separators.
+    Intelligently detect if filenames contain label-value pair patterns.
     
     Returns:
-        str: Regex pattern for negative lookahead after hyphen
-        
-    Examples:
-        Pattern protects: -5, 5-HT, pH-7.4, T-cell, Z-stack, 2024-01-15
-        Pattern allows split: sample-001, test-case, image-data
+        tuple: (has_pairs, detected_labels)
+            has_pairs: bool - True if >30% of parts are label-value pairs
+            detected_labels: set - Set of detected label tokens
     """
-    # Build comprehensive negative lookahead from all protected patterns
-    protected_conditions = [f'(?:{pattern})' for pattern in PROTECTED_HYPHEN_PATTERNS]
-    return '|'.join(protected_conditions)
-
-
-def regex_for_separators(separators, label_tokens=None):
-    """
-    Generate regex pattern for filename field separators with intelligent hyphen protection.
+    all_pairs = []
+    total_parts = 0
+    label_counts = Counter()
     
-    This function creates a regex pattern that splits filenames on separator characters
-    while protecting hyphens that are part of scientific terms (chemical compounds,
-    biological nomenclature, measurements, etc.).
+    for filename in filenames[:30]:  # Sample first 30 files
+        base = extract_base_name(filename)
+        parts = base.split('-')
+        total_parts += len(parts)
+        
+        # Look for alpha-numeric pairs
+        i = 0
+        while i < len(parts) - 1:
+            current = parts[i]
+            next_part = parts[i + 1]
+            
+            # Check for label-value pattern:
+            # - Current is 2-3 lowercase letters
+            # - Next is digits
+            if (current.isalpha() and 
+                2 <= len(current) <= 3 and 
+                current.islower() and 
+                next_part.isdigit()):
+                all_pairs.append((current, next_part))
+                label_counts[current] += 1
+                i += 2
+            else:
+                i += 1
+    
+    # Determine if this is a label-value pattern dataset
+    pair_ratio = len(all_pairs) / max(total_parts, 1)
+    has_pairs = pair_ratio >= 0.3  # 30% threshold
+    
+    # Get labels that appear multiple times (true labels, not random)
+    detected_labels = {label for label, count in label_counts.items() if count >= 2}
+    
+    return has_pairs, detected_labels
+
+
+def build_hyphen_protection_pattern(detected_labels=None):
+    """
+    Build comprehensive hyphen protection pattern.
     
     Args:
-        separators (str or list): Characters to use as separators (e.g., '_', '-', '.')
-        label_tokens (list, optional): Label tokens that may appear between separators.
-                                       Used for more sophisticated pattern matching.
-                                       If None, returns simple separator pattern.
+        detected_labels: Optional set of detected label tokens for label-value pairs
+    
+    Returns:
+        str: Pattern for use in re.split()
+    """
+    # Start with base scientific protection patterns
+    base_patterns = [f'(?:{p})' for p in PROTECTED_HYPHEN_PATTERNS]
+    base_pattern = f"-(?!{'|'.join(base_patterns)})"
+    
+    # If label-value pairs detected, build special pattern
+    if detected_labels:
+        # Build pattern to protect label-value hyphens
+        # Pattern: Split on hyphens EXCEPT those in label-value pairs
+        
+        # Group labels by length for fixed-width lookbehinds
+        labels_2char = sorted([l for l in detected_labels if len(l) == 2])
+        labels_3char = sorted([l for l in detected_labels if len(l) == 3])
+        
+        label_parts = []
+        if labels_2char:
+            label_parts.extend(labels_2char)
+        if labels_3char:
+            label_parts.extend(labels_3char)
+        
+        if label_parts:
+            # Build the intelligent pattern
+            label_alternation = '|'.join(re.escape(l) for l in label_parts)
+            
+            # Pattern: Split on hyphen if:
+            # - After label but NOT before digit, OR
+            # - NOT after any label
+            label_value_pattern = f"(?<={label_alternation})-(?!\\d)|(?<!{label_alternation})-"
+            
+            return label_value_pattern
+    
+    # No label-value pairs, use base pattern
+    return base_pattern
+
+
+def regex_for_separators(separators, filenames=None):
+    """
+    Generate regex pattern with intelligent hyphen protection.
+    
+    Args:
+        separators: Characters to use as separators (string or list)
+        filenames: Optional list of filenames for intelligent pattern detection
     
     Returns:
         str: Regex pattern suitable for re.split()
-        
-    Examples:
-        >>> regex_for_separators('_-')
-        '(?:_|-(?!...protected patterns...))+'
-        
-        >>> regex_for_separators('_', ['T', 'Z'])
-        '(?:_(?:T|Z)_|_|^(?:T|Z)_|_(?:T|Z)$)'
-    
-    Protected hyphen examples:
-        - Chemical: 5-HT, DMSO-d6, pH-7.4
-        - Biology: T-cell, α-SMA, GFP-tagged
-        - Microscopy: Z-stack, 488nm-laser, 20x-objective
-        - Dates: 2024-01-15
-        - Measurements: -20C, 10um-section
     """
     tokens = []
     has_whitespace = False
+    detected_labels = None
     
+    # Detect label-value pairs if filenames provided and hyphen is a separator
+    if filenames and '-' in separators:
+        has_pairs, detected_labels = detect_label_value_pairs(filenames)
+        if not has_pairs:
+            detected_labels = None
+    
+    # Build separator tokens
     for char in separators:
         if char.isspace():
             has_whitespace = True
         elif char == "-":
-            # Apply comprehensive hyphen protection
-            protected_lookahead = build_hyphen_protection_pattern()
-            tokens.append(f'-(?!{protected_lookahead})')
+            # Use intelligent pattern for hyphens
+            hyphen_pattern = build_hyphen_protection_pattern(detected_labels)
+            tokens.append(hyphen_pattern)
         else:
-            # Escape other special regex characters
             tokens.append(re.escape(char))
     
-    # Add whitespace pattern if any whitespace separator was found
     if has_whitespace:
         tokens.append(r"\s")
     
-    # If no valid separators, fall back to digit/non-digit boundary
     if not tokens:
         return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
     
-    # Build basic separator pattern
-    sep_pattern = "(?:" + "|".join(tokens) + ")+"
-    
-    # If no label tokens, return simple pattern
-    if not label_tokens:
-        return sep_pattern
-    
-    # Build pattern that handles labels between separators
-    # This allows for patterns like: "sep LABEL sep" or "^LABEL sep" or "sep LABEL$"
-    label_pattern = "(?:" + "|".join(re.escape(token) for token in label_tokens) + ")"
-    
-    return (
-        "(?:"
-        + sep_pattern               # Separator + label + separator
-        + label_pattern
-        + sep_pattern
-        + "|"
-        + sep_pattern               # Just separator
-        + "|^"
-        + label_pattern             # Label at start + separator
-        + sep_pattern
-        + "|"
-        + sep_pattern               # Separator + label at end
-        + label_pattern
-        + "$)"
-    )
+    # Combine all separator patterns
+    return "(?:" + "|".join(tokens) + ")+"
