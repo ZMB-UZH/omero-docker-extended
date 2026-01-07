@@ -82,136 +82,39 @@ JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 # ==============================================================================
 
 PROTECTED_HYPHEN_PATTERNS = [
-    # -------------------------------------------------------------------------
-    # NEGATIVE NUMBERS - Simple lookahead, no lookbehind needed
-    # -------------------------------------------------------------------------
-    r'\d',                                      # -5, -0.25, -100
+    # =========================================================================
+    # CORE PATTERN - Chemical compound protection
+    # =========================================================================
+    # Protects: DMSO-d6, 5-HT2A, ATP-2 (letters immediately followed by digits)
+    # Allows split: sample-001, ec-01, test-case (normal separators)
+    r'[A-Za-z]+\d',
     
-    # -------------------------------------------------------------------------
-    # CHEMICAL NOMENCLATURE - Use word boundaries instead of variable lookbehind
-    # -------------------------------------------------------------------------
-    r'(?<=\d)[A-Z]{1,4}(?:\d+[A-Z]*)?(?=\W|$)', # After digit: 5-HT, 3-MA, 20-HETE
-    r'd\d+(?=\W|$)',                             # Deuterated: DMSO-d6 (check after, not before)
-    r'(?<=\d)\d+(?=\W|$)',                      # After digit: ATP-2 style
+    # =========================================================================
+    # ADDITIONAL SPECIFIC SCIENTIFIC PATTERNS
+    # =========================================================================
+    # Only fixed-width lookbehinds are used to avoid regex errors
     
-    # -------------------------------------------------------------------------
-    # pH VALUES
-    # -------------------------------------------------------------------------
-    r'(?<=H)\d+\.?\d*',                         # After pH: pH-7.4 (fixed-width H)
+    # Chemical compounds with digit prefix (5-HT, 20-HETE)
+    r'(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)',
     
-    # -------------------------------------------------------------------------
-    # TEMPERATURE - Check what comes after
-    # -------------------------------------------------------------------------
-    r'\d+[CcFfKk](?=\W|$)',                     # Handles -20C, 37C
+    # Microscopy dimensional notation
+    r'(?<=[ZTC])(?:stack|series|plane|projection)',  # Z-stack, T-series, C-plane
     
-    # -------------------------------------------------------------------------
-    # SINGLE LETTER PREFIXES - Fixed single character
-    # -------------------------------------------------------------------------
-    r'(?<=[TBXNHCOSZ])cell',                    # T-cell, B-cell (single letter)
-    r'(?<=[TBXNHCOSZ])ray',                     # X-ray
-    r'(?<=[TBXNHCOSZ])test',                    # T-test
-    r'(?<=[NOHSC])terminus',                    # N-terminus, C-terminus
-    r'(?<=[NOHSC])terminal',                    # N-terminal, C-terminal
-    r'(?<=[NOHSC])bond',                        # H-bond, C-bond
-    r'(?<=[NOHSC])linked',                      # O-linked, N-linked
-    r'(?<=[NOHSC])glycosylation',               # O-glycosylation
-    r'(?<=[NOHSC])acetyl',                      # N-acetyl, O-acetyl
-    r'(?<=[ZTC])stack',                         # Z-stack
-    r'(?<=[ZTC])series',                        # T-series
-    r'(?<=[ZTC])plane',                         # C-plane
-    r'(?<=[ZTC])projection',                    # Z-projection
-    r'(?<=[UV])(?:[A-C](?=\W|$))',             # UV-A, UV-B, UV-C
+    # Magnification and optics
+    r'(?<=x)(?:objective|oil|water)',                # 20x-objective, 100x-oil
+    r'(?<=X)(?:objective|lens)',                     # 20X-objective, 40X-lens
     
-    # -------------------------------------------------------------------------
-    # COMMON SCIENTIFIC SUFFIXES - Check after hyphen
-    # -------------------------------------------------------------------------
-    r'conjugated',                              # FITC-conjugated, Alexa488-conjugated
-    r'tagged',                                  # GFP-tagged, His-tagged
-    r'labeled',                                 # DAPI-labeled
-    r'stained',                                 # DAPI-stained
-    r'expressing',                              # EGFP-expressing
-    r'fusion',                                  # mCherry-fusion
-    r'positive',                                # GFP-positive
-    r'negative',                                # control-negative
+    # Wavelength notation
+    r'(?<=m)(?:laser|channel|filter)',               # 488nm-laser, 561nm-channel
     
-    # -------------------------------------------------------------------------
-    # MICROSCOPY - SPECIFIC TERMS
-    # -------------------------------------------------------------------------
-    r'(?<=m)laser',                             # 488nm-laser (m is fixed)
-    r'(?<=m)channel',                           # 561nm-channel
-    r'(?<=m)filter',                            # 640nm-filter
-    r'(?<=m)section',                           # 10um-section
-    r'(?<=m)slice',                             # 5um-slice
-    r'(?<=x)objective',                         # 20x-objective (x is fixed)
-    r'(?<=x)lens',                              # 40x-lens
-    r'(?<=x)oil',                               # 100x-oil
-    r'(?<=X)objective',                         # 20X-objective
-    r'(?<=X)lens',                              # 40X-lens
+    # Biology single-letter prefixes
+    r'(?<=[TB])cell',                                 # T-cell, B-cell
+    r'(?<=[NOHSC])(?:terminus|terminal|bond|linked)', # N-terminus, H-bond, O-linked
     
-    # -------------------------------------------------------------------------
-    # PROTEIN/ANTIBODY NAMES - Specific matches
-    # -------------------------------------------------------------------------
-    r'(?<=P)GFP',                               # anti-GFP (check for anti later)
-    r'(?<=P)RFP',                               # anti-RFP
-    r'(?<=P)YFP',                               # anti-YFP
-    r'NHS(?=\W|$)',                             # Cy5-NHS, anything-NHS
+    # Protein tags
+    r'(?<=P)(?:GFP|RFP|YFP)',                        # anti-GFP, anti-RFP
     
-    # -------------------------------------------------------------------------
-    # GENETICS - Specific terms
-    # -------------------------------------------------------------------------
-    r'(?<=e)lox',                               # Cre-lox (e is fixed)
-    r'(?<=x)Cre',                               # lox-Cre (x is fixed)
-    r'(?<=x)FRT',                               # flox-FRT (x is fixed)
-    r'(?<=d)type',                              # wild-type (d is fixed)
-    r'(?<=k)out',                               # knock-out (k is fixed)
-    r'(?<=k)in',                                # knock-in
-    r'(?<=k)down',                              # knock-down
-    
-    # -------------------------------------------------------------------------
-    # ISO DATES - Digit patterns
-    # -------------------------------------------------------------------------
-    r'(?<=\d)\d{2}-\d{2}(?=\W|$)',             # After 4 digits: 2024-01-15
-    r'\d{2}-\d{2}-\d{4}',                       # 15-01-2024 format
-    r'\d{4}-\d{2}-\d{2}',                       # 2024-01-15 format (full)
-    
-    # -------------------------------------------------------------------------
-    # TIME NOTATION
-    # -------------------------------------------------------------------------
-    r'(?<=h)timepoint',                         # 24h-timepoint (h is fixed)
-    r'(?<=h)treatment',                         # 2h-treatment
-    r'(?<=h)incubation',                        # 4h-incubation
-    r'(?<=n)interval',                          # 5min-interval (n is fixed)
-    r'(?<=n)treatment',                         # 10min-treatment
-    r'(?<=n)exposure',                          # 30min-exposure
-    r'(?<=s)exposure',                          # 30s-exposure (s is fixed)
-    r'(?<=s)pulse',                             # 1s-pulse
-    
-    # -------------------------------------------------------------------------
-    # STATISTICS
-    # -------------------------------------------------------------------------
-    r'(?<=t)test',                              # t-test (t is fixed)
-    r'(?<=p)value',                             # p-value (p is fixed)
-    r'(?<=o)tailed',                            # two-tailed (o is fixed)
-    r'(?<=o)way',                               # two-way, one-way
-    
-    # -------------------------------------------------------------------------
-    # TREATMENT CONDITIONS
-    # -------------------------------------------------------------------------
-    r'(?<=m)free',                              # serum-free (m is fixed)
-    r'(?<=m)starved',                           # serum-starved
-    r'(?<=m)depleted',                          # serum-depleted
-    r'(?<=e)free',                              # glucose-free (e is fixed)
-    r'(?<=g)treated',                           # drug-treated (g is fixed)
-    r'(?<=g)resistant',                         # drug-resistant
-    
-    # -------------------------------------------------------------------------
-    # IMAGING TECHNIQUES
-    # -------------------------------------------------------------------------
-    r'(?<=T)imaging',                           # FRET-imaging (T is fixed)
-    r'(?<=M)imaging',                           # FLIM-imaging (M is fixed)
-    r'(?<=P)imaging',                           # FRAP-imaging (P is fixed)
-    r'(?<=F)imaging',                           # TIRF-imaging (F is fixed)
-    r'(?<=T)microscopy',                        # FRET-microscopy
-    r'(?<=l)microscopy',                        # confocal-microscopy (l is fixed)
+    # Statistics
+    r'(?<=t)test',                                    # t-test
+    r'(?<=p)value',                                   # p-value
 ]
-
