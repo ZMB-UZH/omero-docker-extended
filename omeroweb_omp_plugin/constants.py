@@ -83,106 +83,112 @@ JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 
 PROTECTED_HYPHEN_PATTERNS = [
     # -------------------------------------------------------------------------
-    # NUMBERS & MATHEMATICS
+    # NEGATIVE NUMBERS
     # -------------------------------------------------------------------------
-    r'\d',                                      # Negative numbers: -5, -0.25, -100
+    r'\d',                                      # After hyphen: -5, -0.25, -100
     
     # -------------------------------------------------------------------------
-    # CHEMICAL NOMENCLATURE (IUPAC)
+    # CHEMICAL NOMENCLATURE (IUPAC) - Number prefix required
     # -------------------------------------------------------------------------
-    r'[A-Z]{1,4}(?:\d+[A-Z]*)?(?=[^a-z]|$)',   # Chemical compounds: 5-HT, 5-HT2A, 3-MA, 20-HETE
-    r'd\d+',                                    # Deuterated solvents: DMSO-d6, CDCl3-d1, MeOD-d4
-    r'\d+(?=[^a-zA-Z]|$)',                     # Chemical codes: ATP-2, DMSO-5, NADPH-1
+    r'(?<=\d-)[A-Z]{1,4}(?:\d+[A-Z]*)?(?=[^a-z]|$)',   # 5-HT, 5-HT2A, 3-MA, 20-HETE (MUST have digit before)
+    r'(?<=[A-Z]{2}-)d\d+',                              # DMSO-d6, CDCl3-d1 (capitals before hyphen)
+    r'(?<=[A-Z]{2}-)\d+',                               # ATP-2, NADPH-1 (capitals before hyphen)
     
     # -------------------------------------------------------------------------
-    # SCIENTIFIC MEASUREMENTS
+    # SCIENTIFIC MEASUREMENTS - Context required
     # -------------------------------------------------------------------------
-    r'\d+\.?\d*(?=[^a-zA-Z]|$)',               # pH values: pH-7.4, pH-8.0, pH-6.5
-    r'[CcFfKk](?=[^a-zA-Z]|$)',                # Temperature: -20C, 37C, 273K, -80F, 98.6F
+    r'(?<=pH-)\d+\.?\d*',                               # pH-7.4, pH-8.0
+    r'(?<=-\d{1,3})[CcFfKk](?=[^a-zA-Z]|$)',           # -20C, 37C after number
     
     # -------------------------------------------------------------------------
-    # BIOLOGY - GREEK LETTER PREFIXES
+    # BIOLOGY - GREEK LETTER PREFIXES (single Greek char)
     # -------------------------------------------------------------------------
-    r'[A-Za-z]{2,}',                            # After Greek: α-SMA, β-actin, γ-tubulin, δ-opioid
+    r'(?<=[α-ωΑ-Ω]-)[A-Za-z]{2,}',                     # α-SMA, β-actin (after Greek)
     
     # -------------------------------------------------------------------------
     # BIOLOGY - SINGLE LETTER SCIENTIFIC NOTATION
     # -------------------------------------------------------------------------
-    r'[a-z]+',                                  # T-cell, B-cell, N-terminus, C-terminus, H-bond
-    r'[A-Z]+(?=[^a-z]|$)',                     # X-RAY, UV-A, UV-B, UV-C, T-TEST, P-VALUE
+    r'(?<=\b[A-Z]-)(?:cell|ray|test|bond|terminus|terminal|linked|directed)', # T-cell, X-ray, H-bond, N-terminus
+    r'(?<=\b[A-Z]-)(?:[A-Z]{2,}(?=[^a-z]|$))',         # UV-A, T-TEST (single letter then caps)
     
     # -------------------------------------------------------------------------
-    # MICROSCOPY - FLUOROPHORES & DYES
+    # MICROSCOPY - FLUOROPHORES (alphanumeric before hyphen)
     # -------------------------------------------------------------------------
-    r'[A-Z][A-Z]+',                             # Cy5-NHS, FITC-BSA, TRITC-dextran, DAPI-stained
-    r'[a-z]+(?:ed|ing|ate|able|ated)',         # conjugated, tagged, stained, labeled, activated
-    r'[A-Za-z]+\d+',                            # Alexa488-NHS, Alexa647-conjugated, Atto565-maleimide
+    r'(?<=[A-Z][a-z]*\d+-)[A-Z]{2,}',                  # Cy5-NHS, Alexa488-NHS
+    r'(?<=[A-Z]{2,}-)(?:conjugated|tagged|labeled|stained|activated)', # FITC-conjugated, DAPI-stained
+    r'(?<=Alexa\d{3}-)(?:NHS|conjugated|labeled)',     # Alexa488-NHS, Alexa647-conjugated
     
     # -------------------------------------------------------------------------
-    # MICROSCOPY - WAVELENGTH & DIMENSIONS
+    # MICROSCOPY - WAVELENGTH & DIMENSIONS (number + unit before hyphen)
     # -------------------------------------------------------------------------
-    r'[a-z]+',                                  # 488nm-laser, 561nm-channel, 10um-section, 100nm-beads
+    r'(?<=\d+nm-)laser|channel|filter',                # 488nm-laser, 561nm-channel
+    r'(?<=\d+[umn]m-)(?:section|slice|beads)',         # 10um-section, 100nm-beads
     
     # -------------------------------------------------------------------------
-    # MICROSCOPY - MAGNIFICATION & OPTICS
+    # MICROSCOPY - MAGNIFICATION
     # -------------------------------------------------------------------------
-    r'[a-z]+',                                  # 20x-objective, 40X-lens, 100x-oil, 63x-water
+    r'(?<=\d+[xX]-)(?:objective|lens|oil|water)',      # 20x-objective, 100x-oil
     
     # -------------------------------------------------------------------------
-    # MICROSCOPY - DIMENSIONAL NOTATION (REMBI/OME)
+    # MICROSCOPY - DIMENSIONAL NOTATION (Z, T, C prefixes)
     # -------------------------------------------------------------------------
-    r'[a-z]+',                                  # Z-stack, T-series, C-plane, Z-projection
-    r'(?:image|frame|plane|slice|section)',     # Z01-image, T05-frame, C03-plane, Z10-slice
+    r'(?<=\b[ZTC]-)(?:stack|series|plane|projection)', # Z-stack, T-series, C-plane
+    r'(?<=\b[ZTC]\d{1,2}-)(?:image|frame|plane|slice)', # Z01-image, T05-frame
     
     # -------------------------------------------------------------------------
-    # MOLECULAR BIOLOGY - PROTEIN TAGS & CONSTRUCTS
+    # MOLECULAR BIOLOGY - PROTEIN TAGS (specific proteins before hyphen)
     # -------------------------------------------------------------------------
-    r'(?:tagged|fusion|expressing|driven|positive|negative)', # GFP-tagged, mCherry-fusion
-    r'[Ll]ox',                                  # Cre-lox, flox-FRT, loxP-flanked
-    r'(?:GFP|RFP|YFP|CFP|BFP)',                # anti-GFP, pro-RFP, EGFP-N1
+    r'(?<=GFP-|EGFP-|RFP-|YFP-|CFP-|mCherry-|tdTomato-)(?:tagged|fusion|expressing|positive|negative)',
+    r'(?<=Cre-|lox-|flox-)(?:lox|Cre|FRT|flanked)',    # Cre-lox, lox-Cre, flox-FRT
+    r'(?<=anti-)(?:GFP|RFP|YFP|CD\d+|mouse|rabbit|IgG)', # anti-GFP, anti-CD4
     
     # -------------------------------------------------------------------------
-    # CHEMISTRY - PREFIXES & MODIFICATIONS
+    # CHEMISTRY - SPECIFIC PREFIXES
     # -------------------------------------------------------------------------
-    r'(?:terminus|terminal|bond|linked|directed)',  # N-terminus, C-terminal, H-bond, O-linked
-    r'glycosylation',                           # O-glycosylation, N-glycosylation
-    r'(?:acetyl|methyl|ethyl|phospho)',        # N-acetyl, O-methyl, S-ethyl, O-phospho
+    r'(?<=\b[NOHSC]-)(?:terminus|terminal|glycosylation|acetyl|methyl|linked)', # N-terminus, O-glycosylation
     
     # -------------------------------------------------------------------------
-    # DATE & TIME FORMATS (ISO 8601)
+    # DATE FORMATS - ISO 8601 (strict digit patterns)
     # -------------------------------------------------------------------------
-    r'\d{2}(?:-\d{2})?',                       # 2024-01-15, 2024-01, 15-01-2024
-    r'\d+[hms](?:r)?',                         # 24h-timepoint, 5min-interval, 30s-exposure, 2hr-treatment
+    r'(?<=\d{4}-)\d{2}-\d{2}',                         # 2024-01-15 (year-month-day)
+    r'(?<=\d{2}-)\d{2}(?=-\d{2,4})',                   # 15-01-2024 (day-month part)
     
     # -------------------------------------------------------------------------
-    # STATISTICS & MATHEMATICS
+    # TIME NOTATION (number before unit)
     # -------------------------------------------------------------------------
-    r'(?:test|tailed|way|sided|value)',        # t-test, two-tailed, one-way, double-sided, p-value
+    r'(?<=\d+h-)timepoint|treatment|incubation',        # 24h-timepoint, 2h-treatment
+    r'(?<=\d+min-)interval|treatment|exposure',         # 5min-interval
+    r'(?<=\d+s-)exposure|pulse|interval',               # 30s-exposure
     
     # -------------------------------------------------------------------------
-    # BIOLOGY - SAMPLE & STRAIN NOTATION
+    # STATISTICS (lowercase "t" or "p" before hyphen)
     # -------------------------------------------------------------------------
-    r'(?:WT|KO|HET|background|type)',          # wild-type, knock-out, C57BL/6-background, mock-treated
+    r'(?<=\bt-)test',                                   # t-test
+    r'(?<=\bp-)value',                                  # p-value
+    r'(?<=two-)tailed|way|sided',                       # two-tailed, two-way
     
     # -------------------------------------------------------------------------
-    # ANTIBODIES & IMMUNOLOGY
+    # GENETICS - VERY SPECIFIC
     # -------------------------------------------------------------------------
-    r'[A-Za-z]+(?:\d+)?',                      # anti-CD4, anti-mouse, anti-rabbit, anti-IgG
+    r'(?<=wild-)type',                                  # wild-type (specific)
+    r'(?<=knock-)out|in|down',                          # knock-out, knock-in, knock-down
+    r'(?<=C57BL/6-)background',                         # Mouse strain
     
     # -------------------------------------------------------------------------
-    # EXPERIMENTAL CONDITIONS
+    # TREATMENT CONDITIONS (specific prefixes)
     # -------------------------------------------------------------------------
-    r'(?:treated|starved|stimulated|induced|depleted|supplemented)',  # serum-starved, drug-treated
-    r'(?:free|containing|rich|poor)',          # serum-free, glucose-containing, nutrient-rich
+    r'(?<=serum-)free|starved|depleted',                # serum-free, serum-starved
+    r'(?<=glucose-)free|containing',                    # glucose-free
+    r'(?<=drug-)treated|resistant',                     # drug-treated
     
     # -------------------------------------------------------------------------
-    # CELLULAR COMPARTMENTS & ORGANELLES
+    # SUBCELLULAR (specific prefixes)
     # -------------------------------------------------------------------------
-    r'(?:associated|bound|localized|resident)', # membrane-associated, ER-resident, nucleus-localized
+    r'(?<=membrane-|ER-|nucleus-)(?:associated|bound|localized|resident)', 
     
     # -------------------------------------------------------------------------
-    # IMAGING MODALITIES & TECHNIQUES
+    # IMAGING TECHNIQUES (specific acronyms)
     # -------------------------------------------------------------------------
-    r'(?:FRET|FLIM|FRAP|TIRF|SIM|STED|PALM|STORM)', # FRET-imaging, TIRF-microscopy
-    r'(?:confocal|widefield|lightsheet)',       # confocal-microscopy, light-sheet imaging
+    r'(?<=FRET-|FLIM-|FRAP-|TIRF-|SIM-|STED-|PALM-|STORM-)(?:imaging|microscopy|analysis)',
+    r'(?<=confocal-|widefield-|lightsheet-)microscopy', 
 ]
