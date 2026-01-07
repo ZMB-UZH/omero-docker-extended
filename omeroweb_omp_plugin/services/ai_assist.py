@@ -4,6 +4,7 @@ import re
 import urllib.error
 import urllib.request
 from collections import Counter
+from .filename_utils import extract_base_name, regex_for_separators
 from ..constants import COMMON_SEPARATORS
 
 logger = logging.getLogger(__name__)
@@ -37,38 +38,10 @@ _OPENAI_COMPATIBLE = {
 }
 
 
-def _extract_base_name(filename):
-    match = re.search(r"\[(.+?)\]", filename)
-    if match:
-        return match.group(1)
-    sanitized = filename.replace("\t", " ")
-    match = re.search(r".*\s+(.+?)\s*$", sanitized)
-    if match:
-        return match.group(1).rsplit(".", 1)[0]
-    return filename.rsplit(".", 1)[0]
-
-
-def _regex_for_separators(separators):
-    tokens = []
-    has_whitespace = False
-    for char in separators:
-        if char.isspace():
-            has_whitespace = True
-        elif char == "-":
-            tokens.append(r"-(?![A-Za-z]+\d)")
-        else:
-            tokens.append(re.escape(char))
-    if has_whitespace:
-        tokens.append(r"\s")
-    if not tokens:
-        return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
-    return "(?:" + "|".join(tokens) + ")+"
-
-
 def _suggest_separator_regex(filenames):
     counts = Counter()
     for name in filenames:
-        base = _extract_base_name(name)
+        base = extract_base_name(name)
         for char in base:
             if char in COMMON_SEPARATORS:
                 counts[char] += 1
@@ -77,13 +50,13 @@ def _suggest_separator_regex(filenames):
     top = counts.most_common()
     max_count = top[0][1]
     candidates = [char for char, count in top if count >= max_count * 0.4]
-    return _regex_for_separators(candidates[:5])
+    return regex_for_separators(candidates[:5])
 
 
 def _summarize_separators(filenames):
     counts = Counter()
     for name in filenames:
-        base = _extract_base_name(name)
+        base = extract_base_name(name)
         for char in base:
             if char in COMMON_SEPARATORS:
                 counts[char] += 1
@@ -279,14 +252,14 @@ def _is_regex_reasonable(regex, filenames):
         return True
     has_separator = False
     for name in sample:
-        base = _extract_base_name(name)
+        base = extract_base_name(name)
         if any(not char.isalnum() for char in base):
             has_separator = True
             break
     try:
         split_counts = []
         for name in sample:
-            base = _extract_base_name(name)
+            base = extract_base_name(name)
             parts = [p for p in re.split(regex, base) if p]
             split_counts.append(len(parts))
     except re.error:
