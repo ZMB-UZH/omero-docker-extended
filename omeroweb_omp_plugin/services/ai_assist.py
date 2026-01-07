@@ -4,7 +4,12 @@ import re
 import urllib.error
 import urllib.request
 from collections import Counter
-from .filename_utils import extract_base_name, regex_for_separators
+from .filename_utils import (
+    build_hyphen_protection_pattern,
+    detect_label_value_pairs,
+    extract_base_name,
+    regex_for_separators,
+)
 from ..constants import COMMON_SEPARATORS
 
 logger = logging.getLogger(__name__)
@@ -70,17 +75,55 @@ def _summarize_separators(filenames):
     return ", ".join(repr(char) for char in top)
 
 
-def _build_prompt(filenames):
+def _separator_candidates(filenames):
+    counts = Counter()
+    for name in filenames:
+        base = extract_base_name(name)
+        for char in base:
+            if char in COMMON_SEPARATORS:
+                counts[char] += 1
+    if not counts:
+        return []
+    top = counts.most_common()
+    max_count = top[0][1]
+    return [char for char, count in top if count >= max_count * 0.4][:6]
+
+
+def _build_hyphen_hint(filenames):
+    has_pairs, detected_labels = detect_label_value_pairs(filenames)
+    if not has_pairs:
+        detected_labels = None
+    return build_hyphen_protection_pattern(detected_labels)
+
+
+def _build_prompt(filenames, strict=False):
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
     separators = _summarize_separators(filenames)
     separator_hint = f"Common separators observed: {separators}\n" if separators else ""
+    strict_lines = ""
+    if strict:
+        candidates = _separator_candidates(filenames)
+        if candidates:
+            strict_lines += (
+                "Use only the following separators when building the regex: "
+                f"{', '.join(repr(c) for c in candidates)}.\n"
+            )
+        if "-" in candidates:
+            hyphen_hint = _build_hyphen_hint(filenames)
+            strict_lines += (
+                "If you need to split on hyphens, prefer this hyphen-safe pattern: "
+                f"{hyphen_hint}\n"
+            )
     return (
         "You generate a single regex pattern suitable for re.split.\n"
         "The regex must match separators (not tokens) and avoid capturing groups.\n"
-        "Prefer a simple character-class or alternation using common delimiters.\n"
+        "Prefer a simple character-class or alternation using delimiters that appear.\n"
+        "Avoid complex lookarounds unless absolutely required.\n"
+        "Do not return a single separator unless it is the only delimiter present.\n"
         "Return only the regex pattern with no explanation or code fences.\n"
         f"{separator_hint}"
+        f"{strict_lines}"
         "Filenames:\n"
         f"{list_block}\n"
         "Regex:"
@@ -94,12 +137,19 @@ def _clean_regex(text):
     fenced = re.search(r"```(?:regex)?\s*([\s\S]+?)```", cleaned, re.IGNORECASE)
     if fenced:
         cleaned = fenced.group(1).strip()
+    else:
+        inline = re.search(r"`([^`]+)`", cleaned)
+        if inline:
+            cleaned = inline.group(1).strip()
     if cleaned.lower().startswith("regex:"):
         cleaned = cleaned.split(":", 1)[1].strip()
     lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
     if not lines:
         return ""
-    return lines[0].strip().strip("'\"")
+    first = lines[0]
+    if "regex:" in first.lower():
+        first = first.split(":", 1)[1].strip()
+    return first.strip().strip("'\"")
 
 
 def _extract_error_details(error):
@@ -273,7 +323,39 @@ def _is_regex_reasonable(regex, filenames):
         return True
 
     non_trivial = sum(count > 1 for count in split_counts)
-    return non_trivial / len(split_counts) >= 0.4
+    if non_trivial == 0:
+        return False
+    return non_trivial / len(split_counts) >= 0.1
+
+
+def _extract_single_separator(regex):
+    if not regex:
+        return None
+    candidate = regex.strip()
+    if re.fullmatch(r"\\s", candidate):
+        return " "
+    match = re.fullmatch(r"\\?.", candidate)
+    if match:
+        return match.group(0).lstrip("\\")
+    wrapped = re.fullmatch(r"\(\?:(.+)\)\+?", candidate)
+    if wrapped:
+        inner = wrapped.group(1)
+        match = re.fullmatch(r"\\?.", inner)
+        if match:
+            return match.group(0).lstrip("\\")
+        if re.fullmatch(r"\\s", inner):
+            return " "
+    return None
+
+
+def _is_regex_too_generic(regex, filenames):
+    candidates = _separator_candidates(filenames)
+    if len(candidates) <= 1:
+        return False
+    single = _extract_single_separator(regex)
+    if single and single in candidates:
+        return True
+    return False
 
 
 def generate_ai_regex(provider, api_key, filenames):
@@ -294,9 +376,33 @@ def generate_ai_regex(provider, api_key, filenames):
     else:
         raise AiAssistError(f"Provider '{provider}' is not supported.")
 
-    if not _is_regex_reasonable(regex, filenames):
+    if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(regex, filenames):
+        retry_prompt = _build_prompt(filenames, strict=True)
+        if provider in _OPENAI_COMPATIBLE:
+            retry_regex = _openai_like(provider, api_key, retry_prompt)
+        elif provider == "anthropic":
+            retry_regex = _anthropic(api_key, retry_prompt)
+        elif provider == "google":
+            retry_regex = _google(api_key, retry_prompt)
+        elif provider == "cohere":
+            retry_regex = _cohere(api_key, retry_prompt)
+        else:
+            retry_regex = ""
+        if retry_regex and _is_regex_reasonable(retry_regex, filenames) and not _is_regex_too_generic(
+            retry_regex, filenames
+        ):
+            regex = retry_regex
+        else:
+            regex = ""
+    if not regex or not _is_regex_reasonable(regex, filenames):
         fallback = _suggest_separator_regex(filenames)
-        if fallback and fallback != regex:
-            logger.warning("AI regex looked unreliable; using heuristic suggestion.")
-            return fallback
-    return regex
+        if fallback:
+            if fallback != regex:
+                logger.warning("AI regex looked unreliable; using heuristic suggestion.")
+            return {
+                "regex": fallback,
+                "source": "fallback",
+                "ai_regex": regex,
+                "fallback_reason": "ai_regex_unreliable",
+            }
+    return {"regex": regex, "source": "ai", "ai_regex": regex}
