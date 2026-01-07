@@ -1005,7 +1005,7 @@
         updateAiModalStatus('Please add an API key for this provider in settings.', true);
     }
 
-    function confirmUserDataDelete(url, successMessage) {
+    function confirmUserDataDelete(url, successMessage, options = {}) {
         if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
             return;
         }
@@ -1021,6 +1021,9 @@
             if (!ok || data.error) {
                 showNonBlockingModal(data.error || 'Unable to delete data.');
                 return;
+            }
+            if (typeof options.onSuccess === 'function') {
+                options.onSuccess(data);
             }
             showNonBlockingModal(successMessage);
         })
@@ -1197,6 +1200,20 @@
             return JSON.parse(stored);
         } catch (error) {
             return null;
+        }
+    }
+
+    function clearLocalUserData() {
+        try {
+            if (!window.localStorage) return;
+            const keys = Object.keys(window.localStorage);
+            keys.forEach((key) => {
+                if (key.startsWith('omp_')) {
+                    window.localStorage.removeItem(key);
+                }
+            });
+        } catch (error) {
+            // ignore storage errors
         }
     }
 
@@ -1738,7 +1755,12 @@
     if (deleteAllUserDataBtn) {
         deleteAllUserDataBtn.addEventListener('click', () => {
             showSettingsMenu(false);
-            confirmUserDataDelete(deleteAllUserDataUrl, 'All plugin user data deleted.');
+            confirmUserDataDelete(deleteAllUserDataUrl, 'All plugin user data deleted.', {
+                onSuccess: () => {
+                    clearLocalUserData();
+                    resetUserSettingsToDefaults();
+                }
+            });
         });
     }
 
