@@ -45,12 +45,16 @@ def _suggest_separator_regex(filenames):
         for char in base:
             if char in COMMON_SEPARATORS:
                 counts[char] += 1
+    
     if not counts:
-        return regex_for_separators([])
+        return regex_for_separators([], filenames=filenames)
+    
     top = counts.most_common()
     max_count = top[0][1]
     candidates = [char for char, count in top if count >= max_count * 0.4]
-    return regex_for_separators(candidates[:5])
+    
+    # Pass filenames for intelligent pattern detection
+    return regex_for_separators(candidates[:5], filenames=filenames)
 
 
 def _summarize_separators(filenames):
