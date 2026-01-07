@@ -1985,7 +1985,16 @@
                     if (aiTransferBtn) {
                         aiTransferBtn.disabled = !(data.regex && data.regex.trim());
                     }
-                    updateAiModalStatus('Regex suggestion ready. Please repeat processing if unsatisfactory.');
+                    if (data.source === 'fallback') {
+                        updateAiModalStatus(
+                            'AI suggestion looked unreliable, so a heuristic regex was provided instead.',
+                            true
+                        );
+                    } else if (data.source === 'local') {
+                        updateAiModalStatus('Heuristic regex suggestion ready.');
+                    } else {
+                        updateAiModalStatus('Regex suggestion ready. Please repeat processing if unsatisfactory.');
+                    }
                 })
                 .catch(() => {
                     updateAiModalStatus('Unable to process filenames. Please try again.', true);
