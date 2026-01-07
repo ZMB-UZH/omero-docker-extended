@@ -46,7 +46,7 @@ def _suggest_separator_regex(filenames):
             if char in COMMON_SEPARATORS:
                 counts[char] += 1
     if not counts:
-        return _regex_for_separators([])
+        return regex_for_separators([])
     top = counts.most_common()
     max_count = top[0][1]
     candidates = [char for char, count in top if count >= max_count * 0.4]
