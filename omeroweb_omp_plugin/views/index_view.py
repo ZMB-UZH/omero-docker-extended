@@ -51,7 +51,7 @@ def _suggest_separator_regex(filenames):
         for token, count in token_counts.items()
         if count >= label_min_count and 1 < len(token) <= 4
     ]
-    return regex_for_separators(candidates[:5], label_candidates[:6])
+    return regex_for_separators(candidates[:5])
 
 
 def _current_username(request, conn):
