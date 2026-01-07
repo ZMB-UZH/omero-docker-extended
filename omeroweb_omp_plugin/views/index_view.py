@@ -31,27 +31,21 @@ logger = logging.getLogger(__name__)
 
 def _suggest_separator_regex(filenames):
     counts = Counter()
-    token_counts = Counter()
     for name in filenames:
         base = extract_base_name(name)
         for char in base:
             if not char.isalnum():
                 counts[char] += 1
-        for token in re.findall(r"[A-Za-z0-9]+", base):
-            if token.isalpha():
-                token_counts[token] += 1
+    
     if not counts:
-        return regex_for_separators([])
+        return regex_for_separators([], filenames=filenames)
+    
     top = counts.most_common()
     max_count = top[0][1]
     candidates = [char for char, count in top if count >= max_count * 0.4]
-    label_min_count = max(2, int(len(filenames) * 0.4))
-    label_candidates = [
-        token
-        for token, count in token_counts.items()
-        if count >= label_min_count and 1 < len(token) <= 4
-    ]
-    return regex_for_separators(candidates[:5])
+    
+    # Pass filenames for intelligent label-value detection
+    return regex_for_separators(candidates[:5], filenames=filenames)
 
 
 def _current_username(request, conn):
