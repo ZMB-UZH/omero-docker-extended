@@ -902,6 +902,7 @@
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
     let aiParseTransferred = false;
+    let lastAiParseRows = null;
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
     const userSettingsStorageKey = 'omp_user_settings';
     const userSettingsDefaults = {
@@ -2220,12 +2221,14 @@
                         return;
                     }
                     const rows = data.rows || [];
+                    if (!rows.length) {
+                        updateAiParseModalStatus(messages.unableToProcessFilenames, true);
+                        return;
+                    }
+                    lastAiParseRows = rows;
                     const lines = rows.map((row) => (row.values || []).join(','));
                     if (aiParseOutput) {
                         aiParseOutput.value = lines.join('\n');
-                    }
-                    if (aiParseTransferBtn) {
-                        aiParseTransferBtn.disabled = !rows.length;
                     }
                     updateAiParseModalStatus('');
                 })
@@ -2244,6 +2247,9 @@
                 return;
             }
             separatorInput.value = value;
+            if (typeof setSeparatorMode === 'function') {
+                setSeparatorMode('ai_regex');
+            }
             aiRegexTransferred = true;
             closeAiModal();
         });
@@ -2251,54 +2257,22 @@
 
     if (aiParseTransferBtn) {
         aiParseTransferBtn.addEventListener('click', () => {
-            const value = aiParseOutput?.value?.trim() || '';
-            if (!value) {
+
+            if (!lastAiParseRows || !lastAiParseRows.length) {
                 updateAiParseModalStatus('Click "Process" first.', true);
                 return;
             }
-            const provider = aiParseProviderSelect?.value;
-            if (!provider || provider === 'local') {
-                updateAiParseModalStatus(messages.chooseProvider, true);
-                return;
-            }
-            const projectId = projectSelect?.value;
-            const datasetIds = getSelectedDatasetIds();
-            if (!projectId || !datasetIds.length) {
-                updateAiParseModalStatus(messages.selectDatasets, true);
-                return;
+
+            if (aiParsedJsonInput) {
+                aiParsedJsonInput.value = JSON.stringify(lastAiParseRows);
             }
 
-            const formData = new FormData();
-            formData.append('action', 'ai_parse');
-            formData.append('project', projectId);
-            formData.append('selected_datasets', datasetIds.join(','));
-            formData.append('provider', provider);
+            if (typeof setSeparatorMode === 'function') {
+                setSeparatorMode('ai_parse');
+            }
 
-            updateAiParseModalStatus(messages.aiModalProcessing);
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData,
-            })
-                .then((resp) => resp.json())
-                .then((data) => {
-                    if (data.error) {
-                        updateAiParseModalStatus(data.error, true);
-                        return;
-                    }
-                    const rows = data.rows || [];
-                    if (!rows.length) {
-                        updateAiParseModalStatus(messages.unableToProcessFilenames, true);
-                        return;
-                    }
-                    if (aiParsedJsonInput) {
-                        aiParsedJsonInput.value = JSON.stringify(rows);
-                    }
-                    aiParseTransferred = true;
-                    closeAiParseModal();
-                })
-                .catch(() => {
-                    updateAiParseModalStatus(messages.aiProcessFailed, true);
-                });
+            aiParseTransferred = true;
+            closeAiParseModal();
         });
     }
 
