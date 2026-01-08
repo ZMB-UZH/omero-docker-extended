@@ -113,7 +113,6 @@ services:
     volumes:
       - omero:/OMERO
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - /opt/omero-test/uzh-logo-black.png:/opt/omero/web/OMERO.web/var/static/branding/uzh-logo-black.png:ro # modify according to the path of the logo file
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     tmpfs:
