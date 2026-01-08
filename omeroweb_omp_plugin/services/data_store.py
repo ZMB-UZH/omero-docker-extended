@@ -3,6 +3,7 @@ import os
 import re
 from contextlib import contextmanager
 
+from .. import errors
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,7 @@ def _load_psycopg2():
         import psycopg2  # type: ignore
         from psycopg2 import extras  # type: ignore
     except ImportError:
-        raise VariableStoreError(
-            "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
-        )
+        raise VariableStoreError(errors.psycopg2_missing())
 
     _psycopg2_mod = psycopg2
     _psycopg2_extras = extras
@@ -63,10 +62,7 @@ def _db_params():
     dbname = os.environ.get(ENV_DB, "omp-plugin")
 
     if not user or not password:
-        raise VariableStoreError(
-            "Database credentials (docker compose environment variables) are missing "
-            "(OMP_DATA_USER/OMP_DATA_PASS)."
-        )
+        raise VariableStoreError(errors.missing_db_credentials())
 
     port_candidates = []
     for candidate in (
@@ -128,7 +124,7 @@ def _connect():
 
     if conn is None:
         logger.exception("Database connection failed for all configured hosts/ports: %s", last_error)
-        raise VariableStoreError("Could not connect to the database.")
+        raise VariableStoreError(errors.db_connection_failed())
 
     try:
         yield conn
@@ -230,7 +226,7 @@ def list_variable_sets(username):
         raise
     except Exception as e:
         logger.exception("Failed to list variable sets for %s: %s", username, e)
-        raise VariableStoreError("Unable to fetch saved variable sets.")
+        raise VariableStoreError(errors.variable_sets_fetch_failed())
 
 
 def save_variable_set(username, set_name, var_names):
@@ -262,12 +258,12 @@ def save_variable_set(username, set_name, var_names):
                 )
                 row = cur.fetchone()
                 if row is None:
-                    raise VariableStoreError("Variable set was not persisted to the database.")
+                    raise VariableStoreError(errors.variable_set_not_persisted())
     except VariableStoreError:
         raise
     except Exception as e:
         logger.exception("Failed to save variable set '%s' for %s: %s", set_name, username, e)
-        raise VariableStoreError("Could not save variable set.")
+        raise VariableStoreError(errors.variable_set_save_failed())
 
 
 def load_variable_set(username, set_name):
@@ -289,7 +285,7 @@ def load_variable_set(username, set_name):
         raise
     except Exception as e:
         logger.exception("Failed to load variable set '%s' for %s: %s", set_name, username, e)
-        raise VariableStoreError("Unable to load variable set.")
+        raise VariableStoreError(errors.variable_set_load_failed())
 
 
 def delete_variable_set(username, set_name):
@@ -309,9 +305,7 @@ def delete_variable_set(username, set_name):
                 )
 
                 if cur.rowcount == 0:
-                    raise VariableStoreError(
-                        f"Variable set '{set_name}' does not exist."
-                    )
+                    raise VariableStoreError(errors.variable_set_missing(set_name))
 
             conn.commit()
 
@@ -325,7 +319,7 @@ def delete_variable_set(username, set_name):
                     (username, set_name),
                 )
                 if cur.fetchone():
-                    raise VariableStoreError("Variable set deletion could not be confirmed.")
+                    raise VariableStoreError(errors.variable_set_delete_unconfirmed())
 
     except VariableStoreError:
         raise
@@ -336,7 +330,7 @@ def delete_variable_set(username, set_name):
             username,
             e,
         )
-        raise VariableStoreError("Unable to delete variable set.")
+        raise VariableStoreError(errors.variable_set_delete_failed())
 
 
 def list_ai_credentials(username):
@@ -359,7 +353,7 @@ def list_ai_credentials(username):
         raise
     except Exception as e:
         logger.exception("Failed to list AI credentials for %s: %s", username, e)
-        raise AiCredentialStoreError("Unable to fetch saved AI credentials.")
+        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed())
 
 
 def get_ai_credential(username, provider):
@@ -381,7 +375,7 @@ def get_ai_credential(username, provider):
         raise
     except Exception as e:
         logger.exception("Failed to fetch AI credentials for %s/%s: %s", username, provider, e)
-        raise AiCredentialStoreError("Unable to fetch saved AI credentials.")
+        raise AiCredentialStoreError(errors.ai_credentials_fetch_failed())
 
 
 def save_ai_credentials(username, provider, api_key):
@@ -403,7 +397,7 @@ def save_ai_credentials(username, provider, api_key):
         raise
     except Exception as e:
         logger.exception("Failed to save AI credentials for %s/%s: %s", username, provider, e)
-        raise AiCredentialStoreError("Could not save AI credentials.")
+        raise AiCredentialStoreError(errors.ai_credentials_save_failed())
 
 
 def save_user_settings(username, settings_payload):
@@ -435,12 +429,12 @@ def save_user_settings(username, settings_payload):
                 )
                 row = cur.fetchone()
                 if row is None:
-                    raise UserSettingsStoreError("User settings were not persisted to the database.")
+                    raise UserSettingsStoreError(errors.user_settings_not_persisted())
     except UserSettingsStoreError:
         raise
     except Exception as e:
         logger.exception("Failed to save user settings for %s: %s", username, e)
-        raise UserSettingsStoreError("Could not save user settings.")
+        raise UserSettingsStoreError(errors.user_settings_save_failed())
 
 
 def delete_all_user_settings(username):
@@ -462,7 +456,7 @@ def delete_all_user_settings(username):
         raise
     except Exception as e:
         logger.exception("Failed to delete user settings for %s: %s", username, e)
-        raise UserSettingsStoreError("Unable to delete user settings.")
+        raise UserSettingsStoreError(errors.user_settings_delete_failed())
 
 
 def delete_all_variable_sets(username):
@@ -484,7 +478,7 @@ def delete_all_variable_sets(username):
         raise
     except Exception as e:
         logger.exception("Failed to delete variable sets for %s: %s", username, e)
-        raise VariableStoreError("Unable to delete variable sets.")
+        raise VariableStoreError(errors.variable_sets_delete_failed())
 
 
 def delete_all_ai_credentials(username):
@@ -506,7 +500,7 @@ def delete_all_ai_credentials(username):
         raise
     except Exception as e:
         logger.exception("Failed to delete AI credentials for %s: %s", username, e)
-        raise AiCredentialStoreError("Unable to delete AI credentials.")
+        raise AiCredentialStoreError(errors.ai_credentials_delete_failed())
 
 
 def delete_all_user_data(username):
@@ -527,10 +521,10 @@ def delete_all_user_data(username):
             conn.commit()
             return deleted_counts
     except (VariableStoreError, AiCredentialStoreError, UserSettingsStoreError):
-        raise UserDataStoreError("Unable to delete user data.")
+        raise UserDataStoreError(errors.user_data_delete_failed())
     except Exception as e:
         logger.exception("Failed to delete user data for %s: %s", username, e)
-        raise UserDataStoreError("Unable to delete user data.")
+        raise UserDataStoreError(errors.user_data_delete_failed())
 
 
 def _list_user_scoped_tables(conn):

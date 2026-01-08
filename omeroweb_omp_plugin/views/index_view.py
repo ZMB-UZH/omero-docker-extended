@@ -7,7 +7,6 @@ from omeroweb.decorators import login_required
 import json
 import logging
 import re
-from collections import Counter
 from ..services.core import (
     get_id,
     get_text,
@@ -19,7 +18,9 @@ from ..services.core import (
 from ..services.ai_assist import AiAssistError, generate_ai_regex
 from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..services.filename_utils import extract_base_name, regex_for_separators
+from ..services.filename_utils import suggest_separator_regex
+from ..views.utils import current_username
+from .. import errors
 from ..constants import (
     CHUNK_SIZE,
     DEFAULT_VARIABLE_NAMES,
@@ -30,36 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def _suggest_separator_regex(filenames):
-    counts = Counter()
-    for name in filenames:
-        base = extract_base_name(name)
-        for char in base:
-            if not char.isalnum():
-                counts[char] += 1
-    
-    if not counts:
-        return regex_for_separators([], filenames=filenames)
-    
-    top = counts.most_common()
-    max_count = top[0][1]
-    candidates = [char for char, count in top if count >= max_count * 0.4]
-    
-    # Pass filenames for intelligent label-value detection
-    return regex_for_separators(candidates[:5], filenames=filenames)
-
-
-def _current_username(request, conn):
-    try:
-        user = conn.getUser()
-        if user:
-            return user.getName()
-    except Exception:
-        pass
-
-    try:
-        return request.user.username
-    except Exception:
-        return None
+    return suggest_separator_regex(filenames)
 
 
 @csrf_exempt
@@ -88,7 +60,7 @@ def index(request, conn=None, url=None, **kwargs):
         if request.method == "POST" and request.POST.get("action") == "list_datasets":
             project_id = request.POST.get("project")
             if not project_id:
-                return JsonResponse({"error": "Select a project first."}, status=400)
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
 
             # NO RATE LIMIT - just listing datasets
             dataset_rows = collect_dataset_summaries(conn, project_id)
@@ -104,9 +76,9 @@ def index(request, conn=None, url=None, **kwargs):
             provider = (request.POST.get("provider") or "local").strip().lower()
 
             if not project_id:
-                return JsonResponse({"error": "Select a project first."}, status=400)
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
             if not selected_dataset_ids_raw.strip():
-                return JsonResponse({"error": "Please select one or more datasets."}, status=400)
+                return JsonResponse({"error": errors.datasets_required()}, status=400)
 
             selected_dataset_ids = []
             for ds_id in selected_dataset_ids_raw.split(","):
@@ -119,7 +91,7 @@ def index(request, conn=None, url=None, **kwargs):
                     continue
 
             if not selected_dataset_ids:
-                return JsonResponse({"error": "Please select one or more datasets."}, status=400)
+                return JsonResponse({"error": errors.datasets_required()}, status=400)
 
             allowed, remaining = check_major_action_rate_limit(request, conn)
             if not allowed:
@@ -140,15 +112,15 @@ def index(request, conn=None, url=None, **kwargs):
                         continue
 
             if not filenames:
-                return JsonResponse({"error": "No filenames available in the selected datasets."}, status=400)
+                return JsonResponse({"error": errors.no_filenames_available()}, status=400)
 
             if provider == "local":
                 regex = _suggest_separator_regex(filenames)
                 return JsonResponse({"regex": regex, "source": "local"})
 
-            username = _current_username(request, conn)
+            username = current_username(request, conn)
             if not username:
-                return JsonResponse({"error": "Unable to determine username."}, status=400)
+                return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
 
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
@@ -156,7 +128,7 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": str(e)}, status=500)
 
             if not api_key:
-                return JsonResponse({"error": "Please add an API key for this provider in Settings."}, status=400)
+                return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
             try:
                 result = generate_ai_regex(provider, api_key, filenames)
@@ -164,7 +136,7 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
                 logger.exception("AI regex provider failure: %s", e)
-                return JsonResponse({"error": "Unable to process filenames."}, status=500)
+                return JsonResponse({"error": errors.unable_to_process_filenames()}, status=500)
 
             return JsonResponse(result)
 
@@ -204,7 +176,7 @@ def index(request, conn=None, url=None, **kwargs):
                     "index.html",
                     {
                         "projects": projects,
-                        "error_message": "Select a project first.",
+                        "error_message": errors.select_project_first(),
                     },
                 )
 
@@ -214,7 +186,7 @@ def index(request, conn=None, url=None, **kwargs):
                     "index.html",
                     {
                         "projects": projects,
-                        "error_message": "The input field for filename parsing cannot be empty.",
+                        "error_message": errors.filename_input_empty(),
                     },
                 )
             if not selected_dataset_ids_raw.strip():
@@ -223,7 +195,7 @@ def index(request, conn=None, url=None, **kwargs):
                     "index.html",
                     {
                         "projects": projects,
-                        "error_message": "Please select one or more datasets.",
+                        "error_message": errors.datasets_required(),
                     },
                 )
 
@@ -242,7 +214,7 @@ def index(request, conn=None, url=None, **kwargs):
                     re.compile(sep_pattern)
                 except re.error as e:
                     return HttpResponse(
-                        "<h2 style='color:red;'>Invalid regex pattern.</h2>"
+                        f"<h2 style='color:red;'>{errors.invalid_regex_pattern_title()}</h2>"
                         f"<p>{e}</p>"
                         "<a href='.'>Back</a>"
                     )
@@ -266,7 +238,7 @@ def index(request, conn=None, url=None, **kwargs):
                     "index.html",
                     {
                         "projects": projects,
-                        "error_message": "Please select one or more datasets.",
+                        "error_message": errors.datasets_required(),
                     },
                 )
 
@@ -296,7 +268,7 @@ def index(request, conn=None, url=None, **kwargs):
                     "index.html",
                     {
                         "projects": projects,
-                        "error_message": "No data to process is available in the selected dataset(s).",
+                        "error_message": errors.no_data_to_process(),
                     },
                 )
 
