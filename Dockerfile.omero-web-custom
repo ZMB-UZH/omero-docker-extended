@@ -6,21 +6,25 @@
 FROM openmicroscopy/omero-web-standalone:5
 
 # Run as root to avoid permission issues with deletion
+# ----------------------------------------------------
 USER root
 
 # Remove old copies of the plugin inside the container (if any)
+# -------------------------------------------------------------
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin"
 
-# Copy the whole plugin into the container (temporary, then moved into site-packages)
+# Copy the whole plugin into the container
+# ----------------------------------------
 COPY omeroweb_omp_plugin /tmp/omeroweb_omp_plugin
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
+# ----------------------------------------------------------------
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
@@ -33,4 +37,23 @@ RUN set -eux; \
     chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
     rm -rf /tmp/omeroweb_omp_plugin
 
+# Pre-create ALL Django static directories and own them
+# -----------------------------------------------------
+RUN set -eux; \
+    mkdir -p \
+        /opt/omero/web/OMERO.web/var \
+        /opt/omero/web/OMERO.web/var/log \
+        /opt/omero/web/OMERO.web/var/static \
+        /opt/omero/web/OMERO.web/var/static/branding \
+        /opt/omero/web/OMERO.web/var/static/omero_figure \
+        /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin; \
+    chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
+
+# Copy branding logo
+# ------------------
+COPY logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png
+RUN chown omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding/logo.png
+
+# Drop privileges for runtime
+# ---------------------------
 USER omero-web
