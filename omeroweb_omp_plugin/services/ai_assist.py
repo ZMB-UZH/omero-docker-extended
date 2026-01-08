@@ -289,7 +289,7 @@ def generate_ai_regex(provider, api_key, filenames):
 
 def _build_parse_prompt(filenames):
     sample = filenames[:60]
-    list_block = "\n".join(sample)
+    list_block = "\n".join(f"- {name}" for name in sample)
     return (
         "You are given multiple filenames.\n"
         "\n"
@@ -299,12 +299,16 @@ def _build_parse_prompt(filenames):
         "\n"
         "Task:\n"
         "For EACH filename, output ONE line containing ONLY the variable values.\n"
+        "Example (do NOT output this example):\n"
+        "Input: 10444-ec-01-sa-01-sc-01-20x\n"
+        "Output: 10444,01,01,01,20x\n"
         "\n"
         "Rules:\n"
         "- Do NOT include labels\n"
         "- Do NOT convert or normalize values\n"
         "- Preserve original text exactly\n"
         "- Keep original order\n"
+        "- Do NOT repeat the original filename\n"
         "- The number of values may differ per line\n"
         "- Output ONLY comma-separated values\n"
         "- No headers, no explanations, no quotes, no code fences\n"
