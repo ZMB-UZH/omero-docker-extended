@@ -16,7 +16,7 @@ from ..constants import (
     MAJOR_ACTION_LIMIT,
     MAJOR_ACTION_WINDOW_SECONDS,
 )
-from .. import errors
+from ..strings import errors
 
 logger = logging.getLogger(__name__)
 

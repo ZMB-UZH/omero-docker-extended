@@ -8,7 +8,7 @@ from ..services.core import collect_images_in_project, find_map_annotation_ids, 
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..views.utils import load_json_body
-from .. import errors
+from ..strings import errors
 
 logger = logging.getLogger(__name__)
 
