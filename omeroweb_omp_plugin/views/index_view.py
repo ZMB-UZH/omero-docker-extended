@@ -73,7 +73,7 @@ def index(request, conn=None, url=None, **kwargs):
         if request.method == "POST" and request.POST.get("action") == "ai_regex":
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
-            provider = (request.POST.get("provider") or "").strip().lower()
+            provider = (request.POST.get("provider") or "local").strip().lower()
 
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
