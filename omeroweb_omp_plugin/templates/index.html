@@ -2221,11 +2221,11 @@
                         return;
                     }
                     const rows = data.rows || [];
+                    lastAiParseRows = rows;
                     if (!rows.length) {
                         updateAiParseModalStatus(messages.unableToProcessFilenames, true);
                         return;
                     }
-                    lastAiParseRows = rows;
                     const lines = rows.map((row) => (row.values || []).join(','));
                     if (aiParseOutput) {
                         aiParseOutput.value = lines.join('\n');
