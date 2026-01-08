@@ -105,7 +105,7 @@ services:
         ["Tag Search", "tagsearch"],
         ["OMP plugin", "omeroweb_omp_plugin_index", {"title": "Open OMP plugin in new tab", "target": "_blank"}]
       ]' # modify if needed when the developers update Omero Web
-      CONFIG_omero_web_login__logo: "/static/branding/uzh-logo-black.png" # logo file must be located in the same path as the docker-compose.yml file
+      CONFIG_omero_web_login__logo: "/static/branding/logo.png" # logo file must be located in the same path as the docker-compose.yml file
     networks:
       - omero
     ports:
