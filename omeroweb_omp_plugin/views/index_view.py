@@ -20,7 +20,7 @@ from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..services.filename_utils import suggest_separator_regex
 from ..views.utils import current_username
-from .. import errors
+from .. import errors, messages
 from ..constants import (
     CHUNK_SIZE,
     DEFAULT_VARIABLE_NAMES,
@@ -177,6 +177,11 @@ def index(request, conn=None, url=None, **kwargs):
                     {
                         "projects": projects,
                         "error_message": errors.select_project_first(),
+                        "chunk_size": CHUNK_SIZE,
+                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                        "max_parsed_variables": MAX_PARSED_VARIABLES,
+                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+                        "messages_json": json.dumps(messages.index_messages()),
                     },
                 )
 
@@ -187,6 +192,11 @@ def index(request, conn=None, url=None, **kwargs):
                     {
                         "projects": projects,
                         "error_message": errors.filename_input_empty(),
+                        "chunk_size": CHUNK_SIZE,
+                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                        "max_parsed_variables": MAX_PARSED_VARIABLES,
+                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+                        "messages_json": json.dumps(messages.index_messages()),
                     },
                 )
             if not selected_dataset_ids_raw.strip():
@@ -196,6 +206,11 @@ def index(request, conn=None, url=None, **kwargs):
                     {
                         "projects": projects,
                         "error_message": errors.datasets_required(),
+                        "chunk_size": CHUNK_SIZE,
+                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                        "max_parsed_variables": MAX_PARSED_VARIABLES,
+                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+                        "messages_json": json.dumps(messages.index_messages()),
                     },
                 )
 
@@ -337,6 +352,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_vars_uncapped": max_vars_uncapped,
                 "chunk_size": chunk_size,
                 "max_variable_sets": max_sets,
+                "messages_json": json.dumps(messages.preview_messages()),
             }
 
             return render(
@@ -357,6 +373,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
                 "max_parsed_variables": MAX_PARSED_VARIABLES,
                 "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+                "messages_json": json.dumps(messages.index_messages()),
             },
         )
 

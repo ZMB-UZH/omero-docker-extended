@@ -656,6 +656,13 @@
 
 <script>
 const BASE_URL = "/omeroweb_omp_plugin";
+const messages = {{ messages_json|safe }};
+const formatMessage = (template, values = {}) => {
+    const source = String(template || '');
+    return source.replace(/\{(\w+)\}/g, (match, key) => (
+        Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+    ));
+};
 let DEFAULT_VARS = {{ default_vars_json|safe }};
 const MAX_PARSED_VARS = {{ max_vars }};
 const MAX_PARSED_VARIABLES_DEFAULT = {{ max_parsed_variables }};  // Maximum allowed variables
@@ -808,12 +815,10 @@ let draggedIndex = null;
 
 // Show warning if variable limit was exceeded
 if (VARS_LIMIT_EXCEEDED) {
-    showNonBlockingModal(
-        `Variable parsing is capped at ${MAX_PARSED_VARIABLES}. ` +
-        `Only the first ${MAX_PARSED_VARIABLES} variables will be parsed. ` +
-        `Your filenames produced ${MAX_VARS_UNCAPPED} variables. ` +
-        `Consider checking your parsing method, filenames and user settings.`
-    );
+    showNonBlockingModal(formatMessage(messages.variableParsingCapped, {
+        maxParsedVariables: MAX_PARSED_VARIABLES,
+        maxVarsUncapped: MAX_VARS_UNCAPPED
+    }));
 }
 
 // ============================================================================
@@ -1047,7 +1052,7 @@ function setVarSetControlsDisabled(disabled) {
 function toggleVarNameInputs() {
     // Check if in edit mode
     if (isEditMode) {
-        showNonBlockingModal("Please exit edit mode first.");
+        showNonBlockingModal(messages.exitEditModeFirst);
         // Prevent checkbox from changing
         event.preventDefault();
         document.getElementById('use_defaults').checked = !document.getElementById('use_defaults').checked;
@@ -1062,7 +1067,7 @@ function toggleVarNameInputs() {
             continue;
         }
         if (useDefaults) {
-            inp.value = DEFAULT_VARS[i - 1] || "rename";
+            inp.value = DEFAULT_VARS[i - 1] || messages.defaultVarName;
             inp.disabled = true;
         } else {
             inp.disabled = false;
@@ -1174,16 +1179,17 @@ function addVariableRow() {
     // Check if at limit
     const currentCount = getVarRowCount();
     if (currentCount >= MAX_PARSED_VARIABLES) {
-        showNonBlockingModal(
-            `Maximum of ${MAX_PARSED_VARIABLES} variables allowed. ` +
-            `Cannot add more variable name fields.`
-        );
+        showNonBlockingModal(formatMessage(messages.maxVariablesReached, {
+            maxParsedVariables: MAX_PARSED_VARIABLES
+        }));
         return;
     }
     
     const nextIndex = currentCount + 1;
     const useDefaults = document.getElementById('use_defaults').checked;
-    const defaultValue = useDefaults ? (DEFAULT_VARS[nextIndex - 1] || 'rename') : 'rename';
+    const defaultValue = useDefaults
+        ? (DEFAULT_VARS[nextIndex - 1] || messages.defaultVarName)
+        : messages.defaultVarName;
     const row = createVarRow(nextIndex, defaultValue);
     const input = row.querySelector('.var-input');
     if (input) {
@@ -1461,7 +1467,7 @@ function fetchVariableSets() {
     .then(r => r.json())
     .then(data => {
         if (data.error) {
-            console.warn("Unable to load variable sets.", data.error);
+            console.warn(messages.unableLoadVariableSets, data.error);
             populateVariableSetDropdown([]);
             return;
         }
@@ -1469,7 +1475,7 @@ function fetchVariableSets() {
         populateVariableSetDropdown(data.sets || []);
     })
     .catch(err => {
-        console.warn("Error loading variable sets", err);
+        console.warn(messages.errorLoadingVariableSets, err);
         populateVariableSetDropdown([]);
     });
 }
@@ -1488,7 +1494,7 @@ function saveVariableSet() {
         const rawValue = inp ? inp.value : "";
         const trimmed = rawValue.trim();
         if (rawValue !== "" && trimmed === "") {
-            showNonBlockingModal("Variable names cannot contain just empty spaces.");
+            showNonBlockingModal(messages.variableNamesSpaces);
             return;
         }
         varNames.push(trimmed);
@@ -1496,12 +1502,12 @@ function saveVariableSet() {
 
     const hasEmpty = varNames.some(v => v === "");
     if (hasEmpty) {
-        showNonBlockingModal("Variable names cannot be empty.");
+        showNonBlockingModal(messages.variableNamesEmpty);
         return;
     }
 
     if (!setName) {
-        showNonBlockingModal("Please provide a name for this variable set.");
+        showNonBlockingModal(messages.variableSetNameRequired);
         return;
     }
 
@@ -1535,11 +1541,11 @@ function saveVariableSet() {
             return;
         }
         fetchVariableSets();
-        showNonBlockingModal('Saved variable set "' + setName + '" to database.');
+        showNonBlockingModal(formatMessage(messages.variableSetSaved, { setName }));
         nameInput.value = "";
     })
     .catch(err => {
-        showNonBlockingModal("Error saving variable set: " + err);
+        showNonBlockingModal(formatMessage(messages.variableSetSaveError, { error: err }));
     });
 }
 
@@ -1620,7 +1626,7 @@ function loadVariableSet() {
     if (useDefaults) return;
 
     if (!availableVariableSets.length) {
-        showNonBlockingModal("Your user database is empty. Please save a variable set first.");
+        showNonBlockingModal(messages.variableSetEmptyDb);
         return;
     }
 
@@ -1629,7 +1635,7 @@ function loadVariableSet() {
         : (variableSetInput ? (variableSetInput.value || "").trim() : "");
 
     if (!selected) {
-        showNonBlockingModal("Please select a variable set from the dropdown menu.");
+        showNonBlockingModal(messages.variableSetSelectRequired);
         return;
     }
 
@@ -1658,10 +1664,10 @@ function loadVariableSet() {
             }
         }
 
-        showNonBlockingModal('Loaded variable set "' + selected + '" from database.');
+        showNonBlockingModal(formatMessage(messages.variableSetLoaded, { setName: selected }));
     })
     .catch(err => {
-        showNonBlockingModal("Error loading variable set: " + err);
+        showNonBlockingModal(formatMessage(messages.variableSetLoadError, { error: err }));
     });
 }
 
@@ -1679,12 +1685,12 @@ function deleteVariableSet() {
         : (variableSetInput ? (variableSetInput.value || "").trim() : "");
 
     if (!selected) {
-        showNonBlockingModal("Please select a variable set from the dropdown menu.");
+        showNonBlockingModal(messages.variableSetSelectRequired);
         return;
     }
 
     if (!window.confirm(
-        "Are you absolutely sure? This action is irreversible."
+        messages.confirmIrreversible
     )) {
         return;
     }
@@ -1706,11 +1712,11 @@ function deleteVariableSet() {
 
         fetchVariableSets();
 
-        showNonBlockingModal('Deleted variable set "' + selected + '" from database.');
+        showNonBlockingModal(formatMessage(messages.variableSetDeleted, { setName: selected }));
 
     })
     .catch(err => {
-        showNonBlockingModal("Error deleting variable set: " + err);
+        showNonBlockingModal(formatMessage(messages.variableSetDeleteError, { error: err }));
     });
 }
 
@@ -1732,25 +1738,25 @@ function startPollingAfterMinimumDelay(jobStartMessage) {
 
 function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel) {
     if (currentJobId) {
-        showNonBlockingModal("Another job is already running. Please be patient.");
+        showNonBlockingModal(messages.jobAlreadyRunning);
         return;
     }
 
     const projectId = document.getElementById('project_id').value;
     const selectedImageIds = getSelectedImageIds();
     if (!selectedImageIds.length) {
-        showNonBlockingModal("Select at least one image to apply changes.");
+        showNonBlockingModal(messages.selectImageRequired);
         return;
     }
 
     const pwd = window.prompt(passwordPrompt);
     if (pwd === null) return;
     if (!pwd.trim()) {
-        showNonBlockingModal("Password cannot be empty.");
+        showNonBlockingModal(messages.passwordEmpty);
         return;
     }
 
-    if (!window.confirm("Are you absolutely sure? This action is irreversible.")) return;
+    if (!window.confirm(messages.confirmIrreversible)) return;
 
     const progressSection = document.getElementById("progress-section");
     const progressText = document.getElementById("progress-text");
@@ -1786,11 +1792,14 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
         totalImages = data.total;
 
         startPollingAfterMinimumDelay(
-            jobStartLabel + " job started for " + totalImages + " images..."
+            formatMessage(messages.jobStartedForImages, {
+                jobLabel: jobStartLabel,
+                totalImages
+            })
         );
     })
     .catch(err => {
-        showNonBlockingModal("ERROR: " + err);
+        showNonBlockingModal(formatMessage(messages.errorWithDetails, { error: err }));
     });
 }
 
@@ -1800,9 +1809,9 @@ function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel
 function deleteAllKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_all_job/",
-        "Enter your Omero password to delete ALL key-value pairs:",
-        "Deleting ALL key-value pairs…",
-        "Delete ALL key-value pairs"
+        messages.deleteAllPasswordPrompt,
+        messages.deleteAllProgress,
+        messages.deleteAllJobLabel
     );
 }
 
@@ -1813,9 +1822,9 @@ function deleteAllKeyvaluepairs() {
 function deletePluginKeyvaluepairs() {
     startDeleteJob(
         "/start_delete_plugin_job/",
-        "Enter your Omero password to delete ONLY plugin key-value pairs:",
-        "Deleting ONLY plugin key-value pairs…",
-        "Delete ONLY plugin key-value pairs"
+        messages.deletePluginPasswordPrompt,
+        messages.deletePluginProgress,
+        messages.deletePluginJobLabel
     );
 }
 // -------------------------
@@ -1823,14 +1832,14 @@ function deletePluginKeyvaluepairs() {
 // -------------------------
 function startSaveJob() {
     if (currentJobId) {
-        showNonBlockingModal("Another job is already running. Please be patient.");
+        showNonBlockingModal(messages.jobAlreadyRunning);
         return;
     }
 
     const projectId = document.getElementById('project_id').value;
     const selectedImageIds = getSelectedImageIds();
     if (!selectedImageIds.length) {
-        showNonBlockingModal("Select at least one image to apply changes.");
+        showNonBlockingModal(messages.selectImageRequired);
         return;
     }
     const separator = document.getElementById('separator').value;
@@ -1840,9 +1849,9 @@ function startSaveJob() {
     const useDefaults = document.getElementById('use_defaults').checked;
 
     if (count < MAX_PARSED_VARS) {
-        showNonBlockingModal(
-            "Please populate at least " + MAX_PARSED_VARS + " variables and try again."
-        );
+        showNonBlockingModal(formatMessage(messages.minVariablesRequired, {
+            count: MAX_PARSED_VARS
+        }));
         return;
     }
 
@@ -1852,15 +1861,15 @@ function startSaveJob() {
         const rawValue = inp ? inp.value : "";
         const trimmed = rawValue.trim();
         if (i <= MAX_PARSED_VARS && rawValue !== "" && trimmed === "") {
-            showNonBlockingModal(
-                "Variable names for any of the first " + MAX_PARSED_VARS + " variables cannot contain just empty spaces."
-            );
+            showNonBlockingModal(formatMessage(messages.variableNamesSpacesFirst, {
+                count: MAX_PARSED_VARS
+            }));
             return;
         }
         if (i <= MAX_PARSED_VARS && rawValue === "") {
-            showNonBlockingModal(
-                "Variable names for the first " + MAX_PARSED_VARS + " variables cannot be empty."
-            );
+            showNonBlockingModal(formatMessage(messages.variableNamesEmptyFirst, {
+                count: MAX_PARSED_VARS
+            }));
             return;
         }
         varNames.push(trimmed);
@@ -1879,7 +1888,7 @@ function startSaveJob() {
 
     document.getElementById("progress-section").style.display = "block";
     document.getElementById("progress-text").innerText =
-        'Starting "Save filename metadata into key-value pairs" job…';
+        messages.progressStartSaveJob;
     document.getElementById("progress-bar").style.width = "0%";
     document.getElementById("progress-bar").innerText = "0%";
     document.getElementById("progress-log").textContent = "";
@@ -1901,8 +1910,7 @@ function startSaveJob() {
         totalImages = data.total;
 
         startPollingAfterMinimumDelay(
-            "Save filename metadata into key-value pairs job started for " +
-            totalImages + " images..."
+            formatMessage(messages.jobStartedSave, { totalImages })
         );
     });
 }
@@ -1912,14 +1920,14 @@ function startSaveJob() {
 // -------------------------
 function startAcquisitionMetadataJob() {
     if (currentJobId) {
-        showNonBlockingModal("Another job is already running. Please be patient.");
+        showNonBlockingModal(messages.jobAlreadyRunning);
         return;
     }
 
     const projectId = document.getElementById('project_id').value;
     const selectedImageIds = getSelectedImageIds();
     if (!selectedImageIds.length) {
-        showNonBlockingModal("Select at least one image to apply changes.");
+        showNonBlockingModal(messages.selectImageRequired);
         return;
     }
 
@@ -1931,7 +1939,7 @@ function startAcquisitionMetadataJob() {
 
     document.getElementById("progress-section").style.display = "block";
     document.getElementById("progress-text").innerText =
-        'Starting "copy acquisition metadata into key-value pairs" job…';
+        messages.progressStartAcqJob;
     document.getElementById("progress-bar").style.width = "0%";
     document.getElementById("progress-bar").innerText = "0%";
     document.getElementById("progress-log").textContent = "";
@@ -1953,8 +1961,7 @@ function startAcquisitionMetadataJob() {
         totalImages = data.total;
 
         startPollingAfterMinimumDelay(
-            "Copy acquisition metadata into key-value pairs job started for " +
-            totalImages + " images..."
+            formatMessage(messages.jobStartedAcq, { totalImages })
         );
     });
 }
@@ -1986,7 +1993,7 @@ function pollProgress() {
         bar.innerText = percent.toFixed(1) + "%";
 
         document.getElementById("progress-text").innerText =
-            "Processed " + done + " of " + total + " images (unique IDs).";
+            formatMessage(messages.progressProcessed, { done, total });
 
         if (data.last_log) {
             let logEl = document.getElementById("progress-log");
@@ -1999,7 +2006,7 @@ function pollProgress() {
             pollInterval = null;
             currentJobId = null;
             document.getElementById("progress-text").innerText =
-                "Completed. Processed " + done + " images (unique IDs).";
+                formatMessage(messages.progressCompleted, { done });
         }
     });
 }
