@@ -290,6 +290,7 @@ def generate_ai_regex(provider, api_key, filenames):
 def _build_parse_prompt(filenames):
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
+
     return (
         "You are given multiple filenames.\n"
         "\n"
@@ -347,7 +348,6 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
         values = [v.strip() for v in line.split(",") if v.strip()]
         if not values:
             raise AiAssistError(errors.provider_response_invalid_format())
-
         rows.append(values)
 
     return rows
@@ -370,6 +370,7 @@ def generate_ai_parsed_values(provider, api_key, filenames):
     content = _call_ai_provider_raw(provider, api_key, prompt, 800)
 
     parsed_rows = _parse_ai_value_rows(content, len(filenames), filenames=filenames)
+
 
     rows = []
 
