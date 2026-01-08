@@ -49,10 +49,23 @@ RUN set -eux; \
         /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
-# Copy branding logo
-# ------------------
-COPY logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png
-RUN chown omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding/logo.png
+# Copy branding logo (only if it exists)
+# --------------------------------------
+COPY --chown=omero-web:omero-web logo.png* /tmp/
+RUN set -eux; \
+    if [ -f /tmp/logo.png ]; then \
+        mv /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
+        echo "Logo copied successfully"; \
+    else \
+        echo "No logo.png found, skipping logo setup"; \
+    fi; \
+    rm -f /tmp/logo.png*
+
+# Run collectstatic to ensure static files are properly served
+# ------------------------------------------------------------
+RUN set -eux; \
+    cd /opt/omero/web/OMERO.web && \
+    /opt/omero/web/venv*/bin/omero web collectstatic --noinput --clear
 
 # Drop privileges for runtime
 # ---------------------------
