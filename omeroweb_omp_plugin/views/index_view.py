@@ -75,6 +75,12 @@ def index(request, conn=None, url=None, **kwargs):
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
             provider = (request.POST.get("provider") or "").strip().lower()
 
+            if provider == "local":
+                return JsonResponse(
+                    {"error": errors.choose_provider()},
+                    status=400,
+                )
+
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
             if not selected_dataset_ids_raw.strip():
@@ -202,7 +208,7 @@ def index(request, conn=None, url=None, **kwargs):
                     },
                 )
 
-            if not raw_seps or not raw_seps.strip():
+            if separator_mode != "ai_parse" and (not raw_seps or not raw_seps.strip()):
                 return render(
                     request,
                     "index.html",
@@ -216,6 +222,7 @@ def index(request, conn=None, url=None, **kwargs):
                         "messages_json": json.dumps(messages.index_messages()),
                     },
                 )
+
             if not selected_dataset_ids_raw.strip():
                 return render(
                     request,
