@@ -318,7 +318,7 @@ def _build_parse_prompt(filenames):
     )
 
 
-def _parse_ai_value_rows(text, expected_count):
+def _parse_ai_value_rows(text, expected_count, filenames=None):
     if not text:
         raise AiAssistError(errors.provider_response_empty())
 
@@ -329,12 +329,25 @@ def _parse_ai_value_rows(text, expected_count):
             errors.provider_response_row_mismatch(len(lines), expected_count)
         )
 
+    base_names = set()
+    if filenames:
+        for name in filenames:
+            try:
+                base_names.add(extract_base_name(name))
+            except Exception:
+                continue
+
     rows = []
 
     for line in lines:
+
+        if base_names and line in base_names:
+            raise AiAssistError(errors.provider_response_invalid_format())
+
         values = [v.strip() for v in line.split(",") if v.strip()]
         if not values:
             raise AiAssistError(errors.provider_response_invalid_format())
+
         rows.append(values)
 
     return rows
@@ -356,7 +369,7 @@ def generate_ai_parsed_values(provider, api_key, filenames):
 
     content = _call_ai_provider_raw(provider, api_key, prompt, 800)
 
-    parsed_rows = _parse_ai_value_rows(content, len(filenames))
+    parsed_rows = _parse_ai_value_rows(content, len(filenames), filenames=filenames)
 
     rows = []
 
