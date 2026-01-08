@@ -15,7 +15,7 @@ from ..services.core import (
     collect_dataset_summaries,
     parse_filename,
 )
-from ..services.ai_assist import AiAssistError, generate_ai_regex
+from ..services.ai_assist import AiAssistError, generate_ai_regex, generate_ai_parsed_values
 from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..services.filename_utils import suggest_separator_regex
@@ -70,10 +70,10 @@ def index(request, conn=None, url=None, **kwargs):
             )
             return JsonResponse({"datasets": dataset_rows})
 
-        if request.method == "POST" and request.POST.get("action") == "ai_regex":
+        if request.method == "POST" and request.POST.get("action") == "ai_parse":
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
-            provider = (request.POST.get("provider") or "local").strip().lower()
+            provider = (request.POST.get("provider") or "").strip().lower()
 
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
@@ -104,10 +104,13 @@ def index(request, conn=None, url=None, **kwargs):
                 limit=200,
             )
             filenames = []
+            image_ids = []
+
             for _, images in ds_list:
                 for img in images:
                     try:
                         filenames.append(get_text(img.getName()))
+                        image_ids.append(int(get_id(img)))
                     except Exception:
                         continue
 
@@ -131,14 +134,28 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
             try:
-                result = generate_ai_regex(provider, api_key, filenames)
+                result = generate_ai_parsed_values(provider, api_key, filenames)
             except AiAssistError as e:
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
-                logger.exception("AI regex provider failure: %s", e)
+                logger.exception("AI parse provider failure: %s", e)
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=500)
 
-            return JsonResponse(result)
+            rows_with_ids = []
+            for img_id, row in zip(image_ids, result.get("rows", [])):
+                rows_with_ids.append(
+                    {
+                        "img_id": img_id,
+                        "values": row.get("values", []),
+                    }
+                )
+
+            return JsonResponse(
+                {
+                    "rows": rows_with_ids,
+                    "source": result.get("source"),
+                }
+            )
 
         # ----------------------------------------------------
         # PREVIEW MODE - WITH RATE LIMIT (major action)
