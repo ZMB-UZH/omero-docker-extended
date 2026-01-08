@@ -51,18 +51,18 @@ RUN set -eux; \
 
 # Copy branding logo (only if it exists)
 # --------------------------------------
-COPY --chown=omero-web:omero-web logo.png* /tmp/
+COPY logo.png* /tmp/
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     if [ -f /tmp/logo.png ]; then \
         mkdir -p "${SITE_PACKAGES}/omeroweb/static/branding"; \
-        mv /tmp/logo.png "${SITE_PACKAGES}/omeroweb/static/branding/logo.png"; \
-        chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb/static/branding"; \
-        echo "Logo copied successfully"; \
+        cp /tmp/logo.png "${SITE_PACKAGES}/omeroweb/static/branding/logo.png"; \
+        chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb/static"; \
+        echo "Logo copied to source static directory"; \
     else \
-        echo "No logo.png found, skipping logo setup"; \
+        echo "No logo.png found, skipping"; \
     fi; \
     rm -f /tmp/logo.png*
 
