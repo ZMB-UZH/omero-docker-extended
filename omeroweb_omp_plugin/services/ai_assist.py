@@ -166,160 +166,85 @@ def _post_json(url, headers, payload, timeout=15):
         raise AiAssistError(errors.provider_unreachable())
 
 
-def _openai_like(provider, api_key, prompt):
-    config = _OPENAI_COMPATIBLE.get(provider)
-    if not config:
-        raise AiAssistError(errors.provider_not_supported(provider))
-    payload = {
-        "model": config["model"],
-        "messages": [
-            {
-                "role": "system",
-                "content": "Return only the regex pattern. Do not add explanations.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.0,
-        "max_tokens": 120,
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    url = f"{config['base_url']}/chat/completions"
-    response = _post_json(url, headers, payload)
-    try:
-        content = response["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        raise AiAssistError(errors.provider_response_missing_regex())
-    regex = _clean_regex(content)
-    if not regex:
-        raise AiAssistError(errors.provider_response_no_regex())
-    return regex
+def _call_ai_provider_raw(provider, api_key, prompt, max_tokens):
+    provider = (provider or "").strip().lower()
 
+    if provider in _OPENAI_COMPATIBLE:
+        config = _OPENAI_COMPATIBLE[provider]
+        payload = {
+            "model": config["model"],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Return only the requested output. No explanations.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        url = f"{config['base_url']}/chat/completions"
+        response = _post_json(url, headers, payload)
+        try:
+            return response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise AiAssistError(errors.provider_response_empty())
 
-def _anthropic(api_key, prompt):
-    payload = {
-        "model": "claude-3-5-sonnet-20240620",
-        "max_tokens": 120,
-        "temperature": 0.0,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-    }
-    response = _post_json("https://api.anthropic.com/v1/messages", headers, payload)
-    try:
-        content = response["content"][0]["text"]
-    except (KeyError, IndexError, TypeError):
-        raise AiAssistError(errors.provider_response_missing_regex())
-    regex = _clean_regex(content)
-    if not regex:
-        raise AiAssistError(errors.provider_response_no_regex())
-    return regex
+    if provider == "anthropic":
+        payload = {
+            "model": "claude-3-5-sonnet-20240620",
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        response = _post_json("https://api.anthropic.com/v1/messages", headers, payload)
+        try:
+            return response["content"][0]["text"]
+        except (KeyError, IndexError, TypeError):
+            raise AiAssistError(errors.provider_response_empty())
 
+    if provider == "google":
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.0, "maxOutputTokens": max_tokens},
+        }
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/"
+            f"models/gemini-1.5-flash:generateContent?key={api_key}"
+        )
+        response = _post_json(url, {"Content-Type": "application/json"}, payload)
+        try:
+            return response["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError):
+            raise AiAssistError(errors.provider_response_empty())
 
-def _google(api_key, prompt):
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 120},
-    }
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/gemini-1.5-flash:generateContent?key={api_key}"
-    )
-    response = _post_json(url, {"Content-Type": "application/json"}, payload)
-    try:
-        content = response["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError, TypeError):
-        raise AiAssistError(errors.provider_response_missing_regex())
-    regex = _clean_regex(content)
-    if not regex:
-        raise AiAssistError(errors.provider_response_no_regex())
-    return regex
+    if provider == "cohere":
+        payload = {
+            "model": "command-r",
+            "message": prompt,
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        response = _post_json("https://api.cohere.ai/v1/chat", headers, payload)
+        content = response.get("text") or response.get("response")
+        if not content:
+            raise AiAssistError(errors.provider_response_empty())
+        return content
 
-
-def _cohere(api_key, prompt):
-    payload = {
-        "model": "command-r",
-        "message": prompt,
-        "temperature": 0.0,
-        "max_tokens": 120,
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    response = _post_json("https://api.cohere.ai/v1/chat", headers, payload)
-    content = response.get("text") or response.get("response")
-    if not content:
-        raise AiAssistError(errors.provider_response_missing_regex())
-    regex = _clean_regex(content)
-    if not regex:
-        raise AiAssistError(errors.provider_response_no_regex())
-    return regex
-
-
-def _is_regex_reasonable(regex, filenames):
-    if not regex:
-        return False
-    sample = filenames[:30]
-    if not sample:
-        return True
-    has_separator = False
-    for name in sample:
-        base = extract_base_name(name)
-        if any(not char.isalnum() for char in base):
-            has_separator = True
-            break
-    try:
-        split_counts = []
-        for name in sample:
-            base = extract_base_name(name)
-            parts = [p for p in re.split(regex, base) if p]
-            split_counts.append(len(parts))
-    except re.error:
-        return False
-
-    if not has_separator:
-        return True
-
-    non_trivial = sum(count > 1 for count in split_counts)
-    if non_trivial == 0:
-        return False
-    return non_trivial / len(split_counts) >= 0.1
-
-
-def _extract_single_separator(regex):
-    if not regex:
-        return None
-    candidate = regex.strip()
-    if re.fullmatch(r"\\s", candidate):
-        return " "
-    match = re.fullmatch(r"\\?.", candidate)
-    if match:
-        return match.group(0).lstrip("\\")
-    wrapped = re.fullmatch(r"\(\?:(.+)\)\+?", candidate)
-    if wrapped:
-        inner = wrapped.group(1)
-        match = re.fullmatch(r"\\?.", inner)
-        if match:
-            return match.group(0).lstrip("\\")
-        if re.fullmatch(r"\\s", inner):
-            return " "
-    return None
-
-
-def _is_regex_too_generic(regex, filenames):
-    candidates = _separator_candidates(filenames)
-    if len(candidates) <= 1:
-        return False
-    single = _extract_single_separator(regex)
-    if single and single in candidates:
-        return True
-    return False
+    raise AiAssistError(errors.provider_not_supported(provider))
 
 
 def generate_ai_regex(provider, api_key, filenames):
@@ -329,35 +254,24 @@ def generate_ai_regex(provider, api_key, filenames):
     if provider in {"aws", "azure"}:
         raise AiAssistError(errors.provider_requires_configuration())
     prompt = _build_prompt(filenames)
-    if provider in _OPENAI_COMPATIBLE:
-        regex = _openai_like(provider, api_key, prompt)
-    elif provider == "anthropic":
-        regex = _anthropic(api_key, prompt)
-    elif provider == "google":
-        regex = _google(api_key, prompt)
-    elif provider == "cohere":
-        regex = _cohere(api_key, prompt)
-    else:
-        raise AiAssistError(errors.provider_not_supported(provider))
+
+    content = _call_ai_provider_raw(provider, api_key, prompt, 120)
+
+    regex = _clean_regex(content)
+    if not regex:
+        raise AiAssistError(errors.provider_response_no_regex())
 
     if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(regex, filenames):
         retry_prompt = _build_prompt(filenames, strict=True)
-        if provider in _OPENAI_COMPATIBLE:
-            retry_regex = _openai_like(provider, api_key, retry_prompt)
-        elif provider == "anthropic":
-            retry_regex = _anthropic(api_key, retry_prompt)
-        elif provider == "google":
-            retry_regex = _google(api_key, retry_prompt)
-        elif provider == "cohere":
-            retry_regex = _cohere(api_key, retry_prompt)
-        else:
-            retry_regex = ""
+        retry_content = _call_ai_provider_raw(provider, api_key, retry_prompt, 120)
+        retry_regex = _clean_regex(retry_content)
         if retry_regex and _is_regex_reasonable(retry_regex, filenames) and not _is_regex_too_generic(
             retry_regex, filenames
         ):
             regex = retry_regex
         else:
             regex = ""
+
     if not regex or not _is_regex_reasonable(regex, filenames):
         fallback = _suggest_separator_regex(filenames)
         if fallback:
@@ -369,4 +283,88 @@ def generate_ai_regex(provider, api_key, filenames):
                 "ai_regex": regex,
                 "fallback_reason": "ai_regex_unreliable",
             }
+
     return {"regex": regex, "source": "ai", "ai_regex": regex}
+
+
+def _build_parse_prompt(filenames):
+    sample = filenames[:60]
+    list_block = "\n".join(sample)
+    return (
+        "You are given multiple filenames.\n"
+        "\n"
+        "Each filename contains:\n"
+        "- fixed structural labels (field names, markers)\n"
+        "- variable values (numbers, codes, magnifications, optional suffix text)\n"
+        "\n"
+        "Task:\n"
+        "For EACH filename, output ONE line containing ONLY the variable values.\n"
+        "\n"
+        "Rules:\n"
+        "- Do NOT include labels\n"
+        "- Do NOT convert or normalize values\n"
+        "- Preserve original text exactly\n"
+        "- Keep original order\n"
+        "- The number of values may differ per line\n"
+        "- Output ONLY comma-separated values\n"
+        "- No headers, no explanations, no quotes, no code fences\n"
+        "\n"
+        "Filenames:\n"
+        f"{list_block}\n"
+    )
+
+
+def _parse_ai_value_rows(text, expected_count):
+    if not text:
+        raise AiAssistError(errors.provider_response_empty())
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    if len(lines) != expected_count:
+        raise AiAssistError(
+            errors.provider_response_row_mismatch(len(lines), expected_count)
+        )
+
+    rows = []
+
+    for line in lines:
+        values = [v.strip() for v in line.split(",") if v.strip()]
+        if not values:
+            raise AiAssistError(errors.provider_response_invalid_format())
+        rows.append(values)
+
+    return rows
+
+
+def generate_ai_parsed_values(provider, api_key, filenames):
+    provider = (provider or "").strip().lower()
+
+    if not provider:
+        raise AiAssistError(errors.provider_required())
+
+    if provider in {"aws", "azure"}:
+        raise AiAssistError(errors.provider_requires_configuration())
+
+    if not filenames:
+        raise AiAssistError(errors.no_filenames_provided())
+
+    prompt = _build_parse_prompt(filenames)
+
+    content = _call_ai_provider_raw(provider, api_key, prompt, 800)
+
+    parsed_rows = _parse_ai_value_rows(content, len(filenames))
+
+    rows = []
+
+    for name, values in zip(filenames, parsed_rows):
+        rows.append(
+            {
+                "filename": name,
+                "values": values,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "source": "ai",
+    }
