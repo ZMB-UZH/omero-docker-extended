@@ -2172,66 +2172,6 @@
         });
     }
 
-    if (aiProcessBtn) {
-        aiProcessBtn.addEventListener('click', () => {
-            const provider = aiProviderSelect?.value;
-            if (!provider) {
-                updateAiModalStatus(messages.aiModalChooseProvider, true);
-                return;
-            }
-            if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
-                updateAiModalStatus(messages.aiModalAddKeySelected, true);
-                return;
-            }
-            const projectId = projectSelect?.value;
-            const datasetIds = getSelectedDatasetIds();
-            if (!projectId) {
-                updateAiModalStatus(messages.selectProject, true);
-                return;
-            }
-            if (datasetIds.length === 0) {
-                updateAiModalStatus(messages.selectDatasets, true);
-                return;
-            }
-            const selectedImageCount = getSelectedDatasetImageCount();
-            if (selectedImageCount === 0) {
-                updateAiModalStatus(messages.noDataToProcess, true);
-                return;
-            }
-            updateAiModalStatus(messages.aiModalProcessing);
-            const formData = new FormData();
-            formData.append('action', 'ai_regex');
-            formData.append('project', projectId);
-            formData.append('selected_datasets', datasetIds.join(','));
-            formData.append('provider', provider);
-            fetch(window.location.href, {
-                method: 'POST',
-                body: formData,
-            })
-                .then((resp) => resp.json())
-                .then((data) => {
-                    if (data.error) {
-                        updateAiModalStatus(data.error, true);
-                        return;
-                    }
-                    if (aiRegexOutput) {
-                        aiRegexOutput.value = data.regex || '';
-                    }
-                    if (aiTransferBtn) {
-                        aiTransferBtn.disabled = !(data.regex || '').trim();
-                    }
-                    if (data.source === 'fallback') {
-                        updateAiModalStatus(messages.regexSuggestionFallback, true);
-                    } else {
-                        updateAiModalStatus(messages.regexSuggestionReady);
-                    }
-                })
-                .catch(() => {
-                    updateAiModalStatus(messages.aiProcessFailed, true);
-                });
-        });
-    }
-
     if (aiParseProcessBtn) {
         aiParseProcessBtn.addEventListener('click', () => {
             const provider = aiParseProviderSelect?.value;
