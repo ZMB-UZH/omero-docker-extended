@@ -25,6 +25,12 @@ cd "${BASE_DIR}"
 echo "Backing up script..."
 cp "${SCRIPT_NAME}" "/tmp/${SCRIPT_NAME}.backup"
 
+echo "Stopping containers..."
+docker compose down
+
+echo "Removing old omeroweb image..."
+docker rmi omero-test-omeroweb 2>/dev/null || echo "Image already removed or doesn't exist"
+
 echo "Removing all files except script..."
 find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" -exec rm -rf {} +
 
@@ -43,3 +49,4 @@ echo "Starting containers..."
 docker compose up -d
 
 echo "Done."
+
