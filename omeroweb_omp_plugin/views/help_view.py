@@ -2,6 +2,7 @@ from django.http import FileResponse, Http404
 from omeroweb.decorators import login_required
 import os
 
+from .. import errors
 
 @login_required()
 def help_page(request, **kwargs):
@@ -13,7 +14,7 @@ def help_page(request, **kwargs):
     )
 
     if not os.path.exists(help_path):
-        raise Http404(f"Help file not found: {help_path}")
+        raise Http404(errors.help_file_not_found(help_path))
 
     return FileResponse(open(help_path, "rb"), content_type="application/pdf")
   

@@ -3,7 +3,6 @@ from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 import subprocess
 import logging
-import json
 from ..services.core import (
     collect_images_in_project,
     find_annotation_link_ids,
@@ -12,6 +11,8 @@ from ..services.core import (
 )
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+from ..views.utils import load_json_body
+from .. import errors
 logger = logging.getLogger(__name__)
 
 OMERO = OMERO_CLI
@@ -23,20 +24,19 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
         if request.method != "POST":
-            return JsonResponse({"error": "POST required"}, status=400)
+            return JsonResponse({"error": errors.method_post_required()}, status=400)
 
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+        data, error = load_json_body(request)
+        if error:
+            return JsonResponse({"error": error}, status=400)
 
         project_id = data.get("project_id")
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": "Missing project_id"}, status=400)
+            return JsonResponse({"error": errors.missing_project_id()}, status=400)
         if not password:
-            return JsonResponse({"error": "Missing password"}, status=400)
+            return JsonResponse({"error": errors.missing_password()}, status=400)
 
         username = conn.getUser().getName()
 
@@ -65,7 +65,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": "Omero web login failed",
+                    "error": errors.omero_web_login_failed(),
                     "stdout": login.stdout,
                     "stderr": login.stderr,
                 }
@@ -142,7 +142,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                                     "image": iid,
                                     "annotation": aid,
                                     "links_remaining": remaining_links,
-                                    "error": "Annotation links still exist; skipping delete.",
+                                    "error": errors.annotation_links_still_exist(),
                                 }
                             )
                             continue
@@ -178,7 +178,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                                 {
                                     "image": iid,
                                     "annotation": aid,
-                                    "error": "Annotation still exists after delete.",
+                                    "error": errors.annotation_still_exists(),
                                 }
                             )
                             continue

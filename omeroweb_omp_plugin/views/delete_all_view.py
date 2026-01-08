@@ -3,11 +3,12 @@ from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 import subprocess
 import logging
-import json
 
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+from ..views.utils import load_json_body
+from .. import errors
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +24,19 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
     try:
         if request.method != "POST":
-            return JsonResponse({"error": "POST required"}, status=400)
+            return JsonResponse({"error": errors.method_post_required()}, status=400)
 
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-        except Exception:
-            return JsonResponse({"error": "Invalid JSON body"}, status=400)
+        data, error = load_json_body(request)
+        if error:
+            return JsonResponse({"error": error}, status=400)
 
         project_id = data.get("project_id")
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": "Missing project_id"}, status=400)
+            return JsonResponse({"error": errors.missing_project_id()}, status=400)
         if not password:
-            return JsonResponse({"error": "Missing password"}, status=400)
+            return JsonResponse({"error": errors.missing_password()}, status=400)
 
         # Omero web username from current web session
         username = conn.getUser().getName()
@@ -69,7 +69,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": "Omero web login failed",
+                    "error": errors.omero_web_login_failed(),
                     "stdout": login.stdout,
                     "stderr": login.stderr,
                 }
@@ -82,7 +82,12 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
             if not image_ids:
                 return JsonResponse(
-                    {"ok": True, "deleted_count": 0, "errors": [], "note": "No images found"}
+                    {
+                        "ok": True,
+                        "deleted_count": 0,
+                        "errors": [],
+                        "note": errors.no_images_found(),
+                    }
                 )
 
             allowed, remaining = check_major_action_rate_limit(request, conn)
@@ -135,7 +140,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         errors.append(
                             {
                                 "ids": [image_id],
-                                "error": "Map annotations still present after delete.",
+                                "error": errors.map_annotations_still_present(),
                                 "remaining": remaining,
                             }
                         )
