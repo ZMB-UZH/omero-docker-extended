@@ -9,8 +9,11 @@ from .filename_utils import (
     detect_label_value_pairs,
     extract_base_name,
     regex_for_separators,
+    suggest_separator_regex,
 )
+from .http_utils import extract_error_details
 from ..constants import COMMON_SEPARATORS
+from .. import errors
 
 logger = logging.getLogger(__name__)
 
@@ -44,22 +47,7 @@ _OPENAI_COMPATIBLE = {
 
 
 def _suggest_separator_regex(filenames):
-    counts = Counter()
-    for name in filenames:
-        base = extract_base_name(name)
-        for char in base:
-            if char in COMMON_SEPARATORS:
-                counts[char] += 1
-    
-    if not counts:
-        return regex_for_separators([], filenames=filenames)
-    
-    top = counts.most_common()
-    max_count = top[0][1]
-    candidates = [char for char, count in top if count >= max_count * 0.4]
-    
-    # Pass filenames for intelligent pattern detection
-    return regex_for_separators(candidates[:5], filenames=filenames)
+    return suggest_separator_regex(filenames, allowed_separators=COMMON_SEPARATORS)
 
 
 def _summarize_separators(filenames):
@@ -152,30 +140,6 @@ def _clean_regex(text):
     return first.strip().strip("'\"")
 
 
-def _extract_error_details(error):
-    if not error:
-        return None
-    try:
-        raw = error.read()
-    except Exception:
-        return None
-    if not raw:
-        return None
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except Exception:
-        return raw.decode("utf-8", errors="ignore").strip() or None
-    if isinstance(payload, dict):
-        info = payload.get("error") or payload.get("message")
-        if isinstance(info, dict):
-            message = info.get("message")
-            if message:
-                return message
-        if isinstance(info, str):
-            return info
-    return None
-
-
 def _post_json(url, headers, payload, timeout=15):
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -183,7 +147,7 @@ def _post_json(url, headers, payload, timeout=15):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        detail = _extract_error_details(exc)
+        detail = extract_error_details(exc)
         retry_after = exc.headers.get("Retry-After") if exc.headers else None
         logger.warning(
             "AI provider HTTP error %s from %s (detail=%s)",
@@ -191,21 +155,21 @@ def _post_json(url, headers, payload, timeout=15):
             url,
             detail or "n/a",
         )
-        message = f"Provider returned status {exc.code}."
+        message = errors.provider_http_status(exc.code)
         if detail:
-            message = f"{message} {detail}"
+            message = errors.provider_http_status_with_detail(exc.code, detail)
         if retry_after:
-            message = f"{message} Retry after {retry_after} seconds."
+            message = errors.provider_http_retry_after(message, retry_after)
         raise AiAssistError(message)
     except urllib.error.URLError as exc:
         logger.warning("AI provider connection error for %s: %s", url, exc)
-        raise AiAssistError("Unable to reach the AI provider.")
+        raise AiAssistError(errors.provider_unreachable())
 
 
 def _openai_like(provider, api_key, prompt):
     config = _OPENAI_COMPATIBLE.get(provider)
     if not config:
-        raise AiAssistError(f"Provider '{provider}' is not supported.")
+        raise AiAssistError(errors.provider_not_supported(provider))
     payload = {
         "model": config["model"],
         "messages": [
@@ -227,10 +191,10 @@ def _openai_like(provider, api_key, prompt):
     try:
         content = response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
-        raise AiAssistError("Provider response was missing the regex suggestion.")
+        raise AiAssistError(errors.provider_response_missing_regex())
     regex = _clean_regex(content)
     if not regex:
-        raise AiAssistError("Provider response did not include a regex suggestion.")
+        raise AiAssistError(errors.provider_response_no_regex())
     return regex
 
 
@@ -250,10 +214,10 @@ def _anthropic(api_key, prompt):
     try:
         content = response["content"][0]["text"]
     except (KeyError, IndexError, TypeError):
-        raise AiAssistError("Provider response was missing the regex suggestion.")
+        raise AiAssistError(errors.provider_response_missing_regex())
     regex = _clean_regex(content)
     if not regex:
-        raise AiAssistError("Provider response did not include a regex suggestion.")
+        raise AiAssistError(errors.provider_response_no_regex())
     return regex
 
 
@@ -270,10 +234,10 @@ def _google(api_key, prompt):
     try:
         content = response["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, TypeError):
-        raise AiAssistError("Provider response was missing the regex suggestion.")
+        raise AiAssistError(errors.provider_response_missing_regex())
     regex = _clean_regex(content)
     if not regex:
-        raise AiAssistError("Provider response did not include a regex suggestion.")
+        raise AiAssistError(errors.provider_response_no_regex())
     return regex
 
 
@@ -291,10 +255,10 @@ def _cohere(api_key, prompt):
     response = _post_json("https://api.cohere.ai/v1/chat", headers, payload)
     content = response.get("text") or response.get("response")
     if not content:
-        raise AiAssistError("Provider response was missing the regex suggestion.")
+        raise AiAssistError(errors.provider_response_missing_regex())
     regex = _clean_regex(content)
     if not regex:
-        raise AiAssistError("Provider response did not include a regex suggestion.")
+        raise AiAssistError(errors.provider_response_no_regex())
     return regex
 
 
@@ -361,9 +325,9 @@ def _is_regex_too_generic(regex, filenames):
 def generate_ai_regex(provider, api_key, filenames):
     provider = (provider or "").strip().lower()
     if not provider:
-        raise AiAssistError("Provider is required.")
+        raise AiAssistError(errors.provider_required())
     if provider in {"aws", "azure"}:
-        raise AiAssistError("Provider requires additional configuration.")
+        raise AiAssistError(errors.provider_requires_configuration())
     prompt = _build_prompt(filenames)
     if provider in _OPENAI_COMPATIBLE:
         regex = _openai_like(provider, api_key, prompt)
@@ -374,7 +338,7 @@ def generate_ai_regex(provider, api_key, filenames):
     elif provider == "cohere":
         regex = _cohere(api_key, prompt)
     else:
-        raise AiAssistError(f"Provider '{provider}' is not supported.")
+        raise AiAssistError(errors.provider_not_supported(provider))
 
     if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(regex, filenames):
         retry_prompt = _build_prompt(filenames, strict=True)

@@ -132,3 +132,24 @@ def regex_for_separators(separators, filenames=None):
     
     # Combine all separator patterns
     return "(?:" + "|".join(tokens) + ")+"
+
+
+def suggest_separator_regex(filenames, allowed_separators=None):
+    counts = Counter()
+    for name in filenames:
+        base = extract_base_name(name)
+        for char in base:
+            if allowed_separators is None:
+                if not char.isalnum():
+                    counts[char] += 1
+            elif char in allowed_separators:
+                counts[char] += 1
+
+    if not counts:
+        return regex_for_separators([], filenames=filenames)
+
+    top = counts.most_common()
+    max_count = top[0][1]
+    candidates = [char for char, count in top if count >= max_count * 0.4]
+
+    return regex_for_separators(candidates[:5], filenames=filenames)

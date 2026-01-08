@@ -16,6 +16,7 @@ from ..constants import (
     MAJOR_ACTION_LIMIT,
     MAJOR_ACTION_WINDOW_SECONDS,
 )
+from .. import errors
 
 logger = logging.getLogger(__name__)
 
@@ -222,12 +223,11 @@ def build_rate_limit_message(remaining_seconds):
         time_str = f"{minutes} minute(s) and {seconds} second(s)"
     else:
         time_str = f"{remaining} second(s)"
-    
-    return (
-        f"Rate limit exceeded: You have performed more than "
-        f"{MAJOR_ACTION_LIMIT} major actions in the last "
-        f"{MAJOR_ACTION_WINDOW_SECONDS} seconds. "
-        f"Please try again in {time_str}."
+
+    return errors.rate_limit_exceeded(
+        MAJOR_ACTION_LIMIT,
+        MAJOR_ACTION_WINDOW_SECONDS,
+        time_str,
     )
 
 
