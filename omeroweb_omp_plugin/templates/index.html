@@ -810,6 +810,7 @@
         updateAiRegexOption();
         updateAiParseOption();
 
+        const separatorInput = document.getElementById('separator_input');
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
             separatorInput.disabled = isAiParse;
@@ -823,7 +824,10 @@
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
         const aiRegex = document.getElementById('sep_mode_ai_regex');
-        if (aiRegex && aiRegex.checked) {
+        const aiParse = document.getElementById('sep_mode_ai_parse');
+        if (aiParse && aiParse.checked) {
+            setSeparatorMode('ai_parse');
+        } else if (aiRegex && aiRegex.checked) {
             setSeparatorMode('ai');
         } else if (regex && regex.checked) {
             setSeparatorMode('regex');
