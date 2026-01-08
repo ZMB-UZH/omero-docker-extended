@@ -3,7 +3,7 @@ import os
 import re
 from contextlib import contextmanager
 
-from .. import errors
+from ..strings import errors
 
 logger = logging.getLogger(__name__)
 

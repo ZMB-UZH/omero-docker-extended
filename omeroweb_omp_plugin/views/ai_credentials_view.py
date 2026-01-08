@@ -15,7 +15,7 @@ from ..services.data_store import (
 )
 from ..services.http_utils import extract_error_details
 from ..views.utils import current_username, load_request_data
-from .. import errors, messages
+from ..strings import errors, messages
 
 
 logger = logging.getLogger(__name__)

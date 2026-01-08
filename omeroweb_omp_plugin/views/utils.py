@@ -1,6 +1,6 @@
 import json
 
-from .. import errors
+from ..strings import errors
 
 
 def current_username(request, conn):

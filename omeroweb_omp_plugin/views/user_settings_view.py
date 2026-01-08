@@ -6,7 +6,7 @@ from omeroweb.decorators import login_required
 
 from ..services.data_store import UserSettingsStoreError, save_user_settings
 from ..views.utils import current_username, load_request_data
-from .. import errors, messages
+from ..strings import errors, messages
 
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ from django.http import FileResponse, Http404
 from omeroweb.decorators import login_required
 import os
 
-from .. import errors
+from ..strings import errors
 
 @login_required()
 def help_page(request, **kwargs):

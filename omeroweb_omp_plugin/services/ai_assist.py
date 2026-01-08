@@ -13,7 +13,7 @@ from .filename_utils import (
 )
 from .http_utils import extract_error_details
 from ..constants import COMMON_SEPARATORS
-from .. import errors
+from ..strings import errors
 
 logger = logging.getLogger(__name__)
 
