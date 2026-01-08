@@ -70,6 +70,90 @@ def index(request, conn=None, url=None, **kwargs):
             )
             return JsonResponse({"datasets": dataset_rows})
 
+        if request.method == "POST" and request.POST.get("action") == "ai_regex":
+            project_id = request.POST.get("project")
+            selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
+            provider = (request.POST.get("provider") or "").strip().lower()
+
+            if not project_id:
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
+
+            if not selected_dataset_ids_raw.strip():
+                return JsonResponse({"error": errors.datasets_required()}, status=400)
+
+            selected_dataset_ids = []
+            for ds_id in selected_dataset_ids_raw.split(","):
+                ds_id = ds_id.strip()
+                if not ds_id:
+                    continue
+                try:
+                    selected_dataset_ids.append(int(ds_id))
+                except ValueError:
+                    continue
+
+            if not selected_dataset_ids:
+                return JsonResponse({"error": errors.datasets_required()}, status=400)
+
+            allowed, remaining = check_major_action_rate_limit(request, conn)
+            if not allowed:
+                return JsonResponse(
+                    {"error": build_rate_limit_message(remaining)},
+                    status=429,
+                )
+
+            ds_list = collect_images_by_selected_datasets(
+                conn,
+                project_id,
+                selected_dataset_ids,
+                limit=200,
+            )
+
+            filenames = []
+            for _, images in ds_list:
+                for img in images:
+                    try:
+                        filenames.append(get_text(img.getName()))
+                    except Exception:
+                        continue
+
+            if not filenames:
+                return JsonResponse({"error": errors.no_filenames_available()}, status=400)
+
+            if provider == "local":
+                regex = _suggest_separator_regex(filenames)
+                return JsonResponse({"regex": regex, "source": "local"})
+
+            username = current_username(request, conn)
+            if not username:
+                return JsonResponse(
+                    {"error": errors.unable_to_determine_username()},
+                    status=400,
+                )
+
+            try:
+                api_key = (get_ai_credential(username, provider) or "").strip()
+            except AiCredentialStoreError as e:
+                return JsonResponse({"error": str(e)}, status=500)
+
+            if not api_key:
+                return JsonResponse(
+                    {"error": errors.ai_api_key_required()},
+                    status=400,
+                )
+
+            try:
+                result = generate_ai_regex(provider, api_key, filenames)
+            except AiAssistError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+            except Exception as e:
+                logger.exception("AI regex provider failure: %s", e)
+                return JsonResponse(
+                    {"error": errors.unable_to_process_filenames()},
+                    status=500,
+                )
+
+            return JsonResponse(result)
+
         if request.method == "POST" and request.POST.get("action") == "ai_parse":
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
@@ -77,7 +161,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             if provider == "local":
                 return JsonResponse(
-                    {"error": errors.choose_provider()},
+                    {"error": errors.provider_required()},
                     status=400,
                 )
 
@@ -125,7 +209,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             if provider == "local":
                 return JsonResponse(
-                    {"error": errors.choose_provider()},
+                    {"error": errors.provider_required()},
                     status=400,
                 )
 
