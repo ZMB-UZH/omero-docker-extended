@@ -30,7 +30,7 @@ from ..services.core import (
 )
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..views.utils import load_request_data
-from .. import errors
+from ..strings import errors
 
 logger = logging.getLogger(__name__)
 

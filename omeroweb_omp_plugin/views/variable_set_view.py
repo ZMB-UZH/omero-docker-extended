@@ -13,7 +13,7 @@ from ..services.data_store import (
 )
 from ..constants import MAX_VARIABLE_SET_ENTRIES
 from ..views.utils import current_username, load_request_data
-from .. import errors, messages
+from ..strings import errors, messages
 
 
 logger = logging.getLogger(__name__)

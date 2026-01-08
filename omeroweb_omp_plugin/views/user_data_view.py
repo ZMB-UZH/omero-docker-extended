@@ -13,7 +13,7 @@ from ..services.data_store import (
     delete_all_variable_sets,
 )
 from ..views.utils import current_username
-from .. import errors
+from ..strings import errors
 
 
 logger = logging.getLogger(__name__)

@@ -20,7 +20,7 @@ from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..services.filename_utils import suggest_separator_regex
 from ..views.utils import current_username
-from .. import errors, messages
+from ..strings import errors, messages
 from ..constants import (
     CHUNK_SIZE,
     DEFAULT_VARIABLE_NAMES,
