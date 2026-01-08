@@ -6,7 +6,7 @@ from omeroweb.decorators import login_required
 
 from ..services.data_store import UserSettingsStoreError, save_user_settings
 from ..views.utils import current_username, load_request_data
-from .. import errors
+from .. import errors, messages
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def save_settings(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": errors.invalid_user_settings_payload()}, status=400)
 
         save_user_settings(username, settings_payload)
-        return JsonResponse({"message": "Saved user settings."})
+        return JsonResponse({"message": messages.user_settings_saved()})
     except UserSettingsStoreError as e:
         return JsonResponse({"error": str(e)}, status=500)
     except Exception as e:
