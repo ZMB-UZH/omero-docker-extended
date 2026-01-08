@@ -1336,7 +1336,7 @@
 
     function loadUserSettings() {
         try {
-            const stored = window.localStorage?.getItem(userSettingsStorageKey);
+            const stored = window.localStorage ? window.localStorage.getItem(userSettingsStorageKey) : null;
             if (!stored) return null;
             return JSON.parse(stored);
         } catch (error) {
@@ -2110,7 +2110,7 @@
 
     if (aiProcessBtn) {
         aiProcessBtn.addEventListener('click', () => {
-            const provider = aiProviderSelect?.value;
+            const provider = aiProviderSelect ? aiProviderSelect.value : '';
             if (!provider) {
                 updateAiModalStatus(messages.aiModalChooseProvider, true);
                 return;
@@ -2119,7 +2119,7 @@
                 updateAiModalStatus(messages.aiModalAddKeySelected, true);
                 return;
             }
-            const projectId = projectSelect?.value;
+            const projectId = projectSelect ? projectSelect.value : '';
             const datasetIds = getSelectedDatasetIds();
             if (!projectId) {
                 updateAiModalStatus(messages.selectProject, true);
@@ -2175,7 +2175,7 @@
 
     if (aiParseProcessBtn) {
         aiParseProcessBtn.addEventListener('click', () => {
-            const provider = aiParseProviderSelect?.value;
+            const provider = aiParseProviderSelect ? aiParseProviderSelect.value : '';
             if (!provider) {
                 updateAiParseModalStatus(messages.aiModalChooseProvider, true);
                 return;
