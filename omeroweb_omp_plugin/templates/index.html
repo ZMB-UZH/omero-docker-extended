@@ -296,7 +296,7 @@
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
             <select id="ai_parse_provider_select" style="width:40%; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                <option value="local">Local</option>
+                <option value="">Choose an AI provider...</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="google">Google Gemini</option>
@@ -1143,7 +1143,7 @@
     }
 
     function getSelectedDatasetIds() {
-        return selectedDatasetsInput?.value ? selectedDatasetsInput.value.split(',').filter(Boolean) : [];
+        return selectedDatasetsInput && selectedDatasetsInput.value ? selectedDatasetsInput.value.split(',').filter(Boolean) : [];
     }
 
     function persistPreviewState() {
