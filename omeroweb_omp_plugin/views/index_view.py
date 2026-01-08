@@ -352,7 +352,9 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_vars_uncapped": max_vars_uncapped,
                 "chunk_size": chunk_size,
                 "max_variable_sets": max_sets,
-                "messages_json": json.dumps(messages.preview_messages()),
+                "messages_json": json.dumps(
+                    messages.build_message_payload(messages.PREVIEW_MESSAGE_NAMES)
+                ),
             }
 
             return render(
