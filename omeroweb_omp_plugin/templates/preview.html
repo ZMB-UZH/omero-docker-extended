@@ -47,14 +47,22 @@
             <p>
                 Project: {{ project_label }} |
                 Input type:
+                {% if separator_mode == "ai_parse" %}
+                    AI-assisted filename parsing
                 {% if separator_mode == "ai_regex" %}
                     AI-assisted Regex expression
                 {% elif separator_mode == "regex" %}
                     Regex expression
                 {% else %}
                     Characters
-                {% endif %} |
-                Input: "{{ raw_seps }}"
+                {% endif %}
+                
+                Input:
+                {% if separator_mode == "ai_parse" %}
+                    Go to next step
+                {% else %}
+                    "{{ raw_seps }}"
+                {% endif %}
             </p>
             <p>Previewing {{ preview_count }} images.</p>
         </div>
