@@ -49,7 +49,8 @@ RUN set -eux; \
         /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
-# Copy branding logo (only if it exists)
+# Copy branding logo (only if it exists) to source static directory
+# Django's collectstatic (runs on startup) will copy to final location
 # --------------------------------------
 COPY logo.png* /tmp/
 RUN set -eux; \
@@ -58,14 +59,11 @@ RUN set -eux; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     if [ -f /tmp/logo.png ]; then \
         mkdir -p "${SITE_PACKAGES}/omeroweb/static/branding"; \
-        mkdir -p /opt/omero/web/OMERO.web/var/static/branding; \
         cp /tmp/logo.png "${SITE_PACKAGES}/omeroweb/static/branding/logo.png"; \
-        cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb/static"; \
-        chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding; \
-        echo "Logo copied to both source and final static directories"; \
+        echo "Logo copied to omeroweb source static directory"; \
     else \
-        echo "No logo.png found, skipping"; \
+        echo "No logo.png found, skipping logo setup"; \
     fi; \
     rm -f /tmp/logo.png*
 
