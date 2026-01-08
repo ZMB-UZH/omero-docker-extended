@@ -60,7 +60,7 @@ RUN set -eux; \
         mkdir -p "${SITE_PACKAGES}/omeroweb/static/branding"; \
         mkdir -p /opt/omero/web/OMERO.web/var/static/branding; \
         cp /tmp/logo.png "${SITE_PACKAGES}/omeroweb/static/branding/logo.png"; \
-        cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png"; \
+        cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb/static"; \
         chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding; \
         echo "Logo copied to both source and final static directories"; \
