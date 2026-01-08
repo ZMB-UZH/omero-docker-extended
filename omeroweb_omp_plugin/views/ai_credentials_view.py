@@ -15,7 +15,7 @@ from ..services.data_store import (
 )
 from ..services.http_utils import extract_error_details
 from ..views.utils import current_username, load_request_data
-from .. import errors
+from .. import errors, messages
 
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ def save_credentials(request, conn=None, url=None, **kwargs):
         if not ok:
             return JsonResponse({"error": message}, status=400)
         save_ai_credentials(username, provider, api_key)
-        return JsonResponse({"message": "API key saved."})
+        return JsonResponse({"message": messages.api_key_saved_status()})
     except AiCredentialStoreError as e:
         return JsonResponse({"error": str(e)}, status=500)
     except Exception as e:
