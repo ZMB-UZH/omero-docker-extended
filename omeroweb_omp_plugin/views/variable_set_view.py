@@ -13,7 +13,7 @@ from ..services.data_store import (
 )
 from ..constants import MAX_VARIABLE_SET_ENTRIES
 from ..views.utils import current_username, load_request_data
-from .. import errors
+from .. import errors, messages
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         save_variable_set(username, set_name, var_names)
 
-        return JsonResponse({"message": "Saved variable set."})
+        return JsonResponse({"message": messages.variable_set_saved_response()})
 
     except VariableStoreError as e:
         return JsonResponse({"error": str(e)}, status=500)

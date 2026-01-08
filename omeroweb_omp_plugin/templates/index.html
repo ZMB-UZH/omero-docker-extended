@@ -710,6 +710,13 @@
 
 <script>
     const previewForm = document.getElementById('preview_form');
+    const messages = {{ messages_json|safe }};
+    const formatMessage = (template, values = {}) => {
+        const source = String(template || '');
+        return source.replace(/\{(\w+)\}/g, (match, key) => (
+            Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+        ));
+    };
     function setSeparatorMode(mode) {
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
@@ -995,18 +1002,18 @@
         if (!aiProviderSelect) return;
         const provider = aiProviderSelect.value;
         if (isLocalProvider(provider)) {
-            updateAiModalStatus('Local provider selected. Ready to process.');
+            updateAiModalStatus(messages.localProviderReady);
             return;
         }
         if (aiCredentialProviders.has(provider)) {
-            updateAiModalStatus('API key exists in database for the selected provider. Ready to process.');
+            updateAiModalStatus(messages.providerKeyReady);
             return;
         }
-        updateAiModalStatus('Please add an API key for this provider in settings.', true);
+        updateAiModalStatus(messages.addApiKeySettings, true);
     }
 
     function confirmUserDataDelete(url, successMessage, options = {}) {
-        if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
+        if (!window.confirm(messages.confirmIrreversible)) {
             return;
         }
 
@@ -1019,7 +1026,7 @@
         .then(response => response.json().then(data => ({ ok: response.ok, data })))
         .then(({ ok, data }) => {
             if (!ok || data.error) {
-                showNonBlockingModal(data.error || 'Unable to delete data.');
+                showNonBlockingModal(data.error || messages.deleteDataFailed);
                 return;
             }
             if (typeof options.onSuccess === 'function') {
@@ -1028,7 +1035,7 @@
             showNonBlockingModal(successMessage);
         })
         .catch(err => {
-            showNonBlockingModal("ERROR: " + err);
+            showNonBlockingModal(formatMessage(messages.errorWithDetails, { error: err }));
         });
     }
 
@@ -1092,16 +1099,16 @@
     function openAiModal() {
         const projectId = projectSelect?.value;
         if (!projectId) {
-            showNonBlockingModal("Please select a project.");
+            showNonBlockingModal(messages.selectProject);
             return;
         }
         if (!selectedDatasetsInput?.value) {
-            showNonBlockingModal("Please select one or more datasets.");
+            showNonBlockingModal(messages.selectDatasets);
             return;
         }
         const selectedImageCount = getSelectedDatasetImageCount();
         if (selectedImageCount === 0) {
-            showNonBlockingModal("No data to process is available in the selected datasets.");
+            showNonBlockingModal(messages.noDataToProcess);
             return;
         }
         updateAiModalStatus('');
@@ -1284,7 +1291,7 @@
         }
 
         if (hasError) {
-            showNonBlockingModal("Formatting error(s). Please try again.");
+            showNonBlockingModal(messages.formattingErrors);
             return null;
         }
 
@@ -1309,10 +1316,10 @@
                     showNonBlockingModal(data.error);
                     return;
                 }
-                showNonBlockingModal('Saved user settings to database.');
+                showNonBlockingModal(messages.userSettingsSavedDb);
             })
             .catch((err) => {
-                showNonBlockingModal('Error saving user settings: ' + err);
+                showNonBlockingModal(formatMessage(messages.userSettingsSaveError, { error: err }));
             });
     }
 
@@ -1332,7 +1339,7 @@
                 }
             })
             .catch(() => {
-                updateAiCredentialsStatus('Unable to load saved credentials.', true);
+                updateAiCredentialsStatus(messages.unableLoadCredentials, true);
             });
     }
 
@@ -1340,9 +1347,9 @@
         if (!aiCredentialsProvider) return;
         const provider = aiCredentialsProvider.value;
         if (aiCredentialProviders.has(provider)) {
-            updateAiCredentialsStatus('API key exists in database for the selected provider.');
+            updateAiCredentialsStatus(messages.aiKeyExists);
         } else {
-            updateAiCredentialsStatus('No API key saved yet for the selected provider.');
+            updateAiCredentialsStatus(messages.aiKeyMissing);
         }
     }
 
@@ -1350,34 +1357,34 @@
         previewForm.addEventListener('submit', (event) => {
             if (!projectSelect.value) {
                 event.preventDefault();
-                showNonBlockingModal("Please select a project.");
+                showNonBlockingModal(messages.selectProject);
                 return;
             }
             if (!selectedDatasetsInput.value) {
                 event.preventDefault();
-                showNonBlockingModal("Please select one or more datasets.");
+                showNonBlockingModal(messages.selectDatasets);
                 return;
             }
             const selectedImageCount = getSelectedDatasetImageCount();
             if (selectedImageCount === 0) {
                 event.preventDefault();
-                showNonBlockingModal("No data to process is available in the selected datasets.");
+                showNonBlockingModal(messages.noDataToProcess);
                 return;
             }
             if (!separatorInput.value.trim()) {
                 event.preventDefault();
-                showNonBlockingModal("The input field for filename parsing cannot be empty.");
+                showNonBlockingModal(messages.filenameInputEmpty);
                 return;
             }
             const separatorMode = document.getElementById('separator_mode')?.value || 'chars';
             if (separatorMode === 'chars' && hasDuplicateCharacters(separatorInput.value)) {
                 event.preventDefault();
-                showNonBlockingModal("The input field for filename parsing cannot contain duplicate characters.");
+                showNonBlockingModal(messages.filenameInputDuplicate);
                 return;
             }
             if (aiRegexCheckbox?.checked && !aiRegexTransferred) {
                 event.preventDefault();
-                showNonBlockingModal("Please use the AI-assisted Regex expression routine first, or choose another method.");
+                showNonBlockingModal(messages.aiRegexUseFirst);
                 return;
             }
             
@@ -1785,7 +1792,7 @@
 
     if (userSettingsRestore) {
         userSettingsRestore.addEventListener('click', () => {
-            if (!window.confirm("Are you absolutely sure? This action is irreversible.")) {
+            if (!window.confirm(messages.confirmIrreversible)) {
                 return;
             }
             try {
@@ -1841,15 +1848,15 @@
             const provider = aiCredentialsProvider?.value;
             const key = aiCredentialsKey?.value?.trim();
             if (!provider) {
-                showNonBlockingModal('Please choose a provider.');
+                showNonBlockingModal(messages.chooseProvider);
                 return;
             }
             const hasSavedKey = aiCredentialProviders.has(provider);
             if (!key && !hasSavedKey) {
-                showNonBlockingModal('API key cannot be empty.');
+                showNonBlockingModal(messages.apiKeyEmpty);
                 return;
             }
-            updateAiCredentialsStatus('Testing connection...');
+            updateAiCredentialsStatus(messages.testingConnection);
             fetch(aiCredentialsTestUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1867,11 +1874,11 @@
                     if (aiCredentialsSave) {
                         aiCredentialsSave.disabled = !key;
                     }
-                    updateAiCredentialsStatus(data.message || 'Connection test passed.');
+                    updateAiCredentialsStatus(data.message || messages.connectionTestPassed);
                 })
                 .catch(() => {
-                    updateAiCredentialsStatus('Unable to test API key.', true);
-                    showNonBlockingModal('Unable to test API key.');
+                    updateAiCredentialsStatus(messages.unableTestApiKey, true);
+                    showNonBlockingModal(messages.unableTestApiKey);
                     resetAiCredentialTest();
                 });
         });
@@ -1883,7 +1890,7 @@
             const provider = aiCredentialsProvider?.value;
             const key = aiCredentialsKey?.value?.trim();
             if (!provider || !key) {
-                showNonBlockingModal('Please choose a provider and enter an API key.');
+                showNonBlockingModal(messages.chooseProviderAndKey);
                 return;
             }
             if (
@@ -1891,10 +1898,10 @@
                 || aiCredentialsLastTest.provider !== provider
                 || aiCredentialsLastTest.key !== key
             ) {
-                showNonBlockingModal('Please run the connection test before saving this API key.');
+                showNonBlockingModal(messages.runConnectionTestFirst);
                 return;
             }
-            updateAiCredentialsStatus('Saving key...');
+            updateAiCredentialsStatus(messages.savingKey);
             fetch(aiCredentialsSaveUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1913,12 +1920,12 @@
                         aiCredentialsKey.value = '';
                     }
                     resetAiCredentialTest();
-                    updateAiCredentialsStatus('API key saved.');
-                    showNonBlockingModal('API key saved to the database.');
+                    updateAiCredentialsStatus(messages.apiKeySavedStatus);
+                    showNonBlockingModal(messages.apiKeySavedDb);
                 })
                 .catch(() => {
-                    updateAiCredentialsStatus('Unable to save API key.', true);
-                    showNonBlockingModal('Unable to save API key.');
+                    updateAiCredentialsStatus(messages.unableSaveApiKey, true);
+                    showNonBlockingModal(messages.unableSaveApiKey);
                     resetAiCredentialTest();
                 });
         });
@@ -1941,29 +1948,29 @@
         aiProcessBtn.addEventListener('click', () => {
             const provider = aiProviderSelect?.value;
             if (!provider) {
-                updateAiModalStatus('Please choose a provider.', true);
+                updateAiModalStatus(messages.aiModalChooseProvider, true);
                 return;
             }
             if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
-                updateAiModalStatus('Please add an API key for the selected provider in settings.', true);
+                updateAiModalStatus(messages.aiModalAddKeySelected, true);
                 return;
             }
             const projectId = projectSelect?.value;
             const datasetIds = getSelectedDatasetIds();
             if (!projectId) {
-                updateAiModalStatus('Please select a project.', true);
+                updateAiModalStatus(messages.selectProject, true);
                 return;
             }
             if (datasetIds.length === 0) {
-                updateAiModalStatus('Please select one or more datasets.', true);
+                updateAiModalStatus(messages.selectDatasets, true);
                 return;
             }
             const selectedImageCount = getSelectedDatasetImageCount();
             if (selectedImageCount === 0) {
-                updateAiModalStatus('No data to process is available in the selected datasets.', true);
+                updateAiModalStatus(messages.noDataToProcess, true);
                 return;
             }
-            updateAiModalStatus('Processing filenames...');
+            updateAiModalStatus(messages.aiModalProcessing);
             const formData = new FormData();
             formData.append('action', 'ai_regex');
             formData.append('project', projectId);
@@ -1987,17 +1994,17 @@
                     }
                     if (data.source === 'fallback') {
                         updateAiModalStatus(
-                            'AI suggestion looked unreliable, so a heuristic regex was provided instead.',
+                            messages.aiSuggestionFallback,
                             true
                         );
                     } else if (data.source === 'local') {
-                        updateAiModalStatus('Heuristic regex suggestion ready.');
+                        updateAiModalStatus(messages.heuristicRegexReady);
                     } else {
-                        updateAiModalStatus('Regex suggestion ready. Please repeat processing if unsatisfactory.');
+                        updateAiModalStatus(messages.regexSuggestionReady);
                     }
                 })
                 .catch(() => {
-                    updateAiModalStatus('Unable to process filenames. Please try again.', true);
+                    updateAiModalStatus(messages.aiProcessFailed, true);
                 });
         });
     }
@@ -2007,7 +2014,7 @@
             if (!aiRegexOutput || !separatorInput) return;
             const value = aiRegexOutput.value.trim();
             if (!value) {
-                updateAiModalStatus('Generate a regex before transferring.', true);
+                updateAiModalStatus(messages.generateRegexFirst, true);
                 return;
             }
             separatorInput.value = value;
@@ -2088,7 +2095,7 @@
         datasetTableBody.innerHTML = '';
         if (!datasets || datasets.length === 0) {
             const projectName = getSelectedProjectName();
-            showNonBlockingModal(`No datasets found in project "${projectName}"`);
+            showNonBlockingModal(formatMessage(messages.noDatasetsFound, { projectName }));
             resetDatasetSelection();
             return;
         }
@@ -2177,7 +2184,7 @@
         datasetButton.addEventListener('click', () => {
             const projectId = projectSelect.value;
             if (!projectId) {
-                showNonBlockingModal("Please select a project.");
+                showNonBlockingModal(messages.selectProject);
                 return;
             }
 
@@ -2202,7 +2209,7 @@
                     renderDatasetRows(data.datasets || []);
                 })
                 .catch(() => {
-                    showNonBlockingModal('Unable to load datasets. Please try again.');
+                    showNonBlockingModal(messages.unableLoadDatasets);
                     resetDatasetSelection();
                 });
         });
