@@ -124,8 +124,10 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": errors.no_filenames_available()}, status=400)
 
             if provider == "local":
-                regex = _suggest_separator_regex(filenames)
-                return JsonResponse({"regex": regex, "source": "local"})
+                return JsonResponse(
+                    {"error": errors.choose_provider()},
+                    status=400,
+                )
 
             username = current_username(request, conn)
             if not username:
