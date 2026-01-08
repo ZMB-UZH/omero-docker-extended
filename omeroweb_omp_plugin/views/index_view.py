@@ -223,8 +223,48 @@ def index(request, conn=None, url=None, **kwargs):
             except Exception:
                 project_label = f"ID {project_id}"
 
-            if separator_mode in ("regex", "ai_regex"):
+            ai_parsed_map = None
+            sep_pattern = None
+
+            if separator_mode == "ai_parse":
+
+                raw_ai_parsed = (request.POST.get("ai_parsed_json") or "").strip()
+
+                if not raw_ai_parsed:
+                    return HttpResponse(
+                        "<h2 style='color:red;'>AI parsing data missing</h2>"
+                        "<p>Please run the AI-assisted filename parsing routine first.</p>"
+                        "<a href='.'>Back</a>"
+                    )
+
+                try:
+                    parsed_rows = json.loads(raw_ai_parsed)
+                except json.JSONDecodeError as e:
+                    return HttpResponse(
+                        "<h2 style='color:red;'>Invalid AI parsing data</h2>"
+                        f"<p>{e}</p>"
+                        "<a href='.'>Back</a>"
+                    )
+
+                ai_parsed_map = {}
+
+                for row in parsed_rows:
+
+                    try:
+                        img_id = int(row["img_id"])
+                        values = [str(v) for v in row.get("values", []) if str(v).strip()]
+                    except (KeyError, ValueError, TypeError):
+                        continue
+
+                    ai_parsed_map[img_id] = values
+
+                sep_pattern = None
+
+
+            elif separator_mode in ("regex", "ai_regex"):
+
                 sep_pattern = raw_seps
+
                 try:
                     re.compile(sep_pattern)
                 except re.error as e:
@@ -233,8 +273,12 @@ def index(request, conn=None, url=None, **kwargs):
                         f"<p>{e}</p>"
                         "<a href='.'>Back</a>"
                     )
+
+
             else:
+                # character-based separators
                 sep_pattern = f"(?:{'|'.join(re.escape(c) for c in raw_seps)})+"
+
 
             selected_dataset_ids = []
             if selected_dataset_ids_raw:
@@ -300,8 +344,11 @@ def index(request, conn=None, url=None, **kwargs):
                     try:
                         iid = int(get_id(img))
                         fname = get_text(img.getName())
-                        parts = parse_filename(fname, sep_pattern)
-                        
+                        if separator_mode == "ai_parse" and ai_parsed_map is not None:
+                            parts = ai_parsed_map.get(iid, [])
+                        else:
+                            parts = parse_filename(fname, sep_pattern)
+
                         # Track actual max before capping
                         max_vars_uncapped = max(max_vars_uncapped, len(parts))
                         
