@@ -142,12 +142,26 @@
                             AI-assisted Regex expression
                         </button>
                     </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_ai_parse'
+                               onclick='setSeparatorMode("ai_parse")'>
+                        <span class="separator-option-text ai-option-text" id="ai_parse_text">AI-assisted filename parsing</span>
+                        <button type="button"
+                                id="ai_parse_btn"
+                                class="ai-option-btn"
+                                style="display:none;">
+                            AI-assisted filename parsing
+                        </button>
+                    </label>
                 </div>
             </div>
         </div>
 
         <input type='hidden' name='selected_datasets' id='selected_datasets' value=''>
         <input type='hidden' name='dataset_selection_opened' id='dataset_selection_opened' value='0'>
+        <input type='hidden' name='ai_parsed_json' id='ai_parsed_json' value=''>
 
         <button type='submit'
                 style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
@@ -262,6 +276,49 @@
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_process_btn">Process</button>
             <button type="button" id="ai_transfer_btn" disabled>Transfer</button>
+        </div>
+    </div>
+</div>
+
+<div id="ai-parse-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:520px; max-width:520px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>AI-assisted filename parsing</strong>
+            <button type="button" id="ai_parse_modal_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div style="margin-bottom:10px; color:#4b5563;">
+            Select a provider, process the filenames, then transfer the results to the plugin.
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+            <select id="ai_parse_provider_select" style="width:40%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                <option value="local">Local</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="google">Google Gemini</option>
+                <option value="aws">AWS Bedrock</option>
+                <option value="azure">Azure OpenAI</option>
+                <option value="cohere">Cohere</option>
+                <option value="mistral">Mistral</option>
+                <option value="perplexity">Perplexity</option>
+                <option value="groq">Groq</option>
+                <option value="xai">xAI</option>
+            </select>
+        </div>
+        <div id="ai_parse_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested parsing</label>
+            <textarea id="ai_parse_output"
+                      style="width:100%; min-height:80px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                      placeholder='Click "Process" to generate a set of suggested parsed values.'></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="ai_parse_process_btn">Process</button>
+            <button type="button" id="ai_parse_transfer_btn" disabled>Transfer</button>
         </div>
     </div>
 </div>
@@ -721,25 +778,44 @@
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
         const aiRegex = document.getElementById('sep_mode_ai_regex');
+        const aiParse = document.getElementById('sep_mode_ai_parse');
         const hidden = document.getElementById('separator_mode');
 
         if (mode === 'regex') {
             if (regex) regex.checked = true;
             if (chars) chars.checked = false;
             if (aiRegex) aiRegex.checked = false;
+            if (aiParse) aiParse.checked = false;
             if (hidden) hidden.value = 'regex';
         } else if (mode === 'ai') {
             if (aiRegex) aiRegex.checked = true;
             if (chars) chars.checked = false;
             if (regex) regex.checked = false;
+            if (aiParse) aiParse.checked = false;
             if (hidden) hidden.value = 'ai_regex';
+        } else if (mode === 'ai_parse') {
+            if (aiParse) aiParse.checked = true;
+            if (chars) chars.checked = false;
+            if (regex) regex.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (hidden) hidden.value = 'ai_parse';
         } else {
             if (chars) chars.checked = true;
             if (regex) regex.checked = false;
             if (aiRegex) aiRegex.checked = false;
+            if (aiParse) aiParse.checked = false;
             if (hidden) hidden.value = 'chars';
         }
+
         updateAiRegexOption();
+        updateAiParseOption();
+
+        if (separatorInput) {
+            const isAiParse = (hidden?.value === 'ai_parse');
+            separatorInput.disabled = isAiParse;
+            separatorInput.style.background = isAiParse ? '#f3f4f6' : '';
+            separatorInput.style.color = isAiParse ? '#6b7280' : '';
+        }
     }
 
     // Ensure exactly one mode is selected even if browser restores form state
@@ -783,6 +859,14 @@
     const aiTransferBtn = document.getElementById('ai_transfer_btn');
     const aiRegexOutput = document.getElementById('ai_regex_output');
     const aiModalStatus = document.getElementById('ai_modal_status');
+    const aiParseModalOverlay = document.getElementById('ai-parse-modal-overlay');
+    const aiParseModalClose = document.getElementById('ai_parse_modal_close');
+    const aiParseProviderSelect = document.getElementById('ai_parse_provider_select');
+    const aiParseProcessBtn = document.getElementById('ai_parse_process_btn');
+    const aiParseTransferBtn = document.getElementById('ai_parse_transfer_btn');
+    const aiParseOutput = document.getElementById('ai_parse_output');
+    const aiParseModalStatus = document.getElementById('ai_parse_modal_status');
+    const aiParsedJsonInput = document.getElementById('ai_parsed_json');
     const userSettingsOverlay = document.getElementById('user-settings-overlay');
     const userSettingsBtn = document.getElementById('user_settings_btn');
     const userSettingsClose = document.getElementById('user_settings_close');
@@ -813,6 +897,7 @@
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
+    let aiParseTransferred = false;
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
     const userSettingsStorageKey = 'omp_user_settings';
     const userSettingsDefaults = {
@@ -860,6 +945,20 @@
         } else {
             if (aiRegexButton) aiRegexButton.style.display = 'none';
             if (aiRegexText) aiRegexText.style.display = 'inline';
+        }
+    }
+
+    function updateAiParseOption() {
+        const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+        const aiParseButton = document.getElementById('ai_parse_btn');
+        const aiParseText = document.getElementById('ai_parse_text');
+        if (!aiParseCheckbox) return;
+        if (aiParseCheckbox.checked) {
+            if (aiParseButton) aiParseButton.style.display = 'inline-flex';
+            if (aiParseText) aiParseText.style.display = 'none';
+        } else {
+            if (aiParseButton) aiParseButton.style.display = 'none';
+            if (aiParseText) aiParseText.style.display = 'inline';
         }
     }
 
@@ -1106,11 +1205,6 @@
             showNonBlockingModal(messages.selectDatasets);
             return;
         }
-        const selectedImageCount = getSelectedDatasetImageCount();
-        if (selectedImageCount === 0) {
-            showNonBlockingModal(messages.noDataToProcess);
-            return;
-        }
         updateAiModalStatus('');
         refreshAiCredentials();
         if (aiRegexOutput) {
@@ -1128,6 +1222,41 @@
     function closeAiModal() {
         if (aiModalOverlay) {
             aiModalOverlay.style.display = 'none';
+        }
+    }
+
+    function updateAiParseModalStatus(message, isError = false) {
+        if (!aiParseModalStatus) return;
+        aiParseModalStatus.textContent = message || '';
+        aiParseModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function openAiParseModal() {
+        const projectId = projectSelect?.value;
+        if (!projectId) {
+            showNonBlockingModal(messages.selectProject);
+            return;
+        }
+        if (!selectedDatasetsInput?.value) {
+            showNonBlockingModal(messages.selectDatasets);
+            return;
+        }
+        updateAiParseModalStatus('');
+        refreshAiCredentials();
+        if (aiParseOutput) {
+            aiParseOutput.value = '';
+        }
+        if (aiParseTransferBtn) {
+            aiParseTransferBtn.disabled = true;
+        }
+        if (aiParseModalOverlay) {
+            aiParseModalOverlay.style.display = 'flex';
+        }
+    }
+
+    function closeAiParseModal() {
+        if (aiParseModalOverlay) {
+            aiParseModalOverlay.style.display = 'none';
         }
     }
 
@@ -1371,12 +1500,13 @@
                 showNonBlockingModal(messages.noDataToProcess);
                 return;
             }
-            if (!separatorInput.value.trim()) {
+            const separatorMode = document.getElementById('separator_mode')?.value || 'chars';
+
+            if (separatorMode !== 'ai_parse' && !separatorInput.value.trim()) {
                 event.preventDefault();
                 showNonBlockingModal(messages.filenameInputEmpty);
                 return;
             }
-            const separatorMode = document.getElementById('separator_mode')?.value || 'chars';
             if (separatorMode === 'chars' && hasDuplicateCharacters(separatorInput.value)) {
                 event.preventDefault();
                 showNonBlockingModal(messages.filenameInputDuplicate);
@@ -1385,6 +1515,17 @@
             if (aiRegexCheckbox?.checked && !aiRegexTransferred) {
                 event.preventDefault();
                 showNonBlockingModal(messages.aiRegexUseFirst);
+                return;
+            }
+            const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+            if (aiParseCheckbox?.checked && !aiParseTransferred) {
+                event.preventDefault();
+                showNonBlockingModal(messages.aiParseUseFirst);
+                return;
+            }
+            if (separatorMode === 'ai_parse' && (!aiParsedJsonInput || !aiParsedJsonInput.value.trim())) {
+                event.preventDefault();
+                showNonBlockingModal(messages.aiParseUseFirst);
                 return;
             }
             
@@ -1708,9 +1849,27 @@
         updateAiRegexOption();
     }
 
+    const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+    if (aiParseCheckbox) {
+        updateAiParseOption();
+    }
+
     if (aiRegexButton) {
         aiRegexButton.addEventListener('click', () => {
             openAiModal();
+        });
+    }
+
+    const aiParseButton = document.getElementById('ai_parse_btn');
+    if (aiParseButton) {
+        aiParseButton.addEventListener('click', () => {
+            openAiParseModal();
+        });
+    }
+
+    if (aiParseModalClose) {
+        aiParseModalClose.addEventListener('click', () => {
+            closeAiParseModal();
         });
     }
 
@@ -2009,6 +2168,77 @@
         });
     }
 
+    if (aiProcessBtn) {
+        aiProcessBtn.addEventListener('click', () => {
+            ...
+            formData.append('action', 'ai_regex');
+            ...
+        });
+    }
+
+    if (aiParseProcessBtn) {
+        aiParseProcessBtn.addEventListener('click', () => {
+            const provider = aiParseProviderSelect?.value;
+            if (!provider) {
+                updateAiParseModalStatus(messages.aiModalChooseProvider, true);
+                return;
+            }
+            if (provider === 'local') {
+                updateAiParseModalStatus(messages.chooseProvider, true);
+                return;
+            }
+            if (!aiCredentialProviders.has(provider)) {
+                updateAiParseModalStatus(messages.aiModalAddKeySelected, true);
+                return;
+            }
+            const projectId = projectSelect?.value;
+            const datasetIds = getSelectedDatasetIds();
+            if (!projectId) {
+                updateAiParseModalStatus(messages.selectProject, true);
+                return;
+            }
+            if (!datasetIds.length) {
+                updateAiParseModalStatus(messages.selectDatasets, true);
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                updateAiParseModalStatus(messages.noDataToProcess, true);
+                return;
+            }
+
+            updateAiParseModalStatus(messages.aiModalProcessing);
+            const formData = new FormData();
+            formData.append('action', 'ai_parse');
+            formData.append('project', projectId);
+            formData.append('selected_datasets', datasetIds.join(','));
+            formData.append('provider', provider);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiParseModalStatus(data.error, true);
+                        return;
+                    }
+                    const rows = data.rows || [];
+                    const lines = rows.map((row) => (row.values || []).join(','));
+                    if (aiParseOutput) {
+                        aiParseOutput.value = lines.join('\n');
+                    }
+                    if (aiParseTransferBtn) {
+                        aiParseTransferBtn.disabled = !rows.length;
+                    }
+                    updateAiParseModalStatus('');
+                })
+                .catch(() => {
+                    updateAiParseModalStatus(messages.aiProcessFailed, true);
+                });
+        });
+    }
+
     if (aiTransferBtn) {
         aiTransferBtn.addEventListener('click', () => {
             if (!aiRegexOutput || !separatorInput) return;
@@ -2020,6 +2250,59 @@
             separatorInput.value = value;
             aiRegexTransferred = true;
             closeAiModal();
+        });
+    }
+
+    if (aiParseTransferBtn) {
+        aiParseTransferBtn.addEventListener('click', () => {
+            const value = aiParseOutput?.value?.trim() || '';
+            if (!value) {
+                updateAiParseModalStatus('Click "Process" first.', true);
+                return;
+            }
+            const provider = aiParseProviderSelect?.value;
+            if (!provider || provider === 'local') {
+                updateAiParseModalStatus(messages.chooseProvider, true);
+                return;
+            }
+            const projectId = projectSelect?.value;
+            const datasetIds = getSelectedDatasetIds();
+            if (!projectId || !datasetIds.length) {
+                updateAiParseModalStatus(messages.selectDatasets, true);
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'ai_parse');
+            formData.append('project', projectId);
+            formData.append('selected_datasets', datasetIds.join(','));
+            formData.append('provider', provider);
+
+            updateAiParseModalStatus(messages.aiModalProcessing);
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiParseModalStatus(data.error, true);
+                        return;
+                    }
+                    const rows = data.rows || [];
+                    if (!rows.length) {
+                        updateAiParseModalStatus(messages.unableToProcessFilenames, true);
+                        return;
+                    }
+                    if (aiParsedJsonInput) {
+                        aiParsedJsonInput.value = JSON.stringify(rows);
+                    }
+                    aiParseTransferred = true;
+                    closeAiParseModal();
+                })
+                .catch(() => {
+                    updateAiParseModalStatus(messages.aiProcessFailed, true);
+                });
         });
     }
 
