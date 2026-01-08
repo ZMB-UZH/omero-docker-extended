@@ -58,9 +58,12 @@ RUN set -eux; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     if [ -f /tmp/logo.png ]; then \
         mkdir -p "${SITE_PACKAGES}/omeroweb/static/branding"; \
+        mkdir -p /opt/omero/web/OMERO.web/var/static/branding; \
         cp /tmp/logo.png "${SITE_PACKAGES}/omeroweb/static/branding/logo.png"; \
+        cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png"; \
         chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb/static"; \
-        echo "Logo copied to source static directory"; \
+        chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding; \
+        echo "Logo copied to both source and final static directories"; \
     else \
         echo "No logo.png found, skipping"; \
     fi; \
