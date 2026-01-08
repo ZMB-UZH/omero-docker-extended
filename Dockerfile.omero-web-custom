@@ -61,14 +61,6 @@ RUN set -eux; \
     fi; \
     rm -f /tmp/logo.png*
 
-# Run collectstatic to ensure static files are properly served
-# ------------------------------------------------------------
-USER omero-web
-RUN set -eux; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
-    cd /opt/omero/web/OMERO.web && \
-    "${VENV_DIR}/bin/omero" web collectstatic --noinput --clear
-
 # Drop privileges for runtime
 # ---------------------------
 USER omero-web
