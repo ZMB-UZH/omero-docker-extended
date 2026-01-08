@@ -65,9 +65,9 @@ RUN set -eux; \
 # ------------------------------------------------------------
 USER omero-web
 RUN set -eux; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     cd /opt/omero/web/OMERO.web && \
-    /opt/omero/web/venv*/bin/omero web collectstatic --noinput --clear
-USER root
+    "${VENV_DIR}/bin/omero" web collectstatic --noinput --clear
 
 # Drop privileges for runtime
 # ---------------------------
