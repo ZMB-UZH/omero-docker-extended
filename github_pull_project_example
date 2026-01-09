@@ -80,5 +80,4 @@ docker compose -f "${COMPOSE_FILE}" build --no-cache omeroweb
 echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
-echo 'Done. Wait 30 seconds and check if the containers are up and running with "docker ps"'
-
+echo "Done. Wait 30 seconds and check if the containers are up and running."
