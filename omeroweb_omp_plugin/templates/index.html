@@ -916,23 +916,6 @@
         }
     }
 
-    // Ensure exactly one mode is selected even if browser restores form state
-    (function initSeparatorMode() {
-        const chars = document.getElementById('sep_mode_chars');
-        const regex = document.getElementById('sep_mode_regex');
-        const aiRegex = document.getElementById('sep_mode_ai_regex');
-        const aiParse = document.getElementById('sep_mode_ai_parse');
-        if (aiParse && aiParse.checked) {
-            setSeparatorMode('ai_parse');
-        } else if (aiRegex && aiRegex.checked) {
-            setSeparatorMode('ai');
-        } else if (regex && regex.checked) {
-            setSeparatorMode('regex');
-        } else if (chars) {
-            setSeparatorMode('chars');
-        }
-    })();
-
     const datasetButton = document.getElementById('dataset_selection_btn');
     const projectSelect = document.getElementById('project_select');
     const projectSelectInput = document.getElementById('project_select_input');
@@ -1027,6 +1010,23 @@
         },
     };
     let aiProviderDefaultsState = { defaultProvider: '', modelsByProvider: {} };
+
+    // Ensure exactly one mode is selected even if browser restores form state
+    (function initSeparatorMode() {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        const aiRegex = document.getElementById('sep_mode_ai_regex');
+        const aiParse = document.getElementById('sep_mode_ai_parse');
+        if (aiParse && aiParse.checked) {
+            setSeparatorMode('ai_parse');
+        } else if (aiRegex && aiRegex.checked) {
+            setSeparatorMode('ai');
+        } else if (regex && regex.checked) {
+            setSeparatorMode('regex');
+        } else if (chars) {
+            setSeparatorMode('chars');
+        }
+    })();
 
     function hasDuplicateCharacters(value) {
         const seen = new Set();
