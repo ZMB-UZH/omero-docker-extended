@@ -53,7 +53,7 @@ def ai_api_key_required():
     return "Please add an API key for this provider in Settings."
 
 def unable_to_process_filenames():
-    return "Unable to process filenames."
+    return "Unable to process filenames. Try again or change your selections in this menu."
 
 def filename_input_empty():
     return "The input field for filename parsing cannot be empty."
@@ -104,7 +104,7 @@ def wrong_password():
     return "Wrong password."
 
 def validation_unavailable():
-    return "Unable to validate credentials. Please try again later or contact the administrator."
+    return "Unable to validate credentials. Please try again later or contact the server administrator."
 
 def provider_and_key_required():
     return "Provider and API key are required."
