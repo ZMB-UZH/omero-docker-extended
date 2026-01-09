@@ -119,7 +119,7 @@ def no_datasets_found():
     return 'No datasets found in project "{projectName}"'
 
 def unable_load_datasets():
-    return "Unable to load datasets. Please try again."
+    return "Unable to load datasets. Refresh browser and try again."
 
 def groq_models_loading():
     return "Loading Groq models..."
