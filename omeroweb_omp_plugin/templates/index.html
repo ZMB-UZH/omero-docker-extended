@@ -959,7 +959,9 @@
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
             if (isAiParse) {
-                separatorInput.value = aiParseNoInputMessage;
+                if (options.forceAiParseMessage) {
+                    separatorInput.value = aiParseNoInputMessage;
+                }
             } else if (options.preserveInputValue) {
                 storeSeparatorValue(normalizedMode, separatorInput.value);
             } else {
@@ -3115,7 +3117,7 @@
             }
 
             if (typeof setSeparatorMode === 'function') {
-                setSeparatorMode('ai_parse');
+                setSeparatorMode('ai_parse', { forceAiParseMessage: true });
             }
 
             aiParseTransferred = true;
