@@ -20,6 +20,13 @@ from ..strings import errors, messages
 
 logger = logging.getLogger(__name__)
 
+_GROQ_MODEL_PREFERENCES = (
+    "llama-3.1-8b-instant",
+    "llama-3.1-70b-versatile",
+    "llama3-8b-8192",
+    "llama3-70b-8192",
+)
+
 _PROVIDER_TESTS = {
     "openai": {
         "url": "https://api.openai.com/v1/models",
@@ -115,6 +122,13 @@ def _perform_connection_test(provider, api_key):
         return False, errors.connection_test_failed()
 
 
+def _select_groq_default(model_ids):
+    for preferred in _GROQ_MODEL_PREFERENCES:
+        if preferred in model_ids:
+            return preferred
+    return model_ids[0] if model_ids else None
+
+
 @csrf_exempt
 @login_required()
 def list_credentials(request, conn=None, url=None, **kwargs):
@@ -190,3 +204,60 @@ def save_credentials(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unexpected error saving AI credentials: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
+
+
+@csrf_exempt
+@login_required()
+def list_groq_models(request, conn=None, url=None, **kwargs):
+    if request.method != "GET":
+        return JsonResponse({"error": errors.method_get_required()}, status=405)
+
+    username = current_username(request, conn)
+    if not username:
+        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+
+    try:
+        api_key = (get_ai_credential(username, "groq") or "").strip()
+    except AiCredentialStoreError as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    if not api_key:
+        return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
+
+    request_obj = urllib.request.Request(
+        "https://api.groq.com/openai/v1/models",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "omero-omp-plugin",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request_obj, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = extract_error_details(e)
+        message = errors.provider_http_status(e.code)
+        if detail:
+            message = errors.provider_http_status_with_detail(e.code, detail)
+        return JsonResponse({"error": message}, status=400)
+    except Exception as e:
+        logger.exception("Unexpected error fetching Groq models: %s", e)
+        return JsonResponse({"error": errors.unexpected_error()}, status=500)
+
+    models = []
+    for item in payload.get("data", []) or []:
+        model_id = item.get("id")
+        if not model_id:
+            continue
+        models.append(
+            {
+                "id": model_id,
+                "context_length": item.get("context_length"),
+            }
+        )
+
+    model_ids = [model["id"] for model in models]
+    default_model = _select_groq_default(model_ids)
+
+    return JsonResponse({"models": models, "default_model": default_model})

@@ -5,7 +5,12 @@ from .views.delete_all_view import delete_all_keyvaluepairs
 from .views.delete_plugin_view import delete_plugin_keyvaluepairs
 from .views.variable_set_view import list_sets, save_set, load_set, delete_set
 from .views.help_view import help_page
-from .views.ai_credentials_view import list_credentials, save_credentials, test_credentials
+from .views.ai_credentials_view import (
+    list_credentials,
+    save_credentials,
+    test_credentials,
+    list_groq_models,
+)
 from .views.user_data_view import delete_api_keys, delete_variable_sets, delete_all_data
 from .views.user_settings_view import save_settings
 
@@ -25,6 +30,7 @@ urlpatterns = [
     path("ai-credentials/", list_credentials, name="omeroweb_omp_plugin_list_ai_credentials"),
     path("ai-credentials/test/", test_credentials, name="omeroweb_omp_plugin_test_ai_credentials"),
     path("ai-credentials/save/", save_credentials, name="omeroweb_omp_plugin_save_ai_credentials"),
+    path("ai-credentials/groq-models/", list_groq_models, name="omeroweb_omp_plugin_list_groq_models"),
     path("user-settings/save/", save_settings, name="omeroweb_omp_plugin_save_user_settings"),
     path("user-data/delete-api-keys/", delete_api_keys, name="omeroweb_omp_plugin_delete_api_keys"),
     path("user-data/delete-variable-sets/", delete_variable_sets, name="omeroweb_omp_plugin_delete_variable_sets"),
