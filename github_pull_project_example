@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 
+# Configuration (change SCRIPT_NAME and BASE_DIR according to your preferences)
+# -----------------------------------------------------------------------------
 SCRIPT_NAME="github_pull_project"
+BASE_DIR="/opt/omero-test"
+REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
+REPO_BRANCH="test"
+COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
 
 set -euo pipefail
 
@@ -21,21 +27,12 @@ if ! flock -w 15 9; then
     exit 1
 fi
 
-# Configuration
-# -------------
-BASE_DIR="/opt/omero-test"
-REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
-REPO_BRANCH="test"
-
 # Workflow
 # --------
 cd "${BASE_DIR}"
-
 echo "Backing up script..."
 SCRIPT_BACKUP="/tmp/${SCRIPT_NAME}.backup.$(date +%s)"
 cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
-
-COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
 
 if [ -f "${COMPOSE_FILE}" ]; then
     echo "Stopping containers using ${COMPOSE_FILE}..."
@@ -81,3 +78,4 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
