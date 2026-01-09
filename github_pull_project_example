@@ -1,59 +1,83 @@
 #!/usr/bin/env bash
+
+SCRIPT_NAME="github_pull_project"
+
 set -euo pipefail
 
-# ------------------------------------------------------------------
 # Root-only safety check
-# ------------------------------------------------------------------
+# ----------------------
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: This script must be run as root." >&2
     exit 1
 fi
 
-# ------------------------------------------------------------------
+# Lockfile (prevents concurrent runs)
+# -----------------------------------
+LOCKFILE="/var/lock/${SCRIPT_NAME}.lock"
+
+exec 9>"${LOCKFILE}"
+if ! flock -w 15 9; then
+    echo "ERROR: Could not acquire lock (${LOCKFILE}) within 15 seconds. Another update may be running." >&2
+    exit 1
+fi
+
 # Configuration
-# ------------------------------------------------------------------
+# -------------
 BASE_DIR="/opt/omero-test"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
-SCRIPT_NAME="github_pull_project"
 
-# ------------------------------------------------------------------
 # Workflow
-# ------------------------------------------------------------------
+# --------
 cd "${BASE_DIR}"
 
 echo "Backing up script..."
-cp "${SCRIPT_NAME}" "/tmp/${SCRIPT_NAME}.backup"
+SCRIPT_BACKUP="/tmp/${SCRIPT_NAME}.backup.$(date +%s)"
+cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
 
 COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
 
 if [ -f "${COMPOSE_FILE}" ]; then
     echo "Stopping containers using ${COMPOSE_FILE}..."
-    docker compose -f "${COMPOSE_FILE}" down
+    docker compose -f "${COMPOSE_FILE}" down --remove-orphans
 else
-    echo "No docker-compose.yml found — skipping container shutdown."
+    echo "docker-compose.yml missing — stopping ONLY omeroweb containers"
+
+    docker ps -aq \
+        --filter "name=omeroweb" \
+        | xargs -r docker stop
+
+    docker ps -aq \
+        --filter "name=omeroweb" \
+        | xargs -r docker rm -f
 fi
 
-echo "Removing old omeroweb image..."
-docker rmi omero-test-omeroweb 2>/dev/null || echo "Image already removed or doesn't exist"
+echo "Removing ALL omeroweb images..."
+docker images -q omero-test-omeroweb \
+    | xargs -r docker rmi -f || true
 
 echo "Removing all files except script..."
 find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" -exec rm -rf {} +
 
 echo "Cloning repository (test branch)..."
 git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
-mv temp_clone/* temp_clone/.* . 2>/dev/null || true
+shopt -s dotglob
+mv temp_clone/* .
+shopt -u dotglob
 rm -rf temp_clone
 
 echo "Restoring script..."
-mv "/tmp/${SCRIPT_NAME}.backup" "${SCRIPT_NAME}"
+mv "${SCRIPT_BACKUP}" "${SCRIPT_NAME}"
+
+if [ ! -f "${COMPOSE_FILE}" ]; then
+    echo "ERROR: docker-compose.yml still missing after clone. Aborting." >&2
+    exit 1
+fi
 
 echo "Building Omero container (no cache)..."
-docker compose build --no-cache omeroweb
+docker compose -f "${COMPOSE_FILE}" build --no-cache omeroweb
 
 echo "Starting containers..."
-docker compose up -d
+docker compose -f "${COMPOSE_FILE}" up -d
 
-echo "Done."
-
-
+echo 'Done. Wait 30 seconds and check if the containers are up and running with "docker ps"'
