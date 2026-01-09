@@ -121,6 +121,12 @@ def no_datasets_found():
 def unable_load_datasets():
     return "Unable to load datasets. Please try again."
 
+def groq_models_loading():
+    return "Loading Groq models..."
+
+def groq_models_load_failed():
+    return "Unable to load Groq models. Please try again."
+
 
 def variable_parsing_capped():
     return (
@@ -296,6 +302,8 @@ INDEX_MESSAGE_NAMES = (
     "generate_regex_first",
     "no_datasets_found",
     "unable_load_datasets",
+    "groq_models_loading",
+    "groq_models_load_failed",
 )
 
 

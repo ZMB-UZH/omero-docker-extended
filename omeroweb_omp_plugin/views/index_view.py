@@ -74,6 +74,7 @@ def index(request, conn=None, url=None, **kwargs):
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
             provider = (request.POST.get("provider") or "local").strip().lower()
+            model = (request.POST.get("model") or "").strip()
 
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
@@ -142,7 +143,7 @@ def index(request, conn=None, url=None, **kwargs):
                 )
 
             try:
-                result = generate_ai_regex(provider, api_key, filenames)
+                result = generate_ai_regex(provider, api_key, filenames, model=model or None)
             except AiAssistError as e:
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
@@ -158,6 +159,7 @@ def index(request, conn=None, url=None, **kwargs):
             project_id = request.POST.get("project")
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
             provider = (request.POST.get("provider") or "").strip().lower()
+            model = (request.POST.get("model") or "").strip()
 
             if provider == "local":
                 return JsonResponse(
@@ -226,7 +228,7 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
             try:
-                result = generate_ai_parsed_values(provider, api_key, filenames)
+                result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None)
             except AiAssistError as e:
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
