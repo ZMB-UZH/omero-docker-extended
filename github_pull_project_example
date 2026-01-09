@@ -81,3 +81,4 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo 'Done. Wait 30 seconds and check if the containers are up and running with "docker ps"'
+
