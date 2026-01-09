@@ -978,9 +978,10 @@
             } else {
                 separatorInput.value = separatorValues[normalizedMode] ?? '';
             }
-            separatorInput.disabled = isAiParse;
-            separatorInput.style.background = isAiParse ? '#f3f4f6' : '';
-            separatorInput.style.color = isAiParse ? '#6b7280' : '';
+            const disableSeparatorInput = isAiParse || (isAiRegex && !hasAiRegexResults());
+            separatorInput.disabled = disableSeparatorInput;
+            separatorInput.style.background = disableSeparatorInput ? '#f3f4f6' : '';
+            separatorInput.style.color = disableSeparatorInput ? '#6b7280' : '';
         }
     }
 
