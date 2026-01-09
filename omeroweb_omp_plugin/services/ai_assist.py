@@ -187,6 +187,8 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        if provider == "groq":
+            headers["User-Agent"] = "omero-omp-plugin"
         url = f"{config['base_url']}/chat/completions"
         response = _post_json(url, headers, payload)
         try:
