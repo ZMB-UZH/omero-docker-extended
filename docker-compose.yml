@@ -22,8 +22,6 @@ services:
       - omero
     volumes:
       - database:/var/lib/postgresql:rw
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
 
   omeroserver:
     image: "openmicroscopy/omero-server:5"
@@ -37,14 +35,13 @@ services:
       ROOTPASS: CsCN581JzgGsdyV # root account password, must be strong!!
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
+      CONFIG_omero_db_poolsize: 80 # max number should be less than 100 for the default Postgres settings
     networks:
       - omero
     ports:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
     ulimits:
       nofile:
         soft: 8192
@@ -54,16 +51,13 @@ services:
     image: "redis:7-alpine"
     restart: unless-stopped
     # Disable persistence for RAM storage only
-    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
     networks:
       - omero
     tmpfs:
-      - /data:size=256m
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
+      - /data:size=512m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -113,12 +107,10 @@ services:
     volumes:
       - omero:/OMERO
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
     tmpfs:
-      - /tmp/omp_plugin_filename_metadata_jobs:size=128m,mode=1777
+      - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
 
-  database_plugin: # database exclusive to the plugin
+  database_plugin: # database exclusive to the OME plugin
     image: "postgres:18"
     restart: unless-stopped
     command:
@@ -138,8 +130,6 @@ services:
       - omero
     volumes:
       - database_plugin:/var/lib/postgresql:rw
-      - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
 
 networks:
   omero:
