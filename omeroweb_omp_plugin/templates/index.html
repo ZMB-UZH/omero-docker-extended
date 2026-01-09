@@ -959,8 +959,10 @@
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
             if (isAiParse) {
-                if (options.forceAiParseMessage || separatorInput.value !== aiParseNoInputMessage) {
-                    separatorInput.value = aiParseNoInputMessage;
+                const hasAiParseResults = Boolean(aiParsedJsonInput?.value?.trim());
+                const message = hasAiParseResults ? aiParseNoInputMessage : aiParseRequiredMessage;
+                if (options.forceAiParseMessage || separatorInput.value !== message) {
+                    separatorInput.value = message;
                 }
             } else if (options.preserveInputValue) {
                 storeSeparatorValue(normalizedMode, separatorInput.value);
@@ -1056,9 +1058,10 @@
         ai_regex: defaultSeparatorValue,
     };
     const aiParseNoInputMessage = 'No input required. Ready for next step.';
+    const aiParseRequiredMessage = 'Run the AI-assisted filename parsing routine first.';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
-    let aiParseTransferred = false;
+    let aiParseTransferred = Boolean(aiParsedJsonInput?.value?.trim());
     let lastAiParseRows = null;
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
     const userSettingsStorageKey = 'omp_user_settings';
