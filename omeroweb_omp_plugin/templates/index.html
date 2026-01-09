@@ -911,6 +911,7 @@
 
     function storeSeparatorValue(mode, value) {
         if (!mode || mode === 'ai_parse') return;
+        if (mode === 'ai_regex' && value === aiRegexRequiredMessage) return;
         separatorValues[mode] = value ?? '';
     }
 
@@ -958,10 +959,18 @@
 
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
+            const isAiRegex = (hidden?.value === 'ai_regex');
             if (isAiParse) {
                 const hasAiParseResults = Boolean(aiParsedJsonInput?.value?.trim());
                 const message = hasAiParseResults ? aiParseNoInputMessage : aiParseRequiredMessage;
                 if (options.forceAiParseMessage || separatorInput.value !== message) {
+                    separatorInput.value = message;
+                }
+            } else if (isAiRegex) {
+                const message = hasAiRegexResults()
+                    ? (separatorValues.ai_regex ?? '')
+                    : aiRegexRequiredMessage;
+                if (separatorInput.value !== message) {
                     separatorInput.value = message;
                 }
             } else if (options.preserveInputValue) {
@@ -1059,6 +1068,7 @@
     };
     const aiParseNoInputMessage = 'No input required. Ready for next step.';
     const aiParseRequiredMessage = 'Run the AI-assisted filename parsing routine first.';
+    const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression routine.';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
     let aiParseTransferred = Boolean(aiParsedJsonInput?.value?.trim());
@@ -1130,11 +1140,22 @@
         if (overlay) overlay.style.display = "none";
     }
 
+    function hasAiRegexResults() {
+        if (aiRegexTransferred) return true;
+        const storedValue = separatorValues.ai_regex ?? '';
+        return Boolean(storedValue.trim()) && storedValue.trim() !== defaultSeparatorValue.trim();
+    }
+
     function updateAiRegexOption() {
         const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
         const aiRegexButton = document.getElementById('ai_regex_btn');
         const aiRegexText = document.getElementById('ai_regex_text');
         if (!aiRegexCheckbox) return;
+        if (aiRegexText) {
+            aiRegexText.textContent = hasAiRegexResults()
+                ? 'AI-assisted Regex expression'
+                : aiRegexRequiredMessage;
+        }
         if (aiRegexCheckbox.checked) {
             if (aiRegexButton) aiRegexButton.style.display = 'inline-flex';
             if (aiRegexText) aiRegexText.style.display = 'none';
@@ -1172,8 +1193,7 @@
         separatorInput.addEventListener('input', () => {
             aiRegexTransferred = false;
             if (aiRegexCheckbox && aiRegexCheckbox.checked) {
-                storeSeparatorValue('ai_regex', separatorInput.value);
-                setSeparatorMode('regex', { skipStore: true });
+                setSeparatorMode('regex', { skipStore: true, preserveInputValue: true });
                 return;
             }
             const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
@@ -1504,6 +1524,7 @@
             ai_regex_model: aiModelSelect?.value || '',
             ai_parse_provider: aiParseProviderSelect?.value || '',
             ai_parse_model: aiParseModelSelect?.value || '',
+            ai_regex_completed: aiRegexTransferred,
         };
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
     }
@@ -1532,6 +1553,11 @@
             separatorValues.chars = state.separator_values.chars ?? separatorValues.chars;
             separatorValues.regex = state.separator_values.regex ?? separatorValues.regex;
             separatorValues.ai_regex = state.separator_values.ai_regex ?? separatorValues.ai_regex;
+        }
+        if (typeof state.ai_regex_completed === 'boolean') {
+            aiRegexTransferred = state.ai_regex_completed;
+        } else {
+            aiRegexTransferred = hasAiRegexResults();
         }
         if (state.separator_mode) {
             if (state.separator_mode === 'ai_regex') {
@@ -3101,10 +3127,11 @@
                 return;
             }
             separatorInput.value = value;
+            storeSeparatorValue('ai_regex', value);
+            aiRegexTransferred = true;
             if (typeof setSeparatorMode === 'function') {
                 setSeparatorMode('ai');
             }
-            aiRegexTransferred = true;
             closeAiModal();
         });
     }
