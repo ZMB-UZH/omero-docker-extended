@@ -56,12 +56,14 @@
                 {% else %}
                     Characters
                 {% endif %}
-                
-                Input:
-                {% if separator_mode == "ai_parse" %}
-                    "No input required here"
-                {% else %}
-                    "{{ raw_seps }}"
+                |
+                {% if separator_mode != "ai_regex" %}
+                    Input:
+                    {% if separator_mode == "ai_parse" %}
+                        "No input required here"
+                    {% else %}
+                        "{{ raw_seps }}"
+                    {% endif %}
                 {% endif %}
             </p>
             <p>Previewing {{ preview_count }} images.</p>

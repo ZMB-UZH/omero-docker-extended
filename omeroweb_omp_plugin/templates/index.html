@@ -820,6 +820,13 @@
         const separatorInput = document.getElementById('separator_input');
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
+            if (!isAiParse) {
+                const previousValue = separatorInput.dataset.previousValue;
+                if (previousValue && separatorInput.value === aiParseNoInputMessage) {
+                    separatorInput.value = previousValue;
+                }
+                separatorInput.dataset.previousValue = '';
+            }
             separatorInput.disabled = isAiParse;
             separatorInput.style.background = isAiParse ? '#f3f4f6' : '';
             separatorInput.style.color = isAiParse ? '#6b7280' : '';
@@ -906,6 +913,7 @@
     let activeProjectIndex = -1;
     const STATE_STORAGE_KEY = 'omp_preview_state';
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
+    const aiParseNoInputMessage = 'No input required. Ready for next step.';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
     let aiParseTransferred = false;
@@ -1190,6 +1198,8 @@
         if (state.separator_mode) {
             if (state.separator_mode === 'ai_regex') {
                 setSeparatorMode('ai');
+            } else if (state.separator_mode === 'ai_parse') {
+                setSeparatorMode('ai_parse');
             } else if (state.separator_mode === 'regex') {
                 setSeparatorMode('regex');
             } else {
@@ -2269,6 +2279,13 @@
             if (!lastAiParseRows || !lastAiParseRows.length) {
                 updateAiParseModalStatus('Click "Process" first.', true);
                 return;
+            }
+
+            if (separatorInput) {
+                if (separatorInput.value && separatorInput.value !== aiParseNoInputMessage) {
+                    separatorInput.dataset.previousValue = separatorInput.value;
+                }
+                separatorInput.value = aiParseNoInputMessage;
             }
 
             if (aiParsedJsonInput) {
