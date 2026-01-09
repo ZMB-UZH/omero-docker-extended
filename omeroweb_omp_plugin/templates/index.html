@@ -352,7 +352,7 @@
                     <input type="text"
                            id="user_setting_job_batch"
                            inputmode="numeric"
-                           style="width:20%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                 </div>
                 <div class="user-setting-description">
                     <span class="user-setting-limit">[1-100]</span>
@@ -376,7 +376,7 @@
                     <input type="text"
                            id="user_setting_max_parsed"
                            inputmode="numeric"
-                           style="width:20%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                 </div>
                 <div class="user-setting-description">
                     <span class="user-setting-limit">[3-15]</span>
@@ -389,7 +389,7 @@
                     <input type="text"
                            id="user_setting_max_sets"
                            inputmode="numeric"
-                           style="width:20%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                 </div>
                 <div class="user-setting-description">
                     <span class="user-setting-limit">[5-30]</span>
@@ -417,7 +417,7 @@
                                 <option value="groq">Groq</option>
                                 <option value="xai">xAI</option>
                             </select>
-                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:2px; font-weight:600; margin:0;">
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
                                 <input type="checkbox" id="ai_regex_default_toggle">
                                 <span style="color:#000;">*</span>
                             </label>
@@ -425,7 +425,7 @@
                         <div id="ai_regex_default_model_group" style="display:flex; align-items:center; gap:6px;">
                             <select id="ai_regex_default_model_select"
                                     class="ai-provider-option-select placeholder"
-                                    style="width:150px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                    style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected>Default model</option>
                             </select>
                             <button type="button" id="ai_regex_default_apply_btn">Apply</button>
@@ -433,6 +433,7 @@
                     </div>
                 </div>
                 <div class="user-setting-description">
+                    <div style="font-weight:700; color:#000;">Settings applied immediately</div>
                     <span>*Select to set as default AI provider for AI-assisted Regex expression.<br>The Apply button (where applicable) saves only the selected AI provider - model pair. Please repeat for other AI providers.</span>
                 </div>
             </div>
@@ -457,7 +458,7 @@
                                 <option value="groq">Groq</option>
                                 <option value="xai">xAI</option>
                             </select>
-                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:2px; font-weight:600; margin:0;">
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
                                 <input type="checkbox" id="ai_parse_default_toggle">
                                 <span style="color:#000;">*</span>
                             </label>
@@ -465,7 +466,7 @@
                         <div id="ai_parse_default_model_group" style="display:flex; align-items:center; gap:6px;">
                             <select id="ai_parse_default_model_select"
                                     class="ai-provider-option-select placeholder"
-                                    style="width:150px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                    style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected>Default model</option>
                             </select>
                             <button type="button" id="ai_parse_default_apply_btn">Apply</button>
@@ -473,6 +474,7 @@
                     </div>
                 </div>
                 <div class="user-setting-description">
+                    <div style="font-weight:700; color:#000;">Settings applied immediately</div>
                     <span>*Select to set as default AI provider for AI-assisted filename parsing.<br>The Apply button (where applicable) saves only the selected AI provider - model pair. Please repeat for other AI providers.</span>
                 </div>
             </div>
@@ -1543,13 +1545,48 @@
         }
     }
 
-    function applyDefaultAiProviderSelections() {
+    function syncAiDefaultsToSessionStorage({ force = false } = {}) {
+        if (!window.sessionStorage) return;
+        let state = {};
+        try {
+            const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
+            if (raw) {
+                state = JSON.parse(raw) || {};
+            }
+        } catch (error) {
+            state = {};
+        }
         const regexDefaults = aiDefaultsState.regex;
         const parseDefaults = aiDefaultsState.parse;
         const regexProvider = regexDefaults.defaultProvider || '';
         const parseProvider = parseDefaults.defaultProvider || '';
 
-        if (aiProviderSelect && regexProvider && (aiProviderSelect.value === 'local' || !aiProviderSelect.value)) {
+        if (force || !state.ai_regex_provider || state.ai_regex_provider === 'local') {
+            state.ai_regex_provider = regexProvider;
+            state.ai_regex_model = regexProvider === 'groq'
+                ? (regexDefaults.modelsByProvider?.[regexProvider] || '')
+                : '';
+        }
+        if (force || !state.ai_parse_provider) {
+            state.ai_parse_provider = parseProvider;
+            state.ai_parse_model = parseProvider === 'groq'
+                ? (parseDefaults.modelsByProvider?.[parseProvider] || '')
+                : '';
+        }
+        try {
+            window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function applyDefaultAiProviderSelections({ force = false } = {}) {
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = regexDefaults.defaultProvider || '';
+        const parseProvider = parseDefaults.defaultProvider || '';
+
+        if (aiProviderSelect && regexProvider && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value)) {
             aiProviderSelect.value = regexProvider;
             if (regexProvider === 'groq') {
                 ensureGroqModels(
@@ -1561,8 +1598,10 @@
             } else {
                 toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
             }
+            updateAiProcessAvailability();
+            updateAiProviderStatus();
         }
-        if (aiParseProviderSelect && parseProvider && !aiParseProviderSelect.value) {
+        if (aiParseProviderSelect && parseProvider && (force || !aiParseProviderSelect.value)) {
             aiParseProviderSelect.value = parseProvider;
             if (parseProvider === 'groq') {
                 ensureGroqModels(
@@ -1574,6 +1613,10 @@
             } else {
                 toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
             }
+            updateAiParseProviderStatus();
+        }
+        if (force) {
+            syncAiDefaultsToSessionStorage({ force: true });
         }
     }
 
@@ -1883,6 +1926,7 @@
             aiDefaults: userSettingsDefaults.aiDefaults,
         });
         clearUserSettingErrors();
+        applyDefaultAiProviderSelections({ force: true });
     }
 
     function populateUserSettings() {
@@ -2491,6 +2535,7 @@
             } catch (error) {
                 // ignore storage errors
             }
+            applyDefaultAiProviderSelections({ force: true });
             closeUserSettingsModal();
             saveUserSettingsToDatabase(validated);
         });
@@ -2520,6 +2565,7 @@
         } catch (error) {
             // ignore storage errors
         }
+        applyDefaultAiProviderSelections({ force: true });
         saveUserSettingsToDatabase(payload, {
             showSuccessMessage: false,
             onSuccess: () => {
