@@ -1152,9 +1152,7 @@
         const aiRegexText = document.getElementById('ai_regex_text');
         if (!aiRegexCheckbox) return;
         if (aiRegexText) {
-            aiRegexText.textContent = hasAiRegexResults()
-                ? 'AI-assisted Regex expression'
-                : aiRegexRequiredMessage;
+            aiRegexText.textContent = 'AI-assisted Regex expression';
         }
         if (aiRegexCheckbox.checked) {
             if (aiRegexButton) aiRegexButton.style.display = 'inline-flex';
