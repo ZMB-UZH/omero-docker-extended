@@ -250,21 +250,27 @@
         <div style="margin-bottom:10px; color:#4b5563;">
             Select a provider, process the filenames, then transfer the suggested Regex.
         </div>
-        <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
-            <select id="ai_provider_select" style="width:40%; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                <option value="local">Local</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google Gemini</option>
-                <option value="aws">AWS Bedrock</option>
-                <option value="azure">Azure OpenAI</option>
-                <option value="cohere">Cohere</option>
-                <option value="mistral">Mistral</option>
-                <option value="perplexity">Perplexity</option>
-                <option value="groq">Groq</option>
-                <option value="xai">xAI</option>
-            </select>
+        <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start;">
+            <div style="flex:1;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+                <select id="ai_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="local">Local</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="aws">AWS Bedrock</option>
+                    <option value="azure">Azure OpenAI</option>
+                    <option value="cohere">Cohere</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="perplexity">Perplexity</option>
+                    <option value="groq">Groq</option>
+                    <option value="xai">xAI</option>
+                </select>
+            </div>
+            <div id="ai_model_wrapper" style="flex:1; display:none;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
+                <select id="ai_model_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+            </div>
         </div>
         <div id="ai_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="margin-bottom:10px;">
@@ -293,21 +299,27 @@
         <div style="margin-bottom:10px; color:#4b5563;">
             Select a provider, process the filenames, then transfer the results to the plugin.
         </div>
-        <div style="margin-bottom:10px;">
-            <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
-            <select id="ai_parse_provider_select" style="width:40%; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                <option value="">Choose an AI provider...</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google Gemini</option>
-                <option value="aws">AWS Bedrock</option>
-                <option value="azure">Azure OpenAI</option>
-                <option value="cohere">Cohere</option>
-                <option value="mistral">Mistral</option>
-                <option value="perplexity">Perplexity</option>
-                <option value="groq">Groq</option>
-                <option value="xai">xAI</option>
-            </select>
+        <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start;">
+            <div style="flex:1;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+                <select id="ai_parse_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="">Choose an AI provider...</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="aws">AWS Bedrock</option>
+                    <option value="azure">Azure OpenAI</option>
+                    <option value="cohere">Cohere</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="perplexity">Perplexity</option>
+                    <option value="groq">Groq</option>
+                    <option value="xai">xAI</option>
+                </select>
+            </div>
+            <div id="ai_parse_model_wrapper" style="flex:1; display:none;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
+                <select id="ai_parse_model_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+            </div>
         </div>
         <div id="ai_parse_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="margin-bottom:10px;">
@@ -873,6 +885,8 @@
     const aiModalOverlay = document.getElementById('ai-modal-overlay');
     const aiModalClose = document.getElementById('ai_modal_close');
     const aiProviderSelect = document.getElementById('ai_provider_select');
+    const aiModelWrapper = document.getElementById('ai_model_wrapper');
+    const aiModelSelect = document.getElementById('ai_model_select');
     const aiProcessBtn = document.getElementById('ai_process_btn');
     const aiTransferBtn = document.getElementById('ai_transfer_btn');
     const aiRegexOutput = document.getElementById('ai_regex_output');
@@ -880,6 +894,8 @@
     const aiParseModalOverlay = document.getElementById('ai-parse-modal-overlay');
     const aiParseModalClose = document.getElementById('ai_parse_modal_close');
     const aiParseProviderSelect = document.getElementById('ai_parse_provider_select');
+    const aiParseModelWrapper = document.getElementById('ai_parse_model_wrapper');
+    const aiParseModelSelect = document.getElementById('ai_parse_model_select');
     const aiParseProcessBtn = document.getElementById('ai_parse_process_btn');
     const aiParseTransferBtn = document.getElementById('ai_parse_transfer_btn');
     const aiParseOutput = document.getElementById('ai_parse_output');
@@ -1012,6 +1028,7 @@
     const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
     const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
     const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
+    const groqModelsUrl = new URL('ai-credentials/groq-models/', window.location.href);
     const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
     const deleteApiKeysUrl = new URL('user-data/delete-api-keys/', window.location.href);
     const deleteVariableSetsUrl = new URL('user-data/delete-variable-sets/', window.location.href);
@@ -1019,6 +1036,8 @@
     let aiCredentialProviders = new Set();
     let aiCredentialsLastTest = { provider: null, key: null, passed: false };
     let isUserDataMenuLocked = false;
+    let groqModelsCache = null;
+    let groqModelsRequest = null;
 
     function isLocalProvider(provider) {
         return (provider || '').toLowerCase() === 'local';
@@ -1120,15 +1139,113 @@
     function updateAiProviderStatus() {
         if (!aiProviderSelect) return;
         const provider = aiProviderSelect.value;
+        if (provider !== 'groq') {
+            toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
+        }
         if (isLocalProvider(provider)) {
             updateAiModalStatus(messages.localProviderReady);
             return;
         }
         if (aiCredentialProviders.has(provider)) {
             updateAiModalStatus(messages.providerKeyReady);
+            if (provider === 'groq') {
+                ensureGroqModels(aiModelWrapper, aiModelSelect, updateAiModalStatus);
+            }
             return;
         }
         updateAiModalStatus(messages.addApiKeySettings, true);
+    }
+
+    function updateAiParseProviderStatus() {
+        if (!aiParseProviderSelect) return;
+        const provider = aiParseProviderSelect.value;
+        if (!provider) {
+            toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            return;
+        }
+        if (aiCredentialProviders.has(provider)) {
+            if (provider === 'groq') {
+                ensureGroqModels(aiParseModelWrapper, aiParseModelSelect, updateAiParseModalStatus);
+            } else {
+                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            }
+            return;
+        }
+        toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+        updateAiParseModalStatus(messages.addApiKeySettings, true);
+    }
+
+    function toggleGroqModelVisibility(show, wrapper, select) {
+        if (!wrapper) return;
+        wrapper.style.display = show ? 'block' : 'none';
+        if (!show && select) {
+            select.innerHTML = '';
+        }
+    }
+
+    function populateGroqModels(select, models, defaultModel) {
+        if (!select) return;
+        select.innerHTML = '';
+        models.forEach((model) => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.id;
+            select.appendChild(option);
+        });
+        if (defaultModel) {
+            select.value = defaultModel;
+        }
+        if (!select.value && select.options.length > 0) {
+            select.value = select.options[0].value;
+        }
+    }
+
+    function fetchGroqModels() {
+        if (groqModelsCache) {
+            return Promise.resolve(groqModelsCache);
+        }
+        if (groqModelsRequest) {
+            return groqModelsRequest;
+        }
+        groqModelsRequest = fetch(groqModelsUrl, { method: 'GET' })
+            .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || data.error) {
+                    throw new Error(data.error || messages.groqModelsLoadFailed);
+                }
+                groqModelsCache = data;
+                return data;
+            })
+            .catch((error) => {
+                groqModelsRequest = null;
+                throw error;
+            });
+        return groqModelsRequest;
+    }
+
+    function ensureGroqModels(wrapper, select, updateStatus) {
+        if (!wrapper || !select) return;
+        toggleGroqModelVisibility(true, wrapper, select);
+        if (select.options.length > 0) {
+            return;
+        }
+        if (typeof updateStatus === 'function') {
+            updateStatus(messages.groqModelsLoading);
+        }
+        fetchGroqModels()
+            .then((data) => {
+                const models = Array.isArray(data.models) ? data.models : [];
+                populateGroqModels(select, models, data.default_model);
+                if (typeof updateStatus === 'function') {
+                    updateStatus(messages.providerKeyReady);
+                }
+            })
+            .catch((error) => {
+                toggleGroqModelVisibility(false, wrapper, select);
+                if (typeof updateStatus === 'function') {
+                    updateStatus(error?.message || messages.groqModelsLoadFailed, true);
+                }
+            });
     }
 
     function confirmUserDataDelete(url, successMessage, options = {}) {
@@ -1239,6 +1356,7 @@
         if (aiModalOverlay) {
             aiModalOverlay.style.display = 'flex';
         }
+        updateAiProviderStatus();
     }
 
     function closeAiModal() {
@@ -1274,6 +1392,7 @@
         if (aiParseModalOverlay) {
             aiParseModalOverlay.style.display = 'flex';
         }
+        updateAiParseProviderStatus();
     }
 
     function closeAiParseModal() {
@@ -2123,6 +2242,12 @@
         });
     }
 
+    if (aiParseProviderSelect) {
+        aiParseProviderSelect.addEventListener('change', () => {
+            updateAiParseProviderStatus();
+        });
+    }
+
     if (aiProcessBtn) {
         aiProcessBtn.addEventListener('click', () => {
             const provider = aiProviderSelect ? aiProviderSelect.value : '';
@@ -2155,6 +2280,14 @@
             formData.append('project', projectId);
             formData.append('selected_datasets', datasetIds.join(','));
             formData.append('provider', provider);
+            if (provider === 'groq') {
+                const selectedModel = aiModelSelect?.value;
+                if (!selectedModel) {
+                    updateAiModalStatus(messages.groqModelsLoadFailed, true);
+                    return;
+                }
+                formData.append('model', selectedModel);
+            }
             fetch(window.location.href, {
                 method: 'POST',
                 body: formData,
@@ -2225,6 +2358,14 @@
             formData.append('project', projectId);
             formData.append('selected_datasets', datasetIds.join(','));
             formData.append('provider', provider);
+            if (provider === 'groq') {
+                const selectedModel = aiParseModelSelect?.value;
+                if (!selectedModel) {
+                    updateAiParseModalStatus(messages.groqModelsLoadFailed, true);
+                    return;
+                }
+                formData.append('model', selectedModel);
+            }
             fetch(window.location.href, {
                 method: 'POST',
                 body: formData,

@@ -29,7 +29,7 @@ _OPENAI_COMPATIBLE = {
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.1-70b-versatile",
+        "model": "llama-3.1-8b-instant",
     },
     "xai": {
         "base_url": "https://api.x.ai/v1",
@@ -166,13 +166,13 @@ def _post_json(url, headers, payload, timeout=15):
         raise AiAssistError(errors.provider_unreachable())
 
 
-def _call_ai_provider_raw(provider, api_key, prompt, max_tokens):
+def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
     provider = (provider or "").strip().lower()
 
     if provider in _OPENAI_COMPATIBLE:
         config = _OPENAI_COMPATIBLE[provider]
         payload = {
-            "model": config["model"],
+            "model": model or config["model"],
             "messages": [
                 {
                     "role": "system",
@@ -249,7 +249,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens):
     raise AiAssistError(errors.provider_not_supported(provider))
 
 
-def generate_ai_regex(provider, api_key, filenames):
+def generate_ai_regex(provider, api_key, filenames, model=None):
     provider = (provider or "").strip().lower()
     if not provider:
         raise AiAssistError(errors.provider_required())
@@ -257,7 +257,7 @@ def generate_ai_regex(provider, api_key, filenames):
         raise AiAssistError(errors.provider_requires_configuration())
     prompt = _build_prompt(filenames)
 
-    content = _call_ai_provider_raw(provider, api_key, prompt, 120)
+    content = _call_ai_provider_raw(provider, api_key, prompt, 120, model=model)
 
     regex = _clean_regex(content)
     if not regex:
@@ -265,7 +265,7 @@ def generate_ai_regex(provider, api_key, filenames):
 
     if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(regex, filenames):
         retry_prompt = _build_prompt(filenames, strict=True)
-        retry_content = _call_ai_provider_raw(provider, api_key, retry_prompt, 120)
+        retry_content = _call_ai_provider_raw(provider, api_key, retry_prompt, 120, model=model)
         retry_regex = _clean_regex(retry_content)
         if retry_regex and _is_regex_reasonable(retry_regex, filenames) and not _is_regex_too_generic(
             retry_regex, filenames
@@ -355,7 +355,7 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
     return rows
 
 
-def generate_ai_parsed_values(provider, api_key, filenames):
+def generate_ai_parsed_values(provider, api_key, filenames, model=None):
     provider = (provider or "").strip().lower()
 
     if not provider:
@@ -369,7 +369,7 @@ def generate_ai_parsed_values(provider, api_key, filenames):
 
     prompt = _build_parse_prompt(filenames)
 
-    content = _call_ai_provider_raw(provider, api_key, prompt, 800)
+    content = _call_ai_provider_raw(provider, api_key, prompt, 800, model=model)
 
     parsed_rows = _parse_ai_value_rows(content, len(filenames), filenames=filenames)
 
