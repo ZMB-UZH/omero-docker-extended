@@ -441,7 +441,7 @@
                 </button>
             </div>
         </div>
-        <div id="ai_credentials_status" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div id="ai_credentials_status" class="ai-credentials-status"></div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_credentials_test">Test connection</button>
             <button type="button" id="ai_credentials_save">Save key</button>
@@ -538,6 +538,13 @@
         stroke: currentColor;
         fill: none;
         stroke-width: 1.8;
+    }
+    .ai-credentials-status {
+        margin-bottom: 10px;
+        color: #1f2937;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
     }
     .sort-arrow {
         width: 0;
@@ -2030,7 +2037,6 @@
                 .then((data) => {
                     if (data.error) {
                         updateAiCredentialsStatus(data.error, true);
-                        showNonBlockingModal(data.error);
                         resetAiCredentialTest();
                         return;
                     }
@@ -2042,7 +2048,6 @@
                 })
                 .catch(() => {
                     updateAiCredentialsStatus(messages.unableTestApiKey, true);
-                    showNonBlockingModal(messages.unableTestApiKey);
                     resetAiCredentialTest();
                 });
         });
@@ -2229,6 +2234,9 @@
                     const lines = rows.map((row) => (row.values || []).join(','));
                     if (aiParseOutput) {
                         aiParseOutput.value = lines.join('\n');
+                    }
+                    if (aiParseTransferBtn) {
+                        aiParseTransferBtn.disabled = false;
                     }
                     updateAiParseModalStatus('');
                 })
