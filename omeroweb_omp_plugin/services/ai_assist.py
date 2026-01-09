@@ -29,7 +29,7 @@ _OPENAI_COMPATIBLE = {
     },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "model": "llama-3.1-70b-versatile",
+        "model": "llama-3.1-70b-instant",
     },
     "xai": {
         "base_url": "https://api.x.ai/v1",
