@@ -255,17 +255,6 @@
                 <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
                 <select id="ai_provider_select" class="ai-modal-select placeholder" style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                     <option value="" disabled selected hidden>Choose an AI provider...</option>
-                    <option value="local">Local</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
-                    <option value="aws">AWS Bedrock</option>
-                    <option value="azure">Azure OpenAI</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="mistral">Mistral</option>
-                    <option value="perplexity">Perplexity</option>
-                    <option value="groq">Groq</option>
-                    <option value="xai">xAI</option>
                 </select>
             </div>
             <div id="ai_model_wrapper" style="flex:0 0 auto; display:none;">
@@ -305,16 +294,6 @@
                 <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
                 <select id="ai_parse_provider_select" class="ai-modal-select placeholder" style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                     <option value="" disabled selected hidden>Choose an AI provider...</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
-                    <option value="aws">AWS Bedrock</option>
-                    <option value="azure">Azure OpenAI</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="mistral">Mistral</option>
-                    <option value="perplexity">Perplexity</option>
-                    <option value="groq">Groq</option>
-                    <option value="xai">xAI</option>
                 </select>
             </div>
             <div id="ai_parse_model_wrapper" style="flex:0 0 auto; display:none;">
@@ -406,17 +385,6 @@
                                     class="ai-provider-option-select placeholder"
                                     style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected hidden>Select AI...</option>
-                                <option value="local">Local</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="anthropic">Anthropic</option>
-                                <option value="google">Google Gemini</option>
-                                <option value="aws">AWS Bedrock</option>
-                                <option value="azure">Azure OpenAI</option>
-                                <option value="cohere">Cohere</option>
-                                <option value="mistral">Mistral</option>
-                                <option value="perplexity">Perplexity</option>
-                                <option value="groq">Groq</option>
-                                <option value="xai">xAI</option>
                             </select>
                             <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
                                 <input type="checkbox" id="ai_regex_default_toggle">
@@ -447,17 +415,6 @@
                                     class="ai-provider-option-select placeholder"
                                     style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected hidden>Select AI...</option>
-                                <option value="local">Local</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="anthropic">Anthropic</option>
-                                <option value="google">Google Gemini</option>
-                                <option value="aws">AWS Bedrock</option>
-                                <option value="azure">Azure OpenAI</option>
-                                <option value="cohere">Cohere</option>
-                                <option value="mistral">Mistral</option>
-                                <option value="perplexity">Perplexity</option>
-                                <option value="groq">Groq</option>
-                                <option value="xai">xAI</option>
                             </select>
                             <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
                                 <input type="checkbox" id="ai_parse_default_toggle">
@@ -503,16 +460,6 @@
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
             <select id="ai_credentials_provider" style="width:40%; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="google">Google Gemini</option>
-                <option value="aws">AWS Bedrock</option>
-                <option value="azure">Azure OpenAI</option>
-                <option value="cohere">Cohere</option>
-                <option value="mistral">Mistral</option>
-                <option value="perplexity">Perplexity</option>
-                <option value="groq">Groq</option>
-                <option value="xai">xAI</option>
             </select>
         </div>
         <div style="margin-bottom:10px;">
@@ -1070,6 +1017,44 @@
     const aiParseNoInputMessage = 'No input required. Ready for next step.';
     const aiParseRequiredMessage = 'Run the AI-assisted filename parsing routine...';
     const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression routine...';
+    const AI_PROVIDER_OPTIONS = [
+        { value: 'local', label: 'Local' },
+        { value: 'openai', label: 'OpenAI' },
+        { value: 'anthropic', label: 'Anthropic' },
+        { value: 'google', label: 'Google Gemini' },
+        { value: 'aws', label: 'AWS Bedrock' },
+        { value: 'azure', label: 'Azure OpenAI' },
+        { value: 'cohere', label: 'Cohere' },
+        { value: 'mistral', label: 'Mistral' },
+        { value: 'perplexity', label: 'Perplexity' },
+        { value: 'groq', label: 'Groq' },
+        { value: 'xai', label: 'xAI' },
+    ];
+    function populateProviderSelect(select, { includeLocal = false } = {}) {
+        if (!select) return;
+        const placeholder = select.querySelector('option[disabled]');
+        const placeholderClone = placeholder ? placeholder.cloneNode(true) : null;
+        select.innerHTML = '';
+        if (placeholderClone) {
+            select.appendChild(placeholderClone);
+        }
+        const options = AI_PROVIDER_OPTIONS.filter((option) => includeLocal || option.value !== 'local');
+        options.forEach((option) => {
+            const optionNode = document.createElement('option');
+            optionNode.value = option.value;
+            optionNode.textContent = option.label;
+            select.appendChild(optionNode);
+        });
+        if (!placeholderClone && options.length) {
+            select.value = options[0].value;
+        }
+    }
+
+    populateProviderSelect(aiProviderSelect, { includeLocal: true });
+    populateProviderSelect(aiParseProviderSelect);
+    populateProviderSelect(aiRegexDefaultProviderSelect, { includeLocal: true });
+    populateProviderSelect(aiParseDefaultProviderSelect);
+    populateProviderSelect(aiCredentialsProvider);
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
     let aiParseTransferred = Boolean(aiParsedJsonInput?.value?.trim());
