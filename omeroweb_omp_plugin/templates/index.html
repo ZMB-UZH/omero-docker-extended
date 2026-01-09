@@ -253,7 +253,8 @@
         <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start;">
             <div style="flex:1;">
                 <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
-                <select id="ai_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                <select id="ai_provider_select" class="ai-modal-select placeholder" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="" disabled selected hidden>Choose an AI provider...</option>
                     <option value="local">Local</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
@@ -269,7 +270,7 @@
             </div>
             <div id="ai_model_wrapper" style="flex:1; display:none;">
                 <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
-                <select id="ai_model_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+                <select id="ai_model_select" class="ai-modal-select placeholder" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
             </div>
         </div>
         <div id="ai_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
@@ -302,8 +303,8 @@
         <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start;">
             <div style="flex:1;">
                 <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
-                <select id="ai_parse_provider_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                    <option value="">Choose an AI provider...</option>
+                <select id="ai_parse_provider_select" class="ai-modal-select placeholder" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="" disabled selected hidden>Choose an AI provider...</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                     <option value="google">Google Gemini</option>
@@ -318,7 +319,7 @@
             </div>
             <div id="ai_parse_model_wrapper" style="flex:1; display:none;">
                 <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
-                <select id="ai_parse_model_select" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+                <select id="ai_parse_model_select" class="ai-modal-select placeholder" style="width:100%; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
             </div>
         </div>
         <div id="ai_parse_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
@@ -404,7 +405,7 @@
                             <select id="ai_regex_default_provider_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                                <option value="" disabled selected>AI provider</option>
+                                <option value="" disabled selected hidden>Select AI...</option>
                                 <option value="local">Local</option>
                                 <option value="openai">OpenAI</option>
                                 <option value="anthropic">Anthropic</option>
@@ -426,7 +427,7 @@
                             <select id="ai_regex_default_model_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                                <option value="" disabled selected>Default model</option>
+                                <option value="" disabled selected hidden>Select model...</option>
                             </select>
                             <button type="button" id="ai_regex_default_apply_btn">Apply</button>
                         </div>
@@ -445,7 +446,7 @@
                             <select id="ai_parse_default_provider_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                                <option value="" disabled selected>AI provider</option>
+                                <option value="" disabled selected hidden>Select AI...</option>
                                 <option value="local">Local</option>
                                 <option value="openai">OpenAI</option>
                                 <option value="anthropic">Anthropic</option>
@@ -467,7 +468,7 @@
                             <select id="ai_parse_default_model_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
-                                <option value="" disabled selected>Default model</option>
+                                <option value="" disabled selected hidden>Select model...</option>
                             </select>
                             <button type="button" id="ai_parse_default_apply_btn">Apply</button>
                         </div>
@@ -790,6 +791,12 @@
         color: #6b7280;
     }
     .user-setting-input select.ai-provider-option-select option {
+        color: #000000;
+    }
+    .ai-modal-select.placeholder {
+        color: #6b7280;
+    }
+    .ai-modal-select option {
         color: #000000;
     }
     .ai-default-toggle input {
@@ -1309,11 +1316,17 @@
     function updateAiProviderStatus() {
         if (!aiProviderSelect) return;
         const provider = aiProviderSelect.value;
+        if (!provider) {
+            updateAiModalStatus(messages.aiModalChooseProvider);
+            updateAiModalPlaceholders();
+            return;
+        }
         if (provider !== 'groq') {
             toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
         }
         if (isLocalProvider(provider)) {
             updateAiModalStatus(messages.localProviderReady);
+            updateAiModalPlaceholders();
             return;
         }
         if (aiCredentialProviders.has(provider)) {
@@ -1321,9 +1334,11 @@
             if (provider === 'groq') {
                 ensureGroqModels(aiModelWrapper, aiModelSelect, updateAiModalStatus);
             }
+            updateAiModalPlaceholders();
             return;
         }
         updateAiModalStatus(messages.addApiKeySettings, true);
+        updateAiModalPlaceholders();
     }
 
     function updateAiParseProviderStatus() {
@@ -1331,6 +1346,8 @@
         const provider = aiParseProviderSelect.value;
         if (!provider) {
             toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            updateAiParseModalStatus(messages.aiModalChooseProvider);
+            updateAiModalPlaceholders();
             return;
         }
         if (aiCredentialProviders.has(provider)) {
@@ -1339,10 +1356,12 @@
             } else {
                 toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
             }
+            updateAiModalPlaceholders();
             return;
         }
         toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
         updateAiParseModalStatus(messages.addApiKeySettings, true);
+        updateAiModalPlaceholders();
     }
 
     function toggleGroqModelVisibility(show, wrapper, select) {
@@ -1350,6 +1369,7 @@
         wrapper.style.display = show ? 'block' : 'none';
         if (!show && select) {
             select.innerHTML = '';
+            updateSelectPlaceholder(select);
         }
     }
 
@@ -1397,6 +1417,16 @@
         if (!wrapper || !select) return;
         toggleGroqModelVisibility(true, wrapper, select);
         if (select.options.length > 0) {
+            if (preferredModel) {
+                const hasPreferred = Array.from(select.options).some((option) => option.value === preferredModel);
+                if (hasPreferred) {
+                    select.value = preferredModel;
+                }
+            }
+            if (!select.value && select.options.length > 0) {
+                select.value = select.options[0].value;
+            }
+            updateSelectPlaceholder(select);
             return;
         }
         if (typeof updateStatus === 'function') {
@@ -1406,6 +1436,7 @@
             .then((data) => {
                 const models = Array.isArray(data.models) ? data.models : [];
                 populateGroqModels(select, models, preferredModel || data.default_model);
+                updateSelectPlaceholder(select);
                 if (typeof updateStatus === 'function') {
                     updateStatus(messages.providerKeyReady);
                 }
@@ -1523,7 +1554,7 @@
         if (!state) return;
         const regexProvider = state.ai_regex_provider || '';
         const regexModel = state.ai_regex_model || '';
-        if (aiProviderSelect && regexProvider) {
+        if (aiProviderSelect && regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
             aiProviderSelect.value = regexProvider;
             updateAiProcessAvailability();
             if (regexProvider === 'groq') {
@@ -1531,18 +1562,21 @@
             } else {
                 toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
             }
+            updateAiProviderStatus();
         }
 
         const parseProvider = state.ai_parse_provider || '';
         const parseModel = state.ai_parse_model || '';
-        if (aiParseProviderSelect && parseProvider) {
+        if (aiParseProviderSelect && parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
             aiParseProviderSelect.value = parseProvider;
             if (parseProvider === 'groq') {
                 ensureGroqModels(aiParseModelWrapper, aiParseModelSelect, updateAiParseModalStatus, parseModel);
             } else {
                 toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
             }
+            updateAiParseProviderStatus();
         }
+        updateAiModalPlaceholders();
     }
 
     function syncAiDefaultsToSessionStorage({ force = false } = {}) {
@@ -1586,7 +1620,12 @@
         const regexProvider = regexDefaults.defaultProvider || '';
         const parseProvider = parseDefaults.defaultProvider || '';
 
-        if (aiProviderSelect && regexProvider && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value)) {
+        if (
+            aiProviderSelect
+            && regexProvider
+            && hasSelectOption(aiProviderSelect, regexProvider)
+            && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value)
+        ) {
             aiProviderSelect.value = regexProvider;
             if (regexProvider === 'groq') {
                 ensureGroqModels(
@@ -1601,7 +1640,12 @@
             updateAiProcessAvailability();
             updateAiProviderStatus();
         }
-        if (aiParseProviderSelect && parseProvider && (force || !aiParseProviderSelect.value)) {
+        if (
+            aiParseProviderSelect
+            && parseProvider
+            && hasSelectOption(aiParseProviderSelect, parseProvider)
+            && (force || !aiParseProviderSelect.value)
+        ) {
             aiParseProviderSelect.value = parseProvider;
             if (parseProvider === 'groq') {
                 ensureGroqModels(
@@ -1615,6 +1659,7 @@
             }
             updateAiParseProviderStatus();
         }
+        updateAiModalPlaceholders();
         if (force) {
             syncAiDefaultsToSessionStorage({ force: true });
         }
@@ -1773,6 +1818,18 @@
         select.classList.toggle('placeholder', !select.value);
     }
 
+    function hasSelectOption(select, value) {
+        if (!select || !value) return false;
+        return Array.from(select.options).some((option) => option.value === value);
+    }
+
+    function updateAiModalPlaceholders() {
+        updateSelectPlaceholder(aiProviderSelect);
+        updateSelectPlaceholder(aiModelSelect);
+        updateSelectPlaceholder(aiParseProviderSelect);
+        updateSelectPlaceholder(aiParseModelSelect);
+    }
+
     function setAiDefaultsSelectStatus(selects, status) {
         const targets = selects.filter(Boolean);
         targets.forEach((select) => {
@@ -1793,7 +1850,7 @@
     function resetAiDefaultsModel(modelSelect) {
         if (!modelSelect) return;
         modelSelect.disabled = true;
-        modelSelect.innerHTML = '<option value="" disabled selected>Default model</option>';
+        modelSelect.innerHTML = '<option value="" disabled selected hidden>Select model...</option>';
         updateSelectPlaceholder(modelSelect);
     }
 
@@ -2855,12 +2912,26 @@
         aiProviderSelect.addEventListener('change', () => {
             updateAiProcessAvailability();
             updateAiProviderStatus();
+            updateAiModalPlaceholders();
         });
     }
 
     if (aiParseProviderSelect) {
         aiParseProviderSelect.addEventListener('change', () => {
             updateAiParseProviderStatus();
+            updateAiModalPlaceholders();
+        });
+    }
+
+    if (aiModelSelect) {
+        aiModelSelect.addEventListener('change', () => {
+            updateAiModalPlaceholders();
+        });
+    }
+
+    if (aiParseModelSelect) {
+        aiParseModelSelect.addEventListener('change', () => {
+            updateAiModalPlaceholders();
         });
     }
 
@@ -3270,6 +3341,7 @@
     }
 
     initDatasetSorting();
-    applyDefaultAiProviderSelections();
     restorePreviewState();
+    applyDefaultAiProviderSelections();
+    updateAiModalPlaceholders();
     </script>
