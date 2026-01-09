@@ -959,7 +959,7 @@
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
             if (isAiParse) {
-                if (options.forceAiParseMessage) {
+                if (options.forceAiParseMessage || separatorInput.value !== aiParseNoInputMessage) {
                     separatorInput.value = aiParseNoInputMessage;
                 }
             } else if (options.preserveInputValue) {
@@ -1169,7 +1169,8 @@
         separatorInput.addEventListener('input', () => {
             aiRegexTransferred = false;
             if (aiRegexCheckbox && aiRegexCheckbox.checked) {
-                setSeparatorMode('regex', { preserveInputValue: true });
+                storeSeparatorValue('ai_regex', separatorInput.value);
+                setSeparatorMode('regex', { skipStore: true });
                 return;
             }
             const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
