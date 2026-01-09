@@ -56,7 +56,10 @@ _PROVIDER_TESTS = {
     },
     "groq": {
         "url": "https://api.groq.com/openai/v1/models",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "headers": lambda key: {
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "omero-omp-plugin",
+        },
     },
     "xai": {
         "url": "https://api.x.ai/v1/models",
