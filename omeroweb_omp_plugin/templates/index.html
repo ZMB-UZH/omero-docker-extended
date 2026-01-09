@@ -396,6 +396,46 @@
                     <span>Increase if you run out of variable set storage slots.</span>
                 </div>
             </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="ai_settings_provider_select">AI provider options</label>
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_settings_provider_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected>AI provider</option>
+                                <option value="local">Local</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="google">Google Gemini</option>
+                                <option value="aws">AWS Bedrock</option>
+                                <option value="azure">Azure OpenAI</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="mistral">Mistral</option>
+                                <option value="perplexity">Perplexity</option>
+                                <option value="groq">Groq</option>
+                                <option value="xai">xAI</option>
+                            </select>
+                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; margin:0;">
+                                <input type="checkbox" id="ai_settings_default_toggle">
+                                <span style="color:#9ca3af;">*</span>
+                            </label>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_settings_model_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected>Default model</option>
+                            </select>
+                            <button type="button" id="ai_settings_apply_btn">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>*Select to set as default AI provider.</span>
+                </div>
+            </div>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="user_settings_save">Save settings</button>
@@ -701,6 +741,12 @@
         font-weight: 600;
         margin-bottom: 0px;
     }
+    .user-setting-input select.ai-provider-option-select {
+        color: #1f2937;
+    }
+    .user-setting-input select.ai-provider-option-select.placeholder {
+        color: #9ca3af;
+    }
     .user-setting-description {
         flex: 1 1 220px;
         color: #4b5563;
@@ -718,6 +764,14 @@
     }
     .user-setting-input input.user-setting-error,
     .user-setting-input textarea.user-setting-error {
+        border-color: #dc2626;
+        box-shadow: 0 0 0 1px #dc2626;
+    }
+    .user-setting-input select.user-setting-success {
+        border-color: #16a34a;
+        box-shadow: 0 0 0 1px #16a34a;
+    }
+    .user-setting-input select.user-setting-error {
         border-color: #dc2626;
         box-shadow: 0 0 0 1px #dc2626;
     }
@@ -793,26 +847,44 @@
             Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
         ));
     };
-    function setSeparatorMode(mode) {
+    function normalizeSeparatorMode(mode) {
+        if (mode === 'ai' || mode === 'ai_regex') {
+            return 'ai_regex';
+        }
+        return mode || 'chars';
+    }
+
+    function storeSeparatorValue(mode, value) {
+        if (!mode || mode === 'ai_parse') return;
+        separatorValues[mode] = value ?? '';
+    }
+
+    function setSeparatorMode(mode, options = {}) {
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
         const aiRegex = document.getElementById('sep_mode_ai_regex');
         const aiParse = document.getElementById('sep_mode_ai_parse');
         const hidden = document.getElementById('separator_mode');
+        const normalizedMode = normalizeSeparatorMode(mode);
+        const previousMode = normalizeSeparatorMode(hidden?.value || 'chars');
 
-        if (mode === 'regex') {
+        if (!options.skipStore && separatorInput) {
+            storeSeparatorValue(previousMode, separatorInput.value);
+        }
+
+        if (normalizedMode === 'regex') {
             if (regex) regex.checked = true;
             if (chars) chars.checked = false;
             if (aiRegex) aiRegex.checked = false;
             if (aiParse) aiParse.checked = false;
             if (hidden) hidden.value = 'regex';
-        } else if (mode === 'ai') {
+        } else if (normalizedMode === 'ai_regex') {
             if (aiRegex) aiRegex.checked = true;
             if (chars) chars.checked = false;
             if (regex) regex.checked = false;
             if (aiParse) aiParse.checked = false;
             if (hidden) hidden.value = 'ai_regex';
-        } else if (mode === 'ai_parse') {
+        } else if (normalizedMode === 'ai_parse') {
             if (aiParse) aiParse.checked = true;
             if (chars) chars.checked = false;
             if (regex) regex.checked = false;
@@ -829,15 +901,14 @@
         updateAiRegexOption();
         updateAiParseOption();
 
-        const separatorInput = document.getElementById('separator_input');
         if (separatorInput) {
             const isAiParse = (hidden?.value === 'ai_parse');
-            if (!isAiParse) {
-                const previousValue = separatorInput.dataset.previousValue;
-                if (previousValue && separatorInput.value === aiParseNoInputMessage) {
-                    separatorInput.value = previousValue;
-                }
-                separatorInput.dataset.previousValue = '';
+            if (isAiParse) {
+                separatorInput.value = aiParseNoInputMessage;
+            } else if (options.preserveInputValue) {
+                storeSeparatorValue(normalizedMode, separatorInput.value);
+            } else {
+                separatorInput.value = separatorValues[normalizedMode] ?? '';
             }
             separatorInput.disabled = isAiParse;
             separatorInput.style.background = isAiParse ? '#f3f4f6' : '';
@@ -910,6 +981,10 @@
     const userSettingDefaultVarsInput = document.getElementById('user_setting_default_vars');
     const userSettingMaxParsedInput = document.getElementById('user_setting_max_parsed');
     const userSettingMaxSetsInput = document.getElementById('user_setting_max_sets');
+    const aiProviderOptionsSelect = document.getElementById('ai_settings_provider_select');
+    const aiProviderOptionsModelSelect = document.getElementById('ai_settings_model_select');
+    const aiProviderOptionsDefaultToggle = document.getElementById('ai_settings_default_toggle');
+    const aiProviderOptionsApplyBtn = document.getElementById('ai_settings_apply_btn');
     const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
     const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
     const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
@@ -929,6 +1004,11 @@
     let activeProjectIndex = -1;
     const STATE_STORAGE_KEY = 'omp_preview_state';
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
+    const separatorValues = {
+        chars: separatorInput ? separatorInput.value || '' : '',
+        regex: defaultSeparatorValue,
+        ai_regex: defaultSeparatorValue,
+    };
     const aiParseNoInputMessage = 'No input required. Ready for next step.';
     let lastDatasetRows = [];
     let aiRegexTransferred = false;
@@ -941,7 +1021,12 @@
         maxParsedVariables: {{ max_parsed_variables }},
         maxVariableSets: {{ max_variable_sets }},
         defaultVariableNames: {{ default_variable_names_json|safe }},
+        aiProviderDefaults: {
+            defaultProvider: '',
+            modelsByProvider: {},
+        },
     };
+    let aiProviderDefaultsState = { defaultProvider: '', modelsByProvider: {} };
 
     function hasDuplicateCharacters(value) {
         const seen = new Set();
@@ -1012,8 +1097,11 @@
         separatorInput.addEventListener('input', () => {
             aiRegexTransferred = false;
             if (aiRegexCheckbox && aiRegexCheckbox.checked) {
-                setSeparatorMode('regex');
+                setSeparatorMode('regex', { preserveInputValue: true });
+                return;
             }
+            const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
+            storeSeparatorValue(currentMode, separatorInput.value);
         });
     }
 
@@ -1047,6 +1135,25 @@
         if (!aiModalStatus) return;
         aiModalStatus.textContent = message || '';
         aiModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function clearAiRegexSuggestion() {
+        if (aiRegexOutput) {
+            aiRegexOutput.value = '';
+        }
+        if (aiTransferBtn) {
+            aiTransferBtn.disabled = true;
+        }
+    }
+
+    function clearAiParseSuggestion() {
+        if (aiParseOutput) {
+            aiParseOutput.value = '';
+        }
+        if (aiParseTransferBtn) {
+            aiParseTransferBtn.disabled = true;
+        }
+        lastAiParseRows = null;
     }
 
     function updateAiCredentialsStatus(message, isError = false) {
@@ -1223,7 +1330,7 @@
         return groqModelsRequest;
     }
 
-    function ensureGroqModels(wrapper, select, updateStatus) {
+    function ensureGroqModels(wrapper, select, updateStatus, preferredModel) {
         if (!wrapper || !select) return;
         toggleGroqModelVisibility(true, wrapper, select);
         if (select.options.length > 0) {
@@ -1235,7 +1342,7 @@
         fetchGroqModels()
             .then((data) => {
                 const models = Array.isArray(data.models) ? data.models : [];
-                populateGroqModels(select, models, data.default_model);
+                populateGroqModels(select, models, preferredModel || data.default_model);
                 if (typeof updateStatus === 'function') {
                     updateStatus(messages.providerKeyReady);
                 }
@@ -1280,14 +1387,23 @@
     }
 
     function persistPreviewState() {
+        if (separatorInput) {
+            const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
+            storeSeparatorValue(currentMode, separatorInput.value);
+        }
         const state = {
             project_id: projectSelect?.value || '',
             project_name: projectSelectInput?.dataset.selectedName || '',
             separator: separatorInput?.value || '',
             separator_mode: document.getElementById('separator_mode')?.value || 'chars',
+            separator_values: separatorValues,
             dataset_selection_opened: datasetSelectionOpenedInput?.value || '0',
             datasets: Array.isArray(lastDatasetRows) ? lastDatasetRows : [],
             selected_dataset_ids: getSelectedDatasetIds(),
+            ai_regex_provider: aiProviderSelect?.value || '',
+            ai_regex_model: aiModelSelect?.value || '',
+            ai_parse_provider: aiParseProviderSelect?.value || '',
+            ai_parse_model: aiParseModelSelect?.value || '',
         };
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
     }
@@ -1312,6 +1428,11 @@
         if (separatorInput && typeof state.separator === 'string') {
             separatorInput.value = state.separator;
         }
+        if (state.separator_values && typeof state.separator_values === 'object') {
+            separatorValues.chars = state.separator_values.chars ?? separatorValues.chars;
+            separatorValues.regex = state.separator_values.regex ?? separatorValues.regex;
+            separatorValues.ai_regex = state.separator_values.ai_regex ?? separatorValues.ai_regex;
+        }
         if (state.separator_mode) {
             if (state.separator_mode === 'ai_regex') {
                 setSeparatorMode('ai');
@@ -1332,6 +1453,64 @@
         if (datasetSelectionOpenedInput && state.dataset_selection_opened) {
             datasetSelectionOpenedInput.value = state.dataset_selection_opened;
         }
+        restoreAiProviderSelections(state);
+    }
+
+    function restoreAiProviderSelections(state) {
+        if (!state) return;
+        const regexProvider = state.ai_regex_provider || '';
+        const regexModel = state.ai_regex_model || '';
+        if (aiProviderSelect && regexProvider) {
+            aiProviderSelect.value = regexProvider;
+            updateAiProcessAvailability();
+            if (regexProvider === 'groq') {
+                ensureGroqModels(aiModelWrapper, aiModelSelect, updateAiModalStatus, regexModel);
+            } else {
+                toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
+            }
+        }
+
+        const parseProvider = state.ai_parse_provider || '';
+        const parseModel = state.ai_parse_model || '';
+        if (aiParseProviderSelect && parseProvider) {
+            aiParseProviderSelect.value = parseProvider;
+            if (parseProvider === 'groq') {
+                ensureGroqModels(aiParseModelWrapper, aiParseModelSelect, updateAiParseModalStatus, parseModel);
+            } else {
+                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            }
+        }
+    }
+
+    function applyDefaultAiProviderSelections() {
+        const defaultProvider = aiProviderDefaultsState.defaultProvider || '';
+        if (!defaultProvider) return;
+        if (aiProviderSelect && aiProviderSelect.value === 'local') {
+            aiProviderSelect.value = defaultProvider;
+            if (defaultProvider === 'groq') {
+                ensureGroqModels(
+                    aiModelWrapper,
+                    aiModelSelect,
+                    updateAiModalStatus,
+                    aiProviderDefaultsState.modelsByProvider?.[defaultProvider]
+                );
+            } else {
+                toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
+            }
+        }
+        if (aiParseProviderSelect && !aiParseProviderSelect.value) {
+            aiParseProviderSelect.value = defaultProvider;
+            if (defaultProvider === 'groq') {
+                ensureGroqModels(
+                    aiParseModelWrapper,
+                    aiParseModelSelect,
+                    updateAiParseModalStatus,
+                    aiProviderDefaultsState.modelsByProvider?.[defaultProvider]
+                );
+            } else {
+                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            }
+        }
     }
 
     function openAiModal() {
@@ -1346,12 +1525,7 @@
         }
         updateAiModalStatus('');
         refreshAiCredentials();
-        if (aiRegexOutput) {
-            aiRegexOutput.value = '';
-        }
-        if (aiTransferBtn) {
-            aiTransferBtn.disabled = true;
-        }
+        clearAiRegexSuggestion();
         updateAiProcessAvailability();
         if (aiModalOverlay) {
             aiModalOverlay.style.display = 'flex';
@@ -1360,6 +1534,7 @@
     }
 
     function closeAiModal() {
+        clearAiRegexSuggestion();
         if (aiModalOverlay) {
             aiModalOverlay.style.display = 'none';
         }
@@ -1383,12 +1558,7 @@
         }
         updateAiParseModalStatus('');
         refreshAiCredentials();
-        if (aiParseOutput) {
-            aiParseOutput.value = '';
-        }
-        if (aiParseTransferBtn) {
-            aiParseTransferBtn.disabled = true;
-        }
+        clearAiParseSuggestion();
         if (aiParseModalOverlay) {
             aiParseModalOverlay.style.display = 'flex';
         }
@@ -1396,6 +1566,7 @@
     }
 
     function closeAiParseModal() {
+        clearAiParseSuggestion();
         if (aiParseModalOverlay) {
             aiParseModalOverlay.style.display = 'none';
         }
@@ -1470,6 +1641,75 @@
             .forEach((input) => setUserSettingError(input, false));
     }
 
+    function normalizeAiProviderDefaults(raw) {
+        return {
+            defaultProvider: raw?.defaultProvider || '',
+            modelsByProvider: raw?.modelsByProvider || {},
+        };
+    }
+
+    function updateSelectPlaceholder(select) {
+        if (!select) return;
+        select.classList.toggle('placeholder', !select.value);
+    }
+
+    function setAiProviderOptionStatus(status) {
+        const targets = [aiProviderOptionsSelect, aiProviderOptionsModelSelect].filter(Boolean);
+        targets.forEach((select) => {
+            select.classList.remove('user-setting-success', 'user-setting-error');
+            if (status === 'success') {
+                select.classList.add('user-setting-success');
+            } else if (status === 'error') {
+                select.classList.add('user-setting-error');
+            }
+        });
+    }
+
+    function syncAiProviderDefaultToggle(provider) {
+        if (!aiProviderOptionsDefaultToggle) return;
+        aiProviderOptionsDefaultToggle.checked = !!provider && provider === aiProviderDefaultsState.defaultProvider;
+    }
+
+    function resetAiProviderOptionsModel() {
+        if (!aiProviderOptionsModelSelect) return;
+        aiProviderOptionsModelSelect.disabled = true;
+        aiProviderOptionsModelSelect.innerHTML = '<option value="" disabled selected>Default model</option>';
+        updateSelectPlaceholder(aiProviderOptionsModelSelect);
+    }
+
+    function refreshAiProviderOptionsModel(provider, preferredModel) {
+        if (!aiProviderOptionsModelSelect) return;
+        if (provider !== 'groq') {
+            resetAiProviderOptionsModel();
+            return;
+        }
+        aiProviderOptionsModelSelect.disabled = false;
+        fetchGroqModels()
+            .then((data) => {
+                const models = Array.isArray(data.models) ? data.models : [];
+                const defaultModel = preferredModel || data.default_model;
+                populateGroqModels(aiProviderOptionsModelSelect, models, defaultModel);
+                updateSelectPlaceholder(aiProviderOptionsModelSelect);
+            })
+            .catch((error) => {
+                resetAiProviderOptionsModel();
+                setAiProviderOptionStatus('error');
+                showNonBlockingModal(error?.message || messages.groqModelsLoadFailed);
+            });
+    }
+
+    function applyAiProviderDefaults(defaults) {
+        aiProviderDefaultsState = normalizeAiProviderDefaults(defaults);
+        if (aiProviderOptionsSelect) {
+            aiProviderOptionsSelect.value = aiProviderDefaultsState.defaultProvider || '';
+            updateSelectPlaceholder(aiProviderOptionsSelect);
+        }
+        const provider = aiProviderOptionsSelect?.value || '';
+        syncAiProviderDefaultToggle(provider);
+        refreshAiProviderOptionsModel(provider, aiProviderDefaultsState.modelsByProvider?.[provider]);
+        setAiProviderOptionStatus(null);
+    }
+
     function loadUserSettings() {
         try {
             const stored = window.localStorage ? window.localStorage.getItem(userSettingsStorageKey) : null;
@@ -1478,6 +1718,13 @@
         } catch (error) {
             return null;
         }
+    }
+
+    const initialUserSettings = loadUserSettings();
+    if (initialUserSettings?.aiProviderDefaults) {
+        aiProviderDefaultsState = normalizeAiProviderDefaults(initialUserSettings.aiProviderDefaults);
+    } else {
+        aiProviderDefaultsState = normalizeAiProviderDefaults(userSettingsDefaults.aiProviderDefaults);
     }
 
     function clearLocalUserData() {
@@ -1511,6 +1758,7 @@
                 : (settings.defaultVariableNames ?? '');
             userSettingDefaultVarsInput.value = defaultVars;
         }
+        applyAiProviderDefaults(settings.aiProviderDefaults);
     }
 
     function resetUserSettingsToDefaults() {
@@ -1519,6 +1767,7 @@
             maxParsedVariables: userSettingsDefaults.maxParsedVariables,
             maxVariableSets: userSettingsDefaults.maxVariableSets,
             defaultVariableNames: userSettingsDefaults.defaultVariableNames,
+            aiProviderDefaults: userSettingsDefaults.aiProviderDefaults,
         });
         clearUserSettingErrors();
     }
@@ -1570,10 +1819,12 @@
             maxParsedVariables: maxParsedValue,
             maxVariableSets: maxSetsValue,
             defaultVariableNames: parsedDefaults,
+            aiProviderDefaults: aiProviderDefaultsState,
         };
     }
 
-    function saveUserSettingsToDatabase(settings) {
+    function saveUserSettingsToDatabase(settings, options = {}) {
+        const { showSuccessMessage = true, onSuccess, onError } = options;
         return fetch(userSettingsSaveUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1584,12 +1835,25 @@
             .then((data) => {
                 if (data.error) {
                     showNonBlockingModal(data.error);
-                    return;
+                    if (typeof onError === 'function') {
+                        onError(data.error);
+                    }
+                    return false;
                 }
-                showNonBlockingModal(messages.userSettingsSavedDb);
+                if (showSuccessMessage) {
+                    showNonBlockingModal(messages.userSettingsSavedDb);
+                }
+                if (typeof onSuccess === 'function') {
+                    onSuccess(data);
+                }
+                return true;
             })
             .catch((err) => {
                 showNonBlockingModal(formatMessage(messages.userSettingsSaveError, { error: err }));
+                if (typeof onError === 'function') {
+                    onError(err);
+                }
+                return false;
             });
     }
 
@@ -2127,6 +2391,93 @@
             });
         });
 
+    function persistAiProviderDefaults(updatedDefaults) {
+        clearUserSettingErrors();
+        const validated = validateUserSettings();
+        if (!validated) {
+            setAiProviderOptionStatus('error');
+            return;
+        }
+        const payload = { ...validated, aiProviderDefaults: updatedDefaults };
+        try {
+            window.localStorage?.setItem(userSettingsStorageKey, JSON.stringify(payload));
+        } catch (error) {
+            // ignore storage errors
+        }
+        saveUserSettingsToDatabase(payload, {
+            showSuccessMessage: false,
+            onSuccess: () => setAiProviderOptionStatus('success'),
+            onError: () => setAiProviderOptionStatus('error'),
+        });
+    }
+
+    if (aiProviderOptionsSelect) {
+        aiProviderOptionsSelect.addEventListener('change', () => {
+            setAiProviderOptionStatus(null);
+            updateSelectPlaceholder(aiProviderOptionsSelect);
+            const provider = aiProviderOptionsSelect.value;
+            syncAiProviderDefaultToggle(provider);
+            const preferredModel = aiProviderDefaultsState.modelsByProvider?.[provider];
+            refreshAiProviderOptionsModel(provider, preferredModel);
+        });
+    }
+
+    if (aiProviderOptionsModelSelect) {
+        aiProviderOptionsModelSelect.addEventListener('change', () => {
+            setAiProviderOptionStatus(null);
+            updateSelectPlaceholder(aiProviderOptionsModelSelect);
+        });
+    }
+
+    if (aiProviderOptionsDefaultToggle) {
+        aiProviderOptionsDefaultToggle.addEventListener('change', () => {
+            setAiProviderOptionStatus(null);
+            const provider = aiProviderOptionsSelect?.value || '';
+            if (!provider) {
+                aiProviderOptionsDefaultToggle.checked = false;
+                showNonBlockingModal(messages.chooseProvider);
+                setAiProviderOptionStatus('error');
+                return;
+            }
+            const updatedDefaults = normalizeAiProviderDefaults({
+                ...aiProviderDefaultsState,
+                defaultProvider: aiProviderOptionsDefaultToggle.checked ? provider : '',
+            });
+            aiProviderDefaultsState = updatedDefaults;
+            persistAiProviderDefaults(updatedDefaults);
+        });
+    }
+
+    if (aiProviderOptionsApplyBtn) {
+        aiProviderOptionsApplyBtn.addEventListener('click', () => {
+            setAiProviderOptionStatus(null);
+            const provider = aiProviderOptionsSelect?.value || '';
+            if (!provider) {
+                showNonBlockingModal(messages.chooseProvider);
+                setAiProviderOptionStatus('error');
+                return;
+            }
+            let selectedModel = '';
+            if (provider === 'groq') {
+                selectedModel = aiProviderOptionsModelSelect?.value || '';
+                if (!selectedModel) {
+                    showNonBlockingModal(messages.groqModelsLoadFailed);
+                    setAiProviderOptionStatus('error');
+                    return;
+                }
+            }
+            const updatedDefaults = normalizeAiProviderDefaults({
+                ...aiProviderDefaultsState,
+                modelsByProvider: {
+                    ...(aiProviderDefaultsState.modelsByProvider || {}),
+                    [provider]: selectedModel,
+                },
+            });
+            aiProviderDefaultsState = updatedDefaults;
+            persistAiProviderDefaults(updatedDefaults);
+        });
+    }
+
     if (aiCredentialsProvider) {
         aiCredentialsProvider.addEventListener('change', () => {
             if (aiCredentialsKey) {
@@ -2250,6 +2601,7 @@
 
     if (aiProcessBtn) {
         aiProcessBtn.addEventListener('click', () => {
+            clearAiRegexSuggestion();
             const provider = aiProviderSelect ? aiProviderSelect.value : '';
             if (!provider) {
                 updateAiModalStatus(messages.aiModalChooseProvider, true);
@@ -2323,6 +2675,7 @@
 
     if (aiParseProcessBtn) {
         aiParseProcessBtn.addEventListener('click', () => {
+            clearAiParseSuggestion();
             const provider = aiParseProviderSelect ? aiParseProviderSelect.value : '';
             if (!provider) {
                 updateAiParseModalStatus(messages.aiModalChooseProvider, true);
@@ -2389,7 +2742,7 @@
                     if (aiParseTransferBtn) {
                         aiParseTransferBtn.disabled = false;
                     }
-                    updateAiParseModalStatus('');
+                    updateAiParseModalStatus(messages.aiSuggestionReady);
                 })
                 .catch(() => {
                     updateAiParseModalStatus(messages.aiProcessFailed, true);
@@ -2407,7 +2760,7 @@
             }
             separatorInput.value = value;
             if (typeof setSeparatorMode === 'function') {
-                setSeparatorMode('ai_regex');
+                setSeparatorMode('ai');
             }
             aiRegexTransferred = true;
             closeAiModal();
@@ -2416,17 +2769,9 @@
 
     if (aiParseTransferBtn) {
         aiParseTransferBtn.addEventListener('click', () => {
-
             if (!lastAiParseRows || !lastAiParseRows.length) {
                 updateAiParseModalStatus('Click "Process" first.', true);
                 return;
-            }
-
-            if (separatorInput) {
-                if (separatorInput.value && separatorInput.value !== aiParseNoInputMessage) {
-                    separatorInput.dataset.previousValue = separatorInput.value;
-                }
-                separatorInput.value = aiParseNoInputMessage;
             }
 
             if (aiParsedJsonInput) {
@@ -2645,6 +2990,9 @@
         if (separatorInput) {
             separatorInput.value = defaultSeparatorValue;
         }
+        separatorValues.chars = defaultSeparatorValue;
+        separatorValues.regex = defaultSeparatorValue;
+        separatorValues.ai_regex = defaultSeparatorValue;
         setSeparatorMode('chars');
         resetDatasetSelection();
         window.sessionStorage.removeItem(STATE_STORAGE_KEY);
@@ -2657,5 +3005,6 @@
     }
 
     initDatasetSorting();
+    applyDefaultAiProviderSelections();
     restorePreviewState();
     </script>

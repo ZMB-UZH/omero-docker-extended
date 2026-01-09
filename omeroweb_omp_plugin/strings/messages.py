@@ -109,6 +109,9 @@ def heuristic_regex_ready():
 def regex_suggestion_ready():
     return "Regex suggestion ready. Please repeat processing if unsatisfactory."
 
+def ai_suggestion_ready():
+    return "AI suggestion ready. Please repeat processing if unsatisfactory."
+
 def ai_process_failed():
     return "Unable to process filenames. Please try again."
 
@@ -298,6 +301,7 @@ INDEX_MESSAGE_NAMES = (
     "ai_suggestion_fallback",
     "heuristic_regex_ready",
     "regex_suggestion_ready",
+    "ai_suggestion_ready",
     "ai_process_failed",
     "generate_regex_first",
     "no_datasets_found",
