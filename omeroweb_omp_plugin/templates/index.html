@@ -398,10 +398,10 @@
             </div>
             <div class="user-setting-row">
                 <div class="user-setting-input">
-                    <label for="ai_settings_provider_select">Defaults for AI-assisted Regex expression</label>
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <select id="ai_settings_provider_select"
+                    <label for="ai_regex_default_provider_select">Defaults for AI-assisted Regex expression</label>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <select id="ai_regex_default_provider_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected>AI provider</option>
@@ -417,23 +417,63 @@
                                 <option value="groq">Groq</option>
                                 <option value="xai">xAI</option>
                             </select>
-                            <label style="display:flex; align-items:center; gap:4px; font-weight:600; margin:0;">
-                                <input type="checkbox" id="ai_settings_default_toggle">
-                                <span style="color:#9ca3af;">*</span>
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:2px; font-weight:600; margin:0;">
+                                <input type="checkbox" id="ai_regex_default_toggle">
+                                <span style="color:#000;">*</span>
                             </label>
                         </div>
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <select id="ai_settings_model_select"
+                        <div id="ai_regex_default_model_group" style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_regex_default_model_select"
                                     class="ai-provider-option-select placeholder"
                                     style="width:150px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                                 <option value="" disabled selected>Default model</option>
                             </select>
-                            <button type="button" id="ai_settings_apply_btn">Apply</button>
+                            <button type="button" id="ai_regex_default_apply_btn">Apply</button>
                         </div>
                     </div>
                 </div>
                 <div class="user-setting-description">
-                    <span>*Select to set as default AI provider.</span>
+                    <span>*Select to set as default AI provider for AI-assisted Regex expression.<br>The Apply button (where applicable) saves only the selected AI provider - model pair. Please repeat for other AI providers.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="ai_parse_default_provider_select">Defaults for AI-assisted filename parsing</label>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <select id="ai_parse_default_provider_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected>AI provider</option>
+                                <option value="local">Local</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="google">Google Gemini</option>
+                                <option value="aws">AWS Bedrock</option>
+                                <option value="azure">Azure OpenAI</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="mistral">Mistral</option>
+                                <option value="perplexity">Perplexity</option>
+                                <option value="groq">Groq</option>
+                                <option value="xai">xAI</option>
+                            </select>
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:2px; font-weight:600; margin:0;">
+                                <input type="checkbox" id="ai_parse_default_toggle">
+                                <span style="color:#000;">*</span>
+                            </label>
+                        </div>
+                        <div id="ai_parse_default_model_group" style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_parse_default_model_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:150px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected>Default model</option>
+                            </select>
+                            <button type="button" id="ai_parse_default_apply_btn">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>*Select to set as default AI provider for AI-assisted filename parsing.<br>The Apply button (where applicable) saves only the selected AI provider - model pair. Please repeat for other AI providers.</span>
                 </div>
             </div>
         </div>
@@ -742,10 +782,16 @@
         margin-bottom: 0px;
     }
     .user-setting-input select.ai-provider-option-select {
-        color: #1f2937;
+        color: #6b7280;
     }
     .user-setting-input select.ai-provider-option-select.placeholder {
-        color: #9ca3af;
+        color: #6b7280;
+    }
+    .user-setting-input select.ai-provider-option-select option {
+        color: #000000;
+    }
+    .ai-default-toggle input {
+        accent-color: #16a34a;
     }
     .user-setting-description {
         flex: 1 1 220px;
@@ -964,10 +1010,16 @@
     const userSettingDefaultVarsInput = document.getElementById('user_setting_default_vars');
     const userSettingMaxParsedInput = document.getElementById('user_setting_max_parsed');
     const userSettingMaxSetsInput = document.getElementById('user_setting_max_sets');
-    const aiProviderOptionsSelect = document.getElementById('ai_settings_provider_select');
-    const aiProviderOptionsModelSelect = document.getElementById('ai_settings_model_select');
-    const aiProviderOptionsDefaultToggle = document.getElementById('ai_settings_default_toggle');
-    const aiProviderOptionsApplyBtn = document.getElementById('ai_settings_apply_btn');
+    const aiRegexDefaultProviderSelect = document.getElementById('ai_regex_default_provider_select');
+    const aiRegexDefaultModelSelect = document.getElementById('ai_regex_default_model_select');
+    const aiRegexDefaultToggle = document.getElementById('ai_regex_default_toggle');
+    const aiRegexDefaultApplyBtn = document.getElementById('ai_regex_default_apply_btn');
+    const aiRegexDefaultModelGroup = document.getElementById('ai_regex_default_model_group');
+    const aiParseDefaultProviderSelect = document.getElementById('ai_parse_default_provider_select');
+    const aiParseDefaultModelSelect = document.getElementById('ai_parse_default_model_select');
+    const aiParseDefaultToggle = document.getElementById('ai_parse_default_toggle');
+    const aiParseDefaultApplyBtn = document.getElementById('ai_parse_default_apply_btn');
+    const aiParseDefaultModelGroup = document.getElementById('ai_parse_default_model_group');
     const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
     const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
     const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
@@ -1004,12 +1056,21 @@
         maxParsedVariables: {{ max_parsed_variables }},
         maxVariableSets: {{ max_variable_sets }},
         defaultVariableNames: {{ default_variable_names_json|safe }},
-        aiProviderDefaults: {
-            defaultProvider: '',
-            modelsByProvider: {},
+        aiDefaults: {
+            regex: {
+                defaultProvider: '',
+                modelsByProvider: {},
+            },
+            parse: {
+                defaultProvider: '',
+                modelsByProvider: {},
+            },
         },
     };
-    let aiProviderDefaultsState = { defaultProvider: '', modelsByProvider: {} };
+    let aiDefaultsState = {
+        regex: { defaultProvider: '', modelsByProvider: {} },
+        parse: { defaultProvider: '', modelsByProvider: {} },
+    };
 
     // Ensure exactly one mode is selected even if browser restores form state
     (function initSeparatorMode() {
@@ -1483,29 +1544,32 @@
     }
 
     function applyDefaultAiProviderSelections() {
-        const defaultProvider = aiProviderDefaultsState.defaultProvider || '';
-        if (!defaultProvider) return;
-        if (aiProviderSelect && aiProviderSelect.value === 'local') {
-            aiProviderSelect.value = defaultProvider;
-            if (defaultProvider === 'groq') {
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = regexDefaults.defaultProvider || '';
+        const parseProvider = parseDefaults.defaultProvider || '';
+
+        if (aiProviderSelect && regexProvider && (aiProviderSelect.value === 'local' || !aiProviderSelect.value)) {
+            aiProviderSelect.value = regexProvider;
+            if (regexProvider === 'groq') {
                 ensureGroqModels(
                     aiModelWrapper,
                     aiModelSelect,
                     updateAiModalStatus,
-                    aiProviderDefaultsState.modelsByProvider?.[defaultProvider]
+                    regexDefaults.modelsByProvider?.[regexProvider]
                 );
             } else {
                 toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
             }
         }
-        if (aiParseProviderSelect && !aiParseProviderSelect.value) {
-            aiParseProviderSelect.value = defaultProvider;
-            if (defaultProvider === 'groq') {
+        if (aiParseProviderSelect && parseProvider && !aiParseProviderSelect.value) {
+            aiParseProviderSelect.value = parseProvider;
+            if (parseProvider === 'groq') {
                 ensureGroqModels(
                     aiParseModelWrapper,
                     aiParseModelSelect,
                     updateAiParseModalStatus,
-                    aiProviderDefaultsState.modelsByProvider?.[defaultProvider]
+                    parseDefaults.modelsByProvider?.[parseProvider]
                 );
             } else {
                 toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
@@ -1525,6 +1589,7 @@
         }
         updateAiModalStatus('');
         refreshAiCredentials();
+        applyDefaultAiProviderSelections();
         clearAiRegexSuggestion();
         updateAiProcessAvailability();
         if (aiModalOverlay) {
@@ -1558,6 +1623,7 @@
         }
         updateAiParseModalStatus('');
         refreshAiCredentials();
+        applyDefaultAiProviderSelections();
         clearAiParseSuggestion();
         if (aiParseModalOverlay) {
             aiParseModalOverlay.style.display = 'flex';
@@ -1648,13 +1714,24 @@
         };
     }
 
+    function normalizeAiDefaults(raw) {
+        if (raw && (raw.defaultProvider !== undefined || raw.modelsByProvider !== undefined)) {
+            const normalized = normalizeAiProviderDefaults(raw);
+            return { regex: normalized, parse: { ...normalized } };
+        }
+        return {
+            regex: normalizeAiProviderDefaults(raw?.regex),
+            parse: normalizeAiProviderDefaults(raw?.parse),
+        };
+    }
+
     function updateSelectPlaceholder(select) {
         if (!select) return;
         select.classList.toggle('placeholder', !select.value);
     }
 
-    function setAiProviderOptionStatus(status) {
-        const targets = [aiProviderOptionsSelect, aiProviderOptionsModelSelect].filter(Boolean);
+    function setAiDefaultsSelectStatus(selects, status) {
+        const targets = selects.filter(Boolean);
         targets.forEach((select) => {
             select.classList.remove('user-setting-success', 'user-setting-error');
             if (status === 'success') {
@@ -1665,49 +1742,66 @@
         });
     }
 
-    function syncAiProviderDefaultToggle(provider) {
-        if (!aiProviderOptionsDefaultToggle) return;
-        aiProviderOptionsDefaultToggle.checked = !!provider && provider === aiProviderDefaultsState.defaultProvider;
+    function syncAiDefaultToggle(toggle, provider, defaultsState) {
+        if (!toggle) return;
+        toggle.checked = !!provider && provider === defaultsState.defaultProvider;
     }
 
-    function resetAiProviderOptionsModel() {
-        if (!aiProviderOptionsModelSelect) return;
-        aiProviderOptionsModelSelect.disabled = true;
-        aiProviderOptionsModelSelect.innerHTML = '<option value="" disabled selected>Default model</option>';
-        updateSelectPlaceholder(aiProviderOptionsModelSelect);
+    function resetAiDefaultsModel(modelSelect) {
+        if (!modelSelect) return;
+        modelSelect.disabled = true;
+        modelSelect.innerHTML = '<option value="" disabled selected>Default model</option>';
+        updateSelectPlaceholder(modelSelect);
     }
 
-    function refreshAiProviderOptionsModel(provider, preferredModel) {
-        if (!aiProviderOptionsModelSelect) return;
+    function updateAiDefaultsModelVisibility(provider, modelSelect, modelGroup, applyBtn) {
+        const show = provider === 'groq';
+        if (modelGroup) {
+            modelGroup.style.display = show ? 'flex' : 'none';
+        }
+        if (applyBtn) {
+            applyBtn.style.display = show ? 'inline-flex' : 'none';
+        }
+        if (!show) {
+            resetAiDefaultsModel(modelSelect);
+        }
+    }
+
+    function refreshAiDefaultsModel(provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus) {
+        if (!modelSelect) return;
+        updateAiDefaultsModelVisibility(provider, modelSelect, modelGroup, applyBtn);
         if (provider !== 'groq') {
-            resetAiProviderOptionsModel();
             return;
         }
-        aiProviderOptionsModelSelect.disabled = false;
+        modelSelect.disabled = false;
         fetchGroqModels()
             .then((data) => {
                 const models = Array.isArray(data.models) ? data.models : [];
                 const defaultModel = preferredModel || data.default_model;
-                populateGroqModels(aiProviderOptionsModelSelect, models, defaultModel);
-                updateSelectPlaceholder(aiProviderOptionsModelSelect);
+                populateGroqModels(modelSelect, models, defaultModel);
+                updateSelectPlaceholder(modelSelect);
             })
             .catch((error) => {
-                resetAiProviderOptionsModel();
-                setAiProviderOptionStatus('error');
+                resetAiDefaultsModel(modelSelect);
+                if (typeof onErrorStatus === 'function') {
+                    onErrorStatus();
+                }
                 showNonBlockingModal(error?.message || messages.groqModelsLoadFailed);
             });
     }
 
-    function applyAiProviderDefaults(defaults) {
-        aiProviderDefaultsState = normalizeAiProviderDefaults(defaults);
-        if (aiProviderOptionsSelect) {
-            aiProviderOptionsSelect.value = aiProviderDefaultsState.defaultProvider || '';
-            updateSelectPlaceholder(aiProviderOptionsSelect);
+    function applyAiDefaultsToRow(config) {
+        const { defaults, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
+        if (providerSelect) {
+            providerSelect.value = defaults.defaultProvider || '';
+            updateSelectPlaceholder(providerSelect);
         }
-        const provider = aiProviderOptionsSelect?.value || '';
-        syncAiProviderDefaultToggle(provider);
-        refreshAiProviderOptionsModel(provider, aiProviderDefaultsState.modelsByProvider?.[provider]);
-        setAiProviderOptionStatus(null);
+        const provider = providerSelect?.value || '';
+        syncAiDefaultToggle(toggle, provider, defaults);
+        refreshAiDefaultsModel(provider, defaults.modelsByProvider?.[provider], modelSelect, modelGroup, applyBtn, () => {
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+        });
+        setAiDefaultsSelectStatus(statusTargets, null);
     }
 
     function loadUserSettings() {
@@ -1721,10 +1815,10 @@
     }
 
     const initialUserSettings = loadUserSettings();
-    if (initialUserSettings?.aiProviderDefaults) {
-        aiProviderDefaultsState = normalizeAiProviderDefaults(initialUserSettings.aiProviderDefaults);
+    if (initialUserSettings?.aiDefaults || initialUserSettings?.aiProviderDefaults) {
+        aiDefaultsState = normalizeAiDefaults(initialUserSettings.aiDefaults || initialUserSettings.aiProviderDefaults);
     } else {
-        aiProviderDefaultsState = normalizeAiProviderDefaults(userSettingsDefaults.aiProviderDefaults);
+        aiDefaultsState = normalizeAiDefaults(userSettingsDefaults.aiDefaults);
     }
 
     function clearLocalUserData() {
@@ -1758,7 +1852,26 @@
                 : (settings.defaultVariableNames ?? '');
             userSettingDefaultVarsInput.value = defaultVars;
         }
-        applyAiProviderDefaults(settings.aiProviderDefaults);
+        const defaults = normalizeAiDefaults(settings.aiDefaults || settings.aiProviderDefaults);
+        aiDefaultsState = defaults;
+        applyAiDefaultsToRow({
+            defaults: defaults.regex,
+            providerSelect: aiRegexDefaultProviderSelect,
+            modelSelect: aiRegexDefaultModelSelect,
+            toggle: aiRegexDefaultToggle,
+            modelGroup: aiRegexDefaultModelGroup,
+            applyBtn: aiRegexDefaultApplyBtn,
+            statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+        });
+        applyAiDefaultsToRow({
+            defaults: defaults.parse,
+            providerSelect: aiParseDefaultProviderSelect,
+            modelSelect: aiParseDefaultModelSelect,
+            toggle: aiParseDefaultToggle,
+            modelGroup: aiParseDefaultModelGroup,
+            applyBtn: aiParseDefaultApplyBtn,
+            statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+        });
     }
 
     function resetUserSettingsToDefaults() {
@@ -1767,7 +1880,7 @@
             maxParsedVariables: userSettingsDefaults.maxParsedVariables,
             maxVariableSets: userSettingsDefaults.maxVariableSets,
             defaultVariableNames: userSettingsDefaults.defaultVariableNames,
-            aiProviderDefaults: userSettingsDefaults.aiProviderDefaults,
+            aiDefaults: userSettingsDefaults.aiDefaults,
         });
         clearUserSettingErrors();
     }
@@ -1819,7 +1932,7 @@
             maxParsedVariables: maxParsedValue,
             maxVariableSets: maxSetsValue,
             defaultVariableNames: parsedDefaults,
-            aiProviderDefaults: aiProviderDefaultsState,
+            aiDefaults: aiDefaultsState,
         };
     }
 
@@ -2391,14 +2504,17 @@
             });
         });
 
-    function persistAiProviderDefaults(updatedDefaults) {
+    function persistAiDefaults(updatedDefaults, options = {}) {
+        const { onSuccess, onError } = options;
         clearUserSettingErrors();
         const validated = validateUserSettings();
         if (!validated) {
-            setAiProviderOptionStatus('error');
+            if (typeof onError === 'function') {
+                onError();
+            }
             return;
         }
-        const payload = { ...validated, aiProviderDefaults: updatedDefaults };
+        const payload = { ...validated, aiDefaults: updatedDefaults };
         try {
             window.localStorage?.setItem(userSettingsStorageKey, JSON.stringify(payload));
         } catch (error) {
@@ -2406,75 +2522,178 @@
         }
         saveUserSettingsToDatabase(payload, {
             showSuccessMessage: false,
-            onSuccess: () => setAiProviderOptionStatus('success'),
-            onError: () => setAiProviderOptionStatus('error'),
-        });
-    }
-
-    if (aiProviderOptionsSelect) {
-        aiProviderOptionsSelect.addEventListener('change', () => {
-            setAiProviderOptionStatus(null);
-            updateSelectPlaceholder(aiProviderOptionsSelect);
-            const provider = aiProviderOptionsSelect.value;
-            syncAiProviderDefaultToggle(provider);
-            const preferredModel = aiProviderDefaultsState.modelsByProvider?.[provider];
-            refreshAiProviderOptionsModel(provider, preferredModel);
-        });
-    }
-
-    if (aiProviderOptionsModelSelect) {
-        aiProviderOptionsModelSelect.addEventListener('change', () => {
-            setAiProviderOptionStatus(null);
-            updateSelectPlaceholder(aiProviderOptionsModelSelect);
-        });
-    }
-
-    if (aiProviderOptionsDefaultToggle) {
-        aiProviderOptionsDefaultToggle.addEventListener('change', () => {
-            setAiProviderOptionStatus(null);
-            const provider = aiProviderOptionsSelect?.value || '';
-            if (!provider) {
-                aiProviderOptionsDefaultToggle.checked = false;
-                showNonBlockingModal(messages.chooseProvider);
-                setAiProviderOptionStatus('error');
-                return;
-            }
-            const updatedDefaults = normalizeAiProviderDefaults({
-                ...aiProviderDefaultsState,
-                defaultProvider: aiProviderOptionsDefaultToggle.checked ? provider : '',
-            });
-            aiProviderDefaultsState = updatedDefaults;
-            persistAiProviderDefaults(updatedDefaults);
-        });
-    }
-
-    if (aiProviderOptionsApplyBtn) {
-        aiProviderOptionsApplyBtn.addEventListener('click', () => {
-            setAiProviderOptionStatus(null);
-            const provider = aiProviderOptionsSelect?.value || '';
-            if (!provider) {
-                showNonBlockingModal(messages.chooseProvider);
-                setAiProviderOptionStatus('error');
-                return;
-            }
-            let selectedModel = '';
-            if (provider === 'groq') {
-                selectedModel = aiProviderOptionsModelSelect?.value || '';
-                if (!selectedModel) {
-                    showNonBlockingModal(messages.groqModelsLoadFailed);
-                    setAiProviderOptionStatus('error');
-                    return;
+            onSuccess: () => {
+                if (typeof onSuccess === 'function') {
+                    onSuccess();
                 }
+            },
+            onError: () => {
+                if (typeof onError === 'function') {
+                    onError();
+                }
+            },
+        });
+    }
+
+    function handleDefaultsProviderChange(config) {
+        const { key, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        updateSelectPlaceholder(providerSelect);
+        const provider = providerSelect.value;
+        syncAiDefaultToggle(toggle, provider, aiDefaultsState[key]);
+        const preferredModel = aiDefaultsState[key].modelsByProvider?.[provider];
+        refreshAiDefaultsModel(
+            provider,
+            preferredModel,
+            modelSelect,
+            modelGroup,
+            applyBtn,
+            () => setAiDefaultsSelectStatus(statusTargets, 'error')
+        );
+    }
+
+    function handleDefaultsModelChange(modelSelect, statusTargets) {
+        setAiDefaultsSelectStatus(statusTargets, null);
+        updateSelectPlaceholder(modelSelect);
+    }
+
+    function handleDefaultsToggleChange(config) {
+        const { key, providerSelect, toggle, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        const provider = providerSelect?.value || '';
+        if (!provider) {
+            toggle.checked = false;
+            showNonBlockingModal(messages.chooseProvider);
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        const updatedDefaults = normalizeAiDefaults({
+            ...aiDefaultsState,
+            [key]: {
+                ...aiDefaultsState[key],
+                defaultProvider: toggle.checked ? provider : '',
+            },
+        });
+        aiDefaultsState = updatedDefaults;
+        persistAiDefaults(updatedDefaults);
+    }
+
+    function handleDefaultsApply(config) {
+        const { key, providerSelect, modelSelect, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        const provider = providerSelect?.value || '';
+        if (!provider) {
+            showNonBlockingModal(messages.chooseProvider);
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        let selectedModel = '';
+        if (provider === 'groq') {
+            selectedModel = modelSelect?.value || '';
+            if (!selectedModel) {
+                showNonBlockingModal(messages.groqModelsLoadFailed);
+                setAiDefaultsSelectStatus(statusTargets, 'error');
+                return;
             }
-            const updatedDefaults = normalizeAiProviderDefaults({
-                ...aiProviderDefaultsState,
+        }
+        const updatedDefaults = normalizeAiDefaults({
+            ...aiDefaultsState,
+            [key]: {
+                ...aiDefaultsState[key],
                 modelsByProvider: {
-                    ...(aiProviderDefaultsState.modelsByProvider || {}),
+                    ...(aiDefaultsState[key].modelsByProvider || {}),
                     [provider]: selectedModel,
                 },
+            },
+        });
+        aiDefaultsState = updatedDefaults;
+        persistAiDefaults(updatedDefaults, {
+            onSuccess: () => setAiDefaultsSelectStatus(statusTargets, 'success'),
+            onError: () => setAiDefaultsSelectStatus(statusTargets, 'error'),
+        });
+    }
+
+    if (aiRegexDefaultProviderSelect) {
+        aiRegexDefaultProviderSelect.addEventListener('change', () => {
+            handleDefaultsProviderChange({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                modelSelect: aiRegexDefaultModelSelect,
+                toggle: aiRegexDefaultToggle,
+                modelGroup: aiRegexDefaultModelGroup,
+                applyBtn: aiRegexDefaultApplyBtn,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
             });
-            aiProviderDefaultsState = updatedDefaults;
-            persistAiProviderDefaults(updatedDefaults);
+        });
+    }
+
+    if (aiRegexDefaultModelSelect) {
+        aiRegexDefaultModelSelect.addEventListener('change', () => {
+            handleDefaultsModelChange(aiRegexDefaultModelSelect, [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect]);
+        });
+    }
+
+    if (aiRegexDefaultToggle) {
+        aiRegexDefaultToggle.addEventListener('change', () => {
+            handleDefaultsToggleChange({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                toggle: aiRegexDefaultToggle,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiRegexDefaultApplyBtn) {
+        aiRegexDefaultApplyBtn.addEventListener('click', () => {
+            handleDefaultsApply({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                modelSelect: aiRegexDefaultModelSelect,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultProviderSelect) {
+        aiParseDefaultProviderSelect.addEventListener('change', () => {
+            handleDefaultsProviderChange({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                modelSelect: aiParseDefaultModelSelect,
+                toggle: aiParseDefaultToggle,
+                modelGroup: aiParseDefaultModelGroup,
+                applyBtn: aiParseDefaultApplyBtn,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultModelSelect) {
+        aiParseDefaultModelSelect.addEventListener('change', () => {
+            handleDefaultsModelChange(aiParseDefaultModelSelect, [aiParseDefaultProviderSelect, aiParseDefaultModelSelect]);
+        });
+    }
+
+    if (aiParseDefaultToggle) {
+        aiParseDefaultToggle.addEventListener('change', () => {
+            handleDefaultsToggleChange({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                toggle: aiParseDefaultToggle,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultApplyBtn) {
+        aiParseDefaultApplyBtn.addEventListener('click', () => {
+            handleDefaultsApply({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                modelSelect: aiParseDefaultModelSelect,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
         });
     }
 
