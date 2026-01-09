@@ -277,7 +277,7 @@
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested Regex</label>
             <textarea id="ai_regex_output"
-                      style="width:100%; min-height:80px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                      style="width:100%; min-height:80px; max-height:220px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
                       placeholder='Click "Process" to generate a Regex expression.'></textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -326,7 +326,7 @@
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested parsing</label>
             <textarea id="ai_parse_output"
-                      style="width:100%; min-height:80px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                      style="width:100%; min-height:110px; max-height:260px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
                       placeholder='Click "Process" to generate a set of suggested parsed values.'></textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
@@ -420,7 +420,7 @@
                             </select>
                             <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
                                 <input type="checkbox" id="ai_regex_default_toggle">
-                                <span style="color:#000; margin-right: 0.1em;">*</span>
+                                <span style="color:#000;">*</span>
                             </label>
                         </div>
                         <div id="ai_regex_default_model_group" style="display:flex; align-items:center; gap:6px;">
