@@ -104,7 +104,7 @@ def ai_suggestion_fallback():
     return "AI suggestion looked unreliable, so a heuristic regex was provided instead."
 
 def heuristic_regex_ready():
-    return "Heuristic regex suggestion ready."
+    return "Heuristic regex suggestion ready. Please repeat processing if unsatisfactory."
 
 def regex_suggestion_ready():
     return "Regex suggestion ready. Please repeat processing if unsatisfactory."
