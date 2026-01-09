@@ -86,7 +86,7 @@ def api_key_saved_status():
     return "API key saved."
 
 def api_key_saved_db():
-    return "API key saved to the database."
+    return "API key saved to database."
 
 def unable_save_api_key():
     return "Unable to save API key."
