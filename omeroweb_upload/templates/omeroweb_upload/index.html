@@ -180,18 +180,90 @@
             if (!pendingFiles.length) {
                 return;
             }
-            pendingFiles.forEach((file) => {
+            pendingFiles.forEach((entry) => {
                 const item = document.createElement('li');
-                const displayPath = file.webkitRelativePath || file.name;
-                item.textContent = `${displayPath} (${formatBytes(file.size)})`;
+                const displayPath = entry.relativePath || entry.file.name;
+                item.textContent = `${displayPath} (${formatBytes(entry.file.size)})`;
                 fileList.appendChild(item);
             });
         }
 
-        function handleFiles(files) {
-            pendingFiles = Array.from(files);
+        function normalizeFileList(files) {
+            return Array.from(files).map((file) => ({
+                file,
+                relativePath: file.webkitRelativePath || file.name,
+            }));
+        }
+
+        function handleFiles(entries) {
+            pendingFiles = entries;
             refreshFileList();
             setStatus('');
+        }
+
+        function readAllDirectoryEntries(reader) {
+            return new Promise((resolve, reject) => {
+                const entries = [];
+                const readChunk = () => {
+                    reader.readEntries((batch) => {
+                        if (!batch.length) {
+                            resolve(entries);
+                            return;
+                        }
+                        entries.push(...batch);
+                        readChunk();
+                    }, reject);
+                };
+                readChunk();
+            });
+        }
+
+        async function traverseEntry(entry, pathPrefix = '') {
+            if (!entry) {
+                return [];
+            }
+            if (entry.isFile) {
+                return new Promise((resolve, reject) => {
+                    entry.file((file) => {
+                        resolve([{ file, relativePath: `${pathPrefix}${file.name}` }]);
+                    }, reject);
+                });
+            }
+            if (entry.isDirectory) {
+                const reader = entry.createReader();
+                const children = await readAllDirectoryEntries(reader);
+                const results = [];
+                for (const child of children) {
+                    const childResults = await traverseEntry(child, `${pathPrefix}${entry.name}/`);
+                    results.push(...childResults);
+                }
+                return results;
+            }
+            return [];
+        }
+
+        async function getFilesFromDrop(event) {
+            const items = Array.from(event.dataTransfer?.items || []);
+            const entries = [];
+            for (const item of items) {
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+                    if (entry) {
+                        entries.push(entry);
+                    } else if (item.getAsFile()) {
+                        entries.push({ isFile: true, file: (callback) => callback(item.getAsFile()) });
+                    }
+                }
+            }
+            if (!entries.length && event.dataTransfer?.files?.length) {
+                return normalizeFileList(event.dataTransfer.files);
+            }
+            const collected = [];
+            for (const entry of entries) {
+                const results = await traverseEntry(entry);
+                collected.push(...results);
+            }
+            return collected;
         }
 
         uploadCard.addEventListener('dragover', (event) => {
@@ -203,16 +275,19 @@
             uploadCard.classList.remove('dragover');
         });
 
-        uploadCard.addEventListener('drop', (event) => {
+        uploadCard.addEventListener('drop', async (event) => {
             event.preventDefault();
             uploadCard.classList.remove('dragover');
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
                 return;
             }
-            if (event.dataTransfer?.files?.length) {
-                handleFiles(event.dataTransfer.files);
+            const files = await getFilesFromDrop(event);
+            if (!files.length) {
+                setStatus('No files detected in the dropped folder.', 'error');
+                return;
             }
+            handleFiles(files);
         });
 
         fileInput.addEventListener('change', () => {
@@ -221,16 +296,16 @@
                 return;
             }
             if (fileInput.files?.length) {
-                handleFiles(fileInput.files);
+                handleFiles(normalizeFileList(fileInput.files));
             }
         });
 
         async function startUploadJob() {
-            const totalBytes = pendingFiles.reduce((acc, file) => acc + file.size, 0);
-            const metadata = pendingFiles.map((file) => ({
-                name: file.name,
-                relative_path: file.webkitRelativePath || file.name,
-                size: file.size,
+            const totalBytes = pendingFiles.reduce((acc, entry) => acc + entry.file.size, 0);
+            const metadata = pendingFiles.map((entry) => ({
+                name: entry.file.name,
+                relative_path: entry.relativePath || entry.file.name,
+                size: entry.file.size,
             }));
 
             const response = await fetch(startUrl, {
@@ -247,12 +322,37 @@
             return { ...data, totalBytes };
         }
 
-        function uploadFiles(uploadUrl, totalBytes) {
+        function createUploadBatches() {
+            const maxBatchBytes = 50 * 1024 * 1024;
+            const maxBatchFiles = 20;
+            const batches = [];
+            let current = [];
+            let currentBytes = 0;
+
+            pendingFiles.forEach((entry) => {
+                const fileSize = entry.file.size;
+                const needsSplit = current.length >= maxBatchFiles || (currentBytes + fileSize > maxBatchBytes && current.length);
+                if (needsSplit) {
+                    batches.push(current);
+                    current = [];
+                    currentBytes = 0;
+                }
+                current.push(entry);
+                currentBytes += fileSize;
+            });
+
+            if (current.length) {
+                batches.push(current);
+            }
+            return batches;
+        }
+
+        function uploadBatch(uploadUrl, batch, batchIndex, batchBytes, totalBytes, progressMap) {
             return new Promise((resolve, reject) => {
                 const formData = new FormData();
-                pendingFiles.forEach((file) => {
-                    const relativePath = file.webkitRelativePath || file.name;
-                    formData.append('files', file, relativePath);
+                batch.forEach((entry) => {
+                    const relativePath = entry.relativePath || entry.file.name;
+                    formData.append('files', entry.file, relativePath);
                 });
 
                 const xhr = new XMLHttpRequest();
@@ -262,8 +362,12 @@
                     if (!event.lengthComputable) {
                         return;
                     }
-                    const percent = Math.min(100, Math.round((event.loaded / totalBytes) * 100));
-                    updateProgress(percent, `Uploading ${formatBytes(event.loaded)} of ${formatBytes(totalBytes)}...`);
+                    progressMap.set(batchIndex, Math.min(event.loaded, batchBytes));
+                    const loaded = Array.from(progressMap.values()).reduce((acc, value) => acc + value, 0);
+                    const percent = totalBytes
+                        ? Math.min(100, Math.round((loaded / totalBytes) * 100))
+                        : 0;
+                    updateProgress(percent, `Uploading ${formatBytes(loaded)} of ${formatBytes(totalBytes)}...`);
                 };
                 xhr.onload = () => {
                     try {
@@ -271,6 +375,7 @@
                         if (xhr.status >= 400 || !response.ok) {
                             reject(new Error(response.error || 'Upload failed.'));
                         } else {
+                            progressMap.set(batchIndex, batchBytes);
                             resolve(response);
                         }
                     } catch (error) {
@@ -280,6 +385,39 @@
                 xhr.onerror = () => reject(new Error('Upload failed.'));
                 xhr.send(formData);
             });
+        }
+
+        async function uploadFiles(uploadUrl, totalBytes) {
+            const batches = createUploadBatches();
+            const progressMap = new Map();
+            const totalFiles = pendingFiles.length;
+            let completedBatches = 0;
+            const concurrency = Math.min(4, batches.length);
+
+            const tasks = batches.map((batch, index) => async () => {
+                const batchBytes = batch.reduce((acc, entry) => acc + entry.file.size, 0);
+                progressMap.set(index, 0);
+                await uploadBatch(uploadUrl, batch, index, batchBytes, totalBytes, progressMap);
+                completedBatches += 1;
+                const loaded = Array.from(progressMap.values()).reduce((acc, value) => acc + value, 0);
+                const percent = totalBytes
+                    ? Math.min(100, Math.round((loaded / totalBytes) * 100))
+                    : 0;
+                updateProgress(
+                    percent,
+                    `Uploaded batch ${completedBatches}/${batches.length} (${totalFiles} files total).`
+                );
+            });
+
+            let taskIndex = 0;
+            const workers = new Array(concurrency).fill(null).map(async () => {
+                while (taskIndex < tasks.length) {
+                    const currentIndex = taskIndex;
+                    taskIndex += 1;
+                    await tasks[currentIndex]();
+                }
+            });
+            await Promise.all(workers);
         }
 
         async function runImportStep(importUrl) {
