@@ -20,47 +20,37 @@ from ..strings import errors, messages
 
 logger = logging.getLogger(__name__)
 
-_GROQ_MODEL_PREFERENCES = (
-    "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile",
-    "llama3-8b-8192",
-    "llama3-70b-8192",
-)
+_MODEL_PREFERENCES = {
+    "groq": (
+        "llama-3.1-8b-instant",
+        "llama-3.1-70b-versatile",
+        "llama3-8b-8192",
+        "llama3-70b-8192",
+    ),
+    "gemini": (
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    ),
+    "claude": (
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-haiku-20241022",
+    ),
+    "perplexity": (
+        "sonar",
+        "sonar-pro",
+    ),
+    "xai": (
+        "grok-2-latest",
+    ),
+    "cohere": (
+        "command-r",
+        "command-r-plus",
+    ),
+}
 
-_PROVIDER_TESTS = {
-    "openai": {
-        "url": "https://api.openai.com/v1/models",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
-    },
-    "anthropic": {
-        "url": "https://api.anthropic.com/v1/models",
-        "headers": lambda key: {"x-api-key": key, "anthropic-version": "2023-06-01"},
-    },
-    "google": {
-        "url": lambda key: f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
-        "headers": lambda key: {},
-    },
-    "cohere": {
-        "url": "https://api.cohere.ai/v1/models",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
-    },
-    "mistral": {
-        "url": "https://api.mistral.ai/v1/models",
-        "headers": lambda key: {"Authorization": f"Bearer {key}"},
-    },
-    "perplexity": {
-        "url": "https://api.perplexity.ai/chat/completions",
-        "method": "POST",
-        "payload": {
-            "model": "sonar",
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
-        },
-        "headers": lambda key: {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-    },
+_OPENAI_STYLE_PROVIDERS = {"groq", "xai", "perplexity"}
+
+_MODEL_ENDPOINTS = {
     "groq": {
         "url": "https://api.groq.com/openai/v1/models",
         "headers": lambda key: {
@@ -72,12 +62,26 @@ _PROVIDER_TESTS = {
         "url": "https://api.x.ai/v1/models",
         "headers": lambda key: {"Authorization": f"Bearer {key}"},
     },
+    "perplexity": {
+        "url": "https://api.perplexity.ai/models",
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+    },
+    "claude": {
+        "url": "https://api.anthropic.com/v1/models",
+        "headers": lambda key: {"x-api-key": key, "anthropic-version": "2023-06-01"},
+    },
+    "gemini": {
+        "url": lambda key: f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
+        "headers": lambda key: {},
+    },
+    "cohere": {
+        "url": "https://api.cohere.ai/v1/models",
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+    },
 }
 
-_UNSUPPORTED_TEST_MESSAGE = {
-    "aws": errors.bedrock_test_not_available(),
-    "azure": errors.azure_test_not_available(),
-}
+
+_PROVIDER_TESTS = _MODEL_ENDPOINTS
 
 
 def _perform_connection_test(provider, api_key):
@@ -85,9 +89,6 @@ def _perform_connection_test(provider, api_key):
     api_key = (api_key or "").strip()
     if not provider or not api_key:
         return False, errors.provider_and_key_required()
-
-    if provider in _UNSUPPORTED_TEST_MESSAGE:
-        return False, _UNSUPPORTED_TEST_MESSAGE[provider]
 
     config = _PROVIDER_TESTS.get(provider)
     if not config:
@@ -122,11 +123,71 @@ def _perform_connection_test(provider, api_key):
         return False, errors.connection_test_failed()
 
 
-def _select_groq_default(model_ids):
-    for preferred in _GROQ_MODEL_PREFERENCES:
+def _select_default_model(provider, model_ids):
+    preferences = _MODEL_PREFERENCES.get(provider, ())
+    for preferred in preferences:
         if preferred in model_ids:
             return preferred
     return model_ids[0] if model_ids else None
+
+
+def _parse_openai_style_models(payload):
+    models = []
+    for item in payload.get("data", []) or []:
+        model_id = item.get("id")
+        if not model_id:
+            continue
+        models.append(
+            {
+                "id": model_id,
+                "context_length": item.get("context_length"),
+            }
+        )
+    return models
+
+
+def _parse_anthropic_models(payload):
+    models = []
+    for item in payload.get("data", []) or []:
+        model_id = item.get("id")
+        if not model_id:
+            continue
+        models.append({"id": model_id})
+    return models
+
+
+def _parse_gemini_models(payload):
+    models = []
+    for item in payload.get("models", []) or []:
+        name = item.get("name")
+        if not name:
+            continue
+        model_id = name.split("/", 1)[-1]
+        models.append(
+            {
+                "id": model_id,
+                "display_name": item.get("displayName"),
+                "input_token_limit": item.get("inputTokenLimit"),
+                "output_token_limit": item.get("outputTokenLimit"),
+            }
+        )
+    return models
+
+
+def _parse_cohere_models(payload):
+    models = []
+    for item in payload.get("models", []) or []:
+        model_id = item.get("name") or item.get("id")
+        if not model_id:
+            continue
+        models.append({"id": model_id})
+    if not models:
+        for item in payload.get("data", []) or []:
+            model_id = item.get("id")
+            if not model_id:
+                continue
+            models.append({"id": model_id})
+    return models
 
 
 @csrf_exempt
@@ -208,30 +269,33 @@ def save_credentials(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
-def list_groq_models(request, conn=None, url=None, **kwargs):
+def list_models(request, conn=None, url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
+
+    provider = (request.GET.get("provider") or "").strip().lower()
+    if not provider:
+        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
 
     username = current_username(request, conn)
     if not username:
         return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
 
     try:
-        api_key = (get_ai_credential(username, "groq") or "").strip()
+        api_key = (get_ai_credential(username, provider) or "").strip()
     except AiCredentialStoreError as e:
         return JsonResponse({"error": str(e)}, status=500)
 
     if not api_key:
         return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
-    request_obj = urllib.request.Request(
-        "https://api.groq.com/openai/v1/models",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "User-Agent": "omero-omp-plugin",
-        },
-        method="GET",
-    )
+    config = _MODEL_ENDPOINTS.get(provider)
+    if not config:
+        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+
+    url = config["url"](api_key) if callable(config["url"]) else config["url"]
+    headers = config["headers"](api_key)
+    request_obj = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(request_obj, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -242,22 +306,26 @@ def list_groq_models(request, conn=None, url=None, **kwargs):
             message = errors.provider_http_status_with_detail(e.code, detail)
         return JsonResponse({"error": message}, status=400)
     except Exception as e:
-        logger.exception("Unexpected error fetching Groq models: %s", e)
+        logger.exception("Unexpected error fetching models for %s: %s", provider, e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
-    models = []
-    for item in payload.get("data", []) or []:
-        model_id = item.get("id")
-        if not model_id:
-            continue
-        models.append(
-            {
-                "id": model_id,
-                "context_length": item.get("context_length"),
-            }
-        )
+    if provider in _OPENAI_STYLE_PROVIDERS:
+        models = _parse_openai_style_models(payload)
+    elif provider == "claude":
+        models = _parse_anthropic_models(payload)
+    elif provider == "gemini":
+        models = _parse_gemini_models(payload)
+    elif provider == "cohere":
+        models = _parse_cohere_models(payload)
+    else:
+        models = []
 
     model_ids = [model["id"] for model in models]
-    default_model = _select_groq_default(model_ids)
+    default_model = _select_default_model(provider, model_ids)
 
-    return JsonResponse({"models": models, "default_model": default_model})
+    if not models:
+        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+
+    return JsonResponse(
+        {"models": models, "default_model": default_model, "supports_models": True}
+    )

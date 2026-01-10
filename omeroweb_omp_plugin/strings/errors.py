@@ -124,17 +124,6 @@ def connection_test_failed():
 def connection_test_not_supported(provider):
     return f"Connection testing is not supported for provider '{provider}'."
 
-def bedrock_test_not_available():
-    return (
-        "AWS Bedrock requires additional server-side configuration. "
-        "Connection test is not available."
-    )
-
-def azure_test_not_available():
-    return (
-        "Azure OpenAI requires an endpoint and deployment configuration. "
-        "Connection test is not available."
-    )
 
 def provider_http_status(code):
     return f"Provider returned status {code}."
@@ -160,8 +149,6 @@ def provider_response_no_regex():
 def provider_required():
     return "Provider is required."
 
-def provider_requires_configuration():
-    return "Provider requires additional configuration."
 
 def psycopg2_missing():
     return "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."

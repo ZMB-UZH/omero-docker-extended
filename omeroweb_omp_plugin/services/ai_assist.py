@@ -23,10 +23,6 @@ class AiAssistError(Exception):
 
 
 _OPENAI_COMPATIBLE = {
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-4o-mini",
-    },
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "model": "llama-3.1-8b-instant",
@@ -39,11 +35,11 @@ _OPENAI_COMPATIBLE = {
         "base_url": "https://api.perplexity.ai",
         "model": "sonar",
     },
-    "mistral": {
-        "base_url": "https://api.mistral.ai/v1",
-        "model": "mistral-small-latest",
-    },
 }
+
+_CLAUDE_DEFAULT_MODEL = "claude-3-5-sonnet-20240620"
+_GEMINI_DEFAULT_MODEL = "gemini-1.5-flash"
+_COHERE_DEFAULT_MODEL = "command-r"
 
 
 def _suggest_separator_regex(filenames):
@@ -196,9 +192,9 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         except (KeyError, IndexError, TypeError):
             raise AiAssistError(errors.provider_response_empty())
 
-    if provider == "anthropic":
+    if provider == "claude":
         payload = {
-            "model": "claude-3-5-sonnet-20240620",
+            "model": model or _CLAUDE_DEFAULT_MODEL,
             "max_tokens": max_tokens,
             "temperature": 0.0,
             "messages": [{"role": "user", "content": prompt}],
@@ -214,14 +210,20 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
         except (KeyError, IndexError, TypeError):
             raise AiAssistError(errors.provider_response_empty())
 
-    if provider == "google":
+    if provider == "gemini":
+        selected_model = model or _GEMINI_DEFAULT_MODEL
+        model_path = (
+            selected_model
+            if selected_model.startswith("models/")
+            else f"models/{selected_model}"
+        )
         payload = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": max_tokens},
         }
         url = (
             "https://generativelanguage.googleapis.com/v1beta/"
-            f"models/gemini-1.5-flash:generateContent?key={api_key}"
+            f"{model_path}:generateContent?key={api_key}"
         )
         response = _post_json(url, {"Content-Type": "application/json"}, payload)
         try:
@@ -231,7 +233,7 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
 
     if provider == "cohere":
         payload = {
-            "model": "command-r",
+            "model": model or _COHERE_DEFAULT_MODEL,
             "message": prompt,
             "temperature": 0.0,
             "max_tokens": max_tokens,
@@ -253,8 +255,6 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
     provider = (provider or "").strip().lower()
     if not provider:
         raise AiAssistError(errors.provider_required())
-    if provider in {"aws", "azure"}:
-        raise AiAssistError(errors.provider_requires_configuration())
     prompt = _build_prompt(filenames)
 
     content = _call_ai_provider_raw(provider, api_key, prompt, 120, model=model)
@@ -360,9 +360,6 @@ def generate_ai_parsed_values(provider, api_key, filenames, model=None):
 
     if not provider:
         raise AiAssistError(errors.provider_required())
-
-    if provider in {"aws", "azure"}:
-        raise AiAssistError(errors.provider_requires_configuration())
 
     if not filenames:
         raise AiAssistError(errors.no_filenames_provided())
