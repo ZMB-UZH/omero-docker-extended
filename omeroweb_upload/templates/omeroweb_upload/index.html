@@ -22,15 +22,21 @@
             box-sizing: border-box;
         }
         .upload-card p {
-            margin: 0 0 6px;
+            margin: 0;
             line-height: 1.25;
+        }
+        .upload-intro {
+            margin: 4px 0;
+            line-height: 1.3;
+        }
+        .upload-intro + .upload-intro {
+            margin-top: 2px;
         }
         .upload-card.dragover {
             border-color: #2563eb;
             background: #eff6ff;
         }
         .upload-actions {
-            margin-top: 5px;
             display: flex;
             gap: 5px;
             align-items: center;
@@ -93,7 +99,7 @@
         .tree-header,
         .tree-row {
             display: grid;
-            grid-template-columns: minmax(240px, 1fr) 120px 170px;
+            grid-template-columns: minmax(240px, 1fr) 120px 170px 32px;
             column-gap: 16px;
             align-items: center;
         }
@@ -179,10 +185,38 @@
             font-variant-numeric: tabular-nums;
             font-size: 0.85rem;
         }
+        .tree-delete-cell {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
         .tree-icon {
             width: 16px;
             height: 16px;
             flex-shrink: 0;
+        }
+        .var-row-btn {
+            width: 16px;
+            height: 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            line-height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .var-row-remove {
+            background: #dc3545;
+        }
+        .var-row-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+            pointer-events: none;
         }
         .file-list li {
             margin: 4px 0;
@@ -239,8 +273,8 @@
 </head>
 <body>
     <h1 style="color:#007bff; margin:0;">Upload</h1>
-    <p>Drag & drop files or folders to import them into your user space in Omero.</p>
-    <p>Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
+    <p class="upload-intro">Drag & drop files or folders to import them into your user space in Omero.</p>
+    <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
     <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
         <p><strong>Drag & drop</strong> files here or <strong>select from storage</strong>.</p>
         <div class="upload-actions">
@@ -396,7 +430,27 @@
             return icon;
         }
 
-        function renderTree(node, depth = 0) {
+        function removeByPredicate(predicate) {
+            pendingFiles = pendingFiles.filter((entry) => !predicate(entry));
+            if (!pendingFiles.length) {
+                fileInput.value = '';
+            }
+            refreshFileList();
+        }
+
+        function removeFileEntry(rawPath) {
+            removeByPredicate((entry) => (entry.relativePath || entry.file.name) === rawPath);
+        }
+
+        function removeFolderEntries(folderPath, isRootGroup) {
+            if (isRootGroup) {
+                removeByPredicate((entry) => !(entry.relativePath || entry.file.name).includes('/'));
+                return;
+            }
+            removeByPredicate((entry) => (entry.relativePath || entry.file.name).startsWith(folderPath));
+        }
+
+        function renderTree(node, depth = 0, pathPrefix = '') {
             const list = document.createElement('ul');
             node.children.forEach((child) => {
                 const item = document.createElement('li');
@@ -442,8 +496,21 @@
                 row.appendChild(nameCell);
                 row.appendChild(size);
                 row.appendChild(date);
+                const deleteCell = document.createElement('div');
+                deleteCell.classList.add('tree-delete-cell');
+                const deleteButton = document.createElement('button');
+                deleteButton.type = 'button';
+                deleteButton.classList.add('var-row-btn', 'var-row-remove');
+                deleteButton.setAttribute('aria-label', `Remove ${child.name}`);
+                deleteButton.textContent = '−';
+                const folderPath = child.isRootGroup ? '' : `${pathPrefix}${child.name}/`;
+                deleteButton.addEventListener('click', () => {
+                    removeFolderEntries(folderPath, Boolean(child.isRootGroup));
+                });
+                deleteCell.appendChild(deleteButton);
+                row.appendChild(deleteCell);
 
-                const childrenList = renderTree(child, depth + 1);
+                const childrenList = renderTree(child, depth + 1, folderPath);
                 childrenList.classList.add('tree-children');
                 childrenList.hidden = true;
 
@@ -485,6 +552,17 @@
                     const date = document.createElement('span');
                     date.classList.add('tree-date');
                     date.textContent = formatDateTime(file.lastModified);
+                    const deleteCell = document.createElement('div');
+                    deleteCell.classList.add('tree-delete-cell');
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.classList.add('var-row-btn', 'var-row-remove');
+                    deleteButton.setAttribute('aria-label', `Remove ${file.name}`);
+                    deleteButton.textContent = '−';
+                    deleteButton.addEventListener('click', () => {
+                        removeFileEntry(file.rawPath);
+                    });
+                    deleteCell.appendChild(deleteButton);
 
                     nameCell.appendChild(spacer);
                     nameCell.appendChild(icon);
@@ -492,6 +570,7 @@
                     row.appendChild(nameCell);
                     row.appendChild(size);
                     row.appendChild(date);
+                    row.appendChild(deleteCell);
                     item.appendChild(row);
                     list.appendChild(item);
                 });
@@ -510,6 +589,7 @@
                 <span>Name</span>
                 <span style="text-align: right;">Size</span>
                 <span>Last modified</span>
+                <span></span>
             `;
             fileTree.appendChild(header);
             const tree = buildTree(pendingFiles);
@@ -525,6 +605,7 @@
                     files: tree.files,
                     totalSize: rootFilesTotal,
                     lastModified: rootFilesLastModified,
+                    isRootGroup: true,
                 });
                 tree.files = [];
             }
