@@ -285,17 +285,15 @@
         }
         .duplicate-popup {
             position: fixed;
-            color: #b91c1c;
-            font-size: 18px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: #991b1b;
+            font-size: 16px;
+            font-weight: 600;
             text-align: center;
             padding: 20px 28px;
-            background: rgba(254, 226, 226, 0.96);
-            border: 2px solid #b91c1c;
+            background: #fff;
+            border: 1px solid #fecaca;
             border-radius: 12px;
-            box-shadow: 0 14px 30px rgba(185, 28, 28, 0.35);
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
             max-width: 520px;
             margin: auto;
             left: 50%;
@@ -303,6 +301,22 @@
             transform: translate(-50%, -50%);
             z-index: 20001;
             display: none;
+        }
+        .duplicate-popup__message {
+            margin: 0 0 12px;
+        }
+        .duplicate-popup__btn {
+            background: #2563eb;
+            border: none;
+            color: #fff;
+            padding: 8px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .duplicate-popup__btn:focus {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
         }
     </style>
 </head>
@@ -330,7 +344,10 @@
         <pre id="progress-log"></pre>
     </div>
     <div id="duplicate-overlay" class="duplicate-overlay" aria-hidden="true"></div>
-    <div id="duplicate-popup" class="duplicate-popup" role="alert" aria-live="assertive"></div>
+    <div id="duplicate-popup" class="duplicate-popup" role="alertdialog" aria-modal="true" aria-hidden="true">
+        <p id="duplicate-message" class="duplicate-popup__message"></p>
+        <button type="button" id="duplicate-ok-btn" class="duplicate-popup__btn">Ok</button>
+    </div>
 
     <script>
         const uploadCard = document.getElementById('upload-card');
@@ -348,10 +365,12 @@
         const progressLog = document.getElementById('progress-log');
         const duplicateOverlay = document.getElementById('duplicate-overlay');
         const duplicatePopup = document.getElementById('duplicate-popup');
+        const duplicateMessage = document.getElementById('duplicate-message');
+        const duplicateOkBtn = document.getElementById('duplicate-ok-btn');
 
         let pendingFiles = [];
         let uploadCycleComplete = false;
-        let duplicateTimer = null;
+        const expandedNodes = new Set();
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -485,6 +504,7 @@
             pendingFiles = pendingFiles.filter((entry) => !predicate(entry));
             if (!pendingFiles.length) {
                 fileInput.value = '';
+                expandedNodes.clear();
             }
             refreshFileList();
         }
@@ -496,8 +516,14 @@
         function removeFolderEntries(folderPath, isRootGroup) {
             if (isRootGroup) {
                 removeByPredicate((entry) => !(entry.relativePath || entry.file.name).includes('/'));
+                expandedNodes.clear();
                 return;
             }
+            expandedNodes.forEach((path) => {
+                if (path.startsWith(folderPath)) {
+                    expandedNodes.delete(path);
+                }
+            });
             removeByPredicate((entry) => (entry.relativePath || entry.file.name).startsWith(folderPath));
         }
 
@@ -555,6 +581,7 @@
                 deleteButton.setAttribute('aria-label', `Remove ${child.name}`);
                 deleteButton.textContent = '−';
                 const folderPath = child.isRootGroup ? '' : `${pathPrefix}${child.name}/`;
+                const isExpanded = expandedNodes.has(folderPath);
                 deleteButton.addEventListener('click', () => {
                     removeFolderEntries(folderPath, Boolean(child.isRootGroup));
                 });
@@ -563,7 +590,9 @@
 
                 const childrenList = renderTree(child, depth + 1, folderPath);
                 childrenList.classList.add('tree-children');
-                childrenList.hidden = true;
+                childrenList.hidden = !isExpanded;
+                toggle.setAttribute('aria-expanded', String(isExpanded));
+                toggle.textContent = isExpanded ? '−' : '+';
 
                 toggle.addEventListener('click', () => {
                     const expanded = toggle.getAttribute('aria-expanded') === 'true';
@@ -571,6 +600,11 @@
                     toggle.textContent = expanded ? '+' : '−';
                     toggle.setAttribute('aria-label', `${expanded ? 'Expand' : 'Collapse'} ${child.name}`);
                     childrenList.hidden = expanded;
+                    if (expanded) {
+                        expandedNodes.delete(folderPath);
+                    } else {
+                        expandedNodes.add(folderPath);
+                    }
                 });
 
                 item.appendChild(row);
@@ -648,25 +682,17 @@
         }
 
         function showDuplicatePopup(message) {
-            duplicatePopup.textContent = message;
+            duplicateMessage.textContent = message;
             duplicateOverlay.style.display = 'block';
             duplicatePopup.style.display = 'block';
-            if (duplicateTimer) {
-                clearTimeout(duplicateTimer);
-            }
-            duplicateTimer = setTimeout(() => {
-                duplicateOverlay.style.display = 'none';
-                duplicatePopup.style.display = 'none';
-            }, 3000);
+            duplicatePopup.setAttribute('aria-hidden', 'false');
+            duplicateOkBtn.focus();
         }
 
         function hideDuplicatePopup() {
             duplicateOverlay.style.display = 'none';
             duplicatePopup.style.display = 'none';
-            if (duplicateTimer) {
-                clearTimeout(duplicateTimer);
-                duplicateTimer = null;
-            }
+            duplicatePopup.setAttribute('aria-hidden', 'true');
         }
 
         function getRootInfo(entry) {
@@ -702,7 +728,7 @@
                     }
                     incomingRootFiles.add(info.rootName);
                 } else {
-                    if (existingRootFolders.has(info.rootName) || incomingRootFolders.has(info.rootName)) {
+                    if (existingRootFolders.has(info.rootName)) {
                         hasFolderDuplicate = true;
                     }
                     incomingRootFolders.add(info.rootName);
@@ -736,10 +762,10 @@
             if (duplicates.hasFileDuplicate || duplicates.hasFolderDuplicate) {
                 const messages = [];
                 if (duplicates.hasFolderDuplicate) {
-                    messages.push('No duplicate folder(s) allowed. Please try again.');
+                    messages.push('No duplicate folder(s) allowed in the upload list. Please try again.');
                 }
                 if (duplicates.hasFileDuplicate) {
-                    messages.push('No duplicate file(s) allowed. Please try again.');
+                    messages.push('No duplicate file(s) allowed in the upload list. Please try again.');
                 }
                 showDuplicatePopup(messages.join(' '));
                 return;
@@ -849,7 +875,7 @@
         });
 
         duplicateOverlay.addEventListener('click', hideDuplicatePopup);
-        duplicatePopup.addEventListener('click', hideDuplicatePopup);
+        duplicateOkBtn.addEventListener('click', hideDuplicatePopup);
 
         async function parseJsonResponse(response) {
             const text = await response.text();
