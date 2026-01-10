@@ -12,9 +12,14 @@
         .upload-card {
             border: 2px solid #007bff;
             border-radius: 12px;
-            padding: 32px;
+            padding: 24px 32px;
             text-align: center;
             background: #f8fafc;
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-sizing: border-box;
         }
         .upload-card p {
             margin: 0 0 6px;
@@ -67,12 +72,13 @@
             background: #ffffff;
             border: 1px solid #e5e7eb;
             border-radius: 10px;
-            max-height: 320px;
             overflow-y: auto;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
             display: flex;
             flex-direction: column;
             gap: 4px;
+            flex: 1;
+            min-height: 0;
         }
         .file-tree ul {
             list-style: none;
@@ -235,6 +241,8 @@
             <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
             <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
         </div>
+        <div id="file-tree" class="file-tree" aria-live="polite"></div>
+        <div id="status" class="status"></div>
     </div>
 
     <div class="note">
@@ -248,9 +256,6 @@
         </p>
         <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
     </div>
-    <div id="file-tree" class="file-tree" aria-live="polite"></div>
-    <div id="status" class="status"></div>
-
     <div id="progress-section">
         <h3>Progress</h3>
         <p id="progress-stage">Stage: Waiting to start…</p>
@@ -654,6 +659,20 @@
             }
         });
 
+        async function parseJsonResponse(response) {
+            const text = await response.text();
+            if (!text) {
+                return {};
+            }
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                const snippet = text.trim().slice(0, 160);
+                const details = snippet ? ` Response: ${snippet}` : '';
+                throw new Error(`Server returned invalid JSON.${details}`);
+            }
+        }
+
         async function startUploadJob() {
             const totalBytes = pendingFiles.reduce((acc, entry) => acc + entry.file.size, 0);
             const metadata = pendingFiles.map((entry) => ({
@@ -669,7 +688,7 @@
                 credentials: 'same-origin',
             });
 
-            const data = await response.json();
+            const data = await parseJsonResponse(response);
             if (!response.ok || !data.ok) {
                 throw new Error(data.error || `Upload start failed with status ${response.status}.`);
             }
@@ -725,17 +744,24 @@
                     updateProgress(percent, `Uploading ${formatBytes(loaded)} of ${formatBytes(totalBytes)}...`);
                 };
                 xhr.onload = () => {
-                    try {
-                        const response = JSON.parse(xhr.responseText || '{}');
-                        if (xhr.status >= 400 || !response.ok) {
-                            reject(new Error(response.error || 'Upload failed.'));
-                        } else {
-                            progressMap.set(batchIndex, batchBytes);
-                            resolve(response);
+                    const responseText = xhr.responseText || '';
+                    let responseData = {};
+                    if (responseText) {
+                        try {
+                            responseData = JSON.parse(responseText);
+                        } catch (error) {
+                            const snippet = responseText.trim().slice(0, 160);
+                            const details = snippet ? ` Response: ${snippet}` : '';
+                            reject(new Error(`Server returned invalid JSON.${details}`));
+                            return;
                         }
-                    } catch (error) {
-                        reject(error);
                     }
+                    if (xhr.status >= 400 || !responseData.ok) {
+                        reject(new Error(responseData.error || 'Upload failed.'));
+                        return;
+                    }
+                    progressMap.set(batchIndex, batchBytes);
+                    resolve(responseData);
                 };
                 xhr.onerror = () => reject(new Error('Upload failed.'));
                 xhr.send(formData);
@@ -780,7 +806,7 @@
                 method: 'POST',
                 credentials: 'same-origin',
             });
-            const data = await response.json();
+            const data = await parseJsonResponse(response);
             if (!response.ok || !data.ok) {
                 throw new Error(data.error || `Import failed with status ${response.status}.`);
             }
