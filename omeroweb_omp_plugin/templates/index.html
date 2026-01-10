@@ -1,7 +1,7 @@
 {% if is_root_user %}
     <div class="root-user-overlay" aria-hidden="true"></div>
     <div id="root-user-warning" class="root-user-warning" role="alert">
-        PLEASE LOGIN AS A NORMAL USER TO USE THIS PLUGIN
+        PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
     </div>
 {% endif %}
 
@@ -1418,6 +1418,7 @@
             return;
         }
         if (aiCredentialProviders.has(provider)) {
+            updateAiParseModalStatus(messages.providerKeyReady);
             ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, null, { container: aiParseModelWrapper });
             updateAiModalPlaceholders();
             return;
@@ -1510,7 +1511,16 @@
             select.dataset.provider = provider;
             resetModelSelect(select, placeholderHtml);
         }
+        const supportsModels = providerModelSupport.get(provider);
         const hasSelectableOptions = Array.from(select.options).some((option) => option.value);
+        if (supportsModels === false) {
+            select.dataset.requiresModel = 'false';
+            setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+            if (typeof updateStatus === 'function') {
+                updateStatus(messages.providerKeyReady);
+            }
+            return;
+        }
         if (hasSelectableOptions) {
             if (preferredModel) {
                 const hasPreferred = Array.from(select.options).some((option) => option.value === preferredModel);
@@ -1522,11 +1532,14 @@
                 select.value = select.options[0].value;
             }
             updateSelectPlaceholder(select);
+            select.dataset.requiresModel = 'true';
+            providerModelSupport.set(provider, true);
+            setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
             return;
         }
         select.dataset.requiresModel = 'pending';
-        setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
-        if (typeof updateStatus === 'function') {
+        setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+        if (typeof updateStatus === 'function' && supportsModels === true) {
             updateStatus(formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }));
         }
         fetchAiModels(provider)
@@ -1536,12 +1549,16 @@
                     select.dataset.requiresModel = 'false';
                     providerModelSupport.set(provider, false);
                     setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+                    if (typeof updateStatus === 'function') {
+                        updateStatus(messages.providerKeyReady);
+                    }
                     return;
                 }
                 populateAiModels(select, models, preferredModel || data.default_model);
                 updateSelectPlaceholder(select);
                 select.dataset.requiresModel = 'true';
                 providerModelSupport.set(provider, true);
+                setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
                 if (typeof updateStatus === 'function') {
                     updateStatus(messages.providerKeyReady);
                 }
