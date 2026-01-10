@@ -1,3 +1,10 @@
+{% if is_root_user %}
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS A NORMAL USER TO USE THIS PLUGIN
+    </div>
+{% endif %}
+
 <div class="omeroweb-omp-plugin"
      id="filename_metadata_container"
      style='padding:15px 15px 15px 15px; width:630px; min-width:630px; max-width:630px; margin:0 auto; --base-font-size:13px; font-size:var(--base-font-size);'>
@@ -493,6 +500,46 @@
 
 <style>
     html, body {min-width: 632px;}
+    .root-user-blocked .omeroweb-omp-plugin,
+    .root-user-blocked .dataset-table-wrapper,
+    .root-user-blocked #project_dropdown_backdrop,
+    .root-user-blocked #nb-modal-overlay,
+    .root-user-blocked #ai-modal-overlay,
+    .root-user-blocked #ai-parse-modal-overlay,
+    .root-user-blocked #user-settings-overlay,
+    .root-user-blocked #ai-credentials-overlay {
+        filter: blur(5px);
+        pointer-events: none;
+        user-select: none;
+    }
+    .root-user-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.65);
+        z-index: 20000;
+        pointer-events: none;
+    }
+    .root-user-warning {
+        position: fixed;
+        color: #b91c1c;
+        font-size: 20px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        text-align: center;
+        padding: 24px 32px;
+        background: rgba(254, 226, 226, 0.96);
+        border: 2px solid #b91c1c;
+        border-radius: 12px;
+        box-shadow: 0 14px 30px rgba(185, 28, 28, 0.35);
+        max-width: 520px;
+        margin: auto;
+        pointer-events: auto;
+        left: 50%;
+        top: 35%;
+        transform: translate(-50%, -50%);
+        z-index: 20001;
+    }
     .omeroweb-omp-plugin,
     .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .omeroweb-omp-plugin button,
@@ -732,12 +779,15 @@
         margin-bottom: 0px;
     }
     .user-setting-input select.ai-provider-option-select {
-        color: #6b7280;
+        color: #000000;
     }
     .user-setting-input select.ai-provider-option-select.placeholder {
         color: #6b7280;
     }
     .user-setting-input select.ai-provider-option-select option {
+        color: #000000;
+    }
+    .ai-modal-select {
         color: #000000;
     }
     .ai-modal-select.placeholder {
@@ -842,6 +892,13 @@
 
 <script>
     const previewForm = document.getElementById('preview_form');
+    const isRootUser = {{ is_root_user|yesno:"true,false" }};
+    if (isRootUser) {
+        document.documentElement.classList.add('root-user-blocked');
+        if (document.body) {
+            document.body.classList.add('root-user-blocked');
+        }
+    }
     const messages = {{ messages_json|safe }};
     const formatMessage = (template, values = {}) => {
         const source = String(template || '');
@@ -1453,7 +1510,8 @@
             select.dataset.provider = provider;
             resetModelSelect(select, placeholderHtml);
         }
-        if (select.options.length > 0) {
+        const hasSelectableOptions = Array.from(select.options).some((option) => option.value);
+        if (hasSelectableOptions) {
             if (preferredModel) {
                 const hasPreferred = Array.from(select.options).some((option) => option.value === preferredModel);
                 if (hasPreferred) {

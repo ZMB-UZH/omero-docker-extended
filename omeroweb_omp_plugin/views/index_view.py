@@ -42,6 +42,23 @@ def index(request, conn=None, url=None, **kwargs):
     """
 
     try:
+        username = current_username(request, conn)
+        is_root_user = username == "root"
+
+        def build_index_context(extra=None):
+            context = {
+                "projects": projects,
+                "chunk_size": CHUNK_SIZE,
+                "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
+                "max_parsed_variables": MAX_PARSED_VARIABLES,
+                "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
+                "messages_json": json.dumps(messages.index_messages()),
+                "is_root_user": is_root_user,
+            }
+            if extra:
+                context.update(extra)
+            return context
+
         # ----------------------------------------------------
         # Load projects
         # ----------------------------------------------------
@@ -285,45 +302,33 @@ def index(request, conn=None, url=None, **kwargs):
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": errors.select_project_first(),
-                        "chunk_size": CHUNK_SIZE,
-                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                        "max_parsed_variables": MAX_PARSED_VARIABLES,
-                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
-                        "messages_json": json.dumps(messages.index_messages()),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": errors.select_project_first(),
+                        }
+                    ),
                 )
 
             if separator_mode != "ai_parse" and (not raw_seps or not raw_seps.strip()):
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": errors.filename_input_empty(),
-                        "chunk_size": CHUNK_SIZE,
-                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                        "max_parsed_variables": MAX_PARSED_VARIABLES,
-                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
-                        "messages_json": json.dumps(messages.index_messages()),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": errors.filename_input_empty(),
+                        }
+                    ),
                 )
 
             if not selected_dataset_ids_raw.strip():
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": errors.datasets_required(),
-                        "chunk_size": CHUNK_SIZE,
-                        "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                        "max_parsed_variables": MAX_PARSED_VARIABLES,
-                        "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
-                        "messages_json": json.dumps(messages.index_messages()),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": errors.datasets_required(),
+                        }
+                    ),
                 )
 
             try:
@@ -407,10 +412,11 @@ def index(request, conn=None, url=None, **kwargs):
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": errors.datasets_required(),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": errors.datasets_required(),
+                        }
+                    ),
                 )
 
             # RATE LIMIT - preview is a major action (loads lots of data)
@@ -419,10 +425,11 @@ def index(request, conn=None, url=None, **kwargs):
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": build_rate_limit_message(remaining),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": build_rate_limit_message(remaining),
+                        }
+                    ),
                 )
 
             ds_list = collect_images_by_selected_datasets(
@@ -437,10 +444,11 @@ def index(request, conn=None, url=None, **kwargs):
                 return render(
                     request,
                     "index.html",
-                    {
-                        "projects": projects,
-                        "error_message": errors.no_data_to_process(),
-                    },
+                    build_index_context(
+                        {
+                            "error_message": errors.no_data_to_process(),
+                        }
+                    ),
                 )
 
             preview_rows = []
@@ -528,14 +536,7 @@ def index(request, conn=None, url=None, **kwargs):
         return render(
             request,
             "index.html",
-            {
-                "projects": projects,
-                "chunk_size": CHUNK_SIZE,
-                "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
-                "max_parsed_variables": MAX_PARSED_VARIABLES,
-                "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
-                "messages_json": json.dumps(messages.index_messages()),
-            },
+            build_index_context(),
         )
 
     except Exception as e:

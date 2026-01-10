@@ -289,6 +289,9 @@ def list_models(request, conn=None, url=None, **kwargs):
     if not api_key:
         return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
+    if provider == "perplexity":
+        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+
     config = _MODEL_ENDPOINTS.get(provider)
     if not config:
         return JsonResponse({"models": [], "default_model": None, "supports_models": False})
