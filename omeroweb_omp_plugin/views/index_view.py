@@ -19,6 +19,7 @@ from ..services.ai_assist import AiAssistError, generate_ai_regex, generate_ai_p
 from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..services.filename_utils import suggest_separator_regex
+from ..services.ai_providers import list_ai_provider_options
 from ..views.utils import current_username
 from ..strings import errors, messages
 from ..constants import (
@@ -54,6 +55,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
                 "messages_json": json.dumps(messages.index_messages()),
                 "is_root_user": is_root_user,
+                "ai_provider_options_json": json.dumps(list_ai_provider_options()),
             }
             if extra:
                 context.update(extra)

@@ -1074,15 +1074,7 @@
     const aiParseNoInputMessage = 'No input required. Ready for next step.';
     const aiParseRequiredMessage = 'Run the AI-assisted filename parsing method...';
     const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression method...';
-    const AI_PROVIDER_OPTIONS = [
-        { value: 'local', label: 'Local' },
-        { value: 'groq', label: 'Groq' },
-        { value: 'gemini', label: 'Gemini' },
-        { value: 'claude', label: 'Claude' },
-        { value: 'perplexity', label: 'Perplexity' },
-        { value: 'xai', label: 'xAI' },
-        { value: 'cohere', label: 'Cohere' },
-    ];
+    const AI_PROVIDER_OPTIONS = {{ ai_provider_options_json|safe }};
     function populateProviderSelect(select, { includeLocal = false } = {}) {
         if (!select) return;
         const placeholder = select.querySelector('option[disabled]');
@@ -1106,6 +1098,18 @@
     function getProviderLabel(provider) {
         const match = AI_PROVIDER_OPTIONS.find((option) => option.value === provider);
         return match ? match.label : provider;
+    }
+
+    function resolveProviderValue(select, preferred, { fallbackToFirst = false } = {}) {
+        if (!select) return '';
+        if (preferred && hasSelectOption(select, preferred)) {
+            return preferred;
+        }
+        if (fallbackToFirst) {
+            const firstOption = Array.from(select.options).find((option) => !option.disabled && option.value);
+            return firstOption ? firstOption.value : '';
+        }
+        return '';
     }
 
     populateProviderSelect(aiProviderSelect, { includeLocal: true });
@@ -1684,20 +1688,29 @@
         if (!state) return;
         const regexProvider = state.ai_regex_provider || '';
         const regexModel = state.ai_regex_model || '';
-        if (aiProviderSelect && regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
-            aiProviderSelect.value = regexProvider;
-            updateAiProcessAvailability();
-            ensureAiModels(regexProvider, aiModelSelect, updateAiModalStatus, regexModel, { container: aiModelWrapper });
-            updateAiProviderStatus();
+        if (aiProviderSelect) {
+            if (regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
+                aiProviderSelect.value = regexProvider;
+                updateAiProcessAvailability();
+                ensureAiModels(regexProvider, aiModelSelect, updateAiModalStatus, regexModel, { container: aiModelWrapper });
+                updateAiProviderStatus();
+            } else {
+                aiProviderSelect.value = '';
+            }
         }
 
         const parseProvider = state.ai_parse_provider || '';
         const parseModel = state.ai_parse_model || '';
-        if (aiParseProviderSelect && parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
-            aiParseProviderSelect.value = parseProvider;
-            ensureAiModels(parseProvider, aiParseModelSelect, updateAiParseModalStatus, parseModel, { container: aiParseModelWrapper });
-            updateAiParseProviderStatus();
+        if (aiParseProviderSelect) {
+            if (parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
+                aiParseProviderSelect.value = parseProvider;
+                ensureAiModels(parseProvider, aiParseModelSelect, updateAiParseModalStatus, parseModel, { container: aiParseModelWrapper });
+                updateAiParseProviderStatus();
+            } else {
+                aiParseProviderSelect.value = '';
+            }
         }
+        applyDefaultAiProviderSelections();
         updateAiModalPlaceholders();
     }
 
@@ -1714,14 +1727,14 @@
         }
         const regexDefaults = aiDefaultsState.regex;
         const parseDefaults = aiDefaultsState.parse;
-        const regexProvider = regexDefaults.defaultProvider || '';
-        const parseProvider = parseDefaults.defaultProvider || '';
+        const regexProvider = resolveProviderValue(aiProviderSelect, regexDefaults.defaultProvider);
+        const parseProvider = resolveProviderValue(aiParseProviderSelect, parseDefaults.defaultProvider);
 
-        if (force || !state.ai_regex_provider || state.ai_regex_provider === 'local') {
+        if (force || !state.ai_regex_provider || state.ai_regex_provider === 'local' || !hasSelectOption(aiProviderSelect, state.ai_regex_provider)) {
             state.ai_regex_provider = regexProvider;
             state.ai_regex_model = regexDefaults.modelsByProvider?.[regexProvider] || '';
         }
-        if (force || !state.ai_parse_provider) {
+        if (force || !state.ai_parse_provider || !hasSelectOption(aiParseProviderSelect, state.ai_parse_provider)) {
             state.ai_parse_provider = parseProvider;
             state.ai_parse_model = parseDefaults.modelsByProvider?.[parseProvider] || '';
         }
@@ -1735,14 +1748,14 @@
     function applyDefaultAiProviderSelections({ force = false } = {}) {
         const regexDefaults = aiDefaultsState.regex;
         const parseDefaults = aiDefaultsState.parse;
-        const regexProvider = regexDefaults.defaultProvider || '';
-        const parseProvider = parseDefaults.defaultProvider || '';
+        const regexProvider = resolveProviderValue(aiProviderSelect, regexDefaults.defaultProvider);
+        const parseProvider = resolveProviderValue(aiParseProviderSelect, parseDefaults.defaultProvider);
 
         if (
             aiProviderSelect
             && regexProvider
             && hasSelectOption(aiProviderSelect, regexProvider)
-            && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value)
+            && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value || !hasSelectOption(aiProviderSelect, aiProviderSelect.value))
         ) {
             aiProviderSelect.value = regexProvider;
             ensureAiModels(
@@ -1759,7 +1772,7 @@
             aiParseProviderSelect
             && parseProvider
             && hasSelectOption(aiParseProviderSelect, parseProvider)
-            && (force || !aiParseProviderSelect.value)
+            && (force || !aiParseProviderSelect.value || !hasSelectOption(aiParseProviderSelect, aiParseProviderSelect.value))
         ) {
             aiParseProviderSelect.value = parseProvider;
             ensureAiModels(
