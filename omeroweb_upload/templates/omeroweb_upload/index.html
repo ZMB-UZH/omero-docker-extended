@@ -65,24 +65,46 @@
             max-height: 320px;
             overflow-y: auto;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
         .file-tree ul {
             list-style: none;
             padding-left: 0;
             margin: 0;
         }
+        .tree-header,
+        .tree-row {
+            display: grid;
+            grid-template-columns: minmax(240px, 1fr) 120px 170px;
+            column-gap: 16px;
+            align-items: center;
+        }
+        .tree-header {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+        }
         .tree-node {
             margin: 4px 0;
         }
-        .tree-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .tree-row {
             padding: 4px 6px;
             border-radius: 6px;
         }
-        .tree-item:hover {
+        .tree-row:hover {
             background: #f8fafc;
+        }
+        .tree-name-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-left: calc(var(--depth, 0) * 18px);
+            position: relative;
         }
         .tree-toggle {
             width: 22px;
@@ -102,8 +124,16 @@
             outline: 2px solid #2563eb;
             outline-offset: 1px;
         }
+        .tree-toggle[aria-expanded="true"] {
+            background: #dbeafe;
+        }
+        .tree-spacer {
+            width: 22px;
+            height: 22px;
+            display: inline-block;
+        }
         .tree-children {
-            margin-left: 18px;
+            margin-left: 16px;
             padding-left: 12px;
             border-left: 1px solid #e2e8f0;
         }
@@ -119,12 +149,18 @@
             color: #111827;
         }
         .tree-meta {
-            margin-left: auto;
             font-size: 0.85rem;
             color: #64748b;
         }
         .tree-size {
-            color: #6b7280;
+            color: #334155;
+            font-variant-numeric: tabular-nums;
+            font-size: 0.85rem;
+            text-align: right;
+        }
+        .tree-date {
+            color: #475569;
+            font-variant-numeric: tabular-nums;
             font-size: 0.85rem;
         }
         .tree-icon {
@@ -255,6 +291,20 @@
             return `${value.toFixed(1)} ${units[unitIndex]}`;
         }
 
+        function formatDateTime(timestamp) {
+            if (!timestamp) {
+                return '—';
+            }
+            const date = new Date(timestamp);
+            return date.toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        }
+
         const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
         const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
 
@@ -271,7 +321,7 @@
         }
 
         function buildTree(entries) {
-            const root = { name: '', children: new Map(), files: [] };
+            const root = { name: '', children: new Map(), files: [], totalSize: 0, lastModified: 0 };
             entries.forEach((entry) => {
                 const rawPath = entry.relativePath || entry.file.name;
                 const parts = rawPath.split('/').filter(Boolean);
@@ -279,16 +329,44 @@
                 parts.forEach((part, index) => {
                     const isFile = index === parts.length - 1;
                     if (isFile) {
-                        node.files.push({ name: part, size: entry.file.size, rawPath });
+                        node.files.push({
+                            name: part,
+                            size: entry.file.size,
+                            rawPath,
+                            lastModified: entry.file.lastModified,
+                        });
                         return;
                     }
                     if (!node.children.has(part)) {
-                        node.children.set(part, { name: part, children: new Map(), files: [] });
+                        node.children.set(part, {
+                            name: part,
+                            children: new Map(),
+                            files: [],
+                            totalSize: 0,
+                            lastModified: 0,
+                        });
                     }
                     node = node.children.get(part);
                 });
             });
-            return root;
+            return computeNodeStats(root);
+        }
+
+        function computeNodeStats(node) {
+            let totalSize = 0;
+            let latest = 0;
+            node.files.forEach((file) => {
+                totalSize += file.size;
+                latest = Math.max(latest, file.lastModified || 0);
+            });
+            node.children.forEach((child) => {
+                computeNodeStats(child);
+                totalSize += child.totalSize;
+                latest = Math.max(latest, child.lastModified || 0);
+            });
+            node.totalSize = totalSize;
+            node.lastModified = latest;
+            return node;
         }
 
         function createIcon(kind) {
@@ -310,14 +388,18 @@
             return icon;
         }
 
-        function renderTree(node) {
+        function renderTree(node, depth = 0) {
             const list = document.createElement('ul');
             node.children.forEach((child) => {
                 const item = document.createElement('li');
                 item.classList.add('tree-node');
 
                 const row = document.createElement('div');
-                row.classList.add('tree-item');
+                row.classList.add('tree-row');
+                row.style.setProperty('--depth', depth);
+
+                const nameCell = document.createElement('div');
+                nameCell.classList.add('tree-name-cell');
 
                 const toggle = document.createElement('button');
                 toggle.type = 'button';
@@ -331,17 +413,29 @@
                 label.classList.add('tree-name');
                 label.textContent = child.name;
 
+                const itemCount = child.files.length + child.children.size;
                 const meta = document.createElement('span');
                 meta.classList.add('tree-meta');
-                const itemCount = child.files.length + child.children.size;
                 meta.textContent = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
 
-                row.appendChild(toggle);
-                row.appendChild(icon);
-                row.appendChild(label);
-                row.appendChild(meta);
+                const size = document.createElement('span');
+                size.classList.add('tree-size');
+                size.textContent = formatBytes(child.totalSize);
 
-                const childrenList = renderTree(child);
+                const date = document.createElement('span');
+                date.classList.add('tree-date');
+                date.textContent = formatDateTime(child.lastModified);
+
+                nameCell.appendChild(toggle);
+                nameCell.appendChild(icon);
+                nameCell.appendChild(label);
+                nameCell.appendChild(meta);
+
+                row.appendChild(nameCell);
+                row.appendChild(size);
+                row.appendChild(date);
+
+                const childrenList = renderTree(child, depth + 1);
                 childrenList.classList.add('tree-children');
                 childrenList.hidden = true;
 
@@ -363,11 +457,14 @@
                     const item = document.createElement('li');
                     item.classList.add('tree-node');
                     const row = document.createElement('div');
-                    row.classList.add('tree-item');
+                    row.classList.add('tree-row');
+                    row.style.setProperty('--depth', depth);
+
+                    const nameCell = document.createElement('div');
+                    nameCell.classList.add('tree-name-cell');
 
                     const spacer = document.createElement('span');
-                    spacer.style.width = '22px';
-                    spacer.style.display = 'inline-block';
+                    spacer.classList.add('tree-spacer');
 
                     const icon = createIcon('file');
                     const label = document.createElement('span');
@@ -377,10 +474,16 @@
                     size.classList.add('tree-size');
                     size.textContent = formatBytes(file.size);
 
-                    row.appendChild(spacer);
-                    row.appendChild(icon);
-                    row.appendChild(label);
+                    const date = document.createElement('span');
+                    date.classList.add('tree-date');
+                    date.textContent = formatDateTime(file.lastModified);
+
+                    nameCell.appendChild(spacer);
+                    nameCell.appendChild(icon);
+                    nameCell.appendChild(label);
+                    row.appendChild(nameCell);
                     row.appendChild(size);
+                    row.appendChild(date);
                     item.appendChild(row);
                     list.appendChild(item);
                 });
@@ -392,12 +495,27 @@
             if (!pendingFiles.length) {
                 return;
             }
+            const header = document.createElement('div');
+            header.classList.add('tree-header');
+            header.innerHTML = `
+                <span>Name</span>
+                <span style="text-align: right;">Size</span>
+                <span>Last modified</span>
+            `;
+            fileTree.appendChild(header);
             const tree = buildTree(pendingFiles);
             if (tree.files.length) {
-                tree.children.set('Files', {
-                    name: 'Files',
+                const rootFilesTotal = tree.files.reduce((acc, file) => acc + file.size, 0);
+                const rootFilesLastModified = tree.files.reduce(
+                    (acc, file) => Math.max(acc, file.lastModified || 0),
+                    0
+                );
+                tree.children.set('Root files', {
+                    name: 'Root files',
                     children: new Map(),
                     files: tree.files,
+                    totalSize: rootFilesTotal,
+                    lastModified: rootFilesLastModified,
                 });
                 tree.files = [];
             }
