@@ -9,17 +9,18 @@ FROM openmicroscopy/omero-web-standalone:5
 # ----------------------------------------------------
 USER root
 
-# Remove old copies of the plugin inside the container (if any)
-# -------------------------------------------------------------
+# Remove old copies of the plugins inside the container (if any)
+# --------------------------------------------------------------
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
-    rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin"
+    rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin" "${SITE_PACKAGES}/omeroweb_upload"
 
-# Copy the whole plugin into the container
-# ----------------------------------------
+# Copy the plugins into the container
+# -----------------------------------
 COPY omeroweb_omp_plugin /tmp/omeroweb_omp_plugin
+COPY omeroweb_upload /tmp/omeroweb_upload
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
@@ -30,12 +31,13 @@ RUN set -eux; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     cp -a /tmp/omeroweb_omp_plugin "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
+    cp -a /tmp/omeroweb_upload "${SITE_PACKAGES}/omeroweb_upload"; \
     "${VENV_DIR}/bin/pip" install --no-cache-dir \
         psycopg2-binary \
         redis>=5.0.0 \
         django-redis>=5.4.0; \
-    chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
-    rm -rf /tmp/omeroweb_omp_plugin
+    chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin" "${SITE_PACKAGES}/omeroweb_upload"; \
+    rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload
 
 # Pre-create ALL Django static directories and own them
 # -----------------------------------------------------
@@ -46,7 +48,8 @@ RUN set -eux; \
         /opt/omero/web/OMERO.web/var/static \
         /opt/omero/web/OMERO.web/var/static/branding \
         /opt/omero/web/OMERO.web/var/static/omero_figure \
-        /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin; \
+        /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin \
+        /opt/omero/web/OMERO.web/var/static/omeroweb_upload; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
 # Copy branding logo (create dummy if it doesn't and remove after)
