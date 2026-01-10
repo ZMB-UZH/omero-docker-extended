@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 
@@ -33,6 +34,7 @@ def index(request, conn=None, url=None, **kwargs):
         {
             "upload_root": str(upload_root),
             "upload_enabled": _ensure_upload_root(upload_root),
+            "upload_url": reverse("omeroweb_upload_files"),
         },
     )
 
