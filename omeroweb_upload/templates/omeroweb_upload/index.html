@@ -10,18 +10,22 @@
             color: #111827;
         }
         .upload-card {
-            border: 2px dashed #94a3b8;
+            border: 2px solid #007bff;
             border-radius: 12px;
             padding: 32px;
             text-align: center;
             background: #f8fafc;
+        }
+        .upload-card p {
+            margin: 0 0 6px;
+            line-height: 1.25;
         }
         .upload-card.dragover {
             border-color: #2563eb;
             background: #eff6ff;
         }
         .upload-actions {
-            margin-top: 16px;
+            margin-top: 10px;
             display: flex;
             gap: 12px;
             align-items: center;
@@ -44,6 +48,7 @@
         .status {
             margin-top: 16px;
             font-size: 0.95rem;
+            min-height: 1.3em;
         }
         .status.error {
             color: #b91c1c;
@@ -56,9 +61,9 @@
             text-align: left;
         }
         .file-tree {
-            margin-top: 16px;
+            margin-top: 12px;
             text-align: left;
-            padding: 16px;
+            padding: 12px;
             background: #ffffff;
             border: 1px solid #e5e7eb;
             border-radius: 10px;
@@ -67,7 +72,7 @@
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
         }
         .file-tree ul {
             list-style: none;
@@ -86,14 +91,14 @@
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: #64748b;
-            padding-bottom: 6px;
+            padding-bottom: 4px;
             border-bottom: 1px solid #e2e8f0;
         }
         .tree-node {
-            margin: 4px 0;
+            margin: 2px 0;
         }
         .tree-row {
-            padding: 4px 6px;
+            padding: 2px 6px;
             border-radius: 6px;
         }
         .tree-row:hover {
@@ -172,9 +177,10 @@
             margin: 4px 0;
         }
         .note {
-            margin-top: 16px;
+            margin-top: 12px;
             font-size: 0.9rem;
             color: #4b5563;
+            text-align: left;
         }
         #progress-section {
             margin-top: 24px;
@@ -200,6 +206,7 @@
             margin: 4px 0 12px;
             font-size: 0.95rem;
             color: #334155;
+            min-height: 1.3em;
         }
         #progress-stage {
             margin: 0 0 4px;
@@ -213,7 +220,7 @@
             color: #e2e8f0;
             padding: 12px;
             border-radius: 8px;
-            max-height: 180px;
+            height: 250px;
             overflow-y: auto;
             font-size: 0.85rem;
         }
@@ -228,6 +235,17 @@
             <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
             <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
         </div>
+        <div class="note">
+            <p>Uploads are staged in: <code>{{ upload_root }}</code></p>
+            <p>
+                {% if upload_enabled %}
+                    Uploaded files are imported directly into OMERO. Folder names are translated into dataset names.
+                {% else %}
+                    Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
+                {% endif %}
+            </p>
+            <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
+        </div>
         <div id="file-tree" class="file-tree" aria-live="polite"></div>
         <div id="status" class="status"></div>
     </div>
@@ -240,18 +258,6 @@
             <div id="progress-bar">0%</div>
         </div>
         <pre id="progress-log"></pre>
-    </div>
-
-    <div class="note">
-        <p>Uploads are staged in: <code>{{ upload_root }}</code></p>
-        <p>
-            {% if upload_enabled %}
-                Uploaded files are imported directly into OMERO. Folder names are translated into dataset names.
-            {% else %}
-                Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
-            {% endif %}
-        </p>
-        <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
     </div>
 
     <script>
@@ -270,6 +276,7 @@
         const progressLog = document.getElementById('progress-log');
 
         let pendingFiles = [];
+        let uploadCycleComplete = false;
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -529,8 +536,20 @@
             }));
         }
 
+        function resetProgressDisplay() {
+            progressSection.style.display = 'none';
+            setProgressStage('Stage: Waiting to start…');
+            updateProgress(0, 'Waiting to start…');
+            progressLog.textContent = '';
+        }
+
         function handleFiles(entries) {
-            pendingFiles = entries;
+            if (uploadCycleComplete) {
+                pendingFiles = [];
+                resetProgressDisplay();
+                uploadCycleComplete = false;
+            }
+            pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
             setStatus('');
         }
@@ -809,6 +828,7 @@
 
             uploadBtn.disabled = true;
             progressSection.style.display = 'block';
+            uploadCycleComplete = false;
             setProgressStage('Stage 1 of 2: Uploading to temporary storage');
             updateProgress(0, 'Preparing upload...');
             setStatus('');
@@ -819,10 +839,11 @@
                 updateProgress(100, 'Upload complete. Starting import...');
                 await startImport(job.import_step_url);
                 updateProgress(100, 'Import complete.');
-                setStatus('Import completed.', 'success');
+                setStatus('Import complete.', 'success');
             } catch (error) {
                 setStatus(`Upload failed: ${error.message || error}`, 'error');
             } finally {
+                uploadCycleComplete = true;
                 uploadBtn.disabled = false;
             }
         });
