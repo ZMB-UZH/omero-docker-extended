@@ -43,7 +43,7 @@ services:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
-      - /opt/omero-upload-tmp:/OMERO/DropBox/Upload:ro
+      - /opt/omero-upload-tmp:/OMERO/DropBox/Upload:rw
     ulimits:
       nofile:
         soft: 8192
