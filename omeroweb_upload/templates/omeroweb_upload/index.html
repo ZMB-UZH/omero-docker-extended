@@ -234,7 +234,8 @@
 </head>
 <body>
     <h1>Upload</h1>
-    <p>Drag and drop files or folders to import them into OMERO.</p>
+    <p>Drag and drop files or folders to import them into Omero.</p>
+    <p>Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
     <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
         <p><strong>Drop files here</strong> or choose files/folders manually.</p>
         <div class="upload-actions">
@@ -245,17 +246,6 @@
         <div id="status" class="status"></div>
     </div>
 
-    <div class="note">
-        <p>Uploads are staged in: <code>{{ upload_root }}</code></p>
-        <p>
-            {% if upload_enabled %}
-                Uploaded files are imported directly into OMERO. Folder names are translated into dataset names.
-            {% else %}
-                Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
-            {% endif %}
-        </p>
-        <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
-    </div>
     <div id="progress-section">
         <h3>Progress</h3>
         <p id="progress-stage">Stage: Waiting to start…</p>
