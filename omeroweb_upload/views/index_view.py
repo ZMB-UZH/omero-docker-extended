@@ -324,6 +324,16 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
     if not files:
         return JsonResponse({"ok": False, "error": "No files provided."}, status=200)
 
+    relative_paths = request.POST.getlist("relative_paths")
+    if relative_paths and len(relative_paths) != len(files):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Upload payload mismatch. Please retry the upload.",
+            },
+            status=200,
+        )
+
     job_root = upload_root / job_id
     if not _ensure_dir(job_root):
         return JsonResponse({"ok": False, "error": "Unable to initialize upload folder."}, status=200)
@@ -332,10 +342,11 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
     errors = []
     known_paths = {file_entry["relative_path"]: file_entry for file_entry in job["files"]}
 
-    for upload in files:
-        rel_path = _safe_relative_path(upload.name)
+    for index, upload in enumerate(files):
+        raw_name = relative_paths[index] if relative_paths else upload.name
+        rel_path = _safe_relative_path(raw_name)
         if rel_path is None:
-            errors.append(f"Invalid filename: {upload.name}")
+            errors.append(f"Invalid filename: {raw_name}")
             continue
 
         if rel_path not in known_paths:
@@ -371,6 +382,7 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
             "ok": len(errors) == 0,
             "saved": saved,
             "errors": errors,
+            "error": errors[0] if errors else None,
             "uploaded_bytes": job["uploaded_bytes"],
             "total_bytes": job.get("total_bytes", 0),
             "ready": job["status"] == "ready",
