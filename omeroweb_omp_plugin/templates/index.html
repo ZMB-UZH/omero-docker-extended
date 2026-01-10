@@ -1019,16 +1019,12 @@
     const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression method...';
     const AI_PROVIDER_OPTIONS = [
         { value: 'local', label: 'Local' },
-        { value: 'openai', label: 'OpenAI' },
-        { value: 'anthropic', label: 'Anthropic' },
-        { value: 'google', label: 'Google Gemini' },
-        { value: 'aws', label: 'AWS Bedrock' },
-        { value: 'azure', label: 'Azure OpenAI' },
-        { value: 'cohere', label: 'Cohere' },
-        { value: 'mistral', label: 'Mistral' },
-        { value: 'perplexity', label: 'Perplexity' },
         { value: 'groq', label: 'Groq' },
+        { value: 'gemini', label: 'Gemini' },
+        { value: 'claude', label: 'Claude' },
+        { value: 'perplexity', label: 'Perplexity' },
         { value: 'xai', label: 'xAI' },
+        { value: 'cohere', label: 'Cohere' },
     ];
     function populateProviderSelect(select, { includeLocal = false } = {}) {
         if (!select) return;
@@ -1048,6 +1044,11 @@
         if (!placeholderClone && options.length) {
             select.value = options[0].value;
         }
+    }
+
+    function getProviderLabel(provider) {
+        const match = AI_PROVIDER_OPTIONS.find((option) => option.value === provider);
+        return match ? match.label : provider;
     }
 
     populateProviderSelect(aiProviderSelect, { includeLocal: true });
@@ -1196,16 +1197,17 @@
     const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
     const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
     const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
-    const groqModelsUrl = new URL('ai-credentials/groq-models/', window.location.href);
     const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
     const deleteApiKeysUrl = new URL('user-data/delete-api-keys/', window.location.href);
     const deleteVariableSetsUrl = new URL('user-data/delete-variable-sets/', window.location.href);
     const deleteAllUserDataUrl = new URL('user-data/delete-all/', window.location.href);
+    const aiModelsUrl = new URL('ai-credentials/models/', window.location.href);
     let aiCredentialProviders = new Set();
     let aiCredentialsLastTest = { provider: null, key: null, passed: false };
     let isUserDataMenuLocked = false;
-    let groqModelsCache = null;
-    let groqModelsRequest = null;
+    const providerModelsCache = new Map();
+    const providerModelsRequest = new Map();
+    const providerModelSupport = new Map();
 
     function isLocalProvider(provider) {
         return (provider || '').toLowerCase() === 'local';
@@ -1328,25 +1330,23 @@
         const provider = aiProviderSelect.value;
         if (!provider) {
             updateAiModalStatus(messages.aiModalChooseProvider);
+            setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
-        if (provider !== 'groq') {
-            toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
-        }
         if (isLocalProvider(provider)) {
             updateAiModalStatus(messages.localProviderReady);
+            setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
         if (aiCredentialProviders.has(provider)) {
             updateAiModalStatus(messages.providerKeyReady);
-            if (provider === 'groq') {
-                ensureGroqModels(aiModelWrapper, aiModelSelect, updateAiModalStatus);
-            }
+            ensureAiModels(provider, aiModelSelect, updateAiModalStatus, null, { container: aiModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
+        setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
         updateAiModalStatus(messages.addApiKeySettings, true);
         updateAiModalPlaceholders();
     }
@@ -1355,35 +1355,46 @@
         if (!aiParseProviderSelect) return;
         const provider = aiParseProviderSelect.value;
         if (!provider) {
-            toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+            setModelVisibility(false, { select: aiParseModelSelect, container: aiParseModelWrapper });
             updateAiParseModalStatus(messages.aiModalChooseProvider);
             updateAiModalPlaceholders();
             return;
         }
         if (aiCredentialProviders.has(provider)) {
-            if (provider === 'groq') {
-                ensureGroqModels(aiParseModelWrapper, aiParseModelSelect, updateAiParseModalStatus);
-            } else {
-                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
-            }
+            ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, null, { container: aiParseModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
-        toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
+        setModelVisibility(false, { select: aiParseModelSelect, container: aiParseModelWrapper });
         updateAiParseModalStatus(messages.addApiKeySettings, true);
         updateAiModalPlaceholders();
     }
 
-    function toggleGroqModelVisibility(show, wrapper, select) {
-        if (!wrapper) return;
-        wrapper.style.display = show ? 'block' : 'none';
-        if (!show && select) {
-            select.innerHTML = '';
-            updateSelectPlaceholder(select);
+    function resetModelSelect(select, placeholderHtml = '') {
+        if (!select) return;
+        select.innerHTML = placeholderHtml;
+        updateSelectPlaceholder(select);
+    }
+
+    function setModelVisibility(show, { select, container, display = 'block', applyBtn, placeholderHtml = '' } = {}) {
+        if (container) {
+            container.style.display = show ? display : 'none';
+        }
+        if (applyBtn) {
+            applyBtn.style.display = show ? 'inline-flex' : 'none';
+        }
+        if (select) {
+            select.disabled = !show;
+            if (!show) {
+                select.dataset.requiresModel = 'false';
+            }
+        }
+        if (!show) {
+            resetModelSelect(select, placeholderHtml);
         }
     }
 
-    function populateGroqModels(select, models, defaultModel) {
+    function populateAiModels(select, models, defaultModel) {
         if (!select) return;
         select.innerHTML = '';
         models.forEach((model) => {
@@ -1400,32 +1411,48 @@
         }
     }
 
-    function fetchGroqModels() {
-        if (groqModelsCache) {
-            return Promise.resolve(groqModelsCache);
+    function fetchAiModels(provider) {
+        if (!provider) {
+            return Promise.reject(new Error(messages.aiModelsLoadFailed));
         }
-        if (groqModelsRequest) {
-            return groqModelsRequest;
+        if (providerModelsCache.has(provider)) {
+            return Promise.resolve(providerModelsCache.get(provider));
         }
-        groqModelsRequest = fetch(groqModelsUrl, { method: 'GET' })
+        if (providerModelsRequest.has(provider)) {
+            return providerModelsRequest.get(provider);
+        }
+        const url = new URL(aiModelsUrl.toString());
+        url.searchParams.set('provider', provider);
+        const request = fetch(url.toString(), { method: 'GET' })
             .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
             .then(({ ok, data }) => {
                 if (!ok || data.error) {
-                    throw new Error(data.error || messages.groqModelsLoadFailed);
+                    throw new Error(data.error || messages.aiModelsLoadFailed);
                 }
-                groqModelsCache = data;
+                providerModelsCache.set(provider, data);
+                providerModelsRequest.delete(provider);
                 return data;
             })
             .catch((error) => {
-                groqModelsRequest = null;
+                providerModelsRequest.delete(provider);
                 throw error;
             });
-        return groqModelsRequest;
+        providerModelsRequest.set(provider, request);
+        return request;
     }
 
-    function ensureGroqModels(wrapper, select, updateStatus, preferredModel) {
-        if (!wrapper || !select) return;
-        toggleGroqModelVisibility(true, wrapper, select);
+    function ensureAiModels(
+        provider,
+        select,
+        updateStatus,
+        preferredModel,
+        { container, display = 'block', applyBtn, placeholderHtml = '' } = {}
+    ) {
+        if (!provider || !select) return;
+        if (select.dataset.provider !== provider) {
+            select.dataset.provider = provider;
+            resetModelSelect(select, placeholderHtml);
+        }
         if (select.options.length > 0) {
             if (preferredModel) {
                 const hasPreferred = Array.from(select.options).some((option) => option.value === preferredModel);
@@ -1439,22 +1466,34 @@
             updateSelectPlaceholder(select);
             return;
         }
+        select.dataset.requiresModel = 'pending';
+        setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
         if (typeof updateStatus === 'function') {
-            updateStatus(messages.groqModelsLoading);
+            updateStatus(formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }));
         }
-        fetchGroqModels()
+        fetchAiModels(provider)
             .then((data) => {
                 const models = Array.isArray(data.models) ? data.models : [];
-                populateGroqModels(select, models, preferredModel || data.default_model);
+                if (!data.supports_models || models.length === 0) {
+                    select.dataset.requiresModel = 'false';
+                    providerModelSupport.set(provider, false);
+                    setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+                    return;
+                }
+                populateAiModels(select, models, preferredModel || data.default_model);
                 updateSelectPlaceholder(select);
+                select.dataset.requiresModel = 'true';
+                providerModelSupport.set(provider, true);
                 if (typeof updateStatus === 'function') {
                     updateStatus(messages.providerKeyReady);
                 }
             })
             .catch((error) => {
-                toggleGroqModelVisibility(false, wrapper, select);
+                select.dataset.requiresModel = 'false';
+                providerModelSupport.set(provider, false);
+                setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
                 if (typeof updateStatus === 'function') {
-                    updateStatus(error?.message || messages.groqModelsLoadFailed, true);
+                    updateStatus(error?.message || messages.aiModelsLoadFailed, true);
                 }
             });
     }
@@ -1573,11 +1612,7 @@
         if (aiProviderSelect && regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
             aiProviderSelect.value = regexProvider;
             updateAiProcessAvailability();
-            if (regexProvider === 'groq') {
-                ensureGroqModels(aiModelWrapper, aiModelSelect, updateAiModalStatus, regexModel);
-            } else {
-                toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
-            }
+            ensureAiModels(regexProvider, aiModelSelect, updateAiModalStatus, regexModel, { container: aiModelWrapper });
             updateAiProviderStatus();
         }
 
@@ -1585,11 +1620,7 @@
         const parseModel = state.ai_parse_model || '';
         if (aiParseProviderSelect && parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
             aiParseProviderSelect.value = parseProvider;
-            if (parseProvider === 'groq') {
-                ensureGroqModels(aiParseModelWrapper, aiParseModelSelect, updateAiParseModalStatus, parseModel);
-            } else {
-                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
-            }
+            ensureAiModels(parseProvider, aiParseModelSelect, updateAiParseModalStatus, parseModel, { container: aiParseModelWrapper });
             updateAiParseProviderStatus();
         }
         updateAiModalPlaceholders();
@@ -1613,15 +1644,11 @@
 
         if (force || !state.ai_regex_provider || state.ai_regex_provider === 'local') {
             state.ai_regex_provider = regexProvider;
-            state.ai_regex_model = regexProvider === 'groq'
-                ? (regexDefaults.modelsByProvider?.[regexProvider] || '')
-                : '';
+            state.ai_regex_model = regexDefaults.modelsByProvider?.[regexProvider] || '';
         }
         if (force || !state.ai_parse_provider) {
             state.ai_parse_provider = parseProvider;
-            state.ai_parse_model = parseProvider === 'groq'
-                ? (parseDefaults.modelsByProvider?.[parseProvider] || '')
-                : '';
+            state.ai_parse_model = parseDefaults.modelsByProvider?.[parseProvider] || '';
         }
         try {
             window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
@@ -1643,16 +1670,13 @@
             && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value)
         ) {
             aiProviderSelect.value = regexProvider;
-            if (regexProvider === 'groq') {
-                ensureGroqModels(
-                    aiModelWrapper,
-                    aiModelSelect,
-                    updateAiModalStatus,
-                    regexDefaults.modelsByProvider?.[regexProvider]
-                );
-            } else {
-                toggleGroqModelVisibility(false, aiModelWrapper, aiModelSelect);
-            }
+            ensureAiModels(
+                regexProvider,
+                aiModelSelect,
+                updateAiModalStatus,
+                regexDefaults.modelsByProvider?.[regexProvider],
+                { container: aiModelWrapper }
+            );
             updateAiProcessAvailability();
             updateAiProviderStatus();
         }
@@ -1663,16 +1687,13 @@
             && (force || !aiParseProviderSelect.value)
         ) {
             aiParseProviderSelect.value = parseProvider;
-            if (parseProvider === 'groq') {
-                ensureGroqModels(
-                    aiParseModelWrapper,
-                    aiParseModelSelect,
-                    updateAiParseModalStatus,
-                    parseDefaults.modelsByProvider?.[parseProvider]
-                );
-            } else {
-                toggleGroqModelVisibility(false, aiParseModelWrapper, aiParseModelSelect);
-            }
+            ensureAiModels(
+                parseProvider,
+                aiParseModelSelect,
+                updateAiParseModalStatus,
+                parseDefaults.modelsByProvider?.[parseProvider],
+                { container: aiParseModelWrapper }
+            );
             updateAiParseProviderStatus();
         }
         updateAiModalPlaceholders();
@@ -1839,6 +1860,14 @@
         return Array.from(select.options).some((option) => option.value === value);
     }
 
+    function requiresModelSelection(select) {
+        return select?.dataset.requiresModel === 'true';
+    }
+
+    function isModelSelectionPending(select) {
+        return select?.dataset.requiresModel === 'pending';
+    }
+
     function updateAiModalPlaceholders() {
         updateSelectPlaceholder(aiProviderSelect);
         updateSelectPlaceholder(aiModelSelect);
@@ -1863,47 +1892,47 @@
         toggle.checked = !!provider && provider === defaultsState.defaultProvider;
     }
 
+    const defaultModelPlaceholder = '<option value="" disabled selected hidden>Select model...</option>';
+
     function resetAiDefaultsModel(modelSelect) {
         if (!modelSelect) return;
         modelSelect.disabled = true;
-        modelSelect.innerHTML = '<option value="" disabled selected hidden>Select model...</option>';
-        updateSelectPlaceholder(modelSelect);
-    }
-
-    function updateAiDefaultsModelVisibility(provider, modelSelect, modelGroup, applyBtn) {
-        const show = provider === 'groq';
-        if (modelGroup) {
-            modelGroup.style.display = show ? 'flex' : 'none';
-        }
-        if (applyBtn) {
-            applyBtn.style.display = show ? 'inline-flex' : 'none';
-        }
-        if (!show) {
-            resetAiDefaultsModel(modelSelect);
-        }
+        resetModelSelect(modelSelect, defaultModelPlaceholder);
     }
 
     function refreshAiDefaultsModel(provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus) {
         if (!modelSelect) return;
-        updateAiDefaultsModelVisibility(provider, modelSelect, modelGroup, applyBtn);
-        if (provider !== 'groq') {
+        if (!provider) {
+            setModelVisibility(false, {
+                select: modelSelect,
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            });
+            resetAiDefaultsModel(modelSelect);
             return;
         }
         modelSelect.disabled = false;
-        fetchGroqModels()
-            .then((data) => {
-                const models = Array.isArray(data.models) ? data.models : [];
-                const defaultModel = preferredModel || data.default_model;
-                populateGroqModels(modelSelect, models, defaultModel);
-                updateSelectPlaceholder(modelSelect);
-            })
-            .catch((error) => {
-                resetAiDefaultsModel(modelSelect);
-                if (typeof onErrorStatus === 'function') {
-                    onErrorStatus();
+        ensureAiModels(
+            provider,
+            modelSelect,
+            (message, isError) => {
+                if (isError) {
+                    if (typeof onErrorStatus === 'function') {
+                        onErrorStatus();
+                    }
+                    showNonBlockingModal(message || messages.aiModelsLoadFailed);
                 }
-                showNonBlockingModal(error?.message || messages.groqModelsLoadFailed);
-            });
+            },
+            preferredModel,
+            {
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            }
+        );
     }
 
     function applyAiDefaultsToRow(config) {
@@ -2719,10 +2748,15 @@
             return;
         }
         let selectedModel = '';
-        if (provider === 'groq') {
+        if (isModelSelectionPending(modelSelect)) {
+            showNonBlockingModal(formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }));
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        if (requiresModelSelection(modelSelect)) {
             selectedModel = modelSelect?.value || '';
             if (!selectedModel) {
-                showNonBlockingModal(messages.groqModelsLoadFailed);
+                showNonBlockingModal(messages.aiModelsLoadFailed);
                 setAiDefaultsSelectStatus(statusTargets, 'error');
                 return;
             }
@@ -2996,10 +3030,17 @@
             formData.append('project', projectId);
             formData.append('selected_datasets', datasetIds.join(','));
             formData.append('provider', provider);
-            if (provider === 'groq') {
+            if (isModelSelectionPending(aiModelSelect)) {
+                updateAiModalStatus(
+                    formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }),
+                    true
+                );
+                return;
+            }
+            if (requiresModelSelection(aiModelSelect)) {
                 const selectedModel = aiModelSelect?.value;
                 if (!selectedModel) {
-                    updateAiModalStatus(messages.groqModelsLoadFailed, true);
+                    updateAiModalStatus(messages.aiModelsLoadFailed, true);
                     return;
                 }
                 formData.append('model', selectedModel);
@@ -3075,10 +3116,17 @@
             formData.append('project', projectId);
             formData.append('selected_datasets', datasetIds.join(','));
             formData.append('provider', provider);
-            if (provider === 'groq') {
+            if (isModelSelectionPending(aiParseModelSelect)) {
+                updateAiParseModalStatus(
+                    formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }),
+                    true
+                );
+                return;
+            }
+            if (requiresModelSelection(aiParseModelSelect)) {
                 const selectedModel = aiParseModelSelect?.value;
                 if (!selectedModel) {
-                    updateAiParseModalStatus(messages.groqModelsLoadFailed, true);
+                    updateAiParseModalStatus(messages.aiModelsLoadFailed, true);
                     return;
                 }
                 formData.append('model', selectedModel);
