@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -22,6 +23,11 @@ UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
 DEFAULT_UPLOAD_ROOT = "/opt/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
 DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
+UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
+UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
+DEFAULT_UPLOAD_CONCURRENCY = 3
+DEFAULT_UPLOAD_BATCH_FILES = 5
+INT_SANITIZER = re.compile(r"[^0-9]")
 
 
 # --------------------------------------------------------------------------
@@ -49,6 +55,17 @@ def _ensure_dir(path: Path) -> bool:
 
 def _job_path(job_id: str) -> Path:
     return _get_jobs_root() / f"{job_id}.json"
+
+
+def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    raw = os.environ.get(env_key, "")
+    if raw:
+        raw = INT_SANITIZER.sub("", str(raw))
+    try:
+        value = int(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    return max(min_value, min(max_value, value))
 
 
 def _load_job(job_id: str):
@@ -204,6 +221,8 @@ def index(request, conn=None, url=None, **kwargs):
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
     job_dir_ok = _ensure_dir(_get_jobs_root())
+    upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
+    upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 25)
     return render(
         request,
         "omeroweb_upload/index.html",
@@ -211,6 +230,8 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_root": str(upload_root),
             "upload_enabled": upload_enabled and job_dir_ok,
             "upload_start_url": reverse("omeroweb_upload_start"),
+            "upload_concurrency": upload_concurrency,
+            "upload_batch_files": upload_batch_files,
         },
     )
 
