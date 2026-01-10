@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            margin: 24px;
+            color: #111827;
+        }
+        .upload-card {
+            border: 2px dashed #94a3b8;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            background: #f8fafc;
+        }
+        .upload-card.dragover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .upload-actions {
+            margin-top: 16px;
+        }
+        .upload-actions button {
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .upload-actions button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 16px;
+            font-size: 0.95rem;
+        }
+        .status.error {
+            color: #b91c1c;
+        }
+        .status.success {
+            color: #047857;
+        }
+        .file-list {
+            margin-top: 16px;
+            text-align: left;
+        }
+        .file-list li {
+            margin: 4px 0;
+        }
+        .note {
+            margin-top: 16px;
+            font-size: 0.9rem;
+            color: #4b5563;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload</h1>
+    <p>Drag and drop files to stage them for import into OMERO.</p>
+    <div id="upload-card" class="upload-card">
+        <p><strong>Drop files here</strong> or choose files manually.</p>
+        <div class="upload-actions">
+            <input type="file" id="file-input" multiple>
+            <button id="upload-btn" type="button">Upload</button>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+        <div id="status" class="status"></div>
+    </div>
+    <div class="note">
+        <p>Uploads are stored in: <code>{{ upload_root }}</code></p>
+        <p>
+            {% if upload_enabled %}
+                Files are written to disk. If your OMERO dropbox/import watcher is configured,
+                they should appear in OMERO after ingestion.
+            {% else %}
+                Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
+            {% endif %}
+        </p>
+    </div>
+    <script>
+        const uploadCard = document.getElementById('upload-card');
+        const fileInput = document.getElementById('file-input');
+        const uploadBtn = document.getElementById('upload-btn');
+        const statusEl = document.getElementById('status');
+        const fileList = document.getElementById('file-list');
+
+        let pendingFiles = [];
+
+        function setStatus(message, type) {
+            statusEl.textContent = message || '';
+            statusEl.classList.remove('error', 'success');
+            if (type) {
+                statusEl.classList.add(type);
+            }
+        }
+
+        function refreshFileList() {
+            fileList.innerHTML = '';
+            if (!pendingFiles.length) {
+                return;
+            }
+            pendingFiles.forEach((file) => {
+                const item = document.createElement('li');
+                item.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+                fileList.appendChild(item);
+            });
+        }
+
+        function handleFiles(files) {
+            pendingFiles = Array.from(files);
+            refreshFileList();
+            setStatus('');
+        }
+
+        uploadCard.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            uploadCard.classList.add('dragover');
+        });
+
+        uploadCard.addEventListener('dragleave', () => {
+            uploadCard.classList.remove('dragover');
+        });
+
+        uploadCard.addEventListener('drop', (event) => {
+            event.preventDefault();
+            uploadCard.classList.remove('dragover');
+            if (event.dataTransfer?.files?.length) {
+                handleFiles(event.dataTransfer.files);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files?.length) {
+                handleFiles(fileInput.files);
+            }
+        });
+
+        uploadBtn.addEventListener('click', async () => {
+            if (!pendingFiles.length) {
+                setStatus('Please select files to upload.', 'error');
+                return;
+            }
+            uploadBtn.disabled = true;
+            setStatus('Uploading...', '');
+            const formData = new FormData();
+            pendingFiles.forEach((file) => formData.append('files', file));
+            try {
+                const response = await fetch('upload/', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.ok) {
+                    setStatus(`Uploaded ${data.saved.length} file(s).`, 'success');
+                } else {
+                    const detail = (data.errors || []).join(' | ') || data.error || 'Upload failed.';
+                    setStatus(detail, 'error');
+                }
+            } catch (error) {
+                setStatus(`Upload failed: ${error}`, 'error');
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
