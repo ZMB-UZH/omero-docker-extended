@@ -62,11 +62,11 @@
 <body>
     <h1>Upload</h1>
     <p>Drag and drop files to stage them for import into OMERO.</p>
-    <div id="upload-card" class="upload-card">
+    <div id="upload-card" class="upload-card" data-upload-url="{{ upload_url }}">
         <p><strong>Drop files here</strong> or choose files manually.</p>
         <div class="upload-actions">
-            <input type="file" id="file-input" multiple>
-            <button id="upload-btn" type="button">Upload</button>
+            <input type="file" id="file-input" multiple {% if not upload_enabled %}disabled{% endif %}>
+            <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload</button>
         </div>
         <ul id="file-list" class="file-list"></ul>
         <div id="status" class="status"></div>
@@ -84,10 +84,12 @@
     </div>
     <script>
         const uploadCard = document.getElementById('upload-card');
+        const uploadUrl = uploadCard.dataset.uploadUrl;
         const fileInput = document.getElementById('file-input');
         const uploadBtn = document.getElementById('upload-btn');
         const statusEl = document.getElementById('status');
         const fileList = document.getElementById('file-list');
+        const uploadEnabled = !uploadBtn.disabled;
 
         let pendingFiles = [];
 
@@ -129,12 +131,20 @@
         uploadCard.addEventListener('drop', (event) => {
             event.preventDefault();
             uploadCard.classList.remove('dragover');
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                return;
+            }
             if (event.dataTransfer?.files?.length) {
                 handleFiles(event.dataTransfer.files);
             }
         });
 
         fileInput.addEventListener('change', () => {
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                return;
+            }
             if (fileInput.files?.length) {
                 handleFiles(fileInput.files);
             }
@@ -145,13 +155,30 @@
                 setStatus('Please select files to upload.', 'error');
                 return;
             }
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                return;
+            }
             uploadBtn.disabled = true;
             setStatus('Uploading...', '');
             const formData = new FormData();
             pendingFiles.forEach((file) => formData.append('files', file));
             try {
-                const response = await fetch('upload/', { method: 'POST', body: formData });
-                const data = await response.json();
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                });
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    const fallback = await response.clone().text();
+                    throw new Error(fallback || `Upload failed with status ${response.status}.`);
+                }
+                if (!response.ok) {
+                    throw new Error(data.error || `Upload failed with status ${response.status}.`);
+                }
                 if (data.ok) {
                     setStatus(`Uploaded ${data.saved.length} file(s).`, 'success');
                 } else {
@@ -159,11 +186,15 @@
                     setStatus(detail, 'error');
                 }
             } catch (error) {
-                setStatus(`Upload failed: ${error}`, 'error');
+                setStatus(`Upload failed: ${error.message || error}`, 'error');
             } finally {
                 uploadBtn.disabled = false;
             }
         });
+
+        if (!uploadEnabled) {
+            setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+        }
     </script>
 </body>
 </html>
