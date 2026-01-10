@@ -235,20 +235,21 @@
             <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
             <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
         </div>
-        <div class="note">
-            <p>Uploads are staged in: <code>{{ upload_root }}</code></p>
-            <p>
-                {% if upload_enabled %}
-                    Uploaded files are imported directly into OMERO. Folder names are translated into dataset names.
-                {% else %}
-                    Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
-                {% endif %}
-            </p>
-            <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
-        </div>
-        <div id="file-tree" class="file-tree" aria-live="polite"></div>
-        <div id="status" class="status"></div>
     </div>
+
+    <div class="note">
+        <p>Uploads are staged in: <code>{{ upload_root }}</code></p>
+        <p>
+            {% if upload_enabled %}
+                Uploaded files are imported directly into OMERO. Folder names are translated into dataset names.
+            {% else %}
+                Upload folder is not writable. Configure <code>OMERO_WEB_UPLOAD_DIR</code> or adjust permissions.
+            {% endif %}
+        </p>
+        <p>Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
+    </div>
+    <div id="file-tree" class="file-tree" aria-live="polite"></div>
+    <div id="status" class="status"></div>
 
     <div id="progress-section">
         <h3>Progress</h3>
