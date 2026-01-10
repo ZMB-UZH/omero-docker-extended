@@ -36,14 +36,12 @@ services:
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
       CONFIG_omero_db_poolsize: 80 # max number should be less than 100 for the default Postgres settings
-      CONFIG_omero_dropbox_path: /OMERO/DropBox/Upload
     networks:
       - omero
     ports:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
-      - /opt/omero-upload-tmp:/OMERO/DropBox/Upload:rw
     ulimits:
       nofile:
         soft: 8192
@@ -103,7 +101,7 @@ services:
         ["Upload", "omeroweb_upload_index", {"title": "Open Upload in new tab", "target": "_blank"}]
       ]' # modify if needed when the developers update Omero Web
       CONFIG_omero_web_login__logo: "/static/branding/logo.png" # optional, delete if you don't want a custom logo at the top of the login page
-      OMERO_WEB_UPLOAD_DIR: /OMERO/DropBox/Upload
+      OMERO_WEB_UPLOAD_DIR: /opt/omero-upload-tmp
     networks:
       - omero
     ports:
@@ -111,7 +109,7 @@ services:
     volumes:
       - omero:/OMERO
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - /opt/omero-upload-tmp:/OMERO/DropBox/Upload:rw
+      - /opt/omero-upload-tmp:/opt/omero-upload-tmp:rw
     tmpfs:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
 
