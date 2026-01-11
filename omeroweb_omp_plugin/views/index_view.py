@@ -303,7 +303,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": errors.select_project_first(),
@@ -314,7 +314,7 @@ def index(request, conn=None, url=None, **kwargs):
             if separator_mode != "ai_parse" and (not raw_seps or not raw_seps.strip()):
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": errors.filename_input_empty(),
@@ -325,7 +325,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not selected_dataset_ids_raw.strip():
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": errors.datasets_required(),
@@ -413,7 +413,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not selected_dataset_ids:
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": errors.datasets_required(),
@@ -426,7 +426,7 @@ def index(request, conn=None, url=None, **kwargs):
             if not allowed:
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": build_rate_limit_message(remaining),
@@ -445,7 +445,7 @@ def index(request, conn=None, url=None, **kwargs):
             if total_images == 0:
                 return render(
                     request,
-                    "index.html",
+                    "omeroweb_omp_plugin/index.html",
                     build_index_context(
                         {
                             "error_message": errors.no_data_to_process(),
@@ -528,7 +528,7 @@ def index(request, conn=None, url=None, **kwargs):
 
             return render(
                 request,
-                "preview.html",
+                "omeroweb_omp_plugin/preview.html",
                 context,
             )
 
@@ -537,7 +537,7 @@ def index(request, conn=None, url=None, **kwargs):
         # ----------------------------------------------------
         return render(
             request,
-            "index.html",
+            "omeroweb_omp_plugin/index.html",
             build_index_context(),
         )
 
