@@ -1,0 +1,14 @@
+## Custom OMERO.server image with OMERO.figure PDF export dependencies installed
+# Needs to match the tag in docker-compose.yml
+FROM openmicroscopy/omero-server:5
+
+USER root
+
+# Install OMERO.figure PDF export dependencies in the OMERO.server virtualenv
+RUN set -eux; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* | head -n 1)"; \
+    "${VENV_DIR}/bin/pip" install --no-cache-dir \
+        reportlab \
+        markdown
+
+USER omero-server
