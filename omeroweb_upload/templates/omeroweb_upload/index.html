@@ -1016,7 +1016,7 @@
             }
             uploadCard.classList.remove('dragover');
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
                 return;
             }
             const files = await getFilesFromDrop(event);
@@ -1029,7 +1029,7 @@
 
         fileInput.addEventListener('change', () => {
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
                 return;
             }
             if (isUploading) {
@@ -1379,7 +1379,7 @@
                 return;
             }
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
                 return;
             }
 
@@ -1395,7 +1395,7 @@
                 refreshFileList();
                 registerImportJob(job);
                 setStatus(
-                    'Upload to temporary folder complete. You can close this browser window. Files will appear in Omero soon.',
+                    'Upload to temporary folder complete. You can close this browser window and log off. Files will appear in Omero soon.',
                     'success'
                 );
             } catch (error) {
@@ -1406,7 +1406,7 @@
         });
 
         if (!uploadEnabled) {
-            setStatus('Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.', 'error');
+            setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
         }
         restoreImportState();
         if (importJobs.size) {
