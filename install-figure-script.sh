@@ -2,24 +2,20 @@
 set -e
 echo "Checking for Figure_To_Pdf.py script..."
 
-# Find the correct venv directory
-VENV_DIR=$(ls -d /opt/omero/server/venv* 2>/dev/null | head -n 1)
-if [ -z "${VENV_DIR}" ]; then
-    echo "ERROR: Could not find venv directory"
-    exit 1
-fi
-
-# Detect installed OMERO.figure version
-FIGURE_VERSION=$(${VENV_DIR}/bin/python -c "import pkg_resources; print(pkg_resources.get_distribution('omero-figure').version)")
-
-if [ -z "${FIGURE_VERSION}" ]; then
-    echo "ERROR: Could not detect omero-figure version"
-    exit 1
-fi
-
-echo "Detected OMERO.figure version: ${FIGURE_VERSION}"
-
+# omero-figure is installed in OMERO.web, not OMERO.server
+# We'll check what version is in the existing scripts directory
 SCRIPT_PATH="/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py"
+
+# Check existing script files for version hints
+if ls /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/*.py 1> /dev/null 2>&1; then
+    # Scripts exist, try to get version from an existing script
+    FIGURE_VERSION=$(grep -oP "(?<=# OMERO.figure version )[0-9.]+" /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Movie_Figure.py 2>/dev/null || echo "7.3.0")
+else
+    # No scripts, use default
+    FIGURE_VERSION="7.3.0"
+fi
+
+echo "Using OMERO.figure version: ${FIGURE_VERSION}"
 
 # Check if script exists and get its version
 if [ -f "${SCRIPT_PATH}" ]; then
