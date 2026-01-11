@@ -180,8 +180,8 @@
 
 <div class="dataset-table-wrapper">
     <div id='dataset_table_container'
-         style='display:none; background:#fff; overflow:hidden; width:100%;'>
-        <div style='max-height:500px; overflow-y:auto; overflow-x:hidden;'>
+         class="dataset-table-container">
+        <div class="dataset-table-scroll">
             <table border='1'
                    class="dataset-table"
                    style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
@@ -217,7 +217,9 @@
                 <tbody id='dataset_table_body'></tbody>
             </table>
         </div>
-        <div id='dataset_table_message' style='padding:10px 12px; display:none; color:#b91c1c;'></div>
+        <div id='dataset_table_message'
+             class="dataset-table-message"
+             aria-live="polite"></div>
     </div>
 </div>
 
@@ -578,6 +580,9 @@
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
     .dataset-table-wrapper {min-width:650px; max-width:650px; margin:10px auto 0; width:100%; padding:0 12px;}
+    .dataset-table-container {display:block; background:#fff; overflow:hidden; width:100%; min-height:552px;}
+    .dataset-table-scroll {max-height:500px; min-height:500px; overflow-y:auto; overflow-x:hidden;}
+    .dataset-table-message {padding:10px 12px; min-height:32px; color:#b91c1c; visibility:hidden;}
     .dataset-table td {word-break: break-word; white-space: normal;}
     .dataset-table thead td {
         position: sticky;
@@ -3346,10 +3351,8 @@
             datasetTableBody.innerHTML = '';
         }
         if (datasetTableMessage) {
-            datasetTableMessage.style.display = 'none';
-        }
-        if (datasetTableContainer) {
-            datasetTableContainer.style.display = 'none';
+            datasetTableMessage.style.visibility = 'hidden';
+            datasetTableMessage.textContent = '';
         }
         if (filenameMetadataContainer) {
             filenameMetadataContainer.classList.remove('expanded');
@@ -3371,7 +3374,8 @@
         if (datasetTableContainer) {
             datasetTableContainer.style.display = 'block';
         }
-        datasetTableMessage.style.display = 'none';
+        datasetTableMessage.style.visibility = 'hidden';
+        datasetTableMessage.textContent = '';
         const selectedIds = new Set(options.selectedIds || []);
         const useDefaultSelection = selectedIds.size === 0;
         const normalizedDatasets = Array.isArray(datasets) ? datasets : [];
@@ -3453,7 +3457,8 @@
                 return;
             }
 
-            datasetTableMessage.style.display = 'none';
+            datasetTableMessage.style.visibility = 'hidden';
+            datasetTableMessage.textContent = '';
             datasetTableBody.innerHTML = '';
 
             const formData = new FormData();
