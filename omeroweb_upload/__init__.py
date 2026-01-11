@@ -1,1 +1,1 @@
-"""Omero.web upload plugin."""
+"""Omero web upload plugin."""
