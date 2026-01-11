@@ -580,7 +580,7 @@
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
     .dataset-table-wrapper {min-width:650px; max-width:650px; margin:10px auto 0; width:100%; padding:0 12px;}
-    .dataset-table-container {display:block; background:#fff; overflow:hidden; width:100%; min-height:552px;}
+    .dataset-table-container {display:none; background:#fff; overflow:hidden; width:100%; min-height:552px;}
     .dataset-table-scroll {max-height:500px; min-height:500px; overflow-y:auto; overflow-x:hidden;}
     .dataset-table-message {padding:10px 12px; min-height:32px; color:#b91c1c; visibility:hidden;}
     .dataset-table td {word-break: break-word; white-space: normal;}
@@ -3344,6 +3344,9 @@
         datasetSortState.direction = 'asc';
         datasetSortState.userSet = false;
         setDatasetSortIndicator(null, 'asc');
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'none';
+        }
         if (datasetSelectAll) {
             datasetSelectAll.checked = false;
         }
