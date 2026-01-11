@@ -915,40 +915,31 @@
             return { rootName, isRootFile: parts.length <= 1 };
         }
 
-        function detectRootDuplicates(entries) {
+        function findDuplicateRootFileNames(entries) {
             const existingRootFiles = new Set();
-            const existingRootFolders = new Set();
 
             pendingFiles.forEach((entry) => {
                 const info = getRootInfo(entry);
                 if (info.isRootFile) {
                     existingRootFiles.add(info.rootName);
-                } else {
-                    existingRootFolders.add(info.rootName);
                 }
             });
 
             const incomingRootFiles = new Set();
-            const incomingRootFolders = new Set();
-            let hasFileDuplicate = false;
-            let hasFolderDuplicate = false;
+            const duplicates = new Set();
 
             entries.forEach((entry) => {
                 const info = getRootInfo(entry);
-                if (info.isRootFile) {
-                    if (existingRootFiles.has(info.rootName) || incomingRootFiles.has(info.rootName)) {
-                        hasFileDuplicate = true;
-                    }
-                    incomingRootFiles.add(info.rootName);
-                } else {
-                    if (existingRootFolders.has(info.rootName)) {
-                        hasFolderDuplicate = true;
-                    }
-                    incomingRootFolders.add(info.rootName);
+                if (!info.isRootFile) {
+                    return;
                 }
+                if (existingRootFiles.has(info.rootName) || incomingRootFiles.has(info.rootName)) {
+                    duplicates.add(info.rootName);
+                }
+                incomingRootFiles.add(info.rootName);
             });
 
-            return { hasFileDuplicate, hasFolderDuplicate };
+            return duplicates;
         }
 
         function normalizeFileList(files) {
@@ -959,6 +950,14 @@
         }
 
         function handleFiles(entries) {
+            const duplicates = findDuplicateRootFileNames(entries);
+            if (duplicates.size) {
+                const names = Array.from(duplicates).sort().join(', ');
+                showDuplicatePopup(
+                    `Duplicate file name(s) in the base path: ${names}. Remove existing entries or rename the files before uploading.`
+                );
+                return;
+            }
             pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
             if (hasActiveImport()) {
@@ -1472,6 +1471,9 @@
         });
 
         uploadBtn.addEventListener('click', async () => {
+            if (isUploading) {
+                return;
+            }
             if (!pendingFiles.length) {
                 setStatus('Please select files to upload.', 'error');
                 return;
