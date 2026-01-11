@@ -520,6 +520,39 @@
 
         const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
         const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
+        const csrfTokenName = 'csrftoken';
+
+        function getCookie(name) {
+            if (!document.cookie) {
+                return null;
+            }
+            const cookies = document.cookie.split(';');
+            for (const cookie of cookies) {
+                const trimmed = cookie.trim();
+                if (trimmed.startsWith(`${name}=`)) {
+                    return decodeURIComponent(trimmed.slice(name.length + 1));
+                }
+            }
+            return null;
+        }
+
+        function getCsrfToken() {
+            return getCookie(csrfTokenName);
+        }
+
+        function setRequestHeaders(headers, target) {
+            const csrfToken = getCsrfToken();
+            if (csrfToken) {
+                headers['X-CSRFToken'] = csrfToken;
+            }
+            headers['X-Requested-With'] = 'XMLHttpRequest';
+            if (target && typeof target.setRequestHeader === 'function') {
+                Object.entries(headers).forEach(([key, value]) => {
+                    target.setRequestHeader(key, value);
+                });
+            }
+            return headers;
+        }
 
         function setProgressStage(text) {
             if (progressStage) {
@@ -992,8 +1025,15 @@
 
         async function parseJsonResponse(response) {
             const text = await response.text();
+            const contentType = response.headers.get('content-type') || '';
             if (!text) {
                 return {};
+            }
+            if (contentType.includes('text/html')) {
+                const snippet = text.trim().slice(0, 160);
+                const redirected = response.redirected ? ' Request was redirected.' : '';
+                const details = snippet ? ` Response: ${snippet}` : '';
+                throw new Error(`Server returned HTML instead of JSON.${redirected}${details}`);
             }
             try {
                 return JSON.parse(text);
@@ -1014,7 +1054,7 @@
 
             const response = await fetch(startUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ files: metadata }),
                 credentials: 'same-origin',
             });
@@ -1063,6 +1103,7 @@
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', uploadUrl);
                 xhr.withCredentials = true;
+                setRequestHeaders({}, xhr);
                 xhr.upload.onprogress = (event) => {
                     if (!event.lengthComputable) {
                         return;
@@ -1070,6 +1111,16 @@
                 };
                 xhr.onload = () => {
                     const responseText = xhr.responseText || '';
+                    const contentType = xhr.getResponseHeader('content-type') || '';
+                    if (contentType.includes('text/html')) {
+                        const snippet = responseText.trim().slice(0, 160);
+                        const redirected = xhr.responseURL && xhr.responseURL !== uploadUrl
+                            ? ' Request was redirected.'
+                            : '';
+                        const details = snippet ? ` Response: ${snippet}` : '';
+                        reject(new Error(`Server returned HTML instead of JSON.${redirected}${details}`));
+                        return;
+                    }
                     let responseData = {};
                     if (responseText) {
                         try {
