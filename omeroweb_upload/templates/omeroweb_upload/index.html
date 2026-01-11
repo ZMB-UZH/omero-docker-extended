@@ -9,6 +9,39 @@
             margin: 24px;
             color: #111827;
         }
+        .root-user-blocked .upload-page {
+            filter: blur(5px);
+            pointer-events: none;
+            user-select: none;
+        }
+        .root-user-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.65);
+            z-index: 20000;
+            pointer-events: none;
+        }
+        .root-user-warning {
+            position: fixed;
+            color: #b91c1c;
+            font-size: 20px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            padding: 24px 32px;
+            background: rgba(254, 226, 226, 0.96);
+            border: 2px solid #b91c1c;
+            border-radius: 12px;
+            box-shadow: 0 14px 30px rgba(185, 28, 28, 0.35);
+            max-width: 520px;
+            margin: auto;
+            pointer-events: auto;
+            left: 50%;
+            top: 35%;
+            transform: translate(-50%, -50%);
+            z-index: 20001;
+        }
         .upload-title {
             margin: 0 0 12px;
             color: #007bff;
@@ -321,35 +354,50 @@
     </style>
 </head>
 <body>
-    <h1 class="upload-title">Upload</h1>
-    <p class="upload-intro">Drag & drop files or folders to import them into your user space in Omero.</p>
-    <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
-    <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
-        <p><strong>Drag & drop</strong> files here or <strong>select from storage</strong>.</p>
-        <div class="upload-actions">
-            <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
-            <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+    {% if is_root_user %}
+        <div class="root-user-overlay" aria-hidden="true"></div>
+        <div id="root-user-warning" class="root-user-warning" role="alert">
+            PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
         </div>
-        <div id="file-tree" class="file-tree" aria-live="polite"></div>
-        <div id="status" class="status"></div>
-    </div>
+    {% endif %}
+    <div class="upload-page">
+        <h1 class="upload-title">Upload</h1>
+        <p class="upload-intro">Drag & drop files or folders to import them into your user space in Omero.</p>
+        <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
+        <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
+            <p><strong>Drag & drop</strong> files here or <strong>select from storage</strong>.</p>
+            <div class="upload-actions">
+                <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
+                <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+            </div>
+            <div id="file-tree" class="file-tree" aria-live="polite"></div>
+            <div id="status" class="status"></div>
+        </div>
 
-    <div id="progress-section">
-        <h3>Progress</h3>
-        <p id="progress-stage">Stage: Waiting to start…</p>
-        <p id="progress-text">Waiting to start…</p>
-        <div id="progress-bar-container">
-            <div id="progress-bar">0%</div>
+        <div id="progress-section">
+            <h3>Progress</h3>
+            <p id="progress-stage">Stage: Waiting to start…</p>
+            <p id="progress-text">Waiting to start…</p>
+            <div id="progress-bar-container">
+                <div id="progress-bar">0%</div>
+            </div>
+            <pre id="progress-log"></pre>
         </div>
-        <pre id="progress-log"></pre>
-    </div>
-    <div id="duplicate-overlay" class="duplicate-overlay" aria-hidden="true"></div>
-    <div id="duplicate-popup" class="duplicate-popup" role="alertdialog" aria-modal="true" aria-hidden="true">
-        <p id="duplicate-message" class="duplicate-popup__message"></p>
-        <button type="button" id="duplicate-ok-btn" class="duplicate-popup__btn">Ok</button>
+        <div id="duplicate-overlay" class="duplicate-overlay" aria-hidden="true"></div>
+        <div id="duplicate-popup" class="duplicate-popup" role="alertdialog" aria-modal="true" aria-hidden="true">
+            <p id="duplicate-message" class="duplicate-popup__message"></p>
+            <button type="button" id="duplicate-ok-btn" class="duplicate-popup__btn">Ok</button>
+        </div>
     </div>
 
     <script>
+        const isRootUser = {{ is_root_user|yesno:"true,false" }};
+        if (isRootUser) {
+            document.documentElement.classList.add('root-user-blocked');
+            if (document.body) {
+                document.body.classList.add('root-user-blocked');
+            }
+        }
         const uploadCard = document.getElementById('upload-card');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
