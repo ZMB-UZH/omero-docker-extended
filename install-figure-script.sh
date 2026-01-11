@@ -3,7 +3,7 @@ set -e
 echo "Checking for Figure_To_Pdf.py script..."
 
 # Detect installed OMERO.figure version
-FIGURE_VERSION=$(/opt/omero/server/venv*/bin/pip show omero-figure | grep Version | cut -d' ' -f2)
+FIGURE_VERSION=$(/opt/omero/server/OMERO.server/bin/omero version --list | grep "omero-figure" | cut -d' ' -f2)
 echo "Detected OMERO.figure version: ${FIGURE_VERSION}"
 
 SCRIPT_PATH="/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py"
