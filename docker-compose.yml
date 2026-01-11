@@ -39,6 +39,7 @@ services:
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
       CONFIG_omero_db_poolsize: 80 # max number should be less than 100 for the default Postgres settings
+      OMERO_FIGURE_VERSION=7.3.0 # change if you get a warning in Omero web -> Figure; it will say which version should be installed
     networks:
       - omero
     ports:
