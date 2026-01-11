@@ -2,15 +2,9 @@
 set -e
 echo "Checking for Figure_To_Pdf.py script..."
 
-# Get version from OMERO.web container
-FIGURE_VERSION=$(docker exec omero-test-omeroweb-1 /opt/omero/web/venv*/bin/python -c "import pkg_resources; print(pkg_resources.get_distribution('omero-figure').version)" 2>/dev/null || echo "")
-
-if [ -z "${FIGURE_VERSION}" ]; then
-    echo "ERROR: Could not detect omero-figure version from web container"
-    exit 1
-fi
-
-echo "Detected OMERO.figure version: ${FIGURE_VERSION}"
+# Get version from environment variable set in docker-compose.yml
+FIGURE_VERSION="${OMERO_FIGURE_VERSION:-7.3.0}"
+echo "Using OMERO.figure version: ${FIGURE_VERSION}"
 
 SCRIPT_PATH="/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py"
 
