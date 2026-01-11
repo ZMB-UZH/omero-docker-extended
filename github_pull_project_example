@@ -58,6 +58,8 @@ find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" -exec rm -rf {} +
 
 echo "Cloning repository (test branch)..."
 git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
+echo "Fixing line endings in shell scripts..."
+find temp_clone -name "*.sh" -type f -exec sed -i 's/\r$//' {} \;
 shopt -s dotglob
 mv temp_clone/* .
 shopt -u dotglob
@@ -78,4 +80,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
