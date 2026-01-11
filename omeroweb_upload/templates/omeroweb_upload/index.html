@@ -129,6 +129,17 @@
             justify-content: center;
             flex-wrap: wrap;
         }
+        .upload-action-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            align-items: center;
+            gap: 12px;
+            margin-top: 4px;
+        }
+        .upload-action-slot {
+            display: flex;
+            justify-content: center;
+        }
         .upload-actions button {
             background: #2563eb;
             color: #fff;
@@ -138,9 +149,20 @@
             cursor: pointer;
             font-size: 0.95rem;
         }
+        .upload-actions .secondary-action {
+            background: #6b7280;
+            color: #fff;
+        }
         .upload-actions button:disabled {
             background: #94a3b8;
             cursor: not-allowed;
+        }
+        .upload-actions .secondary-action:disabled {
+            background: #cbd5f5;
+        }
+        .action-hidden {
+            visibility: hidden;
+            pointer-events: none;
         }
         .upload-actions input[type="file"].has-files {
             color: transparent;
@@ -428,6 +450,14 @@
                     <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
                     <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
                 </div>
+                <div class="upload-action-row upload-actions" aria-live="polite">
+                    <div class="upload-action-slot">
+                        <button id="cancel-upload-btn" type="button" class="secondary-action action-hidden">Cancel upload</button>
+                    </div>
+                    <div class="upload-action-slot">
+                        <button id="cancel-import-btn" type="button" class="secondary-action action-hidden">Cancel import</button>
+                    </div>
+                </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
             </div>
@@ -461,6 +491,8 @@
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
         const uploadBtn = document.getElementById('upload-btn');
+        const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+        const cancelImportBtn = document.getElementById('cancel-import-btn');
         const statusEl = document.getElementById('status');
         const fileTree = document.getElementById('file-tree');
         const uploadEnabled = !uploadBtn.disabled;
@@ -482,6 +514,8 @@
         const importLogState = new Map();
         let importPollTimer = null;
         let isUploading = false;
+        let cancelUploadRequested = false;
+        const activeUploadRequests = new Set();
         const storage =
             (() => {
                 try {
@@ -518,6 +552,7 @@
             uploadCard.classList.toggle('is-uploading', active);
             fileInput.disabled = active || !uploadEnabled;
             uploadBtn.disabled = active || !uploadEnabled;
+            updateCancelButtons();
         }
 
         function updateUploadButtonLabel() {
@@ -1111,8 +1146,20 @@
             return batches;
         }
 
+        function registerActiveRequest(xhr) {
+            activeUploadRequests.add(xhr);
+            const cleanup = () => activeUploadRequests.delete(xhr);
+            xhr.addEventListener('loadend', cleanup);
+            xhr.addEventListener('abort', cleanup);
+            xhr.addEventListener('error', cleanup);
+        }
+
         function uploadBatch(uploadUrl, batch) {
             return new Promise((resolve, reject) => {
+                if (cancelUploadRequested) {
+                    reject(new Error('Upload canceled.'));
+                    return;
+                }
                 const formData = new FormData();
                 batch.forEach((entry) => {
                     const relativePath = entry.relativePath || entry.file.name;
@@ -1124,12 +1171,17 @@
                 xhr.open('POST', uploadUrl);
                 xhr.withCredentials = true;
                 setRequestHeaders({}, xhr);
+                registerActiveRequest(xhr);
                 xhr.upload.onprogress = (event) => {
                     if (!event.lengthComputable) {
                         return;
                     }
                 };
                 xhr.onload = () => {
+                    if (cancelUploadRequested) {
+                        reject(new Error('Upload canceled.'));
+                        return;
+                    }
                     const responseText = xhr.responseText || '';
                     const contentType = xhr.getResponseHeader('content-type') || '';
                     if (contentType.includes('text/html')) {
@@ -1158,6 +1210,7 @@
                     }
                     resolve(responseData);
                 };
+                xhr.onabort = () => reject(new Error('Upload canceled.'));
                 xhr.onerror = () => reject(new Error('Upload failed.'));
                 xhr.send(formData);
             });
@@ -1174,6 +1227,9 @@
             let taskIndex = 0;
             const workers = new Array(concurrency).fill(null).map(async () => {
                 while (taskIndex < tasks.length) {
+                    if (cancelUploadRequested) {
+                        return;
+                    }
                     const currentIndex = taskIndex;
                     taskIndex += 1;
                     await tasks[currentIndex]();
@@ -1296,6 +1352,7 @@
             if (!importJobs.size) {
                 progressSection.style.display = 'none';
                 updateUploadButtonLabel();
+                updateCancelButtons();
                 return;
             }
             progressSection.style.display = 'block';
@@ -1317,6 +1374,7 @@
             }
             updateUploadButtonLabel();
             persistImportState();
+            updateCancelButtons();
         }
 
         async function pollImportJobs() {
@@ -1373,6 +1431,45 @@
             ensureImportPolling();
         }
 
+        function updateCancelButtons() {
+            const showUploadCancel = isUploading;
+            const showImportCancel = hasActiveImport();
+            cancelUploadBtn.classList.toggle('action-hidden', !showUploadCancel);
+            cancelUploadBtn.disabled = !showUploadCancel;
+            cancelImportBtn.classList.toggle('action-hidden', !showImportCancel);
+            cancelImportBtn.disabled = !showImportCancel;
+        }
+
+        function clearImportState() {
+            importJobs.clear();
+            importLogEntries.splice(0, importLogEntries.length);
+            importLogState.clear();
+            progressLog.textContent = '';
+            setProgressStage('Stage: Waiting to start…');
+            updateProgress(0, 'Waiting to start…');
+            if (importPollTimer) {
+                window.clearTimeout(importPollTimer);
+                importPollTimer = null;
+            }
+            if (storage) {
+                try {
+                    storage.removeItem(importJobsStorageKey);
+                    storage.removeItem(importLogsStorageKey);
+                } catch (error) {
+                    // Ignore storage failures.
+                }
+            }
+            updateProgressFromJobs();
+        }
+
+        cancelImportBtn.addEventListener('click', () => {
+            if (!hasActiveImport()) {
+                return;
+            }
+            clearImportState();
+            setStatus('Import canceled. You can start a new upload when ready.', 'success');
+        });
+
         uploadBtn.addEventListener('click', async () => {
             if (!pendingFiles.length) {
                 setStatus('Please select files to upload.', 'error');
@@ -1384,6 +1481,7 @@
             }
 
             setUploadingState(true);
+            cancelUploadRequested = false;
             setStatus('');
 
             try {
@@ -1399,10 +1497,32 @@
                     'success'
                 );
             } catch (error) {
-                setStatus(`Upload failed: ${error.message || error}`, 'error');
+                if (cancelUploadRequested) {
+                    setStatus('Upload canceled. You can restart the upload when ready.', 'success');
+                } else {
+                    setStatus(`Upload failed: ${error.message || error}`, 'error');
+                }
             } finally {
                 setUploadingState(false);
+                cancelUploadRequested = false;
             }
+        });
+
+        cancelUploadBtn.addEventListener('click', () => {
+            if (!isUploading) {
+                return;
+            }
+            cancelUploadRequested = true;
+            activeUploadRequests.forEach((xhr) => {
+                try {
+                    xhr.abort();
+                } catch (error) {
+                    // Ignore abort failures.
+                }
+            });
+            activeUploadRequests.clear();
+            setUploadingState(false);
+            setStatus('Upload canceled. You can restart the upload when ready.', 'success');
         });
 
         if (!uploadEnabled) {
@@ -1414,6 +1534,7 @@
             ensureImportPolling();
         }
         updateUploadButtonLabel();
+        updateCancelButtons();
     </script>
 </body>
 </html>
