@@ -919,28 +919,40 @@
             return { rootName, isRootFile: parts.length <= 1 };
         }
 
-        function findDuplicateRootFileNames(entries) {
-            const existingRootFiles = new Set();
+        function findDuplicateRootNames(entries) {
+            const existingRootNames = new Set();
 
             pendingFiles.forEach((entry) => {
                 const info = getRootInfo(entry);
-                if (info.isRootFile) {
-                    existingRootFiles.add(info.rootName);
+                if (info.rootName) {
+                    existingRootNames.add(info.rootName);
                 }
             });
 
             const incomingRootFiles = new Set();
+            const incomingRootFolders = new Set();
             const duplicates = new Set();
 
             entries.forEach((entry) => {
                 const info = getRootInfo(entry);
-                if (!info.isRootFile) {
+                if (!info.rootName) {
                     return;
                 }
-                if (existingRootFiles.has(info.rootName) || incomingRootFiles.has(info.rootName)) {
+                if (info.isRootFile) {
+                    if (
+                        existingRootNames.has(info.rootName)
+                        || incomingRootFiles.has(info.rootName)
+                        || incomingRootFolders.has(info.rootName)
+                    ) {
+                        duplicates.add(info.rootName);
+                    }
+                    incomingRootFiles.add(info.rootName);
+                    return;
+                }
+                if (existingRootNames.has(info.rootName) || incomingRootFiles.has(info.rootName)) {
                     duplicates.add(info.rootName);
                 }
-                incomingRootFiles.add(info.rootName);
+                incomingRootFolders.add(info.rootName);
             });
 
             return duplicates;
@@ -954,11 +966,10 @@
         }
 
         function handleFiles(entries) {
-            const duplicates = findDuplicateRootFileNames(entries);
+            const duplicates = findDuplicateRootNames(entries);
             if (duplicates.size) {
-                const names = Array.from(duplicates).sort().join(', ');
                 showDuplicatePopup(
-                    `Duplicate file name(s) in the base path: ${names}. Remove existing entries or rename the files before uploading.`
+                    'Some of the selected items are already in the upload list. Remove existing entries or rename them before uploading.'
                 );
                 return;
             }
@@ -1284,6 +1295,7 @@
                 return;
             }
             try {
+                let restoredLogs = false;
                 const rawJobs = storage.getItem(importJobsStorageKey);
                 if (rawJobs) {
                     const savedJobs = JSON.parse(rawJobs);
@@ -1311,6 +1323,7 @@
                     if (Array.isArray(savedLogs.entries)) {
                         importLogEntries.splice(0, importLogEntries.length, ...savedLogs.entries);
                         updateImportLog(importLogEntries);
+                        restoredLogs = true;
                     }
                     if (Array.isArray(savedLogs.state)) {
                         importLogState.clear();
@@ -1320,6 +1333,10 @@
                             }
                         });
                     }
+                }
+                if (!hasActiveImport() && (importJobs.size || restoredLogs)) {
+                    clearImportState();
+                    setStatus('');
                 }
             } catch (error) {
                 // Ignore storage failures.
