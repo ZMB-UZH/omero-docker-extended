@@ -13,7 +13,6 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt
 from omero.model import DatasetI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
@@ -369,14 +368,22 @@ def index(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 def start_upload(request, conn=None, url=None, **kwargs):
+    try:
+        return _start_upload(request, conn)
+    except Exception:
+        logger.exception("Unhandled error while starting upload job.")
+        return JsonResponse({"ok": False, "error": "Unexpected server error while starting upload."}, status=500)
+
+
+def _start_upload(request, conn):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "Upload start expects POST."}, status=200)
 
     upload_root = _get_upload_root()
     if not _ensure_dir(upload_root) or not _ensure_dir(_get_jobs_root()):
+        logger.warning("Upload folder not writable or job dir missing.")
         return JsonResponse(
             {
                 "ok": False,
@@ -392,14 +399,17 @@ def start_upload(request, conn=None, url=None, **kwargs):
 
     files = payload.get("files") or []
     if not files:
+        logger.info("Upload start request missing files payload.")
         return JsonResponse({"ok": False, "error": "No files provided."}, status=200)
 
     session_key = _get_session_key(conn)
     if not session_key:
+        logger.warning("Unable to resolve OMERO session key for upload start.")
         return JsonResponse({"ok": False, "error": "Unable to resolve OMERO session."}, status=200)
 
     host, port = _resolve_omero_host_port(conn)
     if not host or not port:
+        logger.warning("Unable to resolve OMERO host/port for upload start.")
         return JsonResponse({"ok": False, "error": "Unable to resolve OMERO host/port."}, status=200)
 
     normalized = []
@@ -430,6 +440,7 @@ def start_upload(request, conn=None, url=None, **kwargs):
         )
 
     if invalid:
+        logger.info("Upload start rejected invalid paths: %s", invalid)
         return JsonResponse(
             {"ok": False, "error": f"Invalid file paths: {', '.join(invalid)}."},
             status=200,
@@ -463,6 +474,13 @@ def start_upload(request, conn=None, url=None, **kwargs):
         "import_thread_started": False,
     }
     _save_job(job)
+    logger.info(
+        "Upload job %s created for user %s with %d files (%d bytes).",
+        job_id,
+        username,
+        len(normalized),
+        total_bytes,
+    )
 
     return JsonResponse(
         {
@@ -475,14 +493,22 @@ def start_upload(request, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
+    try:
+        return _upload_files(request, job_id)
+    except Exception:
+        logger.exception("Unhandled error while uploading files for job %s.", job_id)
+        return JsonResponse({"ok": False, "error": "Unexpected server error while uploading files."}, status=500)
+
+
+def _upload_files(request, job_id):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "Upload endpoint expects POST."}, status=200)
 
     upload_root = _get_upload_root()
     if not _ensure_dir(upload_root):
+        logger.warning("Upload root not writable for job %s.", job_id)
         return JsonResponse(
             {
                 "ok": False,
@@ -493,14 +519,17 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
 
     job = _load_job(job_id)
     if not job:
+        logger.warning("Upload job %s not found.", job_id)
         return JsonResponse({"ok": False, "error": "Upload job not found."}, status=200)
 
     files = request.FILES.getlist("files")
     if not files:
+        logger.info("Upload job %s received no files.", job_id)
         return JsonResponse({"ok": False, "error": "No files provided."}, status=200)
 
     relative_paths = request.POST.getlist("relative_paths")
     if relative_paths and len(relative_paths) != len(files):
+        logger.warning("Upload payload mismatch for job %s.", job_id)
         return JsonResponse(
             {
                 "ok": False,
@@ -511,6 +540,7 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
 
     job_root = upload_root / job_id
     if not _ensure_dir(job_root):
+        logger.warning("Unable to initialize upload folder for job %s.", job_id)
         return JsonResponse({"ok": False, "error": "Unable to initialize upload folder."}, status=200)
 
     saved = []
@@ -554,6 +584,7 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
 
     if job["status"] == "ready":
         _start_import_thread(job_id)
+        logger.info("Upload job %s ready; import thread started.", job_id)
 
     return JsonResponse(
         {
@@ -568,14 +599,22 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
     )
 
 
-@csrf_exempt
 @login_required()
 def import_step(request, job_id, conn=None, url=None, **kwargs):
+    try:
+        return _import_step(request, job_id)
+    except Exception:
+        logger.exception("Unhandled error while importing job %s.", job_id)
+        return JsonResponse({"ok": False, "error": "Unexpected server error while importing."}, status=500)
+
+
+def _import_step(request, job_id):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "Import endpoint expects POST."}, status=200)
 
     job = _load_job(job_id)
     if not job:
+        logger.warning("Import job %s not found.", job_id)
         return JsonResponse({"ok": False, "error": "Import job not found."}, status=200)
 
     if job.get("status") == "ready":
