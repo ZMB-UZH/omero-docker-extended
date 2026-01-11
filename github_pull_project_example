@@ -36,13 +36,17 @@ cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
 
 echo "Pulling latest docker-compose.yml from GitHub..."
 git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
+if [ ! -d "temp_clone" ]; then
+    echo "ERROR: Git clone failed"
+    exit 1
+fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
-
 echo "Stopping containers with latest docker-compose.yml..."
 docker compose -f docker-compose.yml.new down --remove-orphans || docker compose down --remove-orphans || true
-
 echo "Removing ALL omeroweb images..."
 docker images -q omero-test-omeroweb | xargs -r docker rmi -f || true
+# echo "Removing dangling images..."
+# docker image prune -f
 
 echo "Removing all files except script..."
 find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" ! -name "temp_clone" ! -name "docker-compose.yml.new" -exec rm -rf {} +
@@ -54,6 +58,7 @@ shopt -s dotglob
 mv temp_clone/* .
 shopt -u dotglob
 rm -rf temp_clone
+rm -f docker-compose.yml.new
 
 echo "Restoring script..."
 mv "${SCRIPT_BACKUP}" "${SCRIPT_NAME}"
@@ -70,4 +75,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
