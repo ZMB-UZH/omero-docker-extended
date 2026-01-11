@@ -446,7 +446,7 @@ def index(request, conn=None, url=None, **kwargs):
     upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 25)
     return render(
         request,
-        "index.html",
+        "omeroweb_upload/index.html",
         {
             "upload_root": str(upload_root),
             "upload_enabled": upload_enabled and job_dir_ok,
