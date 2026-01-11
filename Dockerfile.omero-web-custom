@@ -42,6 +42,8 @@ RUN set -eux; \
 # Pre-create ALL Django static directories and own them
 # -----------------------------------------------------
 RUN set -eux; \
+    dnf -y update || true; \
+    dnf clean all; \
     mkdir -p \
         /opt/omero/web/OMERO.web/var \
         /opt/omero/web/OMERO.web/var/log \
@@ -67,6 +69,17 @@ RUN set -eux; \
         echo "No logo.png found in build context, skipping logo setup"; \
     fi; \
     rm -f /tmp/logo.png*
+
+# Security hardening: upgrade vulnerable Python packages inside OMERO venv
+# ------------------------------------------------------------------------
+RUN set -eux; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
+    "${VENV_DIR}/bin/pip" install --no-cache-dir --upgrade \
+        pip \
+        setuptools>=78.1.1 \
+        wheel \
+        cryptography>=42.0.0 \
+        urllib3>=2.6.3
 
 # Drop privileges for runtime
 # ---------------------------
