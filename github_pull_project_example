@@ -34,30 +34,20 @@ echo "Backing up script..."
 SCRIPT_BACKUP="/tmp/${SCRIPT_NAME}.backup.$(date +%s)"
 cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
 
-if [ -f "${COMPOSE_FILE}" ]; then
-    echo "Stopping containers using ${COMPOSE_FILE}..."
-    docker compose -f "${COMPOSE_FILE}" down --remove-orphans
-else
-    echo "docker-compose.yml missing — stopping ONLY omeroweb containers"
+echo "Pulling latest docker-compose.yml from GitHub..."
+git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
+cp temp_clone/docker-compose.yml docker-compose.yml.new
 
-    docker ps -aq \
-        --filter "name=omeroweb" \
-        | xargs -r docker stop
-
-    docker ps -aq \
-        --filter "name=omeroweb" \
-        | xargs -r docker rm -f
-fi
+echo "Stopping containers with latest docker-compose.yml..."
+docker compose -f docker-compose.yml.new down --remove-orphans || docker compose down --remove-orphans || true
 
 echo "Removing ALL omeroweb images..."
-docker images -q omero-test-omeroweb \
-    | xargs -r docker rmi -f || true
+docker images -q omero-test-omeroweb | xargs -r docker rmi -f || true
 
 echo "Removing all files except script..."
-find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" -exec rm -rf {} +
+find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" ! -name "temp_clone" ! -name "docker-compose.yml.new" -exec rm -rf {} +
 
-echo "Cloning repository (test branch)..."
-git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
+echo "Moving new files..."
 echo "Fixing line endings in shell scripts..."
 find temp_clone -name "*.sh" -type f -exec sed -i 's/\r$//' {} \;
 shopt -s dotglob
@@ -80,3 +70,4 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
