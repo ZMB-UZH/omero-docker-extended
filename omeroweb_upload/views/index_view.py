@@ -17,7 +17,7 @@ from omero.model import DatasetI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 
-from ..constants import MAX_UPLOAD_BATCH_BYTES
+from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
 
@@ -726,11 +726,11 @@ def _start_upload(request, conn):
         total_bytes += size
         if total_bytes > MAX_UPLOAD_BATCH_BYTES:
             logger.info(
-                "Upload start rejected batch exceeding %d bytes for user %s.",
-                MAX_UPLOAD_BATCH_BYTES,
+                "Upload start rejected batch exceeding %d GB for user %s.",
+                MAX_UPLOAD_BATCH_GB,
                 current_username(request, conn),
             )
-            return json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_BYTES))
+            return json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_GB))
         normalized.append(
             {
                 "upload_id": upload_id,
