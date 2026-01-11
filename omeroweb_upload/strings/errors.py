@@ -39,6 +39,10 @@ def upload_payload_mismatch():
     return "Upload payload mismatch. Please retry the upload."
 
 
+def upload_batch_too_large(max_bytes):
+    return f"Upload batch exceeds the limit of {max_bytes} bytes."
+
+
 def unable_initialize_upload_folder():
     return "Unable to initialize upload folder."
 
