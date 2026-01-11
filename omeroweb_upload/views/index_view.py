@@ -145,7 +145,7 @@ def _dataset_name_for_path(relative_path: str):
 
 
 # --------------------------------------------------------------------------
-# OMERO IMPORT HELPERS
+# Omero IMPORT HELPERS
 # --------------------------------------------------------------------------
 
 def _resolve_omero_host_port(conn):
@@ -278,6 +278,48 @@ def _get_import_lock(username: str):
     return lock
 
 
+def _apply_upload_updates(job_id: str, updates: list, errors: list):
+    path = _job_path(job_id)
+
+    def apply_updates(job_dict):
+        entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
+        for update in updates:
+            entry = entries_by_id.get(update.get("upload_id"))
+            if not entry:
+                continue
+            entry["status"] = update.get("status", entry.get("status"))
+            if update.get("errors"):
+                entry.setdefault("errors", []).extend(update["errors"])
+        if errors:
+            job_dict.setdefault("errors", []).extend(errors)
+        uploaded_bytes = sum(
+            entry.get("size", 0) for entry in job_dict.get("files", []) if entry.get("status") == "uploaded"
+        )
+        job_dict["uploaded_bytes"] = uploaded_bytes
+        pending_entries = any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
+        if not pending_entries:
+            job_dict["status"] = "ready"
+        return job_dict
+
+    try:
+        with portalocker.Lock(path, "r+", timeout=5) as handle:
+            job_dict = json.load(handle)
+            job_dict = apply_updates(job_dict)
+            handle.seek(0)
+            handle.truncate()
+            json.dump(job_dict, handle)
+        return job_dict
+    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to lock job file %s for upload update: %s", path, exc)
+
+    job_dict = _load_job(job_id)
+    if not job_dict:
+        return None
+    job_dict = apply_updates(job_dict)
+    _save_job(job_dict)
+    return job_dict
+
+
 def _process_import_job(job_id: str):
     job = _load_job(job_id)
     if not job:
@@ -305,7 +347,7 @@ def _process_import_job(job_id: str):
             port = job.get("port")
             if not session_key or not host or not port:
                 job["status"] = "error"
-                job["errors"].append("Missing OMERO connection details for import.")
+                job["errors"].append("Missing Omero connection details for import.")
                 _save_job(job)
                 return
 
@@ -447,7 +489,7 @@ def _start_upload(request, conn):
         return JsonResponse(
             {
                 "ok": False,
-                "error": "Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.",
+                "error": "Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.",
             },
             status=200,
         )
@@ -468,13 +510,13 @@ def _start_upload(request, conn):
 
     session_key = _get_session_key(conn)
     if not session_key:
-        logger.warning("Unable to resolve OMERO session key for upload start.")
-        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO session."}, status=200)
+        logger.warning("Unable to resolve Omero session key for upload start.")
+        return JsonResponse({"ok": False, "error": "Unable to resolve Omero session."}, status=200)
 
     host, port = _resolve_omero_host_port(conn)
     if not host or not port:
-        logger.warning("Unable to resolve OMERO host/port for upload start.")
-        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO host/port."}, status=200)
+        logger.warning("Unable to resolve Omero host/port for upload start.")
+        return JsonResponse({"ok": False, "error": "Unable to resolve Omero host/port."}, status=200)
 
     normalized = []
     total_bytes = 0
@@ -591,7 +633,7 @@ def _upload_files(request, job_id):
         return JsonResponse(
             {
                 "ok": False,
-                "error": "Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.",
+                "error": "Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR.",
             },
             status=200,
         )
@@ -625,6 +667,7 @@ def _upload_files(request, job_id):
     saved = []
     errors = []
     entries_by_path = {}
+    updates = []
     for file_entry in job["files"]:
         if file_entry.get("status") in ("pending", "error"):
             entries_by_path.setdefault(file_entry["relative_path"], []).append(file_entry)
@@ -651,23 +694,21 @@ def _upload_files(request, job_id):
                     handle.write(chunk)
             saved.append(rel_path)
             entry["status"] = "uploaded"
+            updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
         except OSError as exc:
             logger.warning("Failed to save upload %s: %s", rel_path, exc)
             errors.append(f"{rel_path}: {exc}")
             entry["status"] = "error"
             entry.setdefault("errors", []).append(str(exc))
+            updates.append(
+                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [str(exc)]}
+            )
 
-    uploaded_bytes = 0
-    for entry in job["files"]:
-        if entry["status"] == "uploaded":
-            uploaded_bytes += entry.get("size", 0)
-    job["uploaded_bytes"] = uploaded_bytes
-    if uploaded_bytes >= job.get("total_bytes", 0):
-        job["status"] = "ready"
+    updated_job = _apply_upload_updates(job_id, updates, errors)
+    if not updated_job:
+        return JsonResponse({"ok": False, "error": "Unable to update upload job state."}, status=200)
 
-    _save_job(job)
-
-    if job["status"] == "ready":
+    if updated_job["status"] == "ready":
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", job_id)
 
@@ -677,9 +718,9 @@ def _upload_files(request, job_id):
             "saved": saved,
             "errors": errors,
             "error": errors[0] if errors else None,
-            "uploaded_bytes": job["uploaded_bytes"],
-            "total_bytes": job.get("total_bytes", 0),
-            "ready": job["status"] == "ready",
+            "uploaded_bytes": updated_job.get("uploaded_bytes", 0),
+            "total_bytes": updated_job.get("total_bytes", 0),
+            "ready": updated_job.get("status") == "ready",
         }
     )
 
