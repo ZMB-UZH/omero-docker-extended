@@ -1390,7 +1390,7 @@
             );
             updateImportLogFromJobs(jobs);
             if (!hasActiveImport() && totalBytes) {
-                updateProgress(100, 'Import complete. Check the log below.');
+                updateProgress(100, 'Import complete.');
                 setStatus('Import complete. Check the log below.', 'success');
             }
             updateUploadButtonLabel();
