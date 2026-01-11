@@ -134,7 +134,7 @@
             grid-template-columns: 1fr 1fr;
             align-items: center;
             gap: 12px;
-            margin-top: 4px;
+            margin: 12px 0;
         }
         .upload-action-slot {
             display: flex;
@@ -450,16 +450,17 @@
                     <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
                     <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
                 </div>
-                <div class="upload-action-row upload-actions" aria-live="polite">
-                    <div class="upload-action-slot">
-                        <button id="cancel-upload-btn" type="button" class="secondary-action action-hidden">Cancel upload</button>
-                    </div>
-                    <div class="upload-action-slot">
-                        <button id="cancel-import-btn" type="button" class="secondary-action action-hidden">Cancel import</button>
-                    </div>
-                </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
+            </div>
+        </div>
+
+        <div class="upload-action-row upload-actions" aria-live="polite">
+            <div class="upload-action-slot">
+                <button id="cancel-upload-btn" type="button" class="secondary-action action-hidden">Cancel upload</button>
+            </div>
+            <div class="upload-action-slot">
+                <button id="cancel-import-btn" type="button" class="secondary-action action-hidden">Cancel import</button>
             </div>
         </div>
 
