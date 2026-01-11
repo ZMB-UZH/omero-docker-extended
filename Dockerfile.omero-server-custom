@@ -11,4 +11,15 @@ RUN set -eux; \
         reportlab \
         markdown
 
+# Fetch latest OMERO.figure export script directly from upstream
+RUN set -eux; \
+    dnf -y install git; \
+    dnf clean all; \
+    mkdir -p /OMERO/OMERO.server/lib/scripts/omero/figure_scripts; \
+    git clone --depth 1 https://github.com/ome/omero-figure.git /tmp/omero-figure; \
+    install -m 644 /tmp/omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py \
+        /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
+    chown -R omero-server:omero-server /OMERO/OMERO.server/lib/scripts/omero/figure_scripts; \
+    rm -rf /tmp/omero-figure
+
 USER omero-server

@@ -45,7 +45,6 @@ services:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
-      - "./omero_figure/scripts/omero/figure_scripts:/OMERO/OMERO.server/lib/scripts/omero/figure_scripts:ro"
     ulimits:
       nofile:
         soft: 8192
