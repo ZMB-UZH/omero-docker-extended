@@ -478,6 +478,8 @@
         let pendingFiles = [];
         const expandedNodes = new Set();
         const importJobs = new Map();
+        const importLogEntries = [];
+        const importLogState = new Map();
         let importPollTimer = null;
         let isUploading = false;
 
@@ -1167,11 +1169,37 @@
             await Promise.all(workers);
         }
 
-        function updateImportLog(messages) {
+        function updateImportLog(entries) {
+            if (!entries || !entries.length) {
+                return;
+            }
+            progressLog.textContent = entries.join('\n');
+        }
+
+        function appendImportMessages(jobId, messages) {
             if (!messages || !messages.length) {
                 return;
             }
-            progressLog.textContent = messages.join('\n');
+            const previousCount = importLogState.get(jobId) || 0;
+            if (messages.length < previousCount) {
+                importLogState.set(jobId, messages.length);
+                importLogEntries.push(...messages);
+                updateImportLog(importLogEntries);
+                return;
+            }
+            const newMessages = messages.slice(previousCount);
+            if (!newMessages.length) {
+                return;
+            }
+            importLogEntries.push(...newMessages);
+            importLogState.set(jobId, messages.length);
+            updateImportLog(importLogEntries);
+        }
+
+        function updateImportLogFromJobs(jobs) {
+            jobs.forEach((job) => {
+                appendImportMessages(job.job_id, job.messages || []);
+            });
         }
 
         function updateProgressFromJobs() {
@@ -1192,13 +1220,7 @@
                     ? `Importing ${formatBytes(importedBytes)} of ${formatBytes(totalBytes)}...`
                     : 'Importing...'
             );
-            const latestJob = jobs
-                .slice()
-                .reverse()
-                .find((job) => job.messages && job.messages.length);
-            if (latestJob) {
-                updateImportLog(latestJob.messages);
-            }
+            updateImportLogFromJobs(jobs);
             if (!hasActiveImport() && totalBytes) {
                 updateProgress(100, 'Import complete.');
                 setStatus('Import complete.', 'success');

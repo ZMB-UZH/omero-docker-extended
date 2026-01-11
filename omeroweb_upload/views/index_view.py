@@ -120,7 +120,7 @@ def _save_job(job_dict):
 
 
 def _safe_relative_path(raw_name: str):
-    if not raw_name:
+    if not raw_name or not isinstance(raw_name, str):
         return None
     raw = raw_name.replace("\\", "/")
     candidate = PurePosixPath(raw)
@@ -494,11 +494,18 @@ def _start_upload(request, conn):
         )
 
     dataset_map = {}
-    dataset_names = { _dataset_name_for_path(entry["relative_path"]) for entry in normalized }
-    for dataset_name in sorted(name for name in dataset_names if name):
-        dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map)
-        if dataset_id is None:
-            logger.warning("Unable to resolve dataset for %s", dataset_name)
+    try:
+        dataset_names = set()
+        for entry in normalized:
+            dataset_name = _dataset_name_for_path(entry["relative_path"])
+            if dataset_name:
+                dataset_names.add(dataset_name)
+        for dataset_name in sorted(dataset_names):
+            dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map)
+            if dataset_id is None:
+                logger.warning("Unable to resolve dataset for %s", dataset_name)
+    except Exception:
+        logger.exception("Unable to prepare datasets for upload request.")
 
     job_id = uuid.uuid4().hex
     username = _current_username(request, conn)
