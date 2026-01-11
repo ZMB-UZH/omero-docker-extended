@@ -17,7 +17,7 @@ RUN dnf -y install git && dnf clean all
 
 # Create startup script to install Figure_To_Pdf.py after volume mount
 # Startup scripts run in numerical order, 55 runs after config but before server starts
-RUN echo '#!/bin/bash\n\
+RUN printf '#!/bin/bash\n\
 set -e\n\
 echo "Checking for Figure_To_Pdf.py script..."\n\
 if [ ! -f /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py ]; then\n\
