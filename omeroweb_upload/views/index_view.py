@@ -89,14 +89,34 @@ def _load_job(job_id: str):
     path = _job_path(job_id)
     if not path.exists():
         return None
-    with portalocker.Lock(path, "r", timeout=1) as handle:
-        return json.load(handle)
+    try:
+        with portalocker.Lock(path, "r", timeout=1) as handle:
+            return json.load(handle)
+    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to lock or read job file %s: %s", path, exc)
+    try:
+        with path.open("r") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to read job file %s without lock: %s", path, exc)
+    return None
 
 
 def _save_job(job_dict):
     path = _job_path(job_dict["job_id"])
-    with portalocker.Lock(path, "w", timeout=1) as handle:
-        json.dump(job_dict, handle)
+    try:
+        with portalocker.Lock(path, "w", timeout=1) as handle:
+            json.dump(job_dict, handle)
+        return True
+    except (portalocker.exceptions.LockException, OSError) as exc:
+        logger.warning("Unable to lock job file %s for writing: %s", path, exc)
+    try:
+        with path.open("w") as handle:
+            json.dump(job_dict, handle)
+        return True
+    except OSError as exc:
+        logger.warning("Unable to write job file %s without lock: %s", path, exc)
+    return False
 
 
 def _safe_relative_path(raw_name: str):
