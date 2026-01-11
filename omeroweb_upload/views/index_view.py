@@ -30,6 +30,7 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 DEFAULT_UPLOAD_BATCH_FILES = 5
+MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 
 
@@ -227,6 +228,24 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
     return result.returncode == 0, result.stdout, result.stderr
 
 
+def _append_job_message(job: dict, message: str):
+    if not message:
+        return
+    job.setdefault("messages", [])
+    job["messages"].append(message)
+    if len(job["messages"]) > MAX_IMPORT_LOG_LINES:
+        job["messages"] = job["messages"][-MAX_IMPORT_LOG_LINES:]
+
+
+def _append_job_error(job: dict, message: str):
+    if not message:
+        return
+    job.setdefault("errors", [])
+    job["errors"].append(message)
+    if len(job["errors"]) > MAX_IMPORT_LOG_LINES:
+        job["errors"] = job["errors"][-MAX_IMPORT_LOG_LINES:]
+
+
 def _verify_import(conn, file_name: str, dataset_id=None):
     if dataset_id:
         try:
@@ -313,8 +332,8 @@ def _process_import_job(job_id: str):
                     error_msg = f"Missing staged file: {rel_path}"
                     entry["status"] = "error"
                     entry.setdefault("errors", []).append(error_msg)
-                    job["errors"].append(error_msg)
-                    job["messages"].append(error_msg)
+                    _append_job_error(job, error_msg)
+                    _append_job_message(job, error_msg)
                     _save_job(job)
                     continue
 
@@ -330,17 +349,23 @@ def _process_import_job(job_id: str):
                     dataset_id=dataset_id,
                 )
                 if not success:
-                    error_msg = stderr.strip() or stdout.strip() or "Import failed."
+                    logger.warning(
+                        "Import failed for %s (stdout=%r, stderr=%r).",
+                        rel_path,
+                        stdout.strip(),
+                        stderr.strip(),
+                    )
+                    error_msg = "Import failed. See server logs for details."
                     entry["status"] = "error"
                     entry.setdefault("errors", []).append(error_msg)
-                    job["errors"].append(f"{rel_path}: {error_msg}")
-                    job["messages"].append(f"{rel_path}: {error_msg}")
+                    _append_job_error(job, f"{rel_path}: {error_msg}")
+                    _append_job_message(job, f"{rel_path}: {error_msg}")
                     _save_job(job)
                     continue
 
                 entry["status"] = "imported"
                 job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                job["messages"].append(f"Imported {rel_path}")
+                _append_job_message(job, f"Imported {rel_path}")
                 try:
                     file_path.unlink()
                 except OSError as exc:
@@ -356,7 +381,7 @@ def _process_import_job(job_id: str):
     except Exception as exc:
         logger.exception("Import job %s failed unexpectedly.", job_id)
         job = _load_job(job_id) or {"job_id": job_id}
-        job.setdefault("errors", []).append(f"Unexpected import failure: {exc}")
+        _append_job_error(job, f"Unexpected import failure: {exc}")
         job["status"] = "error"
         _save_job(job)
 

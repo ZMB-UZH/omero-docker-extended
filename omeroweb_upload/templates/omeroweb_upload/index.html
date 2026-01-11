@@ -1173,7 +1173,12 @@
             if (!entries || !entries.length) {
                 return;
             }
-            progressLog.textContent = entries.join('\n');
+            const maxLines = 1000;
+            const trimmed = entries.length > maxLines ? entries.slice(-maxLines) : entries;
+            if (entries.length > maxLines) {
+                importLogEntries.splice(0, importLogEntries.length - maxLines);
+            }
+            progressLog.textContent = trimmed.join('\n');
         }
 
         function appendImportMessages(jobId, messages) {
