@@ -59,6 +59,13 @@
             box-sizing: border-box;
             position: relative;
         }
+        .upload-card__content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1;
+            min-height: 0;
+        }
         .upload-card.is-uploading .upload-card__content {
             filter: blur(3px);
             pointer-events: none;
@@ -169,6 +176,16 @@
             gap: 2px;
             flex: 1;
             min-height: 0;
+        }
+        .file-tree:empty {
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            text-align: center;
+        }
+        .file-tree:empty::before {
+            content: "No files selected yet.";
         }
         .file-tree ul {
             list-style: none;

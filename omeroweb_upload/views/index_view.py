@@ -416,8 +416,12 @@ def _start_upload(request, conn):
         payload = json.loads(request.body or "{}")
     except json.JSONDecodeError:
         payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
 
     files = payload.get("files") or []
+    if not isinstance(files, list):
+        files = []
     if not files:
         logger.info("Upload start request missing files payload.")
         return JsonResponse({"ok": False, "error": "No files provided."}, status=200)
@@ -437,6 +441,9 @@ def _start_upload(request, conn):
     invalid = []
 
     for entry in files:
+        if not isinstance(entry, dict):
+            invalid.append(str(entry))
+            continue
         raw_name = entry.get("relative_path") or entry.get("name")
         size = entry.get("size")
         rel_path = _safe_relative_path(raw_name or "")
