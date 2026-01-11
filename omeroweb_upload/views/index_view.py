@@ -17,6 +17,7 @@ from omero.model import DatasetI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 
+from ..constants import MAX_UPLOAD_BATCH_BYTES
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
 
@@ -723,6 +724,13 @@ def _start_upload(request, conn):
         filename = PurePosixPath(rel_path).name
         staged_path = f"_staged/{upload_id}/{filename}"
         total_bytes += size
+        if total_bytes > MAX_UPLOAD_BATCH_BYTES:
+            logger.info(
+                "Upload start rejected batch exceeding %d bytes for user %s.",
+                MAX_UPLOAD_BATCH_BYTES,
+                current_username(request, conn),
+            )
+            return json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_BYTES))
         normalized.append(
             {
                 "upload_id": upload_id,
