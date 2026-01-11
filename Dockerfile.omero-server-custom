@@ -15,18 +15,23 @@ RUN set -eux; \
 # Install git permanently (needed at runtime)
 RUN dnf -y install git && dnf clean all
 
-# Create entrypoint to install script after volume mount
+# Create startup script to install Figure_To_Pdf.py after volume mount
+# Startup scripts run in numerical order, 55 runs after config but before server starts
 RUN echo '#!/bin/bash\n\
 set -e\n\
+echo "Checking for Figure_To_Pdf.py script..."\n\
 if [ ! -f /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py ]; then\n\
+    echo "Script not found, installing..."\n\
     mkdir -p /OMERO/OMERO.server/lib/scripts/omero/figure_scripts\n\
     git clone --depth 1 https://github.com/ome/omero-figure.git /tmp/omero-figure\n\
-    cp /tmp/omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/\n\
+    cp /tmp/omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py \\\n\
+        /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py\n\
     chown -R omero-server:omero-server /OMERO/OMERO.server/lib/scripts\n\
     chmod -R 755 /OMERO/OMERO.server/lib/scripts\n\
     rm -rf /tmp/omero-figure\n\
-fi\n\
-exec "$@"' > /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
+    echo "Script installed successfully"\n\
+else\n\
+    echo "Script already exists, skipping installation"\n\
+fi' > /startup/55-install-figure-script.sh && chmod +x /startup/55-install-figure-script.sh
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/opt/omero/server/OMERO.server/bin/omero-server"]
+USER omero-server
