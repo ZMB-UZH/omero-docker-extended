@@ -482,6 +482,19 @@
         const importLogState = new Map();
         let importPollTimer = null;
         let isUploading = false;
+        const storage =
+            (() => {
+                try {
+                    const testKey = '__omero_upload_storage_test__';
+                    window.localStorage.setItem(testKey, '1');
+                    window.localStorage.removeItem(testKey);
+                    return window.localStorage;
+                } catch (error) {
+                    return null;
+                }
+            })();
+        const importJobsStorageKey = 'omeroweb_upload_import_jobs_v1';
+        const importLogsStorageKey = 'omeroweb_upload_import_logs_v1';
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -1181,6 +1194,78 @@
             progressLog.textContent = trimmed.join('\n');
         }
 
+        function persistImportState() {
+            if (!storage) {
+                return;
+            }
+            try {
+                const jobs = Array.from(importJobs.values()).map((job, index) => ({
+                    job_id: job.job_id,
+                    status_url: job.status_url,
+                    total_bytes: job.total_bytes,
+                    status: job.status,
+                    created: job.created || index,
+                }));
+                storage.setItem(importJobsStorageKey, JSON.stringify(jobs));
+                storage.setItem(
+                    importLogsStorageKey,
+                    JSON.stringify({
+                        entries: importLogEntries,
+                        state: Array.from(importLogState.entries()),
+                    })
+                );
+            } catch (error) {
+                // Ignore storage failures.
+            }
+        }
+
+        function restoreImportState() {
+            if (!storage) {
+                return;
+            }
+            try {
+                const rawJobs = storage.getItem(importJobsStorageKey);
+                if (rawJobs) {
+                    const savedJobs = JSON.parse(rawJobs);
+                    savedJobs
+                        .sort((a, b) => (a.created || 0) - (b.created || 0))
+                        .forEach((job) => {
+                            if (!job || !job.job_id || !job.status_url) {
+                                return;
+                            }
+                            importJobs.set(job.job_id, {
+                                job_id: job.job_id,
+                                status_url: job.status_url,
+                                status: job.status || 'pending',
+                                imported_bytes: 0,
+                                total_bytes: job.total_bytes || 0,
+                                messages: [],
+                                errors: [],
+                                created: job.created || Date.now(),
+                            });
+                        });
+                }
+                const rawLogs = storage.getItem(importLogsStorageKey);
+                if (rawLogs) {
+                    const savedLogs = JSON.parse(rawLogs);
+                    if (Array.isArray(savedLogs.entries)) {
+                        importLogEntries.splice(0, importLogEntries.length, ...savedLogs.entries);
+                        updateImportLog(importLogEntries);
+                    }
+                    if (Array.isArray(savedLogs.state)) {
+                        importLogState.clear();
+                        savedLogs.state.forEach(([jobId, count]) => {
+                            if (jobId) {
+                                importLogState.set(jobId, count);
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                // Ignore storage failures.
+            }
+        }
+
         function appendImportMessages(jobId, messages) {
             if (!messages || !messages.length) {
                 return;
@@ -1231,6 +1316,7 @@
                 setStatus('Import complete.', 'success');
             }
             updateUploadButtonLabel();
+            persistImportState();
         }
 
         async function pollImportJobs() {
@@ -1281,6 +1367,7 @@
                 total_bytes: job.totalBytes,
                 messages: [],
                 errors: [],
+                created: Date.now(),
             });
             updateProgressFromJobs();
             ensureImportPolling();
@@ -1320,6 +1407,11 @@
 
         if (!uploadEnabled) {
             setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+        }
+        restoreImportState();
+        if (importJobs.size) {
+            updateProgressFromJobs();
+            ensureImportPolling();
         }
         updateUploadButtonLabel();
     </script>
