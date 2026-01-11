@@ -37,7 +37,6 @@
             max-width: 520px;
             margin: auto;
             pointer-events: auto;
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
             left: 50%;
             top: 35%;
             transform: translate(-50%, -50%);
@@ -58,6 +57,45 @@
             flex-direction: column;
             gap: 12px;
             box-sizing: border-box;
+            position: relative;
+        }
+        .upload-card.is-uploading .upload-card__content {
+            filter: blur(3px);
+            pointer-events: none;
+            user-select: none;
+        }
+        .upload-card__overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1e3a8a;
+            background: rgba(248, 250, 252, 0.4);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            z-index: 2;
+        }
+        .upload-card.is-uploading .upload-card__overlay {
+            opacity: 1;
+            pointer-events: auto;
+            animation: uploadPulse 2.8s ease-in-out infinite;
+        }
+        @keyframes uploadPulse {
+            0% {
+                opacity: 0.6;
+            }
+            50% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0.6;
+            }
         }
         .upload-card p {
             margin: 0;
@@ -363,16 +401,19 @@
     {% endif %}
     <div class="upload-page">
         <h1 class="upload-title">Upload</h1>
-        <p class="upload-intro">Drag & drop files or folders to import them into your user space in Omero.</p>
+        <p class="upload-intro">Drag & drop files or folders to upload and import them into your user space in Omero.</p>
         <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
         <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
-            <p><strong>Drag & drop</strong> files here or <strong>select from storage</strong>.</p>
-            <div class="upload-actions">
-                <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
-                <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+            <div class="upload-card__overlay" aria-live="polite">Uploading</div>
+            <div class="upload-card__content">
+                <p><strong>Drag & drop</strong> files here or <strong>select from storage</strong>.</p>
+                <div class="upload-actions">
+                    <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
+                    <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                </div>
+                <div id="file-tree" class="file-tree" aria-live="polite"></div>
+                <div id="status" class="status"></div>
             </div>
-            <div id="file-tree" class="file-tree" aria-live="polite"></div>
-            <div id="status" class="status"></div>
         </div>
 
         <div id="progress-section">
@@ -418,8 +459,10 @@
         const duplicateOkBtn = document.getElementById('duplicate-ok-btn');
 
         let pendingFiles = [];
-        let uploadCycleComplete = false;
         const expandedNodes = new Set();
+        const importJobs = new Map();
+        let importPollTimer = null;
+        let isUploading = false;
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -427,6 +470,26 @@
             if (type) {
                 statusEl.classList.add(type);
             }
+        }
+
+        function hasActiveImport() {
+            for (const job of importJobs.values()) {
+                if (job.status !== 'done' && job.status !== 'error') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function setUploadingState(active) {
+            isUploading = active;
+            uploadCard.classList.toggle('is-uploading', active);
+            fileInput.disabled = active || !uploadEnabled;
+            uploadBtn.disabled = active || !uploadEnabled;
+        }
+
+        function updateUploadButtonLabel() {
+            uploadBtn.textContent = hasActiveImport() ? 'Upload' : 'Upload & Import';
         }
 
         function formatBytes(bytes) {
@@ -794,19 +857,7 @@
             }));
         }
 
-        function resetProgressDisplay() {
-            progressSection.style.display = 'none';
-            setProgressStage('Stage: Waiting to start…');
-            updateProgress(0, 'Waiting to start…');
-            progressLog.textContent = '';
-        }
-
         function handleFiles(entries) {
-            if (uploadCycleComplete) {
-                pendingFiles = [];
-                resetProgressDisplay();
-                uploadCycleComplete = false;
-            }
             const duplicates = detectRootDuplicates(entries);
             if (duplicates.hasFileDuplicate || duplicates.hasFolderDuplicate) {
                 const messages = [];
@@ -821,7 +872,11 @@
             }
             pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
-            setStatus('');
+            if (hasActiveImport()) {
+                setStatus('Ready to upload. A previous import job is currently running.', 'success');
+            } else {
+                setStatus('');
+            }
         }
 
         function readAllDirectoryEntries(reader) {
@@ -890,6 +945,9 @@
         }
 
         uploadCard.addEventListener('dragover', (event) => {
+            if (isUploading) {
+                return;
+            }
             event.preventDefault();
             uploadCard.classList.add('dragover');
         });
@@ -900,6 +958,9 @@
 
         uploadCard.addEventListener('drop', async (event) => {
             event.preventDefault();
+            if (isUploading) {
+                return;
+            }
             uploadCard.classList.remove('dragover');
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
@@ -916,6 +977,9 @@
         fileInput.addEventListener('change', () => {
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                return;
+            }
+            if (isUploading) {
                 return;
             }
             if (fileInput.files?.length) {
@@ -987,7 +1051,7 @@
             return batches;
         }
 
-        function uploadBatch(uploadUrl, batch, batchIndex, batchBytes, totalBytes, progressMap) {
+        function uploadBatch(uploadUrl, batch) {
             return new Promise((resolve, reject) => {
                 const formData = new FormData();
                 batch.forEach((entry) => {
@@ -1003,12 +1067,6 @@
                     if (!event.lengthComputable) {
                         return;
                     }
-                    progressMap.set(batchIndex, Math.min(event.loaded, batchBytes));
-                    const loaded = Array.from(progressMap.values()).reduce((acc, value) => acc + value, 0);
-                    const percent = totalBytes
-                        ? Math.min(100, Math.round((loaded / totalBytes) * 100))
-                        : 0;
-                    updateProgress(percent, `Uploading ${formatBytes(loaded)} of ${formatBytes(totalBytes)}...`);
                 };
                 xhr.onload = () => {
                     const responseText = xhr.responseText || '';
@@ -1027,7 +1085,6 @@
                         reject(new Error(responseData.error || 'Upload failed.'));
                         return;
                     }
-                    progressMap.set(batchIndex, batchBytes);
                     resolve(responseData);
                 };
                 xhr.onerror = () => reject(new Error('Upload failed.'));
@@ -1035,26 +1092,12 @@
             });
         }
 
-        async function uploadFiles(uploadUrl, totalBytes) {
+        async function uploadFiles(uploadUrl) {
             const batches = createUploadBatches();
-            const progressMap = new Map();
-            const totalFiles = pendingFiles.length;
-            let completedBatches = 0;
             const concurrency = Math.min(uploadConcurrency, batches.length);
 
             const tasks = batches.map((batch, index) => async () => {
-                const batchBytes = batch.reduce((acc, entry) => acc + entry.file.size, 0);
-                progressMap.set(index, 0);
-                await uploadBatch(uploadUrl, batch, index, batchBytes, totalBytes, progressMap);
-                completedBatches += 1;
-                const loaded = Array.from(progressMap.values()).reduce((acc, value) => acc + value, 0);
-                const percent = totalBytes
-                    ? Math.min(100, Math.round((loaded / totalBytes) * 100))
-                    : 0;
-                updateProgress(
-                    percent,
-                    `Uploaded batch ${completedBatches}/${batches.length} (${totalFiles} files total).`
-                );
+                await uploadBatch(uploadUrl, batch);
             });
 
             let taskIndex = 0;
@@ -1068,18 +1111,6 @@
             await Promise.all(workers);
         }
 
-        async function runImportStep(importUrl) {
-            const response = await fetch(importUrl, {
-                method: 'POST',
-                credentials: 'same-origin',
-            });
-            const data = await parseJsonResponse(response);
-            if (!response.ok || !data.ok) {
-                throw new Error(data.error || `Import failed with status ${response.status}.`);
-            }
-            return data;
-        }
-
         function updateImportLog(messages) {
             if (!messages || !messages.length) {
                 return;
@@ -1087,27 +1118,89 @@
             progressLog.textContent = messages.join('\n');
         }
 
-        async function startImport(importUrl) {
-            setProgressStage('Stage 2 of 2: Importing into OMERO');
-            updateProgress(0, 'Starting import...');
-            progressLog.textContent = '';
-            let done = false;
-            while (!done) {
-                const result = await runImportStep(importUrl);
-                updateImportLog(result.messages || []);
-                const imported = result.imported_bytes || 0;
-                const total = result.total_bytes || 0;
-                const percent = total
-                    ? Math.min(100, Math.round((imported / total) * 100))
-                    : 0;
-                updateProgress(
-                    percent,
-                    total
-                        ? `Importing ${formatBytes(imported)} of ${formatBytes(total)}...`
-                        : 'Importing...'
-                );
-                done = Boolean(result.done);
+        function updateProgressFromJobs() {
+            if (!importJobs.size) {
+                progressSection.style.display = 'none';
+                updateUploadButtonLabel();
+                return;
             }
+            progressSection.style.display = 'block';
+            setProgressStage('Stage 2 of 2: Importing into OMERO');
+            const jobs = Array.from(importJobs.values());
+            const totalBytes = jobs.reduce((acc, job) => acc + (job.total_bytes || 0), 0);
+            const importedBytes = jobs.reduce((acc, job) => acc + (job.imported_bytes || 0), 0);
+            const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
+            updateProgress(
+                percent,
+                totalBytes
+                    ? `Importing ${formatBytes(importedBytes)} of ${formatBytes(totalBytes)}...`
+                    : 'Importing...'
+            );
+            const latestJob = jobs
+                .slice()
+                .reverse()
+                .find((job) => job.messages && job.messages.length);
+            if (latestJob) {
+                updateImportLog(latestJob.messages);
+            }
+            if (!hasActiveImport() && totalBytes) {
+                updateProgress(100, 'Import complete.');
+                setStatus('Import complete.', 'success');
+            }
+            updateUploadButtonLabel();
+        }
+
+        async function pollImportJobs() {
+            const jobs = Array.from(importJobs.values());
+            if (!jobs.length) {
+                importPollTimer = null;
+                updateProgressFromJobs();
+                return;
+            }
+            await Promise.all(
+                jobs.map(async (job) => {
+                    const response = await fetch(job.status_url, { credentials: 'same-origin' });
+                    const data = await parseJsonResponse(response);
+                    if (!response.ok || !data.ok) {
+                        return;
+                    }
+                    importJobs.set(job.job_id, {
+                        ...job,
+                        status: data.status || job.status,
+                        uploaded_bytes: data.uploaded_bytes,
+                        imported_bytes: data.imported_bytes,
+                        total_bytes: data.total_bytes,
+                        messages: data.messages || job.messages,
+                        errors: data.errors || job.errors,
+                    });
+                })
+            );
+            updateProgressFromJobs();
+            if (hasActiveImport()) {
+                importPollTimer = window.setTimeout(pollImportJobs, 4000);
+            } else {
+                importPollTimer = null;
+            }
+        }
+
+        function ensureImportPolling() {
+            if (!importPollTimer) {
+                pollImportJobs();
+            }
+        }
+
+        function registerImportJob(job) {
+            importJobs.set(job.job_id, {
+                job_id: job.job_id,
+                status_url: job.status_url,
+                status: 'ready',
+                imported_bytes: 0,
+                total_bytes: job.totalBytes,
+                messages: [],
+                errors: [],
+            });
+            updateProgressFromJobs();
+            ensureImportPolling();
         }
 
         uploadBtn.addEventListener('click', async () => {
@@ -1120,31 +1213,32 @@
                 return;
             }
 
-            uploadBtn.disabled = true;
-            progressSection.style.display = 'block';
-            uploadCycleComplete = false;
-            setProgressStage('Stage 1 of 2: Uploading to temporary storage');
-            updateProgress(0, 'Preparing upload...');
+            setUploadingState(true);
             setStatus('');
 
             try {
                 const job = await startUploadJob();
-                await uploadFiles(job.upload_url, job.totalBytes);
-                updateProgress(100, 'Upload complete. Starting import...');
-                await startImport(job.import_step_url);
-                updateProgress(100, 'Import complete.');
-                setStatus('Import complete.', 'success');
+                await uploadFiles(job.upload_url);
+                pendingFiles = [];
+                expandedNodes.clear();
+                fileInput.value = '';
+                refreshFileList();
+                registerImportJob(job);
+                setStatus(
+                    'Upload to temporary folder complete. You can close this browser window. Files will appear in Omero soon.',
+                    'success'
+                );
             } catch (error) {
                 setStatus(`Upload failed: ${error.message || error}`, 'error');
             } finally {
-                uploadCycleComplete = true;
-                uploadBtn.disabled = false;
+                setUploadingState(false);
             }
         });
 
         if (!uploadEnabled) {
             setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
         }
+        updateUploadButtonLabel();
     </script>
 </body>
 </html>

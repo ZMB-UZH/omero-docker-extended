@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 import time
 import uuid
 from pathlib import Path, PurePosixPath
@@ -18,6 +19,9 @@ from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 
 logger = logging.getLogger(__name__)
+
+_IMPORT_LOCKS = {}
+_IMPORT_LOCKS_GUARD = threading.Lock()
 
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
 DEFAULT_UPLOAD_ROOT = "/opt/omero-upload-tmp"
@@ -226,6 +230,118 @@ def _verify_import(conn, file_name: str, dataset_id=None):
     return False
 
 
+def _get_import_lock(username: str):
+    key = username or "__default__"
+    with _IMPORT_LOCKS_GUARD:
+        lock = _IMPORT_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _IMPORT_LOCKS[key] = lock
+    return lock
+
+
+def _process_import_job(job_id: str):
+    job = _load_job(job_id)
+    if not job:
+        return
+
+    username = job.get("username") or ""
+    lock = _get_import_lock(username)
+
+    with lock:
+        job = _load_job(job_id)
+        if not job:
+            return
+
+        if job.get("status") in ("done", "error"):
+            return
+
+        job.setdefault("errors", [])
+        job.setdefault("messages", [])
+        job["status"] = "importing"
+        _save_job(job)
+
+        session_key = job.get("session_key")
+        host = job.get("host")
+        port = job.get("port")
+        if not session_key or not host or not port:
+            job["status"] = "error"
+            job["errors"].append("Missing OMERO connection details for import.")
+            _save_job(job)
+            return
+
+        upload_root = _get_upload_root() / job_id
+        if not upload_root.exists():
+            job["status"] = "error"
+            job["errors"].append("Upload folder missing on server.")
+            _save_job(job)
+            return
+
+        dataset_map = job.get("dataset_map") or {}
+
+        for entry in job.get("files", []):
+            if entry.get("status") not in ("uploaded", "pending"):
+                continue
+
+            rel_path = entry.get("relative_path")
+            if not rel_path:
+                continue
+
+            file_path = upload_root / rel_path
+            if not file_path.exists():
+                error_msg = f"Missing staged file: {rel_path}"
+                entry["status"] = "error"
+                entry.setdefault("errors", []).append(error_msg)
+                job["errors"].append(error_msg)
+                job["messages"].append(error_msg)
+                _save_job(job)
+                continue
+
+            dataset_name = _dataset_name_for_path(rel_path)
+            dataset_id = dataset_map.get(dataset_name)
+
+            success, stdout, stderr = _import_file(conn=None, session_key=session_key, host=host, port=port, path=file_path, dataset_id=dataset_id)
+            if not success:
+                error_msg = stderr.strip() or stdout.strip() or "Import failed."
+                entry["status"] = "error"
+                entry.setdefault("errors", []).append(error_msg)
+                job["errors"].append(f"{rel_path}: {error_msg}")
+                job["messages"].append(f"{rel_path}: {error_msg}")
+                _save_job(job)
+                continue
+
+            entry["status"] = "imported"
+            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+            job["messages"].append(f"Imported {rel_path}")
+            try:
+                file_path.unlink()
+            except OSError as exc:
+                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+            _save_job(job)
+
+        job = _load_job(job_id) or job
+        if job.get("errors"):
+            job["status"] = "error"
+        else:
+            job["status"] = "done"
+        _save_job(job)
+
+
+def _start_import_thread(job_id: str):
+    job = _load_job(job_id)
+    if not job:
+        return
+    if job.get("status") != "ready":
+        return
+    if job.get("import_thread_started"):
+        return
+
+    job["import_thread_started"] = True
+    _save_job(job)
+    worker = threading.Thread(target=_process_import_job, args=(job_id,), daemon=True)
+    worker.start()
+
+
 # --------------------------------------------------------------------------
 # VIEWS
 # --------------------------------------------------------------------------
@@ -278,6 +394,14 @@ def start_upload(request, conn=None, url=None, **kwargs):
     if not files:
         return JsonResponse({"ok": False, "error": "No files provided."}, status=200)
 
+    session_key = _get_session_key(conn)
+    if not session_key:
+        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO session."}, status=200)
+
+    host, port = _resolve_omero_host_port(conn)
+    if not host or not port:
+        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO host/port."}, status=200)
+
     normalized = []
     total_bytes = 0
     invalid = []
@@ -311,9 +435,21 @@ def start_upload(request, conn=None, url=None, **kwargs):
             status=200,
         )
 
+    dataset_map = {}
+    dataset_names = { _dataset_name_for_path(entry["relative_path"]) for entry in normalized }
+    for dataset_name in sorted(name for name in dataset_names if name):
+        dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map)
+        if dataset_id is None:
+            logger.warning("Unable to resolve dataset for %s", dataset_name)
+
     job_id = uuid.uuid4().hex
+    username = _current_username(request, conn)
     job = {
         "job_id": job_id,
+        "username": username,
+        "session_key": session_key,
+        "host": host,
+        "port": port,
         "files": normalized,
         "total_bytes": total_bytes,
         "uploaded_bytes": 0,
@@ -321,9 +457,10 @@ def start_upload(request, conn=None, url=None, **kwargs):
         "status": "uploading",
         "errors": [],
         "created": time.time(),
-        "dataset_map": {},
+        "dataset_map": dataset_map,
         "import_index": 0,
         "messages": [],
+        "import_thread_started": False,
     }
     _save_job(job)
 
@@ -415,6 +552,9 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
 
     _save_job(job)
 
+    if job["status"] == "ready":
+        _start_import_thread(job_id)
+
     return JsonResponse(
         {
             "ok": len(errors) == 0,
@@ -438,114 +578,15 @@ def import_step(request, job_id, conn=None, url=None, **kwargs):
     if not job:
         return JsonResponse({"ok": False, "error": "Import job not found."}, status=200)
 
-    if job.get("status") not in ("ready", "importing", "error"):
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": "Upload is not ready for import.",
-                "status": job.get("status"),
-            },
-            status=200,
-        )
-
-    session_key = _get_session_key(conn)
-    if not session_key:
-        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO session."}, status=200)
-
-    host, port = _resolve_omero_host_port(conn)
-    if not host or not port:
-        return JsonResponse({"ok": False, "error": "Unable to resolve OMERO host/port."}, status=200)
-
-    upload_root = _get_upload_root() / job_id
-    if not upload_root.exists():
-        return JsonResponse({"ok": False, "error": "Upload folder missing on server."}, status=200)
-
-    if job.get("status") != "importing":
-        job["status"] = "importing"
-
-    files = job.get("files", [])
-    next_entry = None
-    for entry in files:
-        if entry.get("status") in ("uploaded", "pending"):
-            next_entry = entry
-            break
-
-    if next_entry is None:
-        job["status"] = "done" if not job["errors"] else "error"
-        _save_job(job)
-        return JsonResponse(
-            {
-                "ok": True,
-                "done": True,
-                "status": job["status"],
-                "imported_bytes": job.get("imported_bytes", 0),
-                "total_bytes": job.get("total_bytes", 0),
-                "messages": job.get("messages", []),
-            }
-        )
-
-    rel_path = next_entry["relative_path"]
-    file_path = upload_root / rel_path
-    dataset_name = _dataset_name_for_path(rel_path)
-    dataset_map = job.setdefault("dataset_map", {})
-    dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map)
-
-    if not file_path.exists():
-        error_msg = f"Missing staged file: {rel_path}"
-        next_entry["status"] = "error"
-        next_entry["errors"].append(error_msg)
-        job["errors"].append(error_msg)
-        job["messages"].append(error_msg)
-        _save_job(job)
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": error_msg,
-                "status": job["status"],
-                "messages": job.get("messages", []),
-            }
-        )
-
-    success, stdout, stderr = _import_file(conn, session_key, host, port, file_path, dataset_id)
-    if not success:
-        error_msg = stderr.strip() or stdout.strip() or "Import failed."
-        next_entry["status"] = "error"
-        next_entry["errors"].append(error_msg)
-        job["errors"].append(f"{rel_path}: {error_msg}")
-        job["messages"].append(f"{rel_path}: {error_msg}")
-        _save_job(job)
-        return JsonResponse(
-            {
-                "ok": False,
-                "error": error_msg,
-                "status": job["status"],
-                "messages": job.get("messages", []),
-            }
-        )
-
-    verified = _verify_import(conn, file_path.name, dataset_id)
-    if not verified:
-        error_msg = "Import completed but verification failed."
-        next_entry["status"] = "error"
-        next_entry["errors"].append(error_msg)
-        job["errors"].append(f"{rel_path}: {error_msg}")
-        job["messages"].append(f"{rel_path}: {error_msg}")
-    else:
-        next_entry["status"] = "imported"
-        job["imported_bytes"] = job.get("imported_bytes", 0) + next_entry.get("size", 0)
-        job["messages"].append(f"Imported {rel_path}")
-        try:
-            file_path.unlink()
-        except OSError as exc:
-            logger.warning("Failed to remove staged file %s: %s", file_path, exc)
-
-    _save_job(job)
+    if job.get("status") == "ready":
+        _start_import_thread(job_id)
+        job = _load_job(job_id) or job
 
     return JsonResponse(
         {
-            "ok": verified,
-            "done": False,
-            "status": job["status"],
+            "ok": True,
+            "done": job.get("status") in ("done", "error"),
+            "status": job.get("status"),
             "imported_bytes": job.get("imported_bytes", 0),
             "total_bytes": job.get("total_bytes", 0),
             "messages": job.get("messages", []),
