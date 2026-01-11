@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
+_UPLOAD_CLEANUP_GUARD = threading.Lock()
+_LAST_UPLOAD_CLEANUP_TIME = 0.0
 
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
 DEFAULT_UPLOAD_ROOT = "/opt/omero-upload-tmp"
@@ -33,8 +35,17 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 DEFAULT_UPLOAD_BATCH_FILES = 5
+UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
+UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
+UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
+UPLOAD_CLEANUP_MAX_DELETE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_DELETE"
+DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
+DEFAULT_UPLOAD_CLEANUP_MAX_AGE = 12 * 60 * 60
+DEFAULT_UPLOAD_CLEANUP_STALE_AGE = 48 * 60 * 60
+DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
+JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 
 
 # --------------------------------------------------------------------------
@@ -94,6 +105,7 @@ def _load_job(job_id: str):
 
 def _save_job(job_dict):
     path = _job_path(job_dict["job_id"])
+    job_dict["updated"] = time.time()
     try:
         with portalocker.Lock(path, "w", timeout=1) as handle:
             json.dump(job_dict, handle)
@@ -267,6 +279,192 @@ def _get_import_lock(username: str):
     return lock
 
 
+def _safe_job_id(value: str) -> bool:
+    return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
+
+
+def _is_within_root(path: Path, root: Path) -> bool:
+    try:
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+    except OSError:
+        return False
+    if resolved_root == resolved_path:
+        return True
+    return resolved_root in resolved_path.parents
+
+
+def _should_run_cleanup(interval: int) -> bool:
+    global _LAST_UPLOAD_CLEANUP_TIME
+    now = time.time()
+    with _UPLOAD_CLEANUP_GUARD:
+        if now - _LAST_UPLOAD_CLEANUP_TIME < interval:
+            return False
+        _LAST_UPLOAD_CLEANUP_TIME = now
+    return True
+
+
+def _safe_remove_tree(path: Path, root: Path):
+    if not path.exists():
+        return False
+    if path.is_symlink():
+        return False
+    if not _is_within_root(path, root):
+        return False
+    try:
+        for root_dir, dirnames, filenames in os.walk(path, followlinks=False):
+            for name in dirnames:
+                candidate = Path(root_dir) / name
+                if candidate.is_symlink():
+                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
+                    return False
+            for name in filenames:
+                candidate = Path(root_dir) / name
+                if candidate.is_symlink():
+                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
+                    return False
+    except OSError:
+        return False
+    try:
+        for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=False):
+            for name in filenames:
+                candidate = Path(root_dir) / name
+                try:
+                    candidate.unlink()
+                except OSError:
+                    return False
+            for name in dirnames:
+                candidate = Path(root_dir) / name
+                try:
+                    candidate.rmdir()
+                except OSError:
+                    return False
+        path.rmdir()
+        return True
+    except OSError:
+        return False
+
+
+def _cleanup_upload_artifacts():
+    interval = _get_env_int(
+        UPLOAD_CLEANUP_INTERVAL_ENV,
+        DEFAULT_UPLOAD_CLEANUP_INTERVAL,
+        60,
+        6 * 60 * 60,
+    )
+    if not _should_run_cleanup(interval):
+        return
+
+    upload_root = _get_upload_root()
+    jobs_root = _get_jobs_root()
+    if not upload_root.exists() or not jobs_root.exists():
+        return
+
+    max_age = _get_env_int(
+        UPLOAD_CLEANUP_MAX_AGE_ENV,
+        DEFAULT_UPLOAD_CLEANUP_MAX_AGE,
+        15 * 60,
+        14 * 24 * 60 * 60,
+    )
+    stale_age = _get_env_int(
+        UPLOAD_CLEANUP_STALE_AGE_ENV,
+        DEFAULT_UPLOAD_CLEANUP_STALE_AGE,
+        max_age,
+        30 * 24 * 60 * 60,
+    )
+    max_delete = _get_env_int(
+        UPLOAD_CLEANUP_MAX_DELETE_ENV,
+        DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
+        1,
+        500,
+    )
+    now = time.time()
+
+    deleted = 0
+    seen_job_ids = set()
+
+    try:
+        for entry in os.scandir(jobs_root):
+            if deleted >= max_delete:
+                break
+            if not entry.name.endswith(".json"):
+                continue
+            job_id = entry.name[:-5]
+            if not _safe_job_id(job_id):
+                continue
+            seen_job_ids.add(job_id)
+            job_path = Path(entry.path)
+
+            try:
+                with portalocker.Lock(job_path, "r", timeout=0) as handle:
+                    try:
+                        job = json.load(handle)
+                    except json.JSONDecodeError:
+                        job = None
+            except (portalocker.exceptions.LockException, OSError):
+                continue
+
+            job_status = job.get("status") if isinstance(job, dict) else None
+            updated = None
+            if isinstance(job, dict):
+                updated = job.get("updated") or job.get("created")
+            if updated is None:
+                try:
+                    updated = entry.stat(follow_symlinks=False).st_mtime
+                except OSError:
+                    continue
+            age = now - float(updated)
+
+            should_delete = False
+            if job_status in ("done", "error") and age > max_age:
+                should_delete = True
+            elif job_status in ("uploading", "ready", "importing") and age > stale_age:
+                should_delete = True
+            elif job_status is None and age > stale_age:
+                should_delete = True
+
+            if not should_delete:
+                continue
+
+            job_dir = upload_root / job_id
+            if job_dir.exists():
+                if not _safe_remove_tree(job_dir, upload_root):
+                    continue
+            try:
+                job_path.unlink()
+            except OSError:
+                continue
+            deleted += 1
+    except OSError as exc:
+        logger.warning("Upload cleanup failed while scanning jobs: %s", exc)
+
+    if deleted >= max_delete:
+        return
+
+    try:
+        for entry in os.scandir(upload_root):
+            if deleted >= max_delete:
+                break
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            job_id = entry.name
+            if not _safe_job_id(job_id):
+                continue
+            if job_id in seen_job_ids:
+                continue
+            try:
+                mtime = entry.stat(follow_symlinks=False).st_mtime
+            except OSError:
+                continue
+            if now - mtime <= stale_age:
+                continue
+            job_dir = Path(entry.path)
+            if _safe_remove_tree(job_dir, upload_root):
+                deleted += 1
+    except OSError as exc:
+        logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
+
+
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
     path = _job_path(job_id)
 
@@ -288,6 +486,7 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
         pending_entries = any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
         if not pending_entries:
             job_dict["status"] = "ready"
+        job_dict["updated"] = time.time()
         return job_dict
 
     try:
@@ -438,6 +637,7 @@ def _start_import_thread(job_id: str):
 
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
+    _cleanup_upload_artifacts()
     username = current_username(request, conn)
     is_root_user = username == "root"
     upload_root = _get_upload_root()
@@ -469,6 +669,7 @@ def start_upload(request, conn=None, url=None, **kwargs):
 
 
 def _start_upload(request, conn):
+    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
 
@@ -601,6 +802,7 @@ def upload_files(request, job_id, conn=None, url=None, **kwargs):
 
 
 def _upload_files(request, job_id):
+    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
 
@@ -700,6 +902,7 @@ def import_step(request, job_id, conn=None, url=None, **kwargs):
 
 
 def _import_step(request, job_id):
+    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
 
@@ -726,6 +929,7 @@ def _import_step(request, job_id):
 
 @login_required()
 def job_status(request, job_id, conn=None, url=None, **kwargs):
+    _cleanup_upload_artifacts()
     job = _load_job(job_id)
     if not job:
         return json_error(errors.upload_job_not_found())
