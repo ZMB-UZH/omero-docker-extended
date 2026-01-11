@@ -1,25 +1,27 @@
-## Custom OMERO.server image with OMERO.figure PDF export dependencies installed
+## Custom Omero server image with Omero figure PDF export dependencies installed
 # Needs to match the tag in docker-compose.yml
+
 FROM openmicroscopy/omero-server:5
 
 USER root
 
-# Install OMERO.figure PDF export dependencies in the OMERO.server virtualenv
+# Install OMERO.figure PDF export dependencies in the Omero server virtualenv
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* | head -n 1)"; \
     "${VENV_DIR}/bin/pip" install --no-cache-dir \
         reportlab \
         markdown
 
-# Fetch latest OMERO.figure export script directly from upstream
+# Fetch latest Omero figure PDF export script directly from Github
 RUN set -eux; \
     dnf -y install git; \
     dnf clean all; \
-    mkdir -p /OMERO/OMERO.server/lib/scripts/omero/figure_scripts; \
+    mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts; \
     git clone --depth 1 https://github.com/ome/omero-figure.git /tmp/omero-figure; \
-    install -m 644 /tmp/omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py \
-        /OMERO/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
-    chown -R omero-server:omero-server /OMERO/OMERO.server/lib/scripts/omero/figure_scripts; \
+    cp /tmp/omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py \
+        /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts; \
+    chmod -R 755 /opt/omero/server/OMERO.server/lib/scripts; \
     rm -rf /tmp/omero-figure
 
 USER omero-server
