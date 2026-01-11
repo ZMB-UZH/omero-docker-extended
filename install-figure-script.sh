@@ -2,34 +2,28 @@
 set -e
 echo "Checking for Figure_To_Pdf.py script..."
 
-# omero-figure is installed in OMERO.web, not OMERO.server
-# We'll check what version is in the existing scripts directory
-SCRIPT_PATH="/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py"
+# Get version from OMERO.web container
+FIGURE_VERSION=$(docker exec omero-test-omeroweb-1 /opt/omero/web/venv*/bin/python -c "import pkg_resources; print(pkg_resources.get_distribution('omero-figure').version)" 2>/dev/null || echo "")
 
-# Check existing script files for version hints
-if ls /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/*.py 1> /dev/null 2>&1; then
-    # Scripts exist, try to get version from an existing script
-    FIGURE_VERSION=$(grep -oP "(?<=# OMERO.figure version )[0-9.]+" /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Movie_Figure.py 2>/dev/null || echo "7.3.0")
-else
-    # No scripts, use default
-    FIGURE_VERSION="7.3.0"
+if [ -z "${FIGURE_VERSION}" ]; then
+    echo "ERROR: Could not detect omero-figure version from web container"
+    exit 1
 fi
 
-echo "Using OMERO.figure version: ${FIGURE_VERSION}"
+echo "Detected OMERO.figure version: ${FIGURE_VERSION}"
 
-# Check if script exists and get its version
+SCRIPT_PATH="/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py"
+
 if [ -f "${SCRIPT_PATH}" ]; then
     SCRIPT_VERSION=$(grep -oP "(?<=__version__ = ')[^']*" "${SCRIPT_PATH}" 2>/dev/null || echo "unknown")
     echo "Current script version: ${SCRIPT_VERSION}"
     
-    # If versions don't match, reinstall
     if [ "${SCRIPT_VERSION}" != "${FIGURE_VERSION}" ]; then
         echo "Version mismatch! Reinstalling script..."
         rm -f "${SCRIPT_PATH}"
     fi
 fi
 
-# Install if missing or was removed due to version mismatch
 if [ ! -f "${SCRIPT_PATH}" ]; then
     echo "Installing Figure_To_Pdf.py script version ${FIGURE_VERSION}..."
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts
