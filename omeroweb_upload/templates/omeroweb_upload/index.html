@@ -908,18 +908,6 @@
         }
 
         function handleFiles(entries) {
-            const duplicates = detectRootDuplicates(entries);
-            if (duplicates.hasFileDuplicate || duplicates.hasFolderDuplicate) {
-                const messages = [];
-                if (duplicates.hasFolderDuplicate) {
-                    messages.push('No duplicate folder(s) allowed in the upload list. Please try again.');
-                }
-                if (duplicates.hasFileDuplicate) {
-                    messages.push('No duplicate file(s) allowed in the upload list. Please try again.');
-                }
-                showDuplicatePopup(messages.join(' '));
-                return;
-            }
             pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
             if (hasActiveImport()) {

@@ -264,85 +264,100 @@ def _process_import_job(job_id: str):
     if not job:
         return
 
-    username = job.get("username") or ""
-    lock = _get_import_lock(username)
+    try:
+        username = job.get("username") or ""
+        lock = _get_import_lock(username)
 
-    with lock:
-        job = _load_job(job_id)
-        if not job:
-            return
+        with lock:
+            job = _load_job(job_id)
+            if not job:
+                return
 
-        if job.get("status") in ("done", "error"):
-            return
+            if job.get("status") in ("done", "error"):
+                return
 
-        job.setdefault("errors", [])
-        job.setdefault("messages", [])
-        job["status"] = "importing"
-        _save_job(job)
-
-        session_key = job.get("session_key")
-        host = job.get("host")
-        port = job.get("port")
-        if not session_key or not host or not port:
-            job["status"] = "error"
-            job["errors"].append("Missing OMERO connection details for import.")
+            job.setdefault("errors", [])
+            job.setdefault("messages", [])
+            job["status"] = "importing"
             _save_job(job)
-            return
 
-        upload_root = _get_upload_root() / job_id
-        if not upload_root.exists():
-            job["status"] = "error"
-            job["errors"].append("Upload folder missing on server.")
-            _save_job(job)
-            return
-
-        dataset_map = job.get("dataset_map") or {}
-
-        for entry in job.get("files", []):
-            if entry.get("status") not in ("uploaded", "pending"):
-                continue
-
-            rel_path = entry.get("relative_path")
-            if not rel_path:
-                continue
-
-            file_path = upload_root / rel_path
-            if not file_path.exists():
-                error_msg = f"Missing staged file: {rel_path}"
-                entry["status"] = "error"
-                entry.setdefault("errors", []).append(error_msg)
-                job["errors"].append(error_msg)
-                job["messages"].append(error_msg)
+            session_key = job.get("session_key")
+            host = job.get("host")
+            port = job.get("port")
+            if not session_key or not host or not port:
+                job["status"] = "error"
+                job["errors"].append("Missing OMERO connection details for import.")
                 _save_job(job)
-                continue
+                return
 
-            dataset_name = _dataset_name_for_path(rel_path)
-            dataset_id = dataset_map.get(dataset_name)
-
-            success, stdout, stderr = _import_file(conn=None, session_key=session_key, host=host, port=port, path=file_path, dataset_id=dataset_id)
-            if not success:
-                error_msg = stderr.strip() or stdout.strip() or "Import failed."
-                entry["status"] = "error"
-                entry.setdefault("errors", []).append(error_msg)
-                job["errors"].append(f"{rel_path}: {error_msg}")
-                job["messages"].append(f"{rel_path}: {error_msg}")
+            upload_root = _get_upload_root() / job_id
+            if not upload_root.exists():
+                job["status"] = "error"
+                job["errors"].append("Upload folder missing on server.")
                 _save_job(job)
-                continue
+                return
 
-            entry["status"] = "imported"
-            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-            job["messages"].append(f"Imported {rel_path}")
-            try:
-                file_path.unlink()
-            except OSError as exc:
-                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+            dataset_map = job.get("dataset_map") or {}
+
+            for entry in job.get("files", []):
+                if entry.get("status") not in ("uploaded", "pending"):
+                    continue
+
+                rel_path = entry.get("relative_path")
+                if not rel_path:
+                    continue
+
+                staged_path = entry.get("staged_path") or rel_path
+                file_path = upload_root / staged_path
+                if not file_path.exists():
+                    error_msg = f"Missing staged file: {rel_path}"
+                    entry["status"] = "error"
+                    entry.setdefault("errors", []).append(error_msg)
+                    job["errors"].append(error_msg)
+                    job["messages"].append(error_msg)
+                    _save_job(job)
+                    continue
+
+                dataset_name = _dataset_name_for_path(rel_path)
+                dataset_id = dataset_map.get(dataset_name)
+
+                success, stdout, stderr = _import_file(
+                    conn=None,
+                    session_key=session_key,
+                    host=host,
+                    port=port,
+                    path=file_path,
+                    dataset_id=dataset_id,
+                )
+                if not success:
+                    error_msg = stderr.strip() or stdout.strip() or "Import failed."
+                    entry["status"] = "error"
+                    entry.setdefault("errors", []).append(error_msg)
+                    job["errors"].append(f"{rel_path}: {error_msg}")
+                    job["messages"].append(f"{rel_path}: {error_msg}")
+                    _save_job(job)
+                    continue
+
+                entry["status"] = "imported"
+                job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                job["messages"].append(f"Imported {rel_path}")
+                try:
+                    file_path.unlink()
+                except OSError as exc:
+                    logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                _save_job(job)
+
+            job = _load_job(job_id) or job
+            if job.get("errors"):
+                job["status"] = "error"
+            else:
+                job["status"] = "done"
             _save_job(job)
-
-        job = _load_job(job_id) or job
-        if job.get("errors"):
-            job["status"] = "error"
-        else:
-            job["status"] = "done"
+    except Exception as exc:
+        logger.exception("Import job %s failed unexpectedly.", job_id)
+        job = _load_job(job_id) or {"job_id": job_id}
+        job.setdefault("errors", []).append(f"Unexpected import failure: {exc}")
+        job["status"] = "error"
         _save_job(job)
 
 
@@ -456,10 +471,15 @@ def _start_upload(request, conn):
             size = 0
         if size < 0:
             size = 0
+        upload_id = uuid.uuid4().hex
+        filename = PurePosixPath(rel_path).name
+        staged_path = f"_staged/{upload_id}/{filename}"
         total_bytes += size
         normalized.append(
             {
+                "upload_id": upload_id,
                 "relative_path": rel_path,
+                "staged_path": staged_path,
                 "size": size,
                 "status": "pending",
                 "errors": [],
@@ -572,7 +592,10 @@ def _upload_files(request, job_id):
 
     saved = []
     errors = []
-    known_paths = {file_entry["relative_path"]: file_entry for file_entry in job["files"]}
+    entries_by_path = {}
+    for file_entry in job["files"]:
+        if file_entry.get("status") in ("pending", "error"):
+            entries_by_path.setdefault(file_entry["relative_path"], []).append(file_entry)
 
     for index, upload in enumerate(files):
         raw_name = relative_paths[index] if relative_paths else upload.name
@@ -581,23 +604,26 @@ def _upload_files(request, job_id):
             errors.append(f"Invalid filename: {raw_name}")
             continue
 
-        if rel_path not in known_paths:
+        entry_queue = entries_by_path.get(rel_path) or []
+        if not entry_queue:
             errors.append(f"Unexpected file: {rel_path}")
             continue
+        entry = entry_queue.pop(0)
 
-        target = job_root / rel_path
+        staged_path = entry.get("staged_path") or rel_path
+        target = job_root / staged_path
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("wb") as handle:
                 for chunk in upload.chunks():
                     handle.write(chunk)
             saved.append(rel_path)
-            known_paths[rel_path]["status"] = "uploaded"
+            entry["status"] = "uploaded"
         except OSError as exc:
             logger.warning("Failed to save upload %s: %s", rel_path, exc)
             errors.append(f"{rel_path}: {exc}")
-            known_paths[rel_path]["status"] = "error"
-            known_paths[rel_path]["errors"].append(str(exc))
+            entry["status"] = "error"
+            entry.setdefault("errors", []).append(str(exc))
 
     uploaded_bytes = 0
     for entry in job["files"]:
