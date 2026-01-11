@@ -1066,7 +1066,7 @@
             }
             uploadCard.classList.remove('dragover');
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
             const files = await getFilesFromDrop(event);
@@ -1079,7 +1079,7 @@
 
         fileInput.addEventListener('change', () => {
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
             if (isUploading) {
@@ -1496,11 +1496,11 @@
                 return;
             }
             if (!pendingFiles.length) {
-                setStatus('Please select files to upload.', 'error');
+                setStatus('Please select files first.', 'error');
                 return;
             }
             if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
 
@@ -1522,7 +1522,7 @@
                 );
             } catch (error) {
                 if (cancelUploadRequested) {
-                    setStatus('Upload canceled. You can restart the upload when ready.', 'success');
+                    setStatus('Upload canceled. You can start a new upload when ready.', 'success');
                 } else {
                     setStatus(`Upload failed: ${error.message || error}`, 'error');
                 }
@@ -1546,11 +1546,11 @@
             });
             activeUploadRequests.clear();
             setUploadingState(false);
-            setStatus('Upload canceled. You can restart the upload when ready.', 'success');
+            setStatus('Upload canceled. You can start a new upload when ready.', 'success');
         });
 
         if (!uploadEnabled) {
-            setStatus('Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR.', 'error');
+            setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
         }
         restoreImportState();
         if (importJobs.size) {
