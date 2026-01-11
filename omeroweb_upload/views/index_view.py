@@ -397,7 +397,7 @@ def _process_import_job(job_id: str):
                         stdout.strip(),
                         stderr.strip(),
                     )
-                    error_msg = "Import failed. See server logs for details."
+                    error_msg = "Import failed."
                     entry["status"] = "error"
                     entry.setdefault("errors", []).append(error_msg)
                     _append_job_error(job, f"{rel_path}: {error_msg}")
