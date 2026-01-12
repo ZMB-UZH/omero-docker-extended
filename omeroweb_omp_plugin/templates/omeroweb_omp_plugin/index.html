@@ -992,7 +992,9 @@
             separatorInput.style.background = disableSeparatorInput ? '#f3f4f6' : '';
             separatorInput.style.color = disableSeparatorInput ? '#6b7280' : '';
         }
-        persistSeparatorModeState();
+        if (!options.skipPersist) {
+            persistSeparatorModeState();
+        }
     }
 
     const datasetButton = document.getElementById('dataset_selection_btn');
@@ -1153,18 +1155,24 @@
 
     // Ensure exactly one mode is selected even if browser restores form state
     (function initSeparatorMode() {
+        const storedState = parseStoredState(window.sessionStorage.getItem(STATE_STORAGE_KEY))
+            || parseStoredState(window.localStorage?.getItem(STATE_STORAGE_KEY))
+            || loadSeparatorModeState();
+        if (storedState && storedState.separator_mode) {
+            return;
+        }
         const chars = document.getElementById('sep_mode_chars');
         const regex = document.getElementById('sep_mode_regex');
         const aiRegex = document.getElementById('sep_mode_ai_regex');
         const aiParse = document.getElementById('sep_mode_ai_parse');
         if (aiParse && aiParse.checked) {
-            setSeparatorMode('ai_parse');
+            setSeparatorMode('ai_parse', { skipPersist: true });
         } else if (aiRegex && aiRegex.checked) {
-            setSeparatorMode('ai');
+            setSeparatorMode('ai', { skipPersist: true });
         } else if (regex && regex.checked) {
-            setSeparatorMode('regex');
+            setSeparatorMode('regex', { skipPersist: true });
         } else if (chars) {
-            setSeparatorMode('chars');
+            setSeparatorMode('chars', { skipPersist: true });
         }
     })();
 

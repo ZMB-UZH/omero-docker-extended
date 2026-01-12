@@ -14,7 +14,7 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from omero.model import DatasetI
+from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB
@@ -270,11 +270,64 @@ def _safe_relative_path(raw_name: str):
     return "/".join(parts)
 
 
+def _get_text(value_obj):
+    try:
+        return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
+            value_obj, "val", str(value_obj)
+        )
+    except Exception:
+        return str(value_obj)
+
+
+def _get_id(obj):
+    try:
+        return obj._obj.id.val
+    except (AttributeError, Exception):
+        pass
+    try:
+        gid = obj.getId()
+        return gid.getValue() if hasattr(gid, "getValue") else gid
+    except (AttributeError, Exception):
+        return None
+
+
 def _dataset_name_for_path(relative_path: str):
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
         return None
     return "\\".join(parts[:-1])
+
+
+def _find_project_dataset(conn, project_id: int, name: str):
+    if not project_id or not name:
+        return None
+    try:
+        project = conn.getObject("Project", int(project_id))
+    except Exception:
+        project = None
+    if project is None:
+        return None
+    try:
+        for dataset in project.listChildren():
+            if _get_text(dataset.getName()) == name:
+                return _get_id(dataset)
+    except Exception as exc:
+        logger.warning("Unable to list datasets for project %s: %s", project_id, exc)
+    return None
+
+
+def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
+    if not dataset_id or not project_id:
+        return False
+    try:
+        link = ProjectDatasetLinkI()
+        link.setParent(ProjectI(int(project_id), False))
+        link.setChild(DatasetI(int(dataset_id), False))
+        conn.getUpdateService().saveAndReturnObject(link)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to link dataset %s to project %s: %s", dataset_id, project_id, exc)
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -312,11 +365,17 @@ def _get_session_key(conn):
     return None
 
 
-def _get_or_create_dataset(conn, name: str, dataset_map: dict):
+def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int = None):
     if not name:
         return None
     if name in dataset_map:
         return dataset_map[name]
+
+    if project_id:
+        existing_id = _find_project_dataset(conn, project_id, name)
+        if existing_id:
+            dataset_map[name] = existing_id
+            return existing_id
 
     existing = None
     try:
@@ -325,8 +384,12 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict):
         existing = None
 
     if existing is not None:
-        dataset_id = existing.getId().getValue()
+        dataset_id = _get_id(existing)
+        if dataset_id is None and hasattr(existing, "getId"):
+            dataset_id = existing.getId().getValue()
         dataset_map[name] = dataset_id
+        if project_id and dataset_id:
+            _link_dataset_to_project(conn, dataset_id, project_id)
         return dataset_id
 
     try:
@@ -334,6 +397,8 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict):
         dataset.setName(rstring(name))
         dataset = conn.getUpdateService().saveAndReturnObject(dataset)
         dataset_id = dataset.getId().getValue()
+        if project_id:
+            _link_dataset_to_project(conn, dataset_id, project_id)
     except Exception as exc:
         logger.warning("Failed to create dataset %s: %s", name, exc)
         return None
@@ -777,6 +842,15 @@ def index(request, conn=None, url=None, **kwargs):
     job_dir_ok = _ensure_dir(_get_jobs_root())
     upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
     upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
+    projects = []
+    try:
+        for proj in conn.listProjects():
+            pid = _get_id(proj)
+            pname = _get_text(proj.getName())
+            if pid is not None:
+                projects.append((str(pid), pname))
+    except Exception as exc:
+        logger.exception("Error listing projects: %s", exc)
     return render(
         request,
         "omeroweb_upload/index.html",
@@ -788,6 +862,7 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_batch_files": upload_batch_files,
             "is_root_user": is_root_user,
             "messages_json": json.dumps(messages.index_messages()),
+            "projects": projects,
         },
     )
 
@@ -814,6 +889,22 @@ def _start_upload(request, conn):
     payload = load_json_body(request)
     if not isinstance(payload, dict):
         payload = {}
+
+    raw_project_id = (payload.get("project_id") or "").strip()
+    project_id = None
+    project_name = ""
+    if raw_project_id:
+        try:
+            project_id = int(raw_project_id)
+        except (TypeError, ValueError):
+            return json_error(errors.invalid_project_selection(), status=400)
+        try:
+            project = conn.getObject("Project", project_id)
+        except Exception:
+            project = None
+        if project is None:
+            return json_error(errors.invalid_project_selection(), status=400)
+        project_name = _get_text(project.getName())
 
     files = payload.get("files") or []
     if not isinstance(files, list):
@@ -886,7 +977,7 @@ def _start_upload(request, conn):
             if dataset_name:
                 dataset_names.add(dataset_name)
         for dataset_name in sorted(dataset_names):
-            dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map)
+            dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map, project_id=project_id)
             if dataset_id is None:
                 logger.warning("Unable to resolve dataset for %s", dataset_name)
     except Exception:
@@ -900,6 +991,8 @@ def _start_upload(request, conn):
         "session_key": session_key,
         "host": host,
         "port": port,
+        "project_id": project_id,
+        "project_name": project_name,
         "files": normalized,
         "total_bytes": total_bytes,
         "uploaded_bytes": 0,
