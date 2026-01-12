@@ -2011,7 +2011,12 @@
             const response = await fetch(startUrl, {
                 method: 'POST',
                 headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ files: metadata, project_id: projectId, project_name: projectName }),
+                body: JSON.stringify({
+                    files: metadata,
+                    project_id: projectId,
+                    project_name: projectName,
+                    batch_size: currentUploadBatchFiles,
+                }),
                 credentials: 'same-origin',
             });
 

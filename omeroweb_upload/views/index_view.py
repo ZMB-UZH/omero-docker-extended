@@ -9,6 +9,8 @@ import uuid
 import portalocker
 import stat
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from pathlib import Path, PurePosixPath
 from django.conf import settings
 from django.http import JsonResponse
@@ -216,6 +218,14 @@ def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> 
     except (TypeError, ValueError):
         value = default
     return max(min_value, min(max_value, value))
+
+
+def _normalize_job_batch_size(value, default: int) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        normalized = default
+    return max(1, min(50, normalized))
 
 
 def _load_job(job_id: str):
@@ -705,6 +715,66 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
     return job_dict
 
 
+def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map):
+    rel_path = entry.get("relative_path")
+    if not rel_path:
+        return {"skip": True}
+
+    staged_path = entry.get("staged_path") or rel_path
+    file_path = upload_root / staged_path
+    if not file_path.exists():
+        error_msg = errors.missing_staged_file(rel_path)
+        return {
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": error_msg,
+            "job_message": error_msg,
+        }
+
+    dataset_name = _dataset_name_for_path(rel_path)
+    dataset_id = dataset_map.get(dataset_name)
+
+    try:
+        success, stdout, stderr = _import_file(
+            conn=None,
+            session_key=session_key,
+            host=host,
+            port=port,
+            path=file_path,
+            dataset_id=dataset_id,
+        )
+    except Exception:
+        logger.exception("Import failed for %s.", rel_path)
+        success = False
+        stdout = ""
+        stderr = ""
+
+    if not success:
+        logger.warning(
+            "Import failed for %s (stdout=%r, stderr=%r).",
+            rel_path,
+            str(stdout).strip(),
+            str(stderr).strip(),
+        )
+        error_msg = errors.import_failed()
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    return {
+        "index": entry.get("index"),
+        "status": "imported",
+        "rel_path": rel_path,
+        "file_path": file_path,
+    }
+
+
 def _process_import_job(job_id: str):
     job = _load_job(job_id)
     if not job:
@@ -744,60 +814,78 @@ def _process_import_job(job_id: str):
                 return
 
             dataset_map = job.get("dataset_map") or {}
-
-            for entry in job.get("files", []):
+            default_batch_size = _get_env_int(
+                UPLOAD_BATCH_FILES_ENV,
+                DEFAULT_UPLOAD_BATCH_FILES,
+                1,
+                50,
+            )
+            batch_size = _normalize_job_batch_size(job.get("job_batch_size"), default_batch_size)
+            entries_to_import = []
+            for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
                     continue
-
-                rel_path = entry.get("relative_path")
-                if not rel_path:
+                if not entry.get("relative_path"):
                     continue
-
-                staged_path = entry.get("staged_path") or rel_path
-                file_path = upload_root / staged_path
-                if not file_path.exists():
-                    error_msg = errors.missing_staged_file(rel_path)
-                    entry["status"] = "error"
-                    entry.setdefault("errors", []).append(error_msg)
-                    _append_job_error(job, error_msg)
-                    _append_job_message(job, error_msg)
-                    _save_job(job)
-                    continue
-
-                dataset_name = _dataset_name_for_path(rel_path)
-                dataset_id = dataset_map.get(dataset_name)
-
-                success, stdout, stderr = _import_file(
-                    conn=None,
-                    session_key=session_key,
-                    host=host,
-                    port=port,
-                    path=file_path,
-                    dataset_id=dataset_id,
+                entries_to_import.append(
+                    {
+                        "index": index,
+                        "relative_path": entry.get("relative_path"),
+                        "staged_path": entry.get("staged_path"),
+                    }
                 )
-                if not success:
-                    logger.warning(
-                        "Import failed for %s (stdout=%r, stderr=%r).",
-                        rel_path,
-                        stdout.strip(),
-                        stderr.strip(),
-                    )
-                    error_msg = errors.import_failed()
-                    entry["status"] = "error"
-                    entry.setdefault("errors", []).append(error_msg)
-                    _append_job_error(job, messages.job_error_with_path(rel_path, error_msg))
-                    _append_job_message(job, messages.job_error_with_path(rel_path, error_msg))
-                    _save_job(job)
-                    continue
 
-                entry["status"] = "imported"
-                job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                _append_job_message(job, messages.imported_file(rel_path))
-                try:
-                    file_path.unlink()
-                except OSError as exc:
-                    logger.warning("Failed to remove staged file %s: %s", file_path, exc)
-                _save_job(job)
+            for start in range(0, len(entries_to_import), batch_size):
+                batch = entries_to_import[start:start + batch_size]
+                if not batch:
+                    continue
+                with ThreadPoolExecutor(max_workers=min(batch_size, len(batch))) as executor:
+                    futures = [
+                        executor.submit(
+                            _import_job_entry,
+                            entry,
+                            upload_root,
+                            session_key,
+                            host,
+                            port,
+                            dataset_map,
+                        )
+                        for entry in batch
+                    ]
+                    for future in as_completed(futures):
+                        result = future.result()
+                        if not result or result.get("skip"):
+                            continue
+                        entry_index = result.get("index")
+                        if entry_index is None:
+                            continue
+                        entry = job.get("files", [])[entry_index]
+
+                        if result.get("status") == "error":
+                            entry["status"] = "error"
+                            entry_error = result.get("entry_error")
+                            if entry_error:
+                                entry.setdefault("errors", []).append(entry_error)
+                            if result.get("job_error"):
+                                _append_job_error(job, result["job_error"])
+                            if result.get("job_message"):
+                                _append_job_message(job, result["job_message"])
+                            _save_job(job)
+                            continue
+
+                        if result.get("status") == "imported":
+                            rel_path = result.get("rel_path") or entry.get("relative_path")
+                            entry["status"] = "imported"
+                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                            if rel_path:
+                                _append_job_message(job, messages.imported_file(rel_path))
+                            file_path = result.get("file_path")
+                            if file_path:
+                                try:
+                                    file_path.unlink()
+                                except OSError as exc:
+                                    logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                            _save_job(job)
 
             job = _load_job(job_id) or job
             if job.get("errors"):
@@ -912,6 +1000,8 @@ def _start_upload(request, conn):
     if not files:
         logger.info("Upload start request missing files payload.")
         return json_error(errors.no_files_provided())
+    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
+    batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
     session_key = _get_session_key(conn)
     if not session_key:
@@ -1004,6 +1094,7 @@ def _start_upload(request, conn):
         "import_index": 0,
         "messages": [],
         "import_thread_started": False,
+        "job_batch_size": batch_size,
     }
     _save_job(job)
     logger.info(
