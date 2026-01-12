@@ -992,6 +992,7 @@
             separatorInput.style.background = disableSeparatorInput ? '#f3f4f6' : '';
             separatorInput.style.color = disableSeparatorInput ? '#6b7280' : '';
         }
+        persistSeparatorModeState();
     }
 
     const datasetButton = document.getElementById('dataset_selection_btn');
@@ -1636,6 +1637,25 @@
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
     }
 
+    function persistSeparatorModeState() {
+        if (!window.sessionStorage) return;
+        let state = {};
+        try {
+            state = JSON.parse(window.sessionStorage.getItem(STATE_STORAGE_KEY)) || {};
+        } catch (err) {
+            state = {};
+        }
+        state.separator_mode = document.getElementById('separator_mode')?.value || 'chars';
+        if (separatorInput) {
+            state.separator = separatorInput.value || '';
+        }
+        state.separator_values = {
+            ...(state.separator_values || {}),
+            ...separatorValues,
+        };
+        window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+    }
+
     function restorePreviewState() {
         const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
         if (!raw) return;
@@ -2220,9 +2240,9 @@
                 const providers = Array.isArray(data.providers) ? data.providers : [];
                 aiCredentialProviders = new Set(providers);
                 updateCredentialProviderStatus();
-                if (aiModalOverlay?.style.display === 'flex' && aiProviderSelect) {
-                    updateAiProviderStatus();
-                }
+                updateAiProcessAvailability();
+                updateAiProviderStatus();
+                updateAiParseProviderStatus();
             })
             .catch(() => {
                 updateAiCredentialsStatus(messages.unableLoadCredentials, true);
