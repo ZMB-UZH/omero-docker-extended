@@ -153,6 +153,42 @@
             justify-content: center;
             flex-wrap: wrap;
         }
+        .project-select-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            position: relative;
+        }
+        .project-select-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .project-select-wrapper {
+            position: relative;
+            width: 150px;
+        }
+        .project-select-arrow {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4b5563;
+            pointer-events: none;
+        }
+        .project-option {
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .project-option:hover,
+        .project-option.is-active {
+            background: #e7f1ff;
+            color: #1d4ed8;
+        }
+        #project_select_dropdown.keyboard-active .project-option:hover {
+            background: transparent;
+            color: inherit;
+        }
         .upload-action-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -746,6 +782,24 @@
                 <p><strong>Drag & drop</strong> files here or <strong>choose from storage</strong>.</p>
                 <div class="upload-actions">
                     <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
+                    <div class="project-select-group">
+                        <label class="project-select-label" for="project_select_input">Select project (optional):</label>
+                        <div id="project_select_wrapper" class="project-select-wrapper">
+                            <input type="text"
+                                   id="project_select_input"
+                                   placeholder="Select project…"
+                                   autocomplete="off"
+                                   style="width:150px; padding:10px 32px 10px 10px; border-radius:6px; border:1px solid #007bff;">
+                            <span class="project-select-arrow" aria-hidden="true">▾</span>
+                            <input type="hidden" id="project_select" value="">
+                            <div id="project_select_dropdown"
+                                 style="display:none; position:absolute; left:0; right:0; top:100%;
+                                        background:#fff; border:1px solid #007bff; border-top:none;
+                                        max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                            </div>
+                            {{ projects|json_script:"project-data" }}
+                        </div>
+                    </div>
                     <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
                     <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                 </div>
@@ -753,6 +807,9 @@
                 <div id="status" class="status"></div>
             </div>
         </div>
+
+        <div id="project_dropdown_backdrop"
+             style="display:none; position:fixed; inset:0; z-index:900;"></div>
 
         <div class="upload-action-row upload-actions" aria-live="polite">
             <div class="upload-action-slot">
@@ -850,6 +907,15 @@
         const statusEl = document.getElementById('status');
         const fileTree = document.getElementById('file-tree');
         const uploadEnabled = !uploadBtn.disabled;
+        const projectSelect = document.getElementById('project_select');
+        const projectSelectInput = document.getElementById('project_select_input');
+        const projectSelectDropdown = document.getElementById('project_select_dropdown');
+        const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
+        const projectDataScript = document.getElementById('project-data');
+        const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+        const MAX_PROJECT_RESULTS = 20;
+        let projectFilterTimeout = null;
+        let activeProjectIndex = -1;
 
         const progressSection = document.getElementById('progress-section');
         const progressBar = document.getElementById('progress-bar');
@@ -927,6 +993,175 @@
         function showSettingsMenu(show) {
             if (!settingsMenu) return;
             settingsMenu.style.display = show ? 'block' : 'none';
+        }
+
+        function getProjectLabel(projectId, projectName) {
+            return String(projectName || projectId || '');
+        }
+
+        function getNumericSortValue(label) {
+            return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
+        }
+
+        function sortProjectMatches(matches) {
+            return matches.sort(([projectIdA, projectNameA], [projectIdB, projectNameB]) => {
+                const labelA = getProjectLabel(projectIdA, projectNameA);
+                const labelB = getProjectLabel(projectIdB, projectNameB);
+                const numericA = getNumericSortValue(labelA);
+                const numericB = getNumericSortValue(labelB);
+                if (numericA !== null && numericB !== null) {
+                    return numericB - numericA;
+                }
+                if (numericA !== null) return -1;
+                if (numericB !== null) return 1;
+                const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+                if (labelCompare !== 0) return labelCompare;
+                return String(projectIdA || '').localeCompare(String(projectIdB || ''), undefined, { numeric: true, sensitivity: 'base' });
+            });
+        }
+
+        function getProjectOptions() {
+            return projectSelectDropdown
+                ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
+                : [];
+        }
+
+        function setActiveProjectIndex(index, useKeyboard = false) {
+            const options = getProjectOptions();
+            if (options.length === 0) {
+                activeProjectIndex = -1;
+                return;
+            }
+            if (projectSelectDropdown) {
+                if (useKeyboard) {
+                    projectSelectDropdown.classList.add('keyboard-active');
+                } else {
+                    projectSelectDropdown.classList.remove('keyboard-active');
+                }
+            }
+            const clamped = Math.max(0, Math.min(index, options.length - 1));
+            options.forEach((option, idx) => {
+                if (idx === clamped) {
+                    option.classList.add('is-active');
+                    option.scrollIntoView({ block: 'nearest' });
+                } else {
+                    option.classList.remove('is-active');
+                }
+            });
+            activeProjectIndex = clamped;
+        }
+
+        function selectProjectOption(option) {
+            if (!option) return;
+            const projectId = option.dataset.projectId || '';
+            const projectName = option.dataset.projectName || option.textContent || '';
+            if (projectSelect) {
+                projectSelect.value = projectId;
+            }
+            if (projectSelectInput) {
+                projectSelectInput.value = projectName;
+                projectSelectInput.dataset.selectedName = projectName;
+            }
+            closeProjectDropdown(false);
+        }
+
+        function renderProjectOptions(query) {
+            if (!projectSelectDropdown) return;
+            const normalizedQuery = query.trim().toLowerCase();
+            const matches = [];
+            let totalMatches = 0;
+
+            for (let i = 0; i < allProjects.length; i += 1) {
+                const [projectId, projectName] = allProjects[i];
+                const name = projectName || '';
+                const id = projectId || '';
+                const isMatch = !normalizedQuery
+                    || String(name).toLowerCase().includes(normalizedQuery)
+                    || String(id).toLowerCase().includes(normalizedQuery);
+                if (isMatch) {
+                    totalMatches += 1;
+                    if (matches.length < MAX_PROJECT_RESULTS) {
+                        matches.push([projectId, projectName]);
+                    }
+                }
+            }
+
+            sortProjectMatches(matches);
+            projectSelectDropdown.innerHTML = '';
+
+            if (matches.length === 0) {
+                const emptyRow = document.createElement('div');
+                emptyRow.style.padding = '8px 12px';
+                emptyRow.style.color = '#6b7280';
+                emptyRow.textContent = 'No matching projects.';
+                projectSelectDropdown.appendChild(emptyRow);
+            } else {
+                matches.forEach(([projectId, projectName]) => {
+                    const option = document.createElement('div');
+                    option.className = 'project-option';
+                    option.dataset.projectId = projectId;
+                    option.dataset.projectName = projectName || '';
+                    option.style.padding = '8px 12px';
+                    option.style.cursor = 'pointer';
+                    option.style.whiteSpace = 'nowrap';
+                    option.textContent = projectName || projectId;
+                    projectSelectDropdown.appendChild(option);
+                });
+            }
+
+            const statusRow = document.createElement('div');
+            statusRow.style.padding = '6px 12px';
+            statusRow.style.fontSize = '11px';
+            statusRow.style.color = '#6b7280';
+            if (totalMatches > MAX_PROJECT_RESULTS) {
+                statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
+            } else if (totalMatches > 0) {
+                statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found.`;
+            } else {
+                statusRow.textContent = 'No projects found.';
+            }
+            projectSelectDropdown.appendChild(statusRow);
+            if (matches.length > 0) {
+                setActiveProjectIndex(0);
+            } else {
+                activeProjectIndex = -1;
+            }
+        }
+
+        function openProjectDropdown() {
+            if (!projectSelectDropdown || !projectSelectInput) return;
+            projectSelectDropdown.style.display = 'block';
+            projectSelectDropdown.classList.remove('keyboard-active');
+            if (projectDropdownBackdrop) {
+                projectDropdownBackdrop.style.display = 'block';
+            }
+            projectSelectInput.dataset.previousValue = projectSelectInput.value;
+            projectSelectInput.value = '';
+            projectSelectInput.placeholder = 'Search...';
+            renderProjectOptions('');
+        }
+
+        function closeProjectDropdown(restoreSelection = true) {
+            if (!projectSelectDropdown || !projectSelectInput) return;
+            projectSelectDropdown.style.display = 'none';
+            projectSelectDropdown.classList.remove('keyboard-active');
+            if (projectDropdownBackdrop) {
+                projectDropdownBackdrop.style.display = 'none';
+            }
+            if (restoreSelection && !projectSelectInput.value) {
+                const selectedName = projectSelectInput.dataset.selectedName || '';
+                projectSelectInput.value = selectedName;
+            }
+            projectSelectInput.placeholder = 'Select project…';
+        }
+
+        function filterProjectOptions(query) {
+            if (projectFilterTimeout) {
+                window.clearTimeout(projectFilterTimeout);
+            }
+            projectFilterTimeout = window.setTimeout(() => {
+                renderProjectOptions(query);
+            }, 120);
         }
 
         function formatBytes(bytes) {
@@ -1632,11 +1867,13 @@
                 relative_path: entry.relativePath || entry.file.name,
                 size: entry.file.size,
             }));
+            const projectId = projectSelect?.value || '';
+            const projectName = projectSelectInput?.dataset.selectedName || projectSelectInput?.value || '';
 
             const response = await fetch(startUrl, {
                 method: 'POST',
                 headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ files: metadata }),
+                body: JSON.stringify({ files: metadata, project_id: projectId, project_name: projectName }),
                 credentials: 'same-origin',
             });
 
@@ -2059,6 +2296,63 @@
             setUploadingState(false);
             setStatus('Upload canceled. You can start a new upload when ready.', 'success');
         });
+
+        if (projectSelectInput) {
+            projectSelectInput.addEventListener('focus', () => {
+                openProjectDropdown();
+            });
+
+            projectSelectInput.addEventListener('click', () => {
+                if (projectSelectDropdown?.style.display !== 'block') {
+                    openProjectDropdown();
+                }
+            });
+
+            projectSelectInput.addEventListener('input', (event) => {
+                filterProjectOptions(event.target.value);
+            });
+
+            projectSelectInput.addEventListener('keydown', (event) => {
+                if (projectSelectDropdown?.style.display !== 'block') return;
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const options = getProjectOptions();
+                    if (options.length === 0) return;
+                    const delta = event.key === 'ArrowDown' ? 1 : -1;
+                    const nextIndex = activeProjectIndex === -1 ? 0 : activeProjectIndex + delta;
+                    setActiveProjectIndex(nextIndex, true);
+                } else if (event.key === 'Enter') {
+                    const options = getProjectOptions();
+                    if (options.length === 0 || activeProjectIndex === -1) return;
+                    event.preventDefault();
+                    selectProjectOption(options[activeProjectIndex]);
+                }
+            });
+        }
+
+        if (projectSelectDropdown) {
+            projectSelectDropdown.addEventListener('click', (event) => {
+                const option = event.target.closest('.project-option');
+                if (!option) return;
+                selectProjectOption(option);
+            });
+
+            projectSelectDropdown.addEventListener('mousemove', (event) => {
+                const option = event.target.closest('.project-option');
+                if (!option) return;
+                const options = getProjectOptions();
+                const index = options.indexOf(option);
+                if (index !== -1) {
+                    setActiveProjectIndex(index, false);
+                }
+            });
+        }
+
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.addEventListener('click', () => {
+                closeProjectDropdown(true);
+            });
+        }
 
         if (settingsMenuBtn) {
             settingsMenuBtn.addEventListener('click', (event) => {

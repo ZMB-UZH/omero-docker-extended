@@ -15,6 +15,10 @@ def no_files_provided():
     return "No files provided."
 
 
+def invalid_project_selection():
+    return "Invalid project selection."
+
+
 def unable_resolve_session():
     return "Unable to resolve Omero session."
 
