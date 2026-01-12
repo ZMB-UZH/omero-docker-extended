@@ -178,7 +178,7 @@
             justify-content: flex-start;
             width: 100%;
             margin: 5px 0 -6px;
-            padding-left: 264px;
+            padding-left: 266px;
         }
         .project-select-group {
             display: flex;
@@ -1072,7 +1072,7 @@
         }
 
         function updateUploadButtonLabel() {
-            uploadBtn.textContent = hasActiveImport() ? 'Upload' : 'Upload & Import';
+            uploadBtn.textContent = hasActiveImport() ? 'Upload & append to Import' : 'Upload & Import';
         }
 
         function getPendingTotalBytes() {
