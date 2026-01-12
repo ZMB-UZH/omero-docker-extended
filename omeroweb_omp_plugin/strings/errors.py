@@ -146,6 +146,18 @@ def provider_response_missing_regex():
 def provider_response_no_regex():
     return "Provider response did not include a regex suggestion."
 
+def provider_response_empty():
+    return "Provider response was empty."
+
+def provider_response_row_mismatch(received, expected):
+    return (
+        "Provider response row count did not match the number of filenames "
+        f"({received} received, {expected} expected)."
+    )
+
+def provider_response_invalid_format():
+    return "Provider response format was invalid."
+
 def provider_required():
     return "Provider is required."
 
