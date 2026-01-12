@@ -29,7 +29,7 @@ _UPLOAD_CLEANUP_GUARD = threading.Lock()
 _LAST_UPLOAD_CLEANUP_TIME = 0.0
 
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/opt/omero-upload-tmp"
+DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
 DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
@@ -58,27 +58,27 @@ _DIRS_INITIALIZED = False
 # PATHS + JOB STORAGE
 # --------------------------------------------------------------------------
 
-def _get_base_tmp_path() -> Path:
-    """
-    Calculate the base tmp directory path at the same level as the plugin folder.
-    
-    If plugin is at /opt/omero-test/, returns /opt/tmp/
-    This ensures tmp directory is outside the plugin folder.
-    
-    This calculation is lightweight and only performs path operations,
-    no filesystem checks or modifications.
-    """
-    # Get the directory where this file (index_view.py) is located
-    current_file = Path(__file__).resolve()
-    
-    # Go up from: omeroweb_upload/views/index_view.py -> omeroweb_upload/views/ -> omeroweb_upload/ -> omero-test/ -> /opt/
-    plugin_views_dir = current_file.parent  # omeroweb_upload/views/
-    plugin_root = plugin_views_dir.parent    # omeroweb_upload/
-    project_root = plugin_root.parent        # omero-test/
-    base_path = project_root.parent          # /opt/
-    
-    # Create tmp directory at same level as plugin folder
-    return base_path / "tmp"
+def _resolve_upload_root() -> Path:
+    configured = os.environ.get(UPLOAD_ROOT_ENV)
+    return Path(configured) if configured else Path(DEFAULT_UPLOAD_ROOT)
+
+
+def _resolve_jobs_root() -> Path:
+    configured = os.environ.get(JOBS_DIR_ENV)
+    return Path(configured) if configured else Path(DEFAULT_JOBS_DIR)
+
+
+def _ensure_parent_dir(path: Path) -> bool:
+    parent = path.parent
+    if parent.exists():
+        return True
+    try:
+        parent.mkdir(parents=True, mode=0o755, exist_ok=True)
+        logger.info("Created parent directory: %s with permissions 0o755", parent)
+        return True
+    except OSError as exc:
+        logger.error("Unable to create parent directory %s: %s", parent, exc)
+        return False
 
 
 def _initialize_directories():
@@ -86,7 +86,7 @@ def _initialize_directories():
     Initialize upload directories once per application lifecycle.
     
     This function:
-    - Creates /opt/tmp with 0o755 (accessible for traversal)
+    - Ensures parent directories exist with 0o755 (accessible for traversal)
     - Creates target directories with 0o700 (secure)
     - Only runs once, subsequent calls return immediately
     
@@ -97,18 +97,11 @@ def _initialize_directories():
     if _DIRS_INITIALIZED:
         return  # Already initialized, skip
     
-    base_tmp = _get_base_tmp_path()
-    upload_root = base_tmp / "omero-upload-tmp"
-    jobs_root = base_tmp / "omero_web_upload_jobs"
-    
-    # Create parent directory (/opt/tmp) with 0o755 if needed
-    if not base_tmp.exists():
-        try:
-            base_tmp.mkdir(parents=True, mode=0o755, exist_ok=True)
-            logger.info(f"Created base tmp directory: {base_tmp} with permissions 0o755")
-        except OSError as exc:
-            logger.error(f"Unable to create base tmp directory {base_tmp}: {exc}")
-            return  # Don't mark as initialized if failed
+    upload_root = _resolve_upload_root()
+    jobs_root = _resolve_jobs_root()
+
+    if not _ensure_parent_dir(upload_root) or not _ensure_parent_dir(jobs_root):
+        return
     
     # Create upload directory with 0o700
     _ensure_dir_with_permissions(upload_root, 0o700)
@@ -129,16 +122,10 @@ def _get_upload_root() -> Path:
     """
     global _UPLOAD_ROOT_CACHE
     
-    if UPLOAD_ROOT_ENV in os.environ:
-        # Use environment variable if set (absolute path)
-        configured = os.environ.get(UPLOAD_ROOT_ENV)
-        return Path(configured)
-    
     # Use cached path if available
     if _UPLOAD_ROOT_CACHE is None:
         _initialize_directories()
-        base_tmp = _get_base_tmp_path()
-        _UPLOAD_ROOT_CACHE = base_tmp / "omero-upload-tmp"
+        _UPLOAD_ROOT_CACHE = _resolve_upload_root()
     
     return _UPLOAD_ROOT_CACHE
 
@@ -151,16 +138,10 @@ def _get_jobs_root() -> Path:
     """
     global _JOBS_ROOT_CACHE
     
-    if JOBS_DIR_ENV in os.environ:
-        # Use environment variable if set (absolute path)
-        configured = os.environ.get(JOBS_DIR_ENV)
-        return Path(configured)
-    
     # Use cached path if available
     if _JOBS_ROOT_CACHE is None:
         _initialize_directories()
-        base_tmp = _get_base_tmp_path()
-        _JOBS_ROOT_CACHE = base_tmp / "omero_web_upload_jobs"
+        _JOBS_ROOT_CACHE = _resolve_jobs_root()
     
     return _JOBS_ROOT_CACHE
 
