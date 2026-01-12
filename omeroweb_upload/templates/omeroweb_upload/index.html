@@ -970,6 +970,7 @@
         const fileBtn = document.getElementById('file-btn');
         const folderBtn = document.getElementById('folder-btn');
         const folderInput = document.getElementById('folder-input');
+        const canUseFolderPicker = window.isSecureContext && typeof window.showDirectoryPicker === 'function';
         const uploadBtn = document.getElementById('upload-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
@@ -2127,16 +2128,15 @@
                 if (isUploading) {
                     return;
                 }
-                if (typeof window.showDirectoryPicker === 'function') {
-                    try {
-                        await openFolderPicker();
-                    } catch (error) {
-                        setStatus(`Folder selection failed: ${error.message || error}`, 'error');
-                    }
+                if (!canUseFolderPicker) {
+                    setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
                     return;
                 }
-                folderInput.value = '';
-                folderInput.click();
+                try {
+                    await openFolderPicker();
+                } catch (error) {
+                    setStatus(`Folder selection failed: ${error.message || error}`, 'error');
+                }
             });
         }
         folderInput.addEventListener('change', () => {
