@@ -162,8 +162,16 @@
             gap: 10px;
             margin-left: auto;
         }
+        .upload-actions__pickers {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
         .upload-actions__buttons button {
             min-width: 140px;
+        }
+        .upload-actions .file-input-hidden {
+            display: none;
         }
         .project-select-row {
             display: flex;
@@ -833,9 +841,12 @@
                     <label class="project-select-label" for="project_select_input">Select project (optional):</label>
                 </div>
                 <div class="upload-actions">
-                    <input type="file" id="file-input" multiple {% if not upload_enabled %}disabled{% endif %}>
-                    <button id="folder-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Folders</button>
-                    <input type="file" id="folder-input" multiple webkitdirectory directory style="display:none;" {% if not upload_enabled %}disabled{% endif %}>
+                    <div class="upload-actions__pickers">
+                        <button id="file-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Files</button>
+                        <button id="folder-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Folders</button>
+                        <input type="file" id="file-input" multiple class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
+                        <input type="file" id="folder-input" multiple webkitdirectory directory class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
+                    </div>
                     <div class="project-select-group">
                         <div id="project_select_wrapper" class="project-select-wrapper">
                             <input type="text"
@@ -956,6 +967,7 @@
         const uploadOverlay = uploadCard.querySelector('.upload-card__overlay');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
+        const fileBtn = document.getElementById('file-btn');
         const folderBtn = document.getElementById('folder-btn');
         const folderInput = document.getElementById('folder-input');
         const uploadBtn = document.getElementById('upload-btn');
@@ -1046,6 +1058,9 @@
             uploadCard.classList.toggle('is-uploading', active);
             fileInput.disabled = active || !uploadEnabled;
             folderInput.disabled = active || !uploadEnabled;
+            if (fileBtn) {
+                fileBtn.disabled = active || !uploadEnabled;
+            }
             if (folderBtn) {
                 folderBtn.disabled = active || !uploadEnabled;
             }
@@ -2074,25 +2089,6 @@
             handleFiles(files);
         });
 
-        fileInput.addEventListener('click', async (event) => {
-            if (typeof window.showOpenFilePicker !== 'function') {
-                return;
-            }
-            event.preventDefault();
-            if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
-                return;
-            }
-            if (isUploading) {
-                return;
-            }
-            try {
-                await openFilePicker();
-            } catch (error) {
-                setStatus(`Upload selection failed: ${error.message || error}`, 'error');
-            }
-        });
-
         fileInput.addEventListener('change', () => {
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
@@ -2105,6 +2101,27 @@
                 handleFiles(normalizeFileList(fileInput.files));
             }
         });
+        if (fileBtn) {
+            fileBtn.addEventListener('click', async () => {
+                if (!uploadEnabled) {
+                    setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
+                    return;
+                }
+                if (isUploading) {
+                    return;
+                }
+                if (typeof window.showOpenFilePicker === 'function') {
+                    try {
+                        await openFilePicker();
+                    } catch (error) {
+                        setStatus(`Upload selection failed: ${error.message || error}`, 'error');
+                    }
+                    return;
+                }
+                fileInput.value = '';
+                fileInput.click();
+            });
+        }
         if (folderBtn) {
             folderBtn.addEventListener('click', async () => {
                 if (!uploadEnabled) {
