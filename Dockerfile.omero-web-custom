@@ -5,8 +5,8 @@
 
 FROM openmicroscopy/omero-web-standalone:5
 
-# Run as root to avoid permission issues with deletion
-# ----------------------------------------------------
+# Run as root to avoid permission issues
+# --------------------------------------
 USER root
 
 # Remove old copies of the plugins inside the container (if any)
@@ -72,7 +72,8 @@ RUN set -eux; \
     rm -f /tmp/logo.png*
 
 # Security hardening: upgrade vulnerable Python packages inside OMERO venv
-# ------------------------------------------------------------------------
+## ATTENTION!! Please delete if you notice any persistent issues in Omero web
+# ---------------------------------------------------------------------------
 RUN set -eux; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
     "${VENV_DIR}/bin/pip" install --no-cache-dir --upgrade \
