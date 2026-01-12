@@ -1,6 +1,6 @@
 {% if is_root_user %}
     <div class="root-user-overlay" aria-hidden="true"></div>
-    <div id="root-user-warning" class="root-user-warning" role="alert">
+    <div id="root-user-warning" class="root-user-warning error-message" role="alert">
         PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
     </div>
 {% endif %}
@@ -218,7 +218,7 @@
             </table>
         </div>
         <div id='dataset_table_message'
-             class="dataset-table-message"
+             class="dataset-table-message error-message"
              aria-live="polite"></div>
     </div>
 </div>
@@ -234,6 +234,7 @@
                 box-shadow:0 10px 30px rgba(0,0,0,0.25);
                 font-size:13px; min-width:300px; max-width:500px;">
         <div id="nb-modal-message"
+             class="error-message"
              style="margin-bottom:16px;">
         </div>
         <div style="text-align:right;">
@@ -271,7 +272,7 @@
                 <select id="ai_model_select" class="ai-modal-select placeholder" style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
             </div>
         </div>
-        <div id="ai_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div id="ai_modal_status" class="error-message" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested Regex</label>
             <textarea id="ai_regex_output"
@@ -310,7 +311,7 @@
                 <select id="ai_parse_model_select" class="ai-modal-select placeholder" style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
             </div>
         </div>
-        <div id="ai_parse_modal_status" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div id="ai_parse_modal_status" class="error-message" style="margin-bottom:10px; color:#1f2937;"></div>
         <div style="margin-bottom:10px;">
             <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested parsing</label>
             <textarea id="ai_parse_output"
@@ -492,7 +493,7 @@
                 </button>
             </div>
         </div>
-        <div id="ai_credentials_status" class="ai-credentials-status"></div>
+        <div id="ai_credentials_status" class="ai-credentials-status error-message"></div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_credentials_test">Test connection</button>
             <button type="button" id="ai_credentials_save">Save key</button>
@@ -502,6 +503,18 @@
 
 <style>
     html, body {min-width: 632px;}
+    body {user-select: none;}
+    input,
+    textarea,
+    table,
+    .error-message,
+    .error-message * {
+        user-select: text;
+    }
+    table,
+    table * {
+        user-select: text;
+    }
     .root-user-blocked .omeroweb-omp-plugin,
     .root-user-blocked .dataset-table-wrapper,
     .root-user-blocked #project_dropdown_backdrop,
@@ -905,6 +918,30 @@
         }
     }
     const messages = {{ messages_json|safe }};
+    const allowedClipboardSelectors = [
+        'input[type="text"]',
+        'input[type="search"]',
+        'input[type="password"]',
+        'input[type="email"]',
+        'input[type="number"]',
+        'input[type="url"]',
+        'textarea',
+        'table',
+        '.error-message',
+    ];
+    const isClipboardAllowed = (target) => {
+        if (!(target instanceof Element)) {
+            return false;
+        }
+        return Boolean(target.closest(allowedClipboardSelectors.join(',')));
+    };
+    ['copy', 'cut', 'paste', 'contextmenu', 'selectstart'].forEach((eventName) => {
+        document.addEventListener(eventName, (event) => {
+            if (!isClipboardAllowed(event.target)) {
+                event.preventDefault();
+            }
+        }, true);
+    });
     const formatMessage = (template, values = {}) => {
         const source = String(template || '');
         return source.replace(/\{(\w+)\}/g, (match, key) => (
