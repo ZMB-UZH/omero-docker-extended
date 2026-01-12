@@ -3,6 +3,8 @@
 
 FROM openmicroscopy/omero-server:5
 
+# Run as root to avoid permission issues
+# --------------------------------------
 USER root
 
 # Install Omero figure PDF export dependencies in the Omero server virtualenv
