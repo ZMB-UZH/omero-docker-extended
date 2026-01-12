@@ -971,6 +971,12 @@
         const folderBtn = document.getElementById('folder-btn');
         const folderInput = document.getElementById('folder-input');
         const canUseFolderPicker = window.isSecureContext && typeof window.showDirectoryPicker === 'function';
+        const canUseFolderInput = Boolean(
+            folderInput &&
+            (folderInput.hasAttribute('webkitdirectory')
+                || folderInput.hasAttribute('directory')
+                || 'webkitdirectory' in folderInput)
+        );
         const uploadBtn = document.getElementById('upload-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
@@ -2128,15 +2134,20 @@
                 if (isUploading) {
                     return;
                 }
-                if (!canUseFolderPicker) {
-                    setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
+                if (canUseFolderPicker) {
+                    try {
+                        await openFolderPicker();
+                    } catch (error) {
+                        setStatus(`Folder selection failed: ${error.message || error}`, 'error');
+                    }
                     return;
                 }
-                try {
-                    await openFolderPicker();
-                } catch (error) {
-                    setStatus(`Folder selection failed: ${error.message || error}`, 'error');
+                if (canUseFolderInput) {
+                    folderInput.value = '';
+                    folderInput.click();
+                    return;
                 }
+                setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
             });
         }
         folderInput.addEventListener('change', () => {
