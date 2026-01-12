@@ -554,8 +554,9 @@
             border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.25);
             font-size: 13px;
-            width: 520px;
-            max-width: calc(100% - 40px);
+            width: 800px;
+            min-width: 800px;
+            max-width: 800px;
         }
         .user-settings-grid {
             display: flex;
@@ -570,15 +571,27 @@
             justify-content: space-between;
         }
         .user-setting-input {
-            flex: 0 0 auto;
+            flex: 1 1 240px;
+        }
+        .user-setting-input label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0px;
         }
         .user-setting-description {
-            flex: 1 1 auto;
+            flex: 1 1 220px;
             color: #4b5563;
+            font-size: 12px;
+            line-height: 1.35;
+            display: flex;
+            gap: 6px;
+            align-items: baseline;
+            justify-content: flex-start;
         }
         .user-setting-limit {
-            font-weight: 700;
-            margin-right: 8px;
+            font-weight: 600;
+            color: #1f2937;
+            white-space: nowrap;
         }
         .user-setting-error {
             border-color: #b91c1c !important;
@@ -592,6 +605,45 @@
         .user-settings-status {
             min-height: 18px;
             color: #1f2937;
+        }
+        .ai-option-btn {
+            font: inherit;
+            font-weight: 600;
+            color: #1d4ed8;
+            background: rgba(0,123,255,0.12);
+            border: 0;
+            border-radius: 4px;
+            padding: 1px 4px;
+            cursor: pointer;
+            line-height: 1.1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .ai-option-btn--modal {
+            font-size: 12px;
+        }
+        .ai-option-btn:hover {
+            color: #0f3ea8;
+            background: rgba(0,123,255,0.18);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .ai-option-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .user-settings-actions button {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .user-settings-actions button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            filter: brightness(105%);
+        }
+        .user-settings-actions button:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
         .root-user-blocked .user-settings-overlay {
             display: none !important;
@@ -678,26 +730,27 @@
             <div class="user-settings-panel" role="dialog" aria-modal="true" aria-labelledby="user-settings-title">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                     <strong id="user-settings-title">User settings</strong>
-                    <button type="button" id="user_settings_close" class="clear-all-btn">Close</button>
+                    <button type="button" id="user_settings_close" class="ai-option-btn ai-option-btn--modal">Close</button>
                 </div>
                 <div class="user-settings-grid">
                     <div class="user-setting-row">
                         <div class="user-setting-input">
-                            <label for="user_setting_batch_size">Chunk size</label>
+                            <label for="user_setting_batch_size">Job batch size</label>
                             <input type="text"
                                    id="user_setting_batch_size"
                                    inputmode="numeric"
-                                   style="width:60px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                   style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
                         </div>
                         <div class="user-setting-description">
-                            <span class="user-setting-limit">[1-25]</span>
+                            <span class="user-setting-limit">[1-50]</span>
                             <span>Set higher for faster uploads, lower for more granular progress updates.</span>
                         </div>
                     </div>
                 </div>
                 <div class="user-settings-status" id="user_settings_status"></div>
                 <div class="user-settings-actions">
-                    <button type="button" id="user_settings_save" class="clear-all-btn">Save</button>
+                    <button type="button" id="user_settings_save">Save settings</button>
+                    <button type="button" id="user_settings_restore">Restore defaults</button>
                 </div>
             </div>
         </div>
@@ -737,6 +790,7 @@
         const userSettingsOverlay = document.getElementById('user-settings-overlay');
         const userSettingsClose = document.getElementById('user_settings_close');
         const userSettingsSave = document.getElementById('user_settings_save');
+        const userSettingsRestore = document.getElementById('user_settings_restore');
         const userSettingsBatchInput = document.getElementById('user_setting_batch_size');
         const userSettingsStatus = document.getElementById('user_settings_status');
 
@@ -1872,10 +1926,10 @@
                 const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
                 const numericPattern = /^\d+$/;
                 const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
-                const isValid = Number.isInteger(value) && value >= 1 && value <= 25;
+                const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
                 setUserSettingError(userSettingsBatchInput, !isValid);
                 if (!isValid) {
-                    setUserSettingsStatus('Chunk size must be a number between 1 and 25.', true);
+                    setUserSettingsStatus('Job batch size must be a number between 1 and 50.', true);
                     return;
                 }
                 currentUploadBatchFiles = value;
@@ -1887,6 +1941,23 @@
                     }
                 }
                 setUserSettingsStatus('Saved user settings.');
+            });
+        }
+        if (userSettingsRestore) {
+            userSettingsRestore.addEventListener('click', () => {
+                currentUploadBatchFiles = uploadBatchFiles;
+                if (userSettingsBatchInput) {
+                    userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
+                }
+                setUserSettingError(userSettingsBatchInput, false);
+                if (storage) {
+                    try {
+                        storage.removeItem(userSettingsStorageKey);
+                    } catch (error) {
+                        // Ignore storage failures.
+                    }
+                }
+                setUserSettingsStatus('Restored default settings.');
             });
         }
 
