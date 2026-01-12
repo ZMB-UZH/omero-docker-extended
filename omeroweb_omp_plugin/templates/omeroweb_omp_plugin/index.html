@@ -1071,6 +1071,7 @@
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
     const STATE_STORAGE_KEY = 'omp_preview_state';
+    const SEPARATOR_STORAGE_KEY = 'omp_separator_mode_state';
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     const separatorValues = {
         chars: separatorInput ? separatorInput.value || '' : '',
@@ -1654,18 +1655,56 @@
             ...separatorValues,
         };
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        try {
+            window.localStorage?.setItem(
+                SEPARATOR_STORAGE_KEY,
+                JSON.stringify({
+                    separator_mode: state.separator_mode,
+                    separator: state.separator,
+                    separator_values: state.separator_values,
+                })
+            );
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function loadSeparatorModeState() {
+        try {
+            const raw = window.localStorage?.getItem(SEPARATOR_STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (error) {
+            return null;
+        }
     }
 
     function restorePreviewState() {
         const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
-        if (!raw) return;
         let state = null;
-        try {
-            state = JSON.parse(raw);
-        } catch (err) {
-            window.sessionStorage.removeItem(STATE_STORAGE_KEY);
-            return;
+        if (raw) {
+            try {
+                state = JSON.parse(raw);
+            } catch (err) {
+                window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+                state = null;
+            }
         }
+        const separatorFallback = loadSeparatorModeState();
+        if (!state && separatorFallback) {
+            state = { ...separatorFallback };
+        } else if (state && separatorFallback) {
+            if (!state.separator_mode && separatorFallback.separator_mode) {
+                state.separator_mode = separatorFallback.separator_mode;
+            }
+            if (typeof state.separator !== 'string' && typeof separatorFallback.separator === 'string') {
+                state.separator = separatorFallback.separator;
+            }
+            if (!state.separator_values && separatorFallback.separator_values) {
+                state.separator_values = separatorFallback.separator_values;
+            }
+        }
+        if (!state) return;
         if (projectSelect && state.project_id) {
             projectSelect.value = state.project_id;
         }
