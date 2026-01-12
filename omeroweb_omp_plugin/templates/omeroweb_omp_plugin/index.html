@@ -3692,6 +3692,12 @@
         setSeparatorMode('chars');
         resetDatasetSelection();
         window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+        try {
+            window.localStorage?.removeItem(STATE_STORAGE_KEY);
+            window.localStorage?.removeItem(SEPARATOR_STORAGE_KEY);
+        } catch (error) {
+            // ignore storage errors
+        }
     }
 
     if (datasetClearBtn) {
