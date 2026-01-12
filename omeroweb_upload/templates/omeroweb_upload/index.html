@@ -842,8 +842,8 @@
                 </div>
                 <div class="upload-actions">
                     <div class="upload-actions__pickers">
-                        <button id="file-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Files</button>
                         <button id="folder-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Folders</button>
+                        <button id="file-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Files</button>
                         <input type="file" id="file-input" multiple class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
                         <input type="file" id="folder-input" multiple webkitdirectory directory class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
                     </div>
@@ -971,12 +971,6 @@
         const folderBtn = document.getElementById('folder-btn');
         const folderInput = document.getElementById('folder-input');
         const canUseFolderPicker = window.isSecureContext && typeof window.showDirectoryPicker === 'function';
-        const canUseFolderInput = Boolean(
-            folderInput &&
-            (folderInput.hasAttribute('webkitdirectory')
-                || folderInput.hasAttribute('directory')
-                || 'webkitdirectory' in folderInput)
-        );
         const uploadBtn = document.getElementById('upload-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
@@ -2134,20 +2128,15 @@
                 if (isUploading) {
                     return;
                 }
-                if (canUseFolderPicker) {
-                    try {
-                        await openFolderPicker();
-                    } catch (error) {
-                        setStatus(`Folder selection failed: ${error.message || error}`, 'error');
-                    }
+                if (!canUseFolderPicker) {
+                    setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
                     return;
                 }
-                if (canUseFolderInput) {
-                    folderInput.value = '';
-                    folderInput.click();
-                    return;
+                try {
+                    await openFolderPicker();
+                } catch (error) {
+                    setStatus(`Folder selection failed: ${error.message || error}`, 'error');
                 }
-                setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
             });
         }
         folderInput.addEventListener('change', () => {
