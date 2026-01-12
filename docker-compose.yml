@@ -47,6 +47,7 @@ services:
     volumes:
       - "omero:/OMERO"
     ulimits:
+    # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
       nofile:
         soft: 50000
         hard: 50000
