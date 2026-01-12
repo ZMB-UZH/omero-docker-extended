@@ -918,9 +918,14 @@
         return mode || 'chars';
     }
 
+    function isAiParseMessage(value) {
+        return value === aiParseNoInputMessage || value === aiParseRequiredMessage;
+    }
+
     function storeSeparatorValue(mode, value) {
         if (!mode || mode === 'ai_parse') return;
         if (mode === 'ai_regex' && value === aiRegexRequiredMessage) return;
+        if (isAiParseMessage(value)) return;
         separatorValues[mode] = value ?? '';
     }
 
@@ -1747,13 +1752,19 @@
             projectSelectInput.value = state.project_name || state.project_id || '';
             projectSelectInput.dataset.selectedName = state.project_name || state.project_id || '';
         }
-        if (separatorInput && typeof state.separator === 'string') {
+        if (separatorInput && typeof state.separator === 'string' && !isAiParseMessage(state.separator)) {
             separatorInput.value = state.separator;
         }
         if (state.separator_values && typeof state.separator_values === 'object') {
-            separatorValues.chars = state.separator_values.chars ?? separatorValues.chars;
-            separatorValues.regex = state.separator_values.regex ?? separatorValues.regex;
-            separatorValues.ai_regex = state.separator_values.ai_regex ?? separatorValues.ai_regex;
+            if (!isAiParseMessage(state.separator_values.chars)) {
+                separatorValues.chars = state.separator_values.chars ?? separatorValues.chars;
+            }
+            if (!isAiParseMessage(state.separator_values.regex)) {
+                separatorValues.regex = state.separator_values.regex ?? separatorValues.regex;
+            }
+            if (!isAiParseMessage(state.separator_values.ai_regex)) {
+                separatorValues.ai_regex = state.separator_values.ai_regex ?? separatorValues.ai_regex;
+            }
         }
         if (typeof state.ai_regex_completed === 'boolean') {
             aiRegexTransferred = state.ai_regex_completed;
