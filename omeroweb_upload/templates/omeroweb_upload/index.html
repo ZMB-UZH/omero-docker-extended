@@ -832,7 +832,7 @@
                     <label class="project-select-label" for="project_select_input">Select project (optional):</label>
                 </div>
                 <div class="upload-actions">
-                    <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
+                    <input type="file" id="file-input" multiple {% if not upload_enabled %}disabled{% endif %}>
                     <div class="project-select-group">
                         <div id="project_select_wrapper" class="project-select-wrapper">
                             <input type="text"
@@ -953,6 +953,17 @@
         const uploadOverlay = uploadCard.querySelector('.upload-card__overlay');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
+        const folderInput = (() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.webkitdirectory = true;
+            input.directory = true;
+            input.style.display = 'none';
+            input.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(input);
+            return input;
+        })();
         const uploadBtn = document.getElementById('upload-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
@@ -1040,6 +1051,7 @@
             isUploading = active;
             uploadCard.classList.toggle('is-uploading', active);
             fileInput.disabled = active || !uploadEnabled;
+            folderInput.disabled = active || !uploadEnabled;
             uploadBtn.disabled = active || !uploadEnabled;
             if (!active) {
                 resetUploadProgress();
@@ -1236,6 +1248,7 @@
             if (!projectSelectDropdown) return;
             const normalizedQuery = query.trim().toLowerCase();
             const matches = [];
+            const totalProjects = allProjects.length;
             let totalMatches = 0;
 
             for (let i = 0; i < allProjects.length; i += 1) {
@@ -1266,7 +1279,7 @@
             emptyOption.textContent = 'No project (clear selection)';
             projectSelectDropdown.appendChild(emptyOption);
 
-            if (matches.length === 0) {
+            if (matches.length === 0 && totalProjects > 0) {
                 const emptyRow = document.createElement('div');
                 emptyRow.style.padding = '8px 12px';
                 emptyRow.style.color = '#6b7280';
@@ -1562,6 +1575,7 @@
             pendingFiles = [];
             expandedNodes.clear();
             fileInput.value = '';
+            folderInput.value = '';
             refreshFileList();
         }
 
@@ -1648,6 +1662,7 @@
             pendingFiles = pendingFiles.filter((entry) => !predicate(entry));
             if (!pendingFiles.length) {
                 fileInput.value = '';
+                folderInput.value = '';
                 expandedNodes.clear();
             }
             refreshFileList();
@@ -1892,6 +1907,56 @@
             }));
         }
 
+        async function collectDirectoryHandleFiles(handle, prefix = '') {
+            const entries = [];
+            for await (const entry of handle.values()) {
+                if (entry.kind === 'file') {
+                    const file = await entry.getFile();
+                    entries.push({ file, relativePath: `${prefix}${entry.name}` });
+                } else if (entry.kind === 'directory') {
+                    const nested = await collectDirectoryHandleFiles(entry, `${prefix}${entry.name}/`);
+                    entries.push(...nested);
+                }
+            }
+            return entries;
+        }
+
+        async function openFileAndFolderPicker() {
+            const collected = [];
+            if (typeof window.showOpenFilePicker === 'function') {
+                try {
+                    const fileHandles = await window.showOpenFilePicker({ multiple: true });
+                    for (const handle of fileHandles) {
+                        const file = await handle.getFile();
+                        collected.push({ file, relativePath: file.name });
+                    }
+                } catch (error) {
+                    if (error?.name !== 'AbortError') {
+                        throw error;
+                    }
+                }
+            }
+            if (typeof window.showDirectoryPicker === 'function') {
+                let addFolder = window.confirm('Would you like to add folders too?');
+                while (addFolder) {
+                    try {
+                        const dirHandle = await window.showDirectoryPicker();
+                        const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
+                        collected.push(...dirEntries);
+                    } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            break;
+                        }
+                        throw error;
+                    }
+                    addFolder = window.confirm('Add another folder?');
+                }
+            }
+            if (collected.length) {
+                handleFiles(collected);
+            }
+        }
+
         function handleFiles(entries) {
             const duplicates = findDuplicateRootNames(entries);
             if (duplicates.size) {
@@ -2004,6 +2069,25 @@
             handleFiles(files);
         });
 
+        fileInput.addEventListener('click', async (event) => {
+            if (typeof window.showOpenFilePicker !== 'function') {
+                return;
+            }
+            event.preventDefault();
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
+                return;
+            }
+            if (isUploading) {
+                return;
+            }
+            try {
+                await openFileAndFolderPicker();
+            } catch (error) {
+                setStatus(`Upload selection failed: ${error.message || error}`, 'error');
+            }
+        });
+
         fileInput.addEventListener('change', () => {
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
@@ -2014,6 +2098,23 @@
             }
             if (fileInput.files?.length) {
                 handleFiles(normalizeFileList(fileInput.files));
+                const wantsFolders = window.confirm('Would you like to add folders too?');
+                if (wantsFolders) {
+                    folderInput.value = '';
+                    folderInput.click();
+                }
+            }
+        });
+        folderInput.addEventListener('change', () => {
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
+                return;
+            }
+            if (isUploading) {
+                return;
+            }
+            if (folderInput.files?.length) {
+                handleFiles(normalizeFileList(folderInput.files));
             }
         });
 
@@ -2461,6 +2562,7 @@
                 pendingFiles = [];
                 expandedNodes.clear();
                 fileInput.value = '';
+                folderInput.value = '';
                 refreshFileList();
                 registerImportJob(job);
                 setStatus(
