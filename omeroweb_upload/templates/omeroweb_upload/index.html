@@ -152,6 +152,7 @@
             align-items: center;
             justify-content: center;
             flex-wrap: nowrap;
+            --action-control-height: 40px;
         }
         .upload-actions > * {
             flex: 0 0 auto;
@@ -188,19 +189,23 @@
         }
         .project-select-input {
             width: 100%;
-            padding: 10px 32px 10px 10px;
+            padding: 0 32px 0 10px;
             border-radius: 6px;
             border: 1px solid #007bff;
-            height: 40px;
-            line-height: 1.2;
+            height: var(--action-control-height);
+            line-height: calc(var(--action-control-height) - 2px);
         }
         .project-select-arrow {
             position: absolute;
-            right: 12px;
+            right: 10px;
             top: 50%;
             transform: translateY(-50%);
             color: #4b5563;
             pointer-events: none;
+        }
+        .project-option.is-empty {
+            color: #6b7280;
+            font-style: italic;
         }
         .project-option {
             transition: background 0.15s ease, color 0.15s ease;
@@ -233,6 +238,7 @@
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
+            height: var(--action-control-height);
         }
         .upload-actions input[type="file"]::file-selector-button,
         .upload-actions input[type="file"]::-webkit-file-upload-button {
@@ -245,6 +251,7 @@
             font-size: 14px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.2s ease;
+            height: var(--action-control-height);
         }
         .upload-actions input[type="file"]:hover::file-selector-button,
         .upload-actions input[type="file"]:hover::-webkit-file-upload-button {
@@ -988,6 +995,7 @@
         const importJobsStorageKey = 'omeroweb_upload_import_jobs_v1';
         const importLogsStorageKey = 'omeroweb_upload_import_logs_v1';
         const userSettingsStorageKey = 'omeroweb_upload_user_settings_v1';
+        const projectSelectionStorageKey = 'omeroweb_upload_project_selection_v1';
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
 
         function setStatus(message, type) {
@@ -1055,6 +1063,82 @@
                 : [];
         }
 
+        function saveProjectSelection(projectId, projectName) {
+            if (!storage) return;
+            const normalizedId = projectId ? String(projectId) : '';
+            const normalizedName = projectName ? String(projectName) : '';
+            try {
+                if (!normalizedId && !normalizedName) {
+                    storage.removeItem(projectSelectionStorageKey);
+                    return;
+                }
+                storage.setItem(
+                    projectSelectionStorageKey,
+                    JSON.stringify({ projectId: normalizedId, projectName: normalizedName })
+                );
+            } catch (error) {
+                // Ignore storage failures.
+            }
+        }
+
+        function setProjectSelection(projectId, projectName, options = {}) {
+            const { persist = true } = options;
+            const normalizedId = projectId ? String(projectId) : '';
+            const normalizedName = projectName ? String(projectName) : '';
+            if (projectSelect) {
+                projectSelect.value = normalizedId;
+            }
+            if (projectSelectInput) {
+                projectSelectInput.value = normalizedName;
+                projectSelectInput.dataset.selectedName = normalizedName;
+            }
+            if (persist) {
+                saveProjectSelection(normalizedId, normalizedName);
+            }
+        }
+
+        function clearProjectSelection(options = {}) {
+            const { persist = true } = options;
+            if (projectSelect) {
+                projectSelect.value = '';
+            }
+            if (projectSelectInput) {
+                projectSelectInput.value = '';
+                projectSelectInput.dataset.selectedName = '';
+            }
+            if (persist && storage) {
+                try {
+                    storage.removeItem(projectSelectionStorageKey);
+                } catch (error) {
+                    // Ignore storage failures.
+                }
+            }
+        }
+
+        function restoreProjectSelection() {
+            if (!storage) return;
+            try {
+                const raw = storage.getItem(projectSelectionStorageKey);
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                const storedId = parsed?.projectId ? String(parsed.projectId) : '';
+                if (!storedId) {
+                    clearProjectSelection({ persist: false });
+                    return;
+                }
+                const match = allProjects.find(([projectId]) => String(projectId) === storedId);
+                if (!match) {
+                    clearProjectSelection({ persist: false });
+                    return;
+                }
+                const [projectId, projectName] = match;
+                const label = parsed?.projectName || projectName || projectId;
+                setProjectSelection(projectId, label, { persist: false });
+            } catch (error) {
+                clearProjectSelection({ persist: false });
+            }
+        }
+
         function setActiveProjectIndex(index, useKeyboard = false) {
             const options = getProjectOptions();
             if (options.length === 0) {
@@ -1084,12 +1168,10 @@
             if (!option) return;
             const projectId = option.dataset.projectId || '';
             const projectName = option.dataset.projectName || option.textContent || '';
-            if (projectSelect) {
-                projectSelect.value = projectId;
-            }
-            if (projectSelectInput) {
-                projectSelectInput.value = projectName;
-                projectSelectInput.dataset.selectedName = projectName;
+            if (!projectId && option.classList.contains('is-empty')) {
+                clearProjectSelection();
+            } else {
+                setProjectSelection(projectId, projectName);
             }
             closeProjectDropdown(false);
         }
@@ -1117,6 +1199,16 @@
 
             sortProjectMatches(matches);
             projectSelectDropdown.innerHTML = '';
+
+            const emptyOption = document.createElement('div');
+            emptyOption.className = 'project-option is-empty';
+            emptyOption.dataset.projectId = '';
+            emptyOption.dataset.projectName = '';
+            emptyOption.style.padding = '8px 12px';
+            emptyOption.style.cursor = 'pointer';
+            emptyOption.style.whiteSpace = 'nowrap';
+            emptyOption.textContent = 'No project (clear selection)';
+            projectSelectDropdown.appendChild(emptyOption);
 
             if (matches.length === 0) {
                 const emptyRow = document.createElement('div');
@@ -1150,11 +1242,7 @@
                 statusRow.textContent = 'No projects found.';
             }
             projectSelectDropdown.appendChild(statusRow);
-            if (matches.length > 0) {
-                setActiveProjectIndex(0);
-            } else {
-                activeProjectIndex = -1;
-            }
+            setActiveProjectIndex(0);
         }
 
         function openProjectDropdown() {
@@ -2454,6 +2542,7 @@
         if (clearAllBtn) {
             clearAllBtn.addEventListener('click', () => {
                 clearSelectedFiles();
+                clearProjectSelection();
                 if (!isUploading && !hasActiveImport()) {
                     clearImportState();
                     setStatus('');
@@ -2465,6 +2554,7 @@
             setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
         }
         applyUserSettings(loadUserSettings() || { uploadBatchFiles });
+        restoreProjectSelection();
         restoreImportState();
         if (importJobs.size) {
             updateProgressFromJobs();
