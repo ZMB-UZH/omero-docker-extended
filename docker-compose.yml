@@ -48,8 +48,8 @@ services:
       - "omero:/OMERO"
     ulimits:
       nofile:
-        soft: 8192
-        hard: 65536
+        soft: 50000
+        hard: 50000
 
   redis: # shared cache across Omero web workers (required for rate limiting)
     image: "redis:7-alpine"

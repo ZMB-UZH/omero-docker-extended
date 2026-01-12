@@ -41,10 +41,13 @@ if [ ! -d "temp_clone" ]; then
     exit 1
 fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
-echo "Stopping containers with latest docker-compose.yml..."
-docker compose -f docker-compose.yml.new down --remove-orphans || docker compose down --remove-orphans || true
-echo "Removing ALL omeroweb images..."
-docker images -q omero-test-omeroweb | xargs -r docker rmi -f || true
+echo "Stopping containers with latest docker-compose.yml and removing referenced images..."
+docker compose -f docker-compose.yml.new down --remove-orphans --rmi all || docker compose down --remove-orphans --rmi all || true
+echo "Removing ALL images referenced by docker-compose.yml..."
+COMPOSE_IMAGES="$(docker compose -f docker-compose.yml.new config --images 2>/dev/null || true)"
+if [ -n "${COMPOSE_IMAGES}" ]; then
+    echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
+fi
 # echo "Removing dangling images..."
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
 
