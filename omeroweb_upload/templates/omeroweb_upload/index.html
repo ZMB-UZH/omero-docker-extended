@@ -1960,13 +1960,9 @@
             }
             const collected = [];
             try {
-                let addFolder = true;
-                while (addFolder) {
-                    const dirHandle = await window.showDirectoryPicker();
-                    const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
-                    collected.push(...dirEntries);
-                    addFolder = window.confirm('Add another folder?');
-                }
+                const dirHandle = await window.showDirectoryPicker();
+                const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
+                collected.push(...dirEntries);
             } catch (error) {
                 if (error?.name !== 'AbortError') {
                     throw error;
