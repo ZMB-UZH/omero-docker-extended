@@ -6,9 +6,10 @@ import subprocess
 import threading
 import time
 import uuid
-from pathlib import Path, PurePosixPath
-
 import portalocker
+import stat
+
+from pathlib import Path, PurePosixPath
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -16,7 +17,6 @@ from django.urls import reverse
 from omero.model import DatasetI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
-
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
@@ -53,22 +53,107 @@ JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 # PATHS + JOB STORAGE
 # --------------------------------------------------------------------------
 
+def _get_base_tmp_path() -> Path:
+    """
+    Calculate the base tmp directory path at the same level as the plugin folder.
+    
+    If plugin is at /opt/omero-test/, returns /opt/tmp/
+    This ensures tmp directory is outside the plugin folder.
+    """
+    # Get the directory where this file (index_view.py) is located
+    current_file = Path(__file__).resolve()
+    
+    # Go up from: omeroweb_upload/views/index_view.py -> omeroweb_upload/views/ -> omeroweb_upload/ -> omero-test/ -> /opt/
+    plugin_views_dir = current_file.parent  # omeroweb_upload/views/
+    plugin_root = plugin_views_dir.parent    # omeroweb_upload/
+    project_root = plugin_root.parent        # omero-test/
+    base_path = project_root.parent          # /opt/
+    
+    # Create tmp directory at same level as plugin folder
+    return base_path / "tmp"
+
+
 def _get_upload_root() -> Path:
-    configured = os.environ.get(UPLOAD_ROOT_ENV, DEFAULT_UPLOAD_ROOT)
-    return Path(configured)
+    """Get the upload root directory, creating it with proper permissions if needed."""
+    if UPLOAD_ROOT_ENV in os.environ:
+        # Use environment variable if set (absolute path)
+        configured = os.environ.get(UPLOAD_ROOT_ENV)
+        return Path(configured)
+    
+    # Use relative path: same level as plugin folder
+    base_tmp = _get_base_tmp_path()
+    upload_root = base_tmp / "omero-upload-tmp"
+    
+    # Ensure directory exists with proper permissions
+    _ensure_dir_with_permissions(upload_root, 0o700)
+    
+    return upload_root
 
 
 def _get_jobs_root() -> Path:
-    configured = os.environ.get(JOBS_DIR_ENV, DEFAULT_JOBS_DIR)
-    return Path(configured)
+    """Get the jobs directory, creating it with proper permissions if needed."""
+    if JOBS_DIR_ENV in os.environ:
+        # Use environment variable if set (absolute path)
+        configured = os.environ.get(JOBS_DIR_ENV)
+        return Path(configured)
+    
+    # Use relative path: same level as plugin folder
+    base_tmp = _get_base_tmp_path()
+    jobs_root = base_tmp / "omero_web_upload_jobs"
+    
+    # Ensure directory exists with proper permissions
+    _ensure_dir_with_permissions(jobs_root, 0o700)
+    
+    return jobs_root
 
 
 def _ensure_dir(path: Path) -> bool:
+    """
+    Ensure directory exists. Used for subdirectories within upload/jobs roots.
+    Does NOT set permissions (uses defaults).
+    """
     try:
         path.mkdir(parents=True, exist_ok=True)
         return True
     except OSError as exc:
         logger.warning("Unable to create directory %s: %s", path, exc)
+        return False
+
+
+def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
+    """
+    Ensure directory exists with strict permissions.
+    
+    - Creates directory if it doesn't exist (with specified permissions)
+    - If directory exists, verifies and fixes permissions if necessary
+    - NEVER deletes any files or directories
+    
+    Args:
+        path: Directory path to ensure
+        mode: Octal permissions (e.g., 0o700 for rwx------)
+    
+    Returns:
+        True if directory exists/created successfully, False otherwise
+    """
+    try:
+        if not path.exists():
+            # Create with proper permissions
+            path.mkdir(parents=True, mode=mode, exist_ok=True)
+            logger.info(f"Created directory: {path} with permissions {oct(mode)}")
+            return True
+        else:
+            # Directory exists - check and fix permissions if necessary
+            # NEVER delete any files
+            try:
+                current_perms = stat.S_IMODE(path.stat().st_mode)
+                if current_perms != mode:
+                    path.chmod(mode)
+                    logger.warning(f"Fixed permissions for existing directory: {path} (was {oct(current_perms)}, now {oct(mode)})")
+            except OSError as perm_exc:
+                logger.warning(f"Could not verify/fix permissions for {path}: {perm_exc}")
+            return True
+    except OSError as exc:
+        logger.error(f"Unable to create/verify directory {path}: {exc}")
         return False
 
 
