@@ -2,12 +2,15 @@ import json
 import logging
 import os
 import re
+import secrets
+import stat
+import string
 import subprocess
 import threading
 import time
 import uuid
+
 import portalocker
-import stat
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -49,6 +52,9 @@ DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
+ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
+ORPHAN_SUFFIX_LENGTH = 6
+ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
 
 # Cache for directory paths (initialized once per application lifecycle)
 _UPLOAD_ROOT_CACHE = None
@@ -301,11 +307,16 @@ def _get_id(obj):
         return None
 
 
-def _dataset_name_for_path(relative_path: str):
+def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
-        return None
+        return orphan_dataset_name
     return "\\".join(parts[:-1])
+
+
+def _generate_orphan_dataset_name():
+    suffix = "".join(secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH))
+    return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
 
 
 def _find_project_dataset(conn, project_id: int, name: str):
@@ -715,7 +726,7 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
     return job_dict
 
 
-def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map):
+def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, orphan_dataset_name):
     rel_path = entry.get("relative_path")
     if not rel_path:
         return {"skip": True}
@@ -732,7 +743,7 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map):
             "job_message": error_msg,
         }
 
-    dataset_name = _dataset_name_for_path(rel_path)
+    dataset_name = _dataset_name_for_path(rel_path, orphan_dataset_name)
     dataset_id = dataset_map.get(dataset_name)
 
     try:
@@ -814,6 +825,7 @@ def _process_import_job(job_id: str):
                 return
 
             dataset_map = job.get("dataset_map") or {}
+            orphan_dataset_name = job.get("orphan_dataset_name")
             default_batch_size = _get_env_int(
                 UPLOAD_BATCH_FILES_ENV,
                 DEFAULT_UPLOAD_BATCH_FILES,
@@ -849,6 +861,7 @@ def _process_import_job(job_id: str):
                             host,
                             port,
                             dataset_map,
+                            orphan_dataset_name,
                         )
                         for entry in batch
                     ]
@@ -1060,10 +1073,13 @@ def _start_upload(request, conn):
         return json_error(errors.invalid_file_paths(invalid))
 
     dataset_map = {}
+    orphan_dataset_name = None
     try:
         dataset_names = set()
+        if any(_dataset_name_for_path(entry["relative_path"]) is None for entry in normalized):
+            orphan_dataset_name = _generate_orphan_dataset_name()
         for entry in normalized:
-            dataset_name = _dataset_name_for_path(entry["relative_path"])
+            dataset_name = _dataset_name_for_path(entry["relative_path"], orphan_dataset_name)
             if dataset_name:
                 dataset_names.add(dataset_name)
         for dataset_name in sorted(dataset_names):
@@ -1091,6 +1107,7 @@ def _start_upload(request, conn):
         "errors": [],
         "created": time.time(),
         "dataset_map": dataset_map,
+        "orphan_dataset_name": orphan_dataset_name,
         "import_index": 0,
         "messages": [],
         "import_thread_started": False,
