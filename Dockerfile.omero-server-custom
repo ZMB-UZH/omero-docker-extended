@@ -24,4 +24,6 @@ RUN dnf -y install git && dnf clean all
 COPY install-figure-script.sh /startup/55-install-figure-script.sh
 RUN chmod +x /startup/55-install-figure-script.sh
 
+# Drop privileges for runtime
+# ---------------------------
 USER omero-server
