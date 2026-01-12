@@ -169,7 +169,7 @@
             display: flex;
             justify-content: flex-start;
             width: 100%;
-            margin: 5px 0 0px;
+            margin: 5px 0 -6px;
             padding-left: 264px;
         }
         .project-select-group {
@@ -200,7 +200,7 @@
             position: absolute;
             right: 12px;
             top: 50%;
-            transform: translateY(-50%);
+            transform: translateY(-45%);
             color: #4b5563;
             font-size: 18px;
             font-weight: 600;
@@ -957,6 +957,8 @@
         const projectSelect = document.getElementById('project_select');
         const projectSelectInput = document.getElementById('project_select_input');
         const projectSelectDropdown = document.getElementById('project_select_dropdown');
+        const projectSelectWrapper = document.getElementById('project_select_wrapper');
+        const projectSelectArrow = projectSelectWrapper?.querySelector('.project-select-arrow') || null;
         const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
         const projectDataScript = document.getElementById('project-data');
         const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
@@ -1260,6 +1262,10 @@
             if (!projectSelectDropdown || !projectSelectInput) return;
             projectSelectDropdown.style.display = 'block';
             projectSelectDropdown.classList.remove('keyboard-active');
+            projectSelectWrapper?.classList.add('is-open');
+            if (projectSelectArrow) {
+                projectSelectArrow.textContent = '▴';
+            }
             if (projectDropdownBackdrop) {
                 projectDropdownBackdrop.style.display = 'block';
             }
@@ -1273,6 +1279,10 @@
             if (!projectSelectDropdown || !projectSelectInput) return;
             projectSelectDropdown.style.display = 'none';
             projectSelectDropdown.classList.remove('keyboard-active');
+            projectSelectWrapper?.classList.remove('is-open');
+            if (projectSelectArrow) {
+                projectSelectArrow.textContent = '▾';
+            }
             if (projectDropdownBackdrop) {
                 projectDropdownBackdrop.style.display = 'none';
             }
