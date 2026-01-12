@@ -787,6 +787,7 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_concurrency": upload_concurrency,
             "upload_batch_files": upload_batch_files,
             "is_root_user": is_root_user,
+            "messages_json": json.dumps(messages.index_messages()),
         },
     )
 
