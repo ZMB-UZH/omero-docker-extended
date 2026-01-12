@@ -726,6 +726,24 @@
             <p id="duplicate-message" class="duplicate-popup__message"></p>
             <button type="button" id="duplicate-ok-btn" class="duplicate-popup__btn">Ok</button>
         </div>
+        <div id="nb-modal-overlay"
+             style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+                    z-index:11000; align-items:center; justify-content:center;">
+            <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                        box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                        font-size:13px; min-width:300px; max-width:500px;">
+                <div id="nb-modal-message"
+                     style="margin-bottom:16px;">
+                </div>
+                <div style="text-align:right;">
+                    <button id="nb-modal-ok"
+                            onclick="hideNonBlockingModal()"
+                            style="padding:6px 14px; font-size:12px;">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
         <div id="user-settings-overlay" class="user-settings-overlay" aria-hidden="true">
             <div class="user-settings-panel" role="dialog" aria-modal="true" aria-labelledby="user-settings-title">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -764,6 +782,13 @@
                 document.body.classList.add('root-user-blocked');
             }
         }
+        const messages = {{ messages_json|safe }};
+        const formatMessage = (template, values = {}) => {
+            const source = String(template || '');
+            return source.replace(/\{(\w+)\}/g, (match, key) => (
+                Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+            ));
+        };
         const uploadCard = document.getElementById('upload-card');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
@@ -817,6 +842,7 @@
         const importJobsStorageKey = 'omeroweb_upload_import_jobs_v1';
         const importLogsStorageKey = 'omeroweb_upload_import_logs_v1';
         const userSettingsStorageKey = 'omeroweb_upload_user_settings_v1';
+        const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -881,6 +907,9 @@
         const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
         const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
         let currentUploadBatchFiles = uploadBatchFiles;
+        const userSettingsDefaults = {
+            uploadBatchFiles,
+        };
         const csrfTokenName = 'csrftoken';
 
         function getCookie(name) {
@@ -927,6 +956,24 @@
             progressText.textContent = text;
         }
 
+        function showNonBlockingModal(message) {
+            const overlay = document.getElementById('nb-modal-overlay');
+            const msg = document.getElementById('nb-modal-message');
+            const okBtn = document.getElementById('nb-modal-ok');
+            if (msg) msg.innerText = message;
+            if (overlay) overlay.style.display = 'flex';
+            if (okBtn) {
+                window.requestAnimationFrame(() => {
+                    okBtn.focus();
+                });
+            }
+        }
+
+        function hideNonBlockingModal() {
+            const overlay = document.getElementById('nb-modal-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
         function setUserSettingsStatus(message, isError = false) {
             if (!userSettingsStatus) return;
             userSettingsStatus.textContent = message || '';
@@ -936,6 +983,11 @@
         function setUserSettingError(input, hasError) {
             if (!input) return;
             input.classList.toggle('user-setting-error', hasError);
+        }
+
+        function clearUserSettingErrors() {
+            setUserSettingError(userSettingsBatchInput, false);
+            setUserSettingsStatus('');
         }
 
         function loadUserSettings() {
@@ -959,6 +1011,70 @@
             }
         }
 
+        function resetUserSettingsToDefaults() {
+            currentUploadBatchFiles = userSettingsDefaults.uploadBatchFiles;
+            if (userSettingsBatchInput) {
+                userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
+            }
+            clearUserSettingErrors();
+        }
+
+        function populateUserSettings() {
+            const stored = loadUserSettings();
+            if (stored) {
+                applyUserSettings(stored);
+                return;
+            }
+            resetUserSettingsToDefaults();
+        }
+
+        function validateUserSettings() {
+            const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
+            const numericPattern = /^\d+$/;
+            const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
+            const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
+            setUserSettingError(userSettingsBatchInput, !isValid);
+            if (!isValid) {
+                showNonBlockingModal(messages.formattingErrors);
+                return null;
+            }
+            return { uploadBatchFiles: value };
+        }
+
+        function saveUserSettingsToDatabase(settings, options = {}) {
+            const { showSuccessMessage = true, onSuccess, onError } = options;
+            return fetch(userSettingsSaveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ settings }),
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        showNonBlockingModal(data.error);
+                        if (typeof onError === 'function') {
+                            onError(data.error);
+                        }
+                        return false;
+                    }
+                    if (showSuccessMessage) {
+                        showNonBlockingModal(messages.userSettingsSavedDb);
+                    }
+                    if (typeof onSuccess === 'function') {
+                        onSuccess(data);
+                    }
+                    return true;
+                })
+                .catch((err) => {
+                    showNonBlockingModal(formatMessage(messages.userSettingsSaveError, { error: err }));
+                    if (typeof onError === 'function') {
+                        onError(err);
+                    }
+                    return false;
+                });
+        }
+
         function openUserSettingsModal() {
             if (!userSettingsOverlay) return;
             userSettingsOverlay.style.display = 'flex';
@@ -972,8 +1088,7 @@
             if (!userSettingsOverlay) return;
             userSettingsOverlay.style.display = 'none';
             userSettingsOverlay.setAttribute('aria-hidden', 'true');
-            setUserSettingsStatus('');
-            setUserSettingError(userSettingsBatchInput, false);
+            clearUserSettingErrors();
         }
 
         function clearSelectedFiles() {
@@ -1913,6 +2028,7 @@
         if (userSettingsBtn) {
             userSettingsBtn.addEventListener('click', () => {
                 showSettingsMenu(false);
+                populateUserSettings();
                 openUserSettingsModal();
             });
         }
@@ -1923,33 +2039,26 @@
 
         if (userSettingsSave) {
             userSettingsSave.addEventListener('click', () => {
-                const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
-                const numericPattern = /^\d+$/;
-                const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
-                const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
-                setUserSettingError(userSettingsBatchInput, !isValid);
-                if (!isValid) {
-                    setUserSettingsStatus('Job batch size must be a number between 1 and 50.', true);
-                    return;
-                }
-                currentUploadBatchFiles = value;
+                clearUserSettingErrors();
+                const validated = validateUserSettings();
+                if (!validated) return;
+                currentUploadBatchFiles = validated.uploadBatchFiles;
                 if (storage) {
                     try {
-                        storage.setItem(userSettingsStorageKey, JSON.stringify({ uploadBatchFiles: value }));
+                        storage.setItem(userSettingsStorageKey, JSON.stringify(validated));
                     } catch (error) {
                         // Ignore storage failures.
                     }
                 }
-                setUserSettingsStatus('Saved user settings.');
+                closeUserSettingsModal();
+                saveUserSettingsToDatabase(validated);
             });
         }
         if (userSettingsRestore) {
             userSettingsRestore.addEventListener('click', () => {
-                currentUploadBatchFiles = uploadBatchFiles;
-                if (userSettingsBatchInput) {
-                    userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
+                if (!window.confirm(messages.confirmIrreversible)) {
+                    return;
                 }
-                setUserSettingError(userSettingsBatchInput, false);
                 if (storage) {
                     try {
                         storage.removeItem(userSettingsStorageKey);
@@ -1957,7 +2066,14 @@
                         // Ignore storage failures.
                     }
                 }
-                setUserSettingsStatus('Restored default settings.');
+                resetUserSettingsToDefaults();
+            });
+        }
+
+        if (userSettingsBatchInput) {
+            userSettingsBatchInput.addEventListener('input', () => {
+                setUserSettingError(userSettingsBatchInput, false);
+                setUserSettingsStatus('');
             });
         }
 
