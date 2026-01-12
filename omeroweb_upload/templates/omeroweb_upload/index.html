@@ -950,6 +950,7 @@
             ));
         };
         const uploadCard = document.getElementById('upload-card');
+        const uploadOverlay = uploadCard.querySelector('.upload-card__overlay');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
         const uploadBtn = document.getElementById('upload-btn');
@@ -998,6 +999,8 @@
         let importPollTimer = null;
         let isUploading = false;
         let cancelUploadRequested = false;
+        let uploadTotalBytes = 0;
+        const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
         const storage =
             (() => {
@@ -1038,11 +1041,46 @@
             uploadCard.classList.toggle('is-uploading', active);
             fileInput.disabled = active || !uploadEnabled;
             uploadBtn.disabled = active || !uploadEnabled;
+            if (!active) {
+                resetUploadProgress();
+            }
             updateCancelButtons();
         }
 
         function updateUploadButtonLabel() {
             uploadBtn.textContent = hasActiveImport() ? 'Upload' : 'Upload & Import';
+        }
+
+        function getPendingTotalBytes() {
+            return pendingFiles.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
+        }
+
+        function resetUploadProgress() {
+            uploadTotalBytes = 0;
+            uploadProgressEntries.clear();
+            if (uploadOverlay) {
+                uploadOverlay.textContent = 'Uploading';
+            }
+        }
+
+        function updateUploadOverlayProgress() {
+            if (!uploadOverlay || !isUploading || !uploadTotalBytes) {
+                if (uploadOverlay) {
+                    uploadOverlay.textContent = 'Uploading';
+                }
+                return;
+            }
+            const loaded = Array.from(uploadProgressEntries.values()).reduce(
+                (acc, entry) => acc + Math.min(entry.loaded, entry.total),
+                0
+            );
+            const percent = Math.min(100, Math.floor((loaded / uploadTotalBytes) * 100));
+            uploadOverlay.textContent = `UPLOADING (${percent}%)...`;
+        }
+
+        function setUploadProgressEntry(key, loaded, total) {
+            uploadProgressEntries.set(key, { loaded, total });
+            updateUploadOverlayProgress();
         }
 
         function showSettingsMenu(show) {
@@ -2072,6 +2110,7 @@
                     return;
                 }
                 const formData = new FormData();
+                const batchTotalBytes = batch.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
                 batch.forEach((entry) => {
                     const relativePath = entry.relativePath || entry.file.name;
                     formData.append('files', entry.file, relativePath);
@@ -2083,10 +2122,13 @@
                 xhr.withCredentials = true;
                 setRequestHeaders({}, xhr);
                 registerActiveRequest(xhr);
+                setUploadProgressEntry(xhr, 0, batchTotalBytes);
                 xhr.upload.onprogress = (event) => {
                     if (!event.lengthComputable) {
                         return;
                     }
+                    const total = event.total || batchTotalBytes;
+                    setUploadProgressEntry(xhr, event.loaded, total);
                 };
                 xhr.onload = () => {
                     if (cancelUploadRequested) {
@@ -2119,6 +2161,7 @@
                         reject(new Error(responseData.error || 'Upload failed.'));
                         return;
                     }
+                    setUploadProgressEntry(xhr, batchTotalBytes, batchTotalBytes);
                     resolve(responseData);
                 };
                 xhr.onabort = () => reject(new Error('Upload canceled.'));
@@ -2399,13 +2442,21 @@
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
+            if (!hasActiveImport()) {
+                clearImportState();
+                setStatus('');
+            }
 
             setUploadingState(true);
             cancelUploadRequested = false;
             setStatus('');
+            uploadTotalBytes = getPendingTotalBytes();
+            updateUploadOverlayProgress();
 
             try {
                 const job = await startUploadJob();
+                uploadTotalBytes = job.totalBytes || uploadTotalBytes;
+                updateUploadOverlayProgress();
                 await uploadFiles(job.upload_url);
                 pendingFiles = [];
                 expandedNodes.clear();
