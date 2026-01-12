@@ -42,6 +42,31 @@ _GEMINI_DEFAULT_MODEL = "gemini-1.5-flash"
 _COHERE_DEFAULT_MODEL = "command-r"
 
 
+def _extract_cohere_response_text(payload):
+    if not payload:
+        return None
+    if payload.get("text"):
+        return payload.get("text")
+    if payload.get("response"):
+        return payload.get("response")
+    message = payload.get("message") or {}
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks = []
+        for item in content:
+            if isinstance(item, str):
+                chunks.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if text:
+                    chunks.append(text)
+        if chunks:
+            return "".join(chunks)
+    return None
+
+
 def _suggest_separator_regex(filenames):
     return suggest_separator_regex(filenames, allowed_separators=COMMON_SEPARATORS)
 
@@ -234,7 +259,12 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
     if provider == "cohere":
         payload = {
             "model": model or _COHERE_DEFAULT_MODEL,
-            "message": prompt,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
             "temperature": 0.0,
             "max_tokens": max_tokens,
         }
@@ -242,8 +272,8 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        response = _post_json("https://api.cohere.ai/v1/chat", headers, payload)
-        content = response.get("text") or response.get("response")
+        response = _post_json("https://api.cohere.ai/v2/chat", headers, payload)
+        content = _extract_cohere_response_text(response)
         if not content:
             raise AiAssistError(errors.provider_response_empty())
         return content
