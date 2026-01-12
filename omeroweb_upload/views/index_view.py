@@ -48,6 +48,11 @@ MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 
+# Cache for directory paths (initialized once per application lifecycle)
+_UPLOAD_ROOT_CACHE = None
+_JOBS_ROOT_CACHE = None
+_DIRS_INITIALIZED = False
+
 
 # --------------------------------------------------------------------------
 # PATHS + JOB STORAGE
@@ -59,6 +64,9 @@ def _get_base_tmp_path() -> Path:
     
     If plugin is at /opt/omero-test/, returns /opt/tmp/
     This ensures tmp directory is outside the plugin folder.
+    
+    This calculation is lightweight and only performs path operations,
+    no filesystem checks or modifications.
     """
     # Get the directory where this file (index_view.py) is located
     current_file = Path(__file__).resolve()
@@ -73,38 +81,88 @@ def _get_base_tmp_path() -> Path:
     return base_path / "tmp"
 
 
+def _initialize_directories():
+    """
+    Initialize upload directories once per application lifecycle.
+    
+    This function:
+    - Creates /opt/tmp with 0o755 (accessible for traversal)
+    - Creates target directories with 0o700 (secure)
+    - Only runs once, subsequent calls return immediately
+    
+    Called automatically by _get_upload_root() and _get_jobs_root()
+    """
+    global _DIRS_INITIALIZED
+    
+    if _DIRS_INITIALIZED:
+        return  # Already initialized, skip
+    
+    base_tmp = _get_base_tmp_path()
+    upload_root = base_tmp / "omero-upload-tmp"
+    jobs_root = base_tmp / "omero_web_upload_jobs"
+    
+    # Create parent directory (/opt/tmp) with 0o755 if needed
+    if not base_tmp.exists():
+        try:
+            base_tmp.mkdir(parents=True, mode=0o755, exist_ok=True)
+            logger.info(f"Created base tmp directory: {base_tmp} with permissions 0o755")
+        except OSError as exc:
+            logger.error(f"Unable to create base tmp directory {base_tmp}: {exc}")
+            return  # Don't mark as initialized if failed
+    
+    # Create upload directory with 0o700
+    _ensure_dir_with_permissions(upload_root, 0o700)
+    
+    # Create jobs directory with 0o700
+    _ensure_dir_with_permissions(jobs_root, 0o700)
+    
+    # Mark as initialized so we don't check again
+    _DIRS_INITIALIZED = True
+    logger.info("Upload directories initialized successfully")
+
+
 def _get_upload_root() -> Path:
-    """Get the upload root directory, creating it with proper permissions if needed."""
+    """
+    Get the upload root directory.
+    
+    Uses cached path after first initialization to avoid repeated filesystem checks.
+    """
+    global _UPLOAD_ROOT_CACHE
+    
     if UPLOAD_ROOT_ENV in os.environ:
         # Use environment variable if set (absolute path)
         configured = os.environ.get(UPLOAD_ROOT_ENV)
         return Path(configured)
     
-    # Use relative path: same level as plugin folder
-    base_tmp = _get_base_tmp_path()
-    upload_root = base_tmp / "omero-upload-tmp"
+    # Use cached path if available
+    if _UPLOAD_ROOT_CACHE is None:
+        _initialize_directories()
+        base_tmp = _get_base_tmp_path()
+        _UPLOAD_ROOT_CACHE = base_tmp / "omero-upload-tmp"
     
-    # Ensure directory exists with proper permissions
-    _ensure_dir_with_permissions(upload_root, 0o700)
-    
-    return upload_root
+    return _UPLOAD_ROOT_CACHE
 
 
 def _get_jobs_root() -> Path:
-    """Get the jobs directory, creating it with proper permissions if needed."""
+    """
+    Get the jobs directory.
+    
+    Uses cached path after first initialization to avoid repeated filesystem checks.
+    """
+    global _JOBS_ROOT_CACHE
+    
     if JOBS_DIR_ENV in os.environ:
         # Use environment variable if set (absolute path)
         configured = os.environ.get(JOBS_DIR_ENV)
         return Path(configured)
     
-    # Use relative path: same level as plugin folder
-    base_tmp = _get_base_tmp_path()
-    jobs_root = base_tmp / "omero_web_upload_jobs"
+    # Use cached path if available
+    if _JOBS_ROOT_CACHE is None:
+        _initialize_directories()
+        base_tmp = _get_base_tmp_path()
+        _JOBS_ROOT_CACHE = base_tmp / "omero_web_upload_jobs"
     
-    # Ensure directory exists with proper permissions
-    _ensure_dir_with_permissions(jobs_root, 0o700)
-    
-    return jobs_root
+    return _JOBS_ROOT_CACHE
 
 
 def _ensure_dir(path: Path) -> bool:
@@ -124,10 +182,10 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     """
     Ensure directory exists with strict permissions.
     
-    - Creates parent directories with 0o755 (accessible to all)
-    - Creates target directory with specified mode (e.g., 0o700 for security)
+    - Creates target directory with specified mode if it doesn't exist
     - If directory exists, verifies and fixes permissions if necessary
     - NEVER deletes any files or directories
+    - Does NOT create parent directories (caller's responsibility)
     
     Args:
         path: Directory path to ensure
@@ -138,18 +196,8 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     """
     try:
         if not path.exists():
-            # Create parent directories with 0o755 (accessible)
-            # Then create target directory with specified mode (secure)
-            parent = path.parent
-            if not parent.exists():
-                try:
-                    parent.mkdir(parents=True, mode=0o755, exist_ok=True)
-                    logger.info(f"Created parent directory: {parent} with permissions 0o755")
-                except OSError as parent_exc:
-                    logger.error(f"Unable to create parent directory {parent}: {parent_exc}")
-                    return False
-            
             # Create target directory with specified secure permissions
+            # Parent directory must already exist
             try:
                 path.mkdir(mode=mode, exist_ok=True)
                 logger.info(f"Created directory: {path} with permissions {oct(mode)}")
