@@ -12,8 +12,7 @@ USER root
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time.
-# Turn off to avoid breaking Omero unexpectedly.
-# ----------------------------------------------
+# -----------------------------------------------------------
 ARG APPLY_DNF_UPDATES=1
 
 # Basic hardening for pip (no behavior change expected)
@@ -22,18 +21,34 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+# Locate Omero server venv and fail fast if layout changes
+# --------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO server venv" >&2; \
+        exit 1; \
+    fi
+
+# Security hardening: upgrade selected Python tooling inside OMERO server venv
+# WARNING:
+# - Affects Omero server Python gateway
+# - Remove immediately if Blitz / TLS / import issues occur
+# - Uses >= only (no pinning), matching Omero web policy
+# ------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+        pip \
+        setuptools>=78.1.1 \
+        wheel \
+        cryptography>=42.0.0 \
+        urllib3>=2.6.3
+
 # Install Omero figure PDF export dependencies in the Omero server virtualenv
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${VENV_DIR}" ]]; then \
-        echo "ERROR: Could not find /opt/omero/server/venv* in base image" >&2; \
-        exit 1; \
-    fi; \
-    if [[ ! -x "${VENV_DIR}/bin/pip" ]]; then \
-        echo "ERROR: Expected pip at ${VENV_DIR}/bin/pip but it is missing/not executable" >&2; \
-        exit 1; \
-    fi; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         reportlab \
         markdown
@@ -43,7 +58,6 @@ RUN set -euo pipefail; \
 # ------------------------------------------------------------
 RUN set -euo pipefail; \
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
-        # Try security-only updates first; fall back to full update if not supported.
         dnf -y update --security || dnf -y update; \
     fi; \
     dnf -y install \
@@ -52,10 +66,10 @@ RUN set -euo pipefail; \
         --nodocs \
         git; \
     dnf clean all; \
-    rm -rf /var/cache/dnf /var/tmp/* /tmp/*
+    rm -rf /var/cache/dnf /var/tmp/*
 
-# Copy the script file (root-owned, not writable by others)
-# ---------------------------------------------------------
+# Copy the script file (root-owned, immutable)
+# --------------------------------------------
 COPY install-figure-script.sh /startup/55-install-figure-script.sh
 RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
