@@ -27,7 +27,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.omero-server-custom
-    image: "omero-server-custom:5"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
