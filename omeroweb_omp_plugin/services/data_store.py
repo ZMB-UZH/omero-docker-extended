@@ -36,6 +36,7 @@ class UserDataStoreError(Exception):
 
 _psycopg2_mod = None
 _psycopg2_extras = None
+_psycopg2_sql = None
 
 
 def _load_psycopg2():
@@ -53,6 +54,21 @@ def _load_psycopg2():
     _psycopg2_mod = psycopg2
     _psycopg2_extras = extras
     return _psycopg2_mod, _psycopg2_extras
+
+
+def _load_psycopg2_sql():
+    global _psycopg2_sql
+
+    if _psycopg2_sql is not None:
+        return _psycopg2_sql
+
+    try:
+        from psycopg2 import sql  # type: ignore
+    except ImportError:
+        raise VariableStoreError(errors.psycopg2_missing())
+
+    _psycopg2_sql = sql
+    return _psycopg2_sql
 
 
 def _db_params():
@@ -137,87 +153,111 @@ def _connect():
 
 
 def _ensure_schema(conn):
+    sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL,
-                set_name TEXT NOT NULL,
-                var_names JSONB NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(username, set_name)
-            );
-            """
+            sql.SQL(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    set_name TEXT NOT NULL,
+                    var_names JSONB NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(username, set_name)
+                );
+                """
+            ).format(sql.Identifier(TABLE_NAME))
         )
         cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {TABLE_NAME}_username_idx
-                ON {TABLE_NAME} (username);
-            """
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME}_username_idx"),
+                sql.Identifier(TABLE_NAME),
+            )
         )
     conn.commit()
 
 
 def _ensure_ai_schema(conn):
+    sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME_AI_CREDENTIALS} (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                api_key TEXT NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(username, provider)
-            );
-            """
+            sql.SQL(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    api_key TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(username, provider)
+                );
+                """
+            ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
         )
         cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {TABLE_NAME_AI_CREDENTIALS}_username_idx
-                ON {TABLE_NAME_AI_CREDENTIALS} (username);
-            """
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME_AI_CREDENTIALS}_username_idx"),
+                sql.Identifier(TABLE_NAME_AI_CREDENTIALS),
+            )
         )
     conn.commit()
 
 
 def _ensure_user_settings_schema(conn):
+    sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME_USER_SETTINGS} (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                settings JSONB NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            """
+            sql.SQL(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE,
+                    settings JSONB NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                """
+            ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
         )
         cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {TABLE_NAME_USER_SETTINGS}_username_idx
-                ON {TABLE_NAME_USER_SETTINGS} (username);
-            """
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME_USER_SETTINGS}_username_idx"),
+                sql.Identifier(TABLE_NAME_USER_SETTINGS),
+            )
         )
     conn.commit()
 
 
 def list_variable_sets(username):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT set_name
-                    FROM {TABLE_NAME}
-                    WHERE username = %s
-                    ORDER BY updated_at DESC, set_name ASC
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT set_name
+                        FROM {}
+                        WHERE username = %s
+                        ORDER BY updated_at DESC, set_name ASC
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username,),
                 )
                 rows = cur.fetchall()
@@ -232,28 +272,33 @@ def list_variable_sets(username):
 def save_variable_set(username, set_name, var_names):
     try:
         _, extras = _load_psycopg2()
+        sql = _load_psycopg2_sql()
         json_payload = extras.Json(var_names)
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    INSERT INTO {TABLE_NAME} (username, set_name, var_names, updated_at)
-                    VALUES (%s, %s, %s, NOW())
-                    ON CONFLICT (username, set_name)
-                    DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
-                    """,
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (username, set_name, var_names, updated_at)
+                        VALUES (%s, %s, %s, NOW())
+                        ON CONFLICT (username, set_name)
+                        DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username, set_name, json_payload),
                 )
             conn.commit()
 
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT var_names
-                    FROM {TABLE_NAME}
-                    WHERE username = %s AND set_name = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT var_names
+                        FROM {}
+                        WHERE username = %s AND set_name = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username, set_name),
                 )
                 row = cur.fetchone()
@@ -268,15 +313,18 @@ def save_variable_set(username, set_name, var_names):
 
 def load_variable_set(username, set_name):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT var_names
-                    FROM {TABLE_NAME}
-                    WHERE username = %s AND set_name = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT var_names
+                        FROM {}
+                        WHERE username = %s AND set_name = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username, set_name),
                 )
                 row = cur.fetchone()
@@ -293,14 +341,17 @@ def delete_variable_set(username, set_name):
     Delete a saved variable set for a user.
     """
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME}
-                    WHERE username = %s AND set_name = %s
-                    """,
+                    sql.SQL(
+                        """
+                        DELETE FROM {}
+                        WHERE username = %s AND set_name = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username, set_name),
                 )
 
@@ -311,11 +362,13 @@ def delete_variable_set(username, set_name):
 
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT 1
-                    FROM {TABLE_NAME}
-                    WHERE username = %s AND set_name = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT 1
+                        FROM {}
+                        WHERE username = %s AND set_name = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username, set_name),
                 )
                 if cur.fetchone():
@@ -335,16 +388,19 @@ def delete_variable_set(username, set_name):
 
 def list_ai_credentials(username):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT provider
-                    FROM {TABLE_NAME_AI_CREDENTIALS}
-                    WHERE username = %s
-                    ORDER BY provider ASC
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT provider
+                        FROM {}
+                        WHERE username = %s
+                        ORDER BY provider ASC
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
                     (username,),
                 )
                 rows = cur.fetchall()
@@ -358,15 +414,18 @@ def list_ai_credentials(username):
 
 def get_ai_credential(username, provider):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT api_key
-                    FROM {TABLE_NAME_AI_CREDENTIALS}
-                    WHERE username = %s AND provider = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT api_key
+                        FROM {}
+                        WHERE username = %s AND provider = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
                     (username, provider),
                 )
                 row = cur.fetchone()
@@ -380,16 +439,19 @@ def get_ai_credential(username, provider):
 
 def save_ai_credentials(username, provider, api_key):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    INSERT INTO {TABLE_NAME_AI_CREDENTIALS} (username, provider, api_key, updated_at)
-                    VALUES (%s, %s, %s, NOW())
-                    ON CONFLICT (username, provider)
-                    DO UPDATE SET api_key = EXCLUDED.api_key, updated_at = NOW()
-                    """,
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (username, provider, api_key, updated_at)
+                        VALUES (%s, %s, %s, NOW())
+                        ON CONFLICT (username, provider)
+                        DO UPDATE SET api_key = EXCLUDED.api_key, updated_at = NOW()
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
                     (username, provider, api_key),
                 )
             conn.commit()
@@ -403,28 +465,33 @@ def save_ai_credentials(username, provider, api_key):
 def save_user_settings(username, settings_payload):
     try:
         _, extras = _load_psycopg2()
+        sql = _load_psycopg2_sql()
         json_payload = extras.Json(settings_payload)
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    INSERT INTO {TABLE_NAME_USER_SETTINGS} (username, settings, updated_at)
-                    VALUES (%s, %s, NOW())
-                    ON CONFLICT (username)
-                    DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
-                    """,
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (username, settings, updated_at)
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT (username)
+                        DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
                     (username, json_payload),
                 )
             conn.commit()
 
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT settings
-                    FROM {TABLE_NAME_USER_SETTINGS}
-                    WHERE username = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT settings
+                        FROM {}
+                        WHERE username = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
                     (username,),
                 )
                 row = cur.fetchone()
@@ -439,14 +506,17 @@ def save_user_settings(username, settings_payload):
 
 def delete_all_user_settings(username):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME_USER_SETTINGS}
-                    WHERE username = %s
-                    """,
+                    sql.SQL(
+                        """
+                        DELETE FROM {}
+                        WHERE username = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
                     (username,),
                 )
                 deleted = cur.rowcount
@@ -461,14 +531,17 @@ def delete_all_user_settings(username):
 
 def delete_all_variable_sets(username):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME}
-                    WHERE username = %s
-                    """,
+                    sql.SQL(
+                        """
+                        DELETE FROM {}
+                        WHERE username = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME)),
                     (username,),
                 )
                 deleted = cur.rowcount
@@ -483,14 +556,17 @@ def delete_all_variable_sets(username):
 
 def delete_all_ai_credentials(username):
     try:
+        sql = _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    DELETE FROM {TABLE_NAME_AI_CREDENTIALS}
-                    WHERE username = %s
-                    """,
+                    sql.SQL(
+                        """
+                        DELETE FROM {}
+                        WHERE username = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
                     (username,),
                 )
                 deleted = cur.rowcount
@@ -506,15 +582,18 @@ def delete_all_ai_credentials(username):
 def delete_all_user_data(username):
     try:
         with _connect() as conn:
+            sql = _load_psycopg2_sql()
             tables = _list_user_scoped_tables(conn)
             deleted_counts = {}
             with conn.cursor() as cur:
                 for table in tables:
                     cur.execute(
-                        f"""
-                        DELETE FROM {table}
-                        WHERE username = %s
-                        """,
+                        sql.SQL(
+                            """
+                            DELETE FROM {}
+                            WHERE username = %s
+                            """
+                        ).format(sql.Identifier(table)),
                         (username,),
                     )
                     deleted_counts[table] = cur.rowcount

@@ -20,6 +20,7 @@ class UserSettingsStoreError(Exception):
 
 _psycopg2_mod = None
 _psycopg2_extras = None
+_psycopg2_sql = None
 
 
 def _load_psycopg2():
@@ -37,6 +38,21 @@ def _load_psycopg2():
     _psycopg2_mod = psycopg2
     _psycopg2_extras = extras
     return _psycopg2_mod, _psycopg2_extras
+
+
+def _load_psycopg2_sql():
+    global _psycopg2_sql
+
+    if _psycopg2_sql is not None:
+        return _psycopg2_sql
+
+    try:
+        from psycopg2 import sql  # type: ignore
+    except ImportError:
+        raise UserSettingsStoreError(errors.psycopg2_missing())
+
+    _psycopg2_sql = sql
+    return _psycopg2_sql
 
 
 def _db_params():
@@ -121,23 +137,30 @@ def _connect():
 
 
 def _ensure_user_settings_schema(conn):
+    sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
         cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {TABLE_NAME_USER_SETTINGS} (
-                id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                settings JSONB NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            );
-            """
+            sql.SQL(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE,
+                    settings JSONB NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                """
+            ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
         )
         cur.execute(
-            f"""
-            CREATE INDEX IF NOT EXISTS {TABLE_NAME_USER_SETTINGS}_username_idx
-                ON {TABLE_NAME_USER_SETTINGS} (username);
-            """
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME_USER_SETTINGS}_username_idx"),
+                sql.Identifier(TABLE_NAME_USER_SETTINGS),
+            )
         )
     conn.commit()
 
@@ -145,28 +168,33 @@ def _ensure_user_settings_schema(conn):
 def save_user_settings(username, settings_payload):
     try:
         _, extras = _load_psycopg2()
+        sql = _load_psycopg2_sql()
         json_payload = extras.Json(settings_payload)
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    INSERT INTO {TABLE_NAME_USER_SETTINGS} (username, settings, updated_at)
-                    VALUES (%s, %s, NOW())
-                    ON CONFLICT (username)
-                    DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
-                    """,
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (username, settings, updated_at)
+                        VALUES (%s, %s, NOW())
+                        ON CONFLICT (username)
+                        DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
                     (username, json_payload),
                 )
             conn.commit()
 
             with conn.cursor() as cur:
                 cur.execute(
-                    f"""
-                    SELECT settings
-                    FROM {TABLE_NAME_USER_SETTINGS}
-                    WHERE username = %s
-                    """,
+                    sql.SQL(
+                        """
+                        SELECT settings
+                        FROM {}
+                        WHERE username = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
                     (username,),
                 )
                 row = cur.fetchone()
