@@ -7,22 +7,59 @@ FROM openmicroscopy/omero-server:5
 # --------------------------------------
 USER root
 
+# Use bash with pipefail for safer RUN commands
+# ---------------------------------------------
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Optional: enable OS package security updates at build time.
+# Turn off to avoid breaking Omero unexpectedly.
+# ----------------------------------------------
+ARG APPLY_DNF_UPDATES=0
+
+# Basic hardening for pip (no behavior change expected)
+# -----------------------------------------------------
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 # Install Omero figure PDF export dependencies in the Omero server virtualenv
 # ---------------------------------------------------------------------------
-RUN set -eux; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* | head -n 1)"; \
-    "${VENV_DIR}/bin/pip" install --no-cache-dir \
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" ]]; then \
+        echo "ERROR: Could not find /opt/omero/server/venv* in base image" >&2; \
+        exit 1; \
+    fi; \
+    if [[ ! -x "${VENV_DIR}/bin/pip" ]]; then \
+        echo "ERROR: Expected pip at ${VENV_DIR}/bin/pip but it is missing/not executable" >&2; \
+        exit 1; \
+    fi; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         reportlab \
         markdown
 
 # Install git permanently (needed at runtime)
-# -------------------------------------------
-RUN dnf -y install git && dnf clean all
+# Optional: apply OS updates at build time, then clean caches.
+# ------------------------------------------------------------
+RUN set -euo pipefail; \
+    if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
+        # Try security-only updates first; fall back to full update if not supported.
+        dnf -y update --security || dnf -y update; \
+    fi; \
+    dnf -y install \
+        --setopt=install_weak_deps=False \
+        --setopt=tsflags=nodocs \
+        --nodocs \
+        git; \
+    dnf clean all; \
+    rm -rf /var/cache/dnf /var/tmp/* /tmp/*
 
-# Copy the script file
-# --------------------
+# Copy the script file (root-owned, not writable by others)
+# ---------------------------------------------------------
 COPY install-figure-script.sh /startup/55-install-figure-script.sh
-RUN chmod +x /startup/55-install-figure-script.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/55-install-figure-script.sh; \
+    chmod 0555 /startup/55-install-figure-script.sh
 
 # Drop privileges for runtime
 # ---------------------------
