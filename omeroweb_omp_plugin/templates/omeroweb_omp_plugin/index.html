@@ -1634,8 +1634,16 @@
             ai_parse_provider: aiParseProviderSelect?.value || '',
             ai_parse_model: aiParseModelSelect?.value || '',
             ai_regex_completed: aiRegexTransferred,
+            ai_parse_completed: aiParseTransferred,
+            ai_parsed_json: aiParsedJsonInput?.value || '',
+            updated_at: Date.now(),
         };
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        try {
+            window.localStorage?.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+            // ignore storage errors
+        }
     }
 
     function persistSeparatorModeState() {
@@ -1654,6 +1662,10 @@
             ...(state.separator_values || {}),
             ...separatorValues,
         };
+        state.ai_regex_completed = aiRegexTransferred;
+        state.ai_parse_completed = aiParseTransferred;
+        state.ai_parsed_json = aiParsedJsonInput?.value || state.ai_parsed_json || '';
+        state.updated_at = Date.now();
         window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
         try {
             window.localStorage?.setItem(
@@ -1664,6 +1676,7 @@
                     separator_values: state.separator_values,
                 })
             );
+            window.localStorage?.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
         } catch (error) {
             // ignore storage errors
         }
@@ -1679,16 +1692,30 @@
         }
     }
 
+    function parseStoredState(raw) {
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function pickLatestState(sessionState, localState) {
+        if (!sessionState && !localState) return null;
+        if (!sessionState) return localState;
+        if (!localState) return sessionState;
+        const sessionUpdated = Number(sessionState.updated_at || 0);
+        const localUpdated = Number(localState.updated_at || 0);
+        return localUpdated >= sessionUpdated ? localState : sessionState;
+    }
+
     function restorePreviewState() {
-        const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
-        let state = null;
-        if (raw) {
-            try {
-                state = JSON.parse(raw);
-            } catch (err) {
-                window.sessionStorage.removeItem(STATE_STORAGE_KEY);
-                state = null;
-            }
+        const sessionState = parseStoredState(window.sessionStorage.getItem(STATE_STORAGE_KEY));
+        const localState = parseStoredState(window.localStorage?.getItem(STATE_STORAGE_KEY));
+        let state = pickLatestState(sessionState, localState);
+        if (!state && sessionState === null) {
+            window.sessionStorage.removeItem(STATE_STORAGE_KEY);
         }
         const separatorFallback = loadSeparatorModeState();
         if (!state && separatorFallback) {
@@ -1724,6 +1751,20 @@
             aiRegexTransferred = state.ai_regex_completed;
         } else {
             aiRegexTransferred = hasAiRegexResults();
+        }
+        if (typeof state.ai_parse_completed === 'boolean') {
+            aiParseTransferred = state.ai_parse_completed;
+        }
+        if (aiParsedJsonInput && typeof state.ai_parsed_json === 'string' && state.ai_parsed_json) {
+            aiParsedJsonInput.value = state.ai_parsed_json;
+            try {
+                const parsedRows = JSON.parse(state.ai_parsed_json);
+                if (Array.isArray(parsedRows)) {
+                    lastAiParseRows = parsedRows;
+                }
+            } catch (error) {
+                // ignore parse errors
+            }
         }
         if (state.separator_mode) {
             if (state.separator_mode === 'ai_regex') {
@@ -2055,6 +2096,18 @@
     function refreshAiDefaultsModel(provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus) {
         if (!modelSelect) return;
         if (!provider) {
+            setModelVisibility(false, {
+                select: modelSelect,
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            });
+            resetAiDefaultsModel(modelSelect);
+            return;
+        }
+        if (isLocalProvider(provider)) {
+            modelSelect.dataset.requiresModel = 'false';
             setModelVisibility(false, {
                 select: modelSelect,
                 container: modelGroup,
@@ -2503,6 +2556,7 @@
             resetDatasetSelection();
         }
         closeProjectDropdown(false);
+        persistPreviewState();
     }
 
     function renderProjectOptions(query) {
@@ -3038,8 +3092,7 @@
                 showNonBlockingModal(messages.chooseProvider);
                 return;
             }
-            const hasSavedKey = aiCredentialProviders.has(provider);
-            if (!key && !hasSavedKey) {
+            if (!key) {
                 showNonBlockingModal(messages.apiKeyEmpty);
                 return;
             }
@@ -3127,6 +3180,7 @@
             updateAiProcessAvailability();
             updateAiProviderStatus();
             updateAiModalPlaceholders();
+            persistPreviewState();
         });
     }
 
@@ -3134,18 +3188,21 @@
         aiParseProviderSelect.addEventListener('change', () => {
             updateAiParseProviderStatus();
             updateAiModalPlaceholders();
+            persistPreviewState();
         });
     }
 
     if (aiModelSelect) {
         aiModelSelect.addEventListener('change', () => {
             updateAiModalPlaceholders();
+            persistPreviewState();
         });
     }
 
     if (aiParseModelSelect) {
         aiParseModelSelect.addEventListener('change', () => {
             updateAiModalPlaceholders();
+            persistPreviewState();
         });
     }
 
@@ -3328,8 +3385,50 @@
             if (typeof setSeparatorMode === 'function') {
                 setSeparatorMode('ai');
             }
+            persistPreviewState();
             closeAiModal();
         });
+    }
+
+    function parseAiParseOutput(rawOutput, expectedRows) {
+        if (!Array.isArray(expectedRows) || expectedRows.length === 0) return null;
+        if (typeof rawOutput !== 'string') return null;
+        const lines = rawOutput.split(/\r?\n/);
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        if (lines.length !== expectedRows.length) {
+            return null;
+        }
+        const parsedRows = [];
+        for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i];
+            if (!line.trim()) {
+                return null;
+            }
+            const parts = line.split(',');
+            if (!parts.length) {
+                return null;
+            }
+            const values = [];
+            for (const part of parts) {
+                if (!part.trim()) {
+                    return null;
+                }
+                if (part !== part.trim()) {
+                    return null;
+                }
+                values.push(part);
+            }
+            if (values.length === 0) {
+                return null;
+            }
+            parsedRows.push({
+                ...expectedRows[i],
+                values,
+            });
+        }
+        return parsedRows;
     }
 
     if (aiParseTransferBtn) {
@@ -3338,9 +3437,17 @@
                 updateAiParseModalStatus('Click "Process" first.', true);
                 return;
             }
+            const output = aiParseOutput ? aiParseOutput.value : '';
+            const updatedRows = parseAiParseOutput(output, lastAiParseRows);
+            if (!updatedRows) {
+                showNonBlockingModal(messages.formattingErrors);
+                updateAiParseModalStatus(messages.formattingErrors, true);
+                return;
+            }
+            lastAiParseRows = updatedRows;
 
             if (aiParsedJsonInput) {
-                aiParsedJsonInput.value = JSON.stringify(lastAiParseRows);
+                aiParsedJsonInput.value = JSON.stringify(updatedRows);
             }
 
             if (typeof setSeparatorMode === 'function') {
@@ -3348,6 +3455,7 @@
             }
 
             aiParseTransferred = true;
+            persistPreviewState();
             closeAiParseModal();
         });
     }
@@ -3381,6 +3489,7 @@
             const allBoxes = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]');
             datasetSelectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
         }
+        persistPreviewState();
     }
 
     function getSelectedDatasetImageCount() {
