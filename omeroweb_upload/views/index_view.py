@@ -776,7 +776,7 @@ def index(request, conn=None, url=None, **kwargs):
     upload_enabled = _ensure_dir(upload_root)
     job_dir_ok = _ensure_dir(_get_jobs_root())
     upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
-    upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 25)
+    upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
     return render(
         request,
         "omeroweb_upload/index.html",
