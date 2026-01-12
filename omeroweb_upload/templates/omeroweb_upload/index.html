@@ -148,10 +148,27 @@
         }
         .upload-actions {
             display: flex;
-            gap: 5px;
+            gap: 12px;
             align-items: center;
             justify-content: center;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+        }
+        .upload-actions > * {
+            flex: 0 0 auto;
+        }
+        .upload-actions__buttons {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+        .upload-actions__buttons button {
+            min-width: 140px;
+        }
+        .project-select-row {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            margin: 10px 0 6px;
         }
         .project-select-group {
             display: flex;
@@ -167,11 +184,19 @@
         }
         .project-select-wrapper {
             position: relative;
-            width: 150px;
+            width: 220px;
+        }
+        .project-select-input {
+            width: 100%;
+            padding: 10px 32px 10px 10px;
+            border-radius: 6px;
+            border: 1px solid #007bff;
+            height: 40px;
+            line-height: 1.2;
         }
         .project-select-arrow {
             position: absolute;
-            right: 10px;
+            right: 12px;
             top: 50%;
             transform: translateY(-50%);
             color: #4b5563;
@@ -780,16 +805,18 @@
             <div class="upload-card__overlay" aria-live="polite">Uploading</div>
             <div class="upload-card__content">
                 <p><strong>Drag & drop</strong> files here or <strong>choose from storage</strong>.</p>
+                <div class="project-select-row">
+                    <label class="project-select-label" for="project_select_input">Select project (optional):</label>
+                </div>
                 <div class="upload-actions">
                     <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
                     <div class="project-select-group">
-                        <label class="project-select-label" for="project_select_input">Select project (optional):</label>
                         <div id="project_select_wrapper" class="project-select-wrapper">
                             <input type="text"
                                    id="project_select_input"
                                    placeholder="Select project…"
                                    autocomplete="off"
-                                   style="width:150px; padding:10px 32px 10px 10px; border-radius:6px; border:1px solid #007bff;">
+                                   class="project-select-input">
                             <span class="project-select-arrow" aria-hidden="true">▾</span>
                             <input type="hidden" id="project_select" value="">
                             <div id="project_select_dropdown"
@@ -800,8 +827,10 @@
                             {{ projects|json_script:"project-data" }}
                         </div>
                     </div>
-                    <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
-                    <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
+                    <div class="upload-actions__buttons">
+                        <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                        <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
+                    </div>
                 </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
