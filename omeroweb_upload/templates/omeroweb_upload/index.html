@@ -153,6 +153,25 @@
             cursor: pointer;
             font-size: 0.95rem;
         }
+        .upload-actions .clear-all-btn {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .clear-all-btn {
+            background: #e5e7eb;
+            color: #111827;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .clear-all-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            filter: brightness(105%);
+        }
+        .clear-all-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
         .upload-actions .secondary-action {
             background: #6b7280;
             color: #fff;
@@ -433,6 +452,150 @@
             outline: 2px solid #2563eb;
             outline-offset: 2px;
         }
+        .upload-utilities {
+            display: flex;
+            justify-content: flex-end;
+            margin: 6px 0 12px;
+        }
+        .upload-utilities__actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+        .help-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #007bff;
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 26px;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .help-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .help-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .gear-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 13px;
+            border: none;
+            background: #e7f1ff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            cursor: pointer;
+            font-size: 18px;
+            color: #1d4ed8;
+            line-height: 1;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .gear-btn:hover {
+            background: #d0e7ff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .gear-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        .settings-menu {
+            position: absolute;
+            right: 0;
+            top: 32px;
+            background: #ffffff;
+            border: 1px solid #007bff;
+            border-radius: 6px;
+            min-width: 180px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            z-index: 1200;
+        }
+        .settings-menu-item {
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 8px 12px;
+            text-align: left;
+            font: inherit;
+            font-weight: 600;
+            color: #1f2937;
+            cursor: pointer;
+        }
+        .settings-menu-item:hover {
+            background: #e7f1ff;
+            color: #1d4ed8;
+        }
+        .user-settings-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-settings-panel {
+            background: #ffffff;
+            padding: 20px 24px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            font-size: 13px;
+            width: 520px;
+            max-width: calc(100% - 40px);
+        }
+        .user-settings-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .user-setting-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .user-setting-input {
+            flex: 0 0 auto;
+        }
+        .user-setting-description {
+            flex: 1 1 auto;
+            color: #4b5563;
+        }
+        .user-setting-limit {
+            font-weight: 700;
+            margin-right: 8px;
+        }
+        .user-setting-error {
+            border-color: #b91c1c !important;
+            box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);
+        }
+        .user-settings-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .user-settings-status {
+            min-height: 18px;
+            color: #1f2937;
+        }
+        .root-user-blocked .user-settings-overlay {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -446,6 +609,34 @@
         <h1 class="upload-title">Upload</h1>
         <p class="upload-intro">Drag & drop files or folders to upload and import them into your user space in Omero.</p>
         <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
+        <div class="upload-utilities">
+            <div class="upload-utilities__actions">
+                <button type="button"
+                        id="settings_menu_btn"
+                        class="gear-btn"
+                        title="Settings"
+                        aria-label="Settings">
+                    ⚙
+                </button>
+                <a href="/omeroweb_omp_plugin/help/"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   title="Help"
+                   aria-label="Help"
+                   class="help-btn">
+                    ?
+                </a>
+                <div id="settings_menu"
+                     class="settings-menu"
+                     style="display:none;">
+                    <button type="button"
+                            id="user_settings_btn"
+                            class="settings-menu-item">
+                        User settings
+                    </button>
+                </div>
+            </div>
+        </div>
         <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
             <div class="upload-card__overlay" aria-live="polite">Uploading</div>
             <div class="upload-card__content">
@@ -453,6 +644,7 @@
                 <div class="upload-actions">
                     <input type="file" id="file-input" multiple webkitdirectory directory {% if not upload_enabled %}disabled{% endif %}>
                     <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                    <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                 </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
@@ -482,6 +674,33 @@
             <p id="duplicate-message" class="duplicate-popup__message"></p>
             <button type="button" id="duplicate-ok-btn" class="duplicate-popup__btn">Ok</button>
         </div>
+        <div id="user-settings-overlay" class="user-settings-overlay" aria-hidden="true">
+            <div class="user-settings-panel" role="dialog" aria-modal="true" aria-labelledby="user-settings-title">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <strong id="user-settings-title">User settings</strong>
+                    <button type="button" id="user_settings_close" class="clear-all-btn">Close</button>
+                </div>
+                <div class="user-settings-grid">
+                    <div class="user-setting-row">
+                        <div class="user-setting-input">
+                            <label for="user_setting_batch_size">Chunk size</label>
+                            <input type="text"
+                                   id="user_setting_batch_size"
+                                   inputmode="numeric"
+                                   style="width:60px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                        </div>
+                        <div class="user-setting-description">
+                            <span class="user-setting-limit">[1-25]</span>
+                            <span>Set higher for faster uploads, lower for more granular progress updates.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-settings-status" id="user_settings_status"></div>
+                <div class="user-settings-actions">
+                    <button type="button" id="user_settings_save" class="clear-all-btn">Save</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -496,6 +715,7 @@
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
         const uploadBtn = document.getElementById('upload-btn');
+        const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
         const cancelImportBtn = document.getElementById('cancel-import-btn');
         const statusEl = document.getElementById('status');
@@ -511,6 +731,14 @@
         const duplicatePopup = document.getElementById('duplicate-popup');
         const duplicateMessage = document.getElementById('duplicate-message');
         const duplicateOkBtn = document.getElementById('duplicate-ok-btn');
+        const settingsMenuBtn = document.getElementById('settings_menu_btn');
+        const settingsMenu = document.getElementById('settings_menu');
+        const userSettingsBtn = document.getElementById('user_settings_btn');
+        const userSettingsOverlay = document.getElementById('user-settings-overlay');
+        const userSettingsClose = document.getElementById('user_settings_close');
+        const userSettingsSave = document.getElementById('user_settings_save');
+        const userSettingsBatchInput = document.getElementById('user_setting_batch_size');
+        const userSettingsStatus = document.getElementById('user_settings_status');
 
         let pendingFiles = [];
         const expandedNodes = new Set();
@@ -534,6 +762,7 @@
             })();
         const importJobsStorageKey = 'omeroweb_upload_import_jobs_v1';
         const importLogsStorageKey = 'omeroweb_upload_import_logs_v1';
+        const userSettingsStorageKey = 'omeroweb_upload_user_settings_v1';
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -564,6 +793,11 @@
             uploadBtn.textContent = hasActiveImport() ? 'Upload' : 'Upload & Import';
         }
 
+        function showSettingsMenu(show) {
+            if (!settingsMenu) return;
+            settingsMenu.style.display = show ? 'block' : 'none';
+        }
+
         function formatBytes(bytes) {
             if (!bytes) return '0 B';
             const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -592,6 +826,7 @@
 
         const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
         const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
+        let currentUploadBatchFiles = uploadBatchFiles;
         const csrfTokenName = 'csrftoken';
 
         function getCookie(name) {
@@ -636,6 +871,62 @@
             progressBar.style.width = `${percent}%`;
             progressBar.textContent = `${percent}%`;
             progressText.textContent = text;
+        }
+
+        function setUserSettingsStatus(message, isError = false) {
+            if (!userSettingsStatus) return;
+            userSettingsStatus.textContent = message || '';
+            userSettingsStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+        }
+
+        function setUserSettingError(input, hasError) {
+            if (!input) return;
+            input.classList.toggle('user-setting-error', hasError);
+        }
+
+        function loadUserSettings() {
+            if (!storage) return null;
+            try {
+                const raw = storage.getItem(userSettingsStorageKey);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function applyUserSettings(settings) {
+            const batchSize = settings?.uploadBatchFiles;
+            if (Number.isInteger(batchSize)) {
+                currentUploadBatchFiles = batchSize;
+            }
+            if (userSettingsBatchInput) {
+                userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
+            }
+        }
+
+        function openUserSettingsModal() {
+            if (!userSettingsOverlay) return;
+            userSettingsOverlay.style.display = 'flex';
+            userSettingsOverlay.setAttribute('aria-hidden', 'false');
+            if (userSettingsBatchInput) {
+                userSettingsBatchInput.focus();
+            }
+        }
+
+        function closeUserSettingsModal() {
+            if (!userSettingsOverlay) return;
+            userSettingsOverlay.style.display = 'none';
+            userSettingsOverlay.setAttribute('aria-hidden', 'true');
+            setUserSettingsStatus('');
+            setUserSettingError(userSettingsBatchInput, false);
+        }
+
+        function clearSelectedFiles() {
+            pendingFiles = [];
+            expandedNodes.clear();
+            fileInput.value = '';
+            refreshFileList();
         }
 
         function buildTree(entries) {
@@ -1138,7 +1429,7 @@
 
         function createUploadBatches() {
             const maxBatchBytes = 50 * 1024 * 1024;
-            const maxBatchFiles = Math.max(1, uploadBatchFiles);
+            const maxBatchFiles = Math.max(1, currentUploadBatchFiles);
             const batches = [];
             let current = [];
             let currentBytes = 0;
@@ -1549,9 +1840,70 @@
             setStatus('Upload canceled. You can start a new upload when ready.', 'success');
         });
 
+        if (settingsMenuBtn) {
+            settingsMenuBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const shouldShow = settingsMenu?.style.display !== 'block';
+                showSettingsMenu(shouldShow);
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!settingsMenu) return;
+            if (settingsMenu.contains(event.target) || settingsMenuBtn?.contains(event.target)) {
+                return;
+            }
+            showSettingsMenu(false);
+        });
+
+        if (userSettingsBtn) {
+            userSettingsBtn.addEventListener('click', () => {
+                showSettingsMenu(false);
+                openUserSettingsModal();
+            });
+        }
+
+        if (userSettingsClose) {
+            userSettingsClose.addEventListener('click', closeUserSettingsModal);
+        }
+
+        if (userSettingsSave) {
+            userSettingsSave.addEventListener('click', () => {
+                const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
+                const numericPattern = /^\d+$/;
+                const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
+                const isValid = Number.isInteger(value) && value >= 1 && value <= 25;
+                setUserSettingError(userSettingsBatchInput, !isValid);
+                if (!isValid) {
+                    setUserSettingsStatus('Chunk size must be a number between 1 and 25.', true);
+                    return;
+                }
+                currentUploadBatchFiles = value;
+                if (storage) {
+                    try {
+                        storage.setItem(userSettingsStorageKey, JSON.stringify({ uploadBatchFiles: value }));
+                    } catch (error) {
+                        // Ignore storage failures.
+                    }
+                }
+                setUserSettingsStatus('Saved user settings.');
+            });
+        }
+
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener('click', () => {
+                clearSelectedFiles();
+                if (!isUploading && !hasActiveImport()) {
+                    clearImportState();
+                    setStatus('');
+                }
+            });
+        }
+
         if (!uploadEnabled) {
             setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
         }
+        applyUserSettings(loadUserSettings() || { uploadBatchFiles });
         restoreImportState();
         if (importJobs.size) {
             updateProgressFromJobs();
