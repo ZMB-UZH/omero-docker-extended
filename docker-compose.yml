@@ -105,7 +105,6 @@ services:
         ["Upload", "omeroweb_upload_index", {"title": "Open Upload in new tab", "target": "_blank"}]
       ]' # modify if needed when the developers update Omero Web
       CONFIG_omero_web_login__logo: "/static/branding/logo.png" # optional, delete if you don't want a custom logo at the top of the login page
-      OMERO_WEB_UPLOAD_DIR: /opt/omero-upload-tmp
     networks:
       - omero
     ports:
@@ -113,7 +112,7 @@ services:
     volumes:
       - omero:/OMERO
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - /opt/omero-upload-tmp:/opt/omero-upload-tmp:rw
+      - omero_upload:/opt/tmp:rw
     tmpfs:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
 
@@ -144,4 +143,5 @@ networks:
 volumes:
   database:
   omero:
+  omero_upload:
   database_plugin:
