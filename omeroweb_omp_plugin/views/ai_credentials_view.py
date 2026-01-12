@@ -323,6 +323,7 @@ def list_models(request, conn=None, url=None, **kwargs):
     else:
         models = []
 
+    models.sort(key=lambda model: (model.get("id") or "").casefold())
     model_ids = [model["id"] for model in models]
     default_model = _select_default_model(provider, model_ids)
 
