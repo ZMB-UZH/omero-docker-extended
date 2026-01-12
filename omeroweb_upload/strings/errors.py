@@ -93,3 +93,42 @@ def import_failed():
 
 def unexpected_import_failure(detail):
     return f"Unexpected import failure: {detail}"
+
+
+def method_post_required():
+    return "POST required"
+
+
+def unable_to_determine_username():
+    return "Unable to determine username."
+
+
+def invalid_user_settings_payload():
+    return "Invalid user settings payload."
+
+
+def psycopg2_missing():
+    return "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
+
+
+def missing_db_credentials():
+    return (
+        "Database credentials (docker compose environment variables) are missing "
+        "(OMP_DATA_USER/OMP_DATA_PASS)."
+    )
+
+
+def db_connection_failed():
+    return "Could not connect to the database."
+
+
+def user_settings_not_persisted():
+    return "User settings were not persisted to the database."
+
+
+def user_settings_save_failed():
+    return "Could not save user settings."
+
+
+def unexpected_error():
+    return "Unexpected error."
