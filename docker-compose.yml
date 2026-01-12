@@ -29,6 +29,8 @@ services:
       dockerfile: Dockerfile.omero-server-custom
     image: "omero-server-custom:5"
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       TZ: Europe/Zurich
       CONFIG_omero_db_host: database
@@ -77,6 +79,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
     environment:
       TZ: Europe/Zurich
       OMEROHOST: omeroserver
