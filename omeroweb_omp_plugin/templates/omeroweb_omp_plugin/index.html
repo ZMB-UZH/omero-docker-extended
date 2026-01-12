@@ -1478,8 +1478,11 @@
 
     function populateAiModels(select, models, defaultModel) {
         if (!select) return;
+        const sortedModels = Array.isArray(models)
+            ? [...models].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }))
+            : [];
         select.innerHTML = '';
-        models.forEach((model) => {
+        sortedModels.forEach((model) => {
             const option = document.createElement('option');
             option.value = model.id;
             option.textContent = model.id;
@@ -1810,8 +1813,10 @@
 
     function restoreAiProviderSelections(state) {
         if (!state) return;
-        const regexProvider = state.ai_regex_provider || '';
-        const regexModel = state.ai_regex_model || '';
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = regexDefaults.defaultProvider || state.ai_regex_provider || '';
+        const regexModel = regexDefaults.modelsByProvider?.[regexProvider] || state.ai_regex_model || '';
         if (aiProviderSelect) {
             if (regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
                 aiProviderSelect.value = regexProvider;
@@ -1823,8 +1828,8 @@
             }
         }
 
-        const parseProvider = state.ai_parse_provider || '';
-        const parseModel = state.ai_parse_model || '';
+        const parseProvider = parseDefaults.defaultProvider || state.ai_parse_provider || '';
+        const parseModel = parseDefaults.modelsByProvider?.[parseProvider] || state.ai_parse_model || '';
         if (aiParseProviderSelect) {
             if (parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
                 aiParseProviderSelect.value = parseProvider;
