@@ -75,7 +75,7 @@ _MODEL_ENDPOINTS = {
         "headers": lambda key: {},
     },
     "cohere": {
-        "url": "https://api.cohere.ai/v1/models",
+        "url": "https://api.cohere.ai/v2/models",
         "headers": lambda key: {"Authorization": f"Bearer {key}"},
     },
 }
@@ -180,13 +180,17 @@ def _parse_cohere_models(payload):
         model_id = item.get("name") or item.get("id")
         if not model_id:
             continue
+        models.append(
+            {
+                "id": model_id,
+                "context_length": item.get("context_length"),
+            }
+        )
+    for item in payload.get("data", []) or []:
+        model_id = item.get("id")
+        if not model_id:
+            continue
         models.append({"id": model_id})
-    if not models:
-        for item in payload.get("data", []) or []:
-            model_id = item.get("id")
-            if not model_id:
-                continue
-            models.append({"id": model_id})
     return models
 
 
