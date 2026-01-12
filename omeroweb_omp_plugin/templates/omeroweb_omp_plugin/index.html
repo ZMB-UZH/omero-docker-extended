@@ -3690,6 +3690,15 @@
         separatorValues.regex = defaultSeparatorValue;
         separatorValues.ai_regex = defaultSeparatorValue;
         setSeparatorMode('chars');
+        aiRegexTransferred = false;
+        aiParseTransferred = false;
+        if (aiParsedJsonInput) {
+            aiParsedJsonInput.value = '';
+        }
+        lastAiParseRows = null;
+        clearAiRegexSuggestion();
+        clearAiParseSuggestion();
+        applyDefaultAiProviderSelections({ force: true });
         resetDatasetSelection();
         window.sessionStorage.removeItem(STATE_STORAGE_KEY);
         try {
