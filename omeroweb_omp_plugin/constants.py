@@ -67,9 +67,7 @@ MAJOR_ACTION_BLOCK_SECONDS = 60
 JOB_MAX_AGE_SECONDS = 7200  # Delete jobs older than 2 hours - increase if problem with ultralong jobs appear
 JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 
-# ==============================================================================
-# HYPHEN PROTECTION PATTERNS FOR SCIENTIFIC NOMENCLATURE
-# ==============================================================================
+# Hyphen protection patterns for scientific nomenclature, used in "Local Regex" creation
 PROTECTED_HYPHEN_PATTERNS = [
     r'[A-Za-z]+\d+',                                    # Chemical: DMSO-d6, 5-HT2A
     r'(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)',              # After digit: 5-HT, 20-HETE
