@@ -124,22 +124,39 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     """
     Ensure directory exists with strict permissions.
     
-    - Creates directory if it doesn't exist (with specified permissions)
+    - Creates parent directories with 0o755 (accessible to all)
+    - Creates target directory with specified mode (e.g., 0o700 for security)
     - If directory exists, verifies and fixes permissions if necessary
     - NEVER deletes any files or directories
     
     Args:
         path: Directory path to ensure
-        mode: Octal permissions (e.g., 0o700 for rwx------)
+        mode: Octal permissions for the target directory (e.g., 0o700 for rwx------)
     
     Returns:
         True if directory exists/created successfully, False otherwise
     """
     try:
         if not path.exists():
-            # Create with proper permissions
-            path.mkdir(parents=True, mode=mode, exist_ok=True)
-            logger.info(f"Created directory: {path} with permissions {oct(mode)}")
+            # Create parent directories with 0o755 (accessible)
+            # Then create target directory with specified mode (secure)
+            parent = path.parent
+            if not parent.exists():
+                try:
+                    parent.mkdir(parents=True, mode=0o755, exist_ok=True)
+                    logger.info(f"Created parent directory: {parent} with permissions 0o755")
+                except OSError as parent_exc:
+                    logger.error(f"Unable to create parent directory {parent}: {parent_exc}")
+                    return False
+            
+            # Create target directory with specified secure permissions
+            try:
+                path.mkdir(mode=mode, exist_ok=True)
+                logger.info(f"Created directory: {path} with permissions {oct(mode)}")
+            except OSError as target_exc:
+                logger.error(f"Unable to create target directory {path}: {target_exc}")
+                return False
+            
             return True
         else:
             # Directory exists - check and fix permissions if necessary
