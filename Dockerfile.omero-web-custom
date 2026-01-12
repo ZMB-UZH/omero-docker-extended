@@ -9,10 +9,42 @@ FROM openmicroscopy/omero-web-standalone:5
 # --------------------------------------
 USER root
 
+# Use bash with pipefail for safer RUN commands
+# ---------------------------------------------
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Optional: enable OS package security updates at build time.
+# -----------------------------------------------------------
+ARG APPLY_DNF_UPDATES=1
+
+# Basic hardening for pip (no behavior change expected)
+# -----------------------------------------------------
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Locate Omero web venv and fail fast if layout changes
+# -----------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO web venv" >&2; \
+        exit 1; \
+    fi
+
+# Optional: apply OS updates at build time (security-only if supported), then clean caches
+# ----------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
+        dnf -y update --security || dnf -y update; \
+    fi; \
+    dnf clean all; \
+    rm -rf /var/cache/dnf /var/tmp/*
+
 # Remove old copies of the plugins inside the container (if any)
 # --------------------------------------------------------------
-RUN set -eux; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin" "${SITE_PACKAGES}/omeroweb_upload"
@@ -26,13 +58,13 @@ COPY omeroweb_upload /tmp/omeroweb_upload
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
-RUN set -eux; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     cp -a /tmp/omeroweb_omp_plugin "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
     cp -a /tmp/omeroweb_upload "${SITE_PACKAGES}/omeroweb_upload"; \
-    "${VENV_DIR}/bin/pip" install --no-cache-dir \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         psycopg2-binary \
         redis>=5.0.0 \
         django-redis>=5.4.0; \
@@ -41,10 +73,7 @@ RUN set -eux; \
 
 # Pre-create ALL Django static directories and own them
 # -----------------------------------------------------
-RUN set -eux; \
-# The two lines below were added for security hardening
-    dnf -y update || true; \
-    dnf clean all; \
+RUN set -euo pipefail; \
     mkdir -p \
         /opt/omero/web/OMERO.web/var \
         /opt/omero/web/OMERO.web/var/log \
@@ -55,28 +84,31 @@ RUN set -eux; \
         /opt/omero/web/OMERO.web/var/static/omeroweb_upload; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
-# Copy branding logo (create dummy if it doesn't and remove after)
-# ----------------------------------------------------------------
-RUN touch /tmp/logo.png.dummy
+# Copy branding logo (skip cleanly if it doesn't exist)
+# -----------------------------------------------------
+RUN set -euo pipefail; \
+    touch /tmp/logo.png.dummy
 COPY logo.png* /tmp/
-RUN set -eux; \
+RUN set -euo pipefail; \
     rm -f /tmp/logo.png.dummy; \
-    if [ -f /tmp/logo.png ]; then \
-        mkdir -p /opt/omero/web/OMERO.web/var/static/branding; \
+    if [[ -f /tmp/logo.png ]]; then \
         cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chown omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
+        chmod 0444 /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         echo "Logo copied to final static directory"; \
     else \
         echo "No logo.png found in build context, skipping logo setup"; \
     fi; \
     rm -f /tmp/logo.png*
 
-# Security hardening: upgrade vulnerable Python packages inside OMERO venv
-## ATTENTION!! Please delete if you notice any persistent issues in Omero web
-# ---------------------------------------------------------------------------
-RUN set -eux; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* | head -n 1)"; \
-    "${VENV_DIR}/bin/pip" install --no-cache-dir --upgrade \
+# Security hardening: upgrade selected Python tooling inside Omero web venv
+# WARNING:
+# - Remove immediately if you observe persistent issues in Omero web
+# - Uses >= only (no pinning), matching your policy
+# ------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
         pip \
         setuptools>=78.1.1 \
         wheel \
