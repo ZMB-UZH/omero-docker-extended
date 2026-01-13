@@ -1224,7 +1224,7 @@
             return false;
         }
 
-        function setUploadingState(active) {
+        function setUploadingState(active, statusText) {
             isUploading = active;
             uploadCard.classList.toggle('is-uploading', active);
             fileInput.disabled = active || !uploadEnabled;
@@ -1238,6 +1238,8 @@
             uploadBtn.disabled = active || !uploadEnabled;
             if (!active) {
                 resetUploadProgress();
+            } else if (statusText && uploadOverlay) {
+                uploadOverlay.textContent = statusText;
             }
             updateCancelButtons();
         }
@@ -1254,14 +1256,14 @@
             uploadTotalBytes = 0;
             uploadProgressEntries.clear();
             if (uploadOverlay) {
-                uploadOverlay.textContent = 'Uploading';
+                uploadOverlay.textContent = 'UPLOADING';
             }
         }
 
         function updateUploadOverlayProgress() {
             if (!uploadOverlay || !isUploading || !uploadTotalBytes) {
                 if (uploadOverlay) {
-                    uploadOverlay.textContent = 'Uploading';
+                    uploadOverlay.textContent = 'UPLOADING';
                 }
                 return;
             }
@@ -1270,7 +1272,7 @@
                 0
             );
             const percent = Math.min(100, Math.floor((loaded / uploadTotalBytes) * 100));
-            uploadOverlay.textContent = `UPLOADING (${percent}%)...`;
+            uploadOverlay.textContent = `UPLOADING (${percent}%)`;
         }
 
         function setUploadProgressEntry(key, loaded, total) {
@@ -2715,7 +2717,6 @@
         }
 
         async function ensureCompatibilityBeforeImport(job) {
-            setStatus('Checking file compatibility with the importer…', 'success');
             const statusData = await waitForCompatibility(job);
             if (statusData.confirmation_required) {
                 const proceed = await showCompatibilityPopup(
@@ -3168,7 +3169,7 @@
                 setStatus('');
             }
 
-            setUploadingState(true);
+            setUploadingState(true, 'UPLOADING');
             cancelUploadRequested = false;
             setStatus('');
             uploadTotalBytes = getPendingTotalBytes();
@@ -3191,12 +3192,13 @@
                 } else {
                     setStatus(`Upload failed: ${error.message || error}`, 'error');
                 }
-            } finally {
                 setUploadingState(false);
                 cancelUploadRequested = false;
+                return;
             }
             
             if (job) {
+                setUploadingState(true, 'CHECKING COMPATIBILITY');
                 try {
                     const compatibilityResult = await ensureCompatibilityBeforeImport(job);
                     if (compatibilityResult.proceed) {
@@ -3208,7 +3210,11 @@
                     }
                 } catch (error) {
                     setStatus(`Compatibility check failed: ${error.message || error}`, 'error');
+                } finally {
+                    setUploadingState(false);
                 }
+            } else {
+                setUploadingState(false);
             }
         });
 
