@@ -231,6 +231,12 @@
             font-weight: 600;
             pointer-events: none;
         }
+        .project-option-owner {
+            font-weight: 700;
+        }
+        .project-option-arrow {
+            margin: 0 4px;
+        }
         #project_select_dropdown {
             text-align: left;
             box-sizing: border-box;
@@ -1259,7 +1265,7 @@
         function getProjectEntryLabel(entry) {
             const baseLabel = getProjectLabel(entry?.id, entry?.name);
             if (entry?.owner) {
-                return `${entry.owner} -> ${baseLabel}`;
+                return `${entry.owner} → ${baseLabel}`;
             }
             return baseLabel;
         }
@@ -1549,9 +1555,19 @@
                     option.style.padding = '8px 12px';
                     option.style.cursor = 'pointer';
                     option.style.whiteSpace = 'nowrap';
-                    option.textContent = getProjectEntryLabel(entry);
                     if (isCollabEntry(entry)) {
                         option.classList.add('is-collab');
+                        const ownerSpan = document.createElement('span');
+                        ownerSpan.className = 'project-option-owner';
+                        ownerSpan.textContent = entry.owner || '';
+                        const arrowSpan = document.createElement('span');
+                        arrowSpan.className = 'project-option-arrow';
+                        arrowSpan.textContent = '→';
+                        const nameSpan = document.createElement('span');
+                        nameSpan.textContent = getProjectLabel(entry?.id, entry?.name);
+                        option.append(ownerSpan, arrowSpan, nameSpan);
+                    } else {
+                        option.textContent = getProjectEntryLabel(entry);
                     }
                     projectSelectDropdown.appendChild(option);
                 });
