@@ -928,12 +928,24 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
         "not a supported",
         "no importable",
         "no import candidates",
+        "no files found",
+        "no files were found",
     )
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
     if return_code == 0:
         return "compatible", details
     return "error", details
+
+
+def _extract_import_candidates(output: str):
+    candidates = []
+    for line in (output or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        candidates.append(stripped)
+    return candidates
 
 
 def _check_import_compatibility(
@@ -950,14 +962,7 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {path.name}",
             "details": f"Missing staged file: {path.name}",
         }
-    cmd = ["omero", "import", "--dry-run", "-k", session_key]
-    if host:
-        cmd.extend(["-s", host])
-    if port:
-        cmd.extend(["-p", str(port)])
-    if dataset_id:
-        cmd.extend(["-d", str(dataset_id)])
-    cmd.append(str(path))
+    cmd = ["omero", "import", "-f", str(path)]
     try:
         result = subprocess.run(
             cmd,
@@ -973,6 +978,10 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    candidates = _extract_import_candidates(result.stdout)
+    if status == "compatible" and not candidates:
+        status = "incompatible"
+        details = details or "No importable files found."
     return {
         "status": status,
         "stdout": result.stdout,
