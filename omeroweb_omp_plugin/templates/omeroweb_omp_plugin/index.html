@@ -2644,13 +2644,7 @@
         sortProjectMatches(matches);
         projectSelectDropdown.innerHTML = '';
 
-        if (matches.length === 0) {
-            const emptyRow = document.createElement('div');
-            emptyRow.style.padding = '8px 12px';
-            emptyRow.style.color = '#6b7280';
-            emptyRow.textContent = 'No matching projects.';
-            projectSelectDropdown.appendChild(emptyRow);
-        } else {
+        if (matches.length > 0) {
             matches.forEach(([projectId, projectName]) => {
                 const option = document.createElement('div');
                 option.className = 'project-option';
@@ -2671,9 +2665,9 @@
         if (totalMatches > MAX_PROJECT_RESULTS) {
             statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
         } else if (totalMatches > 0) {
-            statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found.`;
+            statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
         } else {
-            statusRow.textContent = 'No projects found.';
+            statusRow.textContent = 'No projects found';
         }
         projectSelectDropdown.appendChild(statusRow);
         if (matches.length > 0) {
