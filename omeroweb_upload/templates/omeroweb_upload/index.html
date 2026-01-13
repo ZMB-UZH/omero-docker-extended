@@ -1713,7 +1713,7 @@
                 statusRow.textContent = 'No projects found';
             }
             projectSelectDropdown.appendChild(statusRow);
-            setActiveProjectIndex(0);
+            setActiveProjectIndex(normalizedQuery ? -1 : 0);
         }
 
         function syncProjectSelectionWithMode() {

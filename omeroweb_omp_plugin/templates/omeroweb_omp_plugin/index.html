@@ -2589,6 +2589,11 @@
                 projectSelectDropdown.classList.remove('keyboard-active');
             }
         }
+        if (index < 0) {
+            options.forEach((option) => option.classList.remove('is-active'));
+            activeProjectIndex = -1;
+            return;
+        }
         const clamped = Math.max(0, Math.min(index, options.length - 1));
         options.forEach((option, idx) => {
             if (idx === clamped) {
@@ -2671,7 +2676,7 @@
         }
         projectSelectDropdown.appendChild(statusRow);
         if (matches.length > 0) {
-            setActiveProjectIndex(0);
+            setActiveProjectIndex(normalizedQuery ? -1 : 0);
         } else {
             activeProjectIndex = -1;
         }
