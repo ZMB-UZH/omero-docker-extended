@@ -918,8 +918,6 @@ def _update_job(job_id: str, update_fn):
 
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     details = (stderr or stdout or "").strip()
-    if return_code == 0:
-        return "compatible", details
     lowered = details.lower()
     incompatible_markers = (
         "unsupported",
@@ -933,6 +931,8 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     )
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
+    if return_code == 0:
+        return "compatible", details
     return "error", details
 
 
