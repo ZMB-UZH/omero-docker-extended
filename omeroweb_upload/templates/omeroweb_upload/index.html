@@ -2686,15 +2686,19 @@
             if (!job?.status_url) {
                 return { confirmation_required: false, compatibility_status: 'compatible', status: 'ready' };
             }
-            while (true) {
+            const maxAttempts = 300; // 300 * 800ms = 4 minutes max
+            let attempts = 0;
+            while (attempts < maxAttempts) {
                 const data = await fetchJobStatus(job);
                 const compatibilityStatus = data.compatibility_status || data.status;
                 if (compatibilityStatus === 'checking' || compatibilityStatus === 'pending') {
                     await delay(800);
+                    attempts++;
                     continue;
                 }
                 return data;
             }
+            throw new Error('Compatibility check timeout - please refresh the page and try again.');
         }
 
         async function confirmCompatibility(job) {
