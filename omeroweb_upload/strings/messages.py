@@ -1,10 +1,10 @@
 
 def imported_file(path):
-    return f"Imported {path}"
+    return f"Import success: {path}"
 
 
 def job_error_with_path(path, detail):
-    return f"{path}: {detail}"
+    return f"Import failure: {path}"
 
 
 def confirm_irreversible_action():
