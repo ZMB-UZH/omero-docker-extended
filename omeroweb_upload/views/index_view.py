@@ -351,6 +351,67 @@ def _is_owned_by_user(obj, user_id):
         return False
 
 
+def _get_owner_username(obj):
+    if obj is None:
+        return ""
+    owner = None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+    except Exception:
+        owner = None
+    if owner is None:
+        try:
+            owner = obj.getOwner()
+        except Exception:
+            owner = None
+    if owner is None:
+        return ""
+    for attr in ("getOmeName", "getName", "getFirstName"):
+        try:
+            if hasattr(owner, attr):
+                value = _get_text(getattr(owner, attr)())
+                if value:
+                    return value
+        except Exception:
+            continue
+    owner_id = _get_id(owner)
+    return str(owner_id) if owner_id is not None else ""
+
+
+def _has_read_write_permissions(obj):
+    if obj is None:
+        return False
+    try:
+        details = obj.getDetails()
+        permissions = details.getPermissions() if details else None
+        if permissions:
+            return bool(permissions.isRead() and permissions.isWrite())
+    except Exception:
+        return False
+    return False
+
+
+def _collect_project_payload(conn, user_id):
+    owned_projects = []
+    collab_projects = []
+    try:
+        for proj in conn.listProjects():
+            pid = _get_id(proj)
+            pname = _get_text(proj.getName())
+            if pid is None:
+                continue
+            entry = {"id": str(pid), "name": pname}
+            if _is_owned_by_user(proj, user_id):
+                owned_projects.append(entry)
+            elif _has_read_write_permissions(proj):
+                owner_name = _get_owner_username(proj) or "Unknown user"
+                collab_projects.append({**entry, "owner": owner_name})
+    except Exception as exc:
+        logger.exception("Error listing projects: %s", exc)
+    return {"owned": owned_projects, "collab": collab_projects}
+
+
 def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
@@ -988,15 +1049,7 @@ def index(request, conn=None, url=None, **kwargs):
     job_dir_ok = _ensure_dir(_get_jobs_root())
     upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
     upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
-    projects = []
-    try:
-        for proj in conn.listProjects():
-            pid = _get_id(proj)
-            pname = _get_text(proj.getName())
-            if pid is not None and _is_owned_by_user(proj, user_id):
-                projects.append((str(pid), pname))
-    except Exception as exc:
-        logger.exception("Error listing projects: %s", exc)
+    projects = _collect_project_payload(conn, user_id)
     return render(
         request,
         "omeroweb_upload/index.html",
@@ -1009,8 +1062,16 @@ def index(request, conn=None, url=None, **kwargs):
             "is_root_user": is_root_user,
             "messages_json": json.dumps(messages.index_messages()),
             "projects": projects,
+            "project_list_url": reverse("omeroweb_upload_projects"),
         },
     )
+
+
+@login_required()
+def list_projects(request, conn=None, url=None, **kwargs):
+    user_id = _current_user_id(conn)
+    payload = _collect_project_payload(conn, user_id)
+    return JsonResponse(payload)
 
 
 @login_required()
@@ -1048,7 +1109,9 @@ def _start_upload(request, conn):
             project = conn.getObject("Project", project_id)
         except Exception:
             project = None
-        if project is None or not _is_owned_by_user(project, _current_user_id(conn)):
+        if project is None or not (
+            _is_owned_by_user(project, _current_user_id(conn)) or _has_read_write_permissions(project)
+        ):
             return json_error(errors.invalid_project_selection(), status=400)
         project_name = _get_text(project.getName())
 

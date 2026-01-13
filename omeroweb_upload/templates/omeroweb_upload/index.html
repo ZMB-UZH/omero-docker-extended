@@ -190,6 +190,11 @@
             gap: 0;
             position: relative;
         }
+        .project-select-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
         .project-select-label {
             font-size: 13px;
             font-weight: 600;
@@ -210,6 +215,9 @@
             border: 1px solid #007bff;
             text-align: left;
             box-sizing: border-box;
+        }
+        .project-select-input.is-collab {
+            color: #065f46;
         }
         .project-select-arrow {
             position: absolute;
@@ -237,6 +245,14 @@
         .project-option {
             transition: background 0.15s ease, color 0.15s ease;
         }
+        .project-option.is-collab {
+            color: #065f46;
+        }
+        .project-option.is-collab:hover,
+        .project-option.is-collab.is-active {
+            background: #e7f1ff;
+            color: #065f46;
+        }
         .project-option:hover,
         .project-option.is-active {
             background: #e7f1ff;
@@ -245,6 +261,31 @@
         #project_select_dropdown.keyboard-active .project-option:hover {
             background: transparent;
             color: inherit;
+        }
+        .project-refresh-btn {
+            width: 36px;
+            height: 40px;
+            border-radius: 6px;
+            border: 1px solid #007bff;
+            background: #e7f1ff;
+            color: #1d4ed8;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .project-refresh-btn:hover {
+            background: #d0e7ff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .project-refresh-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
         .upload-action-row {
             display: grid;
@@ -600,8 +641,27 @@
         }
         .upload-utilities {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
             margin: 6px 0 12px;
+        }
+        .upload-utilities__collaboration {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .upload-utilities__collaboration input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #2563eb;
+            cursor: pointer;
+        }
+        .upload-utilities__collaboration label {
+            cursor: pointer;
+            user-select: none;
         }
         .upload-utilities__actions {
             display: flex;
@@ -809,6 +869,10 @@
         <p class="upload-intro">All orphan files in base path will be imported into a dataset named "Orphaned_images_base_path_import" with a random suffix.</p>
         <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
         <div class="upload-utilities">
+            <div class="upload-utilities__collaboration">
+                <input type="checkbox" id="collaboration_toggle">
+                <label for="collaboration_toggle">Collaboration</label>
+            </div>
             <div class="upload-utilities__actions">
                 <button type="button"
                         id="settings_menu_btn"
@@ -851,20 +915,29 @@
                         <input type="file" id="folder-input" multiple webkitdirectory directory class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
                     </div>
                     <div class="project-select-group">
-                        <div id="project_select_wrapper" class="project-select-wrapper">
-                            <input type="text"
-                                   id="project_select_input"
-                                   placeholder="Select project…"
-                                   autocomplete="off"
-                                   class="project-select-input">
-                            <span class="project-select-arrow" aria-hidden="true">▾</span>
-                            <input type="hidden" id="project_select" value="">
-                            <div id="project_select_dropdown"
-                                 style="display:none; position:absolute; left:0; right:0; top:100%;
-                                        background:#fff; border:1px solid #007bff; border-top:none;
-                                        max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                        <div class="project-select-controls">
+                            <div id="project_select_wrapper" class="project-select-wrapper">
+                                <input type="text"
+                                       id="project_select_input"
+                                       placeholder="Select project…"
+                                       autocomplete="off"
+                                       class="project-select-input">
+                                <span class="project-select-arrow" aria-hidden="true">▾</span>
+                                <input type="hidden" id="project_select" value="">
+                                <div id="project_select_dropdown"
+                                     style="display:none; position:absolute; left:0; right:0; top:100%;
+                                            background:#fff; border:1px solid #007bff; border-top:none;
+                                            max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                                </div>
+                                {{ projects|json_script:"project-data" }}
                             </div>
-                            {{ projects|json_script:"project-data" }}
+                            <button type="button"
+                                    id="project_refresh_btn"
+                                    class="project-refresh-btn"
+                                    title="Refresh projects"
+                                    aria-label="Refresh projects">
+                                ⟳
+                            </button>
                         </div>
                     </div>
                     <div class="upload-actions__buttons">
@@ -989,7 +1062,10 @@
         const projectSelectArrow = projectSelectWrapper?.querySelector('.project-select-arrow') || null;
         const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
         const projectDataScript = document.getElementById('project-data');
-        const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+        const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
+        const collaborationToggle = document.getElementById('collaboration_toggle');
+        const projectRefreshBtn = document.getElementById('project_refresh_btn');
+        let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_PROJECT_RESULTS = 20;
         let projectFilterTimeout = null;
         let activeProjectIndex = -1;
@@ -1117,18 +1193,71 @@
             settingsMenu.style.display = show ? 'block' : 'none';
         }
 
+        function normalizeProjectEntry(entry) {
+            if (!entry) return null;
+            if (Array.isArray(entry)) {
+                const [projectId, projectName, owner] = entry;
+                return {
+                    id: projectId ? String(projectId) : '',
+                    name: projectName || '',
+                    owner: owner || '',
+                };
+            }
+            if (typeof entry === 'object') {
+                return {
+                    id: entry.id ? String(entry.id) : '',
+                    name: entry.name || '',
+                    owner: entry.owner || '',
+                };
+            }
+            return null;
+        }
+
+        function normalizeProjectData(raw) {
+            if (Array.isArray(raw)) {
+                return {
+                    owned: raw.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+                    collab: [],
+                };
+            }
+            const owned = Array.isArray(raw?.owned) ? raw.owned : [];
+            const collab = Array.isArray(raw?.collab) ? raw.collab : [];
+            return {
+                owned: owned.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+                collab: collab.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            };
+        }
+
+        projectData = normalizeProjectData(projectData);
+
+        function isCollaborationEnabled() {
+            return !!collaborationToggle?.checked;
+        }
+
         function getProjectLabel(projectId, projectName) {
             return String(projectName || projectId || '');
+        }
+
+        function getProjectEntryLabel(entry) {
+            const baseLabel = getProjectLabel(entry?.id, entry?.name);
+            if (entry?.owner) {
+                return `${entry.owner} -> ${baseLabel}`;
+            }
+            return baseLabel;
+        }
+
+        function isCollabEntry(entry) {
+            return !!entry?.owner;
         }
 
         function getNumericSortValue(label) {
             return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
         }
 
-        function sortProjectMatches(matches) {
-            return matches.sort(([projectIdA, projectNameA], [projectIdB, projectNameB]) => {
-                const labelA = getProjectLabel(projectIdA, projectNameA);
-                const labelB = getProjectLabel(projectIdB, projectNameB);
+        function sortOwnedEntries(entries) {
+            return entries.sort((entryA, entryB) => {
+                const labelA = getProjectLabel(entryA?.id, entryA?.name);
+                const labelB = getProjectLabel(entryB?.id, entryB?.name);
                 const numericA = getNumericSortValue(labelA);
                 const numericB = getNumericSortValue(labelB);
                 if (numericA !== null && numericB !== null) {
@@ -1138,8 +1267,54 @@
                 if (numericB !== null) return 1;
                 const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
                 if (labelCompare !== 0) return labelCompare;
-                return String(projectIdA || '').localeCompare(String(projectIdB || ''), undefined, { numeric: true, sensitivity: 'base' });
+                return String(entryA?.id || '').localeCompare(
+                    String(entryB?.id || ''),
+                    undefined,
+                    { numeric: true, sensitivity: 'base' }
+                );
             });
+        }
+
+        function sortCollabEntries(entries) {
+            const byOwner = new Map();
+            entries.forEach((entry) => {
+                const owner = entry.owner || 'Unknown user';
+                if (!byOwner.has(owner)) {
+                    byOwner.set(owner, []);
+                }
+                byOwner.get(owner).push(entry);
+            });
+            const owners = Array.from(byOwner.keys()).sort((a, b) => (
+                a.localeCompare(b, undefined, { sensitivity: 'base' })
+            ));
+            const sorted = [];
+            owners.forEach((owner) => {
+                const items = byOwner.get(owner) || [];
+                items.sort((entryA, entryB) => {
+                    const labelA = getProjectLabel(entryA?.id, entryA?.name);
+                    const labelB = getProjectLabel(entryB?.id, entryB?.name);
+                    return labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+                });
+                sorted.push(...items);
+            });
+            return sorted;
+        }
+
+        function getOrderedProjectEntries(includeCollab = false) {
+            const owned = sortOwnedEntries([...(projectData?.owned || [])]);
+            if (!includeCollab) {
+                return owned;
+            }
+            const collab = sortCollabEntries([...(projectData?.collab || [])]);
+            return [...owned, ...collab];
+        }
+
+        function findProjectEntryById(projectId, includeCollab = false) {
+            if (!projectId) return null;
+            const list = includeCollab
+                ? [...(projectData?.owned || []), ...(projectData?.collab || [])]
+                : [...(projectData?.owned || [])];
+            return list.find((entry) => String(entry.id) === String(projectId)) || null;
         }
 
         function getProjectOptions() {
@@ -1167,7 +1342,7 @@
         }
 
         function setProjectSelection(projectId, projectName, options = {}) {
-            const { persist = true } = options;
+            const { persist = true, isCollab = false } = options;
             const normalizedId = projectId ? String(projectId) : '';
             const normalizedName = projectName ? String(projectName) : '';
             if (projectSelect) {
@@ -1176,6 +1351,8 @@
             if (projectSelectInput) {
                 projectSelectInput.value = normalizedName;
                 projectSelectInput.dataset.selectedName = normalizedName;
+                projectSelectInput.dataset.selectedIsCollab = isCollab ? 'true' : 'false';
+                projectSelectInput.classList.toggle('is-collab', isCollab);
             }
             if (persist) {
                 saveProjectSelection(normalizedId, normalizedName);
@@ -1190,6 +1367,8 @@
             if (projectSelectInput) {
                 projectSelectInput.value = '';
                 projectSelectInput.dataset.selectedName = '';
+                projectSelectInput.dataset.selectedIsCollab = 'false';
+                projectSelectInput.classList.remove('is-collab');
             }
             if (persist && storage) {
                 try {
@@ -1211,14 +1390,13 @@
                     clearProjectSelection({ persist: false });
                     return;
                 }
-                const match = allProjects.find(([projectId]) => String(projectId) === storedId);
+                const match = findProjectEntryById(storedId, isCollaborationEnabled());
                 if (!match) {
                     clearProjectSelection({ persist: false });
                     return;
                 }
-                const [projectId, projectName] = match;
-                const label = parsed?.projectName || projectName || projectId;
-                setProjectSelection(projectId, label, { persist: false });
+                const label = parsed?.projectName || getProjectEntryLabel(match);
+                setProjectSelection(match.id, label, { persist: false, isCollab: isCollabEntry(match) });
             } catch (error) {
                 clearProjectSelection({ persist: false });
             }
@@ -1253,10 +1431,11 @@
             if (!option) return;
             const projectId = option.dataset.projectId || '';
             const projectName = option.dataset.projectName || option.textContent || '';
+            const isCollab = option.dataset.isCollab === 'true';
             if (!projectId && option.classList.contains('is-empty')) {
                 clearProjectSelection();
             } else {
-                setProjectSelection(projectId, projectName);
+                setProjectSelection(projectId, projectName, { isCollab });
             }
             closeProjectDropdown(false);
         }
@@ -1265,25 +1444,27 @@
             if (!projectSelectDropdown) return;
             const normalizedQuery = query.trim().toLowerCase();
             const matches = [];
-            const totalProjects = allProjects.length;
+            const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
+            const totalProjects = orderedEntries.length;
             let totalMatches = 0;
 
-            for (let i = 0; i < allProjects.length; i += 1) {
-                const [projectId, projectName] = allProjects[i];
-                const name = projectName || '';
-                const id = projectId || '';
+            for (let i = 0; i < orderedEntries.length; i += 1) {
+                const entry = orderedEntries[i];
+                const label = getProjectEntryLabel(entry);
+                const id = entry?.id || '';
+                const owner = entry?.owner || '';
                 const isMatch = !normalizedQuery
-                    || String(name).toLowerCase().includes(normalizedQuery)
-                    || String(id).toLowerCase().includes(normalizedQuery);
+                    || String(label).toLowerCase().includes(normalizedQuery)
+                    || String(id).toLowerCase().includes(normalizedQuery)
+                    || String(owner).toLowerCase().includes(normalizedQuery);
                 if (isMatch) {
                     totalMatches += 1;
                     if (matches.length < MAX_PROJECT_RESULTS) {
-                        matches.push([projectId, projectName]);
+                        matches.push(entry);
                     }
                 }
             }
 
-            sortProjectMatches(matches);
             projectSelectDropdown.innerHTML = '';
 
             const emptyOption = document.createElement('div');
@@ -1303,15 +1484,19 @@
                 emptyRow.textContent = 'No matching projects.';
                 projectSelectDropdown.appendChild(emptyRow);
             } else {
-                matches.forEach(([projectId, projectName]) => {
+                matches.forEach((entry) => {
                     const option = document.createElement('div');
                     option.className = 'project-option';
-                    option.dataset.projectId = projectId;
-                    option.dataset.projectName = projectName || '';
+                    option.dataset.projectId = entry.id;
+                    option.dataset.projectName = getProjectEntryLabel(entry);
+                    option.dataset.isCollab = isCollabEntry(entry) ? 'true' : 'false';
                     option.style.padding = '8px 12px';
                     option.style.cursor = 'pointer';
                     option.style.whiteSpace = 'nowrap';
-                    option.textContent = projectName || projectId;
+                    option.textContent = getProjectEntryLabel(entry);
+                    if (isCollabEntry(entry)) {
+                        option.classList.add('is-collab');
+                    }
                     projectSelectDropdown.appendChild(option);
                 });
             }
@@ -1329,6 +1514,51 @@
             }
             projectSelectDropdown.appendChild(statusRow);
             setActiveProjectIndex(0);
+        }
+
+        function syncProjectSelectionWithMode() {
+            if (!projectSelect) return;
+            const selectedId = projectSelect.value;
+            if (!selectedId) return;
+            const match = findProjectEntryById(selectedId, isCollaborationEnabled());
+            if (!match) {
+                clearProjectSelection();
+                return;
+            }
+            const label = getProjectEntryLabel(match);
+            setProjectSelection(match.id, label, { persist: false, isCollab: isCollabEntry(match) });
+        }
+
+        function updateProjectData(data) {
+            projectData = normalizeProjectData(data);
+            syncProjectSelectionWithMode();
+            if (projectSelectDropdown?.style.display === 'block') {
+                renderProjectOptions(projectSelectInput?.value || '');
+            }
+        }
+
+        async function refreshProjectList() {
+            if (!projectListUrl) return;
+            if (projectRefreshBtn) {
+                projectRefreshBtn.disabled = true;
+            }
+            try {
+                const response = await fetch(projectListUrl.toString(), {
+                    method: 'GET',
+                    headers: setRequestHeaders({}, null),
+                });
+                if (!response.ok) {
+                    throw new Error(`Request failed: ${response.status}`);
+                }
+                const data = await response.json();
+                updateProjectData(data);
+            } catch (error) {
+                setStatus('Unable to refresh project list.', 'error');
+            } finally {
+                if (projectRefreshBtn) {
+                    projectRefreshBtn.disabled = false;
+                }
+            }
         }
 
         function openProjectDropdown() {
@@ -2671,6 +2901,21 @@
                     event.preventDefault();
                     selectProjectOption(options[activeProjectIndex]);
                 }
+            });
+        }
+
+        if (collaborationToggle) {
+            collaborationToggle.addEventListener('change', () => {
+                syncProjectSelectionWithMode();
+                if (projectSelectDropdown?.style.display === 'block') {
+                    renderProjectOptions(projectSelectInput?.value || '');
+                }
+            });
+        }
+
+        if (projectRefreshBtn) {
+            projectRefreshBtn.addEventListener('click', () => {
+                refreshProjectList();
             });
         }
 
