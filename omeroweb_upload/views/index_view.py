@@ -986,9 +986,13 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
 
 def _extract_import_candidates(output: str):
     candidates = []
+    metadata_keywords = ["file(s)", "group(s)", "call(s)", "no files", "parsed into", "to import", "setid"]
     for line in (output or "").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
+            continue
+        stripped_lower = stripped.lower()
+        if any(keyword in stripped_lower for keyword in metadata_keywords):
             continue
         candidates.append(stripped)
     return candidates
