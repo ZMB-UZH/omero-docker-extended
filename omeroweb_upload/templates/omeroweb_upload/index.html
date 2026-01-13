@@ -645,7 +645,7 @@
         }
         .upload-utilities {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
             align-items: center;
             margin: 6px 0 12px;
         }
@@ -672,6 +672,7 @@
             align-items: center;
             gap: 8px;
             position: relative;
+            margin-left: auto;
         }
         .help-btn {
             width: 26px;
@@ -1241,12 +1242,8 @@
         }
 
         function updateCollaborationVisibility() {
-            const hasCollab = Array.isArray(projectData?.collab) && projectData.collab.length > 0;
             if (collaborationSection) {
-                collaborationSection.style.display = hasCollab ? '' : 'none';
-            }
-            if (!hasCollab && collaborationToggle) {
-                collaborationToggle.checked = false;
+                collaborationSection.style.display = '';
             }
         }
 
