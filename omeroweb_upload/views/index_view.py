@@ -1015,7 +1015,15 @@ def _check_import_compatibility(
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": "Compatibility check timeout",
+            "details": "Compatibility check timeout after 30 seconds",
+        }
     except FileNotFoundError as exc:
         return {
             "status": "error",
