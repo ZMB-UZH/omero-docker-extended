@@ -93,6 +93,30 @@
             transform: translateY(2px);
             box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
         }
+        .help-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #007bff;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 26px;
+            text-align: center;
+            text-decoration: none;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .help-btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .help-btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
         .admin-tools-button {
             width: 100%;
             padding: 18px;
@@ -196,7 +220,7 @@
                 </div>
                 <button type="button"
                         id="help_btn"
-                        class="icon-btn"
+                        class="help-btn"
                         title="Help"
                         aria-label="Help">
                     ?
