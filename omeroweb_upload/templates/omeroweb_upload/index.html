@@ -1300,7 +1300,11 @@
         }
 
         function updateUploadButtonLabel() {
-            uploadBtn.textContent = hasActiveImport() ? 'Upload & append to Import' : 'Upload & Import';
+            if (window.pendingImportJob) {
+                uploadBtn.textContent = 'Continue Import';
+            } else {
+                uploadBtn.textContent = hasActiveImport() ? 'Upload & append to Import' : 'Upload & Import';
+            }
         }
 
         function getPendingTotalBytes() {
@@ -2149,6 +2153,7 @@
                             size: entry.file.size,
                             rawPath,
                             lastModified: entry.file.lastModified,
+                            entry: entry,
                         });
                         return;
                     }
@@ -2829,6 +2834,7 @@
                     'Incompatible file(s) found. Do you still want to continue with the upload (SUGGESTED: No).'
                 );
                 if (!proceed) {
+                    window.pendingImportJob = job;
                     pendingFiles = uploadedFiles;
                     const incompatibleSet = new Set(statusData.incompatible_files || []);
                     pendingFiles.forEach(entry => {
@@ -2838,8 +2844,9 @@
                         }
                     });
                     refreshFileList();
+                    updateUploadButtonLabel();
                     setStatus(
-                        'Upload complete. Import halted because incompatible files were detected. Please review.',
+                        'Upload complete. Import halted because incompatible files were detected. Remove incompatible files (red) and click "Continue Import" to proceed.',
                         'error'
                     );
                     return { proceed: false, status: statusData, uploadedFiles };
@@ -3283,6 +3290,59 @@
                 clearImportState();
                 setStatus('');
             }
+
+        uploadBtn.addEventListener('click', async () => {
+            if (isUploading) {
+                return;
+            }
+            if (!pendingFiles.length) {
+                setStatus('Please choose folders or files first.', 'error');
+                return;
+            }
+            if (!uploadEnabled) {
+                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
+                return;
+            }
+            if (!hasActiveImport()) {
+                clearImportState();
+                setStatus('');
+            }
+
+            if (window.pendingImportJob) {
+                const job = window.pendingImportJob;
+                delete window.pendingImportJob;
+                setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
+                try {
+                    const compatibilityResult = await ensureCompatibilityBeforeImport(job, pendingFiles);
+                    if (compatibilityResult.proceed) {
+                        registerImportJob(job);
+                        setStatus(
+                            'Import resumed. Files will appear in Omero soon.',
+                            'success'
+                        );
+                        pendingFiles = [];
+                        expandedNodes.clear();
+                        fileInput.value = '';
+                        folderInput.value = '';
+                        refreshFileList();
+                    }
+                } catch (error) {
+                    setStatus(`Import failed: ${error.message || error}`, 'error');
+                } finally {
+                    setUploadingState(false);
+                }
+                updateUploadButtonLabel();
+                return;
+            }
+
+            setUploadingState(true, 'UPLOADING');
+            cancelUploadRequested = false;
+            setStatus('');
+            uploadTotalBytes = getPendingTotalBytes();
+            updateUploadOverlayProgress();
+
+            let job = null;
+            let uploadedFiles = [];
 
             setUploadingState(true, 'UPLOADING');
             cancelUploadRequested = false;
