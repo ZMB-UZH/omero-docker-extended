@@ -22,7 +22,7 @@ from django.urls import reverse
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
-from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB
+from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
 
@@ -232,6 +232,52 @@ def _normalize_job_batch_size(value, default: int) -> int:
     except (TypeError, ValueError):
         normalized = default
     return max(1, min(50, normalized))
+
+
+def _resolve_job_batch_size(job_dict) -> int:
+    default_batch_size = _get_env_int(
+        UPLOAD_BATCH_FILES_ENV,
+        DEFAULT_UPLOAD_BATCH_FILES,
+        1,
+        50,
+    )
+    return _normalize_job_batch_size(job_dict.get("job_batch_size"), default_batch_size)
+
+
+def _has_pending_uploads(job_dict) -> bool:
+    return any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
+
+
+def _compatibility_pending_entries(job_dict):
+    return [
+        entry
+        for entry in job_dict.get("files", [])
+        if entry.get("status") == "uploaded" and not entry.get("compatibility")
+    ]
+
+
+def _should_start_compatibility_check(job_dict) -> bool:
+    if not job_dict or job_dict.get("compatibility_thread_active"):
+        return False
+    pending_entries = _compatibility_pending_entries(job_dict)
+    if not pending_entries:
+        return False
+    batch_size = _resolve_job_batch_size(job_dict)
+    return len(pending_entries) >= batch_size or not _has_pending_uploads(job_dict)
+
+
+def _refresh_job_status(job_dict):
+    if _has_pending_uploads(job_dict):
+        job_dict["status"] = "uploading"
+        return job_dict
+    compatibility_status = job_dict.get("compatibility_status")
+    if compatibility_status == "incompatible":
+        job_dict["status"] = "awaiting_confirmation"
+    elif compatibility_status in ("compatible", "error"):
+        job_dict["status"] = "ready"
+    else:
+        job_dict["status"] = "checking"
+    return job_dict
 
 
 def _load_job(job_id: str):
@@ -597,7 +643,7 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    cmd = ["omero", "import", "-k", session_key]
+    cmd = [OMERO_CLI, "import", "-k", session_key]
     if host:
         cmd.extend(["-s", host])
     if port:
@@ -869,10 +915,10 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
             entry.get("size", 0) for entry in job_dict.get("files", []) if entry.get("status") == "uploaded"
         )
         job_dict["uploaded_bytes"] = uploaded_bytes
-        pending_entries = any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
-        if not pending_entries:
-            job_dict["status"] = "checking"
+        compatibility_pending = _compatibility_pending_entries(job_dict)
+        if compatibility_pending and job_dict.get("compatibility_status") != "incompatible":
             job_dict["compatibility_status"] = "checking"
+        _refresh_job_status(job_dict)
         job_dict["updated"] = time.time()
         return job_dict
 
@@ -962,7 +1008,14 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {path.name}",
             "details": f"Missing staged file: {path.name}",
         }
-    cmd = ["omero", "import", "-f", str(path)]
+    cmd = [OMERO_CLI, "import", "--dry-run", "-f", "-k", session_key]
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    if dataset_id:
+        cmd.extend(["-d", str(dataset_id)])
+    cmd.append(str(path))
     try:
         result = subprocess.run(
             cmd,
@@ -1004,28 +1057,51 @@ def _run_compatibility_check(job_id: str):
             **job_dict,
             "compatibility_status": "error",
             "status": "awaiting_confirmation",
+            "compatibility_thread_active": False,
             "errors": job_dict.get("errors", []) + [errors.missing_omero_connection_details()],
             "updated": time.time(),
         })
         return
 
     upload_root = _get_upload_root() / job_id
-    entries = [entry for entry in job.get("files", []) if entry.get("status") == "uploaded"]
-    if not entries:
-        _update_job(job_id, lambda job_dict: {
-            **job_dict,
-            "compatibility_status": "compatible",
-            "status": "ready",
-            "updated": time.time(),
-        })
-        _start_import_thread(job_id)
+    pending_entries = [
+        (index, entry)
+        for index, entry in enumerate(job.get("files", []))
+        if entry.get("status") == "uploaded" and not entry.get("compatibility")
+    ]
+    if not pending_entries:
+        def mark_idle(job_dict):
+            job_dict["compatibility_thread_active"] = False
+            has_uploaded = any(entry.get("status") == "uploaded" for entry in job_dict.get("files", []))
+            if has_uploaded:
+                has_errors = any(
+                    entry.get("compatibility") == "error" for entry in job_dict.get("files", [])
+                )
+                if job_dict.get("incompatible_files"):
+                    job_dict["compatibility_status"] = "incompatible"
+                elif has_errors:
+                    job_dict["compatibility_status"] = "error"
+                else:
+                    job_dict["compatibility_status"] = "compatible"
+            else:
+                if job_dict.get("compatibility_status") not in ("incompatible", "error", "compatible"):
+                    job_dict["compatibility_status"] = "pending"
+            _refresh_job_status(job_dict)
+            job_dict["updated"] = time.time()
+            return job_dict
+
+        _update_job(job_id, mark_idle)
         return
 
-    max_workers = min(4, len(entries), os.cpu_count() or 2)
+    pending_entries.sort(key=lambda item: item[0])
+    batch_size = _resolve_job_batch_size(job)
+    entries_to_check = pending_entries[:batch_size]
+
+    max_workers = min(4, len(entries_to_check), os.cpu_count() or 2)
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {}
-        for entry in entries:
+        for entry_index, entry in entries_to_check:
             staged_path = entry.get("staged_path") or entry.get("relative_path")
             if not staged_path:
                 continue
@@ -1040,9 +1116,9 @@ def _run_compatibility_check(job_id: str):
                 file_path,
                 dataset_id,
             )
-            future_map[future] = entry
+            future_map[future] = (entry_index, entry)
         for future in as_completed(future_map):
-            entry = future_map[future]
+            entry_index, entry = future_map[future]
             try:
                 result = future.result()
             except Exception as exc:
@@ -1055,6 +1131,7 @@ def _run_compatibility_check(job_id: str):
                 }
             results.append(
                 {
+                    "index": entry_index,
                     "upload_id": entry.get("upload_id"),
                     "relative_path": entry.get("relative_path"),
                     "status": result.get("status"),
@@ -1062,23 +1139,19 @@ def _run_compatibility_check(job_id: str):
                 }
             )
 
-    incompatible = [
+    new_incompatible = [
         result["relative_path"]
         for result in results
         if result.get("status") == "incompatible" and result.get("relative_path")
     ]
-    check_errors = [
-        result
-        for result in results
-        if result.get("status") == "error" and result.get("relative_path")
-    ]
 
     def apply_results(job_dict):
-        entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
+        entries = job_dict.get("files", [])
         for result in results:
-            entry = entries_by_id.get(result.get("upload_id"))
-            if not entry:
+            entry_index = result.get("index")
+            if entry_index is None or entry_index >= len(entries):
                 continue
+            entry = entries[entry_index]
             status = result.get("status")
             if status == "compatible":
                 entry["compatibility"] = "compatible"
@@ -1092,33 +1165,47 @@ def _run_compatibility_check(job_id: str):
                 entry.setdefault("compatibility_errors", []).append(
                     result.get("details") or "Compatibility check failed."
                 )
-        job_dict["incompatible_files"] = incompatible
-        if incompatible:
+
+        existing_incompatible = set(job_dict.get("incompatible_files", []))
+        existing_incompatible.update(filter(None, new_incompatible))
+        job_dict["incompatible_files"] = sorted(existing_incompatible)
+
+        pending_after = _compatibility_pending_entries(job_dict)
+        has_errors = any(
+            entry.get("compatibility") == "error" for entry in job_dict.get("files", [])
+        )
+        if job_dict["incompatible_files"]:
             job_dict["compatibility_status"] = "incompatible"
-            job_dict["status"] = "awaiting_confirmation"
-        elif check_errors:
+        elif pending_after:
+            job_dict["compatibility_status"] = "checking"
+        elif has_errors:
             job_dict["compatibility_status"] = "error"
-            job_dict["status"] = "ready"
         else:
             job_dict["compatibility_status"] = "compatible"
-            job_dict["status"] = "ready"
+        job_dict["compatibility_thread_active"] = False
+        _refresh_job_status(job_dict)
         job_dict["updated"] = time.time()
         return job_dict
 
     updated_job = _update_job(job_id, apply_results)
-    if updated_job and updated_job.get("status") == "ready":
-        _start_import_thread(job_id)
+    if updated_job:
+        if _should_start_compatibility_check(updated_job):
+            _start_compatibility_check_thread(job_id)
+            return
+        if updated_job.get("status") == "ready":
+            _start_import_thread(job_id)
 
 
 def _start_compatibility_check_thread(job_id: str):
     started = {"value": False}
 
     def mark_started(job_dict):
-        if job_dict.get("compatibility_thread_started"):
+        if job_dict.get("compatibility_thread_active"):
             return job_dict
-        job_dict["compatibility_thread_started"] = True
-        job_dict["compatibility_status"] = "checking"
-        job_dict["status"] = "checking"
+        job_dict["compatibility_thread_active"] = True
+        if job_dict.get("compatibility_status") != "incompatible":
+            job_dict["compatibility_status"] = "checking"
+        _refresh_job_status(job_dict)
         job_dict["updated"] = time.time()
         started["value"] = True
         return job_dict
@@ -1230,13 +1317,7 @@ def _process_import_job(job_id: str):
 
             dataset_map = job.get("dataset_map") or {}
             orphan_dataset_name = job.get("orphan_dataset_name")
-            default_batch_size = _get_env_int(
-                UPLOAD_BATCH_FILES_ENV,
-                DEFAULT_UPLOAD_BATCH_FILES,
-                1,
-                50,
-            )
-            batch_size = _normalize_job_batch_size(job.get("job_batch_size"), default_batch_size)
+            batch_size = _resolve_job_batch_size(job)
             entries_to_import = []
             for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
@@ -1521,7 +1602,7 @@ def _start_upload(request, conn):
         "job_batch_size": batch_size,
         "compatibility_status": "pending",
         "incompatible_files": [],
-        "compatibility_thread_started": False,
+        "compatibility_thread_active": False,
         "compatibility_confirmed": False,
     }
     _save_job(job)
@@ -1628,10 +1709,10 @@ def _upload_files(request, job_id):
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state())
 
-    if updated_job["status"] == "checking":
+    if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
         logger.info("Upload job %s checking compatibility.", job_id)
-    elif updated_job["status"] == "ready":
+    if updated_job["status"] == "ready":
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", job_id)
 
