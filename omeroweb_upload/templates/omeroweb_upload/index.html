@@ -220,6 +220,7 @@
         }
         .project-select-input.is-collab {
             color: #065f46;
+            font-weight: 700;
         }
         .project-select-arrow {
             position: absolute;
@@ -281,7 +282,7 @@
             border: 1px solid #007bff;
             background: #e7f1ff;
             color: #1d4ed8;
-            font-size: 16px;
+            font-size: 20px;
             font-weight: 700;
             cursor: pointer;
             display: inline-flex;
@@ -1253,9 +1254,24 @@
         }
 
         function updateCollaborationVisibility() {
-            if (collaborationSection) {
-                collaborationSection.style.display = '';
+            const hasCollaborationOptions = Array.isArray(projectData?.collab) && projectData.collab.length > 0;
+            if (!collaborationSection) {
+                return hasCollaborationOptions;
             }
+            if (hasCollaborationOptions) {
+                collaborationSection.style.display = '';
+            } else {
+                collaborationSection.style.display = 'none';
+                if (storage) {
+                    try {
+                        storage.removeItem(collaborationToggleStorageKey);
+                    } catch (error) {
+                        // Ignore storage failures.
+                    }
+                }
+                applyCollaborationState(false, { persist: false, refresh: false });
+            }
+            return hasCollaborationOptions;
         }
 
         function getProjectLabel(projectId, projectName) {
@@ -3102,7 +3118,7 @@
         }
         applyUserSettings(loadUserSettings() || { uploadBatchFiles });
         const storedCollaborationState = loadCollaborationState();
-        if (storedCollaborationState !== null) {
+        if (storedCollaborationState !== null && updateCollaborationVisibility()) {
             applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
         }
         restoreProjectSelection();
