@@ -309,18 +309,20 @@
             z-index: 1001;
         }
         .project-refresh-btn {
-            width: 36px;
+            width: 40px;
             height: 40px;
             border-radius: 6px;
             border: 1px solid #007bff;
             background: #e7f1ff;
             color: #1d4ed8;
-            font-size: 30px;
+            font-size: 32px;
             font-weight: 700;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            padding: 0;
+            line-height: 1;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.1s ease;
         }
@@ -642,6 +644,18 @@
             height: 250px;
             overflow-y: auto;
             font-size: 0.85rem;
+        }
+        .import-log-label {
+            font-weight: 600;
+        }
+        .import-log-label--success {
+            color: #86efac;
+        }
+        .import-log-label--failure {
+            color: #fca5a5;
+        }
+        .import-log-rest {
+            color: #e2e8f0;
         }
         .duplicate-overlay {
             position: fixed;
@@ -2748,6 +2762,34 @@
             await Promise.all(workers);
         }
 
+        function escapeHtml(value) {
+            return value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatImportLogEntry(entry) {
+            const rawEntry = String(entry ?? '');
+            const successMatch = rawEntry.match(/^Import success(?:\s*:)?\s*(.*)$/);
+            if (successMatch) {
+                const detail = successMatch[1] ? escapeHtml(successMatch[1].trim()) : '';
+                const rest = detail ? `: ${detail}` : ':';
+                return `<span class="import-log-label import-log-label--success">Import success</span>` +
+                    `<span class="import-log-rest">${escapeHtml(rest)}</span>`;
+            }
+            const failureMatch = rawEntry.match(/^Import failure(?:\s*:)?\s*(.*)$/);
+            if (failureMatch) {
+                const detail = failureMatch[1] ? escapeHtml(failureMatch[1].trim()) : '';
+                const rest = detail ? `: ${detail}` : ':';
+                return `<span class="import-log-label import-log-label--failure">Import failure</span>` +
+                    `<span class="import-log-rest">${escapeHtml(rest)}</span>`;
+            }
+            return escapeHtml(rawEntry);
+        }
+
         function updateImportLog(entries) {
             if (!entries || !entries.length) {
                 return;
@@ -2757,7 +2799,8 @@
             if (entries.length > maxLines) {
                 importLogEntries.splice(0, importLogEntries.length - maxLines);
             }
-            progressLog.textContent = trimmed.join('\n');
+            const formatted = trimmed.map((entry) => formatImportLogEntry(entry));
+            progressLog.innerHTML = formatted.join('\n');
         }
 
         function persistImportState() {
