@@ -1008,7 +1008,7 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {path.name}",
             "details": f"Missing staged file: {path.name}",
         }
-    cmd = [OMERO_CLI, "import", "--dry-run", "-f", "-k", session_key]
+    cmd = [OMERO_CLI, "import", "-f", "-k", session_key]
     if host:
         cmd.extend(["-s", host])
     if port:
@@ -1030,16 +1030,31 @@ def _check_import_compatibility(
             "stderr": str(exc),
             "details": str(exc),
         }
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    
     candidates = _extract_import_candidates(result.stdout)
-    if status == "compatible" and not candidates:
-        status = "incompatible"
-        details = details or "No importable files found."
+    
+    if result.returncode != 0:
+        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+        return {
+            "status": status,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "details": details,
+        }
+    
+    if not candidates:
+        return {
+            "status": "incompatible",
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "details": "No importable files found.",
+        }
+    
     return {
-        "status": status,
+        "status": "compatible",
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": details,
+        "details": f"Found {len(candidates)} importable file(s).",
     }
 
 
