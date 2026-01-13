@@ -1008,14 +1008,7 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {path.name}",
             "details": f"Missing staged file: {path.name}",
         }
-    cmd = [OMERO_CLI, "import", "-f", "-k", session_key]
-    if host:
-        cmd.extend(["-s", host])
-    if port:
-        cmd.extend(["-p", str(port)])
-    if dataset_id:
-        cmd.extend(["-d", str(dataset_id)])
-    cmd.append(str(path))
+    cmd = [OMERO_CLI, "import", "-f", str(path)]
     try:
         result = subprocess.run(
             cmd,
