@@ -51,7 +51,8 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 16px;
+            width: 520px;
+            margin: 0 auto 16px;
         }
         .admin-tools-title {
             margin: 0;
@@ -105,7 +106,12 @@
         .admin-tools-button:hover {
             background: #c7ced6;
         }
-        .gear-btn {
+        .admin-tools-header-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .icon-btn {
             width: 26px;
             height: 26px;
             border-radius: 13px;
@@ -122,12 +128,12 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.2s ease;
         }
-        .gear-btn:hover {
+        .icon-btn:hover {
             background: #d0e7ff;
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
-        .gear-btn:active {
+        .icon-btn:active {
             transform: translateY(1px);
             box-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
@@ -169,23 +175,32 @@
     <div class="admin-tools-page">
         <div class="admin-tools-header">
             <h1 class="admin-tools-title">Admin tools</h1>
-            <div style="position:relative;">
-                <button type="button"
-                        id="settings_menu_btn"
-                        class="gear-btn"
-                        title="Settings"
-                        aria-label="Settings">
-                    ⚙
-                </button>
-                <div id="settings_menu"
-                     class="settings-menu"
-                     style="display:none;">
+            <div class="admin-tools-header-actions">
+                <div style="position:relative;">
                     <button type="button"
-                            id="admin_settings_btn"
-                            class="settings-menu-item">
-                        Admin settings
+                            id="settings_menu_btn"
+                            class="icon-btn"
+                            title="Settings"
+                            aria-label="Settings">
+                        ⚙
                     </button>
+                    <div id="settings_menu"
+                         class="settings-menu"
+                         style="display:none;">
+                        <button type="button"
+                                id="admin_settings_btn"
+                                class="settings-menu-item">
+                            Admin settings
+                        </button>
+                    </div>
                 </div>
+                <button type="button"
+                        id="help_btn"
+                        class="icon-btn"
+                        title="Help"
+                        aria-label="Help">
+                    ?
+                </button>
             </div>
         </div>
         <div class="admin-tools-card">
