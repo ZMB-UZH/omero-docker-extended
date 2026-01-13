@@ -3326,15 +3326,6 @@
 
             let job = null;
             let uploadedFiles = [];
-
-            setUploadingState(true, 'UPLOADING');
-            cancelUploadRequested = false;
-            setStatus('');
-            uploadTotalBytes = getPendingTotalBytes();
-            updateUploadOverlayProgress();
-
-            let job = null;
-            let uploadedFiles = [];
             try {
                 job = await startUploadJob();
                 uploadTotalBytes = job.totalBytes || uploadTotalBytes;
