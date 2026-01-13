@@ -3291,23 +3291,6 @@
                 setStatus('');
             }
 
-        uploadBtn.addEventListener('click', async () => {
-            if (isUploading) {
-                return;
-            }
-            if (!pendingFiles.length) {
-                setStatus('Please choose folders or files first.', 'error');
-                return;
-            }
-            if (!uploadEnabled) {
-                setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
-                return;
-            }
-            if (!hasActiveImport()) {
-                clearImportState();
-                setStatus('');
-            }
-
             if (window.pendingImportJob) {
                 const job = window.pendingImportJob;
                 delete window.pendingImportJob;
