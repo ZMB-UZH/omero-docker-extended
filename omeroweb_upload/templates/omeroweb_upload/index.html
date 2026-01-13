@@ -1065,6 +1065,7 @@
         const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
         const collaborationToggle = document.getElementById('collaboration_toggle');
         const projectRefreshBtn = document.getElementById('project_refresh_btn');
+        const collaborationSection = document.querySelector('.upload-utilities__collaboration');
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_PROJECT_RESULTS = 20;
         let projectFilterTimeout = null;
@@ -1229,9 +1230,20 @@
         }
 
         projectData = normalizeProjectData(projectData);
+        updateCollaborationVisibility();
 
         function isCollaborationEnabled() {
             return !!collaborationToggle?.checked;
+        }
+
+        function updateCollaborationVisibility() {
+            const hasCollab = Array.isArray(projectData?.collab) && projectData.collab.length > 0;
+            if (collaborationSection) {
+                collaborationSection.style.display = hasCollab ? '' : 'none';
+            }
+            if (!hasCollab && collaborationToggle) {
+                collaborationToggle.checked = false;
+            }
         }
 
         function getProjectLabel(projectId, projectName) {
@@ -1531,6 +1543,7 @@
 
         function updateProjectData(data) {
             projectData = normalizeProjectData(data);
+            updateCollaborationVisibility();
             syncProjectSelectionWithMode();
             if (projectSelectDropdown?.style.display === 'block') {
                 renderProjectOptions(projectSelectInput?.value || '');
