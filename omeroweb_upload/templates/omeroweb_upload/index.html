@@ -2819,7 +2819,7 @@
             return data;
         }
 
-        async function ensureCompatibilityBeforeImport(job) {
+        async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
             }
@@ -3291,12 +3291,13 @@
             updateUploadOverlayProgress();
 
             let job = null;
+            let uploadedFiles = [];
             try {
                 job = await startUploadJob();
                 uploadTotalBytes = job.totalBytes || uploadTotalBytes;
                 updateUploadOverlayProgress();
                 await uploadFiles(job.upload_url);
-                const uploadedFiles = [...pendingFiles];
+                uploadedFiles = [...pendingFiles];
                 pendingFiles = [];
                 expandedNodes.clear();
                 fileInput.value = '';
@@ -3316,7 +3317,7 @@
             if (job) {
                 setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
                 try {
-                    const compatibilityResult = await ensureCompatibilityBeforeImport(job);
+                    const compatibilityResult = await ensureCompatibilityBeforeImport(job, uploadedFiles);
                     if (compatibilityResult.proceed) {
                         registerImportJob(job);
                         setStatus(
