@@ -382,6 +382,13 @@ def _get_owner_username(obj):
 def _has_read_write_permissions(obj):
     if obj is None:
         return False
+    for attr in ("canEdit", "canWrite"):
+        checker = getattr(obj, attr, None)
+        if callable(checker):
+            try:
+                return bool(checker())
+            except Exception:
+                continue
     try:
         details = obj.getDetails()
         permissions = details.getPermissions() if details else None
@@ -393,12 +400,21 @@ def _has_read_write_permissions(obj):
 
 
 def _iter_accessible_projects(conn):
-    try:
-        for proj in conn.getObjects("Project"):
-            yield proj
+    if conn is None:
         return
-    except Exception:
-        pass
+    for opts in ({"load_excess": True, "group": "-1"}, {"load_excess": True}, None):
+        try:
+            iterator = conn.getObjects("Project", opts=opts) if opts else conn.getObjects("Project")
+        except Exception:
+            continue
+        if iterator is None:
+            continue
+        try:
+            for proj in iterator:
+                yield proj
+            return
+        except Exception:
+            continue
     try:
         for proj in conn.listProjects():
             yield proj
