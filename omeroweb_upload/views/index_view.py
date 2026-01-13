@@ -274,7 +274,9 @@ def _refresh_job_status(job_dict):
     compatibility_status = job_dict.get("compatibility_status")
     if compatibility_status == "incompatible":
         job_dict["status"] = "awaiting_confirmation"
-    elif compatibility_status in ("compatible", "error"):
+    elif compatibility_status == "error":
+        job_dict["status"] = "awaiting_confirmation"
+    elif compatibility_status == "compatible":
         job_dict["status"] = "ready"
     else:
         job_dict["status"] = "checking"
