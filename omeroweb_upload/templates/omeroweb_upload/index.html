@@ -716,6 +716,32 @@
             position: relative;
             z-index: 1001;
         }
+        .upload-utilities__center {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .upload-utilities__compatibility {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .upload-utilities__compatibility input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: #2563eb;
+            cursor: pointer;
+        }
+        .upload-utilities__compatibility label {
+            cursor: pointer;
+            user-select: none;
+        }
         .upload-utilities__collaboration {
             display: flex;
             align-items: center;
@@ -941,9 +967,15 @@
         <p class="upload-intro">All orphan files in base path will be imported into a dataset named "Orphaned_images_base_path_import" with a random suffix.</p>
         <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
         <div class="upload-utilities">
-            <div class="upload-utilities__collaboration">
-                <input type="checkbox" id="collaboration_toggle">
-                <label for="collaboration_toggle">Collaboration</label>
+            <div class="upload-utilities__center">
+                <div class="upload-utilities__collaboration">
+                    <input type="checkbox" id="collaboration_toggle">
+                    <label for="collaboration_toggle">Collaboration</label>
+                </div>
+                <div class="upload-utilities__compatibility">
+                    <input type="checkbox" id="compatibility_toggle" checked>
+                    <label for="compatibility_toggle">Compatibility check</label>
+                </div>
             </div>
             <div class="upload-utilities__actions">
                 <button type="button"
