@@ -3170,8 +3170,9 @@
             uploadTotalBytes = getPendingTotalBytes();
             updateUploadOverlayProgress();
 
+            let job = null;
             try {
-                const job = await startUploadJob();
+                job = await startUploadJob();
                 uploadTotalBytes = job.totalBytes || uploadTotalBytes;
                 updateUploadOverlayProgress();
                 await uploadFiles(job.upload_url);
@@ -3180,14 +3181,6 @@
                 fileInput.value = '';
                 folderInput.value = '';
                 refreshFileList();
-                const compatibilityResult = await ensureCompatibilityBeforeImport(job);
-                if (compatibilityResult.proceed) {
-                    registerImportJob(job);
-                    setStatus(
-                        'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
-                        'success'
-                    );
-                }
             } catch (error) {
                 if (cancelUploadRequested) {
                     setStatus('Upload canceled. You can start a new upload when ready.', 'success');
@@ -3197,6 +3190,21 @@
             } finally {
                 setUploadingState(false);
                 cancelUploadRequested = false;
+            }
+            
+            if (job) {
+                try {
+                    const compatibilityResult = await ensureCompatibilityBeforeImport(job);
+                    if (compatibilityResult.proceed) {
+                        registerImportJob(job);
+                        setStatus(
+                            'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
+                            'success'
+                        );
+                    }
+                } catch (error) {
+                    setStatus(`Compatibility check failed: ${error.message || error}`, 'error');
+                }
             }
         });
 
