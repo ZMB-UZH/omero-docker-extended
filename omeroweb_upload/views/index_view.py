@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import os
@@ -1013,6 +1014,8 @@ def _check_import_compatibility(
             "details": f"Missing staged file: {path.name}",
         }
     cmd = [OMERO_CLI, "import", "-f", str(path)]
+    env = os.environ.copy()
+    env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
     try:
         result = subprocess.run(
             cmd,
@@ -1020,6 +1023,7 @@ def _check_import_compatibility(
             text=True,
             check=False,
             timeout=30,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return {
