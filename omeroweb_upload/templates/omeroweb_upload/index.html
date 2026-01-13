@@ -551,6 +551,12 @@
             font-size: 0.85rem;
             color: #64748b;
         }
+        .tree-item.is-incompatible .tree-item__name,
+        .tree-item.is-incompatible .tree-item__size,
+        .tree-item.is-incompatible .tree-item__date {
+            color: #dc2626;
+            text-decoration: underline;
+        }
         .tree-size {
             color: #334155;
             font-variant-numeric: tabular-nums;
@@ -2321,6 +2327,10 @@
                     const row = document.createElement('div');
                     row.classList.add('tree-row');
                     row.style.setProperty('--depth', depth);
+                    
+                    if (file.entry?.isIncompatible) {
+                        row.classList.add('is-incompatible');
+                    }
 
                     const nameCell = document.createElement('div');
                     nameCell.classList.add('tree-name-cell');
@@ -2780,7 +2790,7 @@
                     if (total > 0) {
                         const percent = Math.min(100, Math.floor((checked / total) * 100));
                         if (uploadOverlay) {
-                            uploadOverlay.textContent = `CHECKING COMPATIBILITY (${percent}%)`;
+                            uploadOverlay.textContent = 'UPLOADED. CHECKING COMPATIBILITY...';
                         }
                     }
                 }
@@ -2816,14 +2826,23 @@
             const statusData = await waitForCompatibility(job);
             if (statusData.confirmation_required) {
                 const proceed = await showCompatibilityPopup(
-                    'Incompatible file(s) found. Do you still want to continue with the upload (suggested: No).'
+                    'Incompatible file(s) found. Do you still want to continue with the upload (SUGGESTED: No).'
                 );
                 if (!proceed) {
+                    pendingFiles = uploadedFiles;
+                    const incompatibleSet = new Set(statusData.incompatible_files || []);
+                    pendingFiles.forEach(entry => {
+                        const path = entry.relativePath || entry.file.name;
+                        if (incompatibleSet.has(path)) {
+                            entry.isIncompatible = true;
+                        }
+                    });
+                    refreshFileList();
                     setStatus(
-                        'Upload complete. Import paused because incompatible files were detected.',
-                        'success'
+                        'Upload complete. Import halted because incompatible files were detected. Please review.',
+                        'error'
                     );
-                    return { proceed: false, status: statusData };
+                    return { proceed: false, status: statusData, uploadedFiles };
                 }
                 await confirmCompatibility(job);
             }
@@ -3277,6 +3296,7 @@
                 uploadTotalBytes = job.totalBytes || uploadTotalBytes;
                 updateUploadOverlayProgress();
                 await uploadFiles(job.upload_url);
+                const uploadedFiles = [...pendingFiles];
                 pendingFiles = [];
                 expandedNodes.clear();
                 fileInput.value = '';
@@ -3294,7 +3314,7 @@
             }
             
             if (job) {
-                setUploadingState(true, 'CHECKING COMPATIBILITY');
+                setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
                 try {
                     const compatibilityResult = await ensureCompatibilityBeforeImport(job);
                     if (compatibilityResult.proceed) {
