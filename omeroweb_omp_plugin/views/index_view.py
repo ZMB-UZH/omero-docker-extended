@@ -31,6 +31,60 @@ from ..constants import (
 logger = logging.getLogger(__name__)
 
 
+def _get_owner_id(obj):
+    if obj is None:
+        return None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    try:
+        owner = obj.getOwner()
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    return None
+
+
+def _current_user_id(conn):
+    try:
+        user = conn.getUser()
+        if user is not None:
+            uid = user.getId()
+            return uid.getValue() if hasattr(uid, "getValue") else uid
+    except Exception:
+        return None
+    return None
+
+
+def _is_owned_by_user(obj, user_id):
+    if obj is None or user_id is None:
+        return False
+    owner_id = _get_owner_id(obj)
+    if owner_id is None:
+        return False
+    try:
+        return int(owner_id) == int(user_id)
+    except Exception:
+        return False
+
+
+def _get_owned_project(conn, project_id, user_id):
+    try:
+        project = conn.getObject("Project", int(project_id))
+    except Exception:
+        project = None
+    if project is None or not _is_owned_by_user(project, user_id):
+        return None
+    return project
+
+
 def _suggest_separator_regex(filenames):
     return suggest_separator_regex(filenames)
 
@@ -45,6 +99,7 @@ def index(request, conn=None, url=None, **kwargs):
     try:
         username = current_username(request, conn)
         is_root_user = username == "root"
+        user_id = _current_user_id(conn)
 
         def build_index_context(extra=None):
             context = {
@@ -69,7 +124,8 @@ def index(request, conn=None, url=None, **kwargs):
             for proj in conn.listProjects():
                 pid = get_id(proj)
                 pname = get_text(proj.getName())
-                projects.append((str(pid), pname))
+                if _is_owned_by_user(proj, user_id):
+                    projects.append((str(pid), pname))
         except Exception as e:
             logger.exception("Error listing projects: %s", e)
 
@@ -81,8 +137,14 @@ def index(request, conn=None, url=None, **kwargs):
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
 
+            if user_id is None:
+                return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+
+            if _get_owned_project(conn, project_id, user_id) is None:
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
+
             # NO RATE LIMIT - just listing datasets
-            dataset_rows = collect_dataset_summaries(conn, project_id)
+            dataset_rows = collect_dataset_summaries(conn, project_id, owner_id=user_id)
             dataset_rows = sorted(
                 dataset_rows,
                 key=lambda row: (row.get("name") or "").casefold(),
@@ -96,6 +158,10 @@ def index(request, conn=None, url=None, **kwargs):
             model = (request.POST.get("model") or "").strip()
 
             if not project_id:
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
+            if user_id is None:
+                return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+            if _get_owned_project(conn, project_id, user_id) is None:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
 
             if not selected_dataset_ids_raw.strip():
@@ -126,6 +192,7 @@ def index(request, conn=None, url=None, **kwargs):
                 project_id,
                 selected_dataset_ids,
                 limit=200,
+                owner_id=user_id,
             )
 
             filenames = []
@@ -188,6 +255,10 @@ def index(request, conn=None, url=None, **kwargs):
 
             if not project_id:
                 return JsonResponse({"error": errors.select_project_first()}, status=400)
+            if user_id is None:
+                return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+            if _get_owned_project(conn, project_id, user_id) is None:
+                return JsonResponse({"error": errors.select_project_first()}, status=400)
             if not selected_dataset_ids_raw.strip():
                 return JsonResponse({"error": errors.datasets_required()}, status=400)
 
@@ -213,6 +284,7 @@ def index(request, conn=None, url=None, **kwargs):
                 project_id,
                 selected_dataset_ids,
                 limit=200,
+                owner_id=user_id,
             )
             filenames = []
             image_ids = []
@@ -310,6 +382,28 @@ def index(request, conn=None, url=None, **kwargs):
                         }
                     ),
                 )
+            if user_id is None:
+                return render(
+                    request,
+                    "omeroweb_omp_plugin/index.html",
+                    build_index_context(
+                        {
+                            "error_message": errors.unable_to_determine_username(),
+                        }
+                    ),
+                )
+
+            owned_project = _get_owned_project(conn, project_id, user_id)
+            if owned_project is None:
+                return render(
+                    request,
+                    "omeroweb_omp_plugin/index.html",
+                    build_index_context(
+                        {
+                            "error_message": errors.select_project_first(),
+                        }
+                    ),
+                )
 
             if separator_mode != "ai_parse" and (not raw_seps or not raw_seps.strip()):
                 return render(
@@ -333,14 +427,7 @@ def index(request, conn=None, url=None, **kwargs):
                     ),
                 )
 
-            try:
-                prj = conn.getObject("Project", int(project_id))
-                if prj:
-                    project_label = f"{get_text(prj.getName())} (ID {project_id})"
-                else:
-                    project_label = f"ID {project_id}"
-            except Exception:
-                project_label = f"ID {project_id}"
+            project_label = f"{get_text(owned_project.getName())} (ID {project_id})"
 
             ai_parsed_map = None
             sep_pattern = None
@@ -439,6 +526,7 @@ def index(request, conn=None, url=None, **kwargs):
                 project_id,
                 selected_dataset_ids,
                 limit=50,
+                owner_id=user_id,
             )
 
             total_images = sum(len(images) for _, images in ds_list)

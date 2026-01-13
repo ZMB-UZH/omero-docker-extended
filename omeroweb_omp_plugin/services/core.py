@@ -65,6 +65,39 @@ def get_id(obj):
     except (AttributeError, Exception):
         return None
 
+
+def _get_owner_id(obj):
+    if obj is None:
+        return None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    try:
+        owner = obj.getOwner()
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    return None
+
+
+def _is_owned_by_user(obj, owner_id):
+    if owner_id is None:
+        return True
+    obj_owner_id = _get_owner_id(obj)
+    if obj_owner_id is None:
+        return False
+    try:
+        return int(obj_owner_id) == int(owner_id)
+    except Exception:
+        return False
+
 def fetch_images_by_ids(conn, image_ids):
     if not image_ids:
         return {}
@@ -385,7 +418,7 @@ def find_map_annotation_ids(conn, image_id):
 # --------------------------------------------------------------------------
 # DATASET-FIRST + IMAGE-ID-SORTED COLLECTION
 # --------------------------------------------------------------------------
-def collect_images_by_dataset_sorted(conn, project_id, limit=None):
+def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None):
     """
     Returns:
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
@@ -400,6 +433,8 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None):
             return out
 
         for ds in prj.listChildren():   # dataset order preserved
+            if not _is_owned_by_user(ds, owner_id):
+                continue
             imgs = list(ds.listChildren())
             # sort by numeric ID
             imgs_sorted = sorted(
@@ -424,7 +459,7 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None):
 # --------------------------------------------------------------------------
 # DATASET-SELECTION COLLECTION
 # --------------------------------------------------------------------------
-def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=None):
+def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=None, owner_id=None):
     """
     Returns:
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
@@ -449,6 +484,8 @@ def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=Non
             return out
 
         for ds in prj.listChildren():
+            if not _is_owned_by_user(ds, owner_id):
+                continue
             ds_id = get_id(ds)
             if ds_id is None:
                 continue
@@ -479,7 +516,7 @@ def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=Non
     return out
 
 
-def collect_dataset_summaries(conn, project_id):
+def collect_dataset_summaries(conn, project_id, owner_id=None):
     """
     Returns list of dataset summaries for a project.
     Each summary includes the Bio-Formats reader name.
@@ -614,6 +651,8 @@ def collect_dataset_summaries(conn, project_id):
             return summaries
 
         for ds in prj.listChildren():
+            if not _is_owned_by_user(ds, owner_id):
+                continue
             ds_id = get_id(ds)
             ds_name = get_text(ds.getName())
             try:

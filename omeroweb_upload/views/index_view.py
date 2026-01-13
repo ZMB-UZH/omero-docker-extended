@@ -307,6 +307,50 @@ def _get_id(obj):
         return None
 
 
+def _get_owner_id(obj):
+    if obj is None:
+        return None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    try:
+        owner = obj.getOwner()
+        if owner is not None:
+            oid = owner.getId()
+            return oid.getValue() if hasattr(oid, "getValue") else oid
+    except Exception:
+        pass
+    return None
+
+
+def _current_user_id(conn):
+    try:
+        user = conn.getUser()
+        if user is not None:
+            uid = user.getId()
+            return uid.getValue() if hasattr(uid, "getValue") else uid
+    except Exception:
+        return None
+    return None
+
+
+def _is_owned_by_user(obj, user_id):
+    if obj is None or user_id is None:
+        return False
+    owner_id = _get_owner_id(obj)
+    if owner_id is None:
+        return False
+    try:
+        return int(owner_id) == int(user_id)
+    except Exception:
+        return False
+
+
 def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
     parts = PurePosixPath(relative_path).parts
     if len(parts) <= 1:
@@ -938,6 +982,7 @@ def index(request, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     username = current_username(request, conn)
     is_root_user = username == "root"
+    user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
     job_dir_ok = _ensure_dir(_get_jobs_root())
@@ -948,7 +993,7 @@ def index(request, conn=None, url=None, **kwargs):
         for proj in conn.listProjects():
             pid = _get_id(proj)
             pname = _get_text(proj.getName())
-            if pid is not None:
+            if pid is not None and _is_owned_by_user(proj, user_id):
                 projects.append((str(pid), pname))
     except Exception as exc:
         logger.exception("Error listing projects: %s", exc)
@@ -1003,7 +1048,7 @@ def _start_upload(request, conn):
             project = conn.getObject("Project", project_id)
         except Exception:
             project = None
-        if project is None:
+        if project is None or not _is_owned_by_user(project, _current_user_id(conn)):
             return json_error(errors.invalid_project_selection(), status=400)
         project_name = _get_text(project.getName())
 
