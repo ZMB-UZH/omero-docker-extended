@@ -871,7 +871,8 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
         job_dict["uploaded_bytes"] = uploaded_bytes
         pending_entries = any(entry.get("status") == "pending" for entry in job_dict.get("files", []))
         if not pending_entries:
-            job_dict["status"] = "ready"
+            job_dict["status"] = "checking"
+            job_dict["compatibility_status"] = "checking"
         job_dict["updated"] = time.time()
         return job_dict
 
@@ -892,6 +893,157 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
     job_dict = apply_updates(job_dict)
     _save_job(job_dict)
     return job_dict
+
+
+def _update_job(job_id: str, update_fn):
+    path = _job_path(job_id)
+    try:
+        with portalocker.Lock(path, "r+", timeout=5) as handle:
+            job_dict = json.load(handle)
+            job_dict = update_fn(job_dict)
+            handle.seek(0)
+            handle.truncate()
+            json.dump(job_dict, handle)
+        return job_dict
+    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to lock job file %s for update: %s", path, exc)
+
+    job_dict = _load_job(job_id)
+    if not job_dict:
+        return None
+    job_dict = update_fn(job_dict)
+    _save_job(job_dict)
+    return job_dict
+
+
+def _check_import_compatibility(session_key: str, host: str, port: int, path: Path):
+    if not path.exists():
+        return False, "", f"Missing staged file: {path.name}"
+    cmd = ["omero", "import", "--dry-run", "-k", session_key]
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    cmd.append(str(path))
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0, result.stdout, result.stderr
+
+
+def _run_compatibility_check(job_id: str):
+    job = _load_job(job_id)
+    if not job:
+        return
+
+    session_key = job.get("session_key")
+    host = job.get("host")
+    port = job.get("port")
+    if not session_key or not host or not port:
+        logger.warning("Compatibility check missing Omero connection details for job %s.", job_id)
+        _update_job(job_id, lambda job_dict: {
+            **job_dict,
+            "compatibility_status": "error",
+            "status": "awaiting_confirmation",
+            "errors": job_dict.get("errors", []) + [errors.missing_omero_connection_details()],
+            "updated": time.time(),
+        })
+        return
+
+    upload_root = _get_upload_root() / job_id
+    entries = [entry for entry in job.get("files", []) if entry.get("status") == "uploaded"]
+    if not entries:
+        _update_job(job_id, lambda job_dict: {
+            **job_dict,
+            "compatibility_status": "compatible",
+            "status": "ready",
+            "updated": time.time(),
+        })
+        _start_import_thread(job_id)
+        return
+
+    max_workers = min(4, len(entries), os.cpu_count() or 2)
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {}
+        for entry in entries:
+            staged_path = entry.get("staged_path") or entry.get("relative_path")
+            if not staged_path:
+                continue
+            file_path = upload_root / staged_path
+            future = executor.submit(
+                _check_import_compatibility,
+                session_key,
+                host,
+                port,
+                file_path,
+            )
+            future_map[future] = entry
+        for future in as_completed(future_map):
+            entry = future_map[future]
+            try:
+                success, stdout, stderr = future.result()
+            except Exception as exc:
+                logger.warning("Compatibility check failed for %s: %s", entry.get("relative_path"), exc)
+                success = False
+                stdout = ""
+                stderr = str(exc)
+            results.append(
+                {
+                    "upload_id": entry.get("upload_id"),
+                    "relative_path": entry.get("relative_path"),
+                    "success": success,
+                    "details": (stderr or stdout or "").strip(),
+                }
+            )
+
+    incompatible = [
+        result["relative_path"]
+        for result in results
+        if not result["success"] and result.get("relative_path")
+    ]
+
+    def apply_results(job_dict):
+        entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
+        for result in results:
+            entry = entries_by_id.get(result.get("upload_id"))
+            if not entry:
+                continue
+            entry["compatibility"] = "compatible" if result["success"] else "incompatible"
+            if not result["success"]:
+                entry.setdefault("compatibility_errors", []).append(result.get("details") or "Import check failed.")
+        job_dict["incompatible_files"] = incompatible
+        job_dict["compatibility_status"] = "incompatible" if incompatible else "compatible"
+        job_dict["status"] = "awaiting_confirmation" if incompatible else "ready"
+        job_dict["updated"] = time.time()
+        return job_dict
+
+    updated_job = _update_job(job_id, apply_results)
+    if updated_job and updated_job.get("status") == "ready":
+        _start_import_thread(job_id)
+
+
+def _start_compatibility_check_thread(job_id: str):
+    started = {"value": False}
+
+    def mark_started(job_dict):
+        if job_dict.get("compatibility_thread_started"):
+            return job_dict
+        job_dict["compatibility_thread_started"] = True
+        job_dict["compatibility_status"] = "checking"
+        job_dict["status"] = "checking"
+        job_dict["updated"] = time.time()
+        started["value"] = True
+        return job_dict
+
+    job = _update_job(job_id, mark_started)
+    if not job or not started["value"]:
+        return
+    worker = threading.Thread(target=_run_compatibility_check, args=(job_id,), daemon=True)
+    worker.start()
 
 
 def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, orphan_dataset_name):
@@ -1283,6 +1435,10 @@ def _start_upload(request, conn):
         "messages": [],
         "import_thread_started": False,
         "job_batch_size": batch_size,
+        "compatibility_status": "pending",
+        "incompatible_files": [],
+        "compatibility_thread_started": False,
+        "compatibility_confirmed": False,
     }
     _save_job(job)
     logger.info(
@@ -1300,6 +1456,7 @@ def _start_upload(request, conn):
             "upload_url": reverse("omeroweb_upload_files", kwargs={"job_id": job_id}),
             "import_step_url": reverse("omeroweb_upload_import_step", kwargs={"job_id": job_id}),
             "status_url": reverse("omeroweb_upload_status", kwargs={"job_id": job_id}),
+            "confirm_url": reverse("omeroweb_upload_confirm", kwargs={"job_id": job_id}),
         }
     )
 
@@ -1387,7 +1544,10 @@ def _upload_files(request, job_id):
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state())
 
-    if updated_job["status"] == "ready":
+    if updated_job["status"] == "checking":
+        _start_compatibility_check_thread(job_id)
+        logger.info("Upload job %s checking compatibility.", job_id)
+    elif updated_job["status"] == "ready":
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", job_id)
 
@@ -1440,6 +1600,28 @@ def _import_step(request, job_id):
 
 
 @login_required()
+def confirm_import(request, job_id, conn=None, url=None, **kwargs):
+    _cleanup_upload_artifacts()
+    if request.method != "POST":
+        return json_error(errors.method_post_required())
+
+    job = _load_job(job_id)
+    if not job:
+        return json_error(errors.upload_job_not_found())
+
+    if job.get("status") != "awaiting_confirmation":
+        return JsonResponse({"ok": True, "status": job.get("status")})
+
+    job["compatibility_confirmed"] = True
+    job["status"] = "ready"
+    job["updated"] = time.time()
+    _save_job(job)
+    _start_import_thread(job_id)
+
+    return JsonResponse({"ok": True, "status": "ready"})
+
+
+@login_required()
 def job_status(request, job_id, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     job = _load_job(job_id)
@@ -1455,5 +1637,8 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "total_bytes": job.get("total_bytes", 0),
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
+            "compatibility_status": job.get("compatibility_status"),
+            "incompatible_files": job.get("incompatible_files", []),
+            "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
     )
