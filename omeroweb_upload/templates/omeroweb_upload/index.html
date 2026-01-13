@@ -1276,6 +1276,21 @@
             updateCancelButtons();
         }
 
+        function updateCompatibilityOverlayProgress() {
+            if (!uploadOverlay || !isUploading) {
+                return;
+            }
+            const job = Array.from(importJobs.values())[0];
+            if (!job) return;
+            
+            const checked = job.compatibility_checked || 0;
+            const total = job.compatibility_total || 0;
+            if (total === 0) return;
+            
+            const percent = Math.min(100, Math.floor((checked / total) * 100));
+            uploadOverlay.textContent = `CHECKING COMPATIBILITY (${percent}%)`;
+        }
+
         function updateUploadButtonLabel() {
             uploadBtn.textContent = hasActiveImport() ? 'Upload & append to Import' : 'Upload & Import';
         }
@@ -2720,10 +2735,22 @@
             if (!job?.status_url) {
                 return { confirmation_required: false, compatibility_status: 'compatible', status: 'ready' };
             }
-            const maxAttempts = 300; // 300 * 800ms = 4 minutes max
+            const maxAttempts = 300;
             let attempts = 0;
             while (attempts < maxAttempts) {
                 const data = await fetchJobStatus(job);
+                
+                if (data.compatibility_checked !== undefined && data.compatibility_total !== undefined) {
+                    const checked = data.compatibility_checked || 0;
+                    const total = data.compatibility_total || 0;
+                    if (total > 0) {
+                        const percent = Math.min(100, Math.floor((checked / total) * 100));
+                        if (uploadOverlay) {
+                            uploadOverlay.textContent = `CHECKING COMPATIBILITY (${percent}%)`;
+                        }
+                    }
+                }
+                
                 const compatibilityStatus = data.compatibility_status || data.status;
                 if (compatibilityStatus === 'checking' || compatibilityStatus === 'pending') {
                     await delay(800);
