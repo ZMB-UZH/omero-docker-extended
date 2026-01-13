@@ -392,11 +392,25 @@ def _has_read_write_permissions(obj):
     return False
 
 
+def _iter_accessible_projects(conn):
+    try:
+        for proj in conn.getObjects("Project"):
+            yield proj
+        return
+    except Exception:
+        pass
+    try:
+        for proj in conn.listProjects():
+            yield proj
+    except Exception:
+        return
+
+
 def _collect_project_payload(conn, user_id):
     owned_projects = []
     collab_projects = []
     try:
-        for proj in conn.listProjects():
+        for proj in _iter_accessible_projects(conn):
             pid = _get_id(proj)
             pname = _get_text(proj.getName())
             if pid is None:
