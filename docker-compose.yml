@@ -97,7 +97,7 @@ services:
       OMERO_WEB_VENV: venv-3.12 # ATTENTION!!! This needs to be updated to the correct venv when the developers update Omero Web
       # Configure Django to use Redis for rate limiting
       CONFIG_omero_web_caches: '{"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1", "KEY_PREFIX": "omero", "TIMEOUT": 300}}'
-      CONFIG_omero_web_apps: '["omero_figure","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload"]' # modify if needed when the developers update Omero Web
+      CONFIG_omero_web_apps: '["omero_figure","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload","omeroweb_admin_tools"]' # modify if needed when the developers update Omero Web
       CONFIG_omero_web_ui_top__links: '[
         ["Data", "webindex", {"title": "Browse Data via Projects, Tags etc"}],
         ["History", "history", {"title": "History"}],
@@ -106,7 +106,8 @@ services:
         ["Help", "https://help.openmicroscopy.org/", {"title": "Open OMERO user guide in a new tab", "target": "new"}],
         ["Tag Search", "tagsearch"],
         ["OMP plugin", "omeroweb_omp_plugin_index", {"title": "Open OMP plugin in new tab", "target": "_blank"}],
-        ["Upload", "omeroweb_upload_index", {"title": "Open Upload in new tab", "target": "_blank"}]
+        ["Upload", "omeroweb_upload_index", {"title": "Open Upload in new tab", "target": "_blank"}],
+        ["Admin tools", "omeroweb_admin_tools_index", {"title": "Open Admin tools in new tab", "target": "_blank"}]
       ]' # modify if needed when the developers update Omero Web
       CONFIG_omero_web_login__logo: "/static/branding/logo.png" # optional, delete if you don't want a custom logo at the top of the login page
     networks:
