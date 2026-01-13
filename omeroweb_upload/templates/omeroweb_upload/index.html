@@ -217,9 +217,36 @@
             border: 1px solid #007bff;
             text-align: left;
             box-sizing: border-box;
+            position: relative;
+            z-index: 1;
         }
         .project-select-input.is-collab {
             color: #065f46;
+            font-weight: 400;
+        }
+        .project-select-wrapper.is-display-active .project-select-input {
+            color: transparent;
+            caret-color: transparent;
+        }
+        .project-select-display {
+            position: absolute;
+            inset: 0;
+            padding: 12px 40px 12px 12px;
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            pointer-events: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: 2;
+            color: #111827;
+        }
+        .project-select-display.is-collab {
+            color: #065f46;
+        }
+        .project-select-display .project-select-owner {
             font-weight: 700;
         }
         .project-select-arrow {
@@ -938,6 +965,7 @@
                                        placeholder="Select project…"
                                        autocomplete="off"
                                        class="project-select-input">
+                                <div id="project_select_display" class="project-select-display" aria-hidden="true"></div>
                                 <span class="project-select-arrow" aria-hidden="true">▾</span>
                                 <input type="hidden" id="project_select" value="">
                                 <div id="project_select_dropdown"
@@ -1076,6 +1104,7 @@
         const projectSelectDropdown = document.getElementById('project_select_dropdown');
         const projectSelectWrapper = document.getElementById('project_select_wrapper');
         const projectSelectArrow = projectSelectWrapper?.querySelector('.project-select-arrow') || null;
+        const projectSelectDisplay = document.getElementById('project_select_display');
         const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
         const projectDataScript = document.getElementById('project-data');
         const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
@@ -1419,8 +1448,39 @@
             }
         }
 
+        function updateProjectSelectionDisplay() {
+            if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
+            const selectedName = projectSelectInput.dataset.selectedName || '';
+            const selectedOwner = projectSelectInput.dataset.selectedOwner || '';
+            const selectedBaseName = projectSelectInput.dataset.selectedBaseName || selectedName;
+            const isCollab = projectSelectInput.dataset.selectedIsCollab === 'true';
+            if (!selectedName) {
+                projectSelectDisplay.innerHTML = '';
+                projectSelectDisplay.style.display = 'none';
+                projectSelectDisplay.classList.remove('is-collab');
+                projectSelectWrapper.classList.remove('is-display-active');
+                return;
+            }
+            projectSelectDisplay.innerHTML = '';
+            projectSelectDisplay.style.display = 'flex';
+            projectSelectWrapper.classList.add('is-display-active');
+            projectSelectDisplay.classList.toggle('is-collab', isCollab);
+            if (isCollab && selectedOwner) {
+                const ownerSpan = document.createElement('span');
+                ownerSpan.className = 'project-select-owner';
+                ownerSpan.textContent = selectedOwner;
+                const arrowSpan = document.createElement('span');
+                arrowSpan.textContent = '→';
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = selectedBaseName;
+                projectSelectDisplay.append(ownerSpan, arrowSpan, nameSpan);
+            } else {
+                projectSelectDisplay.textContent = selectedName;
+            }
+        }
+
         function setProjectSelection(projectId, projectName, options = {}) {
-            const { persist = true, isCollab = false } = options;
+            const { persist = true, isCollab = false, owner = '', baseName = '' } = options;
             const normalizedId = projectId ? String(projectId) : '';
             const normalizedName = projectName ? String(projectName) : '';
             if (projectSelect) {
@@ -1430,8 +1490,11 @@
                 projectSelectInput.value = normalizedName;
                 projectSelectInput.dataset.selectedName = normalizedName;
                 projectSelectInput.dataset.selectedIsCollab = isCollab ? 'true' : 'false';
+                projectSelectInput.dataset.selectedOwner = owner || '';
+                projectSelectInput.dataset.selectedBaseName = baseName || normalizedName;
                 projectSelectInput.classList.toggle('is-collab', isCollab);
             }
+            updateProjectSelectionDisplay();
             if (persist) {
                 saveProjectSelection(normalizedId, normalizedName);
             }
@@ -1446,8 +1509,11 @@
                 projectSelectInput.value = '';
                 projectSelectInput.dataset.selectedName = '';
                 projectSelectInput.dataset.selectedIsCollab = 'false';
+                projectSelectInput.dataset.selectedOwner = '';
+                projectSelectInput.dataset.selectedBaseName = '';
                 projectSelectInput.classList.remove('is-collab');
             }
+            updateProjectSelectionDisplay();
             if (persist && storage) {
                 try {
                     storage.removeItem(projectSelectionStorageKey);
@@ -1474,7 +1540,12 @@
                     return;
                 }
                 const label = parsed?.projectName || getProjectEntryLabel(match);
-                setProjectSelection(match.id, label, { persist: false, isCollab: isCollabEntry(match) });
+                setProjectSelection(match.id, label, {
+                    persist: false,
+                    isCollab: isCollabEntry(match),
+                    owner: match?.owner || '',
+                    baseName: getProjectLabel(match?.id, match?.name),
+                });
             } catch (error) {
                 clearProjectSelection({ persist: false });
             }
@@ -1510,10 +1581,12 @@
             const projectId = option.dataset.projectId || '';
             const projectName = option.dataset.projectName || option.textContent || '';
             const isCollab = option.dataset.isCollab === 'true';
+            const owner = option.dataset.projectOwner || '';
+            const baseName = option.dataset.projectBaseName || '';
             if (!projectId && option.classList.contains('is-empty')) {
                 clearProjectSelection();
             } else {
-                setProjectSelection(projectId, projectName, { isCollab });
+                setProjectSelection(projectId, projectName, { isCollab, owner, baseName });
             }
             closeProjectDropdown(false);
         }
@@ -1567,12 +1640,14 @@
                     option.className = 'project-option';
                     option.dataset.projectId = entry.id;
                     option.dataset.projectName = getProjectEntryLabel(entry);
+                    option.dataset.projectBaseName = getProjectLabel(entry?.id, entry?.name);
                     option.dataset.isCollab = isCollabEntry(entry) ? 'true' : 'false';
                     option.style.padding = '8px 12px';
                     option.style.cursor = 'pointer';
                     option.style.whiteSpace = 'nowrap';
                     if (isCollabEntry(entry)) {
                         option.classList.add('is-collab');
+                        option.dataset.projectOwner = entry.owner || '';
                         const ownerSpan = document.createElement('span');
                         ownerSpan.className = 'project-option-owner';
                         ownerSpan.textContent = entry.owner || '';
@@ -1614,7 +1689,12 @@
                 return;
             }
             const label = getProjectEntryLabel(match);
-            setProjectSelection(match.id, label, { persist: false, isCollab: isCollabEntry(match) });
+            setProjectSelection(match.id, label, {
+                persist: false,
+                isCollab: isCollabEntry(match),
+                owner: match?.owner || '',
+                baseName: getProjectLabel(match?.id, match?.name),
+            });
         }
 
         function updateProjectData(data) {
@@ -1660,6 +1740,10 @@
             if (projectSelectArrow) {
                 projectSelectArrow.textContent = '▴';
             }
+            projectSelectWrapper?.classList.remove('is-display-active');
+            if (projectSelectDisplay) {
+                projectSelectDisplay.style.display = 'none';
+            }
             if (projectDropdownBackdrop) {
                 projectDropdownBackdrop.style.display = 'block';
             }
@@ -1685,6 +1769,7 @@
                 projectSelectInput.value = selectedName;
             }
             projectSelectInput.placeholder = 'Select project…';
+            updateProjectSelectionDisplay();
         }
 
         function filterProjectOptions(query) {
