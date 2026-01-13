@@ -670,25 +670,25 @@
         .duplicate-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(255, 255, 255, 0.65);
+            background: rgba(0, 0, 0, 0.3);
             z-index: 20000;
             display: none;
         }
         .duplicate-popup {
             position: fixed;
-            color: #991b1b;
-            font-size: 16px;
-            font-weight: 600;
-            text-align: center;
-            padding: 20px 28px;
-            background: #fff;
-            border: 1px solid #fecaca;
-            border-radius: 12px;
-            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.24);
-            max-width: 520px;
+            color: #111827;
+            font-size: 13px;
+            font-weight: 500;
+            text-align: left;
+            padding: 20px 24px;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            min-width: 300px;
+            max-width: 500px;
             margin: auto;
             left: 50%;
-            top: 35%;
+            top: 50%;
             transform: translate(-50%, -50%);
             z-index: 20001;
             display: none;
@@ -697,13 +697,14 @@
             margin: 0 0 12px;
         }
         .duplicate-popup__btn {
-            background: #2563eb;
-            border: none;
-            color: #fff;
-            padding: 8px 18px;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            color: #111827;
+            padding: 6px 14px;
             border-radius: 6px;
             cursor: pointer;
-            font-weight: 600;
+            font-size: 12px;
+            font-weight: 500;
         }
         .duplicate-popup__btn:focus {
             outline: 2px solid #2563eb;
@@ -2142,7 +2143,7 @@
                 lastModified: 0,
             };
             entries.forEach((entry) => {
-                const rawPath = entry.relativePath || entry.file.name;
+                const rawPath = getEntryPath(entry);
                 const parts = rawPath.split('/').filter(Boolean);
                 let node = root;
                 parts.forEach((part, index) => {
@@ -2223,12 +2224,12 @@
         }
 
         function removeFileEntry(rawPath) {
-            removeByPredicate((entry) => (entry.relativePath || entry.file.name) === rawPath);
+            removeByPredicate((entry) => getEntryPath(entry) === rawPath);
         }
 
         function removeFolderEntries(folderPath, isRootGroup) {
             if (isRootGroup) {
-                removeByPredicate((entry) => !(entry.relativePath || entry.file.name).includes('/'));
+                removeByPredicate((entry) => !getEntryPath(entry).includes('/'));
                 expandedNodes.clear();
                 return;
             }
@@ -2237,7 +2238,7 @@
                     expandedNodes.delete(path);
                 }
             });
-            removeByPredicate((entry) => (entry.relativePath || entry.file.name).startsWith(folderPath));
+            removeByPredicate((entry) => getEntryPath(entry).startsWith(folderPath));
         }
 
         function renderTree(node, depth = 0, pathPrefix = '') {
@@ -2440,7 +2441,7 @@
         }
 
         function getRootInfo(entry) {
-            const rawPath = entry.relativePath || entry.file.name;
+            const rawPath = getEntryPath(entry);
             const parts = rawPath.split('/').filter(Boolean);
             const rootName = parts[0] || rawPath;
             return { rootName, isRootFile: parts.length <= 1 };
@@ -2824,6 +2825,27 @@
             return data;
         }
 
+        async function pruneUploadJob(job, keepPaths) {
+            if (!job?.prune_url) {
+                return;
+            }
+            const response = await fetch(job.prune_url, {
+                method: 'POST',
+                headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ keep_paths: keepPaths }),
+                credentials: 'same-origin',
+            });
+            const data = await parseJsonResponse(response);
+            if (!response.ok || !data.ok) {
+                throw new Error(data.error || `Failed to update removed files with status ${response.status}.`);
+            }
+            return data;
+        }
+
+        function getEntryPath(entry) {
+            return entry.relativePath || entry.file.name;
+        }
+
         async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
@@ -2835,10 +2857,11 @@
                 );
                 if (!proceed) {
                     window.pendingImportJob = job;
+                    window.pendingImportFiles = uploadedFiles;
                     pendingFiles = uploadedFiles;
                     const incompatibleSet = new Set(statusData.incompatible_files || []);
                     pendingFiles.forEach(entry => {
-                        const path = entry.relativePath || entry.file.name;
+                        const path = getEntryPath(entry);
                         if (incompatibleSet.has(path)) {
                             entry.isIncompatible = true;
                         }
@@ -2846,7 +2869,7 @@
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
-                        'Upload complete. Import halted because incompatible files were detected. Remove incompatible files (red) and click "Continue Import" to proceed.',
+                        'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files (red) and click "Continue Import".',
                         'error'
                     );
                     return { proceed: false, status: statusData, uploadedFiles };
@@ -2856,11 +2879,11 @@
             return { proceed: true, status: statusData };
         }
 
-        async function startUploadJob() {
-            const totalBytes = pendingFiles.reduce((acc, entry) => acc + entry.file.size, 0);
-            const metadata = pendingFiles.map((entry) => ({
+        async function startUploadJob(entries = pendingFiles) {
+            const totalBytes = entries.reduce((acc, entry) => acc + entry.file.size, 0);
+            const metadata = entries.map((entry) => ({
                 name: entry.file.name,
-                relative_path: entry.relativePath || entry.file.name,
+                relative_path: getEntryPath(entry),
                 size: entry.file.size,
             }));
             const projectId = projectSelect?.value || '';
@@ -2885,14 +2908,14 @@
             return { ...data, totalBytes };
         }
 
-        function createUploadBatches() {
+        function createUploadBatches(entries = pendingFiles) {
             const maxBatchBytes = 50 * 1024 * 1024;
             const maxBatchFiles = Math.max(1, currentUploadBatchFiles);
             const batches = [];
             let current = [];
             let currentBytes = 0;
 
-            pendingFiles.forEach((entry) => {
+            entries.forEach((entry) => {
                 const fileSize = entry.file.size;
                 const needsSplit = current.length >= maxBatchFiles || (currentBytes + fileSize > maxBatchBytes && current.length);
                 if (needsSplit) {
@@ -2927,7 +2950,7 @@
                 const formData = new FormData();
                 const batchTotalBytes = batch.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
                 batch.forEach((entry) => {
-                    const relativePath = entry.relativePath || entry.file.name;
+                    const relativePath = getEntryPath(entry);
                     formData.append('files', entry.file, relativePath);
                     formData.append('relative_paths', relativePath);
                 });
@@ -2985,8 +3008,8 @@
             });
         }
 
-        async function uploadFiles(uploadUrl) {
-            const batches = createUploadBatches();
+        async function uploadFiles(uploadUrl, entries = pendingFiles) {
+            const batches = createUploadBatches(entries);
             const concurrency = Math.min(uploadConcurrency, batches.length);
 
             const tasks = batches.map((batch, index) => async () => {
@@ -3293,16 +3316,61 @@
 
             if (window.pendingImportJob) {
                 const job = window.pendingImportJob;
-                delete window.pendingImportJob;
+                const originalFiles = window.pendingImportFiles || [];
+                const originalPaths = new Set(originalFiles.map((entry) => getEntryPath(entry)));
+                const existingEntries = pendingFiles.filter((entry) => originalPaths.has(getEntryPath(entry)));
+                const newEntries = pendingFiles.filter((entry) => !originalPaths.has(getEntryPath(entry)));
+                let shouldContinue = true;
                 setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
                 try {
-                    const compatibilityResult = await ensureCompatibilityBeforeImport(job, pendingFiles);
-                    if (compatibilityResult.proceed) {
-                        registerImportJob(job);
-                        setStatus(
-                            'Import resumed. Files will appear in Omero soon.',
-                            'success'
-                        );
+                    if (existingEntries.length) {
+                        await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
+                        const compatibilityResult = await ensureCompatibilityBeforeImport(job, existingEntries);
+                        if (compatibilityResult.proceed) {
+                            registerImportJob(job);
+                            setStatus(
+                                'Import resumed. Files will appear in Omero soon.',
+                                'success'
+                            );
+                            delete window.pendingImportJob;
+                            window.pendingImportFiles = [];
+                        } else {
+                            window.pendingImportFiles = existingEntries;
+                            shouldContinue = false;
+                        }
+                    } else {
+                        delete window.pendingImportJob;
+                        window.pendingImportFiles = [];
+                    }
+
+                    if (shouldContinue && newEntries.length) {
+                        pendingFiles = newEntries;
+                        expandedNodes.clear();
+                        refreshFileList();
+                        uploadTotalBytes = getPendingTotalBytes();
+                        updateUploadOverlayProgress();
+
+                        const newJob = await startUploadJob(pendingFiles);
+                        uploadTotalBytes = newJob.totalBytes || uploadTotalBytes;
+                        updateUploadOverlayProgress();
+                        await uploadFiles(newJob.upload_url, pendingFiles);
+
+                        const uploadedNewFiles = [...pendingFiles];
+                        pendingFiles = [];
+                        expandedNodes.clear();
+                        fileInput.value = '';
+                        folderInput.value = '';
+                        refreshFileList();
+
+                        const compatibilityResult = await ensureCompatibilityBeforeImport(newJob, uploadedNewFiles);
+                        if (compatibilityResult.proceed) {
+                            registerImportJob(newJob);
+                            setStatus(
+                                'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
+                                'success'
+                            );
+                        }
+                    } else if (shouldContinue) {
                         pendingFiles = [];
                         expandedNodes.clear();
                         fileInput.value = '';

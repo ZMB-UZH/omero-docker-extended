@@ -1648,6 +1648,7 @@ def _start_upload(request, conn):
             "import_step_url": reverse("omeroweb_upload_import_step", kwargs={"job_id": job_id}),
             "status_url": reverse("omeroweb_upload_status", kwargs={"job_id": job_id}),
             "confirm_url": reverse("omeroweb_upload_confirm", kwargs={"job_id": job_id}),
+            "prune_url": reverse("omeroweb_upload_prune", kwargs={"job_id": job_id}),
         }
     )
 
@@ -1810,6 +1811,88 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": "ready"})
+
+
+@login_required()
+def prune_upload(request, job_id, conn=None, url=None, **kwargs):
+    _cleanup_upload_artifacts()
+    if request.method != "POST":
+        return json_error(errors.method_post_required())
+
+    job = _load_job(job_id)
+    if not job:
+        return json_error(errors.upload_job_not_found())
+
+    payload = load_json_body(request)
+    if not isinstance(payload, dict):
+        payload = {}
+
+    keep_paths = payload.get("keep_paths") or []
+    if not isinstance(keep_paths, list):
+        keep_paths = []
+
+    keep_set = set()
+    for path in keep_paths:
+        rel_path = _safe_relative_path(path)
+        if rel_path:
+            keep_set.add(rel_path)
+
+    upload_root = _get_upload_root() / job_id
+
+    def apply_prune(job_dict):
+        removed = []
+        kept_entries = []
+        for entry in job_dict.get("files", []):
+            rel_path = entry.get("relative_path")
+            if not rel_path or rel_path not in keep_set:
+                removed.append(entry)
+                continue
+            kept_entries.append(entry)
+
+        for entry in removed:
+            staged_path = entry.get("staged_path") or entry.get("relative_path")
+            if not staged_path:
+                continue
+            file_path = upload_root / staged_path
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+            except OSError as exc:
+                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+
+        job_dict["files"] = kept_entries
+        job_dict["total_bytes"] = sum(entry.get("size", 0) for entry in kept_entries)
+        job_dict["uploaded_bytes"] = sum(
+            entry.get("size", 0) for entry in kept_entries if entry.get("status") == "uploaded"
+        )
+        job_dict["incompatible_files"] = sorted(
+            entry.get("relative_path")
+            for entry in kept_entries
+            if entry.get("compatibility") == "incompatible" and entry.get("relative_path")
+        )
+
+        pending_after = _compatibility_pending_entries(job_dict)
+        has_errors = any(entry.get("compatibility") == "error" for entry in kept_entries)
+        if job_dict["incompatible_files"]:
+            job_dict["compatibility_status"] = "incompatible"
+        elif pending_after:
+            job_dict["compatibility_status"] = "checking"
+        elif has_errors:
+            job_dict["compatibility_status"] = "error"
+        else:
+            job_dict["compatibility_status"] = "compatible"
+        _refresh_job_status(job_dict)
+        job_dict["updated"] = time.time()
+        return job_dict
+
+    job = _update_job(job_id, apply_prune)
+    if not job:
+        return json_error(errors.unable_update_upload_job_state())
+
+    if job.get("status") == "ready":
+        _start_import_thread(job_id)
+
+    return JsonResponse({"ok": True, "status": job.get("status")})
 
 
 @login_required()
