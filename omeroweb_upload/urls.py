@@ -6,6 +6,7 @@ from .views.index_view import (
     index,
     job_status,
     list_projects,
+    prune_upload,
     start_upload,
     upload_files,
 )
@@ -17,6 +18,7 @@ urlpatterns = [
     path("upload/<str:job_id>/", upload_files, name="omeroweb_upload_files"),
     path("import/<str:job_id>/", import_step, name="omeroweb_upload_import_step"),
     path("confirm/<str:job_id>/", confirm_import, name="omeroweb_upload_confirm"),
+    path("prune/<str:job_id>/", prune_upload, name="omeroweb_upload_prune"),
     path("status/<str:job_id>/", job_status, name="omeroweb_upload_status"),
     path("projects/", list_projects, name="omeroweb_upload_projects"),
     path("user-settings/save/", save_settings, name="omeroweb_upload_save_user_settings"),
