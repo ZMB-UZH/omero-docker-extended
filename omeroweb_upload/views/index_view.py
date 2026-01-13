@@ -916,22 +916,69 @@ def _update_job(job_id: str, update_fn):
     return job_dict
 
 
-def _check_import_compatibility(session_key: str, host: str, port: int, path: Path):
+def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+    details = (stderr or stdout or "").strip()
+    if return_code == 0:
+        return "compatible", details
+    lowered = details.lower()
+    incompatible_markers = (
+        "unsupported",
+        "unknown format",
+        "no suitable reader",
+        "no reader",
+        "cannot read",
+        "not a supported",
+        "no importable",
+        "no import candidates",
+    )
+    if any(marker in lowered for marker in incompatible_markers):
+        return "incompatible", details
+    return "error", details
+
+
+def _check_import_compatibility(
+    session_key: str,
+    host: str,
+    port: int,
+    path: Path,
+    dataset_id=None,
+):
     if not path.exists():
-        return False, "", f"Missing staged file: {path.name}"
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": f"Missing staged file: {path.name}",
+            "details": f"Missing staged file: {path.name}",
+        }
     cmd = ["omero", "import", "--dry-run", "-k", session_key]
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
+    if dataset_id:
+        cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.returncode == 0, result.stdout, result.stderr
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": str(exc),
+            "details": str(exc),
+        }
+    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    return {
+        "status": status,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "details": details,
+    }
 
 
 def _run_compatibility_check(job_id: str):
@@ -974,36 +1021,47 @@ def _run_compatibility_check(job_id: str):
             if not staged_path:
                 continue
             file_path = upload_root / staged_path
+            dataset_name = _dataset_name_for_path(entry.get("relative_path"), job.get("orphan_dataset_name"))
+            dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
                 session_key,
                 host,
                 port,
                 file_path,
+                dataset_id,
             )
             future_map[future] = entry
         for future in as_completed(future_map):
             entry = future_map[future]
             try:
-                success, stdout, stderr = future.result()
+                result = future.result()
             except Exception as exc:
                 logger.warning("Compatibility check failed for %s: %s", entry.get("relative_path"), exc)
-                success = False
-                stdout = ""
-                stderr = str(exc)
+                result = {
+                    "status": "error",
+                    "stdout": "",
+                    "stderr": str(exc),
+                    "details": str(exc),
+                }
             results.append(
                 {
                     "upload_id": entry.get("upload_id"),
                     "relative_path": entry.get("relative_path"),
-                    "success": success,
-                    "details": (stderr or stdout or "").strip(),
+                    "status": result.get("status"),
+                    "details": result.get("details", ""),
                 }
             )
 
     incompatible = [
         result["relative_path"]
         for result in results
-        if not result["success"] and result.get("relative_path")
+        if result.get("status") == "incompatible" and result.get("relative_path")
+    ]
+    check_errors = [
+        result
+        for result in results
+        if result.get("status") == "error" and result.get("relative_path")
     ]
 
     def apply_results(job_dict):
@@ -1012,12 +1070,29 @@ def _run_compatibility_check(job_id: str):
             entry = entries_by_id.get(result.get("upload_id"))
             if not entry:
                 continue
-            entry["compatibility"] = "compatible" if result["success"] else "incompatible"
-            if not result["success"]:
-                entry.setdefault("compatibility_errors", []).append(result.get("details") or "Import check failed.")
+            status = result.get("status")
+            if status == "compatible":
+                entry["compatibility"] = "compatible"
+            elif status == "incompatible":
+                entry["compatibility"] = "incompatible"
+                entry.setdefault("compatibility_errors", []).append(
+                    result.get("details") or "Import check failed."
+                )
+            else:
+                entry["compatibility"] = "error"
+                entry.setdefault("compatibility_errors", []).append(
+                    result.get("details") or "Compatibility check failed."
+                )
         job_dict["incompatible_files"] = incompatible
-        job_dict["compatibility_status"] = "incompatible" if incompatible else "compatible"
-        job_dict["status"] = "awaiting_confirmation" if incompatible else "ready"
+        if incompatible:
+            job_dict["compatibility_status"] = "incompatible"
+            job_dict["status"] = "awaiting_confirmation"
+        elif check_errors:
+            job_dict["compatibility_status"] = "error"
+            job_dict["status"] = "ready"
+        else:
+            job_dict["compatibility_status"] = "compatible"
+            job_dict["status"] = "ready"
         job_dict["updated"] = time.time()
         return job_dict
 

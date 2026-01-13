@@ -263,6 +263,7 @@
             color: #4b5563;
             font-size: 18px;
             font-weight: 600;
+            z-index: 3;
             pointer-events: none;
         }
         .project-option-owner {
@@ -1667,13 +1668,7 @@
             emptyOption.textContent = 'No project (clear selection)';
             projectSelectDropdown.appendChild(emptyOption);
 
-            if (matches.length === 0 && totalProjects > 0) {
-                const emptyRow = document.createElement('div');
-                emptyRow.style.padding = '8px 12px';
-                emptyRow.style.color = '#6b7280';
-                emptyRow.textContent = 'No matching projects.';
-                projectSelectDropdown.appendChild(emptyRow);
-            } else {
+            if (matches.length > 0) {
                 matches.forEach((entry) => {
                     const option = document.createElement('div');
                     option.className = 'project-option';
@@ -1710,9 +1705,9 @@
             if (totalMatches > MAX_PROJECT_RESULTS) {
                 statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
             } else if (totalMatches > 0) {
-                statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found.`;
+                statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
             } else {
-                statusRow.textContent = 'No projects found.';
+                statusRow.textContent = 'No projects found';
             }
             projectSelectDropdown.appendChild(statusRow);
             setActiveProjectIndex(0);
