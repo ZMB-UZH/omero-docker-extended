@@ -904,6 +904,7 @@
             padding: 8px 12px;
             text-align: left;
             font: inherit;
+            font-size: 14px;
             font-weight: 600;
             color: #1f2937;
             cursor: pointer;
@@ -2740,16 +2741,18 @@
             fileTree.appendChild(renderTree(tree));
         }
 
-        function focusFallbackElement() {
+        function focusFallbackElement(options = {}) {
+            const { allowSelectInputs = true } = options;
             const candidates = [
                 uploadBtn,
                 fileBtn,
                 folderBtn,
-                projectSelectInput,
-                specialUploadInput,
                 cancelUploadBtn,
                 cancelImportBtn
             ];
+            if (allowSelectInputs) {
+                candidates.push(projectSelectInput, specialUploadInput);
+            }
             const target = candidates.find((element) => (
                 element &&
                 typeof element.focus === 'function' &&
@@ -2801,7 +2804,7 @@
             if (compatibilityPopup.contains(document.activeElement)) {
                 suppressProjectDropdownOpenOnFocusOnce = true;
                 suppressSpecialUploadDropdownOpenOnFocusOnce = true;
-                focusFallbackElement();
+                focusFallbackElement({ allowSelectInputs: false });
             }
             compatibilityOverlay.style.display = 'none';
             compatibilityPopup.style.display = 'none';
@@ -3243,7 +3246,8 @@
         }
 
         function getEntryPath(entry) {
-            return entry.relativePath || entry.file.name;
+            const rawPath = entry?.relativePath || entry?.file?.name || '';
+            return normalizeCompatibilityPath(rawPath);
         }
 
         function normalizeCompatibilityPath(rawPath) {
@@ -3263,7 +3267,7 @@
             );
             let changed = false;
             entries.forEach((entry) => {
-                const normalized = normalizeCompatibilityPath(getEntryPath(entry));
+                const normalized = getEntryPath(entry);
                 const isIncompatible = incompatibleSet.has(normalized);
                 if (entry.isIncompatible !== isIncompatible) {
                     entry.isIncompatible = isIncompatible;
@@ -3287,6 +3291,7 @@
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     pendingFiles = [...uploadedFiles];
+                    applyCompatibilityFlags(pendingFiles, statusData.incompatible_files);
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
