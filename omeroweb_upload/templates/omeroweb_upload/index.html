@@ -214,6 +214,9 @@
             position: relative;
             width: 300px;
         }
+        .project-select-wrapper--compact {
+            width: 220px;
+        }
         .project-select-input {
             width: 100%;
             padding: 12px 40px 12px 12px;
@@ -224,6 +227,11 @@
             position: relative;
             z-index: 1;
             font-size: 14px;
+        }
+        .project-select-input--compact {
+            padding: 8px 32px 8px 10px;
+            font-size: 13px;
+            height: 32px;
         }
         .project-select-input.is-collab {
             color: #065f46;
@@ -249,6 +257,10 @@
             color: #111827;
             font-size: 14px;
         }
+        .project-select-wrapper--compact .project-select-display {
+            padding: 8px 32px 8px 10px;
+            font-size: 13px;
+        }
         .project-select-display.is-collab {
             color: #065f46;
         }
@@ -265,6 +277,10 @@
             font-weight: 600;
             z-index: 3;
             pointer-events: none;
+        }
+        .project-select-wrapper--compact .project-select-arrow {
+            right: 10px;
+            font-size: 16px;
         }
         .project-option-owner {
             font-weight: 700;
@@ -356,6 +372,17 @@
             cursor: pointer;
             font-size: 14px;
             height: var(--action-control-height);
+        }
+        .upload-intro-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .upload-intro-row p {
+            margin: 0;
         }
         .upload-actions input[type="file"]::file-selector-button,
         .upload-actions input[type="file"]::-webkit-file-upload-button {
@@ -1019,7 +1046,24 @@
         <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
             <div class="upload-card__overlay" aria-live="polite">Uploading</div>
             <div class="upload-card__content">
-                <p><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
+                <div class="upload-intro-row">
+                    <p><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
+                    <div class="project-select-wrapper project-select-wrapper--compact" id="special_upload_wrapper">
+                        <input type="text"
+                               id="special_upload_input"
+                               placeholder="Special upload methods..."
+                               autocomplete="off"
+                               class="project-select-input project-select-input--compact">
+                        <div id="special_upload_display" class="project-select-display" aria-hidden="true"></div>
+                        <span class="project-select-arrow" aria-hidden="true">▾</span>
+                        <input type="hidden" id="special_upload" value="">
+                        <div id="special_upload_dropdown"
+                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                                    background:#fff; border:1px solid #007bff; border-top:none;
+                                    max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                        </div>
+                    </div>
+                </div>
                 <div class="project-select-row">
                     <label class="project-select-label" for="project_select_input">Select project (optional):</label>
                 </div>
@@ -1186,6 +1230,12 @@
         const projectSelectWrapper = document.getElementById('project_select_wrapper');
         const projectSelectArrow = projectSelectWrapper?.querySelector('.project-select-arrow') || null;
         const projectSelectDisplay = document.getElementById('project_select_display');
+        const specialUploadSelect = document.getElementById('special_upload');
+        const specialUploadInput = document.getElementById('special_upload_input');
+        const specialUploadDropdown = document.getElementById('special_upload_dropdown');
+        const specialUploadWrapper = document.getElementById('special_upload_wrapper');
+        const specialUploadArrow = specialUploadWrapper?.querySelector('.project-select-arrow') || null;
+        const specialUploadDisplay = document.getElementById('special_upload_display');
         const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
         const projectDataScript = document.getElementById('project-data');
         const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
@@ -1252,6 +1302,11 @@
         const collaborationToggleStorageKey = 'omeroweb_upload_collaboration_toggle_v1';
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
         const compatibilityToggleStorageKey = 'omeroweb_upload_compatibility_toggle_v1';
+        const specialUploadOptions = [
+            { value: '', label: 'clear selection', isEmpty: true },
+            { value: 'sem_edx_spectra', label: 'SEM EDX spectra' },
+        ];
+        let activeSpecialUploadIndex = -1;
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -1887,6 +1942,7 @@
 
         function openProjectDropdown() {
             if (!projectSelectDropdown || !projectSelectInput) return;
+            closeSpecialUploadDropdown(false);
             projectSelectDropdown.style.display = 'block';
             projectSelectDropdown.classList.remove('keyboard-active');
             projectSelectWrapper?.classList.add('is-open');
@@ -1923,6 +1979,155 @@
             }
             projectSelectInput.placeholder = 'Select project…';
             updateProjectSelectionDisplay();
+        }
+
+        function getSpecialUploadOptionElements() {
+            return specialUploadDropdown
+                ? Array.from(specialUploadDropdown.querySelectorAll('.project-option'))
+                : [];
+        }
+
+        function updateSpecialUploadDisplay() {
+            if (!specialUploadDisplay || !specialUploadWrapper || !specialUploadInput) return;
+            const selectedName = specialUploadInput.dataset.selectedName || '';
+            if (!selectedName) {
+                specialUploadDisplay.textContent = '';
+                specialUploadDisplay.style.display = 'none';
+                specialUploadWrapper.classList.remove('is-display-active');
+                return;
+            }
+            specialUploadDisplay.textContent = selectedName;
+            specialUploadDisplay.style.display = 'flex';
+            specialUploadWrapper.classList.add('is-display-active');
+        }
+
+        function setSpecialUploadSelection(value, label) {
+            if (specialUploadSelect) {
+                specialUploadSelect.value = value || '';
+            }
+            if (specialUploadInput) {
+                specialUploadInput.value = label || '';
+                specialUploadInput.dataset.selectedName = label || '';
+            }
+            updateSpecialUploadDisplay();
+        }
+
+        function clearSpecialUploadSelection() {
+            if (specialUploadSelect) {
+                specialUploadSelect.value = '';
+            }
+            if (specialUploadInput) {
+                specialUploadInput.value = '';
+                specialUploadInput.dataset.selectedName = '';
+            }
+            updateSpecialUploadDisplay();
+        }
+
+        function renderSpecialUploadOptions(query = '') {
+            if (!specialUploadDropdown) return;
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            specialUploadDropdown.innerHTML = '';
+            const matches = specialUploadOptions.filter((option) => {
+                if (!normalizedQuery) return true;
+                return option.label.toLowerCase().includes(normalizedQuery);
+            });
+            if (matches.length === 0) {
+                const emptyOption = document.createElement('div');
+                emptyOption.className = 'project-option is-empty';
+                emptyOption.dataset.disabled = 'true';
+                emptyOption.textContent = 'No matches';
+                specialUploadDropdown.appendChild(emptyOption);
+                return;
+            }
+            matches.forEach((option) => {
+                const optionEl = document.createElement('div');
+                optionEl.className = `project-option${option.isEmpty ? ' is-empty' : ''}`;
+                optionEl.dataset.value = option.value;
+                optionEl.dataset.label = option.label;
+                optionEl.textContent = option.label;
+                specialUploadDropdown.appendChild(optionEl);
+            });
+        }
+
+        function setActiveSpecialUploadIndex(index, useKeyboard = false) {
+            const options = getSpecialUploadOptionElements();
+            if (options.length === 0) {
+                activeSpecialUploadIndex = -1;
+                return;
+            }
+            const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
+            activeSpecialUploadIndex = clampedIndex;
+            options.forEach((option, optionIndex) => {
+                option.classList.toggle('is-active', optionIndex === clampedIndex);
+            });
+            if (useKeyboard) {
+                options[clampedIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function selectSpecialUploadOption(optionEl) {
+            if (optionEl?.dataset?.disabled === 'true') {
+                return;
+            }
+            if (!optionEl || optionEl.classList.contains('is-empty')) {
+                clearSpecialUploadSelection();
+                closeSpecialUploadDropdown(true);
+                return;
+            }
+            const value = optionEl.dataset.value || '';
+            const label = optionEl.dataset.label || optionEl.textContent || '';
+            if (!value) {
+                clearSpecialUploadSelection();
+            } else {
+                setSpecialUploadSelection(value, label);
+            }
+            closeSpecialUploadDropdown(true);
+        }
+
+        function openSpecialUploadDropdown() {
+            if (!specialUploadDropdown || !specialUploadInput) return;
+            closeProjectDropdown(false);
+            specialUploadDropdown.style.display = 'block';
+            specialUploadDropdown.classList.remove('keyboard-active');
+            specialUploadWrapper?.classList.add('is-open');
+            if (specialUploadArrow) {
+                specialUploadArrow.textContent = '▴';
+            }
+            specialUploadWrapper?.classList.remove('is-display-active');
+            if (specialUploadDisplay) {
+                specialUploadDisplay.style.display = 'none';
+            }
+            if (projectDropdownBackdrop) {
+                projectDropdownBackdrop.style.display = 'block';
+            }
+            specialUploadInput.dataset.previousValue = specialUploadInput.value;
+            specialUploadInput.value = '';
+            specialUploadInput.placeholder = 'Search...';
+            activeSpecialUploadIndex = -1;
+            renderSpecialUploadOptions('');
+        }
+
+        function closeSpecialUploadDropdown(restoreSelection = true) {
+            if (!specialUploadDropdown || !specialUploadInput) return;
+            specialUploadDropdown.style.display = 'none';
+            specialUploadDropdown.classList.remove('keyboard-active');
+            specialUploadWrapper?.classList.remove('is-open');
+            if (specialUploadArrow) {
+                specialUploadArrow.textContent = '▾';
+            }
+            if (projectDropdownBackdrop) {
+                projectDropdownBackdrop.style.display = 'none';
+            }
+            if (restoreSelection && !specialUploadInput.value) {
+                const selectedName = specialUploadInput.dataset.selectedName || '';
+                specialUploadInput.value = selectedName;
+            }
+            specialUploadInput.placeholder = 'Special upload methods...';
+            updateSpecialUploadDisplay();
+        }
+
+        function filterSpecialUploadOptions(query) {
+            renderSpecialUploadOptions(query);
         }
 
         function filterProjectOptions(query) {
@@ -3593,6 +3798,39 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             });
         }
 
+        if (specialUploadInput) {
+            specialUploadInput.addEventListener('focus', () => {
+                openSpecialUploadDropdown();
+            });
+
+            specialUploadInput.addEventListener('click', () => {
+                if (specialUploadDropdown?.style.display !== 'block') {
+                    openSpecialUploadDropdown();
+                }
+            });
+
+            specialUploadInput.addEventListener('input', (event) => {
+                filterSpecialUploadOptions(event.target.value);
+            });
+
+            specialUploadInput.addEventListener('keydown', (event) => {
+                if (specialUploadDropdown?.style.display !== 'block') return;
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const options = getSpecialUploadOptionElements();
+                    if (options.length === 0) return;
+                    const delta = event.key === 'ArrowDown' ? 1 : -1;
+                    const nextIndex = activeSpecialUploadIndex === -1 ? 0 : activeSpecialUploadIndex + delta;
+                    setActiveSpecialUploadIndex(nextIndex, true);
+                } else if (event.key === 'Enter') {
+                    const options = getSpecialUploadOptionElements();
+                    if (options.length === 0 || activeSpecialUploadIndex === -1) return;
+                    event.preventDefault();
+                    selectSpecialUploadOption(options[activeSpecialUploadIndex]);
+                }
+            });
+        }
+
         if (collaborationToggle) {
             collaborationToggle.addEventListener('change', () => {
                 applyCollaborationState(collaborationToggle.checked, { persist: true, refresh: true });
@@ -3629,9 +3867,28 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             });
         }
 
+        if (specialUploadDropdown) {
+            specialUploadDropdown.addEventListener('click', (event) => {
+                const option = event.target.closest('.project-option');
+                if (!option) return;
+                selectSpecialUploadOption(option);
+            });
+
+            specialUploadDropdown.addEventListener('mousemove', (event) => {
+                const option = event.target.closest('.project-option');
+                if (!option) return;
+                const options = getSpecialUploadOptionElements();
+                const index = options.indexOf(option);
+                if (index !== -1) {
+                    setActiveSpecialUploadIndex(index, false);
+                }
+            });
+        }
+
         if (projectDropdownBackdrop) {
             projectDropdownBackdrop.addEventListener('click', () => {
                 closeProjectDropdown(true);
+                closeSpecialUploadDropdown(true);
             });
         }
 
