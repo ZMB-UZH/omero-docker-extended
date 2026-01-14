@@ -87,7 +87,7 @@
                     <div id="project_select_dropdown"
                          style="display:none; position:absolute; left:0; right:0; top:100%;
                                 background:#fff; border:1px solid #007bff; border-top:none;
-                                max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                                max-height:480px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                     </div>
                     {{ projects|json_script:"project-data" }}
                 </div>
@@ -1111,7 +1111,7 @@
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
-    const MAX_PROJECT_RESULTS = 20;
+    const MAX_PROJECT_RESULTS = 15;
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
     const STATE_STORAGE_KEY = 'omp_preview_state';
@@ -2676,7 +2676,7 @@
         }
         projectSelectDropdown.appendChild(statusRow);
         if (matches.length > 0) {
-            setActiveProjectIndex(normalizedQuery ? -1 : 0);
+            setActiveProjectIndex(-1);
         } else {
             activeProjectIndex = -1;
         }
