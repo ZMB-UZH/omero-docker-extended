@@ -382,7 +382,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 4px;
             flex-wrap: wrap;
         }
         .upload-intro-row p {
@@ -1055,7 +1055,7 @@
                     <div class="project-select-wrapper project-select-wrapper--compact" id="special_upload_wrapper">
                         <input type="text"
                                id="special_upload_input"
-                               placeholder="Special upload methods..."
+                               placeholder="Select a special method..."
                                autocomplete="off"
                                class="project-select-input project-select-input--compact">
                         <div id="special_upload_display" class="project-select-display" aria-hidden="true"></div>
@@ -1225,6 +1225,7 @@
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
         const cancelImportBtn = document.getElementById('cancel-import-btn');
+        const uploadActionsButtons = document.querySelector('.upload-actions__buttons');
         const statusEl = document.getElementById('status');
         const fileTree = document.getElementById('file-tree');
         const uploadEnabled = !uploadBtn.disabled;
@@ -1275,6 +1276,17 @@
         const userSettingsBatchInput = document.getElementById('user_setting_batch_size');
         const userSettingsStatus = document.getElementById('user_settings_status');
         const compatibilityToggle = document.getElementById('compatibility_toggle');
+
+        const syncSpecialUploadWidth = () => {
+            if (!specialUploadWrapper || !uploadActionsButtons) return;
+            const buttonsWidth = uploadActionsButtons.offsetWidth;
+            if (buttonsWidth > 0) {
+                specialUploadWrapper.style.width = `${buttonsWidth}px`;
+            }
+        };
+
+        syncSpecialUploadWidth();
+        window.addEventListener('resize', syncSpecialUploadWidth);
 
         let pendingFiles = [];
         const expandedNodes = new Set();
@@ -2136,7 +2148,7 @@
                 const selectedName = specialUploadInput.dataset.selectedName || '';
                 specialUploadInput.value = selectedName;
             }
-            specialUploadInput.placeholder = 'Special upload methods...';
+            specialUploadInput.placeholder = 'Select a special method...';
             updateSpecialUploadDisplay();
         }
 
