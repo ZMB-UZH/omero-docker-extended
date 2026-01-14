@@ -3246,6 +3246,17 @@
             return entry.relativePath || entry.file.name;
         }
 
+        function normalizeCompatibilityPath(rawPath) {
+            if (!rawPath) {
+                return '';
+            }
+            return rawPath
+                .replace(/\\/g, '/')
+                .replace(/^\.\/+/, '')
+                .replace(/^\/+/, '')
+                .replace(/\/+/g, '/');
+        }
+
 async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
@@ -3258,10 +3269,12 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 if (!proceed) {
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
-                    const incompatibleSet = new Set(statusData.incompatible_files || []);
+                    const incompatibleSet = new Set(
+                        (statusData.incompatible_files || []).map(normalizeCompatibilityPath)
+                    );
                     pendingFiles = [...uploadedFiles];
                     pendingFiles.forEach((entry) => {
-                        const path = getEntryPath(entry);
+                        const path = normalizeCompatibilityPath(getEntryPath(entry));
                         entry.isIncompatible = incompatibleSet.has(path);
                     });
                     
