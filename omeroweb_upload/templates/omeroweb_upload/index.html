@@ -427,6 +427,20 @@
             background: #e5e7eb;
             color: #111827;
         }
+        .file-item.incompatible .name {
+            color: #dc2626 !important; /* Red-600 */
+            font-weight: 600;
+        }
+        .folder-item.has-incompatible > .folder-header .name {
+            color: #dc2626 !important;
+            font-weight: 600;
+        }
+        .file-item.incompatible .name::after {
+            content: " (Incompatible)";
+            font-size: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
         .clear-all-btn {
             background: #e5e7eb;
             color: #111827;
