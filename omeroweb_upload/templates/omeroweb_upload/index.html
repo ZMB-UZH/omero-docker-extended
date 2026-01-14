@@ -3257,11 +3257,28 @@
                 .replace(/\/+/g, '/');
         }
 
-async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
+        function applyCompatibilityFlags(entries, incompatibleFiles) {
+            const incompatibleSet = new Set(
+                (incompatibleFiles || []).map(normalizeCompatibilityPath)
+            );
+            let changed = false;
+            entries.forEach((entry) => {
+                const normalized = normalizeCompatibilityPath(getEntryPath(entry));
+                const isIncompatible = incompatibleSet.has(normalized);
+                if (entry.isIncompatible !== isIncompatible) {
+                    entry.isIncompatible = isIncompatible;
+                    changed = true;
+                }
+            });
+            return changed;
+        }
+
+        async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
             }
             const statusData = await waitForCompatibility(job);
+            applyCompatibilityFlags(uploadedFiles, statusData.incompatible_files);
             if (statusData.confirmation_required) {
                 const proceed = await showCompatibilityPopup(
                     'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
@@ -3269,15 +3286,8 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 if (!proceed) {
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
-                    const incompatibleSet = new Set(
-                        (statusData.incompatible_files || []).map(normalizeCompatibilityPath)
-                    );
                     pendingFiles = [...uploadedFiles];
-                    pendingFiles.forEach((entry) => {
-                        const path = normalizeCompatibilityPath(getEntryPath(entry));
-                        entry.isIncompatible = incompatibleSet.has(path);
-                    });
-                    
+                    applyCompatibilityFlags(pendingFiles, statusData.incompatible_files);
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
