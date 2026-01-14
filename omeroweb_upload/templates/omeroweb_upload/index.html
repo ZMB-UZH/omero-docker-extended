@@ -2709,6 +2709,31 @@
             fileTree.appendChild(renderTree(tree));
         }
 
+        function focusFallbackElement() {
+            const candidates = [
+                uploadBtn,
+                fileBtn,
+                folderBtn,
+                projectSelectInput,
+                specialUploadInput,
+                cancelUploadBtn,
+                cancelImportBtn
+            ];
+            const target = candidates.find((element) => (
+                element &&
+                typeof element.focus === 'function' &&
+                !element.disabled &&
+                element.offsetParent !== null
+            ));
+            if (target) {
+                target.focus();
+                return;
+            }
+            if (document.body && typeof document.body.focus === 'function') {
+                document.body.focus();
+            }
+        }
+
         function showDuplicatePopup(message) {
             duplicateMessage.textContent = message;
             duplicateOverlay.style.display = 'block';
@@ -2718,6 +2743,9 @@
         }
 
         function hideDuplicatePopup() {
+            if (duplicatePopup.contains(document.activeElement)) {
+                focusFallbackElement();
+            }
             duplicateOverlay.style.display = 'none';
             duplicatePopup.style.display = 'none';
             duplicatePopup.setAttribute('aria-hidden', 'true');
@@ -2738,6 +2766,9 @@
             if (compatibilityPopupResolver) {
                 compatibilityPopupResolver(decision);
                 compatibilityPopupResolver = null;
+            }
+            if (compatibilityPopup.contains(document.activeElement)) {
+                focusFallbackElement();
             }
             compatibilityOverlay.style.display = 'none';
             compatibilityPopup.style.display = 'none';
