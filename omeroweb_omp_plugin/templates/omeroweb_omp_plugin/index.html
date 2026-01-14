@@ -594,7 +594,8 @@
         z-index: 20001;
     }
     .omeroweb-omp-plugin {
-        --omp-primary-input-width: calc(55% + 50px);
+        --omp-project-select-width: 300px;
+        --omp-primary-input-width: calc(var(--omp-project-select-width) + 50px);
     }
     .omeroweb-omp-plugin,
     .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
@@ -726,7 +727,7 @@
         position: relative;
         z-index: 1001;
     }
-    .project-select-wrapper {position: relative; flex: 1;}
+    .project-select-wrapper {position: relative; width: var(--omp-project-select-width);}
     .project-refresh-btn {
         width: 40px;
         height: 40px;
