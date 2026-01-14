@@ -2702,7 +2702,7 @@
         if (projectDropdownBackdrop) {
             projectDropdownBackdrop.style.display = 'none';
         }
-        if (restoreSelection && !projectSelectInput.value) {
+        if (restoreSelection) {
             const selectedName = projectSelectInput.dataset.selectedName || '';
             projectSelectInput.value = selectedName;
         }
