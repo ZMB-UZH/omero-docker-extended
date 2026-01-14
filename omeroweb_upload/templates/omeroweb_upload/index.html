@@ -184,7 +184,7 @@
             display: flex;
             justify-content: flex-start;
             width: 100%;
-            margin: 5px 0 -6px;
+            margin: 0 0 -8px;
             padding-left: 266px;
         }
         .project-select-group {
@@ -382,7 +382,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 4px;
+            margin-bottom: 0;
             flex-wrap: wrap;
         }
         .upload-intro-row p {
@@ -1052,19 +1052,19 @@
             <div class="upload-card__content">
                 <div class="upload-intro-row">
                     <p><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
-                    <div class="project-select-wrapper project-select-wrapper--compact" id="special_upload_wrapper">
+                    <div class="project-select-wrapper" id="special_upload_wrapper">
                         <input type="text"
                                id="special_upload_input"
                                placeholder="Select a special method..."
                                autocomplete="off"
-                               class="project-select-input project-select-input--compact">
+                               class="project-select-input">
                         <div id="special_upload_display" class="project-select-display" aria-hidden="true"></div>
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" id="special_upload" value="">
                         <div id="special_upload_dropdown"
                              style="display:none; position:absolute; left:0; right:0; top:100%;
                                     background:#fff; border:1px solid #007bff; border-top:none;
-                                    max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                                    max-height:530px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                         </div>
                     </div>
                 </div>
@@ -1092,7 +1092,7 @@
                                 <div id="project_select_dropdown"
                                      style="display:none; position:absolute; left:0; right:0; top:100%;
                                             background:#fff; border:1px solid #007bff; border-top:none;
-                                            max-height:480px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
+                                            max-height:530px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                                 </div>
                                 {{ projects|json_script:"project-data" }}
                             </div>
@@ -1900,7 +1900,7 @@
             statusRow.style.fontSize = '11px';
             statusRow.style.color = '#6b7280';
             if (totalMatches > MAX_PROJECT_RESULTS) {
-                statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
+                statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
             } else if (totalMatches > 0) {
                 statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
             } else {
