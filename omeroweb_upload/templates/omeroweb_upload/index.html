@@ -1293,6 +1293,20 @@
             updateCancelButtons();
         }
 
+        function registerActiveRequest(xhr) {
+            activeUploadRequests.add(xhr);
+            const cleanup = () => {
+                activeUploadRequests.delete(xhr);
+                if (uploadProgressEntries && uploadProgressEntries.has(xhr)) {
+                    uploadProgressEntries.delete(xhr);
+                }
+            };
+            xhr.addEventListener('loadend', cleanup, { once: true });
+            xhr.addEventListener('abort', cleanup, { once: true });
+            xhr.addEventListener('error', cleanup, { once: true });
+            xhr.addEventListener('timeout', cleanup, { once: true });
+        }
+
         function updateCompatibilityOverlayProgress() {
             if (!uploadOverlay || !isUploading) {
                 return;
@@ -1958,7 +1972,7 @@
             if (!document.cookie || typeof name !== 'string' || !name) {
                 return null;
             }
-            // Escape special regex characters in cookie name
+            // Escape special regex characters
             const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const pattern = new RegExp(`(?:^|;\\s*)${escapedName}=([^;]*)`);
             const match = document.cookie.match(pattern);
@@ -1966,7 +1980,7 @@
                 try {
                     return decodeURIComponent(match[1]);
                 } catch (error) {
-                    // Handle malformed URI encoding
+                    console.warn('Failed to decode cookie:', error);
                     return match[1];
                 }
             }
@@ -2786,7 +2800,13 @@
         compatibilityNoBtn.addEventListener('click', () => resolveCompatibilityPopup(false));
 
         async function parseJsonResponse(response) {
-            const text = await response.text();
+            let text = '';
+            try {
+                text = await response.text();
+            } catch (error) {
+                throw new Error(`Failed to read response: ${error.message || error}`);
+            }
+            
             const contentType = response.headers.get('content-type') || '';
             if (!text) {
                 return {};
@@ -2802,7 +2822,7 @@
             } catch (error) {
                 const snippet = text.trim().slice(0, 160);
                 const details = snippet ? ` Response: ${snippet}` : '';
-                throw new Error(`Server returned invalid JSON.${details}`);
+                throw new Error(`Server returned invalid JSON.${details} Parse error: ${error.message}`);
             }
         }
 
@@ -2820,8 +2840,16 @@
                 return { confirmation_required: false, compatibility_status: 'compatible', status: 'ready' };
             }
             const maxAttempts = 300;
+            const maxTimeMs = 5 * 60 * 1000; // 5 minutes
+            const startTime = Date.now();
             let attempts = 0;
+            
             while (attempts < maxAttempts) {
+                // Check absolute timeout
+                if (Date.now() - startTime > maxTimeMs) {
+                    throw new Error('Compatibility check timeout - operation took too long. Please try again.');
+                }
+                
                 const data = await fetchJobStatus(job);
                 
                 if (data.compatibility_checked !== undefined && data.compatibility_total !== undefined) {
@@ -2830,7 +2858,7 @@
                     if (total > 0) {
                         const percent = Math.min(100, Math.floor((checked / total) * 100));
                         if (uploadOverlay) {
-                            uploadOverlay.textContent = 'UPLOADED. CHECKING COMPATIBILITY...';
+                            uploadOverlay.textContent = `UPLOADED. CHECKING COMPATIBILITY... (${percent}%)`;
                         }
                     }
                 }
@@ -2843,7 +2871,7 @@
                 }
                 return data;
             }
-            throw new Error('Compatibility check timeout - please refresh the page and try again.');
+            throw new Error('Compatibility check timeout - maximum attempts exceeded.');
         }
 
         async function confirmCompatibility(job) {
@@ -2880,7 +2908,7 @@
             return entry.relativePath || entry.file.name;
         }
 
-        async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
+async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
             }
@@ -2893,11 +2921,7 @@
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     const incompatibleSet = new Set(statusData.incompatible_files || []);
-                    
-                    // 🔴 FIX: Restore uploadedFiles to pendingFiles
                     pendingFiles = [...uploadedFiles];
-                    
-                    // 🔴 FIX: Set isIncompatible directly on pendingFiles entries
                     pendingFiles.forEach((entry) => {
                         const path = getEntryPath(entry);
                         entry.isIncompatible = incompatibleSet.has(path);
@@ -2914,6 +2938,40 @@
                 await confirmCompatibility(job);
             }
             return { proceed: true, status: statusData };
+        }
+
+        function createUploadBatches(entries) {
+            const maxBatchBytes = 50 * 1024 * 1024;
+            const maxBatchFiles = Math.max(1, currentUploadBatchFiles);
+            const batches = [];
+            let current = [];
+            let currentBytes = 0;
+
+            entries.forEach((entry) => {
+                const fileSize = Number(entry.file?.size) || 0;
+                
+                // Validate file size
+                if (fileSize < 0 || fileSize > Number.MAX_SAFE_INTEGER) {
+                    console.error(`Invalid file size: ${fileSize} for ${getEntryPath(entry)}`);
+                    return;
+                }
+                
+                const needsSplit = current.length >= maxBatchFiles || 
+                                 (currentBytes + fileSize > maxBatchBytes && current.length > 0);
+                
+                if (needsSplit) {
+                    batches.push(current);
+                    current = [];
+                    currentBytes = 0;
+                }
+                current.push(entry);
+                currentBytes += fileSize;
+            });
+
+            if (current.length > 0) {
+                batches.push(current);
+            }
+            return batches;
         }
 
         async function startUploadJob(entries = pendingFiles) {
@@ -3075,12 +3133,16 @@
         }
 
         function escapeHtml(value) {
-            return value
+            if (value == null) {
+                return '';
+            }
+            return String(value)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
+                .replace(/'/g, '&#39;')
+                .replace(/\//g, '&#x2F;');
         }
 
         function formatImportLogEntry(entry) {
