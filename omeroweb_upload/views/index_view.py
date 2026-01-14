@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import os
 import re
 import secrets
 import stat
@@ -33,6 +32,7 @@ _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
 _UPLOAD_CLEANUP_GUARD = threading.Lock()
 _LAST_UPLOAD_CLEANUP_TIME = 0.0
+_CLEANUP_IN_PROGRESS = False
 
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
 DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
