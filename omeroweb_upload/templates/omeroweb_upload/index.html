@@ -1408,8 +1408,16 @@
             }
         }
 
+        function normalizeByteSize(value) {
+            const size = Number(value);
+            if (!Number.isFinite(size) || size <= 0) {
+                return 0;
+            }
+            return size;
+        }
+
         function getPendingTotalBytes() {
-            return pendingFiles.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
+            return pendingFiles.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
         }
 
         function resetUploadProgress() {
@@ -1421,22 +1429,36 @@
         }
 
         function updateUploadOverlayProgress() {
-            if (!uploadOverlay || !isUploading || !uploadTotalBytes) {
+            if (!uploadOverlay || !isUploading) {
                 if (uploadOverlay) {
                     uploadOverlay.textContent = 'UPLOADING';
                 }
                 return;
             }
-            const loaded = Array.from(uploadProgressEntries.values()).reduce(
-                (acc, entry) => acc + Math.min(entry.loaded, entry.total),
-                0
-            );
-            const percent = Math.min(100, Math.floor((loaded / uploadTotalBytes) * 100));
+            const totalBytes = Number.isFinite(uploadTotalBytes) && uploadTotalBytes > 0
+                ? uploadTotalBytes
+                : Array.from(uploadProgressEntries.values()).reduce(
+                    (acc, entry) => acc + normalizeByteSize(entry.total),
+                    0
+                );
+            if (!totalBytes) {
+                uploadOverlay.textContent = 'UPLOADING';
+                return;
+            }
+            const loaded = Array.from(uploadProgressEntries.values()).reduce((acc, entry) => {
+                const loadedBytes = normalizeByteSize(entry.loaded);
+                const entryTotal = normalizeByteSize(entry.total);
+                return acc + (entryTotal ? Math.min(loadedBytes, entryTotal) : loadedBytes);
+            }, 0);
+            const percent = Math.min(100, Math.floor((loaded / totalBytes) * 100));
             uploadOverlay.textContent = `UPLOADING (${percent}%)`;
         }
 
         function setUploadProgressEntry(key, loaded, total) {
-            uploadProgressEntries.set(key, { loaded, total });
+            uploadProgressEntries.set(key, {
+                loaded: normalizeByteSize(loaded),
+                total: normalizeByteSize(total),
+            });
             updateUploadOverlayProgress();
         }
 
@@ -3184,11 +3206,11 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
         }
 
         async function startUploadJob(entries = pendingFiles) {
-            const totalBytes = entries.reduce((acc, entry) => acc + entry.file.size, 0);
+            const totalBytes = entries.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
             const metadata = entries.map((entry) => ({
                 name: entry.file.name,
                 relative_path: getEntryPath(entry),
-                size: entry.file.size,
+                size: normalizeByteSize(entry.file?.size),
             }));
             const projectId = projectSelect?.value || '';
             const projectName = projectSelectInput?.dataset.selectedName || projectSelectInput?.value || '';
@@ -3220,7 +3242,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             let currentBytes = 0;
 
             entries.forEach((entry) => {
-                const fileSize = Number(entry.file?.size) || 0;
+                const fileSize = normalizeByteSize(entry.file?.size);
 
                 if (fileSize < 0 || fileSize > Number.MAX_SAFE_INTEGER) {
                     console.error(`Invalid file size: ${fileSize} for ${getEntryPath(entry)}`);
@@ -3251,7 +3273,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                     return;
                 }
                 const formData = new FormData();
-                const batchTotalBytes = batch.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
+                const batchTotalBytes = batch.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
                 
                 // Validate batch before processing
                 if (batch.length === 0) {
@@ -3280,11 +3302,9 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 registerActiveRequest(xhr);
                 setUploadProgressEntry(xhr, 0, batchTotalBytes);
                 xhr.upload.onprogress = (event) => {
-                    if (!event.lengthComputable) {
-                        return;
-                    }
-                    const total = event.total || batchTotalBytes;
-                    setUploadProgressEntry(xhr, event.loaded, total);
+                    const total = event.lengthComputable ? event.total : batchTotalBytes;
+                    const loaded = event.lengthComputable ? event.loaded : Math.min(event.loaded, total);
+                    setUploadProgressEntry(xhr, loaded, total);
                 };
                 xhr.onload = () => {
                     if (cancelUploadRequested) {
