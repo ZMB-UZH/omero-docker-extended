@@ -2893,13 +2893,14 @@
         }
 
         function handleFiles(entries) {
-            const duplicates = findDuplicateRootNames(entries);
-            if (duplicates.size) {
-                showDuplicatePopup(
-                    'Some of the selected items are already in the upload list. Remove existing entries or rename them before uploading.'
-                );
-                return;
-            }
+        const duplicates = findDuplicateRootNames(entries);
+        if (duplicates.size) {
+            showDuplicatePopup(
+                'Some of the selected items are already in the upload list.\n' +
+                'Remove existing entries or rename them before uploading.',
+            );
+            return;
+        }
             pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
             if (hasActiveImport()) {
@@ -2990,6 +2991,7 @@
         });
 
         uploadCard.addEventListener('dragover', (event) => {
+            event.stopPropagation();
             if (isUploading) {
                 return;
             }
@@ -3717,14 +3719,13 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                         const compatibilityResult = await ensureCompatibilityBeforeImport(job, existingEntries);
                         if (compatibilityResult.proceed) {
                             registerImportJob(job);
-                            setStatus(
-                                'Import resumed. Files will appear in Omero soon.',
-                                'success'
-                            );
+                            setStatus('Import resumed. Files will appear in Omero soon.', 'success');
                             delete window.pendingImportJob;
                             window.pendingImportFiles = [];
                         } else {
                             window.pendingImportFiles = existingEntries;
+                            pendingFiles = existingEntries;
+                            refreshFileList();
                             shouldContinue = false;
                         }
                     } else {
