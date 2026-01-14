@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import random
 import re
 import secrets
 import stat
@@ -300,22 +301,58 @@ def _load_job(job_id: str):
     return None
 
 
-def _save_job(job_dict):
+def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
     path = _job_path(job_dict["job_id"])
     job_dict["updated"] = time.time()
-    try:
-        with portalocker.Lock(path, "w", timeout=1) as handle:
-            json.dump(job_dict, handle)
-        return True
-    except (portalocker.exceptions.LockException, OSError) as exc:
-        logger.warning("Unable to lock job file %s for writing: %s", path, exc)
-    try:
-        with path.open("w") as handle:
-            json.dump(job_dict, handle)
-        return True
-    except OSError as exc:
-        logger.warning("Unable to write job file %s without lock: %s", path, exc)
+    for attempt in range(retries):
+        if attempt:
+            time.sleep(random.uniform(0.05, 0.2))
+        try:
+            with portalocker.Lock(path, "w", timeout=timeout) as handle:
+                json.dump(job_dict, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return True
+        except (portalocker.exceptions.LockException, OSError) as exc:
+            logger.warning(
+                "Unable to lock job file %s for writing (attempt %s/%s): %s",
+                path,
+                attempt + 1,
+                retries,
+                exc,
+            )
+    logger.error("Failed to lock job file %s for writing after %s attempts.", path, retries)
     return False
+
+
+def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
+    path = _job_path(job_id)
+    for attempt in range(retries):
+        if attempt:
+            time.sleep(random.uniform(0.05, 0.2))
+        try:
+            with portalocker.Lock(path, "r+", timeout=timeout) as handle:
+                job_dict = json.load(handle)
+                job_dict = update_fn(job_dict)
+                handle.seek(0)
+                handle.truncate()
+                json.dump(job_dict, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return job_dict
+        except json.JSONDecodeError as exc:
+            logger.error("Job file %s is corrupt: %s", path, exc)
+            return None
+        except (portalocker.exceptions.LockException, OSError) as exc:
+            logger.warning(
+                "Unable to lock job file %s for update (attempt %s/%s): %s",
+                path,
+                attempt + 1,
+                retries,
+                exc,
+            )
+    logger.error("Failed to lock job file %s for update after %s attempts.", path, retries)
+    return None
 
 
 def _safe_relative_path(raw_name: str):
@@ -908,8 +945,6 @@ def _cleanup_upload_artifacts():
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
-    path = _job_path(job_id)
-
     def apply_updates(job_dict):
         entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
         for update in updates:
@@ -932,44 +967,11 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
         job_dict["updated"] = time.time()
         return job_dict
 
-    try:
-        with portalocker.Lock(path, "r+", timeout=5) as handle:
-            job_dict = json.load(handle)
-            job_dict = apply_updates(job_dict)
-            handle.seek(0)
-            handle.truncate()
-            json.dump(job_dict, handle)
-        return job_dict
-    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to lock job file %s for upload update: %s", path, exc)
-
-    job_dict = _load_job(job_id)
-    if not job_dict:
-        return None
-    job_dict = apply_updates(job_dict)
-    _save_job(job_dict)
-    return job_dict
+    return _robust_update_job(job_id, apply_updates)
 
 
 def _update_job(job_id: str, update_fn):
-    path = _job_path(job_id)
-    try:
-        with portalocker.Lock(path, "r+", timeout=5) as handle:
-            job_dict = json.load(handle)
-            job_dict = update_fn(job_dict)
-            handle.seek(0)
-            handle.truncate()
-            json.dump(job_dict, handle)
-        return job_dict
-    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to lock job file %s for update: %s", path, exc)
-
-    job_dict = _load_job(job_id)
-    if not job_dict:
-        return None
-    job_dict = update_fn(job_dict)
-    _save_job(job_dict)
-    return job_dict
+    return _robust_update_job(job_id, update_fn)
 
 
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
