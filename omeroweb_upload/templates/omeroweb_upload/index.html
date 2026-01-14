@@ -2896,8 +2896,8 @@
         const duplicates = findDuplicateRootNames(entries);
         if (duplicates.size) {
             showDuplicatePopup(
-                'Some of the selected items are already in the upload list.\n' +
-                'Remove existing entries or rename them before uploading.',
+                'Some of the selected items are already in the upload list.\n' + 
+                'Remove existing entries or rename them before uploading.'
             );
             return;
         }
@@ -3724,7 +3724,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                             window.pendingImportFiles = [];
                         } else {
                             window.pendingImportFiles = existingEntries;
-                            pendingFiles = existingEntries;
+                            pendingFiles = [...existingEntries, ...newEntries];
                             refreshFileList();
                             shouldContinue = false;
                         }
@@ -3845,25 +3845,31 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
         });
 
         if (projectSelectInput) {
+            // Block drag propagation to prevent flickering and unintended focus shifts
+            ['dragenter', 'dragover'].forEach(eventName => {
+                projectSelectInput.addEventListener(eventName, (e) => e.stopPropagation());
+            });
+
             projectSelectInput.addEventListener('focus', () => {
+                if (isUploading) return; // Prevent expansion while uploading
                 if (suppressProjectDropdownOpenOnFocusOnce) {
                     suppressProjectDropdownOpenOnFocusOnce = false;
                     return;
                 }
                 openProjectDropdown();
             });
-
             projectSelectInput.addEventListener('click', () => {
+                if (isUploading) return; // Guard click event
                 if (projectSelectDropdown?.style.display !== 'block') {
                     openProjectDropdown();
                 }
             });
-
             projectSelectInput.addEventListener('input', (event) => {
+                if (isUploading) return;
                 filterProjectOptions(event.target.value);
             });
-
             projectSelectInput.addEventListener('keydown', (event) => {
+                if (isUploading) return;
                 if (projectSelectDropdown?.style.display !== 'block') return;
                 if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                     event.preventDefault();
@@ -3888,25 +3894,31 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
         }
 
         if (specialUploadInput) {
+            // Block drag propagation to prevent flickering and unintended focus shifts
+            ['dragenter', 'dragover'].forEach(eventName => {
+                specialUploadInput.addEventListener(eventName, (e) => e.stopPropagation());
+            });
+
             specialUploadInput.addEventListener('focus', () => {
+                if (isUploading) return; // Prevent expansion while uploading
                 if (suppressSpecialUploadDropdownOpenOnFocusOnce) {
                     suppressSpecialUploadDropdownOpenOnFocusOnce = false;
                     return;
                 }
                 openSpecialUploadDropdown();
             });
-
             specialUploadInput.addEventListener('click', () => {
+                if (isUploading) return; // Guard click event
                 if (specialUploadDropdown?.style.display !== 'block') {
                     openSpecialUploadDropdown();
                 }
             });
-
             specialUploadInput.addEventListener('input', (event) => {
+                if (isUploading) return;
                 filterSpecialUploadOptions(event.target.value);
             });
-
             specialUploadInput.addEventListener('keydown', (event) => {
+                if (isUploading) return;
                 if (specialUploadDropdown?.style.display !== 'block') return;
                 if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                     event.preventDefault();
