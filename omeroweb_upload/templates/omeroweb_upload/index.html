@@ -557,6 +557,11 @@
             color: #dc2626;
             text-decoration: underline;
         }
+        .tree-row.is-incompatible-folder .tree-name,
+        .tree-row.is-incompatible-folder .tree-meta {
+            color: #dc2626;
+            font-weight: 700;
+        }
         .tree-size {
             color: #334155;
             font-variant-numeric: tabular-nums;
@@ -2144,6 +2149,7 @@
                 totalSize: 0,
                 totalFiles: 0,
                 lastModified: 0,
+                hasIncompatible: false,
             };
             entries.forEach((entry) => {
                 const rawPath = getEntryPath(entry);
@@ -2168,6 +2174,7 @@
                             files: [],
                             totalSize: 0,
                             lastModified: 0,
+                            hasIncompatible: false,
                         });
                     }
                     node = node.children.get(part);
@@ -2180,23 +2187,34 @@
             let totalSize = 0;
             let totalFiles = 0;
             let latest = 0;
+            let hasIncompatible = false;
+            
             node.files.forEach((file) => {
                 totalSize += file.size;
                 totalFiles += 1;
                 latest = Math.max(latest, file.lastModified || 0);
+                if (file.entry?.isIncompatible) {
+                    hasIncompatible = true;
+                }
             });
+            
             node.children.forEach((child) => {
                 computeNodeStats(child);
                 totalSize += child.totalSize;
                 totalFiles += child.totalFiles;
                 latest = Math.max(latest, child.lastModified || 0);
+                if (child.hasIncompatible) {
+                    hasIncompatible = true;
+                }
             });
+            
             node.totalSize = totalSize;
             node.totalFiles = totalFiles;
             node.lastModified = latest;
+            node.hasIncompatible = hasIncompatible;
             return node;
         }
-
+        
         function createIcon(kind) {
             const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             icon.setAttribute('viewBox', '0 0 24 24');
@@ -2253,6 +2271,10 @@
                 const row = document.createElement('div');
                 row.classList.add('tree-row');
                 row.style.setProperty('--depth', depth);
+                
+                if (child.hasIncompatible) {
+                    row.classList.add('is-incompatible-folder');
+                }
 
                 const nameCell = document.createElement('div');
                 nameCell.classList.add('tree-name-cell');
@@ -2328,58 +2350,6 @@
                 item.appendChild(childrenList);
                 list.appendChild(item);
             });
-            node.files
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .forEach((file) => {
-                    const item = document.createElement('li');
-                    item.classList.add('tree-node');
-                    const row = document.createElement('div');
-                    row.classList.add('tree-row');
-                    row.style.setProperty('--depth', depth);
-                    
-                    if (file.entry?.isIncompatible) {
-                        row.classList.add('is-incompatible');
-                    }
-
-                    const nameCell = document.createElement('div');
-                    nameCell.classList.add('tree-name-cell');
-
-                    const spacer = document.createElement('span');
-                    spacer.classList.add('tree-spacer');
-
-                    const icon = createIcon('file');
-                    const label = document.createElement('span');
-                    label.classList.add('tree-file-name');
-                    label.textContent = file.name;
-                    const size = document.createElement('span');
-                    size.classList.add('tree-size');
-                    size.textContent = formatBytes(file.size);
-
-                    const date = document.createElement('span');
-                    date.classList.add('tree-date');
-                    date.textContent = formatDateTime(file.lastModified);
-                    const deleteCell = document.createElement('div');
-                    deleteCell.classList.add('tree-delete-cell');
-                    const deleteButton = document.createElement('button');
-                    deleteButton.type = 'button';
-                    deleteButton.classList.add('var-row-btn', 'var-row-remove');
-                    deleteButton.setAttribute('aria-label', `Remove ${file.name}`);
-                    deleteButton.textContent = '−';
-                    deleteButton.addEventListener('click', () => {
-                        removeFileEntry(file.rawPath);
-                    });
-                    deleteCell.appendChild(deleteButton);
-
-                    nameCell.appendChild(spacer);
-                    nameCell.appendChild(icon);
-                    nameCell.appendChild(label);
-                    row.appendChild(nameCell);
-                    row.appendChild(size);
-                    row.appendChild(date);
-                    row.appendChild(deleteCell);
-                    item.appendChild(row);
-                    list.appendChild(item);
-                });
             return list;
         }
 
