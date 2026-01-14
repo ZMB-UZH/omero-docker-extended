@@ -730,11 +730,14 @@ def _is_within_root(path: Path, root: Path) -> bool:
 
 
 def _should_run_cleanup(interval: int) -> bool:
-    global _LAST_UPLOAD_CLEANUP_TIME
+    global _LAST_UPLOAD_CLEANUP_TIME, _CLEANUP_IN_PROGRESS
     now = time.time()
     with _UPLOAD_CLEANUP_GUARD:
+        if _CLEANUP_IN_PROGRESS:
+            return False
         if now - _LAST_UPLOAD_CLEANUP_TIME < interval:
             return False
+        _CLEANUP_IN_PROGRESS = True
         _LAST_UPLOAD_CLEANUP_TIME = now
     return True
 
@@ -898,6 +901,10 @@ def _cleanup_upload_artifacts():
                 deleted += 1
     except OSError as exc:
         logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
+    
+    global _CLEANUP_IN_PROGRESS
+    with _UPLOAD_CLEANUP_GUARD:
+        _CLEANUP_IN_PROGRESS = False
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
