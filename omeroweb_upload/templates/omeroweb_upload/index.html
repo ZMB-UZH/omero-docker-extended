@@ -2893,19 +2893,16 @@
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     const incompatibleSet = new Set(statusData.incompatible_files || []);
-                    const pendingByPath = new Map(
-                        pendingFiles.map((entry) => [getEntryPath(entry), entry])
-                    );
-                    uploadedFiles.forEach((entry) => {
+                    
+                    // 🔴 FIX: Restore uploadedFiles to pendingFiles
+                    pendingFiles = [...uploadedFiles];
+                    
+                    // 🔴 FIX: Set isIncompatible directly on pendingFiles entries
+                    pendingFiles.forEach((entry) => {
                         const path = getEntryPath(entry);
-                        if (!pendingByPath.has(path)) {
-                            pendingFiles.push(entry);
-                            pendingByPath.set(path, entry);
-                        }
-                    });
-                    pendingByPath.forEach((entry, path) => {
                         entry.isIncompatible = incompatibleSet.has(path);
                     });
+                    
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
