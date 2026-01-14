@@ -2858,13 +2858,19 @@
                 if (!proceed) {
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
-                    pendingFiles = uploadedFiles;
                     const incompatibleSet = new Set(statusData.incompatible_files || []);
-                    pendingFiles.forEach(entry => {
+                    const pendingByPath = new Map(
+                        pendingFiles.map((entry) => [getEntryPath(entry), entry])
+                    );
+                    uploadedFiles.forEach((entry) => {
                         const path = getEntryPath(entry);
-                        if (incompatibleSet.has(path)) {
-                            entry.isIncompatible = true;
+                        if (!pendingByPath.has(path)) {
+                            pendingFiles.push(entry);
+                            pendingByPath.set(path, entry);
                         }
+                    });
+                    pendingByPath.forEach((entry, path) => {
+                        entry.isIncompatible = incompatibleSet.has(path);
                     });
                     refreshFileList();
                     updateUploadButtonLabel();
