@@ -1014,8 +1014,9 @@ def _check_import_compatibility(
     session_key: str,
     host: str,
     port: int,
-    path: Path,
-    dataset_id=None,
+    file_path: Path,
+    dataset_id: Optional[int],
+    relative_path: str,
 ):
     if not path.exists():
         return {
@@ -1039,10 +1040,12 @@ def _check_import_compatibility(
     except subprocess.TimeoutExpired:
         return {
             "status": "error",
+            "relative_path": relative_path,
             "stdout": "",
             "stderr": "Compatibility check timeout",
             "details": "Compatibility check timeout after 30 seconds",
         }
+
     except FileNotFoundError as exc:
         return {
             "status": "error",
@@ -1055,13 +1058,16 @@ def _check_import_compatibility(
         status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
         return {
             "status": status,
+            "relative_path": relative_path,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "details": details,
         }
 
+
     return {
         "status": "compatible",
+        "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
         "details": "Compatibility check succeeded.",
@@ -1140,6 +1146,7 @@ def _run_compatibility_check(job_id: str):
                 port,
                 file_path,
                 dataset_id,
+                entry.get("relative_path"),
             )
             future_map[future] = (entry_index, entry)
         for future in as_completed(future_map):
@@ -1167,7 +1174,8 @@ def _run_compatibility_check(job_id: str):
     new_incompatible = [
         result["relative_path"]
         for result in results
-        if result.get("status") == "incompatible" and result.get("relative_path")
+        if result.get("status") == "incompatible"
+           and isinstance(result.get("relative_path"), str)
     ]
 
     def apply_results(job_dict):
