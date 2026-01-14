@@ -1305,6 +1305,8 @@
         let isUploading = false;
         let cancelUploadRequested = false;
         let compatibilityPopupResolver = null;
+        let suppressProjectDropdownOpenOnFocusOnce = false;
+        let suppressSpecialUploadDropdownOpenOnFocusOnce = false;
         let uploadTotalBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
@@ -2768,6 +2770,8 @@
                 compatibilityPopupResolver = null;
             }
             if (compatibilityPopup.contains(document.activeElement)) {
+                suppressProjectDropdownOpenOnFocusOnce = true;
+                suppressSpecialUploadDropdownOpenOnFocusOnce = true;
                 focusFallbackElement();
             }
             compatibilityOverlay.style.display = 'none';
@@ -3088,9 +3092,21 @@
 
         duplicateOverlay.addEventListener('click', hideDuplicatePopup);
         duplicateOkBtn.addEventListener('click', hideDuplicatePopup);
-        compatibilityOverlay.addEventListener('click', () => resolveCompatibilityPopup(false));
-        compatibilityYesBtn.addEventListener('click', () => resolveCompatibilityPopup(true));
-        compatibilityNoBtn.addEventListener('click', () => resolveCompatibilityPopup(false));
+        compatibilityOverlay.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveCompatibilityPopup(false);
+        });
+        compatibilityYesBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveCompatibilityPopup(true);
+        });
+        compatibilityNoBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveCompatibilityPopup(false);
+        });
 
         async function parseJsonResponse(response) {
             let text = '';
@@ -3829,6 +3845,10 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
 
         if (projectSelectInput) {
             projectSelectInput.addEventListener('focus', () => {
+                if (suppressProjectDropdownOpenOnFocusOnce) {
+                    suppressProjectDropdownOpenOnFocusOnce = false;
+                    return;
+                }
                 openProjectDropdown();
             });
 
@@ -3868,6 +3888,10 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
 
         if (specialUploadInput) {
             specialUploadInput.addEventListener('focus', () => {
+                if (suppressSpecialUploadDropdownOpenOnFocusOnce) {
+                    suppressSpecialUploadDropdownOpenOnFocusOnce = false;
+                    return;
+                }
                 openSpecialUploadDropdown();
             });
 
