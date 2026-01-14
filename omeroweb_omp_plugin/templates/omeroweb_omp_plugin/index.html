@@ -110,7 +110,7 @@
                                id="project_select_input"
                                placeholder="Select project…"
                                autocomplete="off"
-                               style="width:100%; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                               style="width:100%; flex:1 1 auto; min-width:0; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" name="project" id="project_select" value="">
                         <div id="project_select_dropdown"
@@ -156,7 +156,7 @@
                        id='separator_input'
                        name='separator'
                        value='_-.'
-                       style='width:var(--omp-primary-input-width); flex:0 0 var(--omp-primary-input-width); padding:12px;border-radius:6px;border:1px solid #007bff;'>
+                       style='width:100%; flex:1 1 auto; min-width:0; padding:12px;border-radius:6px;border:1px solid #007bff;'>
 
                 <div style='display:flex; flex-direction:column; gap:6px;'>
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
@@ -594,8 +594,7 @@
         z-index: 20001;
     }
     .omeroweb-omp-plugin {
-        --omp-project-select-width: 300px;
-        --omp-primary-input-width: calc(var(--omp-project-select-width) + 50px);
+        --omp-project-select-width: 100%;
     }
     .omeroweb-omp-plugin,
     .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
@@ -722,12 +721,17 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        width: var(--omp-primary-input-width);
-        flex: 0 0 var(--omp-primary-input-width);
+        flex: 1 1 auto;
+        min-width: 0;
         position: relative;
         z-index: 1001;
     }
-    .project-select-wrapper {position: relative; width: var(--omp-project-select-width);}
+    .project-select-wrapper {
+        position: relative;
+        width: var(--omp-project-select-width);
+        flex: 1 1 auto;
+        min-width: 0;
+    }
     .project-refresh-btn {
         width: 40px;
         height: 40px;
