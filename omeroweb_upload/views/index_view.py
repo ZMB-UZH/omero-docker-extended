@@ -1026,7 +1026,12 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    cmd = [OMERO_CLI, "import", "-f", str(path)]
+    cmd = [OMERO_CLI, "import", "-f", "-k", session_key]
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    cmd.append(str(file_path))
     env = os.environ.copy()
     env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
     try:
