@@ -3790,8 +3790,14 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                     event.preventDefault();
                     const options = getProjectOptions();
                     if (options.length === 0) return;
+                    const maxIndex = options.length - 1;
+                    if (activeProjectIndex === -1) {
+                        const nextIndex = event.key === 'ArrowDown' ? 0 : maxIndex;
+                        setActiveProjectIndex(nextIndex, true);
+                        return;
+                    }
                     const delta = event.key === 'ArrowDown' ? 1 : -1;
-                    const nextIndex = activeProjectIndex === -1 ? 0 : activeProjectIndex + delta;
+                    const nextIndex = Math.max(0, Math.min(activeProjectIndex + delta, maxIndex));
                     setActiveProjectIndex(nextIndex, true);
                 } else if (event.key === 'Enter') {
                     const options = getProjectOptions();
@@ -3823,8 +3829,14 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                     event.preventDefault();
                     const options = getSpecialUploadOptionElements();
                     if (options.length === 0) return;
+                    const maxIndex = options.length - 1;
+                    if (activeSpecialUploadIndex === -1) {
+                        const nextIndex = event.key === 'ArrowDown' ? 0 : maxIndex;
+                        setActiveSpecialUploadIndex(nextIndex, true);
+                        return;
+                    }
                     const delta = event.key === 'ArrowDown' ? 1 : -1;
-                    const nextIndex = activeSpecialUploadIndex === -1 ? 0 : activeSpecialUploadIndex + delta;
+                    const nextIndex = Math.max(0, Math.min(activeSpecialUploadIndex + delta, maxIndex));
                     setActiveSpecialUploadIndex(nextIndex, true);
                 } else if (event.key === 'Enter') {
                     const options = getSpecialUploadOptionElements();
