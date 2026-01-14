@@ -261,6 +261,8 @@ def _compatibility_pending_entries(job_dict):
 def _should_start_compatibility_check(job_dict) -> bool:
     if not job_dict or job_dict.get("compatibility_thread_active"):
         return False
+    if job_dict.get("compatibility_confirmed"):
+        return False
     pending_entries = _compatibility_pending_entries(job_dict)
     if not pending_entries:
         return False
@@ -830,118 +832,120 @@ def _cleanup_upload_artifacts():
     if not _should_run_cleanup(interval):
         return
 
-    upload_root = _get_upload_root()
-    jobs_root = _get_jobs_root()
-    if not upload_root.exists() or not jobs_root.exists():
-        return
-
-    max_age = _get_env_int(
-        UPLOAD_CLEANUP_MAX_AGE_ENV,
-        DEFAULT_UPLOAD_CLEANUP_MAX_AGE,
-        15 * 60,
-        14 * 24 * 60 * 60,
-    )
-    stale_age = _get_env_int(
-        UPLOAD_CLEANUP_STALE_AGE_ENV,
-        DEFAULT_UPLOAD_CLEANUP_STALE_AGE,
-        max_age,
-        30 * 24 * 60 * 60,
-    )
-    max_delete = _get_env_int(
-        UPLOAD_CLEANUP_MAX_DELETE_ENV,
-        DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
-        1,
-        500,
-    )
-    now = time.time()
-
-    deleted = 0
-    seen_job_ids = set()
-
     try:
-        for entry in os.scandir(jobs_root):
-            if deleted >= max_delete:
-                break
-            if not entry.name.endswith(".json"):
-                continue
-            job_id = entry.name[:-5]
-            if not _safe_job_id(job_id):
-                continue
-            seen_job_ids.add(job_id)
-            job_path = Path(entry.path)
+        upload_root = _get_upload_root()
+        jobs_root = _get_jobs_root()
+        if not upload_root.exists() or not jobs_root.exists():
+            return
 
-            try:
-                with portalocker.Lock(job_path, "r", timeout=0) as handle:
-                    try:
-                        job = json.load(handle)
-                    except json.JSONDecodeError:
-                        job = None
-            except (portalocker.exceptions.LockException, OSError):
-                continue
+        max_age = _get_env_int(
+            UPLOAD_CLEANUP_MAX_AGE_ENV,
+            DEFAULT_UPLOAD_CLEANUP_MAX_AGE,
+            15 * 60,
+            14 * 24 * 60 * 60,
+        )
+        stale_age = _get_env_int(
+            UPLOAD_CLEANUP_STALE_AGE_ENV,
+            DEFAULT_UPLOAD_CLEANUP_STALE_AGE,
+            max_age,
+            30 * 24 * 60 * 60,
+        )
+        max_delete = _get_env_int(
+            UPLOAD_CLEANUP_MAX_DELETE_ENV,
+            DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
+            1,
+            500,
+        )
+        now = time.time()
 
-            job_status = job.get("status") if isinstance(job, dict) else None
-            updated = None
-            if isinstance(job, dict):
-                updated = job.get("updated") or job.get("created")
-            if updated is None:
+        deleted = 0
+        seen_job_ids = set()
+
+        try:
+            for entry in os.scandir(jobs_root):
+                if deleted >= max_delete:
+                    break
+                if not entry.name.endswith(".json"):
+                    continue
+                job_id = entry.name[:-5]
+                if not _safe_job_id(job_id):
+                    continue
+                seen_job_ids.add(job_id)
+                job_path = Path(entry.path)
+
                 try:
-                    updated = entry.stat(follow_symlinks=False).st_mtime
+                    with portalocker.Lock(job_path, "r", timeout=0) as handle:
+                        try:
+                            job = json.load(handle)
+                        except json.JSONDecodeError:
+                            job = None
+                except (portalocker.exceptions.LockException, OSError):
+                    continue
+
+                job_status = job.get("status") if isinstance(job, dict) else None
+                updated = None
+                if isinstance(job, dict):
+                    updated = job.get("updated") or job.get("created")
+                if updated is None:
+                    try:
+                        updated = entry.stat(follow_symlinks=False).st_mtime
+                    except OSError:
+                        continue
+                age = now - float(updated)
+
+                should_delete = False
+                if job_status in ("done", "error") and age > max_age:
+                    should_delete = True
+                elif job_status in ("uploading", "ready", "importing") and age > stale_age:
+                    should_delete = True
+                elif job_status is None and age > stale_age:
+                    should_delete = True
+
+                if not should_delete:
+                    continue
+
+                job_dir = upload_root / job_id
+                if job_dir.exists():
+                    if not _safe_remove_tree(job_dir, upload_root):
+                        continue
+                try:
+                    job_path.unlink()
                 except OSError:
                     continue
-            age = now - float(updated)
-
-            should_delete = False
-            if job_status in ("done", "error") and age > max_age:
-                should_delete = True
-            elif job_status in ("uploading", "ready", "importing") and age > stale_age:
-                should_delete = True
-            elif job_status is None and age > stale_age:
-                should_delete = True
-
-            if not should_delete:
-                continue
-
-            job_dir = upload_root / job_id
-            if job_dir.exists():
-                if not _safe_remove_tree(job_dir, upload_root):
-                    continue
-            try:
-                job_path.unlink()
-            except OSError:
-                continue
-            deleted += 1
-    except OSError as exc:
-        logger.warning("Upload cleanup failed while scanning jobs: %s", exc)
-
-    if deleted >= max_delete:
-        return
-
-    try:
-        for entry in os.scandir(upload_root):
-            if deleted >= max_delete:
-                break
-            if not entry.is_dir(follow_symlinks=False):
-                continue
-            job_id = entry.name
-            if not _safe_job_id(job_id):
-                continue
-            if job_id in seen_job_ids:
-                continue
-            try:
-                mtime = entry.stat(follow_symlinks=False).st_mtime
-            except OSError:
-                continue
-            if now - mtime <= stale_age:
-                continue
-            job_dir = Path(entry.path)
-            if _safe_remove_tree(job_dir, upload_root):
                 deleted += 1
-    except OSError as exc:
-        logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
-    
-    global _CLEANUP_IN_PROGRESS
-    with _UPLOAD_CLEANUP_GUARD:
-        _CLEANUP_IN_PROGRESS = False
+        except OSError as exc:
+            logger.warning("Upload cleanup failed while scanning jobs: %s", exc)
+
+        if deleted >= max_delete:
+            return
+
+        try:
+            for entry in os.scandir(upload_root):
+                if deleted >= max_delete:
+                    break
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                job_id = entry.name
+                if not _safe_job_id(job_id):
+                    continue
+                if job_id in seen_job_ids:
+                    continue
+                try:
+                    mtime = entry.stat(follow_symlinks=False).st_mtime
+                except OSError:
+                    continue
+                if now - mtime <= stale_age:
+                    continue
+                job_dir = Path(entry.path)
+                if _safe_remove_tree(job_dir, upload_root):
+                    deleted += 1
+        except OSError as exc:
+            logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
+
+    finally:
+        global _CLEANUP_IN_PROGRESS
+        with _UPLOAD_CLEANUP_GUARD:
+            _CLEANUP_IN_PROGRESS = False
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
@@ -1802,6 +1806,7 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
         return JsonResponse({"ok": True, "status": job.get("status")})
 
     job["compatibility_confirmed"] = True
+    job["compatibility_thread_active"] = False
     job["status"] = "ready"
     job["updated"] = time.time()
     _save_job(job)
