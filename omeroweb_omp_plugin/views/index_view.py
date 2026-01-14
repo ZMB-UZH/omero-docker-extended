@@ -1,5 +1,6 @@
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import csrf_exempt
@@ -111,6 +112,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "messages_json": json.dumps(messages.index_messages()),
                 "is_root_user": is_root_user,
                 "ai_provider_options_json": json.dumps(list_ai_provider_options()),
+                "project_list_url": reverse("omeroweb_omp_plugin_projects"),
             }
             if extra:
                 context.update(extra)
@@ -632,3 +634,18 @@ def index(request, conn=None, url=None, **kwargs):
     except Exception as e:
         logger.exception("Unhandled error in index(): %s", e)
         return HttpResponse(f"<h2>Error: {e}</h2>")
+
+
+@login_required()
+def list_projects(request, conn=None, url=None, **kwargs):
+    user_id = _current_user_id(conn)
+    projects = []
+    try:
+        for proj in conn.listProjects():
+            pid = get_id(proj)
+            pname = get_text(proj.getName())
+            if _is_owned_by_user(proj, user_id):
+                projects.append((str(pid), pname))
+    except Exception as exc:
+        logger.exception("Error listing projects: %s", exc)
+    return JsonResponse(projects, safe=False)
