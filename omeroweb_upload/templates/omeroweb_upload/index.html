@@ -2227,6 +2227,7 @@
 
         const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
         const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
+        const uploadRequestTimeoutMs = 2 * 60 * 60 * 1000;
         let currentUploadBatchFiles = uploadBatchFiles;
         const userSettingsDefaults = {
             uploadBatchFiles,
@@ -3298,6 +3299,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', uploadUrl);
                 xhr.withCredentials = true;
+                xhr.timeout = uploadRequestTimeoutMs;
                 setRequestHeaders({}, xhr);
                 registerActiveRequest(xhr);
                 setUploadProgressEntry(xhr, 0, batchTotalBytes);
@@ -3305,6 +3307,9 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                     const total = event.lengthComputable ? event.total : batchTotalBytes;
                     const loaded = event.lengthComputable ? event.loaded : Math.min(event.loaded, total);
                     setUploadProgressEntry(xhr, loaded, total);
+                };
+                xhr.upload.onloadend = () => {
+                    setUploadProgressEntry(xhr, batchTotalBytes, batchTotalBytes);
                 };
                 xhr.onload = () => {
                     if (cancelUploadRequested) {
@@ -3342,6 +3347,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 };
                 xhr.onabort = () => reject(new Error('Upload canceled.'));
                 xhr.onerror = () => reject(new Error('Upload failed.'));
+                xhr.ontimeout = () => reject(new Error('Upload timed out waiting for a server response.'));
                 xhr.send(formData);
             });
         }
