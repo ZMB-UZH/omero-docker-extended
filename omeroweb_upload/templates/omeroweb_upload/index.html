@@ -1955,14 +1955,19 @@
         const csrfTokenName = 'csrftoken';
 
         function getCookie(name) {
-            if (!document.cookie) {
+            if (!document.cookie || typeof name !== 'string' || !name) {
                 return null;
             }
-            const cookies = document.cookie.split(';');
-            for (const cookie of cookies) {
-                const trimmed = cookie.trim();
-                if (trimmed.startsWith(`${name}=`)) {
-                    return decodeURIComponent(trimmed.slice(name.length + 1));
+            // Escape special regex characters in cookie name
+            const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp(`(?:^|;\\s*)${escapedName}=([^;]*)`);
+            const match = document.cookie.match(pattern);
+            if (match) {
+                try {
+                    return decodeURIComponent(match[1]);
+                } catch (error) {
+                    // Handle malformed URI encoding
+                    return match[1];
                 }
             }
             return null;
@@ -2912,14 +2917,6 @@
             return batches;
         }
 
-        function registerActiveRequest(xhr) {
-            activeUploadRequests.add(xhr);
-            const cleanup = () => activeUploadRequests.delete(xhr);
-            xhr.addEventListener('loadend', cleanup);
-            xhr.addEventListener('abort', cleanup);
-            xhr.addEventListener('error', cleanup);
-        }
-
         function uploadBatch(uploadUrl, batch) {
             return new Promise((resolve, reject) => {
                 if (cancelUploadRequested) {
@@ -2928,8 +2925,23 @@
                 }
                 const formData = new FormData();
                 const batchTotalBytes = batch.reduce((acc, entry) => acc + (entry.file?.size || 0), 0);
+                
+                // Validate batch before processing
+                if (batch.length === 0) {
+                    reject(new Error('Empty batch provided'));
+                    return;
+                }
+                
                 batch.forEach((entry) => {
                     const relativePath = getEntryPath(entry);
+                    if (!relativePath) {
+                        reject(new Error('Invalid file entry: missing path'));
+                        return;
+                    }
+                    if (!entry.file) {
+                        reject(new Error('Invalid file entry: missing file object'));
+                        return;
+                    }
                     formData.append('files', entry.file, relativePath);
                     formData.append('relative_paths', relativePath);
                 });
