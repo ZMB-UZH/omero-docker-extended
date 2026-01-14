@@ -321,6 +321,10 @@
             background: transparent;
             color: inherit;
         }
+        #special_upload_dropdown.keyboard-active .project-option:hover {
+            background: transparent;
+            color: inherit;
+        }
         .project-select-controls {
             position: relative;
             z-index: 1001;
@@ -1832,15 +1836,17 @@
 
             projectSelectDropdown.innerHTML = '';
 
-            const emptyOption = document.createElement('div');
-            emptyOption.className = 'project-option is-empty';
-            emptyOption.dataset.projectId = '';
-            emptyOption.dataset.projectName = '';
-            emptyOption.style.padding = '8px 12px';
-            emptyOption.style.cursor = 'pointer';
-            emptyOption.style.whiteSpace = 'nowrap';
-            emptyOption.textContent = 'No project (clear selection)';
-            projectSelectDropdown.appendChild(emptyOption);
+            if (!normalizedQuery) {
+                const emptyOption = document.createElement('div');
+                emptyOption.className = 'project-option is-empty';
+                emptyOption.dataset.projectId = '';
+                emptyOption.dataset.projectName = '';
+                emptyOption.style.padding = '8px 12px';
+                emptyOption.style.cursor = 'pointer';
+                emptyOption.style.whiteSpace = 'nowrap';
+                emptyOption.textContent = 'No project (clear selection)';
+                projectSelectDropdown.appendChild(emptyOption);
+            }
 
             if (matches.length > 0) {
                 matches.forEach((entry) => {
@@ -1973,7 +1979,7 @@
             if (projectDropdownBackdrop) {
                 projectDropdownBackdrop.style.display = 'none';
             }
-            if (restoreSelection && !projectSelectInput.value) {
+            if (restoreSelection) {
                 const selectedName = projectSelectInput.dataset.selectedName || '';
                 projectSelectInput.value = selectedName;
             }
@@ -2029,6 +2035,7 @@
             specialUploadDropdown.innerHTML = '';
             const matches = specialUploadOptions.filter((option) => {
                 if (!normalizedQuery) return true;
+                if (option.isEmpty) return false;
                 return option.label.toLowerCase().includes(normalizedQuery);
             });
             if (matches.length === 0) {
@@ -2054,6 +2061,13 @@
             if (options.length === 0) {
                 activeSpecialUploadIndex = -1;
                 return;
+            }
+            if (specialUploadDropdown) {
+                if (useKeyboard) {
+                    specialUploadDropdown.classList.add('keyboard-active');
+                } else {
+                    specialUploadDropdown.classList.remove('keyboard-active');
+                }
             }
             const clampedIndex = Math.max(0, Math.min(index, options.length - 1));
             activeSpecialUploadIndex = clampedIndex;
@@ -2118,7 +2132,7 @@
             if (projectDropdownBackdrop) {
                 projectDropdownBackdrop.style.display = 'none';
             }
-            if (restoreSelection && !specialUploadInput.value) {
+            if (restoreSelection) {
                 const selectedName = specialUploadInput.dataset.selectedName || '';
                 specialUploadInput.value = selectedName;
             }
