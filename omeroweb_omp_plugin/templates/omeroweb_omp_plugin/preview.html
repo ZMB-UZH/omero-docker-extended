@@ -1,3 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OMP Preview</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            margin: 24px;
+            color: #111827;
+        }
+        .omp-page {
+            width: 950px;
+            margin: 0 auto;
+        }
+        .omp-page--wide {
+            width: 1600px;
+            min-width: 1600px;
+            max-width: 1600px;
+        }
+    </style>
+</head>
+<body>
+<div class="omp-page omp-page--wide">
 <div class="omeroweb-omp-plugin"
      style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); width:1600px; min-width:1600px; max-width:1600px; margin:0 auto;'>
     <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:8px; margin-bottom:10px;'>
@@ -455,8 +479,6 @@
     html,
     body {
         min-width: 1300px;
-        margin: 0;
-        padding: 10px;
     }
 
     #var_name_inputs {margin-top: 6px;}
@@ -2021,3 +2043,6 @@ function pollProgress() {
     });
 }
 </script>
+</div>
+</body>
+</html>
