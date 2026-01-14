@@ -3992,6 +3992,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             clearAllBtn.addEventListener('click', () => {
                 clearSelectedFiles();
                 clearProjectSelection();
+                clearSpecialUploadSelection();
                 if (collaborationToggle?.checked) {
                     applyCollaborationState(false, { persist: true, refresh: true });
                 }
