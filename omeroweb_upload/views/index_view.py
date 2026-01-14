@@ -1026,12 +1026,7 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    cmd = [OMERO_CLI, "import", "-f", "-k", session_key]
-    if host:
-        cmd.extend(["-s", host])
-    if port:
-        cmd.extend(["-p", str(port)])
-    cmd.append(str(file_path))
+    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
     env = os.environ.copy()
     env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
     try:
@@ -1089,18 +1084,6 @@ def _run_compatibility_check(job_id: str):
     session_key = job.get("session_key")
     host = job.get("host")
     port = job.get("port")
-    if not session_key or not host or not port:
-        logger.warning("Compatibility check missing Omero connection details for job %s.", job_id)
-        _update_job(job_id, lambda job_dict: {
-            **job_dict,
-            "compatibility_status": "error",
-            "status": "awaiting_confirmation",
-            "compatibility_thread_active": False,
-            "errors": job_dict.get("errors", []) + [errors.missing_omero_connection_details()],
-            "updated": time.time(),
-        })
-        return
-
     upload_root = _get_upload_root() / job_id
     pending_entries = [
         (index, entry)
