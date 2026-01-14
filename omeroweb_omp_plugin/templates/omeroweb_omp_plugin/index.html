@@ -108,9 +108,9 @@
                     <div id="project_select_wrapper" class="project-select-wrapper">
                         <input type="document"
                                id="project_select_input"
+                               class="project-select-input"
                                placeholder="Select project…"
-                               autocomplete="off"
-                               style="width:100%; flex:1 1 auto; min-width:0; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                               autocomplete="off">
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" name="project" id="project_select" value="">
                         <div id="project_select_dropdown"
@@ -718,21 +718,31 @@
     .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
                            font-size:18px; font-weight:600; pointer-events:none;}
     .project-select-controls {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 10px;
-        flex: 1 1 auto;
-        min-width: 0;
+        gap: 6px;
         position: relative;
         z-index: 1001;
     }
+    .project-select-input {
+        width: 100%;
+        padding: 12px 40px 12px 12px;
+        border-radius: 6px;
+        border: 1px solid #007bff;
+        text-align: left;
+        box-sizing: border-box;
+        position: relative;
+        z-index: 1;
+        font-size: 14px;
+    }
     .project-select-wrapper {
         position: relative;
-        width: var(--omp-project-select-width);
-        flex: 1 1 auto;
-        min-width: 0;
+        width: 300px;
     }
     .project-refresh-btn {
+        position: relative;
+        z-index: 1100;
+
         width: 40px;
         height: 40px;
         border-radius: 6px;
