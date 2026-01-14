@@ -23,6 +23,7 @@ from django.urls import reverse
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
+from typing import Optional
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
