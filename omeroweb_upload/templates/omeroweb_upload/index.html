@@ -2511,11 +2511,11 @@
             });
             
             node.children.forEach((child) => {
-                computeNodeStats(child);
-                totalSize += child.totalSize;
-                totalFiles += child.totalFiles;
-                latest = Math.max(latest, child.lastModified || 0);
-                if (child.hasIncompatible) {
+                const updatedChild = computeNodeStats(child);
+                totalSize += updatedChild.totalSize;
+                totalFiles += updatedChild.totalFiles;
+                latest = Math.max(latest, updatedChild.lastModified || 0);
+                if (updatedChild.hasIncompatible) {
                     hasIncompatible = true;
                 }
             });
@@ -3287,7 +3287,6 @@
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     pendingFiles = [...uploadedFiles];
-                    applyCompatibilityFlags(pendingFiles, statusData.incompatible_files);
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
