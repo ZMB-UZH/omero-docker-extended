@@ -87,7 +87,7 @@
                     <div id="project_select_dropdown"
                          style="display:none; position:absolute; left:0; right:0; top:100%;
                                 background:#fff; border:1px solid #007bff; border-top:none;
-                                max-height:480px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
+                                max-height:510px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                     </div>
                     {{ projects|json_script:"project-data" }}
                 </div>
@@ -2668,7 +2668,7 @@
         statusRow.style.fontSize = '11px';
         statusRow.style.color = '#6b7280';
         if (totalMatches > MAX_PROJECT_RESULTS) {
-            statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Keep typing to narrow results.`;
+            statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
         } else if (totalMatches > 0) {
             statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
         } else {
