@@ -1,3 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Filename &amp; metadata manager</title>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            margin: 24px;
+            color: #111827;
+        }
+        .omp-page {
+            width: 950px;
+            margin: 0 auto;
+        }
+        .omp-page--narrow {
+            width: 730px;
+            min-width: 730px;
+            max-width: 730px;
+        }
+        .root-user-blocked .omp-page {
+            filter: blur(5px);
+            pointer-events: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
 {% if is_root_user %}
     <div class="root-user-overlay" aria-hidden="true"></div>
     <div id="root-user-warning" class="root-user-warning error-message" role="alert">
@@ -5,6 +33,7 @@
     </div>
 {% endif %}
 
+<div class="omp-page omp-page--narrow">
 <div class="omeroweb-omp-plugin"
      id="filename_metadata_container"
      style='padding:15px 15px 15px 15px; width:730px; min-width:730px; max-width:730px; margin:0 auto; --base-font-size:13px; font-size:var(--base-font-size);'>
@@ -184,6 +213,7 @@
             Load images & Preview
         </button>
     </form>
+</div>
 </div>
 
 <div class="dataset-table-wrapper">
@@ -3878,3 +3908,5 @@
     applyDefaultAiProviderSelections();
     updateAiModalPlaceholders();
     </script>
+</body>
+</html>
