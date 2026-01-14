@@ -288,14 +288,21 @@
         .project-option-arrow {
             margin: 0 4px;
         }
-        #project_select_dropdown {
+        #project_select_dropdown,
+        #special_upload_dropdown {
             text-align: left;
             box-sizing: border-box;
             font-size: 12px;
         }
         .project-option,
-        #project_select_dropdown > div {
+        #project_select_dropdown > div,
+        #special_upload_dropdown > div {
             text-align: left;
+        }
+        #special_upload_dropdown .project-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            white-space: nowrap;
         }
         .project-option.is-empty {
             color: #6b7280;
