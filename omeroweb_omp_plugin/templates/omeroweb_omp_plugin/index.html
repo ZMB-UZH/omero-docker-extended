@@ -106,7 +106,7 @@
             <div style='display:flex; align-items:flex-start; gap:14px;'>
                 <div class="project-select-controls">
                     <div id="project_select_wrapper" class="project-select-wrapper">
-                        <input type="text"
+                        <input type="document"
                                id="project_select_input"
                                placeholder="Select project…"
                                autocomplete="off"
@@ -152,11 +152,11 @@
                    value='chars'>
 
             <div style='display:flex; align-items:center; gap:14px;'>
-                <input type='text'
+                <input type='document'
                        id='separator_input'
                        name='separator'
                        value='_-.'
-                       style='width:calc(55% + 50px); flex:0 0 calc(55% + 50px); padding:12px;border-radius:6px;border:1px solid #007bff;'>
+                       style='width:var(--omp-primary-input-width); flex:0 0 var(--omp-primary-input-width); padding:12px;border-radius:6px;border:1px solid #007bff;'>
 
                 <div style='display:flex; flex-direction:column; gap:6px;'>
                     <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
@@ -593,6 +593,9 @@
         transform: translate(-50%, -50%);
         z-index: 20001;
     }
+    .omeroweb-omp-plugin {
+        --omp-primary-input-width: calc(55% + 50px);
+    }
     .omeroweb-omp-plugin,
     .omeroweb-omp-plugin * {font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     .omeroweb-omp-plugin button,
@@ -718,8 +721,8 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        width: calc(55% + 50px);
-        flex: 0 0 calc(55% + 50px);
+        width: var(--omp-primary-input-width);
+        flex: 0 0 var(--omp-primary-input-width);
         position: relative;
         z-index: 1001;
     }
@@ -996,6 +999,7 @@
     const messages = {{ messages_json|safe }};
     const allowedClipboardSelectors = [
         'input[type="text"]',
+        'input[type="document"]',
         'input[type="search"]',
         'input[type="password"]',
         'input[type="email"]',
