@@ -75,21 +75,29 @@
         <div style='margin-bottom:20px;'>
             <label><strong>Project:</strong></label><br>
             <div style='display:flex; align-items:flex-start; gap:14px;'>
-                <div id="project_select_wrapper"
-                     style="width:55%; flex:0 0 55%; position:relative; z-index:1001;">
-                    <input type="text"
-                           id="project_select_input"
-                           placeholder="Select project…"
-                           autocomplete="off"
-                           style="width:100%; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
-                    <span class="project-select-arrow" aria-hidden="true">▾</span>
-                    <input type="hidden" name="project" id="project_select" value="">
-                    <div id="project_select_dropdown"
-                         style="display:none; position:absolute; left:0; right:0; top:100%;
-                                background:#fff; border:1px solid #007bff; border-top:none;
-                                max-height:510px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
+                <div class="project-select-controls">
+                    <div id="project_select_wrapper" class="project-select-wrapper">
+                        <input type="text"
+                               id="project_select_input"
+                               placeholder="Select project…"
+                               autocomplete="off"
+                               style="width:100%; padding:12px 40px 12px 12px;border-radius:6px;border:1px solid #007bff;">
+                        <span class="project-select-arrow" aria-hidden="true">▾</span>
+                        <input type="hidden" name="project" id="project_select" value="">
+                        <div id="project_select_dropdown"
+                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                                    background:#fff; border:1px solid #007bff; border-top:none;
+                                    max-height:510px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
+                        </div>
+                        {{ projects|json_script:"project-data" }}
                     </div>
-                    {{ projects|json_script:"project-data" }}
+                    <button type="button"
+                            id="project_refresh_btn"
+                            class="project-refresh-btn"
+                            title="Refresh projects"
+                            aria-label="Refresh projects">
+                        ⟳
+                    </button>
                 </div>
                 <button type='button'
                         id='dataset_selection_btn'
@@ -676,6 +684,44 @@
     }
     .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
                            font-size:18px; font-weight:600; pointer-events:none;}
+    .project-select-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 55%;
+        flex: 0 0 55%;
+        position: relative;
+        z-index: 1001;
+    }
+    .project-select-wrapper {position: relative; flex: 1;}
+    .project-refresh-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        border: 1px solid #007bff;
+        background: #e7f1ff;
+        color: #1d4ed8;
+        font-size: 32px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        line-height: 1;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transition: all 0.1s ease;
+    }
+    .project-refresh-btn.is-loading {cursor: wait; opacity: 0.75;}
+    .project-refresh-btn:hover {
+        background: #d0e7ff;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    .project-refresh-btn:active {
+        transform: translateY(1px);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
     .project-option {transition: background 0.15s ease, color 0.15s ease;}
     .project-option:hover,
     .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
@@ -1053,6 +1099,8 @@
     const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
     const projectDataScript = document.getElementById('project-data');
     const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
+    const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
+    const projectRefreshBtn = document.getElementById('project_refresh_btn');
     const datasetClearBtn = document.getElementById('dataset_clear_btn');
     const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
     const aiRegexButton = document.getElementById('ai_regex_btn');
@@ -1110,7 +1158,8 @@
     const aiCredentialsTest = document.getElementById('ai_credentials_test');
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
-    const allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    let isProjectRefreshInFlight = false;
+    let allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
     const MAX_PROJECT_RESULTS = 15;
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
@@ -2625,6 +2674,61 @@
         persistPreviewState();
     }
 
+    function updateProjectData(data) {
+        allProjects = Array.isArray(data) ? data : [];
+        const currentId = projectSelect?.value || '';
+        if (currentId) {
+            const match = allProjects.find(([projectId]) => String(projectId) === String(currentId));
+            if (!match) {
+                if (projectSelect) {
+                    projectSelect.value = '';
+                }
+                if (projectSelectInput) {
+                    projectSelectInput.value = '';
+                    projectSelectInput.dataset.selectedName = '';
+                }
+                resetDatasetSelection();
+            } else if (projectSelectInput) {
+                const label = match[1] || match[0] || '';
+                projectSelectInput.value = label;
+                projectSelectInput.dataset.selectedName = label;
+            }
+        }
+        if (projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
+        }
+    }
+
+    async function refreshProjectList() {
+        if (!projectListUrl) return;
+        if (isProjectRefreshInFlight) return;
+        isProjectRefreshInFlight = true;
+        if (projectRefreshBtn) {
+            projectRefreshBtn.classList.add('is-loading');
+            projectRefreshBtn.setAttribute('aria-busy', 'true');
+        }
+        try {
+            const response = await fetch(projectListUrl.toString(), {
+                method: 'GET',
+                cache: 'no-store',
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                throw new Error(`Request failed: ${response.status}`);
+            }
+            const data = await response.json();
+            updateProjectData(data);
+        } catch (error) {
+            showNonBlockingModal('Unable to refresh project list.');
+        } finally {
+            isProjectRefreshInFlight = false;
+            if (projectRefreshBtn) {
+                projectRefreshBtn.classList.remove('is-loading');
+                projectRefreshBtn.setAttribute('aria-busy', 'false');
+            }
+        }
+    }
+
     function renderProjectOptions(query) {
         if (!projectSelectDropdown) return;
         const normalizedQuery = query.trim().toLowerCase();
@@ -2754,6 +2858,12 @@
                 event.preventDefault();
                 selectProjectOption(options[activeProjectIndex]);
             }
+        });
+    }
+
+    if (projectRefreshBtn) {
+        projectRefreshBtn.addEventListener('click', () => {
+            refreshProjectList();
         });
     }
 
