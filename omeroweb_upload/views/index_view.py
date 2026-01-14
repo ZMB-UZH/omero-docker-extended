@@ -1018,12 +1018,13 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
-    if not path.exists():
+    if not file_path.exists():
         return {
             "status": "error",
+            "relative_path": relative_path,
             "stdout": "",
-            "stderr": f"Missing staged file: {path.name}",
-            "details": f"Missing staged file: {path.name}",
+            "stderr": f"Missing staged file: {file_path.name}",
+            "details": f"Missing staged file: {file_path.name}",
         }
     cmd = [OMERO_CLI, "import", "-f", str(path)]
     env = os.environ.copy()
@@ -1049,6 +1050,7 @@ def _check_import_compatibility(
     except FileNotFoundError as exc:
         return {
             "status": "error",
+            "relative_path": relative_path,
             "stdout": "",
             "stderr": str(exc),
             "details": str(exc),
