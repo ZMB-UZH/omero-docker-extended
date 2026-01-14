@@ -1092,7 +1092,7 @@
                                 <div id="project_select_dropdown"
                                      style="display:none; position:absolute; left:0; right:0; top:100%;
                                             background:#fff; border:1px solid #007bff; border-top:none;
-                                            max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                                            max-height:480px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                                 </div>
                                 {{ projects|json_script:"project-data" }}
                             </div>
@@ -1248,7 +1248,7 @@
         const projectRefreshBtn = document.getElementById('project_refresh_btn');
         const collaborationSection = document.querySelector('.upload-utilities__collaboration');
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
-        const MAX_PROJECT_RESULTS = 20;
+        const MAX_PROJECT_RESULTS = 15;
         let projectFilterTimeout = null;
         let activeProjectIndex = -1;
 
@@ -1794,6 +1794,11 @@
                     projectSelectDropdown.classList.remove('keyboard-active');
                 }
             }
+            if (index < 0) {
+                options.forEach((option) => option.classList.remove('is-active'));
+                activeProjectIndex = -1;
+                return;
+            }
             const clamped = Math.max(0, Math.min(index, options.length - 1));
             options.forEach((option, idx) => {
                 if (idx === clamped) {
@@ -1902,7 +1907,7 @@
                 statusRow.textContent = 'No projects found';
             }
             projectSelectDropdown.appendChild(statusRow);
-            setActiveProjectIndex(normalizedQuery ? -1 : 0);
+            setActiveProjectIndex(-1);
         }
 
         function syncProjectSelectionWithMode() {
