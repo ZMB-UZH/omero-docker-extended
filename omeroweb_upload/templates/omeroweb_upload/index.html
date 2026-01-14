@@ -738,6 +738,7 @@
         }
         .duplicate-popup__message {
             margin: 0 0 12px;
+            white-space: pre-line;
         }
         .duplicate-popup__btn {
             background: #ffffff;
@@ -1389,12 +1390,10 @@
             const job = Array.from(importJobs.values())[0];
             if (!job) return;
             
-            const checked = job.compatibility_checked || 0;
             const total = job.compatibility_total || 0;
             if (total === 0) return;
-            
-            const percent = Math.min(100, Math.floor((checked / total) * 100));
-            uploadOverlay.textContent = `CHECKING COMPATIBILITY (${percent}%)`;
+
+            uploadOverlay.textContent = 'CHECKING COMPATIBILITY...';
         }
 
         function updateUploadButtonLabel() {
@@ -3116,12 +3115,10 @@
                 const data = await fetchJobStatus(job);
                 
                 if (data.compatibility_checked !== undefined && data.compatibility_total !== undefined) {
-                    const checked = data.compatibility_checked || 0;
                     const total = data.compatibility_total || 0;
                     if (total > 0) {
-                        const percent = Math.min(100, Math.floor((checked / total) * 100));
                         if (uploadOverlay) {
-                            uploadOverlay.textContent = `UPLOADED. CHECKING COMPATIBILITY... (${percent}%)`;
+                            uploadOverlay.textContent = 'UPLOADED. CHECKING COMPATIBILITY...';
                         }
                     }
                 }
@@ -3178,7 +3175,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             const statusData = await waitForCompatibility(job);
             if (statusData.confirmation_required) {
                 const proceed = await showCompatibilityPopup(
-                    'Incompatible file(s) found. Do you still want to continue with the upload (SUGGESTED: No).'
+                    'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
                 );
                 if (!proceed) {
                     window.pendingImportJob = job;
