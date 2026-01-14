@@ -3145,40 +3145,6 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             return { proceed: true, status: statusData };
         }
 
-        function createUploadBatches(entries) {
-            const maxBatchBytes = 50 * 1024 * 1024;
-            const maxBatchFiles = Math.max(1, currentUploadBatchFiles);
-            const batches = [];
-            let current = [];
-            let currentBytes = 0;
-
-            entries.forEach((entry) => {
-                const fileSize = Number(entry.file?.size) || 0;
-                
-                // Validate file size
-                if (fileSize < 0 || fileSize > Number.MAX_SAFE_INTEGER) {
-                    console.error(`Invalid file size: ${fileSize} for ${getEntryPath(entry)}`);
-                    return;
-                }
-                
-                const needsSplit = current.length >= maxBatchFiles || 
-                                 (currentBytes + fileSize > maxBatchBytes && current.length > 0);
-                
-                if (needsSplit) {
-                    batches.push(current);
-                    current = [];
-                    currentBytes = 0;
-                }
-                current.push(entry);
-                currentBytes += fileSize;
-            });
-
-            if (current.length > 0) {
-                batches.push(current);
-            }
-            return batches;
-        }
-
         async function startUploadJob(entries = pendingFiles) {
             const totalBytes = entries.reduce((acc, entry) => acc + entry.file.size, 0);
             const metadata = entries.map((entry) => ({
@@ -3216,8 +3182,15 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             let currentBytes = 0;
 
             entries.forEach((entry) => {
-                const fileSize = entry.file.size;
-                const needsSplit = current.length >= maxBatchFiles || (currentBytes + fileSize > maxBatchBytes && current.length);
+                const fileSize = Number(entry.file?.size) || 0;
+
+                if (fileSize < 0 || fileSize > Number.MAX_SAFE_INTEGER) {
+                    console.error(`Invalid file size: ${fileSize} for ${getEntryPath(entry)}`);
+                    return;
+                }
+
+                const needsSplit = current.length >= maxBatchFiles ||
+                    (currentBytes + fileSize > maxBatchBytes && current.length > 0);
                 if (needsSplit) {
                     batches.push(current);
                     current = [];
@@ -3227,7 +3200,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
                 currentBytes += fileSize;
             });
 
-            if (current.length) {
+            if (current.length > 0) {
                 batches.push(current);
             }
             return batches;
