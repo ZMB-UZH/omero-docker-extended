@@ -1020,7 +1020,8 @@
                 </div>
                 <div class="upload-actions">
                     <div class="upload-actions__pickers">
-                        <button id="folder-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Folders</button>
+                        <button id="folder-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Folder</button>
+                        <button id="folder-multi-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Multiple Folders</button>
                         <button id="file-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Choose Files</button>
                         <input type="file" id="file-input" multiple class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
                         <input type="file" id="folder-input" multiple webkitdirectory directory class="file-input-hidden" {% if not upload_enabled %}disabled{% endif %}>
@@ -1165,6 +1166,7 @@
         const fileInput = document.getElementById('file-input');
         const fileBtn = document.getElementById('file-btn');
         const folderBtn = document.getElementById('folder-btn');
+        const folderMultiBtn = document.getElementById('folder-multi-btn');
         const folderInput = document.getElementById('folder-input');
         const canUseDirectoryPicker = window.isSecureContext && typeof window.showDirectoryPicker === 'function';
         const canUseFolderInput = !!folderInput && ('webkitdirectory' in folderInput || 'directory' in folderInput);
@@ -1275,6 +1277,9 @@
             }
             if (folderBtn) {
                 folderBtn.disabled = active || !uploadEnabled;
+            }
+            if (folderMultiBtn) {
+                folderMultiBtn.disabled = active || !uploadEnabled;
             }
             uploadBtn.disabled = active || !uploadEnabled;
             if (!active) {
@@ -2528,15 +2533,22 @@
             }
         }
 
-        async function openFolderPicker() {
+        async function openFolderPicker({ allowMultiple = false } = {}) {
             if (typeof window.showDirectoryPicker !== 'function') {
                 return;
             }
             const collected = [];
             try {
-                const dirHandle = await window.showDirectoryPicker();
-                const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
-                collected.push(...dirEntries);
+                let continuePicking = true;
+                while (continuePicking) {
+                    const dirHandle = await window.showDirectoryPicker();
+                    const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
+                    collected.push(...dirEntries);
+                    if (!allowMultiple) {
+                        break;
+                    }
+                    continuePicking = window.confirm('Add another folder?');
+                }
             } catch (error) {
                 if (error?.name !== 'AbortError') {
                     throw error;
@@ -2730,6 +2742,31 @@
                     return;
                 }
                 setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
+            });
+        }
+        if (folderMultiBtn) {
+            folderMultiBtn.addEventListener('click', async () => {
+                if (!uploadEnabled) {
+                    setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
+                    return;
+                }
+                if (isUploading) {
+                    return;
+                }
+                if (canUseDirectoryPicker) {
+                    try {
+                        await openFolderPicker({ allowMultiple: true });
+                    } catch (error) {
+                        setStatus(`Folder selection failed: ${error.message || error}`, 'error');
+                    }
+                    return;
+                }
+                if (canUseFolderInput) {
+                    folderInput.value = '';
+                    folderInput.click();
+                    return;
+                }
+                setStatus('Folder selection is unavailable in this browser. Drag & drop folders instead.', 'error');
             });
         }
         folderInput.addEventListener('change', () => {

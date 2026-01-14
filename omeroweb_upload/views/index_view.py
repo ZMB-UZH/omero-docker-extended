@@ -1042,8 +1042,6 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     
-    candidates = _extract_import_candidates(result.stdout)
-    
     if result.returncode != 0:
         status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
         return {
@@ -1052,20 +1050,12 @@ def _check_import_compatibility(
             "stderr": result.stderr,
             "details": details,
         }
-    
-    if not candidates:
-        return {
-            "status": "incompatible",
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "details": "No importable files found.",
-        }
-    
+
     return {
         "status": "compatible",
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": f"Found {len(candidates)} importable file(s).",
+        "details": "Compatibility check succeeded.",
     }
 
 
