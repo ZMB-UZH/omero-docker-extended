@@ -3942,6 +3942,7 @@ async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             });
         }
 
+        
         if (collaborationToggle) {
             collaborationToggle.addEventListener('change', () => {
                 applyCollaborationState(collaborationToggle.checked, { persist: true, refresh: true });
