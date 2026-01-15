@@ -1450,7 +1450,6 @@ def _start_import_thread(job_id: str):
 def index(request, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     username = current_username(request, conn)
-    is_root_user = username == "root"
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
@@ -1467,7 +1466,6 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_start_url": reverse("omeroweb_upload_start"),
             "upload_concurrency": upload_concurrency,
             "upload_batch_files": upload_batch_files,
-            "is_root_user": is_root_user,
             "user_id": user_id,
             "messages_json": json.dumps(messages.index_messages()),
             "projects": projects,
@@ -1481,6 +1479,12 @@ def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload)
+
+
+@login_required()
+def root_status(request, conn=None, url=None, **kwargs):
+    username = current_username(request, conn)
+    return JsonResponse({"is_root_user": username == "root"})
 
 
 @login_required()

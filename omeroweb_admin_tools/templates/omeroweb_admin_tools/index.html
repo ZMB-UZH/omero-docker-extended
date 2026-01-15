@@ -18,6 +18,14 @@
             pointer-events: none;
             user-select: none;
         }
+        .root-user-overlay,
+        .root-user-warning {
+            display: none;
+        }
+        .root-user-blocked .root-user-overlay,
+        .root-user-blocked .root-user-warning {
+            display: block;
+        }
         .root-user-overlay {
             position: fixed;
             inset: 0;
@@ -189,13 +197,11 @@
         }
     </style>
 </head>
-<body class="{% if is_root_user %}root-user-blocked{% endif %}">
-    {% if is_root_user %}
-        <div class="root-user-overlay" aria-hidden="true"></div>
-        <div id="root-user-warning" class="root-user-warning" role="alert">
-            PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
-        </div>
-    {% endif %}
+<body>
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS ROOT USER TO USE THIS PLUGIN
+    </div>
     <div class="admin-tools-page">
         <div class="admin-tools-header">
             <h1 class="admin-tools-title">Admin tools</h1>
@@ -237,6 +243,26 @@
         </div>
     </div>
     <script>
+        const rootStatusUrl = new URL('root-status/', window.location.href);
+        const applyRootUserState = (isRootUser) => {
+            if (isRootUser) {
+                return;
+            }
+            document.documentElement.classList.add('root-user-blocked');
+            if (document.body) {
+                document.body.classList.add('root-user-blocked');
+            }
+        };
+        fetch(rootStatusUrl, { credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (data && data.is_root_user === false) {
+                    applyRootUserState(false);
+                }
+            })
+            .catch(() => {
+                // Ignore root user lookup failures.
+            });
         const settingsMenuBtn = document.getElementById('settings_menu_btn');
         const settingsMenu = document.getElementById('settings_menu');
 

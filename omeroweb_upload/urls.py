@@ -7,6 +7,7 @@ from .views.index_view import (
     job_status,
     list_projects,
     prune_upload,
+    root_status,
     start_upload,
     upload_files,
 )
@@ -21,5 +22,6 @@ urlpatterns = [
     path("prune/<str:job_id>/", prune_upload, name="omeroweb_upload_prune"),
     path("status/<str:job_id>/", job_status, name="omeroweb_upload_status"),
     path("projects/", list_projects, name="omeroweb_upload_projects"),
+    path("root-status/", root_status, name="omeroweb_upload_root_status"),
     path("user-settings/save/", save_settings, name="omeroweb_upload_save_user_settings"),
 ]
