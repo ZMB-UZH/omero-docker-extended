@@ -745,17 +745,30 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .sem-edx-appended-label:hover {
+            background: #eef2ff;
+            box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.45);
+        }
         .sem-edx-appended-select {
             flex: 1;
             min-width: 0;
-            font-size: 0.72rem;
-            padding: 1px 4px;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            padding: 2px 6px;
             border-radius: 6px;
             border: 1px dashed #93c5fd;
             background: #f8fafc;
             height: 18px;
             color: #1f2937;
             appearance: none;
+            cursor: pointer;
+            font-family: inherit;
+            letter-spacing: normal;
+        }
+        .sem-edx-appended-select:hover {
+            background: #eef2ff;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
         }
         .sem-edx-appended-select:focus {
             outline: 2px solid #2563eb;
@@ -3790,10 +3803,7 @@
         }
 
         function ensureSemEdxManualAssociations(baseAssociations) {
-            if (semEdxManualAssociations.size) {
-                semEdxManualInitialized = true;
-                return;
-            }
+            if (semEdxManualInitialized) return;
             if (!baseAssociations || baseAssociations.size === 0) return;
             semEdxManualAssociations.clear();
             baseAssociations.forEach((value, key) => {
@@ -3959,30 +3969,31 @@
             });
 
             const availableOptions = txtOptions.filter((name) => !selectedSet.has(name));
-            const addRow = document.createElement('div');
-            addRow.classList.add('sem-edx-appended-row');
-            const addSelect = buildSemEdxTxtSelect(availableOptions, '', true);
-            const addButton = document.createElement('button');
-            addButton.type = 'button';
-            addButton.classList.add('sem-edx-appended-action', 'sem-edx-appended-action--add');
-            addButton.setAttribute('aria-label', 'Append txt');
-            addButton.textContent = '+';
-            addButton.disabled = availableOptions.length === 0;
-            if (mode === 'manual') {
-                addButton.addEventListener('click', () => {
-                    const nextValue = addSelect.value;
-                    if (!nextValue) return;
-                    updateSemEdxManualAssociations(imagePath, [...selectedItems, nextValue]);
-                    refreshFileList();
-                });
-            } else {
-                addRow.classList.add('is-placeholder');
-                addSelect.disabled = true;
-                addButton.disabled = true;
+            if (availableOptions.length > 0) {
+                const addRow = document.createElement('div');
+                addRow.classList.add('sem-edx-appended-row');
+                const addSelect = buildSemEdxTxtSelect(availableOptions, '', true);
+                const addButton = document.createElement('button');
+                addButton.type = 'button';
+                addButton.classList.add('sem-edx-appended-action', 'sem-edx-appended-action--add');
+                addButton.setAttribute('aria-label', 'Append txt');
+                addButton.textContent = '+';
+                if (mode === 'manual') {
+                    addButton.addEventListener('click', () => {
+                        const nextValue = addSelect.value;
+                        if (!nextValue) return;
+                        updateSemEdxManualAssociations(imagePath, [...selectedItems, nextValue]);
+                        refreshFileList();
+                    });
+                } else {
+                    addRow.classList.add('is-placeholder');
+                    addSelect.disabled = true;
+                    addButton.disabled = true;
+                }
+                addRow.appendChild(addSelect);
+                addRow.appendChild(addButton);
+                list.appendChild(addRow);
             }
-            addRow.appendChild(addSelect);
-            addRow.appendChild(addButton);
-            list.appendChild(addRow);
 
             return list;
         }
