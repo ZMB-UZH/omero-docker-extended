@@ -303,11 +303,6 @@ def _load_job(job_id: str):
             return json.load(handle)
     except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
         logger.warning("Unable to lock or read job file %s: %s", path, exc)
-    try:
-        with path.open("r") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to read job file %s without lock: %s", path, exc)
     return None
 
 
@@ -498,42 +493,14 @@ def _has_read_write_permissions(obj):
 def _iter_accessible_projects(conn):
     if conn is None:
         return
-    
-    # Save current group context
-    current_group = None
+
     try:
-        current_group = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
-        pass
-    
-    try:
-        # Set group context to -1 to query across all groups
-        conn.SERVICE_OPTS.setOmeroGroup('-1')
-        
-        # Try to get projects with cross-group querying enabled
-        try:
-            for proj in conn.getObjects("Project"):
-                yield proj
-            return
-        except Exception as e:
-            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", e)
-        
-        # Fallback: try with opts parameter
-        try:
-            for proj in conn.getObjects("Project", opts={"group": "-1"}):
-                yield proj
-            return
-        except Exception as e:
-            logger.warning("Failed to query projects with opts group=-1: %s", e)
-            
-    finally:
-        # Restore original group context
-        if current_group is not None:
-            try:
-                conn.SERVICE_OPTS.setOmeroGroup(current_group)
-            except Exception:
-                pass
-    
+        for proj in conn.getObjects("Project", opts={"group": "-1"}):
+            yield proj
+        return
+    except Exception as exc:
+        logger.warning("Failed to query projects with opts group=-1: %s", exc)
+
     # Final fallback: try without cross-group querying
     try:
         for proj in conn.getObjects("Project"):
@@ -705,7 +672,10 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
     existing = None
     try:
-        existing = next(conn.getObjects("Dataset", attributes={"name": name}), None)
+        existing = next(
+            conn.getObjects("Dataset", attributes={"name": name}, opts={"group": "-1"}),
+            None,
+        )
     except Exception:
         existing = None
 
@@ -987,20 +957,14 @@ def _safe_remove_tree(path: Path, root: Path):
     try:
         for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=False):
             for name in filenames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.unlink()
-                except OSError:
-                    return False
+                (Path(root_dir) / name).unlink(missing_ok=True)
             for name in dirnames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.rmdir()
-                except OSError:
-                    return False
-        path.rmdir()
+                (Path(root_dir) / name).rmdir()
+        if path.exists():
+            path.rmdir()
         return True
-    except OSError:
+    except OSError as exc:
+        logger.error("Cleanup failed for %s: %s", path, exc)
         return False
 
 
@@ -2187,7 +2151,9 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
             "compatibility_checked": sum(1 for f in job.get("files", []) if f.get("compatibility")),
-            "compatibility_total": sum(1 for f in job.get("files", []) if f.get("status") == "uploaded"),
+            "compatibility_total": sum(
+                1 for f in job.get("files", []) if not f.get("compatibility_skip")
+            ),
             "incompatible_files": job.get("incompatible_files", []),
             "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
