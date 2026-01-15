@@ -381,37 +381,6 @@ def _safe_relative_path(raw_name: str):
     return "/".join(parts)
 
 
-def _normalize_sem_edx_associations(raw_associations, normalized_entries):
-    if not isinstance(raw_associations, dict):
-        return {}
-    available_paths = {
-        entry.get("relative_path"): entry
-        for entry in normalized_entries
-        if isinstance(entry, dict) and entry.get("relative_path")
-    }
-    normalized = {}
-    for image_path, txt_paths in raw_associations.items():
-        image_rel = _safe_relative_path(image_path or "")
-        if not image_rel or image_rel not in available_paths:
-            continue
-        if image_rel.lower().endswith(".txt"):
-            continue
-        if not isinstance(txt_paths, list):
-            continue
-        cleaned_txt = []
-        for txt_path in txt_paths:
-            txt_rel = _safe_relative_path(txt_path or "")
-            if not txt_rel or txt_rel not in available_paths:
-                continue
-            if not txt_rel.lower().endswith(".txt"):
-                continue
-            if txt_rel not in cleaned_txt:
-                cleaned_txt.append(txt_rel)
-        if cleaned_txt:
-            normalized[image_rel] = cleaned_txt
-    return normalized
-
-
 def _get_text(value_obj):
     try:
         return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
@@ -613,6 +582,47 @@ def _generate_orphan_dataset_name():
     return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
 
 
+def _normalize_sem_edx_associations(raw_associations, normalized_entries):
+    """
+    Normalize and validate SEM EDX associations between images and text files.
+    
+    Args:
+        raw_associations: Dict mapping image paths to lists of text file paths
+        normalized_entries: List of file entries that have been validated
+    
+    Returns:
+        Dict of validated associations with relative paths as keys
+    """
+    if not isinstance(raw_associations, dict):
+        return {}
+    available_paths = {
+        entry.get("relative_path"): entry
+        for entry in normalized_entries
+        if isinstance(entry, dict) and entry.get("relative_path")
+    }
+    normalized = {}
+    for image_path, txt_paths in raw_associations.items():
+        image_rel = _safe_relative_path(image_path or "")
+        if not image_rel or image_rel not in available_paths:
+            continue
+        if image_rel.lower().endswith(".txt"):
+            continue
+        if not isinstance(txt_paths, list):
+            continue
+        cleaned_txt = []
+        for txt_path in txt_paths:
+            txt_rel = _safe_relative_path(txt_path or "")
+            if not txt_rel or txt_rel not in available_paths:
+                continue
+            if not txt_rel.lower().endswith(".txt"):
+                continue
+            if txt_rel not in cleaned_txt:
+                cleaned_txt.append(txt_rel)
+        if cleaned_txt:
+            normalized[image_rel] = cleaned_txt
+    return normalized
+
+
 def _find_project_dataset(conn, project_id: int, name: str):
     if not project_id or not name:
         return None
@@ -722,67 +732,27 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
-
-
-def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
-    cmd = [OMERO_CLI]
-    cmd.extend(subcommand)
-    if session_key:
-        cmd.extend(["-k", session_key])
+def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
+    cmd = [OMERO_CLI, "import", "-k", session_key]
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
-    return cmd
-
-
-def _run_omero_cli(cmd, env=None):
-    """
-    Run OMERO CLI command with optional environment variables.
-    
-    Args:
-        cmd: Command list to execute
-        env: Optional environment dict. If None, inherits parent environment by copying os.environ.
-    
-    Returns:
-        subprocess.CompletedProcess: Result of the command execution
-    
-    Note:
-        CRITICAL: Always pass os.environ.copy() as env to ensure session information
-        (OMERO_USERDIR, OMERO_SESSIONDIR) is available to subprocess. Without this,
-        CLI commands will fail to find session files and may log out the user.
-    """
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env if env is not None else os.environ.copy(),
-    )
-
-
-def _parse_cli_id(output: str, expected_type: str):
-    for line in (output or "").splitlines():
-        match = _CLI_ID_PATTERN.search(line.strip())
-        if match and match.group("type") == expected_type:
-            return int(match.group("id"))
-    return None
-
-
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    cmd = _build_omero_cli_command(["import"], session_key, host, port)
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
-    # CRITICAL FIX: Pass environment to ensure session info is available to subprocess
-    env = os.environ.copy()
-    result = _run_omero_cli(cmd, env=env)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     return result.returncode == 0, result.stdout, result.stderr
 
 
 def _open_session_connection(session_key: str, host: str, port: int):
+    """Create a BlitzGateway connection using an existing session key."""
     client = omero.client(host=host, port=port)
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
@@ -791,6 +761,7 @@ def _open_session_connection(session_key: str, host: str, port: int):
 
 
 def _find_image_by_name(conn, file_name: str, dataset_id=None):
+    """Find an image by exact name match, optionally within a specific dataset."""
     if dataset_id:
         try:
             dataset = conn.getObject("Dataset", dataset_id)
@@ -809,36 +780,51 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
+_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
+
+
+def _parse_cli_id(output: str, expected_type: str):
+    """Parse OMERO CLI output to extract object IDs."""
+    for line in (output or "").splitlines():
+        match = _CLI_ID_PATTERN.search(line.strip())
+        if match and match.group("type") == expected_type:
+            return int(match.group("id"))
+    return None
+
+
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
     """
     Attach a text file to an image using OMERO CLI commands.
     
-    CRITICAL: This function creates three subprocess calls to OMERO CLI. Each must have
-    environment variables (especially OMERO_USERDIR/OMERO_SESSIONDIR) to find session files.
-    Without this, the CLI will fail to authenticate and may log out the user.
+    CRITICAL: Must pass environment variables to subprocess so OMERO CLI can find session files.
+    Without OMERO_USERDIR/OMERO_SESSIONDIR, the CLI cannot authenticate and may invalidate the session.
     
-    Args:
-        session_key: OMERO session key for authentication
-        host: OMERO server host
-        port: OMERO server port
-        image_id: Target image ID
-        txt_path: Path to text file to attach
-    
-    Returns:
-        True on success
-    
-    Raises:
-        RuntimeError: If any CLI command fails
+    This performs three operations:
+    1. Upload text file as OriginalFile
+    2. Create FileAnnotation linking to the OriginalFile
+    3. Create ImageAnnotationLink connecting the annotation to the image
     """
-    # Prepare environment once for all CLI commands - CRITICAL FIX
+    # Copy environment to ensure session info is available to all subprocess calls
     env = os.environ.copy()
     
-    # Step 1: Upload the text file as OriginalFile
-    upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
+    # Step 1: Upload the text file
+    upload_cmd = [OMERO_CLI, "upload", "-k", session_key]
+    if host:
+        upload_cmd.extend(["-s", host])
+    if port:
+        upload_cmd.extend(["-p", str(port)])
     upload_cmd.append(str(txt_path))
-    upload_result = _run_omero_cli(upload_cmd, env=env)
+    
+    upload_result = subprocess.run(
+        upload_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
     if upload_result.returncode != 0:
         raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
+    
     original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
         upload_result.stderr, "OriginalFile"
     )
@@ -846,11 +832,23 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
         raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
 
     # Step 2: Create FileAnnotation
-    annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+    annotation_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
+    if host:
+        annotation_cmd.extend(["-s", host])
+    if port:
+        annotation_cmd.extend(["-p", str(port)])
     annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-    annotation_result = _run_omero_cli(annotation_cmd, env=env)
+    
+    annotation_result = subprocess.run(
+        annotation_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
     if annotation_result.returncode != 0:
         raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
+    
     annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
         annotation_result.stderr, "FileAnnotation"
     )
@@ -858,22 +856,33 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
         raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
 
     # Step 3: Link FileAnnotation to Image
-    link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
-    link_cmd.extend(
-        [
-            "ImageAnnotationLink",
-            f"parent=Image:{image_id}",
-            f"child=FileAnnotation:{annotation_id}",
-        ]
+    link_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
+    if host:
+        link_cmd.extend(["-s", host])
+    if port:
+        link_cmd.extend(["-p", str(port)])
+    link_cmd.extend([
+        "ImageAnnotationLink",
+        f"parent=Image:{image_id}",
+        f"child=FileAnnotation:{annotation_id}",
+    ])
+    
+    link_result = subprocess.run(
+        link_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
     )
-    link_result = _run_omero_cli(link_cmd, env=env)
     if link_result.returncode != 0:
         raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
+    
     link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
         link_result.stderr, "ImageAnnotationLink"
     )
     if not link_id:
         raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
+    
     return True
 
 
@@ -896,6 +905,7 @@ def _append_job_error(job: dict, message: str):
 
 
 def _append_txt_attachment_message(job: dict, txt_name: str, image_name: str, success: bool):
+    """Add a message about text file attachment success or failure."""
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
@@ -1239,19 +1249,23 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-    if status == "compatible":
-        candidates = _extract_import_candidates(result.stdout or "")
-        if not candidates:
-            status = "incompatible"
-            details = details or "No import candidates found."
+    if result.returncode != 0:
+        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+        return {
+            "status": status,
+            "relative_path": relative_path,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "details": details,
+        }
+
 
     return {
-        "status": status,
+        "status": "compatible",
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": details or "Compatibility check succeeded.",
+        "details": "Compatibility check succeeded.",
     }
 
 
@@ -1267,11 +1281,7 @@ def _run_compatibility_check(job_id: str):
     pending_entries = [
         (index, entry)
         for index, entry in enumerate(job.get("files", []))
-        if (
-            entry.get("status") == "uploaded"
-            and not entry.get("compatibility")
-            and not entry.get("compatibility_skip")
-        )
+        if entry.get("status") == "uploaded" and not entry.get("compatibility")
     ]
     if not pending_entries:
         def mark_idle(job_dict):
@@ -1528,8 +1538,6 @@ def _process_import_job(job_id: str):
             for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
                     continue
-                if entry.get("import_skip"):
-                    continue
                 if not entry.get("relative_path"):
                     continue
                 entries_to_import.append(
@@ -1593,6 +1601,7 @@ def _process_import_job(job_id: str):
                                     logger.warning("Failed to remove staged file %s: %s", file_path, exc)
                             _save_job(job)
 
+            # SEM EDX Special Processing: Attach text files to imported images
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
@@ -1781,12 +1790,14 @@ def _start_upload(request, conn):
     if not files:
         logger.info("Upload start request missing files payload.")
         return json_error(errors.no_files_provided())
-    special_upload = (payload.get("special_upload") or "").strip()
+    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
+    batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
+    
+    # Extract special upload type and SEM EDX associations
+    special_upload = payload.get("special_upload") or None
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
-    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
-    batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
     session_key = _get_session_key(conn)
     if not session_key:
@@ -1819,8 +1830,6 @@ def _start_upload(request, conn):
         if size < 0:
             size = 0
         upload_id = uuid.uuid4().hex
-        compatibility_skip = bool(entry.get("compatibility_skip"))
-        import_skip = bool(entry.get("import_skip"))
         filename = PurePosixPath(rel_path).name
         staged_path = f"_staged/{upload_id}/{filename}"
         total_bytes += size
@@ -1839,16 +1848,12 @@ def _start_upload(request, conn):
                 "size": size,
                 "status": "pending",
                 "errors": [],
-                "compatibility_skip": compatibility_skip,
-                "import_skip": import_skip,
             }
         )
 
     if invalid:
         logger.info("Upload start rejected invalid paths: %s", invalid)
         return json_error(errors.invalid_file_paths(invalid))
-
-    sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
 
     dataset_map = {}
     orphan_dataset_name = None
@@ -1869,6 +1874,10 @@ def _start_upload(request, conn):
 
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
+    
+    # Normalize SEM EDX associations after normalizing files
+    sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
+    
     job = {
         "job_id": job_id,
         "username": username,
@@ -2179,14 +2188,8 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
-            "compatibility_checked": sum(
-                1 for f in job.get("files", []) if f.get("compatibility")
-            ),
-            "compatibility_total": sum(
-                1
-                for f in job.get("files", [])
-                if f.get("status") == "uploaded" and not f.get("compatibility_skip")
-            ),
+            "compatibility_checked": sum(1 for f in job.get("files", []) if f.get("compatibility")),
+            "compatibility_total": sum(1 for f in job.get("files", []) if f.get("status") == "uploaded"),
             "incompatible_files": job.get("incompatible_files", []),
             "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
