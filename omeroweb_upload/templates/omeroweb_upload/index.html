@@ -213,7 +213,7 @@
             z-index: 1001;
         }
         .project-select-label {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
             color: #1f2937;
             display: block;
@@ -2087,7 +2087,7 @@
             const statusRow = document.createElement('div');
             statusRow.className = 'project-select-dropdown__status';
             if (Number.isFinite(maxResults) && totalMatches > maxResults) {
-                statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
+                statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Search to narrow down results.`;
             } else if (totalMatches > 0) {
                 statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
             } else {
