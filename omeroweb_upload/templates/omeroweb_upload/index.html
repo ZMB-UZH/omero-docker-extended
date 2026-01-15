@@ -1728,16 +1728,29 @@
         const userSettingsStatus = document.getElementById('user_settings_status');
         const compatibilityToggle = document.getElementById('compatibility_toggle');
 
+        let specialUploadFixedWidth = null;
         const syncSpecialUploadWidth = () => {
-            if (!specialUploadWrapper || !uploadActionsButtons) return;
+            if (!specialUploadWrapper || !uploadActionsButtons || specialUploadFixedWidth !== null) return;
             const buttonsWidth = uploadActionsButtons.offsetWidth;
             if (buttonsWidth > 0) {
+                specialUploadFixedWidth = buttonsWidth;
                 specialUploadWrapper.style.width = `${buttonsWidth}px`;
+                specialUploadWrapper.style.minWidth = `${buttonsWidth}px`;
+                specialUploadWrapper.style.maxWidth = `${buttonsWidth}px`;
             }
         };
 
-        syncSpecialUploadWidth();
-        window.addEventListener('resize', syncSpecialUploadWidth);
+        const lockSpecialUploadWidth = () => {
+            syncSpecialUploadWidth();
+            if (specialUploadFixedWidth !== null) {
+                window.removeEventListener('resize', lockSpecialUploadWidth);
+                window.removeEventListener('load', lockSpecialUploadWidth);
+            }
+        };
+
+        lockSpecialUploadWidth();
+        window.addEventListener('resize', lockSpecialUploadWidth);
+        window.addEventListener('load', lockSpecialUploadWidth);
 
         let pendingFiles = [];
         const expandedNodes = new Set();
@@ -3579,22 +3592,19 @@
             return list;
         }
 
+        function isSemEdxTxtEntry(entry) {
+            const rawPath = getEntryPath(entry);
+            if (!rawPath) return false;
+            const name = rawPath.split('/').pop() || '';
+            return name.toLowerCase().endsWith('.txt');
+        }
+
         function getSemEdxImageEntries(entries) {
-            return entries.filter((entry) => {
-                const rawPath = getEntryPath(entry);
-                if (!rawPath) return false;
-                const name = rawPath.split('/').pop() || '';
-                return !name.toLowerCase().endsWith('.txt');
-            });
+            return entries.filter((entry) => !isSemEdxTxtEntry(entry));
         }
 
         function getSemEdxTxtEntries(entries) {
-            return entries.filter((entry) => {
-                const rawPath = getEntryPath(entry);
-                if (!rawPath) return false;
-                const name = rawPath.split('/').pop() || '';
-                return name.toLowerCase().endsWith('.txt');
-            });
+            return entries.filter((entry) => isSemEdxTxtEntry(entry));
         }
 
         function getSemEdxDirectory(rawPath) {
@@ -4335,7 +4345,9 @@
             compatibilityOverlay.style.display = 'block';
             compatibilityPopup.style.display = 'block';
             compatibilityPopup.setAttribute('aria-hidden', 'false');
-            compatibilityNoBtn.focus();
+            window.setTimeout(() => {
+                compatibilityNoBtn.focus();
+            }, 0);
             return new Promise((resolve) => {
                 compatibilityPopupResolver = resolve;
             });
@@ -4897,10 +4909,13 @@
 
         async function startUploadJob(entries = pendingFiles) {
             const totalBytes = entries.reduce((acc, entry) => acc + normalizeByteSize(entry.file?.size), 0);
+            const shouldSkipSemEdx = (entry) => isSemEdxSelected() && isSemEdxTxtEntry(entry);
             const metadata = entries.map((entry) => ({
                 name: entry.file.name,
                 relative_path: getEntryPath(entry),
                 size: normalizeByteSize(entry.file?.size),
+                compatibility_skip: shouldSkipSemEdx(entry),
+                import_skip: shouldSkipSemEdx(entry),
             }));
             const projectId = projectSelect?.value || '';
             const projectName = projectSelectInput?.dataset.selectedName || projectSelectInput?.value || '';
