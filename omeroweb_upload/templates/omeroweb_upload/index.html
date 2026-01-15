@@ -1908,12 +1908,42 @@
             uploadBtn.disabled = isUploading || !uploadEnabled;
         }
 
+        function resetSemEdxStateAfterUpload() {
+            if (!isSemEdxSelected()) return;
+            semEdxManualAssociations.clear();
+            semEdxManualInitialized = false;
+            semEdxExpandedNodes.clear();
+            semEdxExpandedNodesInitialized = false;
+            semEdxAssociationCache = new Map();
+            semEdxTxtCache.clear();
+            semEdxAssociationVersion += 1;
+            semEdxAssociationLoading = false;
+            semEdxAssociationReady = false;
+            setSemEdxAssociationMode('automatic');
+            setSemEdxInstructionsStep(1);
+            saveSemEdxAssociationsToStorage();
+            updateSemEdxStatus();
+        }
+
+        function resetSpecialUploadStateAfterUpload() {
+            if (!specialUploadSelect?.value) {
+                return;
+            }
+            if (isSemEdxSelected()) {
+                resetSemEdxStateAfterUpload();
+            }
+        }
+
         function setUploadingState(active, statusText) {
+            const wasUploading = isUploading;
             isUploading = active;
             uploadCard.classList.toggle('is-uploading', active);
             updateUploadControlAvailability();
             if (!active) {
                 resetUploadProgress();
+                if (wasUploading) {
+                    resetSpecialUploadStateAfterUpload();
+                }
             } else if (statusText && uploadOverlay) {
                 uploadOverlay.textContent = statusText;
             }
@@ -4880,13 +4910,22 @@
             return changed;
         }
 
+        function filterCompatibilityIncompatibleFiles(incompatibleFiles) {
+            const files = (incompatibleFiles || []).map(normalizeCompatibilityPath).filter(Boolean);
+            if (!isSemEdxSelected()) {
+                return files;
+            }
+            return files.filter((path) => !path.toLowerCase().endsWith('.txt'));
+        }
+
         async function ensureCompatibilityBeforeImport(job, uploadedFiles) {
             if (!isCompatibilityEnabled()) {
                 return { proceed: true, status: { compatibility_status: 'skipped', status: 'ready' } };
             }
             const statusData = await waitForCompatibility(job);
-            applyCompatibilityFlags(uploadedFiles, statusData.incompatible_files);
-            if (statusData.confirmation_required) {
+            const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
+            applyCompatibilityFlags(uploadedFiles, incompatibleFiles);
+            if (statusData.confirmation_required && incompatibleFiles.length) {
                 const proceed = await showCompatibilityPopup(
                     'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
                 );
@@ -4894,7 +4933,7 @@
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     pendingFiles = [...uploadedFiles];
-                    applyCompatibilityFlags(pendingFiles, statusData.incompatible_files);
+                    applyCompatibilityFlags(pendingFiles, incompatibleFiles);
                     refreshFileList();
                     updateUploadButtonLabel();
                     setStatus(
@@ -4903,6 +4942,8 @@
                     );
                     return { proceed: false, status: statusData, uploadedFiles };
                 }
+                await confirmCompatibility(job);
+            } else if (statusData.confirmation_required) {
                 await confirmCompatibility(job);
             }
             return { proceed: true, status: statusData };
