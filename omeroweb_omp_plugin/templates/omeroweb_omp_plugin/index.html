@@ -26,12 +26,10 @@
     </style>
 </head>
 <body>
-{% if is_root_user %}
     <div class="root-user-overlay" aria-hidden="true"></div>
     <div id="root-user-warning" class="root-user-warning error-message" role="alert">
         PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
     </div>
-{% endif %}
 
 <div class="omp-page omp-page--narrow">
 <div class="omeroweb-omp-plugin"
@@ -577,6 +575,14 @@
         filter: blur(5px);
         pointer-events: none;
         user-select: none;
+    }
+    .root-user-overlay,
+    .root-user-warning {
+        display: none;
+    }
+    .root-user-blocked .root-user-overlay,
+    .root-user-blocked .root-user-warning {
+        display: block;
     }
     .root-user-overlay {
         position: fixed;
@@ -1129,13 +1135,26 @@
 
 <script>
     const previewForm = document.getElementById('preview_form');
-    const isRootUser = {{ is_root_user|yesno:"true,false" }};
-    if (isRootUser) {
+    const rootStatusUrl = new URL('root-status/', window.location.href);
+    const applyRootUserState = (isRootUser) => {
+        if (!isRootUser) {
+            return;
+        }
         document.documentElement.classList.add('root-user-blocked');
         if (document.body) {
             document.body.classList.add('root-user-blocked');
         }
-    }
+    };
+    fetch(rootStatusUrl, { credentials: 'same-origin' })
+        .then((resp) => (resp.ok ? resp.json() : null))
+        .then((data) => {
+            if (data && data.is_root_user === true) {
+                applyRootUserState(true);
+            }
+        })
+        .catch(() => {
+            // Ignore root user lookup failures.
+        });
     const messages = {{ messages_json|safe }};
     const allowedClipboardSelectors = [
         'input[type="text"]',
