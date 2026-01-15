@@ -3404,7 +3404,7 @@
         const statusRow = document.createElement('div');
         statusRow.className = 'project-select-dropdown__status';
         if (Number.isFinite(maxResults) && totalMatches > maxResults) {
-            statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Search to narrow down results.`;
+            statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Search to narrow down.`;
         } else if (totalMatches > 0) {
             statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
         } else {
