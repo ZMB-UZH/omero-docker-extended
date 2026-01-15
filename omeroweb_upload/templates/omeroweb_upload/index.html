@@ -18,6 +18,14 @@
             pointer-events: none;
             user-select: none;
         }
+        .root-user-overlay,
+        .root-user-warning {
+            display: none;
+        }
+        .root-user-blocked .root-user-overlay,
+        .root-user-blocked .root-user-warning {
+            display: block;
+        }
         .root-user-overlay {
             position: fixed;
             inset: 0;
@@ -1033,12 +1041,10 @@
     </style>
 </head>
 <body>
-    {% if is_root_user %}
-        <div class="root-user-overlay" aria-hidden="true"></div>
-        <div id="root-user-warning" class="root-user-warning" role="alert">
-            PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
-        </div>
-    {% endif %}
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
+    </div>
     <div class="upload-page">
         <h1 class="upload-title">Upload</h1>
         <p class="upload-intro">Drag & drop or choose folders and files to upload and import them into your user space in Omero. Selecting a project is suggested.</p>
@@ -1233,13 +1239,26 @@
     </div>
 
     <script>
-        const isRootUser = {{ is_root_user|yesno:"true,false" }};
-        if (isRootUser) {
+        const rootStatusUrl = new URL('root-status/', window.location.href);
+        const applyRootUserState = (isRootUser) => {
+            if (!isRootUser) {
+                return;
+            }
             document.documentElement.classList.add('root-user-blocked');
             if (document.body) {
                 document.body.classList.add('root-user-blocked');
             }
-        }
+        };
+        fetch(rootStatusUrl, { credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (data && data.is_root_user === true) {
+                    applyRootUserState(true);
+                }
+            })
+            .catch(() => {
+                // Ignore root user lookup failures.
+            });
         const messages = {{ messages_json|safe }};
         const formatMessage = (template, values = {}) => {
             const source = String(template || '');
@@ -1356,6 +1375,7 @@
         const importLogsStorageKey = makeStorageKey('omeroweb_upload_import_logs_v1');
         const userSettingsStorageKey = makeStorageKey('omeroweb_upload_user_settings_v1');
         const projectSelectionStorageKey = makeStorageKey('omeroweb_upload_project_selection_v1');
+        const specialUploadSelectionStorageKey = makeStorageKey('omeroweb_upload_special_upload_selection_v1');
         const collaborationToggleStorageKey = makeStorageKey('omeroweb_upload_collaboration_toggle_v1');
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
         const compatibilityToggleStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_v1');
@@ -2087,7 +2107,49 @@
             specialUploadWrapper.classList.add('is-display-active');
         }
 
-        function setSpecialUploadSelection(value, label) {
+        function saveSpecialUploadSelection(value, label) {
+            if (!storage) return;
+            const normalizedValue = value ? String(value) : '';
+            const normalizedLabel = label ? String(label) : '';
+            try {
+                if (!normalizedValue && !normalizedLabel) {
+                    storage.removeItem(specialUploadSelectionStorageKey);
+                    return;
+                }
+                storage.setItem(
+                    specialUploadSelectionStorageKey,
+                    JSON.stringify({ value: normalizedValue, label: normalizedLabel })
+                );
+            } catch (error) {
+                // Ignore storage failures.
+            }
+        }
+
+        function loadSpecialUploadSelection() {
+            if (!storage) return null;
+            try {
+                const raw = storage.getItem(specialUploadSelectionStorageKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return {
+                    value: parsed?.value ? String(parsed.value) : '',
+                    label: parsed?.label ? String(parsed.label) : '',
+                };
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function findSpecialUploadOptionByValue(value) {
+            const normalizedValue = value ? String(value) : '';
+            if (!normalizedValue) return null;
+            return specialUploadOptions.find((option) => (
+                !option.isEmpty && String(option.value) === normalizedValue
+            )) || null;
+        }
+
+        function setSpecialUploadSelection(value, label, options = {}) {
+            const { persist = true } = options;
             if (specialUploadSelect) {
                 specialUploadSelect.value = value || '';
             }
@@ -2096,9 +2158,13 @@
                 specialUploadInput.dataset.selectedName = label || '';
             }
             updateSpecialUploadDisplay();
+            if (persist) {
+                saveSpecialUploadSelection(value, label);
+            }
         }
 
-        function clearSpecialUploadSelection() {
+        function clearSpecialUploadSelection(options = {}) {
+            const { persist = true } = options;
             if (specialUploadSelect) {
                 specialUploadSelect.value = '';
             }
@@ -2107,6 +2173,26 @@
                 specialUploadInput.dataset.selectedName = '';
             }
             updateSpecialUploadDisplay();
+            if (persist) {
+                saveSpecialUploadSelection('', '');
+            }
+        }
+
+        function restoreSpecialUploadSelection() {
+            const stored = loadSpecialUploadSelection();
+            if (!stored) return;
+            if (!stored.value) {
+                clearSpecialUploadSelection({ persist: false });
+                return;
+            }
+            const match = findSpecialUploadOptionByValue(stored.value);
+            if (!match) {
+                clearSpecialUploadSelection({ persist: false });
+                saveSpecialUploadSelection('', '');
+                return;
+            }
+            const label = stored.label || match.label;
+            setSpecialUploadSelection(match.value, label, { persist: false });
         }
 
         function renderSpecialUploadOptions(query = '') {
@@ -4160,6 +4246,7 @@
             applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
         }
         restoreProjectSelection();
+        restoreSpecialUploadSelection();
         restoreImportState();
         if (importJobs.size) {
             updateProgressFromJobs();
