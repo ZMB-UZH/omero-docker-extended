@@ -1468,6 +1468,7 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_concurrency": upload_concurrency,
             "upload_batch_files": upload_batch_files,
             "is_root_user": is_root_user,
+            "user_id": user_id,
             "messages_json": json.dumps(messages.index_messages()),
             "projects": projects,
             "project_list_url": reverse("omeroweb_upload_projects"),
