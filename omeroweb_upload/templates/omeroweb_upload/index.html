@@ -649,6 +649,20 @@
             text-align: center;
             padding: 12px 0;
         }
+        .sem-edx-appended-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-start;
+        }
+        .sem-edx-appended-item {
+            font-size: 0.75rem;
+            color: #475569;
+            background: #f8fafc;
+            padding: 2px 6px;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(148, 163, 184, 0.6);
+        }
         .file-tree:empty {
             align-items: center;
             justify-content: center;
@@ -1247,7 +1261,7 @@
             <div class="upload-card__overlay" aria-live="polite">Uploading</div>
             <div class="upload-card__content">
                 <div class="upload-intro-row">
-                    <p><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
+                    <p id="upload_intro_text"><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
                     <div class="project-select-wrapper" id="special_upload_wrapper">
                         <input type="text"
                                id="special_upload_input"
@@ -1303,6 +1317,7 @@
                     </div>
                     <div class="upload-actions__buttons">
                         <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                        <button id="previous-step-btn" type="button" class="is-hidden">Previous step</button>
                         <button id="next-step-btn" type="button" class="is-hidden">Next step</button>
                         <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                     </div>
@@ -1473,6 +1488,8 @@
         const canUseFolderInput = !!folderInput && ('webkitdirectory' in folderInput || 'directory' in folderInput);
         const uploadBtn = document.getElementById('upload-btn');
         const nextStepBtn = document.getElementById('next-step-btn');
+        const previousStepBtn = document.getElementById('previous-step-btn');
+        const uploadIntroText = document.getElementById('upload_intro_text');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
         const cancelImportBtn = document.getElementById('cancel-import-btn');
@@ -1606,6 +1623,11 @@
             'Multiple txt files can be appended to a single image.',
         ];
         let semEdxAssociationMode = 'automatic';
+        let semEdxAssociationCache = new Map();
+        const semEdxTxtCache = new Map();
+        let semEdxAssociationVersion = 0;
+        let semEdxAssociationLoading = false;
+        let semEdxAssociationReady = false;
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -2453,13 +2475,13 @@
 
         function updateSemEdxStatus() {
             if (!isSemEdxSelected()) {
-                updateNextStepVisibility(false);
+                updateSemEdxStepControls(false);
                 return false;
             }
             const { hasFiles, valid } = evaluateSemEdxFiles(pendingFiles);
             if (!hasFiles) {
                 setStatus('');
-                updateNextStepVisibility(false);
+                updateSemEdxStepControls(false);
                 return true;
             }
             if (valid) {
@@ -2467,7 +2489,7 @@
             } else {
                 setStatus('You need to add at least 1 image and 1 txt file in the base path and per folder.', 'error');
             }
-            updateNextStepVisibility(valid);
+            updateSemEdxStepControls(valid);
             return true;
         }
 
@@ -2491,12 +2513,26 @@
             if (!semEdxInstructions) return;
             setSemEdxInstructionLines(step === 2 ? semEdxStep2Lines : semEdxStep1Lines);
             refreshFileList();
+            updateSemEdxStepControls(step > 1);
         }
 
-        function updateNextStepVisibility(isSemEdxReady) {
-            if (!nextStepBtn) return;
-            const shouldShow = isSemEdxSelected() && (semEdxInstructionStep > 1 || isSemEdxReady);
-            nextStepBtn.classList.toggle('is-hidden', !shouldShow);
+        function updateSemEdxIntroVisibility() {
+            if (!uploadIntroText) return;
+            const shouldHide = isSemEdxSelected() && semEdxInstructionStep > 1;
+            uploadIntroText.style.display = shouldHide ? 'none' : '';
+        }
+
+        function updateSemEdxStepControls(isSemEdxReady) {
+            const isActive = isSemEdxSelected();
+            if (nextStepBtn) {
+                const shouldShowNext = isActive && (semEdxInstructionStep > 1 || isSemEdxReady);
+                nextStepBtn.classList.toggle('is-hidden', !shouldShowNext);
+            }
+            if (previousStepBtn) {
+                const shouldShowPrevious = isActive && semEdxInstructionStep > 1;
+                previousStepBtn.classList.toggle('is-hidden', !shouldShowPrevious);
+            }
+            updateSemEdxIntroVisibility();
         }
 
         function setProjectSelectionVisibility(show) {
@@ -2540,7 +2576,7 @@
             if (!value) {
                 semEdxInstructionStep = 1;
                 setSemEdxInstructionsStep(1);
-                updateNextStepVisibility(false);
+                updateSemEdxStepControls(false);
             }
             if (compatibilitySection) {
                 compatibilitySection.style.display = isSemEdx ? 'none' : '';
@@ -2565,10 +2601,11 @@
                     if (pausedState !== null) {
                         applyCompatibilityState(pausedState);
                     }
+                    clearSelectedFiles();
                 }
                 semEdxModeActive = false;
                 setStatus('');
-                updateNextStepVisibility(false);
+                updateSemEdxStepControls(false);
             }
             updateSemEdxStatus();
         }
@@ -3001,6 +3038,7 @@
             expandedNodes.clear();
             fileInput.value = '';
             folderInput.value = '';
+            invalidateSemEdxAssociations();
             refreshFileList();
             updateSemEdxStatus();
         }
@@ -3105,6 +3143,7 @@
                 folderInput.value = '';
                 expandedNodes.clear();
             }
+            invalidateSemEdxAssociations();
             refreshFileList();
             updateSemEdxStatus();
         }
@@ -3283,7 +3322,233 @@
             });
         }
 
-        function renderSemEdxManualTree(node, depth = 0, pathPrefix = '') {
+        function getSemEdxTxtEntries(entries) {
+            return entries.filter((entry) => {
+                const rawPath = getEntryPath(entry);
+                if (!rawPath) return false;
+                const name = rawPath.split('/').pop() || '';
+                return name.toLowerCase().endsWith('.txt');
+            });
+        }
+
+        function stripSemEdxExtension(name) {
+            return String(name || '').replace(/\.[^/.]+$/, '');
+        }
+
+        function normalizeSemEdxName(name) {
+            return stripSemEdxExtension(name)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+        }
+
+        function extractSemEdxSpectrumNumber(value) {
+            if (!value) return null;
+            const match = String(value).match(/spect(?:rum|um)\s*([0-9]+)/i);
+            return match ? match[1] : null;
+        }
+
+        function parseSemEdxTxtContent(content) {
+            const lines = String(content || '').split(/\r?\n/);
+            let title = '';
+            let spectrumData = [];
+            let inSpectrum = false;
+            lines.forEach((line) => {
+                if (!inSpectrum) {
+                    if (line.startsWith('#TITLE')) {
+                        const parts = line.split(':');
+                        title = parts.slice(1).join(':').trim();
+                    }
+                    if (line.startsWith('#SPECTRUM')) {
+                        inSpectrum = true;
+                    }
+                    return;
+                }
+                if (line.startsWith('#END')) {
+                    inSpectrum = false;
+                    return;
+                }
+                const match = line.match(/^\s*([+-]?\d*\.?\d+)\s*,\s*([+-]?\d*\.?\d+)/);
+                if (match) {
+                    spectrumData.push({
+                        x: Number.parseFloat(match[1]),
+                        y: Number.parseFloat(match[2]),
+                    });
+                }
+            });
+            return { title, spectrumData };
+        }
+
+        async function loadSemEdxTxtData(entries) {
+            const parsed = new Map();
+            await Promise.all(entries.map(async (entry) => {
+                const rawPath = getEntryPath(entry);
+                if (!rawPath) return;
+                if (semEdxTxtCache.has(rawPath)) {
+                    parsed.set(rawPath, semEdxTxtCache.get(rawPath));
+                    return;
+                }
+                try {
+                    const content = await entry.file.text();
+                    const data = parseSemEdxTxtContent(content);
+                    semEdxTxtCache.set(rawPath, data);
+                    parsed.set(rawPath, data);
+                } catch (error) {
+                    semEdxTxtCache.set(rawPath, { title: '', spectrumData: [] });
+                    parsed.set(rawPath, { title: '', spectrumData: [] });
+                }
+            }));
+            return parsed;
+        }
+
+        function groupSemEdxEntries(entries) {
+            const groups = new Map();
+            entries.forEach((entry) => {
+                const rawPath = getEntryPath(entry);
+                if (!rawPath) return;
+                const parts = rawPath.split('/');
+                const fileName = parts.pop() || '';
+                const directory = parts.join('/');
+                const isTxt = fileName.toLowerCase().endsWith('.txt');
+                if (!groups.has(directory)) {
+                    groups.set(directory, { images: [], txt: [] });
+                }
+                const info = {
+                    entry,
+                    rawPath,
+                    fileName,
+                    baseName: stripSemEdxExtension(fileName),
+                    normalizedName: normalizeSemEdxName(fileName),
+                    spectrumNumber: extractSemEdxSpectrumNumber(fileName),
+                };
+                if (isTxt) {
+                    groups.get(directory).txt.push(info);
+                } else {
+                    groups.get(directory).images.push(info);
+                }
+            });
+            return groups;
+        }
+
+        async function buildSemEdxAutomaticAssociations(entries) {
+            const associations = new Map();
+            const txtEntries = getSemEdxTxtEntries(entries);
+            const txtDataMap = await loadSemEdxTxtData(txtEntries);
+            const groups = groupSemEdxEntries(entries);
+
+            groups.forEach((group) => {
+                const images = group.images;
+                const txtFiles = group.txt;
+                if (!images.length || !txtFiles.length) return;
+
+                if (images.length === 1 && txtFiles.length === 1) {
+                    associations.set(images[0].rawPath, [txtFiles[0].fileName]);
+                    return;
+                }
+
+                if (images.length === 1 && txtFiles.length > 1) {
+                    associations.set(images[0].rawPath, txtFiles.map((txt) => txt.fileName));
+                    return;
+                }
+
+                if (images.length > 1 && txtFiles.length === 1) {
+                    images.forEach((image) => {
+                        associations.set(image.rawPath, [txtFiles[0].fileName]);
+                    });
+                    return;
+                }
+
+                const matchedImages = new Set();
+                const matchedTxt = new Set();
+
+                const imageLookup = new Map();
+                images.forEach((image) => {
+                    const key = image.baseName.toLowerCase();
+                    if (!imageLookup.has(key)) {
+                        imageLookup.set(key, []);
+                    }
+                    imageLookup.get(key).push(image);
+                });
+
+                txtFiles.forEach((txt) => {
+                    const matches = imageLookup.get(txt.baseName.toLowerCase()) || [];
+                    if (matches.length === 1 && !matchedImages.has(matches[0].rawPath)) {
+                        associations.set(matches[0].rawPath, [txt.fileName]);
+                        matchedImages.add(matches[0].rawPath);
+                        matchedTxt.add(txt.rawPath);
+                    }
+                });
+
+                txtFiles.forEach((txt) => {
+                    if (matchedTxt.has(txt.rawPath)) return;
+                    const txtData = txtDataMap.get(txt.rawPath);
+                    const spectrumNumber = extractSemEdxSpectrumNumber(txtData?.title || '') || txt.spectrumNumber;
+                    if (!spectrumNumber) return;
+                    const matches = images.filter((image) => (
+                        !matchedImages.has(image.rawPath)
+                        && (image.spectrumNumber === spectrumNumber
+                            || extractSemEdxSpectrumNumber(image.fileName) === spectrumNumber)
+                    ));
+                    if (matches.length === 1) {
+                        associations.set(matches[0].rawPath, [txt.fileName]);
+                        matchedImages.add(matches[0].rawPath);
+                        matchedTxt.add(txt.rawPath);
+                    }
+                });
+
+                txtFiles.forEach((txt) => {
+                    if (matchedTxt.has(txt.rawPath)) return;
+                    const txtData = txtDataMap.get(txt.rawPath);
+                    const candidates = [
+                        normalizeSemEdxName(txt.fileName),
+                        normalizeSemEdxName(txtData?.title || ''),
+                    ].filter(Boolean);
+                    const matches = [];
+                    images.forEach((image) => {
+                        if (matchedImages.has(image.rawPath)) return;
+                        const imageName = image.normalizedName;
+                        if (!imageName) return;
+                        const isMatch = candidates.some((candidate) => (
+                            candidate && (imageName.includes(candidate) || candidate.includes(imageName))
+                        ));
+                        if (isMatch) {
+                            matches.push(image);
+                        }
+                    });
+                    if (matches.length === 1) {
+                        associations.set(matches[0].rawPath, [txt.fileName]);
+                        matchedImages.add(matches[0].rawPath);
+                        matchedTxt.add(txt.rawPath);
+                    }
+                });
+            });
+
+            return associations;
+        }
+
+        function invalidateSemEdxAssociations() {
+            semEdxAssociationVersion += 1;
+            semEdxAssociationCache = new Map();
+            semEdxTxtCache.clear();
+            semEdxAssociationReady = false;
+        }
+
+        async function ensureSemEdxAutomaticAssociations() {
+            if (semEdxAssociationLoading || semEdxAssociationReady) return;
+            const version = semEdxAssociationVersion;
+            semEdxAssociationLoading = true;
+            const associations = await buildSemEdxAutomaticAssociations(pendingFiles);
+            if (version !== semEdxAssociationVersion) {
+                semEdxAssociationLoading = false;
+                return;
+            }
+            semEdxAssociationCache = associations;
+            semEdxAssociationLoading = false;
+            semEdxAssociationReady = true;
+            refreshFileList();
+        }
+
+        function renderSemEdxManualTree(node, depth = 0, pathPrefix = '', associations = null) {
             const list = document.createElement('ul');
             node.children.forEach((child) => {
                 if (child.totalFiles < 1) {
@@ -3328,7 +3593,7 @@
 
                 const folderPath = child.isRootGroup ? '' : `${pathPrefix}${child.name}/`;
                 const isExpanded = expandedNodes.has(folderPath);
-                const childrenList = renderSemEdxManualTree(child, depth + 1, folderPath);
+                const childrenList = renderSemEdxManualTree(child, depth + 1, folderPath, associations);
                 childrenList.classList.add('tree-children');
                 childrenList.hidden = !isExpanded;
                 toggle.setAttribute('aria-expanded', String(isExpanded));
@@ -3378,6 +3643,19 @@
                     nameCell.appendChild(icon);
                     nameCell.appendChild(label);
 
+                    const appendedItems = associations?.get(file.rawPath) || [];
+                    if (appendedItems.length) {
+                        const list = document.createElement('div');
+                        list.classList.add('sem-edx-appended-list');
+                        appendedItems.forEach((itemName) => {
+                            const itemLabel = document.createElement('div');
+                            itemLabel.classList.add('sem-edx-appended-item');
+                            itemLabel.textContent = itemName;
+                            list.appendChild(itemLabel);
+                        });
+                        appendedCell.appendChild(list);
+                    }
+
                     row.appendChild(nameCell);
                     row.appendChild(appendedCell);
                     item.appendChild(row);
@@ -3391,6 +3669,10 @@
             if (!fileTree) return;
             fileTree.innerHTML = '';
             fileTree.classList.add('sem-edx-associations');
+
+            if (semEdxAssociationMode === 'automatic') {
+                ensureSemEdxAutomaticAssociations();
+            }
 
             const toggleWrapper = document.createElement('div');
             toggleWrapper.classList.add('sem-edx-mode-toggle');
@@ -3461,7 +3743,8 @@
                 manualPanel.appendChild(empty);
             } else {
                 const tree = buildTree(imageEntries);
-                manualPanel.appendChild(renderSemEdxManualTree(tree));
+                const associations = semEdxAssociationMode === 'automatic' ? semEdxAssociationCache : null;
+                manualPanel.appendChild(renderSemEdxManualTree(tree, 0, '', associations));
             }
 
             fileTree.appendChild(manualPanel);
@@ -3496,6 +3779,7 @@
             const candidates = [
                 uploadBtn,
                 nextStepBtn,
+                previousStepBtn,
                 fileBtn,
                 folderBtn,
                 cancelUploadBtn,
@@ -3685,6 +3969,7 @@
                 return;
             }
             pendingFiles = pendingFiles.concat(entries);
+            invalidateSemEdxAssociations();
             refreshFileList();
             if (updateSemEdxStatus()) {
                 return;
@@ -4811,7 +5096,15 @@
             nextStepBtn.addEventListener('click', () => {
                 if (!isSemEdxSelected()) return;
                 setSemEdxInstructionsStep(2);
-                updateNextStepVisibility(true);
+                updateSemEdxStepControls(true);
+            });
+        }
+
+        if (previousStepBtn) {
+            previousStepBtn.addEventListener('click', () => {
+                if (!isSemEdxSelected()) return;
+                setSemEdxInstructionsStep(1);
+                updateSemEdxStatus();
             });
         }
 
