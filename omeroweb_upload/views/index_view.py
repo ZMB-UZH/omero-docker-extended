@@ -1188,7 +1188,11 @@ def _run_compatibility_check(job_id: str):
     pending_entries = [
         (index, entry)
         for index, entry in enumerate(job.get("files", []))
-        if entry.get("status") == "uploaded" and not entry.get("compatibility")
+        if (
+            entry.get("status") == "uploaded"
+            and not entry.get("compatibility")
+            and not entry.get("compatibility_skip")
+        )
     ]
     if not pending_entries:
         def mark_idle(job_dict):
