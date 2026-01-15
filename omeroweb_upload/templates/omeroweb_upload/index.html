@@ -1816,6 +1816,7 @@
         let semEdxAssociationVersion = 0;
         let semEdxAssociationLoading = false;
         let semEdxAssociationReady = false;
+        let skipSpecialUploadReset = false;
         loadSemEdxAssociationsFromStorage();
 
         function setStatus(message, type) {
@@ -1942,7 +1943,10 @@
             if (!active) {
                 resetUploadProgress();
                 if (wasUploading) {
-                    resetSpecialUploadStateAfterUpload();
+                    if (!skipSpecialUploadReset) {
+                        resetSpecialUploadStateAfterUpload();
+                    }
+                    skipSpecialUploadReset = false;
                 }
             } else if (statusText && uploadOverlay) {
                 uploadOverlay.textContent = statusText;
@@ -3657,6 +3661,46 @@
             return lookup;
         }
 
+        function buildSemEdxAssociationPayload(entries) {
+            const associations = semEdxAssociationMode === 'manual'
+                ? semEdxManualAssociations
+                : semEdxAssociationCache;
+            if (semEdxAssociationMode === 'manual') {
+                ensureSemEdxManualAssociations(semEdxAssociationCache);
+            }
+            const groups = groupSemEdxEntries(entries);
+            const txtLookup = new Map();
+            groups.forEach((group, directory) => {
+                const map = new Map();
+                group.txt.forEach((txt) => {
+                    if (txt.fileName && txt.rawPath) {
+                        map.set(txt.fileName, txt.rawPath);
+                    }
+                });
+                txtLookup.set(directory, map);
+            });
+            const payload = {};
+            associations.forEach((txtFiles, imageRawPath) => {
+                if (!Array.isArray(txtFiles) || !txtFiles.length) {
+                    return;
+                }
+                const normalizedImage = normalizeCompatibilityPath(imageRawPath);
+                if (!normalizedImage) {
+                    return;
+                }
+                const directory = getSemEdxDirectory(imageRawPath);
+                const directoryLookup = txtLookup.get(directory) || new Map();
+                const mapped = txtFiles
+                    .map((name) => directoryLookup.get(name))
+                    .filter(Boolean)
+                    .map((path) => normalizeCompatibilityPath(path));
+                if (mapped.length) {
+                    payload[normalizedImage] = mapped;
+                }
+            });
+            return payload;
+        }
+
         function stripSemEdxExtension(name) {
             return String(name || '').replace(/\.[^/.]+$/, '');
         }
@@ -4930,6 +4974,7 @@
                     'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
                 );
                 if (!proceed) {
+                    skipSpecialUploadReset = true;
                     window.pendingImportJob = job;
                     window.pendingImportFiles = uploadedFiles;
                     pendingFiles = [...uploadedFiles];
@@ -4961,6 +5006,10 @@
             }));
             const projectId = projectSelect?.value || '';
             const projectName = projectSelectInput?.dataset.selectedName || projectSelectInput?.value || '';
+            const specialUploadValue = specialUploadSelect?.value || '';
+            const semEdxAssociations = isSemEdxSelected() && semEdxInstructionStep > 1
+                ? buildSemEdxAssociationPayload(entries)
+                : null;
 
             const response = await fetch(startUrl, {
                 method: 'POST',
@@ -4969,6 +5018,8 @@
                     files: metadata,
                     project_id: projectId,
                     project_name: projectName,
+                    special_upload: specialUploadValue,
+                    sem_edx_associations: semEdxAssociations,
                     batch_size: currentUploadBatchFiles,
                 }),
                 credentials: 'same-origin',
@@ -5129,8 +5180,7 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;')
-                .replace(/\//g, '&#x2F;');
+                .replace(/'/g, '&#39;');
         }
 
         function formatImportLogEntry(entry) {
@@ -5140,14 +5190,28 @@
                 const detail = successMatch[1] ? escapeHtml(successMatch[1].trim()) : '';
                 const rest = detail ? `: ${detail}` : ':';
                 return `<span class="import-log-label import-log-label--success">Import success</span>` +
-                    `<span class="import-log-rest">${escapeHtml(rest)}</span>`;
+                    `<span class="import-log-rest">${rest}</span>`;
             }
             const failureMatch = rawEntry.match(/^Import failure(?:\s*:)?\s*(.*)$/);
             if (failureMatch) {
                 const detail = failureMatch[1] ? escapeHtml(failureMatch[1].trim()) : '';
                 const rest = detail ? `: ${detail}` : ':';
                 return `<span class="import-log-label import-log-label--failure">Import failure</span>` +
-                    `<span class="import-log-rest">${escapeHtml(rest)}</span>`;
+                    `<span class="import-log-rest">${rest}</span>`;
+            }
+            const attachSuccessMatch = rawEntry.match(/^Txt attachment success(?:\s*:)?\s*(.*)$/);
+            if (attachSuccessMatch) {
+                const detail = attachSuccessMatch[1] ? escapeHtml(attachSuccessMatch[1].trim()) : '';
+                const rest = detail ? `: ${detail}` : ':';
+                return `<span class="import-log-label import-log-label--success">Txt attachment success</span>` +
+                    `<span class="import-log-rest">${rest}</span>`;
+            }
+            const attachFailureMatch = rawEntry.match(/^Txt attachment failure(?:\s*:)?\s*(.*)$/);
+            if (attachFailureMatch) {
+                const detail = attachFailureMatch[1] ? escapeHtml(attachFailureMatch[1].trim()) : '';
+                const rest = detail ? `: ${detail}` : ':';
+                return `<span class="import-log-label import-log-label--failure">Txt attachment failure</span>` +
+                    `<span class="import-log-rest">${rest}</span>`;
             }
             return escapeHtml(rawEntry);
         }
