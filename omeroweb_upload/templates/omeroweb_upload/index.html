@@ -188,8 +188,13 @@
         .upload-actions__buttons .clear-all-btn {
             min-width: auto;
         }
-        #next-step-btn {
+        .upload-actions__buttons .step-btn {
             min-width: auto;
+        }
+        .upload-actions__buttons .step-btn.is-hidden {
+            display: inline-flex !important;
+            visibility: hidden;
+            pointer-events: none;
         }
         .upload-actions .file-input-hidden {
             display: none;
@@ -1317,8 +1322,8 @@
                     </div>
                     <div class="upload-actions__buttons">
                         <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
-                        <button id="previous-step-btn" type="button" class="is-hidden">Previous step</button>
-                        <button id="next-step-btn" type="button" class="is-hidden">Next step</button>
+                        <button id="previous-step-btn" type="button" class="step-btn is-hidden">Previous step</button>
+                        <button id="next-step-btn" type="button" class="step-btn is-hidden">Next step</button>
                         <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                     </div>
                 </div>
@@ -3342,6 +3347,22 @@
                 .trim();
         }
 
+        function extractSemEdxStem(name, type = 'generic') {
+            const normalized = normalizeSemEdxName(name);
+            if (!normalized) return '';
+            if (type === 'txt') {
+                return normalized.replace(/\bspectrum\b.*$/, '').trim();
+            }
+            if (type === 'image') {
+                return normalized
+                    .replace(/\belectron\b.*$/, '')
+                    .replace(/\bimage\b.*$/, '')
+                    .replace(/\bsig\b.*$/, '')
+                    .trim();
+            }
+            return normalized;
+        }
+
         function extractSemEdxSpectrumNumber(value) {
             if (!value) return null;
             const match = String(value).match(/spect(?:rum|um)\s*([0-9]+)/i);
@@ -3436,6 +3457,14 @@
             const txtDataMap = await loadSemEdxTxtData(txtEntries);
             const groups = groupSemEdxEntries(entries);
 
+            const addAssociation = (imageRawPath, txtFileName) => {
+                if (!imageRawPath || !txtFileName) return;
+                const existing = associations.get(imageRawPath) || [];
+                if (!existing.includes(txtFileName)) {
+                    associations.set(imageRawPath, [...existing, txtFileName]);
+                }
+            };
+
             groups.forEach((group) => {
                 const images = group.images;
                 const txtFiles = group.txt;
@@ -3451,14 +3480,6 @@
                     return;
                 }
 
-                if (images.length > 1 && txtFiles.length === 1) {
-                    images.forEach((image) => {
-                        associations.set(image.rawPath, [txtFiles[0].fileName]);
-                    });
-                    return;
-                }
-
-                const matchedImages = new Set();
                 const matchedTxt = new Set();
 
                 const imageLookup = new Map();
@@ -3472,10 +3493,36 @@
 
                 txtFiles.forEach((txt) => {
                     const matches = imageLookup.get(txt.baseName.toLowerCase()) || [];
-                    if (matches.length === 1 && !matchedImages.has(matches[0].rawPath)) {
-                        associations.set(matches[0].rawPath, [txt.fileName]);
-                        matchedImages.add(matches[0].rawPath);
+                    if (matches.length === 1) {
+                        addAssociation(matches[0].rawPath, txt.fileName);
                         matchedTxt.add(txt.rawPath);
+                    }
+                });
+
+                const imageStemLookup = new Map();
+                images.forEach((image) => {
+                    const key = extractSemEdxStem(image.fileName, 'image');
+                    if (!key) return;
+                    if (!imageStemLookup.has(key)) {
+                        imageStemLookup.set(key, []);
+                    }
+                    imageStemLookup.get(key).push(image);
+                });
+
+                txtFiles.forEach((txt) => {
+                    if (matchedTxt.has(txt.rawPath)) return;
+                    const txtData = txtDataMap.get(txt.rawPath);
+                    const candidates = [
+                        extractSemEdxStem(txt.fileName, 'txt'),
+                        extractSemEdxStem(txtData?.title || '', 'txt'),
+                    ].filter(Boolean);
+                    for (const candidate of candidates) {
+                        const matches = imageStemLookup.get(candidate) || [];
+                        if (matches.length === 1) {
+                            addAssociation(matches[0].rawPath, txt.fileName);
+                            matchedTxt.add(txt.rawPath);
+                            break;
+                        }
                     }
                 });
 
@@ -3485,13 +3532,11 @@
                     const spectrumNumber = extractSemEdxSpectrumNumber(txtData?.title || '') || txt.spectrumNumber;
                     if (!spectrumNumber) return;
                     const matches = images.filter((image) => (
-                        !matchedImages.has(image.rawPath)
-                        && (image.spectrumNumber === spectrumNumber
-                            || extractSemEdxSpectrumNumber(image.fileName) === spectrumNumber)
+                        image.spectrumNumber === spectrumNumber
+                            || extractSemEdxSpectrumNumber(image.fileName) === spectrumNumber
                     ));
                     if (matches.length === 1) {
-                        associations.set(matches[0].rawPath, [txt.fileName]);
-                        matchedImages.add(matches[0].rawPath);
+                        addAssociation(matches[0].rawPath, txt.fileName);
                         matchedTxt.add(txt.rawPath);
                     }
                 });
@@ -3505,7 +3550,6 @@
                     ].filter(Boolean);
                     const matches = [];
                     images.forEach((image) => {
-                        if (matchedImages.has(image.rawPath)) return;
                         const imageName = image.normalizedName;
                         if (!imageName) return;
                         const isMatch = candidates.some((candidate) => (
@@ -3516,8 +3560,7 @@
                         }
                     });
                     if (matches.length === 1) {
-                        associations.set(matches[0].rawPath, [txt.fileName]);
-                        matchedImages.add(matches[0].rawPath);
+                        addAssociation(matches[0].rawPath, txt.fileName);
                         matchedTxt.add(txt.rawPath);
                     }
                 });
