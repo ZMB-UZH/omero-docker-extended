@@ -188,6 +188,9 @@
         .upload-actions__buttons .clear-all-btn {
             min-width: auto;
         }
+        #next-step-btn {
+            min-width: auto;
+        }
         .upload-actions .file-input-hidden {
             display: none;
         }
@@ -595,7 +598,7 @@
             min-height: 0;
         }
         .file-tree.sem-edx-associations {
-            gap: 12px;
+            gap: 6px;
         }
         .sem-edx-mode-toggle {
             display: flex;
@@ -605,19 +608,19 @@
         .sem-edx-association-table {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 2px;
         }
         .sem-edx-association-table .tree-header,
         .sem-edx-association-table .tree-row {
-            grid-template-columns: minmax(240px, 1fr) minmax(180px, 1fr);
-            column-gap: 16px;
+            grid-template-columns: 60% 40%;
+            column-gap: 8px;
         }
         .sem-edx-association-table .tree-header {
             border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 4px;
+            padding-bottom: 2px;
         }
         .sem-edx-association-table .tree-row {
-            padding: 6px 6px;
+            padding: 2px 2px;
         }
         .sem-edx-association-table .tree-row:hover {
             background: #f8fafc;
@@ -629,7 +632,8 @@
             border-bottom: 1px dashed #cbd5f5;
         }
         .sem-edx-association-table .tree-name-cell {
-            padding-left: calc(var(--depth, 0) * 18px);
+            padding-left: calc(var(--depth, 0) * 12px);
+            gap: 4px;
         }
         .sem-edx-association-table .tree-spacer {
             width: 22px;
@@ -1595,7 +1599,7 @@
         let semEdxModeActive = false;
         let semEdxInstructionStep = 1;
         const semEdxStep1Lines = [
-            '1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders (preferred).',
+            '1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders. Preferred, per folder, is 1 image and 1 or multiple txt spectra, which will be automatically appended to the image.',
         ];
         const semEdxStep2Lines = [
             '2) Confirm or manually edit the associations between SEM images and spectra files.',
@@ -2498,10 +2502,12 @@
         function setProjectSelectionVisibility(show) {
             const shouldShow = !!show;
             if (projectSelectRow) {
-                projectSelectRow.style.display = shouldShow ? '' : 'none';
+                projectSelectRow.style.visibility = shouldShow ? 'visible' : 'hidden';
+                projectSelectRow.style.pointerEvents = shouldShow ? '' : 'none';
             }
             if (projectSelectGroup) {
-                projectSelectGroup.style.display = shouldShow ? '' : 'none';
+                projectSelectGroup.style.visibility = shouldShow ? 'visible' : 'hidden';
+                projectSelectGroup.style.pointerEvents = shouldShow ? '' : 'none';
             }
             if (projectSelectInput) {
                 projectSelectInput.disabled = !shouldShow;
@@ -3277,7 +3283,7 @@
             });
         }
 
-        function renderSemEdxManualTree(node, depth = 0) {
+        function renderSemEdxManualTree(node, depth = 0, pathPrefix = '') {
             const list = document.createElement('ul');
             node.children.forEach((child) => {
                 if (child.totalFiles < 1) {
@@ -3293,8 +3299,12 @@
                 const nameCell = document.createElement('div');
                 nameCell.classList.add('tree-name-cell');
 
-                const spacer = document.createElement('span');
-                spacer.classList.add('tree-spacer');
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.classList.add('tree-toggle');
+                toggle.textContent = '▸';
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.setAttribute('aria-label', `Expand ${child.name}`);
 
                 const icon = createIcon('folder');
                 const label = document.createElement('span');
@@ -3306,7 +3316,7 @@
                 meta.classList.add('tree-meta');
                 meta.textContent = `${itemCount} file${itemCount === 1 ? '' : 's'}`;
 
-                nameCell.appendChild(spacer);
+                nameCell.appendChild(toggle);
                 nameCell.appendChild(icon);
                 nameCell.appendChild(label);
                 nameCell.appendChild(meta);
@@ -3316,7 +3326,26 @@
                 row.appendChild(nameCell);
                 row.appendChild(appendedCell);
 
-                const childrenList = renderSemEdxManualTree(child, depth + 1);
+                const folderPath = child.isRootGroup ? '' : `${pathPrefix}${child.name}/`;
+                const isExpanded = expandedNodes.has(folderPath);
+                const childrenList = renderSemEdxManualTree(child, depth + 1, folderPath);
+                childrenList.classList.add('tree-children');
+                childrenList.hidden = !isExpanded;
+                toggle.setAttribute('aria-expanded', String(isExpanded));
+                toggle.textContent = isExpanded ? '▾' : '▸';
+
+                toggle.addEventListener('click', () => {
+                    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+                    toggle.setAttribute('aria-expanded', String(!expanded));
+                    toggle.textContent = expanded ? '▸' : '▾';
+                    toggle.setAttribute('aria-label', `${expanded ? 'Expand' : 'Collapse'} ${child.name}`);
+                    childrenList.hidden = expanded;
+                    if (expanded) {
+                        expandedNodes.delete(folderPath);
+                    } else {
+                        expandedNodes.add(folderPath);
+                    }
+                });
 
                 item.appendChild(row);
                 item.appendChild(childrenList);
@@ -3412,10 +3441,6 @@
             toggle.appendChild(manualLabel);
             toggleWrapper.appendChild(toggle);
             fileTree.appendChild(toggleWrapper);
-
-            if (semEdxAssociationMode !== 'manual') {
-                return;
-            }
 
             const manualPanel = document.createElement('div');
             manualPanel.classList.add('sem-edx-association-table');
