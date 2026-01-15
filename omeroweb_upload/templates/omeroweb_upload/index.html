@@ -162,20 +162,25 @@
             border-color: #c7dbff;
         }
         .upload-actions {
-            display: flex;
-            gap: 12px;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) max-content;
+            column-gap: 12px;
             align-items: center;
-            justify-content: center;
-            flex-wrap: nowrap;
+            width: 100%;
             --action-control-height: 40px;
         }
         .upload-actions > * {
-            flex: 0 0 auto;
+            min-width: 0;
         }
         .upload-actions__buttons {
             display: flex;
             gap: 10px;
-            margin-left: auto;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        .upload-actions__buttons .action-btn-hidden {
+            visibility: hidden;
+            pointer-events: none;
         }
         .upload-actions__pickers {
             display: flex;
@@ -484,12 +489,15 @@
             height: var(--action-control-height);
         }
         .upload-intro-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) max-content;
             align-items: center;
-            justify-content: space-between;
-            gap: 12px;
+            column-gap: 12px;
+            row-gap: 8px;
             margin-bottom: 0;
-            flex-wrap: wrap;
+        }
+        .upload-intro-row .project-select-wrapper {
+            justify-self: end;
         }
         .upload-intro-row p {
             margin: 0;
@@ -2609,7 +2617,7 @@
                 semEdxInstructions.style.display = isSemEdx ? 'flex' : 'none';
             }
             if (uploadBtn) {
-                uploadBtn.classList.toggle('is-hidden', !!value);
+                uploadBtn.classList.toggle('action-btn-hidden', !!value);
             }
             if (!value) {
                 semEdxInstructionStep = 1;
@@ -2955,7 +2963,7 @@
             }
             if (clearAllBtn) {
                 clearAllBtn.disabled = removeClearAll;
-                clearAllBtn.classList.toggle('is-hidden', removeClearAll);
+                clearAllBtn.classList.toggle('action-btn-hidden', removeClearAll);
             }
         }
 
