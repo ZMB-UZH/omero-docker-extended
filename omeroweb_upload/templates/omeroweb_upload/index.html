@@ -1662,18 +1662,27 @@
             return false;
         }
 
+        function isSemEdxAddLocked() {
+            return isSemEdxSelected() && semEdxInstructionStep > 1;
+        }
+
+        function updateUploadControlAvailability() {
+            const shouldDisable = isUploading || !uploadEnabled || isSemEdxAddLocked();
+            fileInput.disabled = shouldDisable;
+            folderInput.disabled = shouldDisable;
+            if (fileBtn) {
+                fileBtn.disabled = shouldDisable;
+            }
+            if (folderBtn) {
+                folderBtn.disabled = shouldDisable;
+            }
+            uploadBtn.disabled = shouldDisable;
+        }
+
         function setUploadingState(active, statusText) {
             isUploading = active;
             uploadCard.classList.toggle('is-uploading', active);
-            fileInput.disabled = active || !uploadEnabled;
-            folderInput.disabled = active || !uploadEnabled;
-            if (fileBtn) {
-                fileBtn.disabled = active || !uploadEnabled;
-            }
-            if (folderBtn) {
-                folderBtn.disabled = active || !uploadEnabled;
-            }
-            uploadBtn.disabled = active || !uploadEnabled;
+            updateUploadControlAvailability();
             if (!active) {
                 resetUploadProgress();
             } else if (statusText && uploadOverlay) {
@@ -2504,7 +2513,7 @@
                 if (valid) {
                     setStatus('');
                 } else {
-                    setStatus('You need to add at least 1 image and 1 txt file in the base path and per folder.', 'error');
+                    setStatus('You need to add at least one image and one txt file in the base path and per folder.\n', 'error');
                 }
                 updateSemEdxStepControls(valid);
                 return true;
@@ -2512,7 +2521,7 @@
             if (valid) {
                 setStatus('Files added successfully.', 'success');
             } else {
-                setStatus('You need to add at least 1 image and 1 txt file in the base path and per folder.', 'error');
+                setStatus('You need to add at least one image and one txt file in the base path and per folder.\n', 'error');
             }
             updateSemEdxStepControls(valid);
             return true;
@@ -2539,6 +2548,7 @@
             setSemEdxInstructionLines(step === 2 ? semEdxStep2Lines : semEdxStep1Lines);
             refreshFileList();
             updateSemEdxStepControls(step > 1);
+            updateUploadControlAvailability();
             if (uploadCard) {
                 uploadCard.classList.toggle('sem-edx-step-two', isSemEdxSelected() && step > 1);
             }
@@ -4108,7 +4118,7 @@
 
         uploadCard.addEventListener('dragover', (event) => {
             event.stopPropagation();
-            if (isUploading) {
+            if (isUploading || isSemEdxAddLocked()) {
                 return;
             }
             event.preventDefault();
@@ -4121,7 +4131,7 @@
 
         uploadCard.addEventListener('drop', async (event) => {
             event.preventDefault();
-            if (isUploading) {
+            if (isUploading || isSemEdxAddLocked()) {
                 return;
             }
             uploadCard.classList.remove('dragover');
@@ -4142,7 +4152,7 @@
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
-            if (isUploading) {
+            if (isUploading || isSemEdxAddLocked()) {
                 return;
             }
             if (fileInput.files?.length) {
@@ -4155,7 +4165,7 @@
                     setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                     return;
                 }
-                if (isUploading) {
+                if (isUploading || isSemEdxAddLocked()) {
                     return;
                 }
                 if (typeof window.showOpenFilePicker === 'function') {
@@ -4176,7 +4186,7 @@
                     setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                     return;
                 }
-                if (isUploading) {
+                if (isUploading || isSemEdxAddLocked()) {
                     return;
                 }
                 if (canUseDirectoryPicker) {
@@ -4200,7 +4210,7 @@
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
-            if (isUploading) {
+            if (isUploading || isSemEdxAddLocked()) {
                 return;
             }
             if (folderInput.files?.length) {
