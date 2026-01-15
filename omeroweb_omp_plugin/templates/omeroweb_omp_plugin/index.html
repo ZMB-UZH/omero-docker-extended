@@ -37,9 +37,21 @@
 <div class="omeroweb-omp-plugin"
      id="filename_metadata_container"
      style='padding:15px 15px 15px 15px; width:660px; min-width:660px; max-width:660px; margin:0 auto; --base-font-size:13px; font-size:var(--base-font-size);'>
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+    <div class="omp-header-row">
         <h1 style='color:#007bff; margin:0;'>Filename & metadata manager</h1>
-        <div style="display:flex; align-items:center; gap:8px; position:relative;">
+    </div>
+    <div class="upload-utilities">
+        <div class="upload-utilities__center">
+            <div class="upload-utilities__collaboration">
+                <input type="checkbox" id="collaboration_toggle">
+                <label for="collaboration_toggle">Collaboration</label>
+            </div>
+            <div class="upload-utilities__placeholder">
+                <input type="checkbox" id="placeholder_toggle">
+                <label for="placeholder_toggle">Placeholder</label>
+            </div>
+        </div>
+        <div class="upload-utilities__actions">
             <button type="button"
                     id="settings_menu_btn"
                     class="gear-btn"
@@ -111,6 +123,7 @@
                                class="project-select-input"
                                placeholder="Select project…"
                                autocomplete="off">
+                        <div id="project_select_display" class="project-select-display" aria-hidden="true"></div>
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" name="project" id="project_select" value="">
                         <div id="project_select_dropdown"
@@ -632,6 +645,56 @@
     .help-btn {width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
                 line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+    .omp-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        margin-bottom: 4px;
+    }
+    .upload-utilities {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin: 6px 0 12px;
+        position: relative;
+        z-index: 1001;
+    }
+    .upload-utilities__center {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    .upload-utilities__collaboration,
+    .upload-utilities__placeholder {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .upload-utilities__collaboration input[type="checkbox"],
+    .upload-utilities__placeholder input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        accent-color: #2563eb;
+        cursor: pointer;
+    }
+    .upload-utilities__collaboration label,
+    .upload-utilities__placeholder label {
+        cursor: pointer;
+        user-select: none;
+    }
+    .upload-utilities__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+        margin-left: auto;
+    }
     .omeroweb-omp-plugin.expanded {width:900px; min-width:900px; max-width:900px;}
     .dataset-table-wrapper {min-width:650px; max-width:650px; margin:10px auto 0; width:100%; padding:0 12px;}
     .dataset-table-container {display:none; background:#fff; overflow:hidden; width:100%; min-height:552px;}
@@ -735,6 +798,43 @@
         z-index: 1;
         font-size: 14px;
     }
+    .project-select-input.is-collab {
+        color: #065f46;
+        font-weight: 400;
+    }
+    .project-select-input.is-collab-annotate {
+        color: #a16207;
+        font-weight: 400;
+    }
+    .project-select-wrapper.is-display-active .project-select-input {
+        color: transparent;
+        caret-color: transparent;
+    }
+    .project-select-display {
+        position: absolute;
+        inset: 0;
+        padding: 12px 40px 12px 12px;
+        border-radius: 6px;
+        display: none;
+        align-items: center;
+        gap: 4px;
+        pointer-events: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        z-index: 2;
+        color: #111827;
+        font-size: 14px;
+    }
+    .project-select-display.is-collab {
+        color: #065f46;
+    }
+    .project-select-display.is-collab-annotate {
+        color: #a16207;
+    }
+    .project-select-display .project-select-owner {
+        font-weight: 700;
+    }
     .project-select-wrapper {
         position: relative;
         width: 300px;
@@ -774,6 +874,28 @@
         opacity: 0.75;
     }
     .project-option {transition: background 0.15s ease, color 0.15s ease;}
+    .project-option-owner {
+        font-weight: 700;
+    }
+    .project-option-arrow {
+        margin: 0 4px;
+    }
+    .project-option.is-collab {
+        color: #065f46;
+    }
+    .project-option.is-collab:hover,
+    .project-option.is-collab.is-active {
+        background: #e7f1ff;
+        color: #065f46;
+    }
+    .project-option.is-collab-annotate {
+        color: #a16207;
+    }
+    .project-option.is-collab-annotate:hover,
+    .project-option.is-collab-annotate.is-active {
+        background: #e7f1ff;
+        color: #a16207;
+    }
     .project-option:hover,
     .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
     #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
@@ -1140,7 +1262,13 @@
     const datasetButton = document.getElementById('dataset_selection_btn');
     const projectSelect = document.getElementById('project_select');
     const projectSelectInput = document.getElementById('project_select_input');
+    const projectSelectDisplay = document.getElementById('project_select_display');
     const projectSelectDropdown = document.getElementById('project_select_dropdown');
+    const projectSelectWrapper = document.getElementById('project_select_wrapper');
+    const projectSelectArrow = document.querySelector('#project_select_wrapper .project-select-arrow');
+    const collaborationToggle = document.getElementById('collaboration_toggle');
+    const placeholderToggle = document.getElementById('placeholder_toggle');
+    const collaborationSection = document.querySelector('.upload-utilities__collaboration');
     const datasetTableContainer = document.getElementById('dataset_table_container');
     const datasetTableBody = document.getElementById('dataset_table_body');
     const datasetTableMessage = document.getElementById('dataset_table_message');
@@ -1211,12 +1339,15 @@
     const aiCredentialsSave = document.getElementById('ai_credentials_save');
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     let isProjectRefreshInFlight = false;
-    let allProjects = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
     const MAX_PROJECT_RESULTS = 15;
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
-    const STATE_STORAGE_KEY = 'omp_preview_state';
-    const SEPARATOR_STORAGE_KEY = 'omp_separator_mode_state';
+    const currentUserId = {{ user_id|default:"null" }};
+    const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+    const makeStorageKey = (baseKey) => `${baseKey}${storageKeySuffix}`;
+    const STATE_STORAGE_KEY = makeStorageKey('omp_preview_state');
+    const SEPARATOR_STORAGE_KEY = makeStorageKey('omp_separator_mode_state');
     const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
     const separatorValues = {
         chars: separatorInput ? separatorInput.value || '' : '',
@@ -1274,7 +1405,15 @@
     let aiParseTransferred = Boolean(aiParsedJsonInput?.value?.trim());
     let lastAiParseRows = null;
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
-    const userSettingsStorageKey = 'omp_user_settings';
+    const userSettingsStorageKey = makeStorageKey('omp_user_settings');
+    const collaborationToggleStorageKey = makeStorageKey('omp_collaboration_toggle_v1');
+    const placeholderToggleStorageKey = makeStorageKey('omp_placeholder_toggle_v1');
+    const storageKeyPrefix = 'omp_';
+    const isUserStorageKey = (key) => {
+        if (!key.startsWith(storageKeyPrefix)) return false;
+        if (!storageKeySuffix) return true;
+        return key.endsWith(storageKeySuffix);
+    };
     const userSettingsDefaults = {
         jobBatchSize: {{ chunk_size }},
         maxParsedVariables: {{ max_parsed_variables }},
@@ -1886,12 +2025,19 @@
             }
         }
         if (!state) return;
-        if (projectSelect && state.project_id) {
-            projectSelect.value = state.project_id;
-        }
-        if (projectSelectInput) {
-            projectSelectInput.value = state.project_name || state.project_id || '';
-            projectSelectInput.dataset.selectedName = state.project_name || state.project_id || '';
+        if (state.project_id) {
+            const match = findProjectEntryById(state.project_id, isCollaborationEnabled());
+            if (match) {
+                const label = state.project_name || getProjectEntryLabel(match);
+                setProjectSelection(match.id, label, {
+                    persist: false,
+                    access: getProjectEntryAccess(match),
+                    owner: match?.owner || '',
+                    baseName: getProjectLabel(match?.id, match?.name),
+                });
+            } else {
+                setProjectSelection(state.project_id, state.project_name || state.project_id || '', { persist: false });
+            }
         }
         if (separatorInput && typeof state.separator === 'string' && !isAiParseMessage(state.separator)) {
             separatorInput.value = state.separator;
@@ -2338,7 +2484,7 @@
             if (!window.localStorage) return;
             const keys = Object.keys(window.localStorage);
             keys.forEach((key) => {
-                if (key.startsWith('omp_')) {
+                if (isUserStorageKey(key)) {
                     window.localStorage.removeItem(key);
                 }
             });
@@ -2592,8 +2738,97 @@
     showNonBlockingModal("{{ error_message|escapejs }}");
     {% endif %}
 
+    function normalizeProjectEntry(entry) {
+        if (!entry) return null;
+        if (Array.isArray(entry)) {
+            const [projectId, projectName, owner] = entry;
+            return {
+                id: projectId ? String(projectId) : '',
+                name: projectName || '',
+                owner: owner || '',
+                access: '',
+            };
+        }
+        if (typeof entry === 'object') {
+            return {
+                id: entry.id ? String(entry.id) : '',
+                name: entry.name || '',
+                owner: entry.owner || '',
+                access: entry.access || '',
+            };
+        }
+        return null;
+    }
+
+    function normalizeProjectData(raw) {
+        if (Array.isArray(raw)) {
+            return {
+                owned: raw.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+                collab: [],
+                collab_annotate: [],
+                collab_available: false,
+            };
+        }
+        const owned = Array.isArray(raw?.owned) ? raw.owned : [];
+        const collab = Array.isArray(raw?.collab) ? raw.collab : [];
+        const collabAnnotate = Array.isArray(raw?.collab_annotate) ? raw.collab_annotate : [];
+        return {
+            owned: owned.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab: collab.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab_annotate: collabAnnotate.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab_available: Boolean(raw?.collab_available),
+        };
+    }
+
+    function isCollaborationEnabled() {
+        return !!collaborationToggle?.checked;
+    }
+
+    function updateCollaborationVisibility() {
+        const hasCollaborationAccess = Boolean(projectData?.collab_available);
+        if (!collaborationSection) {
+            return hasCollaborationAccess;
+        }
+        if (hasCollaborationAccess) {
+            collaborationSection.style.display = '';
+        } else {
+            collaborationSection.style.display = 'none';
+            try {
+                window.localStorage?.removeItem(collaborationToggleStorageKey);
+            } catch (error) {
+                // Ignore storage failures.
+            }
+            applyCollaborationState(false, { persist: false, refresh: false });
+        }
+        return hasCollaborationAccess;
+    }
+
     function getProjectLabel(projectId, projectName) {
         return String(projectName || projectId || '');
+    }
+
+    function getProjectEntryLabel(entry) {
+        const baseLabel = getProjectLabel(entry?.id, entry?.name);
+        if (entry?.owner) {
+            return `${entry.owner} → ${baseLabel}`;
+        }
+        return baseLabel;
+    }
+
+    function getProjectEntryAccess(entry) {
+        return entry?.access || '';
+    }
+
+    function isCollabEntry(entry) {
+        return getProjectEntryAccess(entry) === 'read_write';
+    }
+
+    function isAnnotateEntry(entry) {
+        return getProjectEntryAccess(entry) === 'read_annotate';
+    }
+
+    function isSharedEntry(entry) {
+        return isCollabEntry(entry) || isAnnotateEntry(entry);
     }
 
     function getNumericSortValue(label) {
@@ -2654,10 +2889,10 @@
         return sorted;
     }
 
-    function sortProjectMatches(matches) {
-        return matches.sort(([projectIdA, projectNameA], [projectIdB, projectNameB]) => {
-            const labelA = getProjectLabel(projectIdA, projectNameA);
-            const labelB = getProjectLabel(projectIdB, projectNameB);
+    function sortOwnedEntries(entries) {
+        return entries.sort((entryA, entryB) => {
+            const labelA = getProjectLabel(entryA?.id, entryA?.name);
+            const labelB = getProjectLabel(entryB?.id, entryB?.name);
             const numericA = getNumericSortValue(labelA);
             const numericB = getNumericSortValue(labelB);
             if (numericA !== null && numericB !== null) {
@@ -2667,14 +2902,222 @@
             if (numericB !== null) return 1;
             const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
             if (labelCompare !== 0) return labelCompare;
-            return String(projectIdA || '').localeCompare(String(projectIdB || ''), undefined, { numeric: true, sensitivity: 'base' });
+            return String(entryA?.id || '').localeCompare(String(entryB?.id || ''), undefined, { numeric: true, sensitivity: 'base' });
         });
     }
+
+    function sortCollabEntries(entries) {
+        const byOwner = new Map();
+        entries.forEach((entry) => {
+            const owner = entry.owner || 'Unknown user';
+            if (!byOwner.has(owner)) {
+                byOwner.set(owner, []);
+            }
+            byOwner.get(owner).push(entry);
+        });
+        const owners = Array.from(byOwner.keys()).sort((a, b) => (
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+        ));
+        const sorted = [];
+        owners.forEach((owner) => {
+            const items = byOwner.get(owner) || [];
+            items.sort((entryA, entryB) => {
+                const labelA = getProjectLabel(entryA?.id, entryA?.name);
+                const labelB = getProjectLabel(entryB?.id, entryB?.name);
+                return labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+            sorted.push(...items);
+        });
+        return sorted;
+    }
+
+    function getOrderedProjectEntries(includeCollab = false) {
+        const owned = sortOwnedEntries([...(projectData?.owned || [])]);
+        if (!includeCollab) {
+            return owned;
+        }
+        const collab = sortCollabEntries([...(projectData?.collab || [])]);
+        const annotate = sortCollabEntries([...(projectData?.collab_annotate || [])]);
+        return [...owned, ...collab, ...annotate];
+    }
+
+    function findProjectEntryById(projectId, includeCollab = false) {
+        if (!projectId) return null;
+        const list = includeCollab
+            ? [
+                ...(projectData?.owned || []),
+                ...(projectData?.collab || []),
+                ...(projectData?.collab_annotate || []),
+            ]
+            : [...(projectData?.owned || [])];
+        return list.find((entry) => String(entry.id) === String(projectId)) || null;
+    }
+
+    projectData = normalizeProjectData(projectData);
+    updateCollaborationVisibility();
 
     function getProjectOptions() {
         return projectSelectDropdown
             ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
             : [];
+    }
+
+    function saveCollaborationState(enabled) {
+        try {
+            window.localStorage?.setItem(collaborationToggleStorageKey, JSON.stringify({ enabled: !!enabled }));
+        } catch (error) {
+            // Ignore storage failures.
+        }
+    }
+
+    function loadCollaborationState() {
+        try {
+            const raw = window.localStorage?.getItem(collaborationToggleStorageKey);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.enabled === 'boolean' ? parsed.enabled : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function savePlaceholderState(enabled) {
+        try {
+            window.localStorage?.setItem(placeholderToggleStorageKey, JSON.stringify({ enabled: !!enabled }));
+        } catch (error) {
+            // Ignore storage failures.
+        }
+    }
+
+    function loadPlaceholderState() {
+        try {
+            const raw = window.localStorage?.getItem(placeholderToggleStorageKey);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.enabled === 'boolean' ? parsed.enabled : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function applyPlaceholderState(enabled) {
+        if (placeholderToggle) {
+            placeholderToggle.checked = !!enabled;
+        }
+        savePlaceholderState(enabled);
+    }
+
+    function updateProjectSelectionDisplay() {
+        if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
+        const selectedName = projectSelectInput.dataset.selectedName || '';
+        const selectedOwner = projectSelectInput.dataset.selectedOwner || '';
+        const selectedBaseName = projectSelectInput.dataset.selectedBaseName || selectedName;
+        const selectedAccess = projectSelectInput.dataset.selectedAccess || '';
+        const isCollab = selectedAccess === 'read_write';
+        const isAnnotate = selectedAccess === 'read_annotate';
+        if (!selectedName) {
+            projectSelectDisplay.innerHTML = '';
+            projectSelectDisplay.style.display = 'none';
+            projectSelectDisplay.classList.remove('is-collab', 'is-collab-annotate');
+            projectSelectWrapper.classList.remove('is-display-active');
+            return;
+        }
+        projectSelectDisplay.innerHTML = '';
+        projectSelectDisplay.style.display = 'flex';
+        projectSelectWrapper.classList.add('is-display-active');
+        projectSelectDisplay.classList.toggle('is-collab', isCollab);
+        projectSelectDisplay.classList.toggle('is-collab-annotate', isAnnotate);
+        if ((isCollab || isAnnotate) && selectedOwner) {
+            const ownerSpan = document.createElement('span');
+            ownerSpan.className = 'project-select-owner';
+            ownerSpan.textContent = selectedOwner;
+            const arrowSpan = document.createElement('span');
+            arrowSpan.textContent = '→';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = selectedBaseName;
+            projectSelectDisplay.append(ownerSpan, arrowSpan, nameSpan);
+        } else {
+            projectSelectDisplay.textContent = selectedName;
+        }
+    }
+
+    function setProjectSelection(projectId, projectName, options = {}) {
+        const { persist = true, access = '', owner = '', baseName = '' } = options;
+        const normalizedId = projectId ? String(projectId) : '';
+        const normalizedName = projectName ? String(projectName) : '';
+        if (projectSelect) {
+            projectSelect.value = normalizedId;
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = normalizedName;
+            projectSelectInput.dataset.selectedName = normalizedName;
+            projectSelectInput.dataset.selectedAccess = access || '';
+            projectSelectInput.dataset.selectedOwner = owner || '';
+            projectSelectInput.dataset.selectedBaseName = baseName || normalizedName;
+            projectSelectInput.classList.toggle('is-collab', access === 'read_write');
+            projectSelectInput.classList.toggle('is-collab-annotate', access === 'read_annotate');
+        }
+        updateProjectSelectionDisplay();
+        if (persist) {
+            persistPreviewState();
+        }
+    }
+
+    function clearProjectSelection({ persist = true } = {}) {
+        if (projectSelect) {
+            projectSelect.value = '';
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = '';
+            projectSelectInput.dataset.selectedName = '';
+            projectSelectInput.dataset.selectedAccess = '';
+            projectSelectInput.dataset.selectedOwner = '';
+            projectSelectInput.dataset.selectedBaseName = '';
+            projectSelectInput.classList.remove('is-collab', 'is-collab-annotate');
+        }
+        updateProjectSelectionDisplay();
+        if (persist) {
+            persistPreviewState();
+        }
+    }
+
+    function applyCollaborationState(enabled, options = {}) {
+        const { persist = true, refresh = false } = options;
+        if (collaborationToggle) {
+            collaborationToggle.checked = !!enabled;
+        }
+        if (persist) {
+            saveCollaborationState(enabled);
+        }
+        syncProjectSelectionWithMode();
+        if (projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
+        }
+        if (refresh) {
+            refreshProjectList();
+        }
+    }
+
+    function syncProjectSelectionWithMode() {
+        if (!projectSelect) return;
+        const selectedId = projectSelect.value;
+        if (!selectedId) {
+            updateProjectSelectionDisplay();
+            return;
+        }
+        const match = findProjectEntryById(selectedId, isCollaborationEnabled());
+        if (!match) {
+            clearProjectSelection();
+            resetDatasetSelection();
+            return;
+        }
+        const label = getProjectEntryLabel(match);
+        setProjectSelection(match.id, label, {
+            persist: false,
+            access: getProjectEntryAccess(match),
+            owner: match?.owner || '',
+            baseName: getProjectLabel(match?.id, match?.name),
+        });
     }
 
     function setActiveProjectIndex(index, useKeyboard = false) {
@@ -2711,39 +3154,35 @@
         if (!option) return;
         const projectId = option.dataset.projectId || '';
         const projectName = option.dataset.projectName || option.textContent || '';
+        const access = option.dataset.projectAccess || '';
+        const owner = option.dataset.projectOwner || '';
+        const baseName = option.dataset.projectBaseName || '';
         const previousProjectId = projectSelect?.value || '';
-        if (projectSelect) {
-            projectSelect.value = projectId;
-        }
-        if (projectSelectInput) {
-            projectSelectInput.value = projectName;
-            projectSelectInput.dataset.selectedName = projectName;
-        }
+        setProjectSelection(projectId, projectName, { access, owner, baseName });
         if (projectId && projectId !== previousProjectId) {
             resetDatasetSelection();
         }
         closeProjectDropdown(false);
-        persistPreviewState();
     }
 
     function updateProjectData(data) {
-        allProjects = Array.isArray(data) ? data : [];
+        projectData = normalizeProjectData(data);
+        updateCollaborationVisibility();
+        syncProjectSelectionWithMode();
         const currentId = projectSelect?.value || '';
         if (currentId) {
-            const match = allProjects.find(([projectId]) => String(projectId) === String(currentId));
+            const match = findProjectEntryById(currentId, isCollaborationEnabled());
             if (!match) {
-                if (projectSelect) {
-                    projectSelect.value = '';
-                }
-                if (projectSelectInput) {
-                    projectSelectInput.value = '';
-                    projectSelectInput.dataset.selectedName = '';
-                }
+                clearProjectSelection();
                 resetDatasetSelection();
-            } else if (projectSelectInput) {
-                const label = match[1] || match[0] || '';
-                projectSelectInput.value = label;
-                projectSelectInput.dataset.selectedName = label;
+            } else {
+                const label = getProjectEntryLabel(match);
+                setProjectSelection(match.id, label, {
+                    persist: false,
+                    access: getProjectEntryAccess(match),
+                    owner: match?.owner || '',
+                    baseName: getProjectLabel(match?.id, match?.name),
+                });
             }
         }
         if (projectSelectDropdown?.style.display === 'block') {
@@ -2785,36 +3224,59 @@
         if (!projectSelectDropdown) return;
         const normalizedQuery = query.trim().toLowerCase();
         const matches = [];
+        const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
+        const totalProjects = orderedEntries.length;
         let totalMatches = 0;
 
-        for (let i = 0; i < allProjects.length; i += 1) {
-            const [projectId, projectName] = allProjects[i];
-            const name = projectName || '';
-            const id = projectId || '';
+        for (let i = 0; i < orderedEntries.length; i += 1) {
+            const entry = orderedEntries[i];
+            const label = getProjectEntryLabel(entry);
+            const id = entry?.id || '';
+            const owner = entry?.owner || '';
             const isMatch = !normalizedQuery
-                || String(name).toLowerCase().includes(normalizedQuery)
-                || String(id).toLowerCase().includes(normalizedQuery);
+                || String(label).toLowerCase().includes(normalizedQuery)
+                || String(id).toLowerCase().includes(normalizedQuery)
+                || String(owner).toLowerCase().includes(normalizedQuery);
             if (isMatch) {
                 totalMatches += 1;
                 if (matches.length < MAX_PROJECT_RESULTS) {
-                    matches.push([projectId, projectName]);
+                    matches.push(entry);
                 }
             }
         }
 
-        sortProjectMatches(matches);
         projectSelectDropdown.innerHTML = '';
 
         if (matches.length > 0) {
-            matches.forEach(([projectId, projectName]) => {
+            matches.forEach((entry) => {
                 const option = document.createElement('div');
                 option.className = 'project-option';
-                option.dataset.projectId = projectId;
-                option.dataset.projectName = projectName || '';
+                option.dataset.projectId = entry.id;
+                option.dataset.projectName = getProjectEntryLabel(entry);
+                option.dataset.projectBaseName = getProjectLabel(entry?.id, entry?.name);
+                option.dataset.projectAccess = getProjectEntryAccess(entry);
                 option.style.padding = '8px 12px';
                 option.style.cursor = 'pointer';
                 option.style.whiteSpace = 'nowrap';
-                option.textContent = projectName || projectId;
+                if (isSharedEntry(entry)) {
+                    option.dataset.projectOwner = entry.owner || '';
+                    const ownerSpan = document.createElement('span');
+                    ownerSpan.className = 'project-option-owner';
+                    ownerSpan.textContent = entry.owner || '';
+                    const arrowSpan = document.createElement('span');
+                    arrowSpan.className = 'project-option-arrow';
+                    arrowSpan.textContent = '→';
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = getProjectLabel(entry?.id, entry?.name);
+                    option.append(ownerSpan, arrowSpan, nameSpan);
+                } else {
+                    option.textContent = getProjectEntryLabel(entry);
+                }
+                if (isCollabEntry(entry)) {
+                    option.classList.add('is-collab');
+                } else if (isAnnotateEntry(entry)) {
+                    option.classList.add('is-collab-annotate');
+                }
                 projectSelectDropdown.appendChild(option);
             });
         }
@@ -2828,7 +3290,7 @@
         } else if (totalMatches > 0) {
             statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
         } else {
-            statusRow.textContent = 'No projects found';
+            statusRow.textContent = totalProjects > 0 ? 'No matching projects' : 'No projects found';
         }
         projectSelectDropdown.appendChild(statusRow);
         if (matches.length > 0) {
@@ -2842,6 +3304,14 @@
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'block';
         projectSelectDropdown.classList.remove('keyboard-active');
+        projectSelectWrapper?.classList.add('is-open');
+        if (projectSelectArrow) {
+            projectSelectArrow.textContent = '▴';
+        }
+        projectSelectWrapper?.classList.remove('is-display-active');
+        if (projectSelectDisplay) {
+            projectSelectDisplay.style.display = 'none';
+        }
         if (projectDropdownBackdrop) {
             projectDropdownBackdrop.style.display = 'block';
         }
@@ -2855,6 +3325,10 @@
         if (!projectSelectDropdown || !projectSelectInput) return;
         projectSelectDropdown.style.display = 'none';
         projectSelectDropdown.classList.remove('keyboard-active');
+        projectSelectWrapper?.classList.remove('is-open');
+        if (projectSelectArrow) {
+            projectSelectArrow.textContent = '▾';
+        }
         if (projectDropdownBackdrop) {
             projectDropdownBackdrop.style.display = 'none';
         }
@@ -2863,6 +3337,7 @@
             projectSelectInput.value = selectedName;
         }
         projectSelectInput.placeholder = 'Select project…';
+        updateProjectSelectionDisplay();
     }
 
     function filterProjectOptions(query) {
@@ -2916,6 +3391,18 @@
     if (projectRefreshBtn) {
         projectRefreshBtn.addEventListener('click', () => {
             refreshProjectList();
+        });
+    }
+
+    if (collaborationToggle) {
+        collaborationToggle.addEventListener('change', () => {
+            applyCollaborationState(collaborationToggle.checked, { persist: true, refresh: true });
+        });
+    }
+
+    if (placeholderToggle) {
+        placeholderToggle.addEventListener('change', () => {
+            applyPlaceholderState(placeholderToggle.checked);
         });
     }
 
@@ -3885,13 +4372,7 @@
     }
 
     function resetAllSelections() {
-        if (projectSelect) {
-            projectSelect.value = '';
-        }
-        if (projectSelectInput) {
-            projectSelectInput.value = '';
-            projectSelectInput.dataset.selectedName = '';
-        }
+        clearProjectSelection({ persist: false });
         if (separatorInput) {
             separatorInput.value = defaultSeparatorValue;
         }
@@ -3926,6 +4407,14 @@
 
     document.title = 'OMP plugin';
     initDatasetSorting();
+    const storedPlaceholderState = loadPlaceholderState();
+    if (storedPlaceholderState !== null) {
+        applyPlaceholderState(storedPlaceholderState);
+    }
+    const storedCollaborationState = loadCollaborationState();
+    if (storedCollaborationState !== null && updateCollaborationVisibility()) {
+        applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
+    }
     restorePreviewState();
     applyDefaultAiProviderSelections();
     updateAiModalPlaceholders();

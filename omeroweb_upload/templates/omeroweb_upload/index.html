@@ -209,7 +209,7 @@
             font-weight: 600;
             color: #1f2937;
             display: block;
-            margin: 0 0 -4px 0;
+            margin: 0;
             padding: 0;
             line-height: 1;
         }
@@ -1338,6 +1338,7 @@
         let uploadTotalBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
+        const currentUserId = {{ user_id|default:"null" }};
         const storage =
             (() => {
                 try {
@@ -1349,13 +1350,15 @@
                     return null;
                 }
             })();
-        const importJobsStorageKey = 'omeroweb_upload_import_jobs_v1';
-        const importLogsStorageKey = 'omeroweb_upload_import_logs_v1';
-        const userSettingsStorageKey = 'omeroweb_upload_user_settings_v1';
-        const projectSelectionStorageKey = 'omeroweb_upload_project_selection_v1';
-        const collaborationToggleStorageKey = 'omeroweb_upload_collaboration_toggle_v1';
+        const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+        const makeStorageKey = (baseKey) => `${baseKey}${storageKeySuffix}`;
+        const importJobsStorageKey = makeStorageKey('omeroweb_upload_import_jobs_v1');
+        const importLogsStorageKey = makeStorageKey('omeroweb_upload_import_logs_v1');
+        const userSettingsStorageKey = makeStorageKey('omeroweb_upload_user_settings_v1');
+        const projectSelectionStorageKey = makeStorageKey('omeroweb_upload_project_selection_v1');
+        const collaborationToggleStorageKey = makeStorageKey('omeroweb_upload_collaboration_toggle_v1');
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
-        const compatibilityToggleStorageKey = 'omeroweb_upload_compatibility_toggle_v1';
+        const compatibilityToggleStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_v1');
         const specialUploadOptions = [
             { value: '', label: 'No special method (clear selection)', isEmpty: true },
             { value: 'sem_edx_spectra', label: 'SEM EDX spectra' },

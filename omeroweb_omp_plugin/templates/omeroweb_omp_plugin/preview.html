@@ -718,7 +718,9 @@ let DEFAULT_VARS = {{ default_vars_json|safe }};
 const MAX_PARSED_VARS = {{ max_vars }};
 const MAX_PARSED_VARIABLES_DEFAULT = {{ max_parsed_variables }};  // Maximum allowed variables
 let MAX_PARSED_VARIABLES = MAX_PARSED_VARIABLES_DEFAULT;
-const USER_SETTINGS_STORAGE_KEY = 'omp_user_settings';
+const currentUserId = {{ user_id|default:"null" }};
+const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+const USER_SETTINGS_STORAGE_KEY = `omp_user_settings${storageKeySuffix}`;
 
 // Load user's chunk size setting
 let CHUNK_SIZE_USER = {{ chunk_size }};
