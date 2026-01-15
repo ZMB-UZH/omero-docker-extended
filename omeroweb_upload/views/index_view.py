@@ -733,22 +733,30 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    cmd = [OMERO_CLI, "import", "-k", session_key]
-    if host:
-        cmd.extend(["-s", host])
-    if port:
-        cmd.extend(["-p", str(port)])
-    if dataset_id:
-        cmd.extend(["-d", str(dataset_id)])
-    cmd.append(str(path))
+    import tempfile  # Ensure tempfile is available
 
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.returncode == 0, result.stdout, result.stderr
+    # FIX: Isolate environment
+    with tempfile.TemporaryDirectory() as temp_user_dir:
+        env = os.environ.copy()
+        env['OMERO_USERDIR'] = temp_user_dir
+
+        cmd = [OMERO_CLI, "import", "-k", session_key]
+        if host:
+            cmd.extend(["-s", host])
+        if port:
+            cmd.extend(["-p", str(port)])
+        if dataset_id:
+            cmd.extend(["-d", str(dataset_id)])
+        cmd.append(str(path))
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,  # Pass the isolated env
+        )
+        return result.returncode == 0, result.stdout, result.stderr
 
 
 def _open_session_connection(session_key: str, host: str, port: int):
@@ -806,86 +814,91 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
     2. Create FileAnnotation linking to the OriginalFile
     3. Create ImageAnnotationLink connecting the annotation to the image
     """
-    # Copy environment to ensure session info is available to all subprocess calls
-    env = os.environ.copy()
-    
-    # Step 1: Upload the text file
-    upload_cmd = [OMERO_CLI, "upload", "-k", session_key]
-    if host:
-        upload_cmd.extend(["-s", host])
-    if port:
-        upload_cmd.extend(["-p", str(port)])
-    upload_cmd.append(str(txt_path))
-    
-    upload_result = subprocess.run(
-        upload_cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    if upload_result.returncode != 0:
-        raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
-    
-    original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
-        upload_result.stderr, "OriginalFile"
-    )
-    if not original_id:
-        raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
+    import tempfile  # Ensure tempfile is available
 
-    # Step 2: Create FileAnnotation
-    annotation_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
-    if host:
-        annotation_cmd.extend(["-s", host])
-    if port:
-        annotation_cmd.extend(["-p", str(port)])
-    annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-    
-    annotation_result = subprocess.run(
-        annotation_cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    if annotation_result.returncode != 0:
-        raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
-    
-    annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
-        annotation_result.stderr, "FileAnnotation"
-    )
-    if not annotation_id:
-        raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
+    # FIX: Use a temporary directory for the CLI session to prevent logging out the web user
+    with tempfile.TemporaryDirectory() as temp_user_dir:
+        # Copy environment to ensure session info is available to all subprocess calls
+        env = os.environ.copy()
+        env['OMERO_USERDIR'] = temp_user_dir  # ISOLATE THE SESSION
 
-    # Step 3: Link FileAnnotation to Image
-    link_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
-    if host:
-        link_cmd.extend(["-s", host])
-    if port:
-        link_cmd.extend(["-p", str(port)])
-    link_cmd.extend([
-        "ImageAnnotationLink",
-        f"parent=Image:{image_id}",
-        f"child=FileAnnotation:{annotation_id}",
-    ])
-    
-    link_result = subprocess.run(
-        link_cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    if link_result.returncode != 0:
-        raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
-    
-    link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
-        link_result.stderr, "ImageAnnotationLink"
-    )
-    if not link_id:
-        raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
-    
-    return True
+        # Step 1: Upload the text file
+        upload_cmd = [OMERO_CLI, "upload", "-k", session_key]
+        if host:
+            upload_cmd.extend(["-s", host])
+        if port:
+            upload_cmd.extend(["-p", str(port)])
+        upload_cmd.append(str(txt_path))
+        
+        upload_result = subprocess.run(
+            upload_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        if upload_result.returncode != 0:
+            raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
+        
+        original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
+            upload_result.stderr, "OriginalFile"
+        )
+        if not original_id:
+            raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
+
+        # Step 2: Create FileAnnotation
+        annotation_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
+        if host:
+            annotation_cmd.extend(["-s", host])
+        if port:
+            annotation_cmd.extend(["-p", str(port)])
+        annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
+        
+        annotation_result = subprocess.run(
+            annotation_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        if annotation_result.returncode != 0:
+            raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
+        
+        annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
+            annotation_result.stderr, "FileAnnotation"
+        )
+        if not annotation_id:
+            raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
+
+        # Step 3: Link FileAnnotation to Image
+        link_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
+        if host:
+            link_cmd.extend(["-s", host])
+        if port:
+            link_cmd.extend(["-p", str(port)])
+        link_cmd.extend([
+            "ImageAnnotationLink",
+            f"parent=Image:{image_id}",
+            f"child=FileAnnotation:{annotation_id}",
+        ])
+        
+        link_result = subprocess.run(
+            link_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        if link_result.returncode != 0:
+            raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
+        
+        link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
+            link_result.stderr, "ImageAnnotationLink"
+        )
+        if not link_id:
+            raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
+        
+        return True
 
 
 def _append_job_message(job: dict, message: str):
@@ -1213,6 +1226,8 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
+    import tempfile  # Ensure tempfile is available
+    
     if not file_path.exists():
         return {
             "status": "error",
@@ -1221,46 +1236,50 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
-    env = os.environ.copy()
-    env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error",
-            "relative_path": relative_path,
-            "stdout": "",
-            "stderr": "Compatibility check timeout",
-            "details": "Compatibility check timeout after 30 seconds",
-        }
-
-    except FileNotFoundError as exc:
-        return {
-            "status": "error",
-            "relative_path": relative_path,
-            "stdout": "",
-            "stderr": str(exc),
-            "details": str(exc),
-        }
     
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-    if not details:
-        details = "Compatibility check succeeded." if status == "compatible" else "Compatibility check failed."
-    return {
-        "status": status,
-        "relative_path": relative_path,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "details": details,
-    }
+    # FIX: Use tempfile for proper isolation and correct env var name
+    with tempfile.TemporaryDirectory() as temp_user_dir:
+        cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+        env = os.environ.copy()
+        # FIX: Was "OMERODIR" (wrong), changed to "OMERO_USERDIR" (correct)
+        env["OMERO_USERDIR"] = temp_user_dir
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {
+                "status": "error",
+                "relative_path": relative_path,
+                "stdout": "",
+                "stderr": "Compatibility check timeout",
+                "details": "Compatibility check timeout after 30 seconds",
+            }
+        except FileNotFoundError as exc:
+            return {
+                "status": "error",
+                "relative_path": relative_path,
+                "stdout": "",
+                "stderr": str(exc),
+                "details": str(exc),
+            }
+        
+        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+        if not details:
+            details = "Compatibility check succeeded." if status == "compatible" else "Compatibility check failed."
+        return {
+            "status": status,
+            "relative_path": relative_path,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "details": details,
+        }
 
 
 def _run_compatibility_check(job_id: str):
