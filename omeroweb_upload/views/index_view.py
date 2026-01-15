@@ -1,5 +1,6 @@
 import os
 import json
+import tempfile
 import logging
 import random
 import re
@@ -733,9 +734,9 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    import tempfile  # Ensure tempfile is available
-
-    # FIX: Isolate environment
+    import tempfile
+    
+    # FIX: Isolate the session for each import thread to prevent lock contention
     with tempfile.TemporaryDirectory() as temp_user_dir:
         env = os.environ.copy()
         env['OMERO_USERDIR'] = temp_user_dir
@@ -754,7 +755,7 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
             capture_output=True,
             text=True,
             check=False,
-            env=env,  # Pass the isolated env
+            env=env, # PASS THE ISOLATED ENV
         )
         return result.returncode == 0, result.stdout, result.stderr
 
@@ -803,24 +804,12 @@ def _parse_cli_id(output: str, expected_type: str):
 
 
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
-    """
-    Attach a text file to an image using OMERO CLI commands.
-    
-    CRITICAL: Must pass environment variables to subprocess so OMERO CLI can find session files.
-    Without OMERO_USERDIR/OMERO_SESSIONDIR, the CLI cannot authenticate and may invalidate the session.
-    
-    This performs three operations:
-    1. Upload text file as OriginalFile
-    2. Create FileAnnotation linking to the OriginalFile
-    3. Create ImageAnnotationLink connecting the annotation to the image
-    """
-    import tempfile  # Ensure tempfile is available
+    import tempfile
 
-    # FIX: Use a temporary directory for the CLI session to prevent logging out the web user
+    # FIX: Wrap everything in a temp user dir to stop session hijacking/logout
     with tempfile.TemporaryDirectory() as temp_user_dir:
-        # Copy environment to ensure session info is available to all subprocess calls
         env = os.environ.copy()
-        env['OMERO_USERDIR'] = temp_user_dir  # ISOLATE THE SESSION
+        env['OMERO_USERDIR'] = temp_user_dir
 
         # Step 1: Upload the text file
         upload_cmd = [OMERO_CLI, "upload", "-k", session_key]
@@ -844,7 +833,7 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
             upload_result.stderr, "OriginalFile"
         )
         if not original_id:
-            raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
+            raise RuntimeError("Unable to resolve OriginalFile ID")
 
         # Step 2: Create FileAnnotation
         annotation_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
@@ -862,13 +851,11 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
             env=env,
         )
         if annotation_result.returncode != 0:
-            raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
+            raise RuntimeError("FileAnnotation creation failed")
         
         annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
             annotation_result.stderr, "FileAnnotation"
         )
-        if not annotation_id:
-            raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
 
         # Step 3: Link FileAnnotation to Image
         link_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
@@ -889,16 +876,7 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
             check=False,
             env=env,
         )
-        if link_result.returncode != 0:
-            raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
-        
-        link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
-            link_result.stderr, "ImageAnnotationLink"
-        )
-        if not link_id:
-            raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
-        
-        return True
+        return link_result.returncode == 0
 
 
 def _append_job_message(job: dict, message: str):
@@ -1226,8 +1204,7 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
-    import tempfile  # Ensure tempfile is available
-    
+    import tempfile
     if not file_path.exists():
         return {
             "status": "error",
@@ -1237,11 +1214,10 @@ def _check_import_compatibility(
             "details": f"Missing staged file: {file_path.name}",
         }
     
-    # FIX: Use tempfile for proper isolation and correct env var name
+    # FIX: Use tempfile for isolation and change OMERODIR to OMERO_USERDIR
     with tempfile.TemporaryDirectory() as temp_user_dir:
         cmd = [OMERO_CLI, "import", "-f", str(file_path)]
         env = os.environ.copy()
-        # FIX: Was "OMERODIR" (wrong), changed to "OMERO_USERDIR" (correct)
         env["OMERO_USERDIR"] = temp_user_dir
         
         try:
