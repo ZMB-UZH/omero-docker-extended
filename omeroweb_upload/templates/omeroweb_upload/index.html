@@ -987,6 +987,35 @@
             border-color: #b91c1c !important;
             box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);
         }
+        .user-setting-toggle {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            padding: 2px;
+            background: #f9fafb;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+            gap: 2px;
+        }
+        .user-setting-toggle input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .user-setting-toggle label {
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #6b7280;
+            transition: all 0.2s ease;
+        }
+        .user-setting-toggle input:checked + label {
+            background: #007bff;
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
         .user-settings-actions {
             display: flex;
             justify-content: flex-end;
@@ -1043,7 +1072,8 @@
 <body>
     <div class="root-user-overlay" aria-hidden="true"></div>
     <div id="root-user-warning" class="root-user-warning" role="alert">
-        PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
+        PLEASE LOGIN AS REGULAR USER<br>
+        TO USE THIS PLUGIN
     </div>
     <div class="upload-page">
         <h1 class="upload-title">Upload</h1>
@@ -1228,6 +1258,20 @@
                             <span>Set higher for faster uploads and imports, lower for more granular progress updates.</span>
                         </div>
                     </div>
+                    <div class="user-setting-row">
+                        <div class="user-setting-input">
+                            <label>Show all projects?</label>
+                            <div class="user-setting-toggle" role="group" aria-label="Show all projects">
+                                <input type="radio" id="user_setting_show_all_no" name="user_setting_show_all_projects" value="no">
+                                <label for="user_setting_show_all_no">No</label>
+                                <input type="radio" id="user_setting_show_all_yes" name="user_setting_show_all_projects" value="yes">
+                                <label for="user_setting_show_all_yes">Yes</label>
+                            </div>
+                        </div>
+                        <div class="user-setting-description">
+                            <span>Toggle "Yes" to show all projects in the expanded project selection dropdown menu.</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="user-settings-status" id="user_settings_status"></div>
                 <div class="user-settings-actions">
@@ -1303,9 +1347,12 @@
         const collaborationSection = document.querySelector('.upload-utilities__collaboration');
         let isProjectRefreshInFlight = false;
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+        const MAX_USER_PROJECT_RESULTS = 15;
         const MAX_PROJECT_RESULTS = 15;
+        const MAX_PROJECT_RESULTS_WITH_COLLAB = 20;
         let projectFilterTimeout = null;
         let activeProjectIndex = -1;
+        let showAllProjectsEnabled = false;
 
         const progressSection = document.getElementById('progress-section');
         const progressBar = document.getElementById('progress-bar');
@@ -1329,6 +1376,8 @@
         const userSettingsSave = document.getElementById('user_settings_save');
         const userSettingsRestore = document.getElementById('user_settings_restore');
         const userSettingsBatchInput = document.getElementById('user_setting_batch_size');
+        const userSettingShowAllNo = document.getElementById('user_setting_show_all_no');
+        const userSettingShowAllYes = document.getElementById('user_setting_show_all_yes');
         const userSettingsStatus = document.getElementById('user_settings_status');
         const compatibilityToggle = document.getElementById('compatibility_toggle');
 
@@ -1577,6 +1626,18 @@
                 applyCollaborationState(false, { persist: false, refresh: false });
             }
             return hasCollaborationOptions;
+        }
+
+        function hasCollaborations() {
+            return Array.isArray(projectData?.collab) && projectData.collab.length > 0;
+        }
+
+        function getProjectResultsLimit(includeCollab = false) {
+            if (showAllProjectsEnabled) return Infinity;
+            if (includeCollab && hasCollaborations()) {
+                return MAX_PROJECT_RESULTS_WITH_COLLAB;
+            }
+            return MAX_PROJECT_RESULTS;
         }
 
         function getProjectLabel(projectId, projectName) {
@@ -1911,6 +1972,9 @@
             const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
             const totalProjects = orderedEntries.length;
             let totalMatches = 0;
+            let ownedMatches = 0;
+            const maxResults = getProjectResultsLimit(isCollaborationEnabled());
+            const allowAll = !Number.isFinite(maxResults);
 
             for (let i = 0; i < orderedEntries.length; i += 1) {
                 const entry = orderedEntries[i];
@@ -1923,7 +1987,14 @@
                     || String(owner).toLowerCase().includes(normalizedQuery);
                 if (isMatch) {
                     totalMatches += 1;
-                    if (matches.length < MAX_PROJECT_RESULTS) {
+                    if (allowAll) {
+                        matches.push(entry);
+                    } else if (isCollabEntry(entry)) {
+                        if (matches.length < maxResults) {
+                            matches.push(entry);
+                        }
+                    } else if (ownedMatches < MAX_USER_PROJECT_RESULTS && matches.length < maxResults) {
+                        ownedMatches += 1;
                         matches.push(entry);
                     }
                 }
@@ -1977,8 +2048,8 @@
             statusRow.style.padding = '6px 12px';
             statusRow.style.fontSize = '11px';
             statusRow.style.color = '#6b7280';
-            if (totalMatches > MAX_PROJECT_RESULTS) {
-                statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
+            if (Number.isFinite(maxResults) && totalMatches > maxResults) {
+                statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
             } else if (totalMatches > 0) {
                 statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
             } else {
@@ -2351,6 +2422,7 @@
         let currentUploadBatchFiles = uploadBatchFiles;
         const userSettingsDefaults = {
             uploadBatchFiles,
+            showAllProjects: false,
         };
         const csrfTokenName = 'csrftoken';
 
@@ -2448,6 +2520,17 @@
             }
         }
 
+        function applyShowAllProjectsSetting(enabled, { refresh = true } = {}) {
+            showAllProjectsEnabled = !!enabled;
+            if (userSettingShowAllYes && userSettingShowAllNo) {
+                userSettingShowAllYes.checked = showAllProjectsEnabled;
+                userSettingShowAllNo.checked = !showAllProjectsEnabled;
+            }
+            if (refresh && projectSelectDropdown?.style.display === 'block') {
+                renderProjectOptions(projectSelectInput?.value || '');
+            }
+        }
+
         function applyUserSettings(settings) {
             const batchSize = settings?.uploadBatchFiles;
             if (Number.isInteger(batchSize)) {
@@ -2456,6 +2539,7 @@
             if (userSettingsBatchInput) {
                 userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
             }
+            applyShowAllProjectsSetting(settings?.showAllProjects, { refresh: false });
         }
 
         function resetUserSettingsToDefaults() {
@@ -2463,6 +2547,7 @@
             if (userSettingsBatchInput) {
                 userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
             }
+            applyShowAllProjectsSetting(userSettingsDefaults.showAllProjects, { refresh: false });
             clearUserSettingErrors();
         }
 
@@ -2481,11 +2566,12 @@
             const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
             const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
             setUserSettingError(userSettingsBatchInput, !isValid);
+            const showAllProjects = !!userSettingShowAllYes?.checked;
             if (!isValid) {
                 showNonBlockingModal(messages.formattingErrors);
                 return null;
             }
-            return { uploadBatchFiles: value };
+            return { uploadBatchFiles: value, showAllProjects };
         }
 
         function saveUserSettingsToDatabase(settings, options = {}) {
@@ -4186,6 +4272,7 @@
                 const validated = validateUserSettings();
                 if (!validated) return;
                 currentUploadBatchFiles = validated.uploadBatchFiles;
+                applyShowAllProjectsSetting(validated.showAllProjects);
                 if (storage) {
                     try {
                         storage.setItem(userSettingsStorageKey, JSON.stringify(validated));
@@ -4240,7 +4327,7 @@
         if (!uploadEnabled) {
             setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
         }
-        applyUserSettings(loadUserSettings() || { uploadBatchFiles });
+        applyUserSettings(loadUserSettings() || userSettingsDefaults);
         const storedCollaborationState = loadCollaborationState();
         if (storedCollaborationState !== null && updateCollaborationVisibility()) {
             applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
