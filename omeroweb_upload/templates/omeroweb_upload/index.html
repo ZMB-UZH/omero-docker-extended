@@ -4969,10 +4969,17 @@
             const statusData = await waitForCompatibility(job);
             const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
             applyCompatibilityFlags(uploadedFiles, incompatibleFiles);
-            if (statusData.confirmation_required && incompatibleFiles.length) {
-                const proceed = await showCompatibilityPopup(
-                    'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
-                );
+            if (statusData.confirmation_required) {
+                const compatibilityStatus = statusData.compatibility_status || statusData.status;
+                let message = 'Compatibility check requires confirmation. Do you still want to continue?\nSUGGESTED: No';
+                if (compatibilityStatus === 'error') {
+                    message = 'Compatibility check failed or returned errors. Do you still want to continue?\nSUGGESTED: No';
+                } else if (incompatibleFiles.length) {
+                    message = 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No';
+                } else if (compatibilityStatus === 'incompatible') {
+                    message = 'Incompatible files were detected, but details are unavailable. Do you still want to continue?\nSUGGESTED: No';
+                }
+                const proceed = await showCompatibilityPopup(message);
                 if (!proceed) {
                     skipSpecialUploadReset = true;
                     window.pendingImportJob = job;
@@ -4981,14 +4988,12 @@
                     applyCompatibilityFlags(pendingFiles, incompatibleFiles);
                     refreshFileList();
                     updateUploadButtonLabel();
-                    setStatus(
-                        'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files and click "Continue Import".',
-                        'error'
-                    );
+                    const haltedMessage = incompatibleFiles.length
+                        ? 'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files and click "Continue Import".'
+                        : 'Upload complete. Import halted because the compatibility check reported errors. Review the files or retry the check.';
+                    setStatus(haltedMessage, 'error');
                     return { proceed: false, status: statusData, uploadedFiles };
                 }
-                await confirmCompatibility(job);
-            } else if (statusData.confirmation_required) {
                 await confirmCompatibility(job);
             }
             return { proceed: true, status: statusData };
