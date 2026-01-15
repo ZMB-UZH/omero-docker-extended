@@ -22,8 +22,8 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from omero.gateway import BlitzGateway
-from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI, FileAnnotationI, ImageAnnotationLinkI, OriginalFileI
-from omero.rtypes import rstring, rlong
+from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
+from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 from typing import Optional
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
@@ -722,22 +722,45 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    cmd = [OMERO_CLI, "import", "-k", session_key]
+_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+
+
+def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
+    cmd = [OMERO_CLI]
+    cmd.extend(subcommand)
+    if session_key:
+        cmd.extend(["-k", session_key])
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
-    if dataset_id:
-        cmd.extend(["-d", str(dataset_id)])
-    cmd.append(str(path))
+    return cmd
 
-    result = subprocess.run(
+
+def _run_omero_cli(cmd):
+    return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _parse_cli_id(output: str, expected_type: str):
+    for line in (output or "").splitlines():
+        match = _CLI_ID_PATTERN.search(line.strip())
+        if match and match.group("type") == expected_type:
+            return int(match.group("id"))
+    return None
+
+
+def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
+    cmd = _build_omero_cli_command(["import"], session_key, host, port)
+    if dataset_id:
+        cmd.extend(["-d", str(dataset_id)])
+    cmd.append(str(path))
+
+    result = _run_omero_cli(cmd)
     return result.returncode == 0, result.stdout, result.stderr
 
 
@@ -768,33 +791,45 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
-def _attach_txt_to_image(conn, image, txt_path: Path):
-    data = txt_path.read_bytes()
-    update = conn.getUpdateService()
-    original = OriginalFileI()
-    original.setName(rstring(txt_path.name))
-    original.setPath(rstring(f"sem_edx/{image.getId()}/"))
-    original.setSize(rlong(len(data)))
-    original.setMimetype(rstring("text/plain"))
-    original = update.saveAndReturnObject(original)
+def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
+    upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
+    upload_cmd.append(str(txt_path))
+    upload_result = _run_omero_cli(upload_cmd)
+    if upload_result.returncode != 0:
+        raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
+    original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
+        upload_result.stderr, "OriginalFile"
+    )
+    if not original_id:
+        raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
 
-    store = conn.c.sf.createRawFileStore()
-    try:
-        store.setFileId(original.getId().getValue())
-        store.write(data, 0, len(data))
-        store.save()
-    finally:
-        try:
-            store.close()
-        except Exception:
-            pass
+    annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+    annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
+    annotation_result = _run_omero_cli(annotation_cmd)
+    if annotation_result.returncode != 0:
+        raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
+    annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
+        annotation_result.stderr, "FileAnnotation"
+    )
+    if not annotation_id:
+        raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
 
-    annotation = FileAnnotationI()
-    annotation.setFile(original)
-    link = ImageAnnotationLinkI()
-    link.setParent(image._obj)
-    link.setChild(annotation)
-    update.saveAndReturnObject(link)
+    link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+    link_cmd.extend(
+        [
+            "ImageAnnotationLink",
+            f"parent=Image:{image_id}",
+            f"child=FileAnnotation:{annotation_id}",
+        ]
+    )
+    link_result = _run_omero_cli(link_cmd)
+    if link_result.returncode != 0:
+        raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
+    link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
+        link_result.stderr, "ImageAnnotationLink"
+    )
+    if not link_id:
+        raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
     return True
 
 
@@ -1540,6 +1575,10 @@ def _process_import_job(job_id: str):
                                 if not image_obj:
                                     _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
                                     continue
+                                image_id = _get_id(image_obj)
+                                if not image_id:
+                                    _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                    continue
                                 txt_entry = entries_by_path.get(txt_rel)
                                 if not txt_entry:
                                     _append_txt_attachment_message(job, txt_name, image_name, False)
@@ -1550,7 +1589,18 @@ def _process_import_job(job_id: str):
                                     _append_txt_attachment_message(job, txt_name, image_name, False)
                                     continue
                                 try:
-                                    _attach_txt_to_image(conn, image_obj, txt_path)
+                                    _attach_txt_to_image(
+                                        session_key,
+                                        host,
+                                        port,
+                                        image_id,
+                                        txt_path,
+                                    )
+                                    if txt_entry.get("status") != "imported":
+                                        txt_entry["status"] = "imported"
+                                        job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get(
+                                            "size", 0
+                                        )
                                     _append_txt_attachment_message(job, txt_name, image_name, True)
                                 except Exception as exc:
                                     logger.warning(
