@@ -647,6 +647,7 @@
             border: 1px solid #e5e7eb;
             border-radius: 10px;
             overflow-y: auto;
+            scrollbar-gutter: stable;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
             display: flex;
             flex-direction: column;
@@ -666,11 +667,16 @@
             display: flex;
             flex-direction: column;
             gap: 2px;
+            --sem-edx-appended-height: 16px;
+            --sem-edx-appended-action-size: 14px;
         }
         .sem-edx-association-table .tree-header,
         .sem-edx-association-table .tree-row {
             grid-template-columns: 60% 40%;
             column-gap: 8px;
+        }
+        .sem-edx-association-table .tree-header span:last-child {
+            padding-right: 8px;
         }
         .sem-edx-association-table .tree-header {
             border-bottom: 1px solid #e2e8f0;
@@ -700,6 +706,9 @@
         .sem-edx-association-table .tree-meta {
             font-size: 0.8rem;
         }
+        .sem-edx-appended-cell {
+            padding-right: 8px;
+        }
         .sem-edx-association-table .sem-edx-empty {
             color: #94a3b8;
             font-size: 0.95rem;
@@ -723,47 +732,53 @@
             box-shadow: 0 1px 2px rgba(148, 163, 184, 0.6);
         }
         .sem-edx-appended-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) var(--sem-edx-appended-action-size);
             align-items: center;
-            gap: 4px;
-            justify-content: flex-end;
-            min-height: 18px;
+            column-gap: 4px;
+            min-height: var(--sem-edx-appended-height);
         }
         .sem-edx-appended-row.is-placeholder {
             visibility: hidden;
         }
         .sem-edx-appended-label {
-            flex: 1;
+            display: flex;
+            align-items: center;
+            width: 100%;
             min-width: 0;
             font-size: 0.75rem;
             color: #475569;
             background: #f8fafc;
-            padding: 2px 6px;
+            padding: 1px 5px;
             border-radius: 6px;
+            border: 1px solid transparent;
             box-shadow: 0 1px 2px rgba(148, 163, 184, 0.6);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            height: var(--sem-edx-appended-height);
+            box-sizing: border-box;
         }
         .sem-edx-appended-label:hover {
             background: #eef2ff;
             box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.45);
         }
         .sem-edx-appended-select {
-            flex: 1;
+            width: 100%;
             min-width: 0;
             font-size: 0.75rem;
             line-height: 1.2;
-            padding: 2px 6px;
+            padding: 1px 5px;
             border-radius: 6px;
             border: 1px dashed #93c5fd;
             background: #f8fafc;
-            height: 18px;
+            height: var(--sem-edx-appended-height);
             color: #1f2937;
             appearance: none;
             cursor: pointer;
             font-family: inherit;
             letter-spacing: normal;
+            box-sizing: border-box;
         }
         .sem-edx-appended-select:hover {
             background: #eef2ff;
@@ -775,14 +790,14 @@
             outline-offset: 1px;
         }
         .sem-edx-appended-action {
-            width: 16px;
-            height: 16px;
+            width: var(--sem-edx-appended-action-size);
+            height: var(--sem-edx-appended-action-size);
             border-radius: 4px;
             border: 1px solid transparent;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             line-height: 1;
             cursor: pointer;
             padding: 0;
@@ -1513,6 +1528,14 @@
                 <button type="button" id="compatibility-yes-btn" class="duplicate-popup__btn">Yes</button>
             </div>
         </div>
+        <div id="sem_edx_confirm-overlay" class="duplicate-overlay" aria-hidden="true"></div>
+        <div id="sem_edx_confirm-popup" class="duplicate-popup" role="alertdialog" aria-modal="true" aria-hidden="true">
+            <p id="sem_edx_confirm-message" class="duplicate-popup__message"></p>
+            <div class="compatibility-popup__actions">
+                <button type="button" id="sem_edx_confirm-no-btn" class="duplicate-popup__btn">No</button>
+                <button type="button" id="sem_edx_confirm-yes-btn" class="duplicate-popup__btn">Yes</button>
+            </div>
+        </div>
         <div id="nb-modal-overlay"
              style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
                     z-index:11000; align-items:center; justify-content:center;">
@@ -1685,6 +1708,11 @@
         const compatibilityMessage = document.getElementById('compatibility-message');
         const compatibilityYesBtn = document.getElementById('compatibility-yes-btn');
         const compatibilityNoBtn = document.getElementById('compatibility-no-btn');
+        const semEdxConfirmOverlay = document.getElementById('sem_edx_confirm-overlay');
+        const semEdxConfirmPopup = document.getElementById('sem_edx_confirm-popup');
+        const semEdxConfirmMessage = document.getElementById('sem_edx_confirm-message');
+        const semEdxConfirmYesBtn = document.getElementById('sem_edx_confirm-yes-btn');
+        const semEdxConfirmNoBtn = document.getElementById('sem_edx_confirm-no-btn');
         const settingsMenuBtn = document.getElementById('settings_menu_btn');
         const settingsMenu = document.getElementById('settings_menu');
         const userSettingsBtn = document.getElementById('user_settings_btn');
@@ -1720,6 +1748,7 @@
         let isUploading = false;
         let cancelUploadRequested = false;
         let compatibilityPopupResolver = null;
+        let semEdxConfirmPopupResolver = null;
         let suppressProjectDropdownOpenOnFocusOnce = false;
         let suppressSpecialUploadDropdownOpenOnFocusOnce = false;
         let uploadTotalBytes = 0;
@@ -1862,7 +1891,7 @@
             if (folderBtn) {
                 folderBtn.disabled = shouldDisable;
             }
-            uploadBtn.disabled = shouldDisable;
+            uploadBtn.disabled = isUploading || !uploadEnabled;
         }
 
         function setUploadingState(active, statusText) {
@@ -2684,24 +2713,41 @@
             return { hasFiles: true, valid: true };
         }
 
+        function getSemEdxAppendedCount() {
+            const associationMap = semEdxAssociationMode === 'manual'
+                ? semEdxManualAssociations
+                : semEdxAssociationCache;
+            return Array.from(associationMap.values()).reduce(
+                (total, items) => total + (Array.isArray(items) ? items.length : 0),
+                0
+            );
+        }
+
         function updateSemEdxStatus() {
             if (!isSemEdxSelected()) {
                 updateSemEdxStepControls(false);
                 return false;
             }
             const { hasFiles, valid } = evaluateSemEdxFiles(pendingFiles);
+            const appendedCount = getSemEdxAppendedCount();
             if (!hasFiles) {
                 setStatus('');
                 updateSemEdxStepControls(false);
                 return true;
             }
             if (semEdxInstructionStep > 1) {
-                if (valid) {
-                    setStatus('');
-                } else {
+                if (!valid) {
                     setStatus('You need to add at least one image and one txt file in the base path and per folder.\n', 'error');
+                    updateSemEdxStepControls(false);
+                    return true;
                 }
-                updateSemEdxStepControls(valid);
+                if (appendedCount < 1) {
+                    setStatus('Please append at least one txt filename before proceeding.', 'error');
+                    updateSemEdxStepControls(false);
+                    return true;
+                }
+                setStatus('');
+                updateSemEdxStepControls(true);
                 return true;
             }
             if (valid) {
@@ -2760,6 +2806,7 @@
             if (nextStepBtn) {
                 const shouldShowNext = isActive && (semEdxInstructionStep > 1 || isSemEdxReady);
                 nextStepBtn.classList.toggle('is-hidden', !shouldShowNext);
+                nextStepBtn.disabled = isActive && semEdxInstructionStep > 1 && !isSemEdxReady;
             }
             if (previousStepBtn) {
                 const shouldShowPrevious = isActive && semEdxInstructionStep > 1;
@@ -4038,6 +4085,7 @@
                 nameCell.appendChild(meta);
 
                 const appendedCell = document.createElement('div');
+                appendedCell.classList.add('sem-edx-appended-cell');
 
                 row.appendChild(nameCell);
                 row.appendChild(appendedCell);
@@ -4093,6 +4141,7 @@
                     label.textContent = file.name;
 
                     const appendedCell = document.createElement('div');
+                    appendedCell.classList.add('sem-edx-appended-cell');
 
                     nameCell.appendChild(spacer);
                     nameCell.appendChild(icon);
@@ -4208,6 +4257,7 @@
             }
 
             fileTree.appendChild(manualPanel);
+            updateSemEdxStatus();
         }
 
         function refreshFileList() {
@@ -4304,6 +4354,32 @@
             compatibilityOverlay.style.display = 'none';
             compatibilityPopup.style.display = 'none';
             compatibilityPopup.setAttribute('aria-hidden', 'true');
+        }
+
+        function showSemEdxConfirmPopup(message) {
+            semEdxConfirmMessage.textContent = message;
+            semEdxConfirmOverlay.style.display = 'block';
+            semEdxConfirmPopup.style.display = 'block';
+            semEdxConfirmPopup.setAttribute('aria-hidden', 'false');
+            semEdxConfirmYesBtn.focus();
+            return new Promise((resolve) => {
+                semEdxConfirmPopupResolver = resolve;
+            });
+        }
+
+        function resolveSemEdxConfirmPopup(decision) {
+            if (semEdxConfirmPopupResolver) {
+                semEdxConfirmPopupResolver(decision);
+                semEdxConfirmPopupResolver = null;
+            }
+            if (semEdxConfirmPopup.contains(document.activeElement)) {
+                suppressProjectDropdownOpenOnFocusOnce = true;
+                suppressSpecialUploadDropdownOpenOnFocusOnce = true;
+                focusFallbackElement({ allowSelectInputs: false });
+            }
+            semEdxConfirmOverlay.style.display = 'none';
+            semEdxConfirmPopup.style.display = 'none';
+            semEdxConfirmPopup.setAttribute('aria-hidden', 'true');
         }
 
         function delay(ms) {
@@ -4639,6 +4715,21 @@
             event.preventDefault();
             event.stopPropagation();
             resolveCompatibilityPopup(false);
+        });
+        semEdxConfirmOverlay.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveSemEdxConfirmPopup(false);
+        });
+        semEdxConfirmYesBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveSemEdxConfirmPopup(true);
+        });
+        semEdxConfirmNoBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            resolveSemEdxConfirmPopup(false);
         });
 
         async function parseJsonResponse(response) {
@@ -5553,10 +5644,27 @@
         }
 
         if (nextStepBtn) {
-            nextStepBtn.addEventListener('click', () => {
+            nextStepBtn.addEventListener('click', async () => {
                 if (!isSemEdxSelected()) return;
-                setSemEdxInstructionsStep(2);
-                updateSemEdxStatus();
+                if (semEdxInstructionStep <= 1) {
+                    setSemEdxInstructionsStep(2);
+                    updateSemEdxStatus();
+                    return;
+                }
+                if (!updateSemEdxStatus()) {
+                    return;
+                }
+                const appendedCount = getSemEdxAppendedCount();
+                if (appendedCount < 1) {
+                    updateSemEdxStatus();
+                    return;
+                }
+                const proceed = await showSemEdxConfirmPopup(
+                    'Are you sure you want to proceed with Upload & Import? The selected SEM images will be imported into Omero and the associated spectra will be appended.'
+                );
+                if (proceed) {
+                    uploadBtn?.click();
+                }
             });
         }
 
