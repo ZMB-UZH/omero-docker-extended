@@ -255,7 +255,11 @@ def _compatibility_pending_entries(job_dict):
     return [
         entry
         for entry in job_dict.get("files", [])
-        if entry.get("status") == "uploaded" and not entry.get("compatibility")
+        if (
+            entry.get("status") == "uploaded"
+            and not entry.get("compatibility")
+            and not entry.get("compatibility_skip")
+        )
     ]
 
 
@@ -1350,6 +1354,8 @@ def _process_import_job(job_id: str):
             for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
                     continue
+                if entry.get("import_skip"):
+                    continue
                 if not entry.get("relative_path"):
                     continue
                 entries_to_import.append(
@@ -1568,6 +1574,8 @@ def _start_upload(request, conn):
         if size < 0:
             size = 0
         upload_id = uuid.uuid4().hex
+        compatibility_skip = bool(entry.get("compatibility_skip"))
+        import_skip = bool(entry.get("import_skip"))
         filename = PurePosixPath(rel_path).name
         staged_path = f"_staged/{upload_id}/{filename}"
         total_bytes += size
@@ -1586,6 +1594,8 @@ def _start_upload(request, conn):
                 "size": size,
                 "status": "pending",
                 "errors": [],
+                "compatibility_skip": compatibility_skip,
+                "import_skip": import_skip,
             }
         )
 
@@ -1920,8 +1930,14 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
-            "compatibility_checked": sum(1 for f in job.get("files", []) if f.get("compatibility")),
-            "compatibility_total": sum(1 for f in job.get("files", []) if f.get("status") == "uploaded"),
+            "compatibility_checked": sum(
+                1 for f in job.get("files", []) if f.get("compatibility")
+            ),
+            "compatibility_total": sum(
+                1
+                for f in job.get("files", [])
+                if f.get("status") == "uploaded" and not f.get("compatibility_skip")
+            ),
             "incompatible_files": job.get("incompatible_files", []),
             "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
