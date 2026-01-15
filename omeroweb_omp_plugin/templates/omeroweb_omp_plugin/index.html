@@ -28,7 +28,8 @@
 <body>
     <div class="root-user-overlay" aria-hidden="true"></div>
     <div id="root-user-warning" class="root-user-warning error-message" role="alert">
-        PLEASE LOGIN AS REGULAR USER TO USE THIS PLUGIN
+        PLEASE LOGIN AS REGULAR USER<br>
+        TO USE THIS PLUGIN
     </div>
 
 <div class="omp-page omp-page--narrow">
@@ -43,10 +44,6 @@
             <div class="upload-utilities__collaboration">
                 <input type="checkbox" id="collaboration_toggle">
                 <label for="collaboration_toggle">Collaboration</label>
-            </div>
-            <div class="upload-utilities__placeholder">
-                <input type="checkbox" id="placeholder_toggle">
-                <label for="placeholder_toggle">Placeholder</label>
             </div>
         </div>
         <div class="upload-utilities__actions">
@@ -400,6 +397,20 @@
             </div>
             <div class="user-setting-row">
                 <div class="user-setting-input">
+                    <label>Show all projects?</label>
+                    <div class="user-setting-toggle" role="group" aria-label="Show all projects">
+                        <input type="radio" id="user_setting_show_all_no" name="user_setting_show_all_projects" value="no">
+                        <label for="user_setting_show_all_no">No</label>
+                        <input type="radio" id="user_setting_show_all_yes" name="user_setting_show_all_projects" value="yes">
+                        <label for="user_setting_show_all_yes">Yes</label>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>Toggle "Yes" to show all projects in the expanded project selection dropdown menu.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
                     <label for="user_setting_default_vars">Default variable names</label>
                     <textarea id="user_setting_default_vars"
                               rows="5"
@@ -673,8 +684,7 @@
         left: 50%;
         transform: translateX(-50%);
     }
-    .upload-utilities__collaboration,
-    .upload-utilities__placeholder {
+    .upload-utilities__collaboration {
         display: flex;
         align-items: center;
         gap: 3px;
@@ -682,15 +692,13 @@
         font-weight: 600;
         color: #1f2937;
     }
-    .upload-utilities__collaboration input[type="checkbox"],
-    .upload-utilities__placeholder input[type="checkbox"] {
+    .upload-utilities__collaboration input[type="checkbox"] {
         width: 14px;
         height: 14px;
         accent-color: #2563eb;
         cursor: pointer;
     }
-    .upload-utilities__collaboration label,
-    .upload-utilities__placeholder label {
+    .upload-utilities__collaboration label {
         cursor: pointer;
         user-select: none;
     }
@@ -1070,6 +1078,35 @@
         border-color: #dc2626;
         box-shadow: 0 0 0 1px #dc2626;
     }
+    .user-setting-toggle {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid #d1d5db;
+        border-radius: 999px;
+        padding: 2px;
+        background: #f9fafb;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+        gap: 2px;
+    }
+    .user-setting-toggle input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .user-setting-toggle label {
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #6b7280;
+        transition: all 0.2s ease;
+    }
+    .user-setting-toggle input:checked + label {
+        background: #007bff;
+        color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
     .settings-menu-item--submenu::after {
         content: '';
         position: absolute;
@@ -1286,7 +1323,6 @@
     const projectSelectWrapper = document.getElementById('project_select_wrapper');
     const projectSelectArrow = document.querySelector('#project_select_wrapper .project-select-arrow');
     const collaborationToggle = document.getElementById('collaboration_toggle');
-    const placeholderToggle = document.getElementById('placeholder_toggle');
     const collaborationSection = document.querySelector('.upload-utilities__collaboration');
     const datasetTableContainer = document.getElementById('dataset_table_container');
     const datasetTableBody = document.getElementById('dataset_table_body');
@@ -1334,6 +1370,8 @@
     const userSettingDefaultVarsInput = document.getElementById('user_setting_default_vars');
     const userSettingMaxParsedInput = document.getElementById('user_setting_max_parsed');
     const userSettingMaxSetsInput = document.getElementById('user_setting_max_sets');
+    const userSettingShowAllNo = document.getElementById('user_setting_show_all_no');
+    const userSettingShowAllYes = document.getElementById('user_setting_show_all_yes');
     const aiRegexDefaultProviderSelect = document.getElementById('ai_regex_default_provider_select');
     const aiRegexDefaultModelSelect = document.getElementById('ai_regex_default_model_select');
     const aiRegexDefaultToggle = document.getElementById('ai_regex_default_toggle');
@@ -1359,7 +1397,9 @@
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     let isProjectRefreshInFlight = false;
     let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    const MAX_USER_PROJECT_RESULTS = 15;
     const MAX_PROJECT_RESULTS = 15;
+    const MAX_PROJECT_RESULTS_WITH_COLLAB = 20;
     let projectFilterTimeout = null;
     let activeProjectIndex = -1;
     const currentUserId = {{ user_id|default:"null" }};
@@ -1426,7 +1466,6 @@
     const datasetSortState = { key: null, direction: 'asc', userSet: false };
     const userSettingsStorageKey = makeStorageKey('omp_user_settings');
     const collaborationToggleStorageKey = makeStorageKey('omp_collaboration_toggle_v1');
-    const placeholderToggleStorageKey = makeStorageKey('omp_placeholder_toggle_v1');
     const storageKeyPrefix = 'omp_';
     const isUserStorageKey = (key) => {
         if (!key.startsWith(storageKeyPrefix)) return false;
@@ -1438,6 +1477,7 @@
         maxParsedVariables: {{ max_parsed_variables }},
         maxVariableSets: {{ max_variable_sets }},
         defaultVariableNames: {{ default_variable_names_json|safe }},
+        showAllProjects: false,
         aiDefaults: {
             regex: {
                 defaultProvider: '',
@@ -1453,6 +1493,32 @@
         regex: { defaultProvider: '', modelsByProvider: {} },
         parse: { defaultProvider: '', modelsByProvider: {} },
     };
+    let showAllProjectsEnabled = false;
+
+    function hasCollaborations() {
+        const collab = Array.isArray(projectData?.collab) ? projectData.collab.length : 0;
+        const annotate = Array.isArray(projectData?.collab_annotate) ? projectData.collab_annotate.length : 0;
+        return collab + annotate > 0;
+    }
+
+    function getProjectResultsLimit(includeCollab = false) {
+        if (showAllProjectsEnabled) return Infinity;
+        if (includeCollab && hasCollaborations()) {
+            return MAX_PROJECT_RESULTS_WITH_COLLAB;
+        }
+        return MAX_PROJECT_RESULTS;
+    }
+
+    function applyShowAllProjectsSetting(enabled, { refresh = true } = {}) {
+        showAllProjectsEnabled = !!enabled;
+        if (userSettingShowAllYes && userSettingShowAllNo) {
+            userSettingShowAllYes.checked = showAllProjectsEnabled;
+            userSettingShowAllNo.checked = !showAllProjectsEnabled;
+        }
+        if (refresh && projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
+        }
+    }
 
     // Ensure exactly one mode is selected even if browser restores form state
     (function initSeparatorMode() {
@@ -2497,6 +2563,11 @@
     } else {
         aiDefaultsState = normalizeAiDefaults(userSettingsDefaults.aiDefaults);
     }
+    if (typeof initialUserSettings?.showAllProjects === 'boolean') {
+        applyShowAllProjectsSetting(initialUserSettings.showAllProjects, { refresh: false });
+    } else {
+        applyShowAllProjectsSetting(userSettingsDefaults.showAllProjects, { refresh: false });
+    }
 
     function clearLocalUserData() {
         try {
@@ -2529,6 +2600,7 @@
                 : (settings.defaultVariableNames ?? '');
             userSettingDefaultVarsInput.value = defaultVars;
         }
+        applyShowAllProjectsSetting(settings.showAllProjects, { refresh: false });
         const defaults = normalizeAiDefaults(settings.aiDefaults || settings.aiProviderDefaults);
         aiDefaultsState = defaults;
         applyAiDefaultsToRow({
@@ -2557,6 +2629,7 @@
             maxParsedVariables: userSettingsDefaults.maxParsedVariables,
             maxVariableSets: userSettingsDefaults.maxVariableSets,
             defaultVariableNames: userSettingsDefaults.defaultVariableNames,
+            showAllProjects: userSettingsDefaults.showAllProjects,
             aiDefaults: userSettingsDefaults.aiDefaults,
         });
         clearUserSettingErrors();
@@ -2585,6 +2658,7 @@
         const maxSetsValue = numericPattern.test(maxSetsRaw) ? parseInt(maxSetsRaw, 10) : NaN;
 
         const parsedDefaults = parseQuotedVariableNames(defaultVarsRaw);
+        const showAllProjects = !!userSettingShowAllYes?.checked;
 
         const jobBatchValid = Number.isInteger(jobBatchValue) && jobBatchValue >= 1 && jobBatchValue <= 100;
         const maxParsedValid = Number.isInteger(maxParsedValue) && maxParsedValue >= 3 && maxParsedValue <= 15;
@@ -2610,6 +2684,7 @@
             maxParsedVariables: maxParsedValue,
             maxVariableSets: maxSetsValue,
             defaultVariableNames: parsedDefaults,
+            showAllProjects,
             aiDefaults: aiDefaultsState,
         };
     }
@@ -3000,32 +3075,6 @@
         }
     }
 
-    function savePlaceholderState(enabled) {
-        try {
-            window.localStorage?.setItem(placeholderToggleStorageKey, JSON.stringify({ enabled: !!enabled }));
-        } catch (error) {
-            // Ignore storage failures.
-        }
-    }
-
-    function loadPlaceholderState() {
-        try {
-            const raw = window.localStorage?.getItem(placeholderToggleStorageKey);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            return typeof parsed?.enabled === 'boolean' ? parsed.enabled : null;
-        } catch (error) {
-            return null;
-        }
-    }
-
-    function applyPlaceholderState(enabled) {
-        if (placeholderToggle) {
-            placeholderToggle.checked = !!enabled;
-        }
-        savePlaceholderState(enabled);
-    }
-
     function updateProjectSelectionDisplay() {
         if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
         const selectedName = projectSelectInput.dataset.selectedName || '';
@@ -3246,6 +3295,9 @@
         const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
         const totalProjects = orderedEntries.length;
         let totalMatches = 0;
+        let ownedMatches = 0;
+        const maxResults = getProjectResultsLimit(isCollaborationEnabled());
+        const allowAll = !Number.isFinite(maxResults);
 
         for (let i = 0; i < orderedEntries.length; i += 1) {
             const entry = orderedEntries[i];
@@ -3258,7 +3310,14 @@
                 || String(owner).toLowerCase().includes(normalizedQuery);
             if (isMatch) {
                 totalMatches += 1;
-                if (matches.length < MAX_PROJECT_RESULTS) {
+                if (allowAll) {
+                    matches.push(entry);
+                } else if (isSharedEntry(entry)) {
+                    if (matches.length < maxResults) {
+                        matches.push(entry);
+                    }
+                } else if (ownedMatches < MAX_USER_PROJECT_RESULTS && matches.length < maxResults) {
+                    ownedMatches += 1;
                     matches.push(entry);
                 }
             }
@@ -3304,8 +3363,8 @@
         statusRow.style.padding = '6px 12px';
         statusRow.style.fontSize = '11px';
         statusRow.style.color = '#6b7280';
-        if (totalMatches > MAX_PROJECT_RESULTS) {
-            statusRow.textContent = `Showing ${MAX_PROJECT_RESULTS} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
+        if (Number.isFinite(maxResults) && totalMatches > maxResults) {
+            statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
         } else if (totalMatches > 0) {
             statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
         } else {
@@ -3416,12 +3475,6 @@
     if (collaborationToggle) {
         collaborationToggle.addEventListener('change', () => {
             applyCollaborationState(collaborationToggle.checked, { persist: true, refresh: true });
-        });
-    }
-
-    if (placeholderToggle) {
-        placeholderToggle.addEventListener('change', () => {
-            applyPlaceholderState(placeholderToggle.checked);
         });
     }
 
@@ -3577,6 +3630,7 @@
             } catch (error) {
                 // ignore storage errors
             }
+            applyShowAllProjectsSetting(validated.showAllProjects);
             applyDefaultAiProviderSelections({ force: true });
             closeUserSettingsModal();
             saveUserSettingsToDatabase(validated);
@@ -4426,10 +4480,6 @@
 
     document.title = 'OMP plugin';
     initDatasetSorting();
-    const storedPlaceholderState = loadPlaceholderState();
-    if (storedPlaceholderState !== null) {
-        applyPlaceholderState(storedPlaceholderState);
-    }
     const storedCollaborationState = loadCollaborationState();
     if (storedCollaborationState !== null && updateCollaborationVisibility()) {
         applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
