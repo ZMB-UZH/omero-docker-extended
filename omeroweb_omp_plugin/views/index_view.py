@@ -76,6 +76,237 @@ def _is_owned_by_user(obj, user_id):
         return False
 
 
+def _get_owner_username(obj):
+    if obj is None:
+        return ""
+    owner = None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+    except Exception:
+        owner = None
+    if owner is None:
+        try:
+            owner = obj.getOwner()
+        except Exception:
+            owner = None
+    if owner is None:
+        return ""
+    for attr in ("getOmeName", "getName", "getFirstName"):
+        try:
+            value = getattr(owner, attr)()
+        except Exception:
+            continue
+        if value:
+            return str(value)
+    try:
+        return str(owner.getId())
+    except Exception:
+        return ""
+
+
+def _get_permissions(obj):
+    try:
+        details = obj.getDetails()
+        permissions = details.getPermissions() if details else None
+        if permissions is not None:
+            return permissions
+    except Exception:
+        pass
+    for attr in ("getPermissions", "permissions"):
+        try:
+            permissions = getattr(obj, attr)()
+        except Exception:
+            continue
+        if permissions is not None:
+            return permissions
+    return None
+
+
+def _permissions_flag(permissions, attr):
+    try:
+        flag = getattr(permissions, attr)
+    except Exception:
+        return False
+    if callable(flag):
+        try:
+            return bool(flag())
+        except Exception:
+            return False
+    return bool(flag)
+
+
+def _has_read_write_permissions(obj):
+    permissions = _get_permissions(obj)
+    if permissions is None:
+        return False
+    return _permissions_flag(permissions, "isRead") and _permissions_flag(permissions, "isWrite")
+
+
+def _has_read_annotate_permissions(obj):
+    permissions = _get_permissions(obj)
+    if permissions is None:
+        return False
+    can_read = _permissions_flag(permissions, "isRead")
+    can_write = _permissions_flag(permissions, "isWrite")
+    can_annotate = _permissions_flag(permissions, "isAnnotate") or _permissions_flag(
+        permissions, "canAnnotate"
+    )
+    return can_read and can_annotate and not can_write
+
+
+def _iter_accessible_projects(conn):
+    if conn is None:
+        return
+    current_group = None
+    try:
+        current_group = conn.SERVICE_OPTS.getOmeroGroup()
+    except Exception:
+        pass
+    try:
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        try:
+            for proj in conn.getObjects("Project"):
+                yield proj
+            return
+        except Exception as exc:
+            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", exc)
+        try:
+            for proj in conn.getObjects("Project", opts={"group": "-1"}):
+                yield proj
+            return
+        except Exception as exc:
+            logger.warning("Failed to query projects with opts group=-1: %s", exc)
+    finally:
+        if current_group is not None:
+            try:
+                conn.SERVICE_OPTS.setOmeroGroup(current_group)
+            except Exception:
+                pass
+    try:
+        for proj in conn.getObjects("Project"):
+            yield proj
+        return
+    except Exception as exc:
+        logger.warning("Failed to query projects in current group: %s", exc)
+    try:
+        for proj in conn.listProjects():
+            yield proj
+    except Exception as exc:
+        logger.warning("Failed to list projects: %s", exc)
+        return
+
+
+def _iter_member_groups(conn):
+    if conn is None:
+        return []
+    try:
+        groups = conn.getGroupsMemberOf()
+        if groups:
+            return list(groups)
+    except Exception:
+        pass
+    try:
+        user = conn.getUser()
+        if user is not None:
+            groups = user.getGroups()
+            if groups:
+                return list(groups)
+    except Exception:
+        pass
+    return []
+
+
+def _group_member_count(conn, group):
+    for attr in ("getMemberCount", "getMembers", "getExperimenters", "getExperimenterIds"):
+        try:
+            value = getattr(group, attr)()
+        except Exception:
+            continue
+        if value is None:
+            continue
+        if attr == "getMemberCount":
+            try:
+                return int(value)
+            except Exception:
+                continue
+        try:
+            return len(list(value))
+        except Exception:
+            continue
+    group_id = get_id(group)
+    if group_id is None:
+        return 0
+    try:
+        members = list(conn.getObjects("Experimenter", opts={"group": str(group_id)}))
+        return len(members)
+    except Exception:
+        return 0
+
+
+def _group_has_other_members(conn, group):
+    count = _group_member_count(conn, group)
+    return count > 1
+
+
+def _group_is_read_write(group):
+    permissions = _get_permissions(group)
+    if permissions is None:
+        return False
+    return _permissions_flag(permissions, "isRead") and _permissions_flag(permissions, "isWrite")
+
+
+def _group_is_read_annotate(group):
+    permissions = _get_permissions(group)
+    if permissions is None:
+        return False
+    can_read = _permissions_flag(permissions, "isRead")
+    can_write = _permissions_flag(permissions, "isWrite")
+    can_annotate = _permissions_flag(permissions, "isAnnotate") or _permissions_flag(
+        permissions, "canAnnotate"
+    )
+    return can_read and can_annotate and not can_write
+
+
+def _has_collaboration_groups(conn):
+    for group in _iter_member_groups(conn):
+        if not _group_has_other_members(conn, group):
+            continue
+        if _group_is_read_write(group) or _group_is_read_annotate(group):
+            return True
+    return False
+
+
+def _collect_project_payload(conn, user_id):
+    owned_projects = []
+    collab_projects = []
+    annotate_projects = []
+    collab_available = _has_collaboration_groups(conn)
+    try:
+        for proj in _iter_accessible_projects(conn):
+            pid = get_id(proj)
+            pname = get_text(proj.getName())
+            if pid is None:
+                continue
+            entry = {"id": str(pid), "name": pname}
+            if _is_owned_by_user(proj, user_id):
+                owned_projects.append(entry)
+            elif _has_read_write_permissions(proj):
+                owner_name = _get_owner_username(proj) or "Unknown user"
+                collab_projects.append({**entry, "owner": owner_name, "access": "read_write"})
+            elif _has_read_annotate_permissions(proj):
+                owner_name = _get_owner_username(proj) or "Unknown user"
+                annotate_projects.append({**entry, "owner": owner_name, "access": "read_annotate"})
+    except Exception as exc:
+        logger.exception("Error listing projects: %s", exc)
+    return {
+        "owned": owned_projects,
+        "collab": collab_projects,
+        "collab_annotate": annotate_projects,
+        "collab_available": collab_available,
+    }
+
+
 def _get_owned_project(conn, project_id, user_id):
     try:
         project = conn.getObject("Project", int(project_id))
@@ -111,6 +342,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
                 "messages_json": json.dumps(messages.index_messages()),
                 "is_root_user": is_root_user,
+                "user_id": user_id,
                 "ai_provider_options_json": json.dumps(list_ai_provider_options()),
                 "project_list_url": reverse("omeroweb_omp_plugin_projects"),
             }
@@ -121,15 +353,7 @@ def index(request, conn=None, url=None, **kwargs):
         # ----------------------------------------------------
         # Load projects
         # ----------------------------------------------------
-        projects = []
-        try:
-            for proj in conn.listProjects():
-                pid = get_id(proj)
-                pname = get_text(proj.getName())
-                if _is_owned_by_user(proj, user_id):
-                    projects.append((str(pid), pname))
-        except Exception as e:
-            logger.exception("Error listing projects: %s", e)
+        projects = _collect_project_payload(conn, user_id)
 
         # ----------------------------------------------------
         # LIST DATASETS - NO RATE LIMIT (read-only, just listing)
@@ -614,6 +838,7 @@ def index(request, conn=None, url=None, **kwargs):
                 "messages_json": json.dumps(
                     messages.build_message_payload(messages.PREVIEW_MESSAGE_NAMES)
                 ),
+                "user_id": user_id,
             }
 
             return render(
@@ -639,13 +864,5 @@ def index(request, conn=None, url=None, **kwargs):
 @login_required()
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
-    projects = []
-    try:
-        for proj in conn.listProjects():
-            pid = get_id(proj)
-            pname = get_text(proj.getName())
-            if _is_owned_by_user(proj, user_id):
-                projects.append((str(pid), pname))
-    except Exception as exc:
-        logger.exception("Error listing projects: %s", exc)
-    return JsonResponse(projects, safe=False)
+    payload = _collect_project_payload(conn, user_id)
+    return JsonResponse(payload)
