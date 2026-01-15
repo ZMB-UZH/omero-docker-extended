@@ -309,10 +309,12 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            max-height: var(--project-dropdown-max-height, 600px);
         }
         #project_select_dropdown .project-select-dropdown__list {
             flex: 1 1 auto;
             min-height: 0;
+            max-height: calc(var(--project-dropdown-max-height, 600px) - 36px);
             overflow-y: auto;
             scrollbar-gutter: stable;
             scrollbar-width: thin;
@@ -335,6 +337,9 @@
             color: #6b7280;
             background: #f9fafb;
             border-top: 1px solid #e5e7eb;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .project-option,
         #project_select_dropdown > div,
@@ -1194,7 +1199,7 @@
                 <div id="project_select_dropdown"
                                             style="display:none; position:absolute; left:0; right:0; top:100%;
                                             background:#fff; border:1px solid #007bff; border-top:none;
-                                            max-height:600px; overflow:hidden; z-index:1000; border-radius:0 0 6px 6px;">
+                                            z-index:1000; border-radius:0 0 6px 6px;">
                                 </div>
                                 {{ projects|json_script:"project-data" }}
                             </div>
