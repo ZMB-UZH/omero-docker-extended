@@ -4141,9 +4141,6 @@
                 clearSelectedFiles();
                 clearProjectSelection();
                 clearSpecialUploadSelection();
-                if (collaborationToggle?.checked) {
-                    applyCollaborationState(false, { persist: true, refresh: true });
-                }
                 if (!isUploading && !hasActiveImport()) {
                     clearImportState();
                     setStatus('');
