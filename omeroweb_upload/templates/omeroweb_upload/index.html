@@ -191,11 +191,6 @@
         .upload-actions__buttons .step-btn {
             min-width: auto;
         }
-        .upload-actions__buttons .step-btn.is-hidden {
-            display: inline-flex !important;
-            visibility: hidden;
-            pointer-events: none;
-        }
         .upload-actions .file-input-hidden {
             display: none;
         }
@@ -231,6 +226,14 @@
         }
         .sem-edx-instructions__text {
             font-weight: 700;
+        }
+        .sem-edx-instructions__row:not(.sem-edx-instructions__row--secondary) .sem-edx-instructions__text {
+            --sem-edx-indent: 2.4ch;
+            padding-left: var(--sem-edx-indent);
+            text-indent: calc(var(--sem-edx-indent) * -1);
+        }
+        .sem-edx-instructions__row--secondary .sem-edx-instructions__text {
+            padding-left: 2.4ch;
         }
         .project-select-row {
             display: flex;
@@ -2583,29 +2586,13 @@
                 setSemEdxInstructionsStep(1);
                 updateSemEdxStepControls(false);
             }
-            if (compatibilitySection) {
-                compatibilitySection.style.display = isSemEdx ? 'none' : '';
-            }
             setProjectSelectionVisibility(!value);
             if (isSemEdx) {
-                if (!semEdxModeActive) {
-                    const pausedState = loadCompatibilityPausedState();
-                    if (!isInitial || pausedState === null) {
-                        saveCompatibilityPausedState(isCompatibilityEnabled());
-                    }
-                }
-                if (isCompatibilityEnabled()) {
-                    applyCompatibilityState(false);
-                }
                 semEdxModeActive = true;
                 setSemEdxInstructionsStep(1);
                 setSemEdxAssociationMode('automatic');
             } else {
                 if (semEdxModeActive) {
-                    const pausedState = loadCompatibilityPausedState();
-                    if (pausedState !== null) {
-                        applyCompatibilityState(pausedState);
-                    }
                     clearSelectedFiles();
                 }
                 semEdxModeActive = false;
@@ -3026,9 +3013,6 @@
             if (!userSettingsOverlay) return;
             userSettingsOverlay.style.display = 'flex';
             userSettingsOverlay.setAttribute('aria-hidden', 'false');
-            if (userSettingsBatchInput) {
-                userSettingsBatchInput.focus();
-            }
         }
 
         function closeUserSettingsModal() {
@@ -3713,9 +3697,7 @@
             fileTree.innerHTML = '';
             fileTree.classList.add('sem-edx-associations');
 
-            if (semEdxAssociationMode === 'automatic') {
-                ensureSemEdxAutomaticAssociations();
-            }
+            ensureSemEdxAutomaticAssociations();
 
             const toggleWrapper = document.createElement('div');
             toggleWrapper.classList.add('sem-edx-mode-toggle');
@@ -3786,7 +3768,7 @@
                 manualPanel.appendChild(empty);
             } else {
                 const tree = buildTree(imageEntries);
-                const associations = semEdxAssociationMode === 'automatic' ? semEdxAssociationCache : null;
+                const associations = semEdxAssociationCache;
                 manualPanel.appendChild(renderSemEdxManualTree(tree, 0, '', associations));
             }
 
