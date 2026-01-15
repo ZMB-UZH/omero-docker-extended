@@ -204,6 +204,25 @@
             font-weight: 700;
             color: #007bff;
             text-align: left;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .sem-edx-instructions__row {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            column-gap: 10px;
+            align-items: start;
+            width: 100%;
+        }
+        .sem-edx-instructions__label {
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .sem-edx-instructions__row--secondary .sem-edx-instructions__label {
+            opacity: 0;
+        }
+        .sem-edx-instructions__text {
+            font-weight: 700;
         }
         .project-select-row {
             display: flex;
@@ -574,6 +593,57 @@
             gap: 2px;
             flex: 1;
             min-height: 0;
+        }
+        .file-tree.sem-edx-associations {
+            gap: 12px;
+        }
+        .sem-edx-mode-toggle {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+        .sem-edx-association-table {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .sem-edx-association-table .tree-header,
+        .sem-edx-association-table .tree-row {
+            grid-template-columns: minmax(240px, 1fr) minmax(180px, 1fr);
+            column-gap: 16px;
+        }
+        .sem-edx-association-table .tree-header {
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
+        }
+        .sem-edx-association-table .tree-row {
+            padding: 6px 6px;
+        }
+        .sem-edx-association-table .tree-row:hover {
+            background: #f8fafc;
+        }
+        .sem-edx-association-table .tree-file-name {
+            font-weight: 500;
+        }
+        .sem-edx-association-table .sem-edx-file-row {
+            border-bottom: 1px dashed #cbd5f5;
+        }
+        .sem-edx-association-table .tree-name-cell {
+            padding-left: calc(var(--depth, 0) * 18px);
+        }
+        .sem-edx-association-table .tree-spacer {
+            width: 22px;
+            height: 22px;
+            display: inline-block;
+        }
+        .sem-edx-association-table .tree-meta {
+            font-size: 0.8rem;
+        }
+        .sem-edx-association-table .sem-edx-empty {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            text-align: center;
+            padding: 12px 0;
         }
         .file-tree:empty {
             align-items: center;
@@ -1234,7 +1304,16 @@
                     </div>
                 </div>
                 <div id="sem_edx_instructions" class="sem-edx-instructions">
-                    INSTRUCTIONS: 1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders (preferred).
+                    <div class="sem-edx-instructions__row">
+                        <span class="sem-edx-instructions__label">INSTRUCTIONS:</span>
+                        <span class="sem-edx-instructions__text" id="sem_edx_instruction_primary"></span>
+                    </div>
+                    <div class="sem-edx-instructions__row sem-edx-instructions__row--secondary"
+                         id="sem_edx_instruction_secondary_row"
+                         style="display:none;">
+                        <span class="sem-edx-instructions__label">INSTRUCTIONS:</span>
+                        <span class="sem-edx-instructions__text" id="sem_edx_instruction_secondary"></span>
+                    </div>
                 </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
@@ -1327,6 +1406,20 @@
                             <span>Toggle "Yes" to show all projects in the expanded project selection dropdown menu.</span>
                         </div>
                     </div>
+                    <div class="user-setting-row">
+                        <div class="user-setting-input">
+                            <label>Remove "Clear all" button?</label>
+                            <div class="user-setting-toggle" role="group" aria-label="Remove Clear all button">
+                                <input type="radio" id="user_setting_remove_clear_all_no" name="user_setting_remove_clear_all" value="no">
+                                <label for="user_setting_remove_clear_all_no">No</label>
+                                <input type="radio" id="user_setting_remove_clear_all_yes" name="user_setting_remove_clear_all" value="yes">
+                                <label for="user_setting_remove_clear_all_yes">Yes</label>
+                            </div>
+                        </div>
+                        <div class="user-setting-description">
+                            <span>Toggle "Yes" to remove the button from the interface in case of accidental clicks.</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="user-settings-status" id="user_settings_status"></div>
                 <div class="user-settings-actions">
@@ -1389,6 +1482,8 @@
         const projectSelectWrapper = document.getElementById('project_select_wrapper');
         const projectSelectArrow = projectSelectWrapper?.querySelector('.project-select-arrow') || null;
         const projectSelectDisplay = document.getElementById('project_select_display');
+        const projectSelectRow = document.querySelector('.project-select-row');
+        const projectSelectGroup = document.querySelector('.project-select-group');
         const specialUploadSelect = document.getElementById('special_upload');
         const specialUploadInput = document.getElementById('special_upload_input');
         const specialUploadDropdown = document.getElementById('special_upload_dropdown');
@@ -1403,6 +1498,9 @@
         const collaborationSection = document.querySelector('.upload-utilities__collaboration');
         const compatibilitySection = document.querySelector('.upload-utilities__compatibility');
         const semEdxInstructions = document.getElementById('sem_edx_instructions');
+        const semEdxInstructionPrimary = document.getElementById('sem_edx_instruction_primary');
+        const semEdxInstructionSecondary = document.getElementById('sem_edx_instruction_secondary');
+        const semEdxInstructionSecondaryRow = document.getElementById('sem_edx_instruction_secondary_row');
         let isProjectRefreshInFlight = false;
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_USER_PROJECT_RESULTS = 15;
@@ -1436,6 +1534,8 @@
         const userSettingsBatchInput = document.getElementById('user_setting_batch_size');
         const userSettingShowAllNo = document.getElementById('user_setting_show_all_no');
         const userSettingShowAllYes = document.getElementById('user_setting_show_all_yes');
+        const userSettingRemoveClearAllNo = document.getElementById('user_setting_remove_clear_all_no');
+        const userSettingRemoveClearAllYes = document.getElementById('user_setting_remove_clear_all_yes');
         const userSettingsStatus = document.getElementById('user_settings_status');
         const compatibilityToggle = document.getElementById('compatibility_toggle');
 
@@ -1494,8 +1594,14 @@
         let activeSpecialUploadIndex = -1;
         let semEdxModeActive = false;
         let semEdxInstructionStep = 1;
-        const semEdxStep1Text = 'INSTRUCTIONS: 1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders (preferred).';
-        const semEdxStep2Text = 'INSTRUCTIONS: 2) Confirm or manually edit the associations between SEM images and spectra files. Multiple txt files can be appended to a single image.';
+        const semEdxStep1Lines = [
+            '1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders (preferred).',
+        ];
+        const semEdxStep2Lines = [
+            '2) Confirm or manually edit the associations between SEM images and spectra files.',
+            'Multiple txt files can be appended to a single image.',
+        ];
+        let semEdxAssociationMode = 'automatic';
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -2361,16 +2467,59 @@
             return true;
         }
 
+        function setSemEdxInstructionLines(lines = []) {
+            if (!semEdxInstructions) return;
+            const primaryLine = lines[0] || '';
+            const secondaryLine = lines[1] || '';
+            if (semEdxInstructionPrimary) {
+                semEdxInstructionPrimary.textContent = primaryLine;
+            }
+            if (semEdxInstructionSecondary) {
+                semEdxInstructionSecondary.textContent = secondaryLine;
+            }
+            if (semEdxInstructionSecondaryRow) {
+                semEdxInstructionSecondaryRow.style.display = secondaryLine ? 'grid' : 'none';
+            }
+        }
+
         function setSemEdxInstructionsStep(step) {
             semEdxInstructionStep = step;
             if (!semEdxInstructions) return;
-            semEdxInstructions.textContent = step === 2 ? semEdxStep2Text : semEdxStep1Text;
+            setSemEdxInstructionLines(step === 2 ? semEdxStep2Lines : semEdxStep1Lines);
+            refreshFileList();
         }
 
         function updateNextStepVisibility(isSemEdxReady) {
             if (!nextStepBtn) return;
             const shouldShow = isSemEdxSelected() && (semEdxInstructionStep > 1 || isSemEdxReady);
             nextStepBtn.classList.toggle('is-hidden', !shouldShow);
+        }
+
+        function setProjectSelectionVisibility(show) {
+            const shouldShow = !!show;
+            if (projectSelectRow) {
+                projectSelectRow.style.display = shouldShow ? '' : 'none';
+            }
+            if (projectSelectGroup) {
+                projectSelectGroup.style.display = shouldShow ? '' : 'none';
+            }
+            if (projectSelectInput) {
+                projectSelectInput.disabled = !shouldShow;
+            }
+            if (projectSelect) {
+                projectSelect.disabled = !shouldShow;
+            }
+            if (projectRefreshBtn) {
+                projectRefreshBtn.disabled = !shouldShow;
+            }
+            if (!shouldShow) {
+                closeProjectDropdown(false);
+            }
+        }
+
+        function setSemEdxAssociationMode(mode) {
+            semEdxAssociationMode = mode === 'manual' ? 'manual' : 'automatic';
+            refreshFileList();
         }
 
         function applySpecialUploadMode(value, options = {}) {
@@ -2390,6 +2539,7 @@
             if (compatibilitySection) {
                 compatibilitySection.style.display = isSemEdx ? 'none' : '';
             }
+            setProjectSelectionVisibility(!value);
             if (isSemEdx) {
                 if (!semEdxModeActive) {
                     const pausedState = loadCompatibilityPausedState();
@@ -2402,6 +2552,7 @@
                 }
                 semEdxModeActive = true;
                 setSemEdxInstructionsStep(1);
+                setSemEdxAssociationMode('automatic');
             } else {
                 if (semEdxModeActive) {
                     const pausedState = loadCompatibilityPausedState();
@@ -2622,6 +2773,7 @@
         const userSettingsDefaults = {
             uploadBatchFiles,
             showAllProjects: false,
+            removeClearAll: false,
         };
         const csrfTokenName = 'csrftoken';
 
@@ -2730,6 +2882,18 @@
             }
         }
 
+        function applyClearAllSetting(enabled) {
+            const removeClearAll = !!enabled;
+            if (userSettingRemoveClearAllYes && userSettingRemoveClearAllNo) {
+                userSettingRemoveClearAllYes.checked = removeClearAll;
+                userSettingRemoveClearAllNo.checked = !removeClearAll;
+            }
+            if (clearAllBtn) {
+                clearAllBtn.disabled = removeClearAll;
+                clearAllBtn.classList.toggle('is-hidden', removeClearAll);
+            }
+        }
+
         function applyUserSettings(settings) {
             const batchSize = settings?.uploadBatchFiles;
             if (Number.isInteger(batchSize)) {
@@ -2739,6 +2903,7 @@
                 userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
             }
             applyShowAllProjectsSetting(settings?.showAllProjects, { refresh: false });
+            applyClearAllSetting(settings?.removeClearAll);
         }
 
         function resetUserSettingsToDefaults() {
@@ -2747,6 +2912,7 @@
                 userSettingsBatchInput.value = `${currentUploadBatchFiles}`;
             }
             applyShowAllProjectsSetting(userSettingsDefaults.showAllProjects, { refresh: false });
+            applyClearAllSetting(userSettingsDefaults.removeClearAll);
             clearUserSettingErrors();
         }
 
@@ -2766,11 +2932,12 @@
             const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
             setUserSettingError(userSettingsBatchInput, !isValid);
             const showAllProjects = !!userSettingShowAllYes?.checked;
+            const removeClearAll = !!userSettingRemoveClearAllYes?.checked;
             if (!isValid) {
                 showNonBlockingModal(messages.formattingErrors);
                 return null;
             }
-            return { uploadBatchFiles: value, showAllProjects };
+            return { uploadBatchFiles: value, showAllProjects, removeClearAll };
         }
 
         function saveUserSettingsToDatabase(settings, options = {}) {
@@ -3101,9 +3268,188 @@
             return list;
         }
 
+        function getSemEdxImageEntries(entries) {
+            return entries.filter((entry) => {
+                const rawPath = getEntryPath(entry);
+                if (!rawPath) return false;
+                const name = rawPath.split('/').pop() || '';
+                return !name.toLowerCase().endsWith('.txt');
+            });
+        }
+
+        function renderSemEdxManualTree(node, depth = 0) {
+            const list = document.createElement('ul');
+            node.children.forEach((child) => {
+                if (child.totalFiles < 1) {
+                    return;
+                }
+                const item = document.createElement('li');
+                item.classList.add('tree-node');
+
+                const row = document.createElement('div');
+                row.classList.add('tree-row');
+                row.style.setProperty('--depth', depth);
+
+                const nameCell = document.createElement('div');
+                nameCell.classList.add('tree-name-cell');
+
+                const spacer = document.createElement('span');
+                spacer.classList.add('tree-spacer');
+
+                const icon = createIcon('folder');
+                const label = document.createElement('span');
+                label.classList.add('tree-name');
+                label.textContent = child.name;
+
+                const itemCount = child.totalFiles;
+                const meta = document.createElement('span');
+                meta.classList.add('tree-meta');
+                meta.textContent = `${itemCount} file${itemCount === 1 ? '' : 's'}`;
+
+                nameCell.appendChild(spacer);
+                nameCell.appendChild(icon);
+                nameCell.appendChild(label);
+                nameCell.appendChild(meta);
+
+                const appendedCell = document.createElement('div');
+
+                row.appendChild(nameCell);
+                row.appendChild(appendedCell);
+
+                const childrenList = renderSemEdxManualTree(child, depth + 1);
+
+                item.appendChild(row);
+                item.appendChild(childrenList);
+                list.appendChild(item);
+            });
+
+            node.files
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach((file) => {
+                    const item = document.createElement('li');
+                    item.classList.add('tree-node');
+                    const row = document.createElement('div');
+                    row.classList.add('tree-row', 'sem-edx-file-row');
+                    row.style.setProperty('--depth', depth);
+
+                    const nameCell = document.createElement('div');
+                    nameCell.classList.add('tree-name-cell');
+
+                    const spacer = document.createElement('span');
+                    spacer.classList.add('tree-spacer');
+
+                    const icon = createIcon('file');
+                    const label = document.createElement('span');
+                    label.classList.add('tree-file-name');
+                    label.textContent = file.name;
+
+                    const appendedCell = document.createElement('div');
+
+                    nameCell.appendChild(spacer);
+                    nameCell.appendChild(icon);
+                    nameCell.appendChild(label);
+
+                    row.appendChild(nameCell);
+                    row.appendChild(appendedCell);
+                    item.appendChild(row);
+                    list.appendChild(item);
+                });
+
+            return list;
+        }
+
+        function renderSemEdxAssociations() {
+            if (!fileTree) return;
+            fileTree.innerHTML = '';
+            fileTree.classList.add('sem-edx-associations');
+
+            const toggleWrapper = document.createElement('div');
+            toggleWrapper.classList.add('sem-edx-mode-toggle');
+            const toggle = document.createElement('div');
+            toggle.classList.add('user-setting-toggle');
+            toggle.setAttribute('role', 'group');
+            toggle.setAttribute('aria-label', 'SEM EDX association mode');
+
+            const autoId = 'sem_edx_mode_auto';
+            const manualId = 'sem_edx_mode_manual';
+
+            const autoInput = document.createElement('input');
+            autoInput.type = 'radio';
+            autoInput.id = autoId;
+            autoInput.name = 'sem_edx_mode';
+            autoInput.value = 'automatic';
+            autoInput.checked = semEdxAssociationMode === 'automatic';
+
+            const autoLabel = document.createElement('label');
+            autoLabel.setAttribute('for', autoId);
+            autoLabel.textContent = 'Automatic';
+
+            const manualInput = document.createElement('input');
+            manualInput.type = 'radio';
+            manualInput.id = manualId;
+            manualInput.name = 'sem_edx_mode';
+            manualInput.value = 'manual';
+            manualInput.checked = semEdxAssociationMode === 'manual';
+
+            const manualLabel = document.createElement('label');
+            manualLabel.setAttribute('for', manualId);
+            manualLabel.textContent = 'Manual';
+
+            autoInput.addEventListener('change', () => {
+                if (autoInput.checked) {
+                    setSemEdxAssociationMode('automatic');
+                }
+            });
+            manualInput.addEventListener('change', () => {
+                if (manualInput.checked) {
+                    setSemEdxAssociationMode('manual');
+                }
+            });
+
+            toggle.appendChild(autoInput);
+            toggle.appendChild(autoLabel);
+            toggle.appendChild(manualInput);
+            toggle.appendChild(manualLabel);
+            toggleWrapper.appendChild(toggle);
+            fileTree.appendChild(toggleWrapper);
+
+            if (semEdxAssociationMode !== 'manual') {
+                return;
+            }
+
+            const manualPanel = document.createElement('div');
+            manualPanel.classList.add('sem-edx-association-table');
+
+            const header = document.createElement('div');
+            header.classList.add('tree-header');
+            header.innerHTML = `
+                <span>IMAGE FILES</span>
+                <span>APPENDED TXT</span>
+            `;
+            manualPanel.appendChild(header);
+
+            const imageEntries = getSemEdxImageEntries(pendingFiles);
+            if (!imageEntries.length) {
+                const empty = document.createElement('div');
+                empty.classList.add('sem-edx-empty');
+                empty.textContent = 'No image files available.';
+                manualPanel.appendChild(empty);
+            } else {
+                const tree = buildTree(imageEntries);
+                manualPanel.appendChild(renderSemEdxManualTree(tree));
+            }
+
+            fileTree.appendChild(manualPanel);
+        }
+
         function refreshFileList() {
             fileTree.innerHTML = '';
+            fileTree.classList.remove('sem-edx-associations');
             fileInput.classList.toggle('has-files', pendingFiles.length > 0);
+            if (isSemEdxSelected() && semEdxInstructionStep > 1) {
+                renderSemEdxAssociations();
+                return;
+            }
             if (!pendingFiles.length) {
                 return;
             }
@@ -4486,6 +4832,7 @@
                 if (!validated) return;
                 currentUploadBatchFiles = validated.uploadBatchFiles;
                 applyShowAllProjectsSetting(validated.showAllProjects);
+                applyClearAllSetting(validated.removeClearAll);
                 if (storage) {
                     try {
                         storage.setItem(userSettingsStorageKey, JSON.stringify(validated));
