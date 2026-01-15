@@ -757,6 +757,8 @@ def _open_session_connection(session_key: str, host: str, port: int):
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
+    if hasattr(conn, "_closeSession"):
+        conn._closeSession = False
     return conn
 
 
@@ -1249,23 +1251,15 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     
-    if result.returncode != 0:
-        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-        return {
-            "status": status,
-            "relative_path": relative_path,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "details": details,
-        }
-
-
+    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    if not details:
+        details = "Compatibility check succeeded." if status == "compatible" else "Compatibility check failed."
     return {
-        "status": "compatible",
+        "status": status,
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": "Compatibility check succeeded.",
+        "details": details,
     }
 
 
@@ -1540,6 +1534,8 @@ def _process_import_job(job_id: str):
                     continue
                 if not entry.get("relative_path"):
                     continue
+                if entry.get("import_skip"):
+                    continue
                 entries_to_import.append(
                     {
                         "index": index,
@@ -1663,7 +1659,12 @@ def _process_import_job(job_id: str):
                         _save_job(job)
                     finally:
                         try:
-                            conn.close()
+                            conn.close(hard=False)
+                        except TypeError:
+                            try:
+                                conn.close()
+                            except Exception:
+                                pass
                         except Exception:
                             pass
                 except Exception:
@@ -1848,6 +1849,8 @@ def _start_upload(request, conn):
                 "size": size,
                 "status": "pending",
                 "errors": [],
+                "compatibility_skip": bool(entry.get("compatibility_skip")),
+                "import_skip": bool(entry.get("import_skip")),
             }
         )
 
