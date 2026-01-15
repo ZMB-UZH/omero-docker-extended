@@ -737,12 +737,28 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-def _run_omero_cli(cmd):
+def _run_omero_cli(cmd, env=None):
+    """
+    Run OMERO CLI command with optional environment variables.
+    
+    Args:
+        cmd: Command list to execute
+        env: Optional environment dict. If None, inherits parent environment by copying os.environ.
+    
+    Returns:
+        subprocess.CompletedProcess: Result of the command execution
+    
+    Note:
+        CRITICAL: Always pass os.environ.copy() as env to ensure session information
+        (OMERO_USERDIR, OMERO_SESSIONDIR) is available to subprocess. Without this,
+        CLI commands will fail to find session files and may log out the user.
+    """
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=False,
+        env=env if env is not None else os.environ.copy(),
     )
 
 
@@ -760,7 +776,9 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
-    result = _run_omero_cli(cmd)
+    # CRITICAL FIX: Pass environment to ensure session info is available to subprocess
+    env = os.environ.copy()
+    result = _run_omero_cli(cmd, env=env)
     return result.returncode == 0, result.stdout, result.stderr
 
 
@@ -792,9 +810,33 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
 
 
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
+    """
+    Attach a text file to an image using OMERO CLI commands.
+    
+    CRITICAL: This function creates three subprocess calls to OMERO CLI. Each must have
+    environment variables (especially OMERO_USERDIR/OMERO_SESSIONDIR) to find session files.
+    Without this, the CLI will fail to authenticate and may log out the user.
+    
+    Args:
+        session_key: OMERO session key for authentication
+        host: OMERO server host
+        port: OMERO server port
+        image_id: Target image ID
+        txt_path: Path to text file to attach
+    
+    Returns:
+        True on success
+    
+    Raises:
+        RuntimeError: If any CLI command fails
+    """
+    # Prepare environment once for all CLI commands - CRITICAL FIX
+    env = os.environ.copy()
+    
+    # Step 1: Upload the text file as OriginalFile
     upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
     upload_cmd.append(str(txt_path))
-    upload_result = _run_omero_cli(upload_cmd)
+    upload_result = _run_omero_cli(upload_cmd, env=env)
     if upload_result.returncode != 0:
         raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
     original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
@@ -803,9 +845,10 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
     if not original_id:
         raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
 
+    # Step 2: Create FileAnnotation
     annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
     annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-    annotation_result = _run_omero_cli(annotation_cmd)
+    annotation_result = _run_omero_cli(annotation_cmd, env=env)
     if annotation_result.returncode != 0:
         raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
     annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
@@ -814,6 +857,7 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
     if not annotation_id:
         raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
 
+    # Step 3: Link FileAnnotation to Image
     link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
     link_cmd.extend(
         [
@@ -822,7 +866,7 @@ def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, 
             f"child=FileAnnotation:{annotation_id}",
         ]
     )
-    link_result = _run_omero_cli(link_cmd)
+    link_result = _run_omero_cli(link_cmd, env=env)
     if link_result.returncode != 0:
         raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
     link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
