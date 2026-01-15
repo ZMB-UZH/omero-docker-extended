@@ -3,6 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <title>Upload</title>
+    <script>
+        (() => {
+            try {
+                const userId = {{ user_id|default:"null" }};
+                const storageKeySuffix = userId ? `_u${userId}` : '';
+                const storageKey = `omeroweb_upload_special_upload_selection_v1${storageKeySuffix}`;
+                const raw = window.localStorage?.getItem(storageKey);
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                if (parsed?.value) {
+                    document.documentElement.classList.add('special-upload-active');
+                }
+            } catch (error) {
+                // Ignore storage access errors.
+            }
+        })();
+    </script>
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -263,6 +280,14 @@
             position: relative;
             z-index: 1001;
         }
+        .special-upload-active .project-select-row,
+        .special-upload-active .project-select-group {
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .special-upload-active .project-refresh-btn {
+            display: none !important;
+        }
         .project-select-label {
             font-size: 15px;
             font-weight: 600;
@@ -499,10 +524,11 @@
         }
         .upload-intro-row p {
             margin: 0;
+            text-align: left;
+            justify-self: start;
         }
         .upload-card.sem-edx-step-two .upload-actions__pickers {
-            visibility: hidden;
-            pointer-events: none;
+            display: none;
         }
         .upload-actions input[type="file"]::file-selector-button,
         .upload-actions input[type="file"]::-webkit-file-upload-button {
@@ -2610,6 +2636,11 @@
         function applySpecialUploadMode(value, options = {}) {
             const { isInitial = false } = options;
             const isSemEdx = value === 'sem_edx_spectra';
+            const shouldHideProjectSelection = !!value;
+            document.documentElement.classList.toggle('special-upload-active', shouldHideProjectSelection);
+            if (document.body) {
+                document.body.classList.toggle('special-upload-active', shouldHideProjectSelection);
+            }
             if (semEdxInstructions) {
                 semEdxInstructions.style.display = isSemEdx ? 'flex' : 'none';
             }
