@@ -191,6 +191,10 @@
         .upload-actions__buttons .step-btn {
             min-width: auto;
         }
+        .upload-actions__buttons .step-btn.is-hidden {
+            display: inline-flex !important;
+            visibility: hidden;
+        }
         .upload-actions .file-input-hidden {
             display: none;
         }
@@ -489,6 +493,10 @@
         }
         .upload-intro-row p {
             margin: 0;
+        }
+        .upload-card.sem-edx-step-two .upload-actions__pickers {
+            visibility: hidden;
+            pointer-events: none;
         }
         .upload-actions input[type="file"]::file-selector-button,
         .upload-actions input[type="file"]::-webkit-file-upload-button {
@@ -2492,6 +2500,15 @@
                 updateSemEdxStepControls(false);
                 return true;
             }
+            if (semEdxInstructionStep > 1) {
+                if (valid) {
+                    setStatus('');
+                } else {
+                    setStatus('You need to add at least 1 image and 1 txt file in the base path and per folder.', 'error');
+                }
+                updateSemEdxStepControls(valid);
+                return true;
+            }
             if (valid) {
                 setStatus('Files added successfully.', 'success');
             } else {
@@ -2522,12 +2539,15 @@
             setSemEdxInstructionLines(step === 2 ? semEdxStep2Lines : semEdxStep1Lines);
             refreshFileList();
             updateSemEdxStepControls(step > 1);
+            if (uploadCard) {
+                uploadCard.classList.toggle('sem-edx-step-two', isSemEdxSelected() && step > 1);
+            }
         }
 
         function updateSemEdxIntroVisibility() {
             if (!uploadIntroText) return;
             const shouldHide = isSemEdxSelected() && semEdxInstructionStep > 1;
-            uploadIntroText.style.display = shouldHide ? 'none' : '';
+            uploadIntroText.style.visibility = shouldHide ? 'hidden' : 'visible';
         }
 
         function updateSemEdxStepControls(isSemEdxReady) {
@@ -5121,7 +5141,7 @@
             nextStepBtn.addEventListener('click', () => {
                 if (!isSemEdxSelected()) return;
                 setSemEdxInstructionsStep(2);
-                updateSemEdxStepControls(true);
+                updateSemEdxStatus();
             });
         }
 
