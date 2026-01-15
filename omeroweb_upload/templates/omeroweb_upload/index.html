@@ -191,12 +191,15 @@
         .upload-actions .file-input-hidden {
             display: none;
         }
+        .is-hidden {
+            display: none !important;
+        }
         .sem-edx-instructions {
             display: none;
             align-items: center;
             justify-content: flex-start;
             width: 100%;
-            margin: 4px 0;
+            margin: 2px 0 0;
             font-size: 14px;
             font-weight: 700;
             color: #007bff;
@@ -558,7 +561,7 @@
             text-align: left;
         }
         .file-tree {
-            margin-top: 5px;
+            margin-top: 2px;
             text-align: left;
             padding: 12px;
             background: #ffffff;
@@ -1226,6 +1229,7 @@
                     </div>
                     <div class="upload-actions__buttons">
                         <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                        <button id="next-step-btn" type="button" class="is-hidden">Next step</button>
                         <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                     </div>
                 </div>
@@ -1371,6 +1375,7 @@
         const canUseDirectoryPicker = window.isSecureContext && typeof window.showDirectoryPicker === 'function';
         const canUseFolderInput = !!folderInput && ('webkitdirectory' in folderInput || 'directory' in folderInput);
         const uploadBtn = document.getElementById('upload-btn');
+        const nextStepBtn = document.getElementById('next-step-btn');
         const clearAllBtn = document.getElementById('clear-all-btn');
         const cancelUploadBtn = document.getElementById('cancel-upload-btn');
         const cancelImportBtn = document.getElementById('cancel-import-btn');
@@ -1488,6 +1493,9 @@
         ];
         let activeSpecialUploadIndex = -1;
         let semEdxModeActive = false;
+        let semEdxInstructionStep = 1;
+        const semEdxStep1Text = 'INSTRUCTIONS: 1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders (preferred).';
+        const semEdxStep2Text = 'INSTRUCTIONS: 2) Confirm or manually edit the associations between SEM images and spectra files. Multiple txt files can be appended to a single image.';
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -2335,11 +2343,13 @@
 
         function updateSemEdxStatus() {
             if (!isSemEdxSelected()) {
+                updateNextStepVisibility(false);
                 return false;
             }
             const { hasFiles, valid } = evaluateSemEdxFiles(pendingFiles);
             if (!hasFiles) {
                 setStatus('');
+                updateNextStepVisibility(false);
                 return true;
             }
             if (valid) {
@@ -2347,7 +2357,20 @@
             } else {
                 setStatus('You need to add at least 1 image and 1 txt file in the base path or per folder.', 'error');
             }
+            updateNextStepVisibility(valid);
             return true;
+        }
+
+        function setSemEdxInstructionsStep(step) {
+            semEdxInstructionStep = step;
+            if (!semEdxInstructions) return;
+            semEdxInstructions.textContent = step === 2 ? semEdxStep2Text : semEdxStep1Text;
+        }
+
+        function updateNextStepVisibility(isSemEdxReady) {
+            if (!nextStepBtn) return;
+            const shouldShow = isSemEdxSelected() && (semEdxInstructionStep > 1 || isSemEdxReady);
+            nextStepBtn.classList.toggle('is-hidden', !shouldShow);
         }
 
         function applySpecialUploadMode(value, options = {}) {
@@ -2355,6 +2378,14 @@
             const isSemEdx = value === 'sem_edx_spectra';
             if (semEdxInstructions) {
                 semEdxInstructions.style.display = isSemEdx ? 'flex' : 'none';
+            }
+            if (uploadBtn) {
+                uploadBtn.classList.toggle('is-hidden', !!value);
+            }
+            if (!value) {
+                semEdxInstructionStep = 1;
+                setSemEdxInstructionsStep(1);
+                updateNextStepVisibility(false);
             }
             if (compatibilitySection) {
                 compatibilitySection.style.display = isSemEdx ? 'none' : '';
@@ -2370,6 +2401,7 @@
                     applyCompatibilityState(false);
                 }
                 semEdxModeActive = true;
+                setSemEdxInstructionsStep(1);
             } else {
                 if (semEdxModeActive) {
                     const pausedState = loadCompatibilityPausedState();
@@ -2379,6 +2411,7 @@
                 }
                 semEdxModeActive = false;
                 setStatus('');
+                updateNextStepVisibility(false);
             }
             updateSemEdxStatus();
         }
@@ -3091,6 +3124,7 @@
             const { allowSelectInputs = true } = options;
             const candidates = [
                 uploadBtn,
+                nextStepBtn,
                 fileBtn,
                 folderBtn,
                 cancelUploadBtn,
@@ -4399,6 +4433,14 @@
                 if (index !== -1) {
                     setActiveSpecialUploadIndex(index, false);
                 }
+            });
+        }
+
+        if (nextStepBtn) {
+            nextStepBtn.addEventListener('click', () => {
+                if (!isSemEdxSelected()) return;
+                setSemEdxInstructionsStep(2);
+                updateNextStepVisibility(true);
             });
         }
 
