@@ -122,9 +122,10 @@
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" name="project" id="project_select" value="">
                         <div id="project_select_dropdown"
+                             class="project-select-dropdown"
                              style="display:none; position:absolute; left:0; right:0; top:100%;
                                     background:#fff; border:1px solid #007bff; border-top:none;
-                                    max-height:600px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
+                                    max-height:600px; overflow:hidden; z-index:1000; border-radius:0 0 6px 6px;">
                         </div>
                         {{ projects|json_script:"project-data" }}
                     </div>
@@ -852,6 +853,37 @@
     .project-select-wrapper {
         position: relative;
         width: 300px;
+    }
+    .project-select-dropdown {
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    }
+    .project-select-dropdown__list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+        scrollbar-width: thin;
+        scrollbar-color: #93c5fd transparent;
+    }
+    .project-select-dropdown__list::-webkit-scrollbar {
+        width: 8px;
+    }
+    .project-select-dropdown__list::-webkit-scrollbar-thumb {
+        background: #93c5fd;
+        border-radius: 999px;
+    }
+    .project-select-dropdown__list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .project-select-dropdown__status {
+        flex: 0 0 auto;
+        padding: 6px 12px;
+        font-size: 11px;
+        color: #6b7280;
+        background: #f9fafb;
+        border-top: 1px solid #e5e7eb;
     }
     .project-refresh-btn {
         position: relative;
@@ -3324,6 +3356,9 @@
         }
 
         projectSelectDropdown.innerHTML = '';
+        const listContainer = document.createElement('div');
+        listContainer.className = 'project-select-dropdown__list';
+        projectSelectDropdown.appendChild(listContainer);
 
         if (matches.length > 0) {
             matches.forEach((entry) => {
@@ -3355,14 +3390,12 @@
                 } else if (isAnnotateEntry(entry)) {
                     option.classList.add('is-collab-annotate');
                 }
-                projectSelectDropdown.appendChild(option);
+                listContainer.appendChild(option);
             });
         }
 
         const statusRow = document.createElement('div');
-        statusRow.style.padding = '6px 12px';
-        statusRow.style.fontSize = '11px';
-        statusRow.style.color = '#6b7280';
+        statusRow.className = 'project-select-dropdown__status';
         if (Number.isFinite(maxResults) && totalMatches > maxResults) {
             statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Type in the search box to narrow down the results.`;
         } else if (totalMatches > 0) {
