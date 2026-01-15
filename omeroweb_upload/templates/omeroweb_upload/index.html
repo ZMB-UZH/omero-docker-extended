@@ -191,6 +191,17 @@
         .upload-actions .file-input-hidden {
             display: none;
         }
+        .sem-edx-instructions {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin: 8px 0 10px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #007bff;
+            text-align: center;
+        }
         .project-select-row {
             display: flex;
             justify-content: flex-start;
@@ -1218,6 +1229,9 @@
                         <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
                     </div>
                 </div>
+                <div id="sem_edx_instructions" class="sem-edx-instructions">
+                    INSTRUCTIONS: 1) Add all SEM EDX image files and associated txt spectra. Can also be arranged in folders.
+                </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
                 <div id="status" class="status"></div>
             </div>
@@ -1382,6 +1396,8 @@
         const collaborationToggle = document.getElementById('collaboration_toggle');
         const projectRefreshBtn = document.getElementById('project_refresh_btn');
         const collaborationSection = document.querySelector('.upload-utilities__collaboration');
+        const compatibilitySection = document.querySelector('.upload-utilities__compatibility');
+        const semEdxInstructions = document.getElementById('sem_edx_instructions');
         let isProjectRefreshInFlight = false;
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_USER_PROJECT_RESULTS = 15;
@@ -1465,11 +1481,13 @@
         const collaborationToggleStorageKey = makeStorageKey('omeroweb_upload_collaboration_toggle_v1');
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
         const compatibilityToggleStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_v1');
+        const compatibilityPausedStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_paused_v1');
         const specialUploadOptions = [
             { value: '', label: 'No special method (clear selection)', isEmpty: true },
             { value: 'sem_edx_spectra', label: 'SEM EDX spectra' },
         ];
         let activeSpecialUploadIndex = -1;
+        let semEdxModeActive = false;
 
         function setStatus(message, type) {
             statusEl.textContent = message || '';
@@ -1835,6 +1853,27 @@
 
         function isCompatibilityEnabled() {
             return compatibilityToggle?.checked ?? false;
+        }
+
+        function saveCompatibilityPausedState(enabled) {
+            if (!storage) return;
+            try {
+                storage.setItem(compatibilityPausedStorageKey, JSON.stringify({ enabled: !!enabled }));
+            } catch (error) {
+                // Ignore storage failures.
+            }
+        }
+
+        function loadCompatibilityPausedState() {
+            if (!storage) return null;
+            try {
+                const raw = storage.getItem(compatibilityPausedStorageKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return typeof parsed?.enabled === 'boolean' ? parsed.enabled : null;
+            } catch (error) {
+                return null;
+            }
         }
 
         function applyCollaborationState(enabled, options = {}) {
@@ -2257,8 +2296,95 @@
             )) || null;
         }
 
+        function isSemEdxSelected() {
+            return specialUploadSelect?.value === 'sem_edx_spectra';
+        }
+
+        function evaluateSemEdxFiles(entries) {
+            if (!entries.length) {
+                return { hasFiles: false, valid: true };
+            }
+            const groups = new Map();
+            entries.forEach((entry) => {
+                const rawPath = getEntryPath(entry);
+                if (!rawPath) return;
+                const parts = rawPath.split('/');
+                const fileName = parts.pop() || '';
+                const dirKey = parts.join('/');
+                if (!groups.has(dirKey)) {
+                    groups.set(dirKey, { txt: 0, other: 0 });
+                }
+                const group = groups.get(dirKey);
+                const isTxt = fileName.toLowerCase().endsWith('.txt');
+                if (isTxt) {
+                    group.txt += 1;
+                } else {
+                    group.other += 1;
+                }
+            });
+            if (groups.size === 0) {
+                return { hasFiles: false, valid: true };
+            }
+            for (const group of groups.values()) {
+                if (group.txt < 1 || group.other < 1) {
+                    return { hasFiles: true, valid: false };
+                }
+            }
+            return { hasFiles: true, valid: true };
+        }
+
+        function updateSemEdxStatus() {
+            if (!isSemEdxSelected()) {
+                return false;
+            }
+            const { hasFiles, valid } = evaluateSemEdxFiles(pendingFiles);
+            if (!hasFiles) {
+                setStatus('');
+                return true;
+            }
+            if (valid) {
+                setStatus('Files added successfully.', 'success');
+            } else {
+                setStatus('You need to add at least 1 image and 1 txt file in the base path or per folder.', 'error');
+            }
+            return true;
+        }
+
+        function applySpecialUploadMode(value, options = {}) {
+            const { isInitial = false } = options;
+            const isSemEdx = value === 'sem_edx_spectra';
+            if (semEdxInstructions) {
+                semEdxInstructions.style.display = isSemEdx ? 'flex' : 'none';
+            }
+            if (compatibilitySection) {
+                compatibilitySection.style.display = isSemEdx ? 'none' : '';
+            }
+            if (isSemEdx) {
+                if (!semEdxModeActive) {
+                    const pausedState = loadCompatibilityPausedState();
+                    if (!isInitial || pausedState === null) {
+                        saveCompatibilityPausedState(isCompatibilityEnabled());
+                    }
+                }
+                if (isCompatibilityEnabled()) {
+                    applyCompatibilityState(false);
+                }
+                semEdxModeActive = true;
+            } else {
+                if (semEdxModeActive) {
+                    const pausedState = loadCompatibilityPausedState();
+                    if (pausedState !== null) {
+                        applyCompatibilityState(pausedState);
+                    }
+                }
+                semEdxModeActive = false;
+                setStatus('');
+            }
+            updateSemEdxStatus();
+        }
+
         function setSpecialUploadSelection(value, label, options = {}) {
-            const { persist = true } = options;
+            const { persist = true, modeOptions = {} } = options;
             if (specialUploadSelect) {
                 specialUploadSelect.value = value || '';
             }
@@ -2267,6 +2393,7 @@
                 specialUploadInput.dataset.selectedName = label || '';
             }
             updateSpecialUploadDisplay();
+            applySpecialUploadMode(value, modeOptions);
             if (persist) {
                 saveSpecialUploadSelection(value, label);
             }
@@ -2282,6 +2409,7 @@
                 specialUploadInput.dataset.selectedName = '';
             }
             updateSpecialUploadDisplay();
+            applySpecialUploadMode('');
             if (persist) {
                 saveSpecialUploadSelection('', '');
             }
@@ -2301,7 +2429,7 @@
                 return;
             }
             const label = stored.label || match.label;
-            setSpecialUploadSelection(match.value, label, { persist: false });
+            setSpecialUploadSelection(match.value, label, { persist: false, modeOptions: { isInitial: true } });
         }
 
         function renderSpecialUploadOptions(query = '') {
@@ -2668,6 +2796,7 @@
             fileInput.value = '';
             folderInput.value = '';
             refreshFileList();
+            updateSemEdxStatus();
         }
 
         function buildTree(entries) {
@@ -2771,6 +2900,7 @@
                 expandedNodes.clear();
             }
             refreshFileList();
+            updateSemEdxStatus();
         }
 
         function removeFileEntry(rawPath) {
@@ -3141,16 +3271,19 @@
         }
 
         function handleFiles(entries) {
-        const duplicates = findDuplicateRootNames(entries);
-        if (duplicates.size) {
-            showDuplicatePopup(
-                'Some of the selected items are already in the upload list.\n' + 
-                'Remove existing entries or rename them before uploading.'
-            );
-            return;
-        }
+            const duplicates = findDuplicateRootNames(entries);
+            if (duplicates.size) {
+                showDuplicatePopup(
+                    'Some of the selected items are already in the upload list.\n' +
+                    'Remove existing entries or rename them before uploading.'
+                );
+                return;
+            }
             pendingFiles = pendingFiles.concat(entries);
             refreshFileList();
+            if (updateSemEdxStatus()) {
+                return;
+            }
             if (hasActiveImport()) {
                 setStatus('Ready to upload. A previous import job is currently running.', 'success');
             } else {
