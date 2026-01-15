@@ -1,5 +1,5 @@
 from django.urls import path
-from .views.index_view import index, list_projects
+from .views.index_view import index, list_projects, root_status
 from .views.job_view import start_job, job_progress, start_acq_job, start_delete_all_job, start_delete_plugin_job
 from .views.delete_all_view import delete_all_keyvaluepairs
 from .views.delete_plugin_view import delete_plugin_keyvaluepairs
@@ -17,6 +17,7 @@ from .views.user_settings_view import save_settings
 urlpatterns = [
     path("", index, name="omeroweb_omp_plugin_index"),
     path("projects/", list_projects, name="omeroweb_omp_plugin_projects"),
+    path("root-status/", root_status, name="omeroweb_omp_plugin_root_status"),
     path("start_job/", start_job, name="omeroweb_omp_plugin_start_job"),
     path("progress/<str:job_id>/", job_progress, name="omeroweb_omp_plugin_job_progress"),
     path("start_acq_job/", start_acq_job, name="omeroweb_omp_plugin_start_acq_job"),

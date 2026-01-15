@@ -330,7 +330,6 @@ def index(request, conn=None, url=None, **kwargs):
 
     try:
         username = current_username(request, conn)
-        is_root_user = username == "root"
         user_id = _current_user_id(conn)
 
         def build_index_context(extra=None):
@@ -341,7 +340,6 @@ def index(request, conn=None, url=None, **kwargs):
                 "max_parsed_variables": MAX_PARSED_VARIABLES,
                 "max_variable_sets": MAX_VARIABLE_SET_ENTRIES,
                 "messages_json": json.dumps(messages.index_messages()),
-                "is_root_user": is_root_user,
                 "user_id": user_id,
                 "ai_provider_options_json": json.dumps(list_ai_provider_options()),
                 "project_list_url": reverse("omeroweb_omp_plugin_projects"),
@@ -866,3 +864,9 @@ def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
     return JsonResponse(payload)
+
+
+@login_required()
+def root_status(request, conn=None, url=None, **kwargs):
+    username = current_username(request, conn)
+    return JsonResponse({"is_root_user": username == "root"})
