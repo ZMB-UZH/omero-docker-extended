@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 import uuid
+import omero
 
 import portalocker
 
@@ -20,8 +21,9 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
-from omero.rtypes import rstring
+from omero.gateway import BlitzGateway
+from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI, FileAnnotationI, ImageAnnotationLinkI, OriginalFileI
+from omero.rtypes import rstring, rlong
 from omeroweb.decorators import login_required
 from typing import Optional
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
@@ -379,6 +381,37 @@ def _safe_relative_path(raw_name: str):
     return "/".join(parts)
 
 
+def _normalize_sem_edx_associations(raw_associations, normalized_entries):
+    if not isinstance(raw_associations, dict):
+        return {}
+    available_paths = {
+        entry.get("relative_path"): entry
+        for entry in normalized_entries
+        if isinstance(entry, dict) and entry.get("relative_path")
+    }
+    normalized = {}
+    for image_path, txt_paths in raw_associations.items():
+        image_rel = _safe_relative_path(image_path or "")
+        if not image_rel or image_rel not in available_paths:
+            continue
+        if image_rel.lower().endswith(".txt"):
+            continue
+        if not isinstance(txt_paths, list):
+            continue
+        cleaned_txt = []
+        for txt_path in txt_paths:
+            txt_rel = _safe_relative_path(txt_path or "")
+            if not txt_rel or txt_rel not in available_paths:
+                continue
+            if not txt_rel.lower().endswith(".txt"):
+                continue
+            if txt_rel not in cleaned_txt:
+                cleaned_txt.append(txt_rel)
+        if cleaned_txt:
+            normalized[image_rel] = cleaned_txt
+    return normalized
+
+
 def _get_text(value_obj):
     try:
         return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
@@ -708,6 +741,63 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
     return result.returncode == 0, result.stdout, result.stderr
 
 
+def _open_session_connection(session_key: str, host: str, port: int):
+    client = omero.client(host=host, port=port)
+    client.joinSession(session_key)
+    conn = BlitzGateway(client_obj=client)
+    conn.SERVICE_OPTS.setOmeroGroup("-1")
+    return conn
+
+
+def _find_image_by_name(conn, file_name: str, dataset_id=None):
+    if dataset_id:
+        try:
+            dataset = conn.getObject("Dataset", dataset_id)
+            if dataset is not None:
+                for image in dataset.listChildren():
+                    if getattr(image, "getName", None) and image.getName() == file_name:
+                        return image
+        except Exception:
+            return None
+    try:
+        for image in conn.getObjects("Image", attributes={"name": file_name}):
+            if getattr(image, "getName", None) and image.getName() == file_name:
+                return image
+    except Exception:
+        return None
+    return None
+
+
+def _attach_txt_to_image(conn, image, txt_path: Path):
+    data = txt_path.read_bytes()
+    update = conn.getUpdateService()
+    original = OriginalFileI()
+    original.setName(rstring(txt_path.name))
+    original.setPath(rstring(f"sem_edx/{image.getId()}/"))
+    original.setSize(rlong(len(data)))
+    original.setMimetype(rstring("text/plain"))
+    original = update.saveAndReturnObject(original)
+
+    store = conn.c.sf.createRawFileStore()
+    try:
+        store.setFileId(original.getId().getValue())
+        store.write(data, 0, len(data))
+        store.save()
+    finally:
+        try:
+            store.close()
+        except Exception:
+            pass
+
+    annotation = FileAnnotationI()
+    annotation.setFile(original)
+    link = ImageAnnotationLinkI()
+    link.setParent(image._obj)
+    link.setChild(annotation)
+    update.saveAndReturnObject(link)
+    return True
+
+
 def _append_job_message(job: dict, message: str):
     if not message:
         return
@@ -724,6 +814,11 @@ def _append_job_error(job: dict, message: str):
     job["errors"].append(message)
     if len(job["errors"]) > MAX_IMPORT_LOG_LINES:
         job["errors"] = job["errors"][-MAX_IMPORT_LOG_LINES:]
+
+
+def _append_txt_attachment_message(job: dict, txt_name: str, image_name: str, success: bool):
+    label = "Txt attachment success" if success else "Txt attachment failure"
+    _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
 
 def _verify_import(conn, file_name: str, dataset_id=None):
@@ -1065,23 +1160,19 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     
-    if result.returncode != 0:
-        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-        return {
-            "status": status,
-            "relative_path": relative_path,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "details": details,
-        }
-
+    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    if status == "compatible":
+        candidates = _extract_import_candidates(result.stdout or "")
+        if not candidates:
+            status = "incompatible"
+            details = details or "No import candidates found."
 
     return {
-        "status": "compatible",
+        "status": status,
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": "Compatibility check succeeded.",
+        "details": details or "Compatibility check succeeded.",
     }
 
 
@@ -1420,6 +1511,58 @@ def _process_import_job(job_id: str):
                             _save_job(job)
 
             job = _load_job(job_id) or job
+            sem_edx_associations = job.get("sem_edx_associations") or {}
+            if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
+                try:
+                    conn = _open_session_connection(session_key, host, port)
+                    try:
+                        entries_by_path = {
+                            entry.get("relative_path"): entry for entry in job.get("files", [])
+                        }
+                        image_cache = {}
+                        for image_rel, txt_paths in sem_edx_associations.items():
+                            if not isinstance(txt_paths, list):
+                                continue
+                            image_name = PurePosixPath(image_rel).name if image_rel else ""
+                            if image_rel not in image_cache:
+                                dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
+                                dataset_id = dataset_map.get(dataset_name)
+                                image_cache[image_rel] = _find_image_by_name(
+                                    conn, image_name, dataset_id=dataset_id
+                                )
+                            image_obj = image_cache.get(image_rel)
+                            for txt_rel in txt_paths:
+                                txt_name = PurePosixPath(txt_rel).name
+                                if not image_obj:
+                                    _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                    continue
+                                txt_entry = entries_by_path.get(txt_rel)
+                                if not txt_entry:
+                                    _append_txt_attachment_message(job, txt_name, image_name, False)
+                                    continue
+                                staged_path = txt_entry.get("staged_path") or txt_rel
+                                txt_path = upload_root / staged_path
+                                if not txt_path.exists():
+                                    _append_txt_attachment_message(job, txt_name, image_name, False)
+                                    continue
+                                try:
+                                    _attach_txt_to_image(conn, image_obj, txt_path)
+                                    _append_txt_attachment_message(job, txt_name, image_name, True)
+                                except Exception as exc:
+                                    logger.warning(
+                                        "Txt attachment failed for %s into %s: %s", txt_rel, image_rel, exc
+                                    )
+                                    _append_txt_attachment_message(job, txt_name, image_name, False)
+                        _save_job(job)
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    logger.exception("SEM EDX txt attachment failed for job %s.", job_id)
+
+            job = _load_job(job_id) or job
             if job.get("errors"):
                 job["status"] = "error"
             else:
@@ -1540,6 +1683,10 @@ def _start_upload(request, conn):
     if not files:
         logger.info("Upload start request missing files payload.")
         return json_error(errors.no_files_provided())
+    special_upload = (payload.get("special_upload") or "").strip()
+    raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
+    if special_upload != "sem_edx_spectra":
+        raw_sem_edx_associations = {}
     default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
     batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
@@ -1603,6 +1750,8 @@ def _start_upload(request, conn):
         logger.info("Upload start rejected invalid paths: %s", invalid)
         return json_error(errors.invalid_file_paths(invalid))
 
+    sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
+
     dataset_map = {}
     orphan_dataset_name = None
     try:
@@ -1647,6 +1796,8 @@ def _start_upload(request, conn):
         "incompatible_files": [],
         "compatibility_thread_active": False,
         "compatibility_confirmed": False,
+        "special_upload": special_upload,
+        "sem_edx_associations": sem_edx_associations,
     }
     _save_job(job)
     logger.info(
