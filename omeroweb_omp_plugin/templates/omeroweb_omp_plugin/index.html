@@ -3200,7 +3200,7 @@
         const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
         
         // ALWAYS clear selection and search when collaboration toggle changes
-        clearProjectSelection({ persist: false });
+        clearProjectSelection({ persist: true });
         resetDatasetSelection();
         
         if (isDropdownOpen) {
