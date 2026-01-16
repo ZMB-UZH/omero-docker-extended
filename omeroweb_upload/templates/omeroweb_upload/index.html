@@ -5507,9 +5507,6 @@
                         uploadedNewFiles = [...pendingFiles];
                     }
 
-                    // Combine ALL files for a single compatibility check
-                    const allFilesToCheck = [...existingEntries, ...uploadedNewFiles];
-                    
                     // Clear UI
                     pendingFiles = [];
                     expandedNodes.clear();
@@ -5517,39 +5514,83 @@
                     folderInput.value = '';
                     refreshFileList();
 
-                    // Single compatibility check for ALL files
+                    // Check compatibility for each job separately but combine results
+                    let allIncompatibleFiles = [];
+                    let oldJobCompatibilityResult = null;
+                    let newJobCompatibilityResult = null;
+
                     if (existingEntries.length) {
                         await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
-                        const compatibilityResult = await ensureCompatibilityBeforeImport(job, allFilesToCheck);
-                        if (compatibilityResult.proceed) {
-                            registerImportJob(job);
-                            if (newJob) {
-                                registerImportJob(newJob);
-                            }
-                            setStatus('Import resumed. Files will appear in Omero soon.', 'success');
-                            delete window.pendingImportJob;
-                            window.pendingImportFiles = [];
-                        } else {
+                        const statusData = await waitForCompatibility(job);
+                        const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
+                        applyCompatibilityFlags(existingEntries, incompatibleFiles);
+                        allIncompatibleFiles.push(...incompatibleFiles);
+                        oldJobCompatibilityResult = { statusData, job, entries: existingEntries, confirmationRequired: statusData.confirmation_required && incompatibleFiles.length > 0 };
+                    }
+
+                    if (newJob && uploadedNewFiles.length) {
+                        const statusData = await waitForCompatibility(newJob);
+                        const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
+                        applyCompatibilityFlags(uploadedNewFiles, incompatibleFiles);
+                        allIncompatibleFiles.push(...incompatibleFiles);
+                        newJobCompatibilityResult = { statusData, job: newJob, entries: uploadedNewFiles, confirmationRequired: statusData.confirmation_required && incompatibleFiles.length > 0 };
+                    }
+
+                    // Combine all files for UI
+                    const allFilesToCheck = [...existingEntries, ...uploadedNewFiles];
+
+                    // Show single popup if ANY job has incompatible files
+                    const needsConfirmation = (oldJobCompatibilityResult?.confirmationRequired || newJobCompatibilityResult?.confirmationRequired);
+                    
+                    if (needsConfirmation && allIncompatibleFiles.length > 0) {
+                        const proceed = await showCompatibilityPopup(
+                            'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
+                        );
+                        if (!proceed) {
+                            skipSpecialUploadReset = true;
+                            window.pendingImportJob = job;
                             window.pendingImportFiles = allFilesToCheck;
                             pendingFiles = [...allFilesToCheck];
+                            applyCompatibilityFlags(pendingFiles, allIncompatibleFiles);
                             refreshFileList();
-                        }
-                    } else if (newJob && uploadedNewFiles.length) {
-                        const compatibilityResult = await ensureCompatibilityBeforeImport(newJob, uploadedNewFiles);
-                        if (compatibilityResult.proceed) {
-                            registerImportJob(newJob);
+                            updateUploadButtonLabel();
                             setStatus(
-                                'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
-                                'success'
+                                'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files and click "Continue Import".',
+                                'error'
                             );
-                            delete window.pendingImportJob;
-                            window.pendingImportFiles = [];
-                        } else {
-                            window.pendingImportFiles = uploadedNewFiles;
-                            pendingFiles = [...uploadedNewFiles];
-                            refreshFileList();
+                            setUploadingState(false);
+                            updateUploadButtonLabel();
+                            return;
+                        }
+                        // User clicked Yes - confirm both jobs
+                        if (oldJobCompatibilityResult) {
+                            await confirmCompatibility(oldJobCompatibilityResult.job);
+                        }
+                        if (newJobCompatibilityResult) {
+                            await confirmCompatibility(newJobCompatibilityResult.job);
+                        }
+                    } else {
+                        // No incompatible files but still need to confirm if required
+                        if (oldJobCompatibilityResult?.statusData.confirmation_required) {
+                            await confirmCompatibility(oldJobCompatibilityResult.job);
+                        }
+                        if (newJobCompatibilityResult?.statusData.confirmation_required) {
+                            await confirmCompatibility(newJobCompatibilityResult.job);
                         }
                     }
+
+                    // Register jobs for import
+                    if (oldJobCompatibilityResult) {
+                        registerImportJob(oldJobCompatibilityResult.job);
+                    }
+                    if (newJobCompatibilityResult) {
+                        registerImportJob(newJobCompatibilityResult.job);
+                    }
+                    
+                    setStatus('Import resumed. Files will appear in Omero soon.', 'success');
+                    delete window.pendingImportJob;
+                    window.pendingImportFiles = [];
+                    
                 } catch (error) {
                     setStatus(`Import failed: ${error.message || error}`, 'error');
                 } finally {
