@@ -1448,6 +1448,7 @@
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     let isProjectRefreshInFlight = false;
     let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    console.log('[DEBUG] RAW projectData from backend (before normalization):', JSON.parse(JSON.stringify(projectData)));
     const MAX_USER_PROJECT_RESULTS = 15;
     const MAX_PROJECT_RESULTS = 15;
     const MAX_PROJECT_RESULTS_WITH_COLLAB = 20;
