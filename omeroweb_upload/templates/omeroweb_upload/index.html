@@ -1382,7 +1382,7 @@
                     <label for="collaboration_toggle">Collaboration</label>
                 </div>
                 <div class="upload-utilities__compatibility">
-                    <input type="checkbox" id="compatibility_toggle">
+                    <input type="checkbox" id="compatibility_toggle" checked>
                     <label for="compatibility_toggle">Compatibility check</label>
                 </div>
             </div>
@@ -5870,6 +5870,9 @@
         const storedCompatibilityState = loadCompatibilityState();
         if (storedCompatibilityState !== null) {
             applyCompatibilityState(storedCompatibilityState);
+        } else {
+            // Default to enabled if no stored state
+            applyCompatibilityState(true);
         }
 
         if (userSettingsBatchInput) {
