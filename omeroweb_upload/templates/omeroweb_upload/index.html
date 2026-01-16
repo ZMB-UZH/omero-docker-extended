@@ -4988,6 +4988,8 @@
                     return { proceed: false, status: statusData, uploadedFiles };
                 }
                 await confirmCompatibility(job);
+            } else if (statusData.confirmation_required) {
+                await confirmCompatibility(job);
             }
             return { proceed: true, status: statusData };
         }
