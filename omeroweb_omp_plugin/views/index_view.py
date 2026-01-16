@@ -250,22 +250,44 @@ def _group_has_other_members(conn, group):
 
 
 def _group_is_read_write(group):
+    """Check if group has read-write permissions (RWRW-- or similar)"""
     permissions = _get_permissions(group)
     if permissions is None:
         return False
-    return _permissions_flag(permissions, "isRead") and _permissions_flag(permissions, "isWrite")
+    try:
+        # OMERO groups use isGroupRead() and isGroupWrite() 
+        # Or check the permission level string
+        perm_str = str(permissions)
+        # Read-write groups have patterns like "rwrw--" or "rwra--"
+        return "rw" in perm_str.lower()[:4]  # Check first 4 chars for group perms
+    except Exception:
+        pass
+    # Fallback: try the isGroupRead/isGroupWrite methods if they exist
+    try:
+        return (_permissions_flag(permissions, "isGroupRead") and 
+                _permissions_flag(permissions, "isGroupWrite"))
+    except Exception:
+        return False
 
 
 def _group_is_read_annotate(group):
+    """Check if group has read-annotate permissions (RWRA-- or similar)"""
     permissions = _get_permissions(group)
     if permissions is None:
         return False
-    can_read = _permissions_flag(permissions, "isRead")
-    can_write = _permissions_flag(permissions, "isWrite")
-    can_annotate = _permissions_flag(permissions, "isAnnotate") or _permissions_flag(
-        permissions, "canAnnotate"
-    )
-    return can_read and can_annotate and not can_write
+    try:
+        perm_str = str(permissions)
+        # Read-annotate groups have pattern like "rwra--"
+        return "ra" in perm_str.lower()[2:4]  # Check positions 2-3 for group perms
+    except Exception:
+        pass
+    # Fallback
+    try:
+        return (_permissions_flag(permissions, "isGroupRead") and 
+                _permissions_flag(permissions, "isGroupAnnotate") and
+                not _permissions_flag(permissions, "isGroupWrite"))
+    except Exception:
+        return False
 
 
 def _has_collaboration_groups(conn):
