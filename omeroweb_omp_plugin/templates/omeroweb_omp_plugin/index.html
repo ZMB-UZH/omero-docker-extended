@@ -3200,8 +3200,10 @@
         const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
         
         if (isDropdownOpen) {
-            // Dropdown is open - just re-render with current search query, don't touch the input
-            renderProjectOptions(projectSelectInput?.value || '');
+            // Dropdown is open - clear search input and reset active index
+            projectSelectInput.value = '';
+            setActiveProjectIndex(-1);
+            renderProjectOptions('');
         } else {
             // Dropdown is closed - sync selection normally
             syncProjectSelectionWithMode();
