@@ -2155,9 +2155,7 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
             "compatibility_checked": sum(1 for f in job.get("files", []) if f.get("compatibility")),
-            "compatibility_total": sum(
-                1 for f in job.get("files", []) if not f.get("compatibility_skip")
-            ),
+            "compatibility_total": sum(1 for f in job.get("files", []) if f.get("status") == "uploaded"),
             "incompatible_files": job.get("incompatible_files", []),
             "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
