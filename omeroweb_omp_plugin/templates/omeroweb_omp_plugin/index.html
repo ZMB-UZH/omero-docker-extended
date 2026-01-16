@@ -423,6 +423,20 @@
             </div>
             <div class="user-setting-row">
                 <div class="user-setting-input">
+                    <label>Remove "Clear all" button?</label>
+                    <div class="user-setting-toggle" role="group" aria-label="Remove Clear all button">
+                        <input type="radio" id="user_setting_remove_clear_all_no" name="user_setting_remove_clear_all" value="no">
+                        <label for="user_setting_remove_clear_all_no">No</label>
+                        <input type="radio" id="user_setting_remove_clear_all_yes" name="user_setting_remove_clear_all" value="yes">
+                        <label for="user_setting_remove_clear_all_yes">Yes</label>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>Toggle "Yes" to remove the button from the interface in case of accidental clicks.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
                     <label for="user_setting_max_parsed">Max nr. of parsed variables</label>
                     <input type="text"
                            id="user_setting_max_parsed"
@@ -663,6 +677,9 @@
     .help-btn {width:26px; height:26px; border-radius:50%; background:#007bff; color:white; font-size:14px; font-weight:700;
                 line-height:26px; text-align:center; text-decoration:none; cursor:pointer;}
     .help-btn:hover {background:#0056b3; transform: translateY(-1px);}
+    .dataset-clear-btn-hidden {
+        display: none !important;
+    }
     .omp-header-row {
         display: flex;
         align-items: center;
@@ -1376,6 +1393,8 @@
     const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
     const projectRefreshBtn = document.getElementById('project_refresh_btn');
     const datasetClearBtn = document.getElementById('dataset_clear_btn');
+    const userSettingRemoveClearAllNo = document.getElementById('user_setting_remove_clear_all_no');
+    const userSettingRemoveClearAllYes = document.getElementById('user_setting_remove_clear_all_yes');
     const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
     const aiRegexButton = document.getElementById('ai_regex_btn');
     const aiRegexText = document.getElementById('ai_regex_text');
@@ -1517,6 +1536,7 @@
         maxVariableSets: {{ max_variable_sets }},
         defaultVariableNames: {{ default_variable_names_json|safe }},
         showAllProjects: false,
+        removeClearAll: false,
         aiDefaults: {
             regex: {
                 defaultProvider: '',
@@ -1556,6 +1576,18 @@
         }
         if (refresh && projectSelectDropdown?.style.display === 'block') {
             renderProjectOptions(projectSelectInput?.value || '');
+        }
+    }
+
+    function applyClearAllSetting(enabled) {
+        const removeClearAll = !!enabled;
+        if (userSettingRemoveClearAllYes && userSettingRemoveClearAllNo) {
+            userSettingRemoveClearAllYes.checked = removeClearAll;
+            userSettingRemoveClearAllNo.checked = !removeClearAll;
+        }
+        if (datasetClearBtn) {
+            datasetClearBtn.disabled = removeClearAll;
+            datasetClearBtn.classList.toggle('dataset-clear-btn-hidden', removeClearAll);
         }
     }
 
@@ -2640,6 +2672,7 @@
             userSettingDefaultVarsInput.value = defaultVars;
         }
         applyShowAllProjectsSetting(settings.showAllProjects, { refresh: false });
+        applyClearAllSetting(settings.removeClearAll);
         const defaults = normalizeAiDefaults(settings.aiDefaults || settings.aiProviderDefaults);
         aiDefaultsState = defaults;
         applyAiDefaultsToRow({
@@ -2669,6 +2702,7 @@
             maxVariableSets: userSettingsDefaults.maxVariableSets,
             defaultVariableNames: userSettingsDefaults.defaultVariableNames,
             showAllProjects: userSettingsDefaults.showAllProjects,
+            removeClearAll: userSettingsDefaults.removeClearAll,
             aiDefaults: userSettingsDefaults.aiDefaults,
         });
         clearUserSettingErrors();
@@ -2698,6 +2732,7 @@
 
         const parsedDefaults = parseQuotedVariableNames(defaultVarsRaw);
         const showAllProjects = !!userSettingShowAllYes?.checked;
+        const removeClearAll = !!userSettingRemoveClearAllYes?.checked;
 
         const jobBatchValid = Number.isInteger(jobBatchValue) && jobBatchValue >= 1 && jobBatchValue <= 100;
         const maxParsedValid = Number.isInteger(maxParsedValue) && maxParsedValue >= 3 && maxParsedValue <= 15;
@@ -2724,6 +2759,7 @@
             maxVariableSets: maxSetsValue,
             defaultVariableNames: parsedDefaults,
             showAllProjects,
+            removeClearAll,
             aiDefaults: aiDefaultsState,
         };
     }
