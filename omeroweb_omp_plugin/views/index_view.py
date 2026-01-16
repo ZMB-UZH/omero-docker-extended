@@ -299,6 +299,32 @@ def _has_collaboration_groups(conn):
     return False
 
 
+def _get_object_group(obj):
+    """Get the group that an object (project/dataset/image) belongs to"""
+    try:
+        details = obj.getDetails()
+        if details:
+            group = details.getGroup()
+            return group
+    except Exception:
+        pass
+    return None
+
+
+def _is_user_in_group(conn, group_id, user_id):
+    """Check if a user is a member of a specific group"""
+    if group_id is None or user_id is None:
+        return False
+    try:
+        for group in _iter_member_groups(conn):
+            gid = get_id(group)
+            if gid and int(gid) == int(group_id):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _collect_project_payload(conn, user_id):
     owned_projects = []
     collab_projects = []
@@ -311,14 +337,37 @@ def _collect_project_payload(conn, user_id):
             if pid is None:
                 continue
             entry = {"id": str(pid), "name": pname}
+            
+            # Check if owned by current user
             if _is_owned_by_user(proj, user_id):
                 owned_projects.append(entry)
-            elif _has_read_write_permissions(proj):
-                owner_name = _get_owner_username(proj) or "Unknown user"
+                continue
+            
+            # NOT owned by user - check if it's a collaboration project
+            # Get the group this project is in
+            proj_group = _get_object_group(proj)
+            if proj_group is None:
+                continue
+                
+            group_id = get_id(proj_group)
+            if group_id is None:
+                continue
+            
+            # Check if we're a member of this project's group
+            if not _is_user_in_group(conn, group_id, user_id):
+                continue
+            
+            # We're in the same group - now check the group's permission level
+            owner_name = _get_owner_username(proj) or "Unknown user"
+            
+            if _group_is_read_write(proj_group):
+                # This is a read-write group, add as collaboration project
                 collab_projects.append({**entry, "owner": owner_name, "access": "read_write"})
-            elif _has_read_annotate_permissions(proj):
-                owner_name = _get_owner_username(proj) or "Unknown user"
+            elif _group_is_read_annotate(proj_group):
+                # This is a read-annotate group, add as collaboration project
                 annotate_projects.append({**entry, "owner": owner_name, "access": "read_annotate"})
+            # else: private or read-only group, skip
+                
     except Exception as exc:
         logger.exception("Error listing projects: %s", exc)
     return {
