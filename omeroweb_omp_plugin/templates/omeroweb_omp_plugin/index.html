@@ -1372,9 +1372,6 @@
     const projectSelectArrow = document.querySelector('#project_select_wrapper .project-select-arrow');
     const collaborationToggle = document.getElementById('collaboration_toggle');
     const collaborationSection = document.querySelector('.upload-utilities__collaboration');
-    console.log('[DEBUG] collaborationToggle element:', collaborationToggle);
-    console.log('[DEBUG] collaborationSection element:', collaborationSection);
-    console.log('[DEBUG] collaborationSection computed display:', collaborationSection ? window.getComputedStyle(collaborationSection).display : 'N/A');
     const datasetTableContainer = document.getElementById('dataset_table_container');
     const datasetTableBody = document.getElementById('dataset_table_body');
     const datasetTableMessage = document.getElementById('dataset_table_message');
@@ -1448,7 +1445,6 @@
     const aiCredentialsStatus = document.getElementById('ai_credentials_status');
     let isProjectRefreshInFlight = false;
     let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
-    console.log('[DEBUG] RAW projectData from backend (before normalization):', JSON.parse(JSON.stringify(projectData)));
     const MAX_USER_PROJECT_RESULTS = 15;
     const MAX_PROJECT_RESULTS = 15;
     const MAX_PROJECT_RESULTS_WITH_COLLAB = 20;
@@ -2935,21 +2931,12 @@
             (Array.isArray(projectData?.collab) && projectData.collab.length > 0) ||
             (Array.isArray(projectData?.collab_annotate) && projectData.collab_annotate.length > 0)
         );
-        console.log('[DEBUG] updateCollaborationVisibility called');
-        console.log('[DEBUG] projectData:', projectData);
-        console.log('[DEBUG] projectData.collab:', projectData?.collab);
-        console.log('[DEBUG] projectData.collab_annotate:', projectData?.collab_annotate);
-        console.log('[DEBUG] hasCollaborationOptions:', hasCollaborationOptions);
-        console.log('[DEBUG] collaborationSection:', collaborationSection);
         if (!collaborationSection) {
-            console.log('[DEBUG] collaborationSection is null/undefined!');
             return hasCollaborationOptions;
         }
         if (hasCollaborationOptions) {
-            console.log('[DEBUG] Setting display to empty string (show)');
             collaborationSection.style.display = '';
         } else {
-            console.log('[DEBUG] Setting display to none (hide)');
             collaborationSection.style.display = 'none';
             try {
                 window.localStorage?.removeItem(collaborationToggleStorageKey);
@@ -2958,7 +2945,6 @@
             }
             applyCollaborationState(false, { persist: false, refresh: false });
         }
-        console.log('[DEBUG] collaborationSection.style.display after update:', collaborationSection.style.display);
         return hasCollaborationOptions;
     }
 
