@@ -1197,10 +1197,11 @@ def _check_import_compatibility(
     relative_path: str,
 ):
     """
-    Check if a file can be imported into OMERO using a dry-run check.
+    Check if a file can be imported into OMERO by analyzing it with Bio-Formats.
     
-    This performs a compatibility check WITHOUT actually importing the file.
-    Uses 'omero import --dry-run' to test if the file format is supported.
+    Uses 'omero import -f' which performs local file format analysis
+    without requiring server connection or authentication.
+    Returns which files would be imported if this were a real import.
     """
     if not file_path.exists():
         return {
@@ -1211,10 +1212,9 @@ def _check_import_compatibility(
             "details": f"Missing staged file: {file_path.name}",
         }
     
-    # Build command with proper authentication using the helper function
-    # Use --dry-run to check compatibility without actually importing
-    cmd = _build_omero_cli_command(["import", "--dry-run"], session_key, host, port)
-    cmd.append(str(file_path))
+    # Use -f flag for local Bio-Formats analysis (no server connection needed)
+    # This flag checks if the file format is supported by OMERO
+    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
@@ -1254,7 +1254,7 @@ def _check_import_compatibility(
         candidates = _extract_import_candidates(result.stdout or "")
         if not candidates:
             status = "incompatible"
-            details = "No import candidates found in dry-run output."
+            details = "No import candidates found in Bio-Formats analysis."
     
     return {
         "status": status,
@@ -1263,7 +1263,6 @@ def _check_import_compatibility(
         "stderr": result.stderr,
         "details": details or "Compatibility check completed.",
     }
-
 
 def _run_compatibility_check(job_id: str):
     job = _load_job(job_id)
