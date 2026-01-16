@@ -5478,47 +5478,63 @@
                 const originalPaths = new Set(originalFiles.map((entry) => getEntryPath(entry)));
                 const existingEntries = pendingFiles.filter((entry) => originalPaths.has(getEntryPath(entry)));
                 const newEntries = pendingFiles.filter((entry) => !originalPaths.has(getEntryPath(entry)));
-                let shouldContinue = true;
+                
                 setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
                 try {
-                    if (existingEntries.length) {
-                        await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
-                        const compatibilityResult = await ensureCompatibilityBeforeImport(job, existingEntries);
-                        if (compatibilityResult.proceed) {
-                            registerImportJob(job);
-                            setStatus('Import resumed. Files will appear in Omero soon.', 'success');
-                            delete window.pendingImportJob;
-                            window.pendingImportFiles = [];
-                        } else {
-                            window.pendingImportFiles = existingEntries;
-                            pendingFiles = [...existingEntries, ...newEntries];
-                            refreshFileList();
-                            shouldContinue = false;
-                        }
-                    } else {
+                    if (!existingEntries.length && !newEntries.length) {
                         delete window.pendingImportJob;
                         window.pendingImportFiles = [];
+                        setStatus('No files to import.', 'error');
+                        setUploadingState(false);
+                        return;
                     }
 
-                    if (shouldContinue && newEntries.length) {
+                    // Handle new files: upload them first
+                    let newJob = null;
+                    let uploadedNewFiles = [];
+                    if (newEntries.length) {
                         pendingFiles = newEntries;
                         expandedNodes.clear();
                         refreshFileList();
                         uploadTotalBytes = getPendingTotalBytes();
                         updateUploadOverlayProgress();
 
-                        const newJob = await startUploadJob(pendingFiles);
+                        newJob = await startUploadJob(pendingFiles);
                         uploadTotalBytes = newJob.totalBytes || uploadTotalBytes;
                         updateUploadOverlayProgress();
                         await uploadFiles(newJob.upload_url, pendingFiles);
 
-                        const uploadedNewFiles = [...pendingFiles];
-                        pendingFiles = [];
-                        expandedNodes.clear();
-                        fileInput.value = '';
-                        folderInput.value = '';
-                        refreshFileList();
+                        uploadedNewFiles = [...pendingFiles];
+                    }
 
+                    // Combine ALL files for a single compatibility check
+                    const allFilesToCheck = [...existingEntries, ...uploadedNewFiles];
+                    
+                    // Clear UI
+                    pendingFiles = [];
+                    expandedNodes.clear();
+                    fileInput.value = '';
+                    folderInput.value = '';
+                    refreshFileList();
+
+                    // Single compatibility check for ALL files
+                    if (existingEntries.length) {
+                        await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
+                        const compatibilityResult = await ensureCompatibilityBeforeImport(job, allFilesToCheck);
+                        if (compatibilityResult.proceed) {
+                            registerImportJob(job);
+                            if (newJob) {
+                                registerImportJob(newJob);
+                            }
+                            setStatus('Import resumed. Files will appear in Omero soon.', 'success');
+                            delete window.pendingImportJob;
+                            window.pendingImportFiles = [];
+                        } else {
+                            window.pendingImportFiles = allFilesToCheck;
+                            pendingFiles = [...allFilesToCheck];
+                            refreshFileList();
+                        }
+                    } else if (newJob && uploadedNewFiles.length) {
                         const compatibilityResult = await ensureCompatibilityBeforeImport(newJob, uploadedNewFiles);
                         if (compatibilityResult.proceed) {
                             registerImportJob(newJob);
@@ -5526,13 +5542,13 @@
                                 'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
                                 'success'
                             );
+                            delete window.pendingImportJob;
+                            window.pendingImportFiles = [];
+                        } else {
+                            window.pendingImportFiles = uploadedNewFiles;
+                            pendingFiles = [...uploadedNewFiles];
+                            refreshFileList();
                         }
-                    } else if (shouldContinue) {
-                        pendingFiles = [];
-                        expandedNodes.clear();
-                        fileInput.value = '';
-                        folderInput.value = '';
-                        refreshFileList();
                     }
                 } catch (error) {
                     setStatus(`Import failed: ${error.message || error}`, 'error');
