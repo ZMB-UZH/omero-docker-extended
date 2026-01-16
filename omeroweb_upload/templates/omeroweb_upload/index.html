@@ -2316,7 +2316,7 @@
             const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
             
             // ALWAYS clear selection and search when collaboration toggle changes
-            clearProjectSelection({ persist: false });
+            clearProjectSelection({ persist: true });
             
             if (isDropdownOpen) {
                 // Dropdown is open - clear search and reset active index
