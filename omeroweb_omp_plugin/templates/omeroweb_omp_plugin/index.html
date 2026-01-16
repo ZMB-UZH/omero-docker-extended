@@ -793,8 +793,17 @@
         opacity: 1;
         filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
     }
-    .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
-                           font-size:18px; font-weight:600; pointer-events:none;}
+    .project-select-arrow {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-45%);
+        color: #4b5563;
+        font-size: 18px;
+        font-weight: 600;
+        z-index: 3;
+        pointer-events: none;
+    }
     .project-select-controls {
         display: inline-flex;
         align-items: center;
@@ -2918,11 +2927,14 @@
     }
 
     function updateCollaborationVisibility() {
-        const hasCollaborationAccess = Boolean(projectData?.collab_available);
+        const hasCollaborationOptions = (
+            (Array.isArray(projectData?.collab) && projectData.collab.length > 0) ||
+            (Array.isArray(projectData?.collab_annotate) && projectData.collab_annotate.length > 0)
+        );
         if (!collaborationSection) {
-            return hasCollaborationAccess;
+            return hasCollaborationOptions;
         }
-        if (hasCollaborationAccess) {
+        if (hasCollaborationOptions) {
             collaborationSection.style.display = '';
         } else {
             collaborationSection.style.display = 'none';
@@ -2933,7 +2945,7 @@
             }
             applyCollaborationState(false, { persist: false, refresh: false });
         }
-        return hasCollaborationAccess;
+        return hasCollaborationOptions;
     }
 
     function getProjectLabel(projectId, projectName) {
