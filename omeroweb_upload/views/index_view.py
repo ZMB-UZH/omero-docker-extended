@@ -1,6 +1,5 @@
 import os
 import json
-import tempfile
 import logging
 import random
 import re
@@ -303,6 +302,11 @@ def _load_job(job_id: str):
             return json.load(handle)
     except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
         logger.warning("Unable to lock or read job file %s: %s", path, exc)
+    try:
+        with path.open("r") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to read job file %s without lock: %s", path, exc)
     return None
 
 
@@ -375,6 +379,37 @@ def _safe_relative_path(raw_name: str):
     if not parts:
         return None
     return "/".join(parts)
+
+
+def _normalize_sem_edx_associations(raw_associations, normalized_entries):
+    if not isinstance(raw_associations, dict):
+        return {}
+    available_paths = {
+        entry.get("relative_path"): entry
+        for entry in normalized_entries
+        if isinstance(entry, dict) and entry.get("relative_path")
+    }
+    normalized = {}
+    for image_path, txt_paths in raw_associations.items():
+        image_rel = _safe_relative_path(image_path or "")
+        if not image_rel or image_rel not in available_paths:
+            continue
+        if image_rel.lower().endswith(".txt"):
+            continue
+        if not isinstance(txt_paths, list):
+            continue
+        cleaned_txt = []
+        for txt_path in txt_paths:
+            txt_rel = _safe_relative_path(txt_path or "")
+            if not txt_rel or txt_rel not in available_paths:
+                continue
+            if not txt_rel.lower().endswith(".txt"):
+                continue
+            if txt_rel not in cleaned_txt:
+                cleaned_txt.append(txt_rel)
+        if cleaned_txt:
+            normalized[image_rel] = cleaned_txt
+    return normalized
 
 
 def _get_text(value_obj):
@@ -493,14 +528,42 @@ def _has_read_write_permissions(obj):
 def _iter_accessible_projects(conn):
     if conn is None:
         return
-
+    
+    # Save current group context
+    current_group = None
     try:
-        for proj in conn.getObjects("Project", opts={"group": "-1"}):
-            yield proj
-        return
-    except Exception as exc:
-        logger.warning("Failed to query projects with opts group=-1: %s", exc)
-
+        current_group = conn.SERVICE_OPTS.getOmeroGroup()
+    except Exception:
+        pass
+    
+    try:
+        # Set group context to -1 to query across all groups
+        conn.SERVICE_OPTS.setOmeroGroup('-1')
+        
+        # Try to get projects with cross-group querying enabled
+        try:
+            for proj in conn.getObjects("Project"):
+                yield proj
+            return
+        except Exception as e:
+            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", e)
+        
+        # Fallback: try with opts parameter
+        try:
+            for proj in conn.getObjects("Project", opts={"group": "-1"}):
+                yield proj
+            return
+        except Exception as e:
+            logger.warning("Failed to query projects with opts group=-1: %s", e)
+            
+    finally:
+        # Restore original group context
+        if current_group is not None:
+            try:
+                conn.SERVICE_OPTS.setOmeroGroup(current_group)
+            except Exception:
+                pass
+    
     # Final fallback: try without cross-group querying
     try:
         for proj in conn.getObjects("Project"):
@@ -548,47 +611,6 @@ def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
 def _generate_orphan_dataset_name():
     suffix = "".join(secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH))
     return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
-
-
-def _normalize_sem_edx_associations(raw_associations, normalized_entries):
-    """
-    Normalize and validate SEM EDX associations between images and text files.
-    
-    Args:
-        raw_associations: Dict mapping image paths to lists of text file paths
-        normalized_entries: List of file entries that have been validated
-    
-    Returns:
-        Dict of validated associations with relative paths as keys
-    """
-    if not isinstance(raw_associations, dict):
-        return {}
-    available_paths = {
-        entry.get("relative_path"): entry
-        for entry in normalized_entries
-        if isinstance(entry, dict) and entry.get("relative_path")
-    }
-    normalized = {}
-    for image_path, txt_paths in raw_associations.items():
-        image_rel = _safe_relative_path(image_path or "")
-        if not image_rel or image_rel not in available_paths:
-            continue
-        if image_rel.lower().endswith(".txt"):
-            continue
-        if not isinstance(txt_paths, list):
-            continue
-        cleaned_txt = []
-        for txt_path in txt_paths:
-            txt_rel = _safe_relative_path(txt_path or "")
-            if not txt_rel or txt_rel not in available_paths:
-                continue
-            if not txt_rel.lower().endswith(".txt"):
-                continue
-            if txt_rel not in cleaned_txt:
-                cleaned_txt.append(txt_rel)
-        if cleaned_txt:
-            normalized[image_rel] = cleaned_txt
-    return normalized
 
 
 def _find_project_dataset(conn, project_id: int, name: str):
@@ -672,10 +694,7 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
     existing = None
     try:
-        existing = next(
-            conn.getObjects("Dataset", attributes={"name": name}, opts={"group": "-1"}),
-            None,
-        )
+        existing = next(conn.getObjects("Dataset", attributes={"name": name}), None)
     except Exception:
         existing = None
 
@@ -703,46 +722,57 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
+_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+
+
+def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
+    cmd = [OMERO_CLI]
+    cmd.extend(subcommand)
+    if session_key:
+        cmd.extend(["-k", session_key])
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    return cmd
+
+
+def _run_omero_cli(cmd):
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _parse_cli_id(output: str, expected_type: str):
+    for line in (output or "").splitlines():
+        match = _CLI_ID_PATTERN.search(line.strip())
+        if match and match.group("type") == expected_type:
+            return int(match.group("id"))
+    return None
+
+
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
-    import tempfile
-    
-    # FIX: Isolate the session for each import thread to prevent lock contention
-    with tempfile.TemporaryDirectory() as temp_user_dir:
-        env = os.environ.copy()
-        env['OMERO_USERDIR'] = temp_user_dir
+    cmd = _build_omero_cli_command(["import"], session_key, host, port)
+    if dataset_id:
+        cmd.extend(["-d", str(dataset_id)])
+    cmd.append(str(path))
 
-        cmd = [OMERO_CLI, "import", "-k", session_key]
-        if host:
-            cmd.extend(["-s", host])
-        if port:
-            cmd.extend(["-p", str(port)])
-        if dataset_id:
-            cmd.extend(["-d", str(dataset_id)])
-        cmd.append(str(path))
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env, # PASS THE ISOLATED ENV
-        )
-        return result.returncode == 0, result.stdout, result.stderr
+    result = _run_omero_cli(cmd)
+    return result.returncode == 0, result.stdout, result.stderr
 
 
 def _open_session_connection(session_key: str, host: str, port: int):
-    """Create a BlitzGateway connection using an existing session key."""
     client = omero.client(host=host, port=port)
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
-    if hasattr(conn, "_closeSession"):
-        conn._closeSession = False
     return conn
 
 
 def _find_image_by_name(conn, file_name: str, dataset_id=None):
-    """Find an image by exact name match, optionally within a specific dataset."""
     if dataset_id:
         try:
             dataset = conn.getObject("Dataset", dataset_id)
@@ -761,92 +791,46 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
-
-
-def _parse_cli_id(output: str, expected_type: str):
-    """Parse OMERO CLI output to extract object IDs."""
-    for line in (output or "").splitlines():
-        match = _CLI_ID_PATTERN.search(line.strip())
-        if match and match.group("type") == expected_type:
-            return int(match.group("id"))
-    return None
-
-
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
-    import tempfile
+    upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
+    upload_cmd.append(str(txt_path))
+    upload_result = _run_omero_cli(upload_cmd)
+    if upload_result.returncode != 0:
+        raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
+    original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
+        upload_result.stderr, "OriginalFile"
+    )
+    if not original_id:
+        raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
 
-    # FIX: Wrap everything in a temp user dir to stop session hijacking/logout
-    with tempfile.TemporaryDirectory() as temp_user_dir:
-        env = os.environ.copy()
-        env['OMERO_USERDIR'] = temp_user_dir
+    annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+    annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
+    annotation_result = _run_omero_cli(annotation_cmd)
+    if annotation_result.returncode != 0:
+        raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
+    annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
+        annotation_result.stderr, "FileAnnotation"
+    )
+    if not annotation_id:
+        raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
 
-        # Step 1: Upload the text file
-        upload_cmd = [OMERO_CLI, "upload", "-k", session_key]
-        if host:
-            upload_cmd.extend(["-s", host])
-        if port:
-            upload_cmd.extend(["-p", str(port)])
-        upload_cmd.append(str(txt_path))
-        
-        upload_result = subprocess.run(
-            upload_cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        if upload_result.returncode != 0:
-            raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
-        
-        original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
-            upload_result.stderr, "OriginalFile"
-        )
-        if not original_id:
-            raise RuntimeError("Unable to resolve OriginalFile ID")
-
-        # Step 2: Create FileAnnotation
-        annotation_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
-        if host:
-            annotation_cmd.extend(["-s", host])
-        if port:
-            annotation_cmd.extend(["-p", str(port)])
-        annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-        
-        annotation_result = subprocess.run(
-            annotation_cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        if annotation_result.returncode != 0:
-            raise RuntimeError("FileAnnotation creation failed")
-        
-        annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
-            annotation_result.stderr, "FileAnnotation"
-        )
-
-        # Step 3: Link FileAnnotation to Image
-        link_cmd = [OMERO_CLI, "obj", "new", "-k", session_key]
-        if host:
-            link_cmd.extend(["-s", host])
-        if port:
-            link_cmd.extend(["-p", str(port)])
-        link_cmd.extend([
+    link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+    link_cmd.extend(
+        [
             "ImageAnnotationLink",
             f"parent=Image:{image_id}",
             f"child=FileAnnotation:{annotation_id}",
-        ])
-        
-        link_result = subprocess.run(
-            link_cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=env,
-        )
-        return link_result.returncode == 0
+        ]
+    )
+    link_result = _run_omero_cli(link_cmd)
+    if link_result.returncode != 0:
+        raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
+    link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
+        link_result.stderr, "ImageAnnotationLink"
+    )
+    if not link_id:
+        raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
+    return True
 
 
 def _append_job_message(job: dict, message: str):
@@ -868,7 +852,6 @@ def _append_job_error(job: dict, message: str):
 
 
 def _append_txt_attachment_message(job: dict, txt_name: str, image_name: str, success: bool):
-    """Add a message about text file attachment success or failure."""
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
@@ -957,14 +940,20 @@ def _safe_remove_tree(path: Path, root: Path):
     try:
         for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=False):
             for name in filenames:
-                (Path(root_dir) / name).unlink(missing_ok=True)
+                candidate = Path(root_dir) / name
+                try:
+                    candidate.unlink()
+                except OSError:
+                    return False
             for name in dirnames:
-                (Path(root_dir) / name).rmdir()
-        if path.exists():
-            path.rmdir()
+                candidate = Path(root_dir) / name
+                try:
+                    candidate.rmdir()
+                except OSError:
+                    return False
+        path.rmdir()
         return True
-    except OSError as exc:
-        logger.error("Cleanup failed for %s: %s", path, exc)
+    except OSError:
         return False
 
 
@@ -1206,23 +1195,19 @@ def _check_import_compatibility(
             "details": str(exc),
         }
     
-    if result.returncode != 0:
-        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-        return {
-            "status": status,
-            "relative_path": relative_path,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "details": details,
-        }
-
+    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    if status == "compatible":
+        candidates = _extract_import_candidates(result.stdout or "")
+        if not candidates:
+            status = "incompatible"
+            details = details or "No import candidates found."
 
     return {
-        "status": "compatible",
+        "status": status,
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": "Compatibility check succeeded.",
+        "details": details or "Compatibility check succeeded.",
     }
 
 
@@ -1238,7 +1223,11 @@ def _run_compatibility_check(job_id: str):
     pending_entries = [
         (index, entry)
         for index, entry in enumerate(job.get("files", []))
-        if entry.get("status") == "uploaded" and not entry.get("compatibility")
+        if (
+            entry.get("status") == "uploaded"
+            and not entry.get("compatibility")
+            and not entry.get("compatibility_skip")
+        )
     ]
     if not pending_entries:
         def mark_idle(job_dict):
@@ -1495,9 +1484,9 @@ def _process_import_job(job_id: str):
             for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
                     continue
-                if not entry.get("relative_path"):
-                    continue
                 if entry.get("import_skip"):
+                    continue
+                if not entry.get("relative_path"):
                     continue
                 entries_to_import.append(
                     {
@@ -1560,7 +1549,6 @@ def _process_import_job(job_id: str):
                                     logger.warning("Failed to remove staged file %s: %s", file_path, exc)
                             _save_job(job)
 
-            # SEM EDX Special Processing: Attach text files to imported images
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
@@ -1622,12 +1610,7 @@ def _process_import_job(job_id: str):
                         _save_job(job)
                     finally:
                         try:
-                            conn.close(hard=False)
-                        except TypeError:
-                            try:
-                                conn.close()
-                            except Exception:
-                                pass
+                            conn.close()
                         except Exception:
                             pass
                 except Exception:
@@ -1754,14 +1737,12 @@ def _start_upload(request, conn):
     if not files:
         logger.info("Upload start request missing files payload.")
         return json_error(errors.no_files_provided())
-    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
-    batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
-    
-    # Extract special upload type and SEM EDX associations
-    special_upload = payload.get("special_upload") or None
+    special_upload = (payload.get("special_upload") or "").strip()
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
+    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 50)
+    batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
     session_key = _get_session_key(conn)
     if not session_key:
@@ -1794,6 +1775,8 @@ def _start_upload(request, conn):
         if size < 0:
             size = 0
         upload_id = uuid.uuid4().hex
+        compatibility_skip = bool(entry.get("compatibility_skip"))
+        import_skip = bool(entry.get("import_skip"))
         filename = PurePosixPath(rel_path).name
         staged_path = f"_staged/{upload_id}/{filename}"
         total_bytes += size
@@ -1812,14 +1795,16 @@ def _start_upload(request, conn):
                 "size": size,
                 "status": "pending",
                 "errors": [],
-                "compatibility_skip": bool(entry.get("compatibility_skip")),
-                "import_skip": bool(entry.get("import_skip")),
+                "compatibility_skip": compatibility_skip,
+                "import_skip": import_skip,
             }
         )
 
     if invalid:
         logger.info("Upload start rejected invalid paths: %s", invalid)
         return json_error(errors.invalid_file_paths(invalid))
+
+    sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
 
     dataset_map = {}
     orphan_dataset_name = None
@@ -1840,10 +1825,6 @@ def _start_upload(request, conn):
 
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
-    
-    # Normalize SEM EDX associations after normalizing files
-    sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
-    
     job = {
         "job_id": job_id,
         "username": username,
@@ -2154,8 +2135,14 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
-            "compatibility_checked": sum(1 for f in job.get("files", []) if f.get("compatibility")),
-            "compatibility_total": sum(1 for f in job.get("files", []) if f.get("status") == "uploaded"),
+            "compatibility_checked": sum(
+                1 for f in job.get("files", []) if f.get("compatibility")
+            ),
+            "compatibility_total": sum(
+                1
+                for f in job.get("files", [])
+                if f.get("status") == "uploaded" and not f.get("compatibility_skip")
+            ),
             "incompatible_files": job.get("incompatible_files", []),
             "confirmation_required": job.get("status") == "awaiting_confirmation",
         }
