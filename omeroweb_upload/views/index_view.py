@@ -1210,20 +1210,22 @@ def _check_import_compatibility(
                 "details": str(exc),
             }
         
-        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-        if status == "compatible":
-            candidates = _extract_import_candidates(result.stdout)
-            if not candidates:
-                status = "incompatible"
-                details = "No importable files were detected."
-        if not details:
-            details = "Compatibility check succeeded." if status == "compatible" else "Compatibility check failed."
+        if result.returncode != 0:
+            status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+            return {
+                "status": status,
+                "relative_path": relative_path,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "details": details,
+            }
+
         return {
-            "status": status,
+            "status": "compatible",
             "relative_path": relative_path,
             "stdout": result.stdout,
             "stderr": result.stderr,
-            "details": details,
+            "details": "Compatibility check succeeded.",
         }
 
 
