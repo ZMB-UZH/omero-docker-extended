@@ -1121,69 +1121,151 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     - "compatible": File can be imported
     - "incompatible": File format not supported
     - "error": Check failed due to an error
+    
+    CRITICAL FIX: The -f flag returns:
+    - Exit code 0: ALWAYS (even for incompatible files)
+    - Actual compatibility is determined by checking if import candidates exist in stdout
     """
     details = (stderr or stdout or "").strip()
     lowered = details.lower()
     
-    # Check for incompatibility markers
-    incompatible_markers = (
+    # CRITICAL: Check stderr first for fatal errors (missing file, CLI errors, etc.)
+    if stderr and stderr.strip():
+        stderr_lower = stderr.lower()
+        # These indicate real errors, not just incompatibility
+        error_indicators = [
+            "exception",
+            "error:",
+            "failed to",
+            "cannot access",
+            "no such file",
+            "permission denied",
+            "timeout",
+        ]
+        if any(indicator in stderr_lower for indicator in error_indicators):
+            return "error", stderr.strip()
+    
+    # Check stdout for explicit incompatibility messages
+    incompatible_markers = [
         "unsupported",
         "unknown format",
         "no suitable reader",
-        "no reader",
         "cannot read",
         "not a supported",
-        "no importable",
-        "no import candidates",
-        "no files found",
-        "no files were found",
-        "could not find any files",
         "cannot determine reader",
-    )
+        "no reader found",
+        "failed to determine reader",
+    ]
     
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
     
-    # Return code 0 means the dry-run succeeded (file is compatible)
-    if return_code == 0:
-        return "compatible", details
+    # CRITICAL FIX: Check if stdout contains actual import candidates
+    # The -f flag ALWAYS returns 0, so we MUST parse stdout
+    has_candidates = _has_import_candidates_in_output(stdout or "")
     
-    # Any other return code is an error
-    return "error", details
+    if has_candidates:
+        return "compatible", "File format supported by OMERO"
+    else:
+        # No candidates found = file is incompatible
+        return "incompatible", "No importable files detected by Bio-Formats"
 
 
-def _extract_import_candidates(output: str):
+
+
+def _has_import_candidates_in_output(output: str) -> bool:
     """
-    Extract import candidates from OMERO import --dry-run output.
+    Check if omero import -f output contains actual import candidates.
     
-    Returns a list of file paths that would be imported.
+    The -f flag displays files grouped by import groups, separated by "#" comments.
+    Real import candidates are non-empty, non-comment lines.
+    
+    Returns True if at least one import candidate is found.
     """
-    candidates = []
-    metadata_keywords = [
-        "file(s)", 
-        "group(s)", 
-        "call(s)", 
-        "no files", 
-        "parsed into", 
-        "to import", 
+    if not output or not output.strip():
+        return False
+    
+    lines = output.strip().split('\n')
+    
+    # Metadata patterns to skip (these are NOT import candidates)
+    skip_patterns = [
+        "# group:",
+        "to import",
+        "file(s)",
+        "group(s)",
+        "call(s)",
+        "parsed into",
         "setid",
+        "reader:",
         "dry run",
         "would import",
     ]
     
-    for line in (output or "").splitlines():
+    for line in lines:
         stripped = line.strip()
+        
+        # Skip empty lines
+        if not stripped:
+            continue
+        
+        # Skip comment lines
+        if stripped.startswith("#"):
+            continue
+        
+        # Skip metadata lines
+        stripped_lower = stripped.lower()
+        if any(pattern in stripped_lower for pattern in skip_patterns):
+            continue
+        
+        # If we reach here, this is likely an actual file path (import candidate)
+        # Additional validation: check if it looks like a file path
+        if '/' in stripped or '\\' in stripped or '.' in stripped:
+            return True
+    
+    return False
+
+
+def _extract_import_candidates(output: str):
+    """
+    Extract import candidates from OMERO import -f output.
+    
+    Returns a list of file paths that would be imported.
+    This is used for additional validation after compatibility check.
+    """
+    if not output or not output.strip():
+        return []
+    
+    candidates = []
+    lines = output.strip().split('\n')
+    
+    skip_patterns = [
+        "# group:",
+        "to import",
+        "file(s)",
+        "group(s)",
+        "call(s)",
+        "parsed into",
+        "setid",
+        "reader:",
+        "dry run",
+        "would import",
+    ]
+    
+    for line in lines:
+        stripped = line.strip()
+        
         # Skip empty lines and comments
         if not stripped or stripped.startswith("#"):
             continue
         
+        # Skip metadata lines
         stripped_lower = stripped.lower()
-        # Skip lines that are metadata/summary lines
-        if any(keyword in stripped_lower for keyword in metadata_keywords):
+        if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
         
-        # Lines that look like file paths are candidates
-        candidates.append(stripped)
+        # This looks like an actual file path
+        if '/' in stripped or '\\' in stripped or '.' in stripped:
+            candidates.append(stripped)
     
     return candidates
 
@@ -1199,9 +1281,13 @@ def _check_import_compatibility(
     """
     Check if a file can be imported into OMERO by analyzing it with Bio-Formats.
     
+    CRITICAL FIXES:
+    1. The -f flag ALWAYS returns exit code 0, regardless of compatibility
+    2. Compatibility is determined by parsing stdout for import candidates
+    3. Proper distinction between errors and incompatibility
+    
     Uses 'omero import -f' which performs local file format analysis
     without requiring server connection or authentication.
-    Returns which files would be imported if this were a real import.
     """
     if not file_path.exists():
         return {
@@ -1213,12 +1299,11 @@ def _check_import_compatibility(
         }
     
     # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    # This flag checks if the file format is supported by OMERO
     cmd = [OMERO_CLI, "import", "-f", str(file_path)]
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
+    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     
     try:
         result = subprocess.run(
@@ -1226,7 +1311,7 @@ def _check_import_compatibility(
             capture_output=True,
             text=True,
             check=False,
-            timeout=30,
+            timeout=45,  # Increased timeout for large files
             env=env,
         )
     except subprocess.TimeoutExpired:
@@ -1235,7 +1320,7 @@ def _check_import_compatibility(
             "relative_path": relative_path,
             "stdout": "",
             "stderr": "Compatibility check timeout",
-            "details": "Compatibility check timeout after 30 seconds",
+            "details": "Compatibility check timeout after 45 seconds",
         }
     except FileNotFoundError as exc:
         return {
@@ -1245,16 +1330,27 @@ def _check_import_compatibility(
             "stderr": str(exc),
             "details": f"OMERO CLI not found: {exc}",
         }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": str(exc),
+            "details": f"Unexpected error during compatibility check: {exc}",
+        }
     
-    # Classify the output to determine compatibility
+    # CRITICAL FIX: Classify based on stdout content, NOT return code
     status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
     
-    # For compatible files, verify that import candidates were actually found
-    if status == "compatible":
-        candidates = _extract_import_candidates(result.stdout or "")
-        if not candidates:
-            status = "incompatible"
-            details = "No import candidates found in Bio-Formats analysis."
+    # Additional logging for debugging
+    logger.debug(
+        "Compatibility check for %s: status=%s, returncode=%d, stdout_lines=%d, stderr_lines=%d",
+        relative_path,
+        status,
+        result.returncode,
+        len((result.stdout or "").splitlines()),
+        len((result.stderr or "").splitlines()),
+    )
     
     return {
         "status": status,
