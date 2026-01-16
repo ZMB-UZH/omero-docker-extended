@@ -236,7 +236,7 @@ def _normalize_job_batch_size(value, default: int) -> int:
         normalized = int(value)
     except (TypeError, ValueError):
         normalized = default
-    return max(1, min(50, normalized))
+    return max(1, min(10, normalized))
 
 
 def _resolve_job_batch_size(job_dict) -> int:
