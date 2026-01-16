@@ -2306,16 +2306,36 @@
 
         function applyCollaborationState(enabled, options = {}) {
             const { persist = true, refresh = false } = options;
+            const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
+            
             if (collaborationToggle) {
                 collaborationToggle.checked = !!enabled;
             }
             if (persist) {
                 saveCollaborationState(enabled);
             }
-            syncProjectSelectionWithMode();
-            if (projectSelectDropdown?.style.display === 'block') {
-                renderProjectOptions(projectSelectInput?.value || '');
+            
+            // Check if selected project will still exist in the new mode
+            const selectedId = projectSelect?.value || '';
+            const selectedStillExists = selectedId ? !!findProjectEntryById(selectedId, enabled) : false;
+            
+            if (isDropdownOpen) {
+                // Dropdown is OPEN: just refresh the list without changing the input
+                if (!selectedStillExists && selectedId) {
+                    // Selected project disappeared - clear selection but keep dropdown open
+                    clearProjectSelection({ persist: false });
+                } else if (selectedStillExists) {
+                    // Update selection display to match new mode (access/owner might change)
+                    syncProjectSelectionWithMode();
+                }
+                // Clear input for fresh search and render all projects
+                projectSelectInput.value = '';
+                renderProjectOptions('');
+            } else {
+                // Dropdown is CLOSED: update selection normally
+                syncProjectSelectionWithMode();
             }
+            
             if (refresh) {
                 refreshProjectList();
             }
