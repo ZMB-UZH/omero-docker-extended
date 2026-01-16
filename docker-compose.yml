@@ -84,6 +84,8 @@ services:
       TZ: Europe/Zurich
       OMEROHOST: omeroserver
       OMERO_PORT: 4064
+      OMERO_WEB_UPLOAD_CONCURRENCY: 3
+      OMERO_WEB_UPLOAD_BATCH_FILES: 5
       CONFIG_omero_security_transport: ssl
       CONFIG_omero_security_ssl: true
       OMP_HASH_SECRET: "8Fo8bCKntvhy8VJ46N0N3dvFe37nNY" # long secret code used for hashing by the plugin
