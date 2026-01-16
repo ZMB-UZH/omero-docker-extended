@@ -3583,7 +3583,12 @@
     }
 
     if (projectDropdownBackdrop) {
-        projectDropdownBackdrop.addEventListener('click', () => {
+        projectDropdownBackdrop.addEventListener('click', (event) => {
+            // Don't close if clicking the refresh button or collaboration toggle
+            if ((projectRefreshBtn && (event.target === projectRefreshBtn || projectRefreshBtn.contains(event.target))) ||
+                (collaborationSection && collaborationSection.contains(event.target))) {
+                return;
+            }
             closeProjectDropdown(true);
         });
     }
