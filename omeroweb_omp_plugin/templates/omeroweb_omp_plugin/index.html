@@ -793,17 +793,8 @@
         opacity: 1;
         filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
     }
-    .project-select-arrow {
-        position: absolute;
-        right: 12px;
-        top: 50%;
-        transform: translateY(-45%);
-        color: #4b5563;
-        font-size: 18px;
-        font-weight: 600;
-        z-index: 3;
-        pointer-events: none;
-    }
+    .project-select-arrow {position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#4b5563;
+                           font-size:18px; font-weight:600; pointer-events:none;}
     .project-select-controls {
         display: inline-flex;
         align-items: center;
@@ -2927,19 +2918,11 @@
     }
 
     function updateCollaborationVisibility() {
-        const hasCollaborationProjects = (
-            (Array.isArray(projectData?.collab) && projectData.collab.length > 0) ||
-            (Array.isArray(projectData?.collab_annotate) && projectData.collab_annotate.length > 0)
-        );
-        const hasCollaborationGroups = Boolean(projectData?.collab_available);
-        
-        // Show collaboration toggle if either there are collaboration projects OR collaboration groups available
-        const hasCollaborationOptions = hasCollaborationProjects || hasCollaborationGroups;
-        
+        const hasCollaborationAccess = Boolean(projectData?.collab_available);
         if (!collaborationSection) {
-            return hasCollaborationOptions;
+            return hasCollaborationAccess;
         }
-        if (hasCollaborationOptions) {
+        if (hasCollaborationAccess) {
             collaborationSection.style.display = '';
         } else {
             collaborationSection.style.display = 'none';
@@ -2950,7 +2933,7 @@
             }
             applyCollaborationState(false, { persist: false, refresh: false });
         }
-        return hasCollaborationOptions;
+        return hasCollaborationAccess;
     }
 
     function getProjectLabel(projectId, projectName) {
@@ -3207,37 +3190,16 @@
 
     function applyCollaborationState(enabled, options = {}) {
         const { persist = true, refresh = false } = options;
-        const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
-        
         if (collaborationToggle) {
             collaborationToggle.checked = !!enabled;
         }
         if (persist) {
             saveCollaborationState(enabled);
         }
-        
-        // Check if selected project will still exist in the new mode
-        const selectedId = projectSelect?.value || '';
-        const selectedStillExists = selectedId ? !!findProjectEntryById(selectedId, enabled) : false;
-        
-        if (isDropdownOpen) {
-            // Dropdown is OPEN: just refresh the list without changing the input
-            if (!selectedStillExists && selectedId) {
-                // Selected project disappeared - clear selection but keep dropdown open
-                clearProjectSelection({ persist: false });
-                resetDatasetSelection();
-            } else if (selectedStillExists) {
-                // Update selection display to match new mode (access/owner might change)
-                syncProjectSelectionWithMode();
-            }
-            // Clear input for fresh search and render all projects
-            projectSelectInput.value = '';
-            renderProjectOptions('');
-        } else {
-            // Dropdown is CLOSED: update selection normally
-            syncProjectSelectionWithMode();
+        syncProjectSelectionWithMode();
+        if (projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
         }
-        
         if (refresh) {
             refreshProjectList();
         }
@@ -3575,12 +3537,7 @@
     }
 
     if (projectDropdownBackdrop) {
-        projectDropdownBackdrop.addEventListener('click', (event) => {
-            // Don't close if clicking the refresh button or collaboration toggle
-            if ((projectRefreshBtn && (event.target === projectRefreshBtn || projectRefreshBtn.contains(event.target))) ||
-                (collaborationSection && collaborationSection.contains(event.target))) {
-                return;
-            }
+        projectDropdownBackdrop.addEventListener('click', () => {
             closeProjectDropdown(true);
         });
     }
