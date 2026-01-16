@@ -3199,14 +3199,15 @@
         
         const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
         
+        // ALWAYS clear selection and search when collaboration toggle changes
+        clearProjectSelection({ persist: false });
+        resetDatasetSelection();
+        
         if (isDropdownOpen) {
-            // Dropdown is open - clear search input and reset active index
+            // Dropdown is open - clear search and reset active index
             projectSelectInput.value = '';
             setActiveProjectIndex(-1);
             renderProjectOptions('');
-        } else {
-            // Dropdown is closed - sync selection normally
-            syncProjectSelectionWithMode();
         }
         
         if (refresh) {
