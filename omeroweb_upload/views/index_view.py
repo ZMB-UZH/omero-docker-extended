@@ -1114,8 +1114,18 @@ def _update_job(job_id: str, update_fn):
 
 
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+    """
+    Classify OMERO import compatibility check output.
+    
+    Returns a tuple of (status, details) where status is one of:
+    - "compatible": File can be imported
+    - "incompatible": File format not supported
+    - "error": Check failed due to an error
+    """
     details = (stderr or stdout or "").strip()
     lowered = details.lower()
+    
+    # Check for incompatibility markers
     incompatible_markers = (
         "unsupported",
         "unknown format",
@@ -1127,25 +1137,54 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
         "no import candidates",
         "no files found",
         "no files were found",
+        "could not find any files",
+        "cannot determine reader",
     )
+    
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
+    
+    # Return code 0 means the dry-run succeeded (file is compatible)
     if return_code == 0:
         return "compatible", details
+    
+    # Any other return code is an error
     return "error", details
 
 
 def _extract_import_candidates(output: str):
+    """
+    Extract import candidates from OMERO import --dry-run output.
+    
+    Returns a list of file paths that would be imported.
+    """
     candidates = []
-    metadata_keywords = ["file(s)", "group(s)", "call(s)", "no files", "parsed into", "to import", "setid"]
+    metadata_keywords = [
+        "file(s)", 
+        "group(s)", 
+        "call(s)", 
+        "no files", 
+        "parsed into", 
+        "to import", 
+        "setid",
+        "dry run",
+        "would import",
+    ]
+    
     for line in (output or "").splitlines():
         stripped = line.strip()
+        # Skip empty lines and comments
         if not stripped or stripped.startswith("#"):
             continue
+        
         stripped_lower = stripped.lower()
+        # Skip lines that are metadata/summary lines
         if any(keyword in stripped_lower for keyword in metadata_keywords):
             continue
+        
+        # Lines that look like file paths are candidates
         candidates.append(stripped)
+    
     return candidates
 
 
@@ -1157,6 +1196,12 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
+    """
+    Check if a file can be imported into OMERO using a dry-run check.
+    
+    This performs a compatibility check WITHOUT actually importing the file.
+    Uses 'omero import --dry-run' to test if the file format is supported.
+    """
     if not file_path.exists():
         return {
             "status": "error",
@@ -1165,9 +1210,16 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+    
+    # Build command with proper authentication using the helper function
+    # Use --dry-run to check compatibility without actually importing
+    cmd = _build_omero_cli_command(["import", "--dry-run"], session_key, host, port)
+    cmd.append(str(file_path))
+    
+    # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
     env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
+    
     try:
         result = subprocess.run(
             cmd,
@@ -1185,29 +1237,31 @@ def _check_import_compatibility(
             "stderr": "Compatibility check timeout",
             "details": "Compatibility check timeout after 30 seconds",
         }
-
     except FileNotFoundError as exc:
         return {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
             "stderr": str(exc),
-            "details": str(exc),
+            "details": f"OMERO CLI not found: {exc}",
         }
     
+    # Classify the output to determine compatibility
     status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    
+    # For compatible files, verify that import candidates were actually found
     if status == "compatible":
         candidates = _extract_import_candidates(result.stdout or "")
         if not candidates:
             status = "incompatible"
-            details = details or "No import candidates found."
-
+            details = "No import candidates found in dry-run output."
+    
     return {
         "status": status,
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "details": details or "Compatibility check succeeded.",
+        "details": details or "Compatibility check completed.",
     }
 
 
