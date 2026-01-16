@@ -1168,7 +1168,6 @@ def _check_import_compatibility(
     dataset_id: Optional[int],
     relative_path: str,
 ):
-    import tempfile
     if not file_path.exists():
         return {
             "status": "error",
@@ -1177,56 +1176,54 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    
-    # FIX: Use tempfile for isolation and change OMERODIR to OMERO_USERDIR
-    with tempfile.TemporaryDirectory() as temp_user_dir:
-        cmd = [OMERO_CLI, "import", "-f", str(file_path)]
-        env = os.environ.copy()
-        env["OMERO_USERDIR"] = temp_user_dir
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=30,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            return {
-                "status": "error",
-                "relative_path": relative_path,
-                "stdout": "",
-                "stderr": "Compatibility check timeout",
-                "details": "Compatibility check timeout after 30 seconds",
-            }
-        except FileNotFoundError as exc:
-            return {
-                "status": "error",
-                "relative_path": relative_path,
-                "stdout": "",
-                "stderr": str(exc),
-                "details": str(exc),
-            }
-        
-        if result.returncode != 0:
-            status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
-            return {
-                "status": status,
-                "relative_path": relative_path,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "details": details,
-            }
-
+    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+    env = os.environ.copy()
+    env["OMERODIR"] = "/tmp/omero-compat-check-" + str(os.getpid())
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
         return {
-            "status": "compatible",
+            "status": "error",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": "Compatibility check timeout",
+            "details": "Compatibility check timeout after 30 seconds",
+        }
+
+    except FileNotFoundError as exc:
+        return {
+            "status": "error",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": str(exc),
+            "details": str(exc),
+        }
+    
+    if result.returncode != 0:
+        status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+        return {
+            "status": status,
             "relative_path": relative_path,
             "stdout": result.stdout,
             "stderr": result.stderr,
-            "details": "Compatibility check succeeded.",
+            "details": details,
         }
+
+
+    return {
+        "status": "compatible",
+        "relative_path": relative_path,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "details": "Compatibility check succeeded.",
+    }
 
 
 def _run_compatibility_check(job_id: str):
