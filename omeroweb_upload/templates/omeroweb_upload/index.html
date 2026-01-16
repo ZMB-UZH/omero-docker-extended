@@ -1382,7 +1382,7 @@
                     <label for="collaboration_toggle">Collaboration</label>
                 </div>
                 <div class="upload-utilities__compatibility">
-                    <input type="checkbox" id="compatibility_toggle" checked>
+                    <input type="checkbox" id="compatibility_toggle">
                     <label for="compatibility_toggle">Compatibility check</label>
                 </div>
             </div>
@@ -1793,13 +1793,13 @@
         const semEdxAssociationsStorageKey = makeStorageKey('omeroweb_upload_sem_edx_associations_v1');
         const specialUploadOptions = [
             { value: '', label: 'No special method (clear selection)', isEmpty: true },
-            { value: 'sem_edx_spectra', label: 'Zeiss GeminiSEM 450: EDX spectra' },
+            { value: 'sem_edx_spectra', label: 'SEM EDX spectra' },
         ];
         let activeSpecialUploadIndex = -1;
         let semEdxModeActive = false;
         let semEdxInstructionStep = 1;
         const semEdxStep1Lines = [
-            '1) Add all SEM image files and associated txt EDX spectra. Data can also be arranged in separate folders.',
+            '1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders.',
             'Preferred, per folder, is one image and one or more txt spectra, which will be automatically appended to the image.',
         ];
         const semEdxStep2Lines = [
@@ -2306,36 +2306,16 @@
 
         function applyCollaborationState(enabled, options = {}) {
             const { persist = true, refresh = false } = options;
-            const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
-            
             if (collaborationToggle) {
                 collaborationToggle.checked = !!enabled;
             }
             if (persist) {
                 saveCollaborationState(enabled);
             }
-            
-            // Check if selected project will still exist in the new mode
-            const selectedId = projectSelect?.value || '';
-            const selectedStillExists = selectedId ? !!findProjectEntryById(selectedId, enabled) : false;
-            
-            if (isDropdownOpen) {
-                // Dropdown is OPEN: just refresh the list without changing the input
-                if (!selectedStillExists && selectedId) {
-                    // Selected project disappeared - clear selection but keep dropdown open
-                    clearProjectSelection({ persist: false });
-                } else if (selectedStillExists) {
-                    // Update selection display to match new mode (access/owner might change)
-                    syncProjectSelectionWithMode();
-                }
-                // Clear input for fresh search and render all projects
-                projectSelectInput.value = '';
-                renderProjectOptions('');
-            } else {
-                // Dropdown is CLOSED: update selection normally
-                syncProjectSelectionWithMode();
+            syncProjectSelectionWithMode();
+            if (projectSelectDropdown?.style.display === 'block') {
+                renderProjectOptions(projectSelectInput?.value || '');
             }
-            
             if (refresh) {
                 refreshProjectList();
             }
@@ -5498,119 +5478,62 @@
                 const originalPaths = new Set(originalFiles.map((entry) => getEntryPath(entry)));
                 const existingEntries = pendingFiles.filter((entry) => originalPaths.has(getEntryPath(entry)));
                 const newEntries = pendingFiles.filter((entry) => !originalPaths.has(getEntryPath(entry)));
-                
+                let shouldContinue = true;
                 setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
                 try {
-                    if (!existingEntries.length && !newEntries.length) {
+                    if (existingEntries.length) {
+                        await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
+                        const compatibilityResult = await ensureCompatibilityBeforeImport(job, existingEntries);
+                        if (compatibilityResult.proceed) {
+                            registerImportJob(job);
+                            setStatus('Import resumed. Files will appear in Omero soon.', 'success');
+                            delete window.pendingImportJob;
+                            window.pendingImportFiles = [];
+                        } else {
+                            window.pendingImportFiles = existingEntries;
+                            pendingFiles = [...existingEntries, ...newEntries];
+                            refreshFileList();
+                            shouldContinue = false;
+                        }
+                    } else {
                         delete window.pendingImportJob;
                         window.pendingImportFiles = [];
-                        setStatus('No files to import.', 'error');
-                        setUploadingState(false);
-                        return;
                     }
 
-                    // Handle new files: upload them first
-                    let newJob = null;
-                    let uploadedNewFiles = [];
-                    if (newEntries.length) {
+                    if (shouldContinue && newEntries.length) {
                         pendingFiles = newEntries;
                         expandedNodes.clear();
                         refreshFileList();
                         uploadTotalBytes = getPendingTotalBytes();
                         updateUploadOverlayProgress();
 
-                        newJob = await startUploadJob(pendingFiles);
+                        const newJob = await startUploadJob(pendingFiles);
                         uploadTotalBytes = newJob.totalBytes || uploadTotalBytes;
                         updateUploadOverlayProgress();
                         await uploadFiles(newJob.upload_url, pendingFiles);
 
-                        uploadedNewFiles = [...pendingFiles];
-                    }
+                        const uploadedNewFiles = [...pendingFiles];
+                        pendingFiles = [];
+                        expandedNodes.clear();
+                        fileInput.value = '';
+                        folderInput.value = '';
+                        refreshFileList();
 
-                    // Clear UI
-                    pendingFiles = [];
-                    expandedNodes.clear();
-                    fileInput.value = '';
-                    folderInput.value = '';
-                    refreshFileList();
-
-                    // Check compatibility for each job separately but combine results
-                    let allIncompatibleFiles = [];
-                    let oldJobCompatibilityResult = null;
-                    let newJobCompatibilityResult = null;
-
-                    if (existingEntries.length) {
-                        await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
-                        const statusData = await waitForCompatibility(job);
-                        const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
-                        applyCompatibilityFlags(existingEntries, incompatibleFiles);
-                        allIncompatibleFiles.push(...incompatibleFiles);
-                        oldJobCompatibilityResult = { statusData, job, entries: existingEntries, confirmationRequired: statusData.confirmation_required && incompatibleFiles.length > 0 };
-                    }
-
-                    if (newJob && uploadedNewFiles.length) {
-                        const statusData = await waitForCompatibility(newJob);
-                        const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
-                        applyCompatibilityFlags(uploadedNewFiles, incompatibleFiles);
-                        allIncompatibleFiles.push(...incompatibleFiles);
-                        newJobCompatibilityResult = { statusData, job: newJob, entries: uploadedNewFiles, confirmationRequired: statusData.confirmation_required && incompatibleFiles.length > 0 };
-                    }
-
-                    // Combine all files for UI
-                    const allFilesToCheck = [...existingEntries, ...uploadedNewFiles];
-
-                    // Show single popup if ANY job has incompatible files
-                    const needsConfirmation = (oldJobCompatibilityResult?.confirmationRequired || newJobCompatibilityResult?.confirmationRequired);
-                    
-                    if (needsConfirmation && allIncompatibleFiles.length > 0) {
-                        const proceed = await showCompatibilityPopup(
-                            'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
-                        );
-                        if (!proceed) {
-                            skipSpecialUploadReset = true;
-                            window.pendingImportJob = job;
-                            window.pendingImportFiles = allFilesToCheck;
-                            pendingFiles = [...allFilesToCheck];
-                            applyCompatibilityFlags(pendingFiles, allIncompatibleFiles);
-                            refreshFileList();
-                            updateUploadButtonLabel();
+                        const compatibilityResult = await ensureCompatibilityBeforeImport(newJob, uploadedNewFiles);
+                        if (compatibilityResult.proceed) {
+                            registerImportJob(newJob);
                             setStatus(
-                                'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files and click "Continue Import".',
-                                'error'
+                                'Upload complete. You can close this browser window and log off. Files will appear in Omero soon, if compatible.',
+                                'success'
                             );
-                            setUploadingState(false);
-                            updateUploadButtonLabel();
-                            return;
                         }
-                        // User clicked Yes - confirm both jobs
-                        if (oldJobCompatibilityResult) {
-                            await confirmCompatibility(oldJobCompatibilityResult.job);
-                        }
-                        if (newJobCompatibilityResult) {
-                            await confirmCompatibility(newJobCompatibilityResult.job);
-                        }
-                    } else {
-                        // No incompatible files but still need to confirm if required
-                        if (oldJobCompatibilityResult?.statusData.confirmation_required) {
-                            await confirmCompatibility(oldJobCompatibilityResult.job);
-                        }
-                        if (newJobCompatibilityResult?.statusData.confirmation_required) {
-                            await confirmCompatibility(newJobCompatibilityResult.job);
-                        }
+                    } else if (shouldContinue) {
+                        pendingFiles = [];
+                        expandedNodes.clear();
+                        fileInput.value = '';
+                        folderInput.value = '';
+                        refreshFileList();
                     }
-
-                    // Register jobs for import
-                    if (oldJobCompatibilityResult) {
-                        registerImportJob(oldJobCompatibilityResult.job);
-                    }
-                    if (newJobCompatibilityResult) {
-                        registerImportJob(newJobCompatibilityResult.job);
-                    }
-                    
-                    setStatus('Import resumed. Files will appear in Omero soon.', 'success');
-                    delete window.pendingImportJob;
-                    window.pendingImportFiles = [];
-                    
                 } catch (error) {
                     setStatus(`Import failed: ${error.message || error}`, 'error');
                 } finally {
@@ -5875,12 +5798,7 @@
         }
 
         if (projectDropdownBackdrop) {
-            projectDropdownBackdrop.addEventListener('click', (event) => {
-                // Don't close if clicking the refresh button or collaboration toggle
-                if ((projectRefreshBtn && (event.target === projectRefreshBtn || projectRefreshBtn.contains(event.target))) ||
-                    (collaborationSection && collaborationSection.contains(event.target))) {
-                    return;
-                }
+            projectDropdownBackdrop.addEventListener('click', () => {
                 closeProjectDropdown(true);
                 closeSpecialUploadDropdown(true);
             });
@@ -5952,9 +5870,6 @@
         const storedCompatibilityState = loadCompatibilityState();
         if (storedCompatibilityState !== null) {
             applyCompatibilityState(storedCompatibilityState);
-        } else {
-            // Default to enabled on first load
-            applyCompatibilityState(true);
         }
 
         if (userSettingsBatchInput) {
