@@ -2927,10 +2927,15 @@
     }
 
     function updateCollaborationVisibility() {
-        const hasCollaborationOptions = (
+        const hasCollaborationProjects = (
             (Array.isArray(projectData?.collab) && projectData.collab.length > 0) ||
             (Array.isArray(projectData?.collab_annotate) && projectData.collab_annotate.length > 0)
         );
+        const hasCollaborationGroups = Boolean(projectData?.collab_available);
+        
+        // Show collaboration toggle if either there are collaboration projects OR collaboration groups available
+        const hasCollaborationOptions = hasCollaborationProjects || hasCollaborationGroups;
+        
         if (!collaborationSection) {
             return hasCollaborationOptions;
         }
