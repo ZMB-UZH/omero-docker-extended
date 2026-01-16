@@ -2312,10 +2312,17 @@
             if (persist) {
                 saveCollaborationState(enabled);
             }
-            syncProjectSelectionWithMode();
-            if (projectSelectDropdown?.style.display === 'block') {
+            
+            const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
+            
+            if (isDropdownOpen) {
+                // Dropdown is open - just re-render with current search query, don't touch the input
                 renderProjectOptions(projectSelectInput?.value || '');
+            } else {
+                // Dropdown is closed - sync selection normally
+                syncProjectSelectionWithMode();
             }
+            
             if (refresh) {
                 refreshProjectList();
             }
