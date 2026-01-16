@@ -1793,13 +1793,13 @@
         const semEdxAssociationsStorageKey = makeStorageKey('omeroweb_upload_sem_edx_associations_v1');
         const specialUploadOptions = [
             { value: '', label: 'No special method (clear selection)', isEmpty: true },
-            { value: 'sem_edx_spectra', label: 'SEM EDX spectra' },
+            { value: 'sem_edx_spectra', label: 'Zeiss GeminiSEM 450: EDX spectra' },
         ];
         let activeSpecialUploadIndex = -1;
         let semEdxModeActive = false;
         let semEdxInstructionStep = 1;
         const semEdxStep1Lines = [
-            '1) Add all SEM EDX image files and associated txt spectra. Data can also be arranged in separate folders.',
+            '1) Add all SEM image files and associated txt EDX spectra. Data can also be arranged in separate folders.',
             'Preferred, per folder, is one image and one or more txt spectra, which will be automatically appended to the image.',
         ];
         const semEdxStep2Lines = [
