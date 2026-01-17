@@ -301,6 +301,14 @@ def _refresh_job_status(job_dict):
     if _has_pending_uploads(job_dict):
         job_dict["status"] = "uploading"
         return job_dict
+
+    # SEM-EDX: if nothing requires compatibility (e.g. only .txt files, or all skipped),
+    # do NOT get stuck in "checking". Mark as compatible once uploads are complete.
+    if job_dict.get("special_upload") == "sem_edx_spectra":
+        pending_entries = _compatibility_pending_entries(job_dict)
+        if not pending_entries and job_dict.get("compatibility_status") not in ("compatible", "incompatible", "error"):
+            job_dict["compatibility_status"] = "compatible"
+
     compatibility_status = job_dict.get("compatibility_status")
     if compatibility_status == "incompatible":
         job_dict["status"] = "awaiting_confirmation"
@@ -2262,13 +2270,6 @@ def _start_upload(request, conn):
     }
     _save_job(job)
 
-    # SEM-EDX uploads skip compatibility checks; start import immediately
-    if special_upload == "sem_edx_spectra":
-        job["status"] = "ready"
-        _save_job(job)
-        _start_import_thread(job_id)
-        logger.info("SEM-EDX job %s marked ready and import thread started.", job_id)
-    
     logger.info(
         "Upload job %s created for user %s with %d files (%d bytes).",
         job_id,
