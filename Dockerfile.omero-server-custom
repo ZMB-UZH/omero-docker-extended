@@ -76,11 +76,12 @@ RUN set -euo pipefail; \
     chmod 0555 /startup/55-install-figure-script.sh
 
 # Bootstrap job-service user (auto-create if missing)
-# ---------------------------------------------------
-COPY startup/60-job-service-bootstrap.sh /startup/60-job-service-bootstrap.sh
+# MUST run AFTER OMERO.server (Glacier2) is up
+# --------------------------------------------
+COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
-    chown root:root /startup/60-job-service-bootstrap.sh; \
-    chmod 0555 /startup/60-job-service-bootstrap.sh
+    chown root:root /startup/99-job-service-bootstrap.sh; \
+    chmod 0555 /startup/99-job-service-bootstrap.sh
 
 # Drop privileges for runtime
 # ---------------------------
