@@ -2261,6 +2261,14 @@ def _start_upload(request, conn):
         "sem_edx_associations": sem_edx_associations,
     }
     _save_job(job)
+
+    # SEM-EDX uploads skip compatibility checks; start import immediately
+    if special_upload == "sem_edx_spectra":
+        job["status"] = "ready"
+        _save_job(job)
+        _start_import_thread(job_id)
+        logger.info("SEM-EDX job %s marked ready and import thread started.", job_id)
+    
     logger.info(
         "Upload job %s created for user %s with %d files (%d bytes).",
         job_id,
