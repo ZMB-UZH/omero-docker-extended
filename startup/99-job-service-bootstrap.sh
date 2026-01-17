@@ -106,10 +106,9 @@ else
     echo "Creating user ${JOB_USER} (non-interactive)..."
     "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
         -u root -w "${ROOTPASS}" \
-        user add "${JOB_USER}" "Job Service" \
+        user add "${JOB_USER}" Job Service \
         --group-name user \
-        --password "${JOB_PASS}" \
-        --password-confirm "${JOB_PASS}"
+        -P "${JOB_PASS}"
 fi
 
 # Ensure job-service is a member of ALL groups (so jobs can switch group contexts safely)
