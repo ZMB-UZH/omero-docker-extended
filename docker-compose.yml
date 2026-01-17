@@ -108,6 +108,8 @@ services:
       # ---------------------------------------------------------------
       OMERO_JOB_SERVICE_USERNAME: "job-service"
       OMERO_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
+      OMERO_WEB_JOB_SERVICE_USERNAME: "job-service"
+      OMERO_WEB_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
       # Optional: force a fixed group id for job-service (otherwise job group is used)
       # OMERO_WEB_JOB_SERVICE_GROUP: "123"
       # Configure Django to use Redis for rate limiting
