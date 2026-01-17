@@ -1860,6 +1860,12 @@ def _process_import_job(job_id: str):
 
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
+
+            if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
+                logger.info("SEM EDX mode enabled for job %s but no sem_edx_associations were provided; skipping TXT attachments", job_id)
+                _append_job_message(job, "SEM EDX: no associations provided; skipping TXT attachments")
+                _save_job(job)
+
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
                 try:
                     conn = _open_service_connection(host, port, group_id=job.get("group_id"))
