@@ -858,9 +858,6 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
-return None
-
-
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
     """
     Attach a text file to an OMERO image using CLI commands.
