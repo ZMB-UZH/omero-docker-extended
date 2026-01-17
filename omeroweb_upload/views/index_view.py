@@ -457,6 +457,54 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
     return normalized
 
 
+def _build_sem_edx_associations_from_entries(entries):
+    """Server-side fallback to derive SEM-EDX TXT->image associations.
+
+    The UI normally submits sem_edx_associations, but if that payload is missing/empty
+    (e.g. browser/localStorage issues, UI state bugs), we can deterministically derive
+    associations from the uploaded file list:
+
+    - Group by directory (based on relative_path)
+    - Choose ONE non-.txt file per directory as the target image (lexicographically)
+    - Attach ALL .txt files in that directory to that image
+
+    This keeps behaviour predictable and ensures TXT attachment is at least attempted.
+    """
+
+    if not isinstance(entries, list) or not entries:
+        return {}
+
+    grouped = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("relative_path")
+        if not rel or not isinstance(rel, str):
+            continue
+        rel_norm = _safe_relative_path(rel)
+        if not rel_norm:
+            continue
+        parent = str(PurePosixPath(rel_norm).parent)
+        if parent == ".":
+            parent = ""
+        bucket = grouped.setdefault(parent, {"images": [], "txt": []})
+        if rel_norm.lower().endswith(".txt"):
+            bucket["txt"].append(rel_norm)
+        else:
+            bucket["images"].append(rel_norm)
+
+    associations = {}
+    for bucket in grouped.values():
+        if not bucket["images"] or not bucket["txt"]:
+            continue
+        image_rel = sorted(bucket["images"])[0]
+        txt_rels = sorted(set(bucket["txt"]))
+        if txt_rels:
+            associations[image_rel] = txt_rels
+
+    return associations
+
+
 def _get_text(value_obj):
     try:
         return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
@@ -1887,15 +1935,31 @@ def _process_import_job(job_id: str):
             sem_edx_associations = job.get("sem_edx_associations") or {}
 
             if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
-                logger.info("SEM EDX mode enabled for job %s but no sem_edx_associations were provided; skipping TXT attachments", job_id)
-                _append_job_message(job, "SEM EDX: no associations provided; skipping TXT attachments")
-                _save_job(job)
+                # Fallback: derive associations server-side from uploaded file list.
+                derived = _build_sem_edx_associations_from_entries(job.get("files", []))
+                if derived:
+                    sem_edx_associations = derived
+                    job["sem_edx_associations"] = derived
+                    _append_job_message(
+                        job,
+                        f"SEM EDX: derived {sum(len(v) for v in derived.values())} TXT attachment(s) from uploaded files (no UI associations received)"
+                    )
+                    _save_job(job)
+                else:
+                    logger.info(
+                        "SEM EDX mode enabled for job %s but no TXT/image associations could be derived; skipping TXT attachments",
+                        job_id,
+                    )
+                    _append_job_message(job, "SEM EDX: no TXT/image associations found; skipping TXT attachments")
+                    _save_job(job)
 
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
                 try:
                     conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                     if not conn:
                         logger.error("Failed to open SEM-EDX service connection for TXT attachments")
+                        _append_job_message(job, "SEM EDX: failed to open service connection for TXT attachments")
+                        _save_job(job)
                     else:
                         try:
                             entries_by_path = {
