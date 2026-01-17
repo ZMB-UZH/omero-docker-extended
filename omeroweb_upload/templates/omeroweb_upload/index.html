@@ -5015,9 +5015,11 @@
             const projectId = projectSelect?.value || '';
             const projectName = projectSelectInput?.dataset.selectedName || projectSelectInput?.value || '';
             const specialUploadValue = specialUploadSelect?.value || '';
-            const semEdxAssociations = isSemEdxSelected() && semEdxInstructionStep > 1
-                ? buildSemEdxAssociationPayload(entries)
-                : null;
+
+            let semEdxAssociations = null;
+            if (isSemEdxSelected()) {
+                semEdxAssociations = buildSemEdxAssociationPayload(entries);
+            }
 
             const response = await fetch(startUrl, {
                 method: 'POST',
@@ -5032,7 +5034,7 @@
                 }),
                 credentials: 'same-origin',
             });
-
+            
             const data = await parseJsonResponse(response);
             if (!response.ok || !data.ok) {
                 throw new Error(data.error || `Upload start failed with status ${response.status}.`);
@@ -5780,14 +5782,21 @@
                     updateSemEdxStatus();
                     return;
                 }
+
+                if (semEdxAssociationMode !== 'manual') {
+                    await ensureSemEdxAutomaticAssociations();
+                }
+
                 if (!updateSemEdxStatus()) {
                     return;
                 }
+
                 const appendedCount = getSemEdxAppendedCount();
                 if (appendedCount < 1) {
                     updateSemEdxStatus();
                     return;
                 }
+
                 const proceed = await showSemEdxConfirmPopup(
                     'Are you sure you want to proceed with Upload & Import? The selected SEM images will be imported into Omero and the associated spectra will be appended.'
                 );
