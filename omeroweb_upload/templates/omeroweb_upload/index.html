@@ -3297,7 +3297,7 @@
             const rawValue = userSettingsBatchInput?.value?.trim() ?? '';
             const numericPattern = /^\d+$/;
             const value = numericPattern.test(rawValue) ? parseInt(rawValue, 10) : NaN;
-            const isValid = Number.isInteger(value) && value >= 1 && value <= 50;
+            const isValid = Number.isInteger(value) && value >= 1 && value <= 10;
             setUserSettingError(userSettingsBatchInput, !isValid);
             const showAllProjects = !!userSettingShowAllYes?.checked;
             const removeClearAll = !!userSettingRemoveClearAllYes?.checked;
