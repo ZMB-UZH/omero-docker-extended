@@ -40,7 +40,7 @@ services:
       # --------------------------------------------------------------------
       # job-service bootstrap (auto-create if missing)
       # --------------------------------------------------------------------
-      OMERO_JOB_SERVICE_PASS: "PUT_A_REAL_STRONG_PASSWORD_HERE"
+      OMERO_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
       OMERO_JOB_SERVICE_USERNAME: "job-service"
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
@@ -106,7 +106,8 @@ services:
       # Global service account for ALL background jobs (across plugins)
       # MUST match the OMERO.server-created user "job-service"
       # ---------------------------------------------------------------
-      OMERO_WEB_JOB_SERVICE_PASS: "PUT_A_REAL_STRONG_PASSWORD_HERE"
+      OMERO_JOB_SERVICE_USERNAME: "job-service"
+      OMERO_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
       # Optional: force a fixed group id for job-service (otherwise job group is used)
       # OMERO_WEB_JOB_SERVICE_GROUP: "123"
       # Configure Django to use Redis for rate limiting
