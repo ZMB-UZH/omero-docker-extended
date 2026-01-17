@@ -103,13 +103,13 @@ done
 if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user info --user-name "${JOB_USER}" >/dev/null 2>&1; then
     echo "User ${JOB_USER} already exists."
 else
-    echo "Creating user ${JOB_USER}..."
-    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" \
-        user add "${JOB_USER}" Job Service --group-name user
-
-    echo "Setting password for ${JOB_USER}..."
-    printf '%s\n%s\n' "${JOB_PASS}" "${JOB_PASS}" | "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-        -u root -w "${ROOTPASS}" user password "${JOB_USER}"
+    echo "Creating user ${JOB_USER} (non-interactive)..."
+    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+        -u root -w "${ROOTPASS}" \
+        user add "${JOB_USER}" "Job Service" \
+        --group-name user \
+        --password "${JOB_PASS}" \
+        --password-confirm "${JOB_PASS}"
 fi
 
 # Ensure job-service is a member of ALL groups (so jobs can switch group contexts safely)
