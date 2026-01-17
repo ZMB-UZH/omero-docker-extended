@@ -61,6 +61,14 @@ ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
 ORPHAN_SUFFIX_LENGTH = 6
 ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
 
+# --------------------------------------------------------------------------
+# SEM-EDX SERVICE ACCOUNT (for async TXT attachments)
+# --------------------------------------------------------------------------
+SEM_EDX_SERVICE_USER_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_USER'
+SEM_EDX_SERVICE_PASS_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_PASS'
+SEM_EDX_SERVICE_GROUP_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_GROUP'
+SEM_EDX_FILEANNOTATION_NS = 'sem_edx.spectra'
+
 # Cache for directory paths (initialized once per application lifecycle)
 _UPLOAD_ROOT_CACHE = None
 _JOBS_ROOT_CACHE = None
@@ -858,132 +866,118 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
-def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
+def _get_sem_edx_service_credentials():
+    """Resolve SEM-EDX service account credentials from environment.
+
+    This is intentionally NOT taken from the user's OMERO.web session.
+    Using the user's session for background attachments can invalidate their login.
     """
-    Attach a text file to an OMERO image using CLI commands.
-    
-    This function implements robust error handling for session expiration.
-    
-    Args:
-        session_key: OMERO session key
-        host: OMERO server host
-        port: OMERO server port
-        image_id: ID of the image to attach the file to
-        txt_path: Path to the text file
-    
-    Returns:
-        bool: True if attachment succeeded
-        
-    Raises:
-        RuntimeError: If attachment fails after retries
-    """
-    max_retries = 3
-    retry_delay = 2  # seconds
-    
-    for attempt in range(max_retries):
+    user = (os.environ.get(SEM_EDX_SERVICE_USER_ENV) or "").strip()
+    passwd = (os.environ.get(SEM_EDX_SERVICE_PASS_ENV) or "").strip()
+
+    # Optional override: force a specific group for the service user.
+    # If empty, we'll use the job's group_id (recommended).
+    group_override = (os.environ.get(SEM_EDX_SERVICE_GROUP_ENV) or "").strip()
+    if group_override:
+        group_override = INT_SANITIZER.sub("", group_override)
+    return user, passwd, group_override
+
+
+def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
+    """Login as a dedicated service user for async SEM-EDX TXT attachments."""
+    service_user, service_pass, group_override = _get_sem_edx_service_credentials()
+    if not service_user or not service_pass:
+        logger.error(
+            "SEM-EDX service credentials missing. Set %s and %s in the omeroweb container environment.",
+            SEM_EDX_SERVICE_USER_ENV,
+            SEM_EDX_SERVICE_PASS_ENV,
+        )
+        return None
+
+    conn = BlitzGateway(service_user, service_pass, host=host, port=int(port), secure=True)
+    try:
+        if not conn.connect():
+            logger.error("Failed to connect with SEM-EDX service user %s", service_user)
+            return None
+
+        # Prefer explicit override, else use job's group_id when provided.
+        effective_group = None
+        if group_override:
+            try:
+                effective_group = int(group_override)
+            except Exception:
+                effective_group = None
+        elif group_id is not None:
+            effective_group = int(group_id)
+
+        if effective_group is not None:
+            try:
+                conn.SERVICE_OPTS.setOmeroGroup(str(effective_group))
+            except Exception as exc:
+                logger.warning("Failed to set service group context to %s: %s", effective_group, exc)
+
+        return conn
+    except Exception:
         try:
-            # Step 1: Upload the file
-            upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
-            upload_cmd.append(str(txt_path))
-            
-            logger.info("Uploading %s (attempt %d/%d)", txt_path, attempt + 1, max_retries)
-            upload_result = _run_omero_cli(upload_cmd)
-            
-            if upload_result.returncode != 0:
-                error_msg = upload_result.stderr or upload_result.stdout or "omero upload failed"
-                
-                # Check if it's a session error
-                if "SessionException" in error_msg or "session" in error_msg.lower():
-                    logger.warning("Session error during upload (attempt %d): %s", attempt + 1, error_msg)
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
-                        
-                raise RuntimeError(error_msg)
-            
-            # Parse OriginalFile ID from output
-            original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
-                upload_result.stderr, "OriginalFile"
-            )
-            if not original_id:
-                raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
-            
-            logger.info("Uploaded file as OriginalFile:%d", original_id)
-            
-            # Step 2: Create FileAnnotation
-            annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
-            annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-            
-            logger.info("Creating FileAnnotation for OriginalFile:%d", original_id)
-            annotation_result = _run_omero_cli(annotation_cmd)
-            
-            if annotation_result.returncode != 0:
-                error_msg = annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed"
-                
-                if "SessionException" in error_msg or "session" in error_msg.lower():
-                    logger.warning("Session error during annotation (attempt %d): %s", attempt + 1, error_msg)
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
-                        
-                raise RuntimeError(error_msg)
-            
-            annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
-                annotation_result.stderr, "FileAnnotation"
-            )
-            if not annotation_id:
-                raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
-            
-            logger.info("Created FileAnnotation:%d", annotation_id)
-            
-            # Step 3: Link FileAnnotation to Image
-            link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
-            link_cmd.extend(
-                [
-                    "ImageAnnotationLink",
-                    f"parent=Image:{image_id}",
-                    f"child=FileAnnotation:{annotation_id}",
-                ]
-            )
-            
-            logger.info("Linking FileAnnotation:%d to Image:%d", annotation_id, image_id)
-            link_result = _run_omero_cli(link_cmd)
-            
-            if link_result.returncode != 0:
-                error_msg = link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed"
-                
-                if "SessionException" in error_msg or "session" in error_msg.lower():
-                    logger.warning("Session error during linking (attempt %d): %s", attempt + 1, error_msg)
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
-                        
-                raise RuntimeError(error_msg)
-            
-            link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
-                link_result.stderr, "ImageAnnotationLink"
-            )
-            if not link_id:
-                raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
-            
-            logger.info("Successfully created ImageAnnotationLink:%d", link_id)
-            return True
-            
-        except RuntimeError as exc:
-            if attempt < max_retries - 1:
-                logger.warning("Attachment attempt %d failed: %s. Retrying...", attempt + 1, exc)
-                time.sleep(retry_delay)
-            else:
-                logger.error("All %d attachment attempts failed for %s", max_retries, txt_path)
-                raise
-        except Exception as exc:
-            logger.error("Unexpected error during attachment attempt %d: %s", attempt + 1, exc)
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-            else:
-                raise RuntimeError(f"Attachment failed after {max_retries} attempts: {exc}")
-    
-    return False
+            conn.close()
+        except Exception:
+            pass
+        raise
+
+
+def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Path):
+    """Attach a TXT file to an Image using OMERO API (no CLI).
+
+    Creates:
+      - OriginalFile
+      - FileAnnotation (ns=SEM_EDX_FILEANNOTATION_NS)
+      - ImageAnnotationLink
+
+    This is safe to run in background threads and does NOT touch the user's session.
+    """
+    from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
+    from omero.rtypes import rstring, rlong
+
+    image = conn.getObject("Image", int(image_id))
+    if image is None:
+        raise RuntimeError(f"Image:{image_id} not found (service user cannot access it)")
+
+    # Read bytes
+    try:
+        binary = txt_path.read_bytes()
+    except Exception as exc:
+        raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
+
+    update = conn.getUpdateService()
+
+    of = OriginalFileI()
+    of.setName(rstring(txt_path.name))
+    of.setPath(rstring(f"sem_edx/img_{image_id}/"))
+    of.setSize(rlong(len(binary)))
+    of.setMimetype(rstring("text/plain"))
+
+    of = update.saveAndReturnObject(of)
+
+    store = conn.c.sf.createRawFileStore()
+    try:
+        store.setFileId(of.getId().getValue())
+        store.write(binary, 0, len(binary))
+        store.save()
+    finally:
+        try:
+            store.close()
+        except Exception:
+            pass
+
+    fa = FileAnnotationI()
+    fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
+    fa.setFile(of)
+
+    link = ImageAnnotationLinkI()
+    link.setParent(image._obj)
+    link.setChild(fa)
+
+    update.saveAndReturnObject(link)
 
 
 def _append_job_message(job: dict, message: str):
@@ -1855,9 +1849,9 @@ def _process_import_job(job_id: str):
             sem_edx_associations = job.get("sem_edx_associations") or {}
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
                 try:
-                    conn = _open_session_connection(session_key, host, port)
+                    conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                     if not conn:
-                        logger.error("Failed to open session connection for SEM EDX attachments")
+                        logger.error("Failed to open SEM-EDX service connection for TXT attachments")
                     else:
                         try:
                             entries_by_path = {
@@ -2193,10 +2187,17 @@ def _start_upload(request, conn):
 
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
+    current_group_id = None
+    try:
+        # Preserve the user's current group context so the service account can attach in the same group.
+        current_group_id = conn.SERVICE_OPTS.getOmeroGroup()
+    except Exception:
+        current_group_id = None
     job = {
         "job_id": job_id,
         "username": username,
         "session_key": session_key,
+        "group_id": current_group_id,
         "host": host,
         "port": port,
         "project_id": project_id,
