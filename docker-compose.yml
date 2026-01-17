@@ -37,6 +37,11 @@ services:
       CONFIG_omero_db_pass: ShR3K413CPh0Q2r # must be the same as the database password
       CONFIG_omero_db_name: omero
       ROOTPASS: CsCN581JzgGsdyV # root account password, must be strong!!
+      # --------------------------------------------------------------------
+      # job-service bootstrap (auto-create if missing)
+      # --------------------------------------------------------------------
+      OMERO_JOB_SERVICE_PASS: "PUT_A_REAL_STRONG_PASSWORD_HERE"
+      OMERO_JOB_SERVICE_USERNAME: "job-service"
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
       CONFIG_omero_db_poolsize: 80 # max number should be less than 100 for the default Postgres settings
@@ -97,10 +102,13 @@ services:
       CONFIG_omero_web_debug: true
       CONFIG_omero_web_time__zone: "Europe/Zurich"
       OMERO_WEB_VENV: venv-3.12 # ATTENTION!!! This needs to be updated to the correct venv when the developers update Omero Web
-      OMERO_WEB_SEM_EDX_SERVICE_USER: "sem-edx-service"
-      OMERO_WEB_SEM_EDX_SERVICE_PASS: "3ZSJSrf7YpH5glY"
-      # Optional: force a fixed group id for attachments (otherwise job group is used)
-      # OMERO_WEB_SEM_EDX_SERVICE_GROUP: "123"
+      # ---------------------------------------------------------------
+      # Global service account for ALL background jobs (across plugins)
+      # MUST match the OMERO.server-created user "job-service"
+      # ---------------------------------------------------------------
+      OMERO_WEB_JOB_SERVICE_PASS: "PUT_A_REAL_STRONG_PASSWORD_HERE"
+      # Optional: force a fixed group id for job-service (otherwise job group is used)
+      # OMERO_WEB_JOB_SERVICE_GROUP: "123"
       # Configure Django to use Redis for rate limiting
       CONFIG_omero_web_caches: '{"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1", "KEY_PREFIX": "omero", "TIMEOUT": 300}}'
       CONFIG_omero_web_apps: '["omero_figure","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload","omeroweb_admin_tools"]' # modify if needed when the developers update Omero Web
