@@ -70,8 +70,13 @@ ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
 # - The job-service user is created automatically by the OMERO.server startup script.
 # --------------------------------------------------------------------------
 JOB_SERVICE_USERNAME = "job-service"
-JOB_SERVICE_PASS_ENV = "OMERO_WEB_JOB_SERVICE_PASS"
-JOB_SERVICE_GROUP_ENV = "OMERO_WEB_JOB_SERVICE_GROUP"
+
+# Prefer shared names across ALL plugins/containers.
+# Keep backward-compat: also accept the old OMERO_WEB_* names.
+JOB_SERVICE_PASS_ENV = "OMERO_JOB_SERVICE_PASS"
+JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
+JOB_SERVICE_PASS_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
+JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 
 # Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
@@ -880,12 +885,14 @@ def _get_job_service_credentials():
     Using the user's session for background work can invalidate their login.
     """
     passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
+    if not passwd:
+        passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
     group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
     if group_override:
-        group_override = INT_SANITIZER.sub("", group_override)
+        group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
 
     return JOB_SERVICE_USERNAME, passwd, group_override
 
