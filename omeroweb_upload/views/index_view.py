@@ -1875,25 +1875,35 @@ def _process_import_job(job_id: str):
                             for image_rel, txt_paths in sem_edx_associations.items():
                                 if not isinstance(txt_paths, list):
                                     continue
-                                
+
                                 image_name = PurePosixPath(image_rel).name if image_rel else ""
-                                
-                                # Validate session periodically (every 10 attachments)
+
+                                # Validate job-service session periodically (every 10 attachments).
+                                # IMPORTANT: NEVER reconnect using the end-user session_key here.
                                 if attachment_count > 0 and attachment_count % 10 == 0:
                                     if not _validate_session(conn):
-                                        logger.warning("Session expired, reconnecting...")
-                                        conn = _reconnect_session(session_key, host, port, conn)
+                                        logger.warning("job-service session expired, reopening service connection...")
+                                        try:
+                                            try:
+                                                conn.close()
+                                            except Exception:
+                                                pass
+                                            conn = _open_service_connection(host, port, group_id=job.get("group_id"))
+                                        except Exception:
+                                            conn = None
+
                                         if not conn:
-                                            logger.error("Failed to reconnect session, aborting SEM EDX attachments")
+                                            logger.error("Failed to reopen job-service connection, aborting SEM EDX attachments")
                                             break
-                                        # Clear image cache as objects may be stale
+
+                                        # Clear caches because OMERO objects become stale after reconnect
                                         image_cache.clear()
-                                
+
                                 # Find or cache the image
                                 if image_rel not in image_cache:
                                     dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
                                     dataset_id = dataset_map.get(dataset_name)
-                                    
+
                                     try:
                                         image_cache[image_rel] = _find_image_by_name(
                                             conn, image_name, dataset_id=dataset_id
@@ -1901,75 +1911,84 @@ def _process_import_job(job_id: str):
                                     except Exception as exc:
                                         logger.warning("Failed to find image %s: %s", image_name, exc)
                                         image_cache[image_rel] = None
-                                        # Try to reconnect if it looks like a session issue
+
+                                        # If it looks like a session issue, reopen job-service connection (NOT user session)
                                         if "session" in str(exc).lower():
-                                            conn = _reconnect_session(session_key, host, port, conn)
+                                            try:
+                                                try:
+                                                    conn.close()
+                                                except Exception:
+                                                    pass
+                                                conn = _open_service_connection(host, port, group_id=job.get("group_id"))
+                                            except Exception:
+                                                conn = None
+
                                             if conn:
+                                                image_cache.clear()
                                                 try:
                                                     image_cache[image_rel] = _find_image_by_name(
                                                         conn, image_name, dataset_id=dataset_id
                                                     )
                                                 except Exception:
-                                                    pass
-                                
+                                                    image_cache[image_rel] = None
+
                                 image_obj = image_cache.get(image_rel)
-                                
+
                                 # Process each text file for this image
                                 for txt_rel in txt_paths:
                                     txt_name = PurePosixPath(txt_rel).name
                                     attachment_count += 1
-                                    
+
                                     if not image_obj:
                                         logger.warning("Image not found for %s, skipping attachment", txt_name)
                                         _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
                                         continue
-                                    
+
                                     image_id = _get_id(image_obj)
                                     if not image_id:
                                         logger.warning("Could not get image ID for %s, skipping %s", image_name, txt_name)
                                         _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
                                         continue
-                                    
+
                                     txt_entry = entries_by_path.get(txt_rel)
                                     if not txt_entry:
                                         logger.warning("Text entry not found for %s, skipping", txt_rel)
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
-                                    
+
                                     staged_path = txt_entry.get("staged_path") or txt_rel
                                     txt_path = upload_root / staged_path
-                                    
+
                                     if not txt_path.exists():
                                         logger.warning("Text file not found at %s, skipping", txt_path)
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
-                                    
-                                    # Attempt the attachment with retry logic built into _attach_txt_to_image
+
+                                    # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:
                                         logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
-                                        _attach_txt_to_image(
-                                            session_key,
-                                            host,
-                                            port,
+                                        _attach_txt_to_image_service(
+                                            conn,
                                             image_id,
                                             txt_path,
                                         )
-                                        
+
                                         # Mark as imported if not already
                                         if txt_entry.get("status") != "imported":
                                             txt_entry["status"] = "imported"
                                             job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get("size", 0)
-                                        
+
                                         _append_txt_attachment_message(job, txt_name, image_name, True)
                                         logger.info("Successfully attached %s to %s", txt_name, image_name)
-                                        
+
                                     except Exception as exc:
                                         logger.error("Failed to attach %s to %s: %s", txt_rel, image_rel, exc)
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
-                                    
+
                                     # Save job state periodically
                                     if attachment_count % 5 == 0:
                                         _save_job(job)
+
                             
                             # Final save
                             _save_job(job)
