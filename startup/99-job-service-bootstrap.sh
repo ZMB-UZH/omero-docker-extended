@@ -30,10 +30,11 @@ OMERO_DIR="$(find /opt/omero/server \
     -name 'OMERO.server-*' \
     | sort -V \
     | tail -n 1)"
-if [[ -z "${OMERO_DIR}" ]]; then
-    echo "ERROR: Cannot locate OMERO.server directory under /opt/omero/server/OMERO.server-*." >&2
+if [[ -z "${OMERO_DIR}" || ! -d "${OMERO_DIR}" ]]; then
+    echo "ERROR: OMERO_DIR is invalid or not a directory: ${OMERO_DIR}" >&2
     exit 1
 fi
+
 OMERO_BIN="${OMERO_DIR}/bin/omero"
 
 LOG_DIR="${OMERO_DIR}/var/log"
