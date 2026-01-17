@@ -37,6 +37,7 @@ fi
 OMERO_BIN="${OMERO_DIR}/bin/omero"
 
 LOG_DIR="${OMERO_DIR}/var/log"
+mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/job-service-bootstrap.log"
 LOCK_FILE="/tmp/job-service-bootstrap.lock"
 
