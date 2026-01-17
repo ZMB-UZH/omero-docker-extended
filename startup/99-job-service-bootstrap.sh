@@ -111,15 +111,19 @@ else
         -P "${JOB_PASS}"
 fi
 
-# Ensure job-service is a member of ALL groups (so jobs can switch group contexts safely)
 echo "Ensuring ${JOB_USER} is in all groups..."
-"${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" group list \
-    | while read -r gid gname rest; do
-        if [[ "${gid}" =~ ^[0-9]+$ ]] && [[ -n "${gname}" ]]; then
-            "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" \
-                group adduser "${JOB_USER}" --name "${gname}" >/dev/null 2>&1 || true
-        fi
-      done
 
-echo "job-service bootstrap complete at $(date -Iseconds)"
+GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+    -u root -w "${ROOTPASS}" \
+    group list -q | awk '{print $1}')"
+
+for GID in ${GROUP_IDS}; do
+    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+        -u root -w "${ROOTPASS}" \
+        user addgroup "${JOB_USER}" "${GID}" \
+        || true
+done
+
+echo "job-service bootstrap complete at $(date -Is)"
+
 exit 0
