@@ -2266,8 +2266,16 @@ def _start_upload(request, conn):
         upload_id = uuid.uuid4().hex
         compatibility_skip = bool(entry.get("compatibility_skip"))
         import_skip = bool(entry.get("import_skip"))
+
         filename = PurePosixPath(rel_path).name
+
+        # SEM-EDX: TXT files must NEVER be imported or compatibility-checked
+        if special_upload == "sem_edx_spectra" and filename.lower().endswith(".txt"):
+            import_skip = True
+            compatibility_skip = True
+
         staged_path = f"_staged/{upload_id}/{filename}"
+
         total_bytes += size
         if total_bytes > MAX_UPLOAD_BATCH_BYTES:
             logger.info(
