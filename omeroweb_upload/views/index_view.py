@@ -244,7 +244,7 @@ def _resolve_job_batch_size(job_dict) -> int:
         UPLOAD_BATCH_FILES_ENV,
         DEFAULT_UPLOAD_BATCH_FILES,
         1,
-        50,
+        10,
     )
     return _normalize_job_batch_size(job_dict.get("job_batch_size"), default_batch_size)
 
