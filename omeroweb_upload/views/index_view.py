@@ -412,31 +412,48 @@ def _safe_relative_path(raw_name: str):
 def _normalize_sem_edx_associations(raw_associations, normalized_entries):
     if not isinstance(raw_associations, dict):
         return {}
-    available_paths = {
-        entry.get("relative_path"): entry
-        for entry in normalized_entries
-        if isinstance(entry, dict) and entry.get("relative_path")
-    }
+
+    # ACCEPT BOTH relative_path AND staged_path
+    available_paths = {}
+
+    for entry in normalized_entries:
+        rel = entry.get("relative_path")
+        if rel:
+            available_paths[rel] = entry
+
+        staged = entry.get("staged_path")
+        if staged:
+            available_paths[staged] = entry
+
     normalized = {}
+
     for image_path, txt_paths in raw_associations.items():
         image_rel = _safe_relative_path(image_path or "")
-        if not image_rel or image_rel not in available_paths:
+        if not image_rel:
             continue
         if image_rel.lower().endswith(".txt"):
             continue
+        if image_rel not in available_paths:
+            continue
         if not isinstance(txt_paths, list):
             continue
+
         cleaned_txt = []
+
         for txt_path in txt_paths:
             txt_rel = _safe_relative_path(txt_path or "")
-            if not txt_rel or txt_rel not in available_paths:
+            if not txt_rel:
                 continue
             if not txt_rel.lower().endswith(".txt"):
                 continue
+            if txt_rel not in available_paths:
+                continue
             if txt_rel not in cleaned_txt:
                 cleaned_txt.append(txt_rel)
+
         if cleaned_txt:
             normalized[image_rel] = cleaned_txt
+
     return normalized
 
 
