@@ -764,7 +764,74 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
     return result.returncode == 0, result.stdout, result.stderr
 
 
+def _validate_session(conn):
+    """
+    Validate that a BlitzGateway connection is still active.
+    
+    Returns:
+        bool: True if session is valid, False otherwise
+    """
+    try:
+        # Try to get the current event context - this will fail if session expired
+        conn.getEventContext()
+        return True
+    except Exception as exc:
+        logger.warning("Session validation failed: %s", exc)
+        return False
+
+
+def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
+    """
+    Create a new connection or reconnect using the session key.
+    
+    Args:
+        session_key: OMERO session key
+        host: OMERO server host
+        port: OMERO server port
+        old_conn: Previous connection to close (if any)
+    
+    Returns:
+        BlitzGateway connection or None if failed
+    """
+    if old_conn:
+        try:
+            old_conn.close()
+        except Exception:
+            pass
+    
+    try:
+        client = omero.client(host=host, port=port)
+        client.joinSession(session_key)
+        conn = BlitzGateway(client_obj=client)
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        
+        # Validate the new connection
+        if not _validate_session(conn):
+            logger.error("Newly created session is invalid")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return None
+            
+        return conn
+    except Exception as exc:
+        logger.error("Failed to reconnect session: %s", exc)
+        return None
+
+
 def _open_session_connection(session_key: str, host: str, port: int):
+    """
+    Open a BlitzGateway connection using a session key.
+    
+    Args:
+        session_key: OMERO session key
+        host: OMERO server host
+        port: OMERO server port
+    
+    Returns:
+        BlitzGateway connection
+    """
     client = omero.client(host=host, port=port)
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
@@ -791,46 +858,135 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
+return None
+
+
 def _attach_txt_to_image(session_key: str, host: str, port: int, image_id: int, txt_path: Path):
-    upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
-    upload_cmd.append(str(txt_path))
-    upload_result = _run_omero_cli(upload_cmd)
-    if upload_result.returncode != 0:
-        raise RuntimeError(upload_result.stderr or upload_result.stdout or "omero upload failed")
-    original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
-        upload_result.stderr, "OriginalFile"
-    )
-    if not original_id:
-        raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
-
-    annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
-    annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
-    annotation_result = _run_omero_cli(annotation_cmd)
-    if annotation_result.returncode != 0:
-        raise RuntimeError(annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed")
-    annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
-        annotation_result.stderr, "FileAnnotation"
-    )
-    if not annotation_id:
-        raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
-
-    link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
-    link_cmd.extend(
-        [
-            "ImageAnnotationLink",
-            f"parent=Image:{image_id}",
-            f"child=FileAnnotation:{annotation_id}",
-        ]
-    )
-    link_result = _run_omero_cli(link_cmd)
-    if link_result.returncode != 0:
-        raise RuntimeError(link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed")
-    link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
-        link_result.stderr, "ImageAnnotationLink"
-    )
-    if not link_id:
-        raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
-    return True
+    """
+    Attach a text file to an OMERO image using CLI commands.
+    
+    This function implements robust error handling for session expiration.
+    
+    Args:
+        session_key: OMERO session key
+        host: OMERO server host
+        port: OMERO server port
+        image_id: ID of the image to attach the file to
+        txt_path: Path to the text file
+    
+    Returns:
+        bool: True if attachment succeeded
+        
+    Raises:
+        RuntimeError: If attachment fails after retries
+    """
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # Step 1: Upload the file
+            upload_cmd = _build_omero_cli_command(["upload"], session_key, host, port)
+            upload_cmd.append(str(txt_path))
+            
+            logger.info("Uploading %s (attempt %d/%d)", txt_path, attempt + 1, max_retries)
+            upload_result = _run_omero_cli(upload_cmd)
+            
+            if upload_result.returncode != 0:
+                error_msg = upload_result.stderr or upload_result.stdout or "omero upload failed"
+                
+                # Check if it's a session error
+                if "SessionException" in error_msg or "session" in error_msg.lower():
+                    logger.warning("Session error during upload (attempt %d): %s", attempt + 1, error_msg)
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                        
+                raise RuntimeError(error_msg)
+            
+            # Parse OriginalFile ID from output
+            original_id = _parse_cli_id(upload_result.stdout, "OriginalFile") or _parse_cli_id(
+                upload_result.stderr, "OriginalFile"
+            )
+            if not original_id:
+                raise RuntimeError("Unable to resolve OriginalFile ID from upload output")
+            
+            logger.info("Uploaded file as OriginalFile:%d", original_id)
+            
+            # Step 2: Create FileAnnotation
+            annotation_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+            annotation_cmd.extend(["FileAnnotation", f"file=OriginalFile:{original_id}"])
+            
+            logger.info("Creating FileAnnotation for OriginalFile:%d", original_id)
+            annotation_result = _run_omero_cli(annotation_cmd)
+            
+            if annotation_result.returncode != 0:
+                error_msg = annotation_result.stderr or annotation_result.stdout or "FileAnnotation creation failed"
+                
+                if "SessionException" in error_msg or "session" in error_msg.lower():
+                    logger.warning("Session error during annotation (attempt %d): %s", attempt + 1, error_msg)
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                        
+                raise RuntimeError(error_msg)
+            
+            annotation_id = _parse_cli_id(annotation_result.stdout, "FileAnnotation") or _parse_cli_id(
+                annotation_result.stderr, "FileAnnotation"
+            )
+            if not annotation_id:
+                raise RuntimeError("Unable to resolve FileAnnotation ID from CLI output")
+            
+            logger.info("Created FileAnnotation:%d", annotation_id)
+            
+            # Step 3: Link FileAnnotation to Image
+            link_cmd = _build_omero_cli_command(["obj", "new"], session_key, host, port)
+            link_cmd.extend(
+                [
+                    "ImageAnnotationLink",
+                    f"parent=Image:{image_id}",
+                    f"child=FileAnnotation:{annotation_id}",
+                ]
+            )
+            
+            logger.info("Linking FileAnnotation:%d to Image:%d", annotation_id, image_id)
+            link_result = _run_omero_cli(link_cmd)
+            
+            if link_result.returncode != 0:
+                error_msg = link_result.stderr or link_result.stdout or "ImageAnnotationLink creation failed"
+                
+                if "SessionException" in error_msg or "session" in error_msg.lower():
+                    logger.warning("Session error during linking (attempt %d): %s", attempt + 1, error_msg)
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                        
+                raise RuntimeError(error_msg)
+            
+            link_id = _parse_cli_id(link_result.stdout, "ImageAnnotationLink") or _parse_cli_id(
+                link_result.stderr, "ImageAnnotationLink"
+            )
+            if not link_id:
+                raise RuntimeError("Unable to resolve ImageAnnotationLink ID from CLI output")
+            
+            logger.info("Successfully created ImageAnnotationLink:%d", link_id)
+            return True
+            
+        except RuntimeError as exc:
+            if attempt < max_retries - 1:
+                logger.warning("Attachment attempt %d failed: %s. Retrying...", attempt + 1, exc)
+                time.sleep(retry_delay)
+            else:
+                logger.error("All %d attachment attempts failed for %s", max_retries, txt_path)
+                raise
+        except Exception as exc:
+            logger.error("Unexpected error during attachment attempt %d: %s", attempt + 1, exc)
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                raise RuntimeError(f"Attachment failed after {max_retries} attempts: {exc}")
+    
+    return False
 
 
 def _append_job_message(job: dict, message: str):
@@ -1703,65 +1859,131 @@ def _process_import_job(job_id: str):
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
                 try:
                     conn = _open_session_connection(session_key, host, port)
-                    try:
-                        entries_by_path = {
-                            entry.get("relative_path"): entry for entry in job.get("files", [])
-                        }
-                        image_cache = {}
-                        for image_rel, txt_paths in sem_edx_associations.items():
-                            if not isinstance(txt_paths, list):
-                                continue
-                            image_name = PurePosixPath(image_rel).name if image_rel else ""
-                            if image_rel not in image_cache:
-                                dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
-                                dataset_id = dataset_map.get(dataset_name)
-                                image_cache[image_rel] = _find_image_by_name(
-                                    conn, image_name, dataset_id=dataset_id
-                                )
-                            image_obj = image_cache.get(image_rel)
-                            for txt_rel in txt_paths:
-                                txt_name = PurePosixPath(txt_rel).name
-                                if not image_obj:
-                                    _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
-                                    continue
-                                image_id = _get_id(image_obj)
-                                if not image_id:
-                                    _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
-                                    continue
-                                txt_entry = entries_by_path.get(txt_rel)
-                                if not txt_entry:
-                                    _append_txt_attachment_message(job, txt_name, image_name, False)
-                                    continue
-                                staged_path = txt_entry.get("staged_path") or txt_rel
-                                txt_path = upload_root / staged_path
-                                if not txt_path.exists():
-                                    _append_txt_attachment_message(job, txt_name, image_name, False)
-                                    continue
-                                try:
-                                    _attach_txt_to_image(
-                                        session_key,
-                                        host,
-                                        port,
-                                        image_id,
-                                        txt_path,
-                                    )
-                                    if txt_entry.get("status") != "imported":
-                                        txt_entry["status"] = "imported"
-                                        job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get(
-                                            "size", 0
-                                        )
-                                    _append_txt_attachment_message(job, txt_name, image_name, True)
-                                except Exception as exc:
-                                    logger.warning(
-                                        "Txt attachment failed for %s into %s: %s", txt_rel, image_rel, exc
-                                    )
-                                    _append_txt_attachment_message(job, txt_name, image_name, False)
-                        _save_job(job)
-                    finally:
+                    if not conn:
+                        logger.error("Failed to open session connection for SEM EDX attachments")
+                    else:
                         try:
-                            conn.close()
-                        except Exception:
-                            pass
+                            entries_by_path = {
+                                entry.get("relative_path"): entry for entry in job.get("files", [])
+                            }
+                            image_cache = {}
+                            attachment_count = 0
+                            total_attachments = sum(
+                                len(txt_paths) for txt_paths in sem_edx_associations.values() 
+                                if isinstance(txt_paths, list)
+                            )
+                            
+                            logger.info("Processing %d SEM EDX text attachments for job %s", total_attachments, job_id)
+                            
+                            for image_rel, txt_paths in sem_edx_associations.items():
+                                if not isinstance(txt_paths, list):
+                                    continue
+                                
+                                image_name = PurePosixPath(image_rel).name if image_rel else ""
+                                
+                                # Validate session periodically (every 10 attachments)
+                                if attachment_count > 0 and attachment_count % 10 == 0:
+                                    if not _validate_session(conn):
+                                        logger.warning("Session expired, reconnecting...")
+                                        conn = _reconnect_session(session_key, host, port, conn)
+                                        if not conn:
+                                            logger.error("Failed to reconnect session, aborting SEM EDX attachments")
+                                            break
+                                        # Clear image cache as objects may be stale
+                                        image_cache.clear()
+                                
+                                # Find or cache the image
+                                if image_rel not in image_cache:
+                                    dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
+                                    dataset_id = dataset_map.get(dataset_name)
+                                    
+                                    try:
+                                        image_cache[image_rel] = _find_image_by_name(
+                                            conn, image_name, dataset_id=dataset_id
+                                        )
+                                    except Exception as exc:
+                                        logger.warning("Failed to find image %s: %s", image_name, exc)
+                                        image_cache[image_rel] = None
+                                        # Try to reconnect if it looks like a session issue
+                                        if "session" in str(exc).lower():
+                                            conn = _reconnect_session(session_key, host, port, conn)
+                                            if conn:
+                                                try:
+                                                    image_cache[image_rel] = _find_image_by_name(
+                                                        conn, image_name, dataset_id=dataset_id
+                                                    )
+                                                except Exception:
+                                                    pass
+                                
+                                image_obj = image_cache.get(image_rel)
+                                
+                                # Process each text file for this image
+                                for txt_rel in txt_paths:
+                                    txt_name = PurePosixPath(txt_rel).name
+                                    attachment_count += 1
+                                    
+                                    if not image_obj:
+                                        logger.warning("Image not found for %s, skipping attachment", txt_name)
+                                        _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                        continue
+                                    
+                                    image_id = _get_id(image_obj)
+                                    if not image_id:
+                                        logger.warning("Could not get image ID for %s, skipping %s", image_name, txt_name)
+                                        _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                        continue
+                                    
+                                    txt_entry = entries_by_path.get(txt_rel)
+                                    if not txt_entry:
+                                        logger.warning("Text entry not found for %s, skipping", txt_rel)
+                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        continue
+                                    
+                                    staged_path = txt_entry.get("staged_path") or txt_rel
+                                    txt_path = upload_root / staged_path
+                                    
+                                    if not txt_path.exists():
+                                        logger.warning("Text file not found at %s, skipping", txt_path)
+                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        continue
+                                    
+                                    # Attempt the attachment with retry logic built into _attach_txt_to_image
+                                    try:
+                                        logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
+                                        _attach_txt_to_image(
+                                            session_key,
+                                            host,
+                                            port,
+                                            image_id,
+                                            txt_path,
+                                        )
+                                        
+                                        # Mark as imported if not already
+                                        if txt_entry.get("status") != "imported":
+                                            txt_entry["status"] = "imported"
+                                            job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get("size", 0)
+                                        
+                                        _append_txt_attachment_message(job, txt_name, image_name, True)
+                                        logger.info("Successfully attached %s to %s", txt_name, image_name)
+                                        
+                                    except Exception as exc:
+                                        logger.error("Failed to attach %s to %s: %s", txt_rel, image_rel, exc)
+                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                    
+                                    # Save job state periodically
+                                    if attachment_count % 5 == 0:
+                                        _save_job(job)
+                            
+                            # Final save
+                            _save_job(job)
+                            logger.info("Completed SEM EDX attachment processing for job %s: %d/%d processed", 
+                                      job_id, attachment_count, total_attachments)
+                            
+                        finally:
+                            try:
+                                conn.close()
+                            except Exception as exc:
+                                logger.warning("Error closing connection: %s", exc)
                 except Exception:
                     logger.exception("SEM EDX txt attachment failed for job %s.", job_id)
 
