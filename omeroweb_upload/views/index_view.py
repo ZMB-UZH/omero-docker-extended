@@ -62,12 +62,19 @@ ORPHAN_SUFFIX_LENGTH = 6
 ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
 
 # --------------------------------------------------------------------------
-# SEM-EDX SERVICE ACCOUNT (for async TXT attachments)
+# JOB SERVICE ACCOUNT (for async background jobs across plugins)
+#
+# IMPORTANT:
+# - NEVER use the end-user OMERO.web session for background jobs.
+# - Background jobs MUST login with "job-service" to avoid logging the user out.
+# - The job-service user is created automatically by the OMERO.server startup script.
 # --------------------------------------------------------------------------
-SEM_EDX_SERVICE_USER_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_USER'
-SEM_EDX_SERVICE_PASS_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_PASS'
-SEM_EDX_SERVICE_GROUP_ENV = 'OMERO_WEB_SEM_EDX_SERVICE_GROUP'
-SEM_EDX_FILEANNOTATION_NS = 'sem_edx.spectra'
+JOB_SERVICE_USERNAME = "job-service"
+JOB_SERVICE_PASS_ENV = "OMERO_WEB_JOB_SERVICE_PASS"
+JOB_SERVICE_GROUP_ENV = "OMERO_WEB_JOB_SERVICE_GROUP"
+
+# Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
+SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
 
 # Cache for directory paths (initialized once per application lifecycle)
 _UPLOAD_ROOT_CACHE = None
@@ -866,38 +873,37 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None):
     return None
 
 
-def _get_sem_edx_service_credentials():
-    """Resolve SEM-EDX service account credentials from environment.
+def _get_job_service_credentials():
+    """Resolve job-service credentials from environment.
 
-    This is intentionally NOT taken from the user's OMERO.web session.
-    Using the user's session for background attachments can invalidate their login.
+    This is intentionally NOT taken from the end-user's OMERO.web session.
+    Using the user's session for background work can invalidate their login.
     """
-    user = (os.environ.get(SEM_EDX_SERVICE_USER_ENV) or "").strip()
-    passwd = (os.environ.get(SEM_EDX_SERVICE_PASS_ENV) or "").strip()
+    passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
 
-    # Optional override: force a specific group for the service user.
+    # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
-    group_override = (os.environ.get(SEM_EDX_SERVICE_GROUP_ENV) or "").strip()
+    group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
     if group_override:
         group_override = INT_SANITIZER.sub("", group_override)
-    return user, passwd, group_override
+
+    return JOB_SERVICE_USERNAME, passwd, group_override
 
 
 def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
-    """Login as a dedicated service user for async SEM-EDX TXT attachments."""
-    service_user, service_pass, group_override = _get_sem_edx_service_credentials()
-    if not service_user or not service_pass:
+    """Login as job-service for async background work (safe for user sessions)."""
+    service_user, service_pass, group_override = _get_job_service_credentials()
+    if not service_pass:
         logger.error(
-            "SEM-EDX service credentials missing. Set %s and %s in the omeroweb container environment.",
-            SEM_EDX_SERVICE_USER_ENV,
-            SEM_EDX_SERVICE_PASS_ENV,
+            "job-service password missing. Set %s in the omeroweb container environment.",
+            JOB_SERVICE_PASS_ENV,
         )
         return None
 
     conn = BlitzGateway(service_user, service_pass, host=host, port=int(port), secure=True)
     try:
         if not conn.connect():
-            logger.error("Failed to connect with SEM-EDX service user %s", service_user)
+            logger.error("Failed to connect with job-service user %s", service_user)
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -914,7 +920,7 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(str(effective_group))
             except Exception as exc:
-                logger.warning("Failed to set service group context to %s: %s", effective_group, exc)
+                logger.warning("Failed to set job-service group context to %s: %s", effective_group, exc)
 
         return conn
     except Exception:
