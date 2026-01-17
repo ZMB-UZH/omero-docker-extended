@@ -24,7 +24,12 @@ ROOTPASS="${ROOTPASS:-}"
 JOB_USER="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
 JOB_PASS="${OMERO_JOB_SERVICE_PASS:-}"
 
-OMERO_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"
+OMERO_DIR="$(find /opt/omero/server \
+    -maxdepth 1 \
+    -type d \
+    -name 'OMERO.server-*' \
+    | sort -V \
+    | tail -n 1)"
 if [[ -z "${OMERO_DIR}" ]]; then
     echo "ERROR: Cannot locate OMERO.server directory under /opt/omero/server/OMERO.server-*." >&2
     exit 1
