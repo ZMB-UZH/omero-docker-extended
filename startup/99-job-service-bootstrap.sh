@@ -14,7 +14,7 @@ set -euo pipefail
 # - The background worker waits for OMERO (4064) and performs the bootstrap.
 #
 # Logs:
-#   /opt/omero/server/OMERO.server/var/log/job-service-bootstrap.log
+#   ${OMERO_DIR}/var/log/job-service-bootstrap.log
 # -----------------------------------------------------------------------------
 
 OMERO_SERVER_HOST="${OMERO_SERVER_HOST:-localhost}"
@@ -38,10 +38,9 @@ fi
 OMERO_BIN="${OMERO_DIR}/bin/omero"
 
 LOG_DIR="${OMERO_DIR}/var/log"
+mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/job-service-bootstrap.log"
 LOCK_FILE="/tmp/job-service-bootstrap.lock"
-
-mkdir -p "${LOG_DIR}"
 
 # --------------------------------------------------------------------------
 # NON-BLOCKING LAUNCHER
@@ -87,8 +86,7 @@ fi
 
 echo "Waiting for OMERO.server (Glacier2) to accept logins..."
 for i in $(seq 1 180); do
-    if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-            -u root -w "${ROOTPASS}" user list >/dev/null 2>&1; then
+    if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user list >/dev/null 2>&1; then
         echo "OMERO.server is ready."
         break
     fi
@@ -99,37 +97,33 @@ for i in $(seq 1 180); do
     fi
 done
 
-# --------------------------------------------------------------------------
-# CREATE job-service USER (NON-INTERACTIVE)
-# --------------------------------------------------------------------------
-if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-        -u root -w "${ROOTPASS}" \
-        user info --user-name "${JOB_USER}" >/dev/null 2>&1; then
+# Create user if missing
+if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user info --user-name "${JOB_USER}" >/dev/null 2>&1; then
     echo "User ${JOB_USER} already exists."
 else
     echo "Creating user ${JOB_USER} (non-interactive)..."
     "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
         -u root -w "${ROOTPASS}" \
         user add "${JOB_USER}" Job Service \
+        --group-name user \
         -P "${JOB_PASS}"
 fi
 
-# --------------------------------------------------------------------------
-# ENSURE job-service IS IN ALL GROUPS
-# --------------------------------------------------------------------------
-echo "Ensuring ${JOB_USER} is in all groups..."
-
-GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-    -u root -w "${ROOTPASS}" \
-    group list -q | awk '{print $1}')"
-
-for GID in ${GROUP_IDS}; do
-    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-        -u root -w "${ROOTPASS}" \
-        user addgroup "${JOB_USER}" "${GID}" \
-        || true
-done
+# OPTIONAL:
+# If you truly want job-service in ALL groups, keep this block enabled.
+# Otherwise: comment it out and rely on per-job group context (recommended).
+#echo "Ensuring ${JOB_USER} is in all groups..."
+#
+#GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+#    -u root -w "${ROOTPASS}" \
+#    group list -q | awk '{print $1}' | grep -E '^[0-9]+$' || true)"
+#
+#for GID in ${GROUP_IDS}; do
+#    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+#        -u root -w "${ROOTPASS}" \
+#        user joingroup "${JOB_USER}" "${GID}" \
+#        || true
+#done
 
 echo "job-service bootstrap complete at $(date -Is)"
-
 exit 0
