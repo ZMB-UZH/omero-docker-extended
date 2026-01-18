@@ -912,11 +912,13 @@
             font-size: 0.85rem;
             color: #64748b;
         }
-        .tree-row.is-incompatible .tree-file-name,
+        .tree-row.is-incompatible .tree-file-name {
+            color: #dc2626;
+            text-decoration: underline;
+        }
         .tree-row.is-incompatible .tree-size,
         .tree-row.is-incompatible .tree-date {
             color: #dc2626;
-            text-decoration: underline;
         }
         .tree-row.is-incompatible-folder .tree-name,
         .tree-row.is-incompatible-folder .tree-meta {
@@ -4978,9 +4980,11 @@
             const incompatibleFiles = filterCompatibilityIncompatibleFiles(statusData.incompatible_files);
             applyCompatibilityFlags(uploadedFiles, incompatibleFiles);
             if (statusData.confirmation_required && incompatibleFiles.length) {
-                const proceed = await showCompatibilityPopup(
-                    'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
-                );
+                const isSemEdx = specialUploadSelect?.value === 'sem_edx_spectra';
+                const message = isSemEdx
+                    ? 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No [Go to the previous step to edit the list of files]'
+                    : 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No';
+                const proceed = await showCompatibilityPopup(message);
                 if (!proceed) {
                     skipSpecialUploadReset = true;
                     window.pendingImportJob = job;
