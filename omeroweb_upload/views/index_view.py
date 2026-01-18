@@ -972,19 +972,12 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                 params.addString("name", file_name)
                 params.page(0, 100)  # Limit results
                 
-                # Set timeout
-                old_timeout = conn.SERVICE_OPTS.getOmeroServiceTimeout()
-                try:
-                    conn.SERVICE_OPTS.setOmeroServiceTimeout(timeout_seconds * 1000)
-                    images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-                    
-                    if images:
-                        elapsed = time.time() - start_time
-                        logger.debug("Found image '%s' in Dataset:%d in %.2fs", file_name, dataset_id, elapsed)
-                        return conn.getObject("Image", images[0].getId().getValue())
-                finally:
-                    if old_timeout:
-                        conn.SERVICE_OPTS.setOmeroServiceTimeout(old_timeout)
+                images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+                
+                if images:
+                    elapsed = time.time() - start_time
+                    logger.debug("Found image '%s' in Dataset:%d in %.2fs", file_name, dataset_id, elapsed)
+                    return conn.getObject("Image", images[0].getId().getValue())
             except Exception as exc:
                 logger.warning("Dataset search failed for '%s': %s", file_name, exc)
         
@@ -995,23 +988,17 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
             params.addString("name", file_name)
             params.page(0, 100)
             
-            old_timeout = conn.SERVICE_OPTS.getOmeroServiceTimeout()
-            try:
-                conn.SERVICE_OPTS.setOmeroServiceTimeout(timeout_seconds * 1000)
-                images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-                
-                if images:
-                    elapsed = time.time() - start_time
-                    if len(images) > 1:
-                        logger.warning("Found %d images named '%s' - using first", len(images), file_name)
-                    logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
-                    return conn.getObject("Image", images[0].getId().getValue())
-                else:
-                    logger.warning("Image '%s' not found", file_name)
-                    return None
-            finally:
-                if old_timeout:
-                    conn.SERVICE_OPTS.setOmeroServiceTimeout(old_timeout)
+            images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+            
+            if images:
+                elapsed = time.time() - start_time
+                if len(images) > 1:
+                    logger.warning("Found %d images named '%s' - using first", len(images), file_name)
+                logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
+                return conn.getObject("Image", images[0].getId().getValue())
+            else:
+                logger.warning("Image '%s' not found", file_name)
+                return None
         except Exception as exc:
             logger.error("Global search failed for '%s': %s", file_name, exc)
             return None
@@ -1059,27 +1046,20 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
             """
             params = omero.sys.ParametersI()
         
-        old_timeout = conn.SERVICE_OPTS.getOmeroServiceTimeout()
-        try:
-            conn.SERVICE_OPTS.setOmeroServiceTimeout(timeout_seconds * 1000)
-            
-            logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
-            images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-            
-            for image_obj in images:
-                img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
-                if img_wrapper:
-                    results[img_wrapper.getName()] = img_wrapper
-            
-            elapsed = time.time() - start_time
-            logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
-            
-            missing = set(file_names) - set(results.keys())
-            if missing:
-                logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
-        finally:
-            if old_timeout:
-                conn.SERVICE_OPTS.setOmeroServiceTimeout(old_timeout)
+        logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
+        images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+        
+        for image_obj in images:
+            img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
+            if img_wrapper:
+                results[img_wrapper.getName()] = img_wrapper
+        
+        elapsed = time.time() - start_time
+        logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
+        
+        missing = set(file_names) - set(results.keys())
+        if missing:
+            logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
     except Exception as exc:
         logger.error("Batch image search failed: %s", exc)
     
