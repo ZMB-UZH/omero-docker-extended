@@ -1647,7 +1647,12 @@
             .catch(() => {
                 // Ignore root user lookup failures.
             });
-        const messages = {{ messages_json|safe }};
+        let messages = {};
+        try {
+            messages = {{ messages_json|default:"{}"|safe }};
+        } catch (e) {
+            messages = {};
+        }
         const formatMessage = (template, values = {}) => {
             const source = String(template || '');
             return source.replace(/\{(\w+)\}/g, (match, key) => (
