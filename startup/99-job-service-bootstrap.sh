@@ -138,7 +138,7 @@ if [[ "${JOIN_ALL_GROUPS}" == "1" ]]; then
     for GID in ${GROUP_IDS}; do
         "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
             -u root -w "${ROOTPASS}" \
-            user joingroup "${GID}" "${JOB_USER}" \
+            user joingroup --name "${JOB_USER}" --group-id "${GID}" \
             || true
     done
 else
