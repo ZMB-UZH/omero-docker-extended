@@ -1216,8 +1216,9 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     except Exception as exc:
         raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
 
-    # Get UpdateService with explicit group context
-    update = conn.getUpdateService()
+    # Get UpdateService with EXPLICIT group context - this is critical!
+    # Without passing SERVICE_OPTS, the service defaults to admin's group (system/0)
+    update = conn.getUpdateService(conn.SERVICE_OPTS)
 
     of = OriginalFileI()
     of.setName(rstring(txt_path.name))
