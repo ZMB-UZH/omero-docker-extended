@@ -1786,7 +1786,7 @@
         let uploadTotalBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
-        const currentUserId = {{ user_id|default:"null" }};
+        const currentUserId = {{ user_id|default:"null"|safe }};
         const storage =
             (() => {
                 try {
@@ -3153,8 +3153,8 @@
             });
         }
 
-        const uploadBatchFiles = Number({{ upload_batch_files }}) || 5;
-        const uploadConcurrency = Number({{ upload_concurrency }}) || 3;
+        const uploadBatchFiles = Number({{ upload_batch_files|default:"5"|safe }}) || 5;
+        const uploadConcurrency = Number({{ upload_concurrency|default:"3"|safe }}) || 3;
         const uploadRequestTimeoutMs = 2 * 60 * 60 * 1000;
         let currentUploadBatchFiles = uploadBatchFiles;
         const userSettingsDefaults = {
