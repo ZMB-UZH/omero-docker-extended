@@ -1199,7 +1199,13 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
         raise RuntimeError(f"Image:{image_id} not found")
     
     # Get the group ID from the image
-    image_group_id = image_obj.getDetails().getGroup().getId().getValue()
+    group_obj = image_obj.getDetails().getGroup()
+    group_id_obj = group_obj.getId()
+    # Handle both int (direct) and RLong (with getValue()) returns
+    if hasattr(group_id_obj, 'getValue'):
+        image_group_id = group_id_obj.getValue()
+    else:
+        image_group_id = int(group_id_obj)
     
     # Set the group context explicitly for this connection
     conn.SERVICE_OPTS.setOmeroGroup(str(image_group_id))
