@@ -1178,7 +1178,7 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         raise
 
 
-def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Path):
+def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Path, username: str):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
     Creates:
@@ -1187,65 +1187,66 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
       - ImageAnnotationLink
 
     This is safe to run in background threads and does NOT touch the user's session.
+    Uses suConn to impersonate the user so annotations are created in the correct group.
     """
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
 
-    # CRITICAL FIX: Get the image FIRST to determine its group
-    # This ensures all objects are created in the correct group
-    image_obj = conn.getObject("Image", image_id)
-    if not image_obj:
-        raise RuntimeError(f"Image:{image_id} not found")
+    # CRITICAL FIX: Use suConn() to impersonate the user
+    # This is the OMERO-approved way for admins to create objects as another user
+    # All objects created will automatically be in the user's current group
+    user_conn = conn.suConn(username)
+    if not user_conn:
+        raise RuntimeError(f"Failed to create connection as user {username}")
     
-    # Get the group ID from the image
-    group_obj = image_obj.getDetails().getGroup()
-    group_id_obj = group_obj.getId()
-    # Handle both int (direct) and RLong (with getValue()) returns
-    if hasattr(group_id_obj, 'getValue'):
-        image_group_id = group_id_obj.getValue()
-    else:
-        image_group_id = int(group_id_obj)
-    
-    # Set the group context explicitly for this connection
-    conn.SERVICE_OPTS.setOmeroGroup(str(image_group_id))
-
-    # Read bytes
     try:
-        binary = txt_path.read_bytes()
-    except Exception as exc:
-        raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
+        # Get the image in user's context
+        image_obj = user_conn.getObject("Image", image_id)
+        if not image_obj:
+            raise RuntimeError(f"Image:{image_id} not found for user {username}")
 
-    # Get UpdateService with EXPLICIT group context - this is critical!
-    # Without passing SERVICE_OPTS, the service defaults to admin's group (system/0)
-    update = conn.getUpdateService(conn.SERVICE_OPTS)
-
-    of = OriginalFileI()
-    of.setName(rstring(txt_path.name))
-    of.setPath(rstring(f"sem_edx/img_{image_id}/"))
-    of.setSize(rlong(len(binary)))
-    of.setMimetype(rstring("text/plain"))
-
-    of = update.saveAndReturnObject(of)
-
-    store = conn.c.sf.createRawFileStore()
-    try:
-        store.setFileId(of.getId().getValue())
-        store.write(binary, 0, len(binary))
-    finally:
+        # Read bytes
         try:
-            store.close()
+            binary = txt_path.read_bytes()
+        except Exception as exc:
+            raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
+
+        # Get UpdateService in user's context - objects will be created in correct group
+        update = user_conn.getUpdateService()
+
+        of = OriginalFileI()
+        of.setName(rstring(txt_path.name))
+        of.setPath(rstring(f"sem_edx/img_{image_id}/"))
+        of.setSize(rlong(len(binary)))
+        of.setMimetype(rstring("text/plain"))
+
+        of = update.saveAndReturnObject(of)
+
+        store = user_conn.c.sf.createRawFileStore()
+        try:
+            store.setFileId(of.getId().getValue())
+            store.write(binary, 0, len(binary))
+        finally:
+            try:
+                store.close()
+            except Exception:
+                pass
+
+        fa = FileAnnotationI()
+        fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
+        fa.setFile(of.proxy())
+
+        fa = update.saveAndReturnObject(fa)
+        
+        # Link annotation using gateway method
+        image_obj.linkAnnotation(FileAnnotationWrapper(user_conn, fa))
+    finally:
+        # Always close the user connection
+        try:
+            user_conn.close()
         except Exception:
             pass
-
-    fa = FileAnnotationI()
-    fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
-    fa.setFile(of.proxy())
-
-    fa = update.saveAndReturnObject(fa)
-    
-    # Link annotation using gateway method
-    image_obj.linkAnnotation(FileAnnotationWrapper(conn, fa))
 
 
 def _append_job_message(job: dict, message: str):
@@ -2273,6 +2274,7 @@ def _process_import_job(job_id: str):
                                             conn,
                                             image_id,
                                             txt_path,
+                                            username,  # Pass username for suConn
                                         )
 
                                         # Mark as imported if not already
