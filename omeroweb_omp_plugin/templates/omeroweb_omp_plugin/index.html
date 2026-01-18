@@ -3731,15 +3731,25 @@
             clearUserSettingErrors();
             const validated = validateUserSettings();
             if (!validated) return;
-            try {
-                window.localStorage?.setItem(userSettingsStorageKey, JSON.stringify(validated));
-            } catch (error) {
-                // ignore storage errors
-            }
-            applyShowAllProjectsSetting(validated.showAllProjects);
-            applyDefaultAiProviderSelections({ force: true });
+
             closeUserSettingsModal();
-            saveUserSettingsToDatabase(validated);
+
+            saveUserSettingsToDatabase(validated, {
+                onSuccess: (data) => {
+                    if (data && data.success === true && data.settings) {
+                        applyUserSettingsValues(data.settings);
+
+                        try {
+                            window.localStorage?.setItem(
+                                userSettingsStorageKey,
+                                JSON.stringify(data.settings)
+                            );
+                        } catch (error) {
+                            // ignore storage errors
+                        }
+                    }
+                },
+            });
         });
     }
 
