@@ -11,29 +11,79 @@ from django.shortcuts import render
 from django.urls import reverse
 from omeroweb.decorators import login_required
 
-# Import from refactored modules
-from ..utils.omero_helpers import get_id, get_current_user_id, is_owned_by_user, get_owner_username, has_read_write_permissions
-from ..utils.file_helpers import get_upload_root, get_jobs_root, ensure_dir, safe_relative_path
-from ..services.jobs.job_storage import (
-    load_job, save_job, robust_update_job, safe_job_id,
-    has_pending_uploads, should_start_compatibility_check, refresh_job_status,
-    append_job_message, append_job_error
+# Import from refactored modules with underscore aliases to match original code
+from ..utils.omero_helpers import (
+    get_id as _get_id,
+    get_text as _get_text,
+    get_current_user_id as _current_user_id,
+    get_owner_id as _get_owner_id,
+    is_owned_by_user as _is_owned_by_user,
+    get_owner_username as _get_owner_username,
+    has_read_write_permissions as _has_read_write_permissions
+)
+from ..utils.file_helpers import (
+    get_upload_root as _get_upload_root,
+    get_jobs_root as _get_jobs_root,
+    ensure_dir as _ensure_dir,
+    safe_relative_path as _safe_relative_path,
+    is_within_root as _is_within_root,
+    safe_remove_tree as _safe_remove_tree
+)
+# Use compatibility layer for job functions (handles jobs_root parameter)
+from ..services.compat import (
+    get_job_path as _job_path,
+    load_job as _load_job,
+    save_job as _save_job,
+    robust_update_job as _robust_update_job,
+    safe_job_id as _safe_job_id,
+    has_pending_uploads as _has_pending_uploads,
+    get_compatibility_pending_entries as _compatibility_pending_entries,
+    should_start_compatibility_check as _should_start_compatibility_check,
+    refresh_job_status as _refresh_job_status,
+    append_job_message as _append_job_message,
+    append_job_error as _append_job_error,
+    get_env_int as _get_env_int,
+    resolve_job_batch_size as _resolve_job_batch_size
 )
 from ..services.omero.dataset_service import (
-    iter_accessible_projects, collect_project_payload,
-    dataset_name_for_path, generate_orphan_dataset_name,
-    find_project_dataset, link_dataset_to_project, get_or_create_dataset
+    iter_accessible_projects as _iter_accessible_projects,
+    collect_project_payload as _collect_project_payload,
+    dataset_name_for_path as _dataset_name_for_path,
+    generate_orphan_dataset_name as _generate_orphan_dataset_name,
+    find_project_dataset as _find_project_dataset,
+    link_dataset_to_project as _link_dataset_to_project,
+    get_or_create_dataset as _get_or_create_dataset
 )
 from ..services.omero.connection_service import (
-    resolve_omero_host_port, get_session_key, get_job_service_credentials,
-    open_service_connection, validate_session, reconnect_session, open_session_connection
+    resolve_omero_host_port as _resolve_omero_host_port,
+    get_session_key as _get_session_key,
+    get_job_service_credentials as _get_job_service_credentials,
+    open_service_connection as _open_service_connection,
+    validate_session as _validate_session,
+    reconnect_session as _reconnect_session,
+    open_session_connection as _open_session_connection,
+    attach_txt_to_image_service as _attach_txt_to_image_service
 )
 from ..services.omero.import_service import (
-    build_omero_cli_command, run_omero_cli, import_file, verify_import,
-    find_image_by_name, attach_txt_to_image_service
+    build_omero_cli_command as _build_omero_cli_command,
+    run_omero_cli as _run_omero_cli,
+    import_file as _import_file,
+    verify_import as _verify_import,
+    find_image_by_name as _find_image_by_name,
+    batch_find_images_by_name as _batch_find_images_by_name,
+    parse_cli_id as _parse_cli_id,
+    get_import_lock as _get_import_lock
 )
 from ..services.upload_management.workflow_service import (
-    start_compatibility_check_thread, start_import_thread, cleanup_upload_artifacts
+    start_compatibility_check_thread as _start_compatibility_check_thread,
+    start_import_thread as _start_import_thread,
+    cleanup_upload_artifacts as _cleanup_upload_artifacts,
+    apply_upload_updates as _apply_upload_updates,
+    update_job as _update_job,
+    normalize_sem_edx_associations as _normalize_sem_edx_associations,
+    build_sem_edx_associations_from_entries as _build_sem_edx_associations_from_entries,
+    append_txt_attachment_message as _append_txt_attachment_message,
+    should_run_cleanup as _should_run_cleanup
 )
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
@@ -41,7 +91,7 @@ from .utils import current_username, json_error, load_json_body
 
 logger = logging.getLogger(__name__)
 
-# View functions start here
+
 def index(request, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     username = current_username(request, conn)
