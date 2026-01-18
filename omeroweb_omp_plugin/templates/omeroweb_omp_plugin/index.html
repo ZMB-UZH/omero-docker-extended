@@ -2638,6 +2638,11 @@
     } else {
         applyShowAllProjectsSetting(userSettingsDefaults.showAllProjects, { refresh: false });
     }
+    if (typeof initialUserSettings?.removeClearAll === 'boolean') {
+        applyClearAllSetting(initialUserSettings.removeClearAll);
+    } else {
+        applyClearAllSetting(userSettingsDefaults.removeClearAll);
+    }
 
     function clearLocalUserData() {
         try {
