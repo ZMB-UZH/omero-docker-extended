@@ -1192,12 +1192,25 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
 
+    # CRITICAL FIX: Get the image FIRST to determine its group
+    # This ensures all objects are created in the correct group
+    image_obj = conn.getObject("Image", image_id)
+    if not image_obj:
+        raise RuntimeError(f"Image:{image_id} not found")
+    
+    # Get the group ID from the image
+    image_group_id = image_obj.getDetails().getGroup().getId().getValue()
+    
+    # Set the group context explicitly for this connection
+    conn.SERVICE_OPTS.setOmeroGroup(image_group_id)
+
     # Read bytes
     try:
         binary = txt_path.read_bytes()
     except Exception as exc:
         raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
 
+    # Get UpdateService with explicit group context
     update = conn.getUpdateService()
 
     of = OriginalFileI()
@@ -1224,11 +1237,8 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
 
     fa = update.saveAndReturnObject(fa)
     
-    # CRITICAL FIX: Use gateway method which handles permissions correctly
-    # This works even when job-service doesn't have direct read access to the image
-    image_obj = conn.getObject("Image", image_id)
-    if image_obj:
-        image_obj.linkAnnotation(FileAnnotationWrapper(conn, fa))
+    # Link annotation using gateway method
+    image_obj.linkAnnotation(FileAnnotationWrapper(conn, fa))
 
 
 def _append_job_message(job: dict, message: str):
