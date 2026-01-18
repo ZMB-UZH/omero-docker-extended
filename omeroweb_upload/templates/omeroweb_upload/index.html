@@ -6,7 +6,7 @@
     <script>
         (() => {
             try {
-                const userId = {{ user_id|default:"null" }};
+                const userId = {{ user_id|default:"null"|safe }};
                 const storageKeySuffix = userId ? `_u${userId}` : '';
                 const storageKey = `omeroweb_upload_special_upload_selection_v1${storageKeySuffix}`;
                 const raw = window.localStorage?.getItem(storageKey);
