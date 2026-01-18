@@ -196,7 +196,9 @@
             align-items: center;
         }
         .upload-actions__buttons .action-btn-hidden {
-            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            visibility: hidden !important;
         }
         .upload-actions__pickers {
             display: flex;
@@ -5874,18 +5876,24 @@
                 clearUserSettingErrors();
                 const validated = validateUserSettings();
                 if (!validated) return;
-                currentUploadBatchFiles = validated.uploadBatchFiles;
-                applyShowAllProjectsSetting(validated.showAllProjects);
-                applyClearAllSetting(validated.removeClearAll);
-                if (storage) {
-                    try {
-                        storage.setItem(userSettingsStorageKey, JSON.stringify(validated));
-                    } catch (error) {
-                        // Ignore storage failures.
-                    }
-                }
+
                 closeUserSettingsModal();
-                saveUserSettingsToDatabase(validated);
+
+                saveUserSettingsToDatabase(validated, {
+                    onSuccess: (data) => {
+                        if (data && data.success === true && data.settings) {
+                            applyUserSettings(data.settings);
+
+                            if (storage) {
+                                try {
+                                    storage.setItem(userSettingsStorageKey, JSON.stringify(data.settings));
+                                } catch (error) {
+                                    // Ignore storage failures.
+                                }
+                            }
+                        }
+                    },
+                });
             });
         }
         if (userSettingsRestore) {
