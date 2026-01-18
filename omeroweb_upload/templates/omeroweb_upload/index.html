@@ -2935,19 +2935,21 @@
                 updateSemEdxStepControls(false);
             }
             setProjectSelectionVisibility(!value);
-            if (isSemEdx) {
-                semEdxModeActive = true;
-                setSemEdxInstructionsStep(1);
-                setSemEdxAssociationMode('automatic');
-            } else {
-                if (semEdxModeActive) {
-                    clearSelectedFiles();
-                }
-                semEdxModeActive = false;
-                setStatus('');
-                updateSemEdxStepControls(false);
-            }
+        if (isSemEdx) {
+            semEdxModeActive = true;
+            setSemEdxInstructionsStep(1);
+            setSemEdxAssociationMode('automatic');
+        } else {
+            // Don't clear files when switching back to normal mode
+            // Users may have already added files and might switch modes accidentally
+            semEdxModeActive = false;
+            setStatus('');
+            updateSemEdxStepControls(false);
+            // Clear SEM EDX associations but keep the files
+            invalidateSemEdxAssociations();
             updateSemEdxStatus();
+        }
+        updateSemEdxStatus();
         }
 
         function setSpecialUploadSelection(value, label, options = {}) {
