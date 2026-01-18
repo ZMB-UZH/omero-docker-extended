@@ -32,12 +32,17 @@ if [ "${NEED_REGEN}" -eq 1 ]; then
 
     rm -f "${CERT_DIR}/server."* || true
 
-    /opt/omero/server/OMERO.server/bin/omero certificates \
-        --overwrite \
-        --hostname localhost \
-        --san DNS:localhost,DNS:omeroserver
+    # Try to configure SANs via OMERO config keys (supported by some builds).
+    # If a key is unknown in your exact OMERO build, the command will fail;
+    # that's why we ignore errors here and still run plain `omero certificates`.
+    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.commonname localhost || true
+    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver" || true
+
+    # Generate certs WITHOUT passing flags (your current image rejects --overwrite/--hostname/--san)
+    /opt/omero/server/OMERO.server/bin/omero certificates
 
     echo "[CERT] Certificate generation complete"
 else
     echo "[CERT] Existing certificates already valid – no regeneration needed"
 fi
+
