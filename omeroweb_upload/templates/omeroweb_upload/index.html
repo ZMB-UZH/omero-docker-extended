@@ -4917,6 +4917,7 @@
                 if (Date.now() - startTime > maxTimeMs) {
                     throw new Error('Compatibility check timeout - operation took too long. Please try again.');
                 }
+                }
                 
                 const data = await fetchJobStatus(job);
                 
