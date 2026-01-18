@@ -37,15 +37,13 @@ services:
       CONFIG_omero_db_pass: ShR3K413CPh0Q2r # must be the same as the database password
       CONFIG_omero_db_name: omero
       ROOTPASS: CsCN581JzgGsdyV # root account password, must be strong!!
-      # --------------------------------------------------------------------
-      # job-service bootstrap (auto-create if missing)
-      # --------------------------------------------------------------------
-      OMERO_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
-      OMERO_JOB_SERVICE_USERNAME: "job-service"
       CONFIG_omero_security_login__failure__throttle__count: 5
       CONFIG_omero_security_login__failure__throttle__time: 60000
       CONFIG_omero_db_poolsize: 80 # max number should be less than 100 for the default Postgres settings
       OMERO_FIGURE_VERSION: "7.3.0" # change if you get a warning in Omero web -> Figure; it will say which version should be installed
+      OMERO_JOB_SERVICE_USERNAME: "job-service"
+      OMERO_JOB_SERVICE_PASS: "d8SvmBQ34f08xYv"
+      OMERO_JOB_SERVICE_JOIN_ALL_GROUPS: "1"
     networks:
       - omero
     ports:
