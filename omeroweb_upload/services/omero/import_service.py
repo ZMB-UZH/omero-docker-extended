@@ -372,6 +372,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
       - OriginalFile
       - FileAnnotation (ns=SEM_EDX_FILEANNOTATION_NS)
       - ImageAnnotationLink
+      - OMERO Tables (metadata, elements, spectrum) parsed from the txt file
 
     This is safe to run in background threads and does NOT touch the user's session.
     Uses suConn to impersonate the user so annotations are created in the correct group.
@@ -379,6 +380,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
+    from .sem_edx_parser import attach_sem_edx_tables
 
     # CRITICAL FIX: Use suConn() to impersonate the user
     # This is the OMERO-approved way for admins to create objects as another user
@@ -428,6 +430,17 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
         
         # Link annotation using gateway method
         image_obj.linkAnnotation(FileAnnotationWrapper(user_conn, fa))
+        
+        # Parse the SEM EDX file and create OMERO Table with spectrum data
+        try:
+            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path)
+            if table_id:
+                logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
+        except Exception as exc:
+            # Don't fail the entire attachment if table creation fails
+            logger.error("Failed to create OMERO Table for image %d from %s: %s", 
+                        image_id, txt_path.name, exc)
+        
     finally:
         # Always close the user connection
         try:
