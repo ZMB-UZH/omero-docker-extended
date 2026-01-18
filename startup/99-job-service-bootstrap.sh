@@ -145,5 +145,68 @@ else
     echo "OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=0 -> not joining ${JOB_USER} into all groups."
 fi
 
+# ---------------------------
+# DEFAULT GROUP (CRITICAL)
+#
+# Without a default group, job-service cannot log in and OMERO fails with:
+#   "Can't find default group for job-service"
+#
+# OMERO CLI in this version has NO setdefaultgroup command,
+# so we must use the AdminService API.
+# -------------------------------------------------------------------------
+DEFAULT_GROUP_NAME="${OMERO_JOB_SERVICE_DEFAULT_GROUP_NAME:-user}"
+
+echo "Ensuring ${JOB_USER} has a default group (${DEFAULT_GROUP_NAME})..."
+
+VENV_BIN_DIR="$(dirname "${OMERO_BIN}")"
+OMERO_PY="${VENV_BIN_DIR}/python"
+
+if [[ ! -x "${OMERO_PY}" ]]; then
+    echo "ERROR: Cannot find python next to OMERO_BIN: ${OMERO_PY}" >&2
+    exit 1
+fi
+
+"${OMERO_PY}" - <<EOF
+import omero
+from omero.rtypes import rstring
+
+host = "${OMERO_SERVER_HOST}"
+port = int("${OMERO_SERVER_PORT}")
+rootpass = "${ROOTPASS}"
+job_user = "${JOB_USER}"
+default_group_name = "${DEFAULT_GROUP_NAME}"
+
+client = omero.client(host, port)
+sess = None
+
+try:
+    sess = client.createSession("root", rootpass)
+    admin = sess.getAdminService()
+
+    exp = admin.lookupExperimenter(job_user)
+    if exp is None:
+        raise RuntimeError(f"Experimenter not found: {job_user}")
+
+    grp = admin.lookupGroup(default_group_name)
+    if grp is None:
+        raise RuntimeError(f"Group not found: {default_group_name}")
+
+    try:
+        admin.addGroups(exp, [grp])
+    except Exception:
+        pass
+
+    admin.setDefaultGroup(exp, grp)
+
+    print(f"OK: default group set -> {job_user}:{default_group_name}")
+
+finally:
+    try:
+        if sess is not None:
+            sess.close()
+    except Exception:
+        pass
+EOF
+
 echo "job-service bootstrap complete at $(date -Is)"
 exit 0
