@@ -1188,8 +1188,9 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
 
     This is safe to run in background threads and does NOT touch the user's session.
     """
-    from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI, ImageI
+    from omero.model import FileAnnotationI, OriginalFileI
     from omero.rtypes import rstring, rlong
+    from omero.gateway import FileAnnotationWrapper
 
     # Read bytes
     try:
@@ -1222,12 +1223,12 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     fa.setFile(of.proxy())
 
     fa = update.saveAndReturnObject(fa)
-
-    link = ImageAnnotationLinkI()
-    link.setParent(ImageI(rlong(image_id), False))  # Unloaded proxy - no permissions needed
-    link.setChild(fa)
-
-    update.saveAndReturnObject(link)
+    
+    # CRITICAL FIX: Use gateway method which handles permissions correctly
+    # This works even when job-service doesn't have direct read access to the image
+    image_obj = conn.getObject("Image", image_id)
+    if image_obj:
+        image_obj.linkAnnotation(FileAnnotationWrapper(conn, fa))
 
 
 def _append_job_message(job: dict, message: str):
