@@ -109,21 +109,41 @@ else
         -P "${JOB_PASS}"
 fi
 
-# OPTIONAL:
-# If you truly want job-service in ALL groups, keep this block enabled.
-# Otherwise: comment it out and rely on per-job group context (recommended).
-#echo "Ensuring ${JOB_USER} is in all groups..."
+# ---------------------------
+# GROUP MEMBERSHIP AUTOMATION
 #
-#GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-#    -u root -w "${ROOTPASS}" \
-#    group list -q | awk '{print $1}' | grep -E '^[0-9]+$' || true)"
+# By default we JOIN job-service into ALL groups so background jobs can work
+# across projects/datasets regardless of group context.
 #
-#for GID in ${GROUP_IDS}; do
-#    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
-#        -u root -w "${ROOTPASS}" \
-#        user joingroup "${JOB_USER}" "${GID}" \
-#        || true
-#done
+# Disable by setting:
+#  OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=0
+#
+# NOTE: This increases privileges of job-service. If you want least-privilege,
+# set OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=0 and explicitly manage membership.
+# -------------------------------------------------------------------------
+JOIN_ALL_GROUPS_RAW="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-1}"
+
+JOIN_ALL_GROUPS=1
+if [[ "${JOIN_ALL_GROUPS_RAW,,}" == "0" || "${JOIN_ALL_GROUPS_RAW,,}" == "false" || "${JOIN_ALL_GROUPS_RAW,,}" == "no" || "${JOIN_ALL_GROUPS_RAW,,}" == "off" ]]; then
+    JOIN_ALL_GROUPS=0
+fi
+
+if [[ "${JOIN_ALL_GROUPS}" == "1" ]]; then
+    echo "Ensuring ${JOB_USER} is in all groups..."
+
+    GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+        -u root -w "${ROOTPASS}" \
+        group list -q | awk '{print $1}' | grep -E '^[0-9]+$' || true)"
+
+    for GID in ${GROUP_IDS}; do
+        "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+            -u root -w "${ROOTPASS}" \
+            user joingroup "${JOB_USER}" "${GID}" \
+            || true
+    done
+else
+    echo "OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=0 -> not joining ${JOB_USER} into all groups."
+fi
 
 echo "job-service bootstrap complete at $(date -Is)"
 exit 0
