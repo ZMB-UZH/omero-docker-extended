@@ -213,15 +213,20 @@
         /*
          * Clear All button must NEVER animate visibility.
          * Animations cause slow fade-out and refresh flash.
+         *
+         * IMPORTANT: The actual button id is "clear-all-btn" (with dashes).
          */
-        #clear_all_btn {
+        #clear-all-btn {
             transition: none !important;
         }
+
         /*
          * Prevent Clear All button flash on page load.
          * JS will explicitly show it if enabled.
+         *
+         * Layout is preserved because we are NOT using display:none.
          */
-        #clear_all_btn {
+        #clear-all-btn {
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
