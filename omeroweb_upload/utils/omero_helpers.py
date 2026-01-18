@@ -64,3 +64,65 @@ def is_owned_by_user(obj, owner_id):
         return int(obj_owner_id) == int(owner_id)
     except Exception:
         return False
+
+def _current_user_id(conn):
+    try:
+        user = conn.getUser()
+        if user is not None:
+            uid = user.getId()
+            return uid.getValue() if hasattr(uid, "getValue") else uid
+    except Exception:
+        return None
+    return None
+
+
+
+def _get_owner_username(obj):
+    if obj is None:
+        return ""
+    owner = None
+    try:
+        details = obj.getDetails()
+        owner = details.getOwner() if details else None
+    except Exception:
+        owner = None
+    if owner is None:
+        try:
+            owner = obj.getOwner()
+        except Exception:
+            owner = None
+    if owner is None:
+        return ""
+    for attr in ("getOmeName", "getName", "getFirstName"):
+        try:
+            if hasattr(owner, attr):
+                value = _get_text(getattr(owner, attr)())
+                if value:
+                    return value
+        except Exception:
+            continue
+    owner_id = _get_id(owner)
+    return str(owner_id) if owner_id is not None else ""
+
+
+
+def _has_read_write_permissions(obj):
+    if obj is None:
+        return False
+    for attr in ("canEdit", "canWrite"):
+        checker = getattr(obj, attr, None)
+        if callable(checker):
+            try:
+                return bool(checker())
+            except Exception:
+                continue
+    try:
+        details = obj.getDetails()
+        permissions = details.getPermissions() if details else None
+        if permissions:
+            return bool(permissions.isRead() and permissions.isWrite())
+    except Exception:
+        return False
+    return False
+
+
