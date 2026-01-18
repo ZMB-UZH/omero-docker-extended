@@ -3327,11 +3327,17 @@
                         }
                         return false;
                     }
+
                     if (showSuccessMessage) {
                         showNonBlockingModal(messages.userSettingsSavedDb);
                     }
 
-                    if (data && data.settings) {
+                    const saveSucceeded =
+                        (data && typeof data.success === 'boolean')
+                            ? data.success === true
+                            : true;
+
+                    if (saveSucceeded && data && data.settings) {
                         applyUserSettings(data.settings);
                     }
 
