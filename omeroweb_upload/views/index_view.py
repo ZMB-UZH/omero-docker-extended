@@ -1120,6 +1120,8 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
     fa.setFile(of)
 
+    fa = update.saveAndReturnObject(fa)
+
     link = ImageAnnotationLinkI()
     link.setParent(image._obj)
     link.setChild(fa)
