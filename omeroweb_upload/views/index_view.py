@@ -2511,9 +2511,13 @@ def _start_upload(request, conn):
     username = current_username(request, conn)
     current_group_id = None
     try:
-        # Preserve the user's current group context so the service account can attach in the same group.
-        current_group_id = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
+        # CRITICAL FIX: Get the user's actual group, not -1 (all groups)
+        # The -1 group causes OptimisticLockException when job-service tries to save annotations
+        event_context = conn.getEventContext()
+        current_group_id = event_context.groupId
+        logger.debug("Captured user's group_id: %s for user: %s", current_group_id, username)
+    except Exception as exc:
+        logger.warning("Unable to get user's group context: %s", exc)
         current_group_id = None
     job = {
         "job_id": job_id,
