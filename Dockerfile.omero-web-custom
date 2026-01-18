@@ -23,8 +23,8 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Locate Omero web venv and fail fast if layout changes
-# -----------------------------------------------------
+# Locate Omero web venv and fail fast if path or layout changes
+# -------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
@@ -107,8 +107,8 @@ RUN set -euo pipefail; \
     chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin" "${SITE_PACKAGES}/omeroweb_upload" "${SITE_PACKAGES}/omeroweb_admin_tools"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools
 
-# Pre-create ALL Django static directories and own them
-# -----------------------------------------------------
+# Pre-create ALL Django static directories and own them (maybe unnecessary)
+# -------------------------------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p \
         /opt/omero/web/OMERO.web/var \
@@ -141,8 +141,8 @@ RUN set -euo pipefail; \
 # Security hardening: upgrade selected Python tooling inside Omero web venv
 # WARNING:
 # - Remove immediately if you observe persistent issues in Omero web
-# - Uses >= only (no pinning), matching your policy
-# -------------------------------------------------
+# - Uses >= only (no pinning)
+# ---------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
