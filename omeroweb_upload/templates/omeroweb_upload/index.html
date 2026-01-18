@@ -209,24 +209,12 @@
         .upload-actions__buttons button {
             transition: all 0.2s ease;
         }
-
         /*
          * Clear All button must NEVER animate visibility.
-         * Animations cause slow fade-out and refresh flash.
-         *
-         * IMPORTANT: The actual button id is "clear-all-btn" (with dashes).
+         * Also start hidden to avoid flash on load; JS will show if enabled.
          */
         #clear-all-btn {
             transition: none !important;
-        }
-
-        /*
-         * Prevent Clear All button flash on page load.
-         * JS will explicitly show it if enabled.
-         *
-         * Layout is preserved because we are NOT using display:none.
-         */
-        #clear-all-btn {
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
@@ -3286,6 +3274,16 @@
             if (clearAllBtn) {
                 clearAllBtn.disabled = removeClearAll;
                 clearAllBtn.classList.toggle('action-btn-hidden', removeClearAll);
+
+                if (removeClearAll) {
+                    clearAllBtn.style.opacity = '0';
+                    clearAllBtn.style.visibility = 'hidden';
+                    clearAllBtn.style.pointerEvents = 'none';
+                } else {
+                    clearAllBtn.style.opacity = '1';
+                    clearAllBtn.style.visibility = 'visible';
+                    clearAllBtn.style.pointerEvents = 'auto';
+                }
             }
         }
 
