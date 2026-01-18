@@ -30,7 +30,12 @@ def save_settings(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": errors.invalid_user_settings_payload()}, status=400)
 
         save_user_settings(username, settings_payload)
-        return JsonResponse({"message": messages.user_settings_saved()})
+
+        return JsonResponse({
+            "success": True,
+            "message": messages.user_settings_saved(),
+            "settings": settings_payload,
+        })
     except UserSettingsStoreError as e:
         return JsonResponse({"error": str(e)}, status=500)
     except Exception as e:
