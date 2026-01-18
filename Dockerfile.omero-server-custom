@@ -75,6 +75,14 @@ RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
 
+# Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
+# secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
+# -------------------------------------------------------------------------
+COPY startup/omero-server.sh /startup/05-omero-cert-sans.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/05-omero-cert-sans.sh; \
+    chmod 0555 /startup/05-omero-cert-sans.sh
+
 # Bootstrap job-service user (auto-create if missing)
 # MUST run AFTER OMERO.server (Glacier2) is up
 # --------------------------------------------
