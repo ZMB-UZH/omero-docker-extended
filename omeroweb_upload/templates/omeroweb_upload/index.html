@@ -1627,6 +1627,7 @@
     </div>
 
     <script>
+        (() => {
         const rootStatusUrl = new URL('root-status/', window.location.href);
         const applyRootUserState = (isRootUser) => {
             if (!isRootUser) {
