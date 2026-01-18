@@ -1188,12 +1188,8 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
 
     This is safe to run in background threads and does NOT touch the user's session.
     """
-    from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
+    from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI, ImageI
     from omero.rtypes import rstring, rlong
-
-    image = conn.getObject("Image", int(image_id))
-    if image is None:
-        raise RuntimeError(f"Image:{image_id} not found (service user cannot access it)")
 
     # Read bytes
     try:
@@ -1215,27 +1211,20 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     try:
         store.setFileId(of.getId().getValue())
         store.write(binary, 0, len(binary))
-        # CRITICAL FIX: Don't call store.save() - it modifies the OriginalFile's update event
-        # which causes OptimisticLockException when we try to save FileAnnotation
-        # The store automatically saves on close()
     finally:
         try:
             store.close()
         except Exception:
             pass
-    
-    # CRITICAL FIX: Reload the OriginalFile after writing to get the updated version
-    # This ensures we have the correct update event ID
-    of = conn.getObject("OriginalFile", of.getId().getValue())._obj
 
     fa = FileAnnotationI()
     fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
-    fa.setFile(of)
+    fa.setFile(of.proxy())
 
     fa = update.saveAndReturnObject(fa)
 
     link = ImageAnnotationLinkI()
-    link.setParent(image._obj)
+    link.setParent(ImageI(rlong(image_id), False))  # Unloaded proxy - no permissions needed
     link.setChild(fa)
 
     update.saveAndReturnObject(link)
