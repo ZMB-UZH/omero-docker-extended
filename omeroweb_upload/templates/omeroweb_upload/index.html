@@ -2940,17 +2940,14 @@
             setSemEdxInstructionsStep(1);
             setSemEdxAssociationMode('automatic');
         } else {
-            // Don't clear files when switching back to normal mode
-            // Users may have already added files and might switch modes accidentally
+            if (semEdxModeActive) {
+                clearSelectedFiles();
+            }
             semEdxModeActive = false;
             setStatus('');
             updateSemEdxStepControls(false);
-            // Clear SEM EDX associations but keep the files
-            invalidateSemEdxAssociations();
-            updateSemEdxStatus();
         }
         updateSemEdxStatus();
-        }
 
         function setSpecialUploadSelection(value, label, options = {}) {
             const { persist = true, modeOptions = {} } = options;
