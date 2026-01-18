@@ -3330,6 +3330,11 @@
                     if (showSuccessMessage) {
                         showNonBlockingModal(messages.userSettingsSavedDb);
                     }
+
+                    if (data && data.settings) {
+                        applyUserSettings(data.settings);
+                    }
+
                     if (typeof onSuccess === 'function') {
                         onSuccess(data);
                     }
