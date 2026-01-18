@@ -204,3 +204,16 @@ def append_job_error(job: dict, message: str):
     errors = job.get("errors", [])
     errors.append({"timestamp": time.time(), "text": message})
     job["errors"] = errors
+
+def _compatibility_pending_entries(job_dict):
+    return [
+        entry
+        for entry in job_dict.get("files", [])
+        if (
+            entry.get("status") == "uploaded"
+            and not entry.get("compatibility")
+            and not entry.get("compatibility_skip")
+        )
+    ]
+
+

@@ -845,3 +845,101 @@ def _start_import_thread(job_id: str):
 # VIEWS
 # --------------------------------------------------------------------------
 
+
+def _normalize_sem_edx_associations(raw_associations, normalized_entries):
+    if not isinstance(raw_associations, dict):
+        return {}
+
+    # ACCEPT BOTH relative_path AND staged_path
+    available_paths = {}
+
+    for entry in normalized_entries:
+        rel = entry.get("relative_path")
+        if rel:
+            available_paths[rel] = entry
+
+        staged = entry.get("staged_path")
+        if staged:
+            available_paths[staged] = entry
+
+    normalized = {}
+
+    for image_path, txt_paths in raw_associations.items():
+        image_rel = _safe_relative_path(image_path or "")
+        if not image_rel:
+            continue
+        if image_rel.lower().endswith(".txt"):
+            continue
+        if image_rel not in available_paths:
+            continue
+        if not isinstance(txt_paths, list):
+            continue
+
+        cleaned_txt = []
+
+        for txt_path in txt_paths:
+            txt_rel = _safe_relative_path(txt_path or "")
+            if not txt_rel:
+                continue
+            if not txt_rel.lower().endswith(".txt"):
+                continue
+            if txt_rel not in available_paths:
+                continue
+            if txt_rel not in cleaned_txt:
+                cleaned_txt.append(txt_rel)
+
+        if cleaned_txt:
+            normalized[image_rel] = cleaned_txt
+
+    return normalized
+
+
+
+def _build_sem_edx_associations_from_entries(entries):
+    """Server-side fallback to derive SEM-EDX TXT->image associations.
+
+    The UI normally submits sem_edx_associations, but if that payload is missing/empty
+    (e.g. browser/localStorage issues, UI state bugs), we can deterministically derive
+    associations from the uploaded file list:
+
+    - Group by directory (based on relative_path)
+    - Choose ONE non-.txt file per directory as the target image (lexicographically)
+    - Attach ALL .txt files in that directory to that image
+
+    This keeps behaviour predictable and ensures TXT attachment is at least attempted.
+    """
+
+    if not isinstance(entries, list) or not entries:
+        return {}
+
+    grouped = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("relative_path")
+        if not rel or not isinstance(rel, str):
+            continue
+        rel_norm = _safe_relative_path(rel)
+        if not rel_norm:
+            continue
+        parent = str(PurePosixPath(rel_norm).parent)
+        if parent == ".":
+            parent = ""
+        bucket = grouped.setdefault(parent, {"images": [], "txt": []})
+        if rel_norm.lower().endswith(".txt"):
+            bucket["txt"].append(rel_norm)
+        else:
+            bucket["images"].append(rel_norm)
+
+    associations = {}
+    for bucket in grouped.values():
+        if not bucket["images"] or not bucket["txt"]:
+            continue
+        image_rel = sorted(bucket["images"])[0]
+        txt_rels = sorted(set(bucket["txt"]))
+        if txt_rels:
+            associations[image_rel] = txt_rels
+
+    return associations
+
+

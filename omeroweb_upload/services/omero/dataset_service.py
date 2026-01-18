@@ -162,3 +162,60 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     if port:
         cmd.extend(["-p", str(port)])
 
+
+def _iter_accessible_projects(conn):
+    if conn is None:
+        return
+    
+    # Save current group context
+    current_group = None
+    try:
+        current_group = conn.SERVICE_OPTS.getOmeroGroup()
+    except Exception:
+        pass
+    
+    try:
+        # Set group context to -1 to query across all groups
+        conn.SERVICE_OPTS.setOmeroGroup('-1')
+        
+        # Try to get projects with cross-group querying enabled
+        try:
+            for proj in conn.getObjects("Project"):
+                yield proj
+            return
+        except Exception as e:
+            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", e)
+        
+        # Fallback: try with opts parameter
+        try:
+            for proj in conn.getObjects("Project", opts={"group": "-1"}):
+                yield proj
+            return
+        except Exception as e:
+            logger.warning("Failed to query projects with opts group=-1: %s", e)
+            
+    finally:
+        # Restore original group context
+        if current_group is not None:
+            try:
+                conn.SERVICE_OPTS.setOmeroGroup(current_group)
+            except Exception:
+                pass
+    
+    # Final fallback: try without cross-group querying
+    try:
+        for proj in conn.getObjects("Project"):
+            yield proj
+        return
+    except Exception as e:
+        logger.warning("Failed to query projects in current group: %s", e)
+    
+    # Last resort: use listProjects
+    try:
+        for proj in conn.listProjects():
+            yield proj
+    except Exception as e:
+        logger.warning("Failed to list projects: %s", e)
+        return
+
+
