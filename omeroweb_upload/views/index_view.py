@@ -1202,7 +1202,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     image_group_id = image_obj.getDetails().getGroup().getId().getValue()
     
     # Set the group context explicitly for this connection
-    conn.SERVICE_OPTS.setOmeroGroup(image_group_id)
+    conn.SERVICE_OPTS.setOmeroGroup(str(image_group_id))
 
     # Read bytes
     try:
