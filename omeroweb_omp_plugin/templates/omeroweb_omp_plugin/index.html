@@ -2788,6 +2788,11 @@
                 if (showSuccessMessage) {
                     showNonBlockingModal(messages.userSettingsSavedDb);
                 }
+
+                if (data && data.settings) {
+                    applyUserSettingsValues(data.settings);
+                }
+
                 if (typeof onSuccess === 'function') {
                     onSuccess(data);
                 }
