@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
 # -----------------------------------------------------------------------------
 # Ensure OMERO SSL certificates include Docker hostname (omeroserver)
 # This is REQUIRED for secure BlitzGateway connections from OMERO.web.
@@ -10,8 +13,6 @@
 
 CERT_DIR="/OMERO/certs"
 CERT_PEM="${CERT_DIR}/server.pem"
-CERT_KEY="${CERT_DIR}/server.key"
-CERT_P12="${CERT_DIR}/server.p12"
 
 NEED_REGEN=0
 
@@ -29,7 +30,7 @@ fi
 if [ "${NEED_REGEN}" -eq 1 ]; then
     echo "[CERT] Generating OMERO certificates with SANs: localhost, omeroserver"
 
-    rm -f "${CERT_DIR}/server."*
+    rm -f "${CERT_DIR}/server."* || true
 
     /opt/omero/server/OMERO.server/bin/omero certificates \
         --overwrite \
