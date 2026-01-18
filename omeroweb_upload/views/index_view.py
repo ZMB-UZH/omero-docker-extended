@@ -1215,12 +1215,18 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     try:
         store.setFileId(of.getId().getValue())
         store.write(binary, 0, len(binary))
-        store.save()
+        # CRITICAL FIX: Don't call store.save() - it modifies the OriginalFile's update event
+        # which causes OptimisticLockException when we try to save FileAnnotation
+        # The store automatically saves on close()
     finally:
         try:
             store.close()
         except Exception:
             pass
+    
+    # CRITICAL FIX: Reload the OriginalFile after writing to get the updated version
+    # This ensures we have the correct update event ID
+    of = conn.getObject("OriginalFile", of.getId().getValue())._obj
 
     fa = FileAnnotationI()
     fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
