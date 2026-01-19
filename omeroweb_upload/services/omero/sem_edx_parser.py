@@ -203,23 +203,25 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             orig_file = table.getOriginalFile()
             table.close()
             
-            # Create TABLE annotation (so OMERO.web shows it under "Tables", not "Attachments")
-            # IMPORTANT: Use the gateway wrapper and call save() on it, otherwise OMERO.web
-            # may not list it under Tables.
-            from omero.gateway import TableAnnotationWrapper
+            # Create TABLE annotation (compatible with OMERO 5.6.x)
+            from omero.model import TableAnnotationI, ImageAnnotationLinkI
 
             image = conn.getObject("Image", image_id)
             if not image:
                 logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
                 return None
 
-            table_wrapper = TableAnnotationWrapper(conn)
-            table_wrapper.setFile(OriginalFileI(orig_file.getId().getValue(), False))
-            table_wrapper.setNs("openmicroscopy.org/omero/client/table")
-            table_wrapper.setDescription(f"SEM EDX spectrum data from {txt_filename}")
+            ann = TableAnnotationI()
+            ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
+            ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
+            ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
 
-            table_wrapper.save()
-            image.linkAnnotation(table_wrapper)
+            ann = conn.getUpdateService().saveAndReturnObject(ann)
+
+            link = ImageAnnotationLinkI()
+            link.setParent(image._obj)
+            link.setChild(ann)
+            conn.getUpdateService().saveObject(link)
 
             logger.info(
                 "Created spectrum table '%s' for image %d (%d rows)",
@@ -227,7 +229,7 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
                 image_id,
                 len(spectrum),
             )
-            return table_wrapper.getId()
+            return ann.getId().getValue()
             
         except Exception as exc:
             logger.error("Failed to populate table for image %d: %s", image_id, exc)
