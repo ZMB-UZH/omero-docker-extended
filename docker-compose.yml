@@ -114,9 +114,9 @@ services:
       CONFIG_omero_web_caches: '{"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1", "KEY_PREFIX": "omero", "TIMEOUT": 300}}'
       CONFIG_omero_web_apps: '["omero_figure","omero_fpbioimage","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload","omeroweb_admin_tools"]' # modify if needed when the developers update Omero Web
       CONFIG_omero_web_open__with: '[
-        ["webgateway", "webgateway_index",
+        ["Image viewer", "webgateway",
           {"supported_objects":["image"],
-           "label":"Image viewer"}],
+           "script_url":"webclient/javascript/ome.openwith_viewer.js"}],
         ["omero_figure", "new_figure",
           {"supported_objects":["images"],
            "target": "_blank",
