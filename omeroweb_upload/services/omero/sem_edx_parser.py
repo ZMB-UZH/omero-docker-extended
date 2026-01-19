@@ -5,6 +5,7 @@ This module parses SEM EDX spectrum files in EMSA/MAS format and creates
 one OMERO Table containing the spectrum X,Y data.
 """
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
@@ -44,12 +45,15 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
     in_spectrum = False
     
     for line in lines:
-        line = line.rstrip()
+        line = line.strip()
         if not line:
             continue
+
+        normalized = line.lstrip('#').strip()
+        normalized_upper = normalized.upper()
         
         # Check if we've entered the spectrum data section
-        if line.startswith('#SPECTRUM'):
+        if normalized_upper.startswith('SPECTRUM'):
             in_spectrum = True
             # Also capture this as metadata
             parts = line.split(':', 1)
@@ -60,20 +64,23 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
             continue
         
         # Check for end of data
-        if line.startswith('#ENDOFDATA'):
+        if normalized_upper.startswith('ENDOFDATA'):
             break
         
         # If we're in the spectrum section, parse X,Y pairs
         if in_spectrum:
-            # Parse X, Y pairs (format: "0.01000, 1057.0")
-            parts = line.split(',')
-            if len(parts) == 2:
-                try:
-                    x = float(parts[0].strip())
-                    y = float(parts[1].strip())
-                    spectrum.append((x, y))
-                except ValueError:
-                    continue
+            if line.startswith('#'):
+                continue
+            # Parse X, Y pairs (format: "0.01000, 1057.0" or "0.01000 1057.0")
+            parts = [p for p in re.split(r'[,\s]+', line) if p]
+            if len(parts) >= 2:
+                for idx in range(0, len(parts) - 1, 2):
+                    try:
+                        x = float(parts[idx])
+                        y = float(parts[idx + 1])
+                        spectrum.append((x, y))
+                    except ValueError:
+                        continue
             continue
         
         # Parse metadata lines (format: "#KEY : value")

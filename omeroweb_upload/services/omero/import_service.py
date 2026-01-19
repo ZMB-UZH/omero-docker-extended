@@ -379,6 +379,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
+    from .sem_edx_parser import attach_sem_edx_tables
 
     # CRITICAL FIX: Use suConn() to impersonate the user
     # This is the OMERO-approved way for admins to create objects as another user
@@ -428,6 +429,20 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
         
         # Link annotation using gateway method
         image_obj.linkAnnotation(FileAnnotationWrapper(user_conn, fa))
+
+        # Parse the SEM EDX file and create OMERO Table with spectrum data
+        try:
+            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path)
+            if table_id:
+                logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
+        except Exception as exc:
+            # Don't fail the entire attachment if table creation fails
+            logger.error(
+                "Failed to create OMERO Table for image %d from %s: %s",
+                image_id,
+                txt_path.name,
+                exc,
+            )
     finally:
         # Always close the user connection
         try:
@@ -1137,4 +1152,3 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
         return {"skip": True}
 
     staged_path = entry.get("staged_path") or rel_path
-
