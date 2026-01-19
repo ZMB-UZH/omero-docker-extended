@@ -1,5 +1,5 @@
 """Backward compatible exports for shared OMERO helpers."""
-from omeroweb_common.omero_helpers import (  # noqa: F401
+from omero_plugin_common.omero_helpers import (  # noqa: F401
     get_id,
     get_owner_id,
     get_text,
