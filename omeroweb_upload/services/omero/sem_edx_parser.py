@@ -212,12 +212,13 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             table.initialize(init_columns)
             table.addData(columns)
 
-            # Get the original file and close table
-            orig_file = table.getOriginalFile()
+            # Get the OriginalFile ID and close table
+            orig_file_obj = table.getOriginalFile()
+            orig_file_id = orig_file_obj.getId().getValue()
             table.close()
 
             # Create FileAnnotation for the table (THIS is how OMERO represents tables)
-            from omero.model import FileAnnotationI, ImageAnnotationLinkI
+            from omero.model import FileAnnotationI, ImageAnnotationLinkI, OriginalFileI
             from omero.rtypes import rstring
 
             image = conn.getObject("Image", image_id)
@@ -225,8 +226,12 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
                 logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
                 return None
 
+            # IMPORTANT:
+            # Do NOT re-save/modify the OriginalFile object returned by table.getOriginalFile().
+            # Reference it by ID only, otherwise the server may attempt to change its update-event
+            # and throw OptimisticLockException (exactly what you're seeing).
             ann = FileAnnotationI()
-            ann.setFile(orig_file)
+            ann.setFile(OriginalFileI(orig_file_id, False))
             ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
             ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
 
@@ -245,11 +250,11 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             )
             return ann.getId().getValue()
             
-        except Exception as exc:
-            logger.error("Failed to populate table for image %d: %s", image_id, exc)
+        except Exception:
+            logger.exception("Failed to populate table for image %d", image_id)
             try:
                 table.close()
-            except:
+            except Exception:
                 pass
             return None
             
