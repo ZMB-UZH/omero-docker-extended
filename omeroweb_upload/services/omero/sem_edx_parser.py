@@ -259,16 +259,21 @@ def create_spectrum_table(
             parents = list(image.listParents())
             dataset = parents[0] if parents else None
 
+            # Attach to both Dataset (for table viewer consistency) and Image
+            # so the table renders correctly in the image right-hand panel.
+            links = []
             if dataset is not None:
-                link = DatasetAnnotationLinkI()
-                link.setParent(dataset._obj)
-            else:
-                # Fallback: no dataset parent, attach to the Image so it's still accessible
-                link = ImageAnnotationLinkI()
-                link.setParent(image._obj)
+                dataset_link = DatasetAnnotationLinkI()
+                dataset_link.setParent(dataset._obj)
+                links.append(dataset_link)
 
-            link.setChild(ann)
-            conn.getUpdateService().saveObject(link)
+            image_link = ImageAnnotationLinkI()
+            image_link.setParent(image._obj)
+            links.append(image_link)
+
+            for link in links:
+                link.setChild(ann)
+                conn.getUpdateService().saveObject(link)
 
             logger.info(
                 "Created spectrum table '%s' for image %d (%d rows)",
