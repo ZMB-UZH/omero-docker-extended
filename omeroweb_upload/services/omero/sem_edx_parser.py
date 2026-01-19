@@ -211,6 +211,7 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
 
             table.initialize(init_columns)
             table.addData(columns)
+            table.close()
 
             # Get the original file and close table
             orig_file = table.getOriginalFile()
