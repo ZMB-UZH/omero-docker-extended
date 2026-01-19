@@ -401,29 +401,29 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const userSettingsStatus = document.getElementById('user_settings_status');
         const compatibilityToggle = document.getElementById('compatibility_toggle');
 
-        let specialUploadFixedWidth = null;
-        const syncSpecialUploadWidth = () => {
-            if (!specialUploadWrapper || !uploadActionsButtons || specialUploadFixedWidth !== null) return;
-            const buttonsWidth = uploadActionsButtons.offsetWidth;
-            if (buttonsWidth > 0) {
-                specialUploadFixedWidth = buttonsWidth;
-                specialUploadWrapper.style.width = `${buttonsWidth}px`;
-                specialUploadWrapper.style.minWidth = `${buttonsWidth}px`;
-                specialUploadWrapper.style.maxWidth = `${buttonsWidth}px`;
-            }
-        };
-
-        const lockSpecialUploadWidth = () => {
-            syncSpecialUploadWidth();
-            if (specialUploadFixedWidth !== null) {
-                window.removeEventListener('resize', lockSpecialUploadWidth);
-                window.removeEventListener('load', lockSpecialUploadWidth);
-            }
-        };
-
-        lockSpecialUploadWidth();
-        window.addEventListener('resize', lockSpecialUploadWidth);
-        window.addEventListener('load', lockSpecialUploadWidth);
+//        let specialUploadFixedWidth = null;
+//        const syncSpecialUploadWidth = () => {
+//            if (!specialUploadWrapper || !uploadActionsButtons || specialUploadFixedWidth !== null) return;
+//            const buttonsWidth = uploadActionsButtons.offsetWidth;
+//            if (buttonsWidth > 0) {
+//                specialUploadFixedWidth = buttonsWidth;
+//               specialUploadWrapper.style.width = `${buttonsWidth}px`;
+//                specialUploadWrapper.style.minWidth = `${buttonsWidth}px`;
+//                specialUploadWrapper.style.maxWidth = `${buttonsWidth}px`;
+//            }
+//        };
+//
+//        const lockSpecialUploadWidth = () => {
+//            syncSpecialUploadWidth();
+//            if (specialUploadFixedWidth !== null) {
+//                window.removeEventListener('resize', lockSpecialUploadWidth);
+//                window.removeEventListener('load', lockSpecialUploadWidth);
+//            }
+//        };
+//
+//        lockSpecialUploadWidth();
+//        window.addEventListener('resize', lockSpecialUploadWidth);
+//        window.addEventListener('load', lockSpecialUploadWidth);
 
         let pendingFiles = [];
         const expandedNodes = new Set();
