@@ -2940,19 +2940,20 @@
                 updateSemEdxStepControls(false);
             }
             setProjectSelectionVisibility(!value);
-        if (isSemEdx) {
-            semEdxModeActive = true;
-            setSemEdxInstructionsStep(1);
-            setSemEdxAssociationMode('automatic');
-        } else {
-            if (semEdxModeActive) {
-                clearSelectedFiles();
+            if (isSemEdx) {
+                semEdxModeActive = true;
+                setSemEdxInstructionsStep(1);
+                setSemEdxAssociationMode('automatic');
+            } else {
+                if (semEdxModeActive) {
+                    clearSelectedFiles();
+                }
+                semEdxModeActive = false;
+                setStatus('');
+                updateSemEdxStepControls(false);
             }
-            semEdxModeActive = false;
-            setStatus('');
-            updateSemEdxStepControls(false);
+            updateSemEdxStatus();
         }
-        updateSemEdxStatus();
 
         function setSpecialUploadSelection(value, label, options = {}) {
             const { persist = true, modeOptions = {} } = options;
@@ -4916,7 +4917,6 @@
                 // Check absolute timeout
                 if (Date.now() - startTime > maxTimeMs) {
                     throw new Error('Compatibility check timeout - operation took too long. Please try again.');
-                }
                 }
                 
                 const data = await fetchJobStatus(job);
