@@ -517,15 +517,14 @@ body {
             height: var(--action-control-height);
         }
         .upload-intro-row {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
             align-items: center;
             gap: 12px;
             margin-bottom: 0;
         }
         .upload-intro-row .project-select-wrapper {
-            flex: 0 0 auto;
-            margin-left: auto;
+            justify-self: end;
         }
         .upload-intro-row p {
             margin: 0;
@@ -661,15 +660,16 @@ body {
         .sem-edx-settings {
             display: none;
             flex-direction: row;
-            align-items: stretch;
-            justify-content: space-between;
+            align-items: flex-start;
+            justify-content: flex-start;
             gap: 16px;
         }
         .sem-edx-settings__options {
             display: flex;
             flex-direction: column;
             gap: 12px;
-            flex: 1 1 auto;
+            flex: 0 1 auto;
+            max-width: 680px;
         }
         .sem-edx-settings__option {
             display: flex;
@@ -681,9 +681,10 @@ body {
         }
         .sem-edx-settings__actions {
             display: flex;
-            align-items: center;
-            justify-content: center;
+            align-items: flex-start;
+            justify-content: flex-start;
             flex: 0 0 auto;
+            padding-top: 2px;
         }
         .file-tree.sem-edx-associations {
             gap: 6px;
