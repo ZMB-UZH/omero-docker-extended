@@ -219,7 +219,7 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             table.close()
 
             # Create FileAnnotation for the table (THIS is how OMERO represents tables)
-            from omero.model import FileAnnotationI, ImageAnnotationLinkI, OriginalFileI
+            from omero.model import FileAnnotationI, DatasetAnnotationLinkI, ImageAnnotationLinkI, OriginalFileI
             from omero.rtypes import rstring
 
             image = conn.getObject("Image", image_id)
@@ -238,8 +238,20 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
 
             ann = conn.getUpdateService().saveAndReturnObject(ann)
 
-            link = ImageAnnotationLinkI()
-            link.setParent(image._obj)
+            # OMERO.web Table rendering works reliably when the "table file annotation" is attached
+            # to a Dataset (or Project). The Image view then shows row values when the table has a
+            # column named "Image" that references image IDs (we create that column above).
+            parents = list(image.listParents())
+            dataset = parents[0] if parents else None
+
+            if dataset is not None:
+                link = DatasetAnnotationLinkI()
+                link.setParent(dataset._obj)
+            else:
+                # Fallback: no dataset parent, attach to the Image so it's still accessible
+                link = ImageAnnotationLinkI()
+                link.setParent(image._obj)
+
             link.setChild(ann)
             conn.getUpdateService().saveObject(link)
 
