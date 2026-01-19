@@ -662,7 +662,7 @@ body {
             flex-direction: row;
             align-items: flex-start;
             justify-content: flex-start;
-            gap: 16px;
+            gap: 30px;
         }
         .sem-edx-settings__options {
             display: flex;
@@ -681,10 +681,11 @@ body {
         }
         .sem-edx-settings__actions {
             display: flex;
-            align-items: flex-start;
-            justify-content: flex-start;
+            align-items: center;
+            justify-content: center;
             flex: 0 0 auto;
-            padding-top: 2px;
+            align-self: center;
+            padding-top: 0;
         }
         .file-tree.sem-edx-associations {
             gap: 6px;
