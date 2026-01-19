@@ -6,6 +6,7 @@ one OMERO Table containing the spectrum X,Y data.
 """
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
