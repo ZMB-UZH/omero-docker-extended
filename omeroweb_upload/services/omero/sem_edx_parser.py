@@ -196,23 +196,34 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
                 len(columns[1].values),
             )
 
-            table.initialize(columns)
+            # IMPORTANT:
+            # initialize() defines ONLY the schema; values are ignored.
+            # addData() must receive the populated columns.
+            from omero.grid import DoubleColumn
+
+            init_columns = [
+                DoubleColumn('Energy_keV', '', []),
+                DoubleColumn('Counts', '', [])
+            ]
+
+            table.initialize(init_columns)
             table.addData(columns)
-            
-            # Get the original file
+
+            # Get the original file and close table
             orig_file = table.getOriginalFile()
             table.close()
-            
-            # Create TABLE annotation (compatible with OMERO 5.6.x)
-            from omero.model import TableAnnotationI, ImageAnnotationLinkI
+
+            # Create FileAnnotation for the table (THIS is how OMERO represents tables)
+            from omero.model import FileAnnotationI, ImageAnnotationLinkI
+            from omero.rtypes import rstring
 
             image = conn.getObject("Image", image_id)
             if not image:
                 logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
                 return None
 
-            ann = TableAnnotationI()
-            ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
+            ann = FileAnnotationI()
+            ann.setFile(orig_file)
             ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
             ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
 
