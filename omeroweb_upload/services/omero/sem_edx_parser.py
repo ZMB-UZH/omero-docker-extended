@@ -166,14 +166,12 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
         
         # Create columns
         columns = [
-            LongColumn('Image', '', []),
             DoubleColumn('Energy_keV', '', []),
             DoubleColumn('Counts', '', [])
         ]
         
         # Populate data
         for x, y in spectrum:
-            columns[0].values.append(image_id)
             columns[1].values.append(x)
             columns[2].values.append(y)
         
@@ -205,7 +203,6 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             from omero.grid import DoubleColumn, LongColumn
 
             init_columns = [
-                LongColumn('Image', '', []),
                 DoubleColumn('Energy_keV', '', []),
                 DoubleColumn('Counts', '', [])
             ]
