@@ -1,12 +1,3 @@
-def current_username(request, conn):
-    try:
-        user = conn.getUser()
-        if user:
-            return user.getName()
-    except Exception:
-        pass
+from omeroweb_common.request_utils import current_username
 
-    try:
-        return request.user.username
-    except Exception:
-        return None
+__all__ = ["current_username"]

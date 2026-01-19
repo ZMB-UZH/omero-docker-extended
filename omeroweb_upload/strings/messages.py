@@ -39,20 +39,10 @@ def user_settings_saved():
     return "Saved user settings."
 
 
-def _snake_to_camel(name):
-    parts = name.split("_")
-    return parts[0] + "".join(part.title() for part in parts[1:])
-
-
 def build_message_payload(names):
-    payload = {}
-    for name in names:
-        if name == "confirm_irreversible_action":
-            key = "confirmIrreversible"
-        else:
-            key = _snake_to_camel(name)
-        payload[key] = globals()[name]()
-    return payload
+    from omeroweb_common.string_utils import build_message_payload as _build_payload
+
+    return _build_payload(names, globals())
 
 
 INDEX_MESSAGE_NAMES = (

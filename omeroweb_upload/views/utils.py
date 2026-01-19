@@ -1,34 +1,22 @@
-import json
-
 from django.http import JsonResponse
 
+from omeroweb_common.request_utils import (
+    current_username as _current_username,
+    load_request_data as _load_request_data,
+    parse_json_body,
+)
 
 def current_username(request, conn):
-    try:
-        user = conn.getUser()
-        if user:
-            return user.getName()
-    except Exception:
-        pass
-
-    try:
-        return request.user.username
-    except Exception:
-        return None
+    return _current_username(request, conn)
 
 
 def load_json_body(request):
-    try:
-        return json.loads(request.body or "{}")
-    except json.JSONDecodeError:
-        return {}
+    payload, _error = parse_json_body(request)
+    return payload if payload is not None else {}
 
 
 def load_request_data(request):
-    try:
-        return json.loads(request.body.decode("utf-8"))
-    except Exception:
-        return request.POST
+    return _load_request_data(request)
 
 
 def json_error(message, status=200, extra=None):
