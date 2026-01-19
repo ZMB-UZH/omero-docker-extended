@@ -159,20 +159,22 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
     )
     
     try:
-        from omero.grid import DoubleColumn
+        from omero.grid import DoubleColumn, LongColumn
         from omero.model import OriginalFileI
         from omero.rtypes import rstring
         
         # Create columns
         columns = [
+            LongColumn('Image', '', []),
             DoubleColumn('Energy_keV', '', []),
             DoubleColumn('Counts', '', [])
         ]
         
         # Populate data
         for x, y in spectrum:
-            columns[0].values.append(x)
-            columns[1].values.append(y)
+            columns[0].values.append(image_id)
+            columns[1].values.append(x)
+            columns[2].values.append(y)
         
         # Create the table
         resources = conn.c.sf.sharedResources()
