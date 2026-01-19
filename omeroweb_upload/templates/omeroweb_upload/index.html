@@ -489,6 +489,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             create_figures_attachments: true,
             create_figures_images: true,
         };
+        let semEdxSettingsDraft = null;
         const specialMethodSettingsCache = new Map();
         const specialMethodSettingsLoading = new Map();
         let semEdxAssociationMode = 'automatic';
@@ -592,6 +593,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             if (semEdxSettingFiguresImage) {
                 semEdxSettingFiguresImage.checked = !!normalized.create_figures_images;
             }
+            semEdxSettingsDraft = normalized;
         }
 
         function getSemEdxSettingsPayload() {
@@ -600,6 +602,14 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                 create_figures_attachments: semEdxSettingFiguresAttachment?.checked ?? true,
                 create_figures_images: semEdxSettingFiguresImage?.checked ?? true,
             }, semEdxSettingsDefaults);
+        }
+
+        function resetSemEdxSettingsDraft() {
+            semEdxSettingsDraft = null;
+        }
+
+        function syncSemEdxSettingsDraft() {
+            semEdxSettingsDraft = getSemEdxSettingsPayload();
         }
 
         async function loadSpecialMethodSettingsFromDatabase(methodKey, defaults) {
@@ -727,6 +737,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             semEdxAssociationReady = false;
             setSemEdxAssociationMode('automatic');
             setSemEdxInstructionsStep(1);
+            resetSemEdxSettingsDraft();
             saveSemEdxAssociationsToStorage();
             updateSemEdxStatus();
         }
@@ -1737,6 +1748,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                 setSemEdxInstructionsStep(1);
                 setSemEdxAssociationMode('automatic');
             } else {
+                resetSemEdxSettingsDraft();
                 if (semEdxModeActive) {
                     clearSelectedFiles();
                 }
@@ -4638,11 +4650,16 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                         return;
                     }
 
-                    await ensureSpecialMethodSettingsLoaded(
-                        'sem_edx_spectra',
-                        semEdxSettingsDefaults,
-                        applySemEdxSettings
-                    );
+                    if (semEdxSettingsDraft) {
+                        applySemEdxSettings(semEdxSettingsDraft);
+                    } else {
+                        const loadedSettings = await ensureSpecialMethodSettingsLoaded(
+                            'sem_edx_spectra',
+                            semEdxSettingsDefaults,
+                            applySemEdxSettings
+                        );
+                        semEdxSettingsDraft = loadedSettings;
+                    }
                     setSemEdxInstructionsStep(3);
                     updateSemEdxStatus();
                     return;
@@ -4765,6 +4782,15 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                 const settings = getSemEdxSettingsPayload();
                 saveSpecialMethodSettingsToDatabase('sem_edx_spectra', settings);
             });
+        }
+        if (semEdxSettingTables) {
+            semEdxSettingTables.addEventListener('change', syncSemEdxSettingsDraft);
+        }
+        if (semEdxSettingFiguresAttachment) {
+            semEdxSettingFiguresAttachment.addEventListener('change', syncSemEdxSettingsDraft);
+        }
+        if (semEdxSettingFiguresImage) {
+            semEdxSettingFiguresImage.addEventListener('change', syncSemEdxSettingsDraft);
         }
 
         const storedCompatibilityState = loadCompatibilityState();
