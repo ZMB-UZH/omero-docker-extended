@@ -118,6 +118,7 @@ services:
         ["History", "history", {"title": "History"}],
         ["Mapr", {"viewname": "maprindex_anyvalue"}, {"title": "Find Any Value"}],
         ["Figure", "figure_index", {"title": "Open Figure in new tab", "target": "_blank"}],
+        ["FPBioimage", "fpbioimage_index", {"title": "Open FPBioimage in new tab", "target": "_blank"}],
         ["Help", "https://help.openmicroscopy.org/", {"title": "Open OMERO user guide in a new tab", "target": "new"}],
         ["Tag Search", "tagsearch"],
         ["OMP plugin", "omeroweb_omp_plugin_index", {"title": "Open OMP plugin in new tab", "target": "_blank"}],
