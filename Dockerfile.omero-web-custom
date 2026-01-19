@@ -63,17 +63,17 @@ RUN set -euo pipefail; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.21.2"
 
-# Optional: remove build dependencies again to keep image smaller
-# ---------------------------------------------------------------
-RUN set -euo pipefail; \
-    dnf -y remove \
-        gcc \
-        gcc-c++ \
-        make \
-        python3-devel || true; \
-    dnf -y autoremove || true; \
-    dnf clean all; \
-    rm -rf /var/cache/dnf /var/tmp/*
+## Optional: remove build dependencies again to keep image smaller
+## ---------------------------------------------------------------
+#RUN set -euo pipefail; \
+#    dnf -y remove \
+#        gcc \
+#        gcc-c++ \
+#        make \
+#        python3-devel || true; \
+#    dnf -y autoremove || true; \
+#    dnf clean all; \
+#    rm -rf /var/cache/dnf /var/tmp/*
 
 # Remove old copies of the plugins inside the container (if any)
 # --------------------------------------------------------------
