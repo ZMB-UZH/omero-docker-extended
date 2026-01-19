@@ -684,8 +684,9 @@ body {
             align-items: center;
             justify-content: center;
             flex: 0 0 auto;
-            align-self: center;
-            padding-top: 0;
+            align-self: flex-start;
+            margin-top: calc(1em + 12px);
+            margin-left: 30px;
         }
         .file-tree.sem-edx-associations {
             gap: 6px;
