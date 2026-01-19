@@ -94,8 +94,10 @@ def _start_upload(request, conn):
         return json_error(errors.no_files_provided())
     special_upload = (payload.get("special_upload") or "").strip()
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
+    raw_sem_edx_settings = payload.get("sem_edx_settings") or {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
+        raw_sem_edx_settings = {}
     default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
     batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
@@ -168,6 +170,11 @@ def _start_upload(request, conn):
         return json_error(errors.invalid_file_paths(invalid))
 
     sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
+    sem_edx_settings = (
+        _normalize_sem_edx_settings(raw_sem_edx_settings)
+        if special_upload == "sem_edx_spectra"
+        else {}
+    )
 
     dataset_map = {}
     orphan_dataset_name = None
@@ -226,6 +233,7 @@ def _start_upload(request, conn):
         "compatibility_confirmed": False,
         "special_upload": special_upload,
         "sem_edx_associations": sem_edx_associations,
+        "sem_edx_settings": sem_edx_settings,
     }
     _save_job(job)
 

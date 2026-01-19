@@ -19,8 +19,20 @@ def user_settings_saved_db():
     return "Saved user settings to database."
 
 
+def special_method_settings_saved_db():
+    return "Saved special method user settings to database."
+
+
 def user_settings_save_error():
     return "Error saving user settings: {error}"
+
+
+def special_method_settings_save_error():
+    return "Error saving special method settings: {error}"
+
+
+def special_method_settings_load_error():
+    return "Error loading special method settings: {error}"
 
 
 def user_settings_saved():
@@ -48,6 +60,9 @@ INDEX_MESSAGE_NAMES = (
     "formatting_errors",
     "user_settings_saved_db",
     "user_settings_save_error",
+    "special_method_settings_saved_db",
+    "special_method_settings_save_error",
+    "special_method_settings_load_error",
 )
 
 
