@@ -150,6 +150,13 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
     if not spectrum:
         logger.info("No spectrum data to create table for image %d", image_id)
         return None
+
+    logger.info(
+        "SEM EDX spectrum received for image %d: %d data points (from %s)",
+        image_id,
+        len(spectrum),
+        txt_filename,
+    )
     
     try:
         from omero.grid import DoubleColumn
@@ -181,6 +188,14 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             return None
         
         try:
+            logger.info(
+                "Initializing OMERO table '%s' with %d rows (Energy_keV=%d, Counts=%d)",
+                table_name,
+                len(spectrum),
+                len(columns[0].values),
+                len(columns[1].values),
+            )
+
             table.initialize(columns)
             table.addData(columns)
             
