@@ -40,7 +40,7 @@ def user_settings_saved():
 
 
 def build_message_payload(names):
-    from omeroweb_common.string_utils import build_message_payload as _build_payload
+    from omero_plugin_common.string_utils import build_message_payload as _build_payload
 
     return _build_payload(names, globals())
 
