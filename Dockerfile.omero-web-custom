@@ -103,7 +103,8 @@ RUN set -euo pipefail; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         psycopg2-binary \
         redis>=5.0.0 \
-        django-redis>=5.4.0; \
+        django-redis>=5.4.0 \
+        omero-fpbioimage; \
     chown -R omero-web:omero-web "${SITE_PACKAGES}/omeroweb_omp_plugin" "${SITE_PACKAGES}/omeroweb_upload" "${SITE_PACKAGES}/omeroweb_admin_tools"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools
 
