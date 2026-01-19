@@ -146,7 +146,7 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
     
     try:
         from omero.grid import DoubleColumn
-        from omero.model import OriginalFileI, FileAnnotationI
+        from omero.model import OriginalFileI
         from omero.rtypes import rstring
         
         # Create columns
@@ -182,26 +182,30 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             table.close()
             
             # Create TABLE annotation (so OMERO.web shows it under "Tables", not "Attachments")
-            # OMERO.web recognizes tables by TableAnnotation + the standard table namespace.
-            from omero.model import TableAnnotationI
+            # IMPORTANT: Use the gateway wrapper and call save() on it, otherwise OMERO.web
+            # may not list it under Tables.
             from omero.gateway import TableAnnotationWrapper
 
-            table_ann = TableAnnotationI()
-            table_ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
-            table_ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
-            table_ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
-            
-            # Save and link to image
-            update_service = conn.getUpdateService()
-            table_ann = update_service.saveAndReturnObject(table_ann)
-            
-            # Link to image
             image = conn.getObject("Image", image_id)
-            if image:
-                image.linkAnnotation(TableAnnotationWrapper(conn, table_ann))
-                logger.info("Created spectrum table '%s' for image %d (%d rows)", 
-                           table_name, image_id, len(spectrum))
-                return table_ann.getId().getValue()
+            if not image:
+                logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
+                return None
+
+            table_wrapper = TableAnnotationWrapper(conn)
+            table_wrapper.setFile(OriginalFileI(orig_file.getId().getValue(), False))
+            table_wrapper.setNs("openmicroscopy.org/omero/client/table")
+            table_wrapper.setDescription(f"SEM EDX spectrum data from {txt_filename}")
+
+            table_wrapper.save()
+            image.linkAnnotation(table_wrapper)
+
+            logger.info(
+                "Created spectrum table '%s' for image %d (%d rows)",
+                table_name,
+                image_id,
+                len(spectrum),
+            )
+            return table_wrapper.getId()
             
         except Exception as exc:
             logger.error("Failed to populate table for image %d: %s", image_id, exc)
