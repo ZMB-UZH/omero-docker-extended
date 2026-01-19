@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 
-from omeroweb_common.request_utils import (
+from omero_plugin_common.request_utils import (
     current_username as _current_username,
     load_request_data as _load_request_data,
     parse_json_body,
