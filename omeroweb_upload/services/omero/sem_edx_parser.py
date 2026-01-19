@@ -201,9 +201,10 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             # IMPORTANT:
             # initialize() defines ONLY the schema; values are ignored.
             # addData() must receive the populated columns.
-            from omero.grid import DoubleColumn
+            from omero.grid import DoubleColumn, LongColumn
 
             init_columns = [
+                LongColumn('Image', '', []),
                 DoubleColumn('Energy_keV', '', []),
                 DoubleColumn('Counts', '', [])
             ]
