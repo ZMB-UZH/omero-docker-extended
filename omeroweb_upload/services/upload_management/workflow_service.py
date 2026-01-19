@@ -619,6 +619,8 @@ def _process_import_job(job_id: str):
 
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
+            sem_edx_settings = job.get("sem_edx_settings") or {}
+            create_tables = sem_edx_settings.get("create_tables", True)
 
             if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
                 # Fallback: derive associations server-side from uploaded file list.
@@ -778,6 +780,7 @@ def _process_import_job(job_id: str):
                                             image_id,
                                             txt_path,
                                             username,  # Pass username for suConn
+                                            create_tables,
                                         )
 
                                         # Mark as imported if not already
@@ -941,5 +944,4 @@ def _build_sem_edx_associations_from_entries(entries):
             associations[image_rel] = txt_rels
 
     return associations
-
 

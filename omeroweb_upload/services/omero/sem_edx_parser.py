@@ -134,8 +134,33 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
     }
 
 
-def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float]], 
-                         txt_filename: str) -> Optional[int]:
+def build_spectrum_columns(
+    image_id: int,
+    spectrum: List[Tuple[float, float]],
+) -> List[Any]:
+    from omero.grid import DoubleColumn, LongColumn
+
+    columns = [
+        LongColumn('Image', '', []),
+        DoubleColumn('Energy_keV', '', []),
+        DoubleColumn('Counts', '', [])
+    ]
+
+    for x, y in spectrum:
+        columns[0].values.append(image_id)
+        columns[1].values.append(x)
+        columns[2].values.append(y)
+
+    return columns
+
+
+def create_spectrum_table(
+    conn,
+    image_id: int,
+    spectrum: List[Tuple[float, float]],
+    txt_filename: str,
+    columns: Optional[List[Any]] = None,
+) -> Optional[int]:
     """
     Create an OMERO Table containing spectrum X,Y data.
     
@@ -164,18 +189,8 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
         from omero.model import OriginalFileI
         from omero.rtypes import rstring
         
-        # Create columns
-        columns = [
-            LongColumn('Image', '', []),
-            DoubleColumn('Energy_keV', '', []),
-            DoubleColumn('Counts', '', [])
-        ]
-        
-        # Populate data
-        for x, y in spectrum:
-            columns[0].values.append(image_id)
-            columns[1].values.append(x)
-            columns[2].values.append(y)
+        if columns is None:
+            columns = build_spectrum_columns(image_id, spectrum)
         
         # Create the table
         resources = conn.c.sf.sharedResources()
@@ -276,7 +291,12 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
         return None
 
 
-def attach_sem_edx_tables(conn, image_id: int, txt_path: Path) -> Optional[int]:
+def attach_sem_edx_tables(
+    conn,
+    image_id: int,
+    txt_path: Path,
+    persist_table: bool = True,
+) -> Optional[int]:
     """
     Parse SEM EDX txt file and create OMERO Table with spectrum data attached to the image.
     
@@ -297,8 +317,17 @@ def attach_sem_edx_tables(conn, image_id: int, txt_path: Path) -> Optional[int]:
     
     # Create spectrum table ONLY
     if parsed['spectrum']:
+        columns = build_spectrum_columns(image_id, parsed['spectrum'])
+        if not persist_table:
+            logger.info(
+                "SEM EDX table creation skipped for image %d (settings disabled) from %s",
+                image_id,
+                txt_path.name,
+            )
+            return None
+
         table_id = create_spectrum_table(
-            conn, image_id, parsed['spectrum'], txt_path.name
+            conn, image_id, parsed['spectrum'], txt_path.name, columns=columns
         )
         if table_id:
             logger.info("Created spectrum table for image %d from %s", 

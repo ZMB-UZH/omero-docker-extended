@@ -111,6 +111,14 @@ def invalid_user_settings_payload():
     return "Invalid user settings payload."
 
 
+def invalid_special_method_settings_payload():
+    return "Invalid special method settings payload."
+
+
+def invalid_special_method_key():
+    return "Invalid special method key."
+
+
 def psycopg2_missing():
     return "psycopg2 is not installed. Please install psycopg2-binary in the OMERO.web environment."
 
@@ -130,8 +138,16 @@ def user_settings_not_persisted():
     return "User settings were not persisted to the database."
 
 
+def special_method_settings_not_persisted():
+    return "Special method settings were not persisted to the database."
+
+
 def user_settings_save_failed():
     return "Could not save user settings."
+
+
+def special_method_settings_save_failed():
+    return "Could not save special method settings."
 
 
 def unexpected_error():

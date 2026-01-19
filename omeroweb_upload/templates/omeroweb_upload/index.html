@@ -71,7 +71,7 @@
                         <span class="project-select-arrow" aria-hidden="true">▾</span>
                         <input type="hidden" id="special_upload" value="">
                         <div id="special_upload_dropdown"
-                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                             style="display:none; position:absolute; left:0; top:100%;
                                     background:#fff; border:1px solid #007bff; border-top:none;
                                     max-height:530px; overflow:visible; z-index:1000; border-radius:0 0 6px 6px;">
                         </div>
@@ -133,6 +133,25 @@
                     </div>
                 </div>
                 <div id="file-tree" class="file-tree" aria-live="polite"></div>
+                <div id="sem_edx_settings" class="file-tree sem-edx-settings" aria-live="polite">
+                    <div class="sem-edx-settings__options">
+                        <label class="sem-edx-settings__option" for="sem_edx_setting_tables">
+                            <input type="checkbox" id="sem_edx_setting_tables" checked>
+                            <span>Create and append Omero Table(s) with EDX data</span>
+                        </label>
+                        <label class="sem-edx-settings__option" for="sem_edx_setting_figures_attachment">
+                            <input type="checkbox" id="sem_edx_setting_figures_attachment" checked>
+                            <span>Create EDX data Figure(s) and append as attachment(s)</span>
+                        </label>
+                        <label class="sem-edx-settings__option" for="sem_edx_setting_figures_image">
+                            <input type="checkbox" id="sem_edx_setting_figures_image" checked>
+                            <span>Create EDX data Figure(s) and import as separate image(s)</span>
+                        </label>
+                    </div>
+                    <div class="sem-edx-settings__actions">
+                        <button type="button" id="sem_edx_settings_save">Save to database</button>
+                    </div>
+                </div>
                 <div id="status" class="status"></div>
             </div>
         </div>
@@ -333,6 +352,11 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const semEdxInstructionPrimary = document.getElementById('sem_edx_instruction_primary');
         const semEdxInstructionSecondary = document.getElementById('sem_edx_instruction_secondary');
         const semEdxInstructionSecondaryRow = document.getElementById('sem_edx_instruction_secondary_row');
+        const semEdxSettingsPanel = document.getElementById('sem_edx_settings');
+        const semEdxSettingTables = document.getElementById('sem_edx_setting_tables');
+        const semEdxSettingFiguresAttachment = document.getElementById('sem_edx_setting_figures_attachment');
+        const semEdxSettingFiguresImage = document.getElementById('sem_edx_setting_figures_image');
+        const semEdxSettingsSave = document.getElementById('sem_edx_settings_save');
         let isProjectRefreshInFlight = false;
         let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
         const MAX_USER_PROJECT_RESULTS = 15;
@@ -436,6 +460,8 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const specialUploadSelectionStorageKey = makeStorageKey('omeroweb_upload_special_upload_selection_v1');
         const collaborationToggleStorageKey = makeStorageKey('omeroweb_upload_collaboration_toggle_v1');
         const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
+        const specialMethodSettingsSaveUrl = new URL('special-method-settings/save/', window.location.href);
+        const specialMethodSettingsLoadUrl = new URL('special-method-settings/load/', window.location.href);
         const compatibilityToggleStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_v1');
         const compatibilityPausedStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_paused_v1');
         const semEdxAssociationsStorageKey = makeStorageKey('omeroweb_upload_sem_edx_associations_v1');
@@ -454,6 +480,17 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             '2) Confirm or manually edit the associations between SEM images and spectra files.',
             'Multiple txt files can be appended to a single image.',
         ];
+        const semEdxStep3Lines = [
+            '3) Adjust the import settings of the SEM EDX spectra, or directly proceed with the next step (Upload & Import).',
+            'The special method settings can be saved in the user database for automatic retrieval in subsequent imports.',
+        ];
+        const semEdxSettingsDefaults = {
+            create_tables: true,
+            create_figures_attachments: true,
+            create_figures_images: true,
+        };
+        const specialMethodSettingsCache = new Map();
+        const specialMethodSettingsLoading = new Map();
         let semEdxAssociationMode = 'automatic';
         const semEdxManualAssociations = new Map();
         let semEdxManualInitialized = false;
@@ -529,6 +566,126 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             } catch (error) {
                 // Ignore storage errors.
             }
+        }
+
+        function normalizeSpecialMethodSettings(raw, defaults) {
+            const base = { ...(defaults || {}) };
+            if (!raw || typeof raw !== 'object') {
+                return base;
+            }
+            Object.keys(base).forEach((key) => {
+                if (Object.prototype.hasOwnProperty.call(raw, key)) {
+                    base[key] = !!raw[key];
+                }
+            });
+            return base;
+        }
+
+        function applySemEdxSettings(settings) {
+            const normalized = normalizeSpecialMethodSettings(settings, semEdxSettingsDefaults);
+            if (semEdxSettingTables) {
+                semEdxSettingTables.checked = !!normalized.create_tables;
+            }
+            if (semEdxSettingFiguresAttachment) {
+                semEdxSettingFiguresAttachment.checked = !!normalized.create_figures_attachments;
+            }
+            if (semEdxSettingFiguresImage) {
+                semEdxSettingFiguresImage.checked = !!normalized.create_figures_images;
+            }
+        }
+
+        function getSemEdxSettingsPayload() {
+            return normalizeSpecialMethodSettings({
+                create_tables: semEdxSettingTables?.checked ?? true,
+                create_figures_attachments: semEdxSettingFiguresAttachment?.checked ?? true,
+                create_figures_images: semEdxSettingFiguresImage?.checked ?? true,
+            }, semEdxSettingsDefaults);
+        }
+
+        async function loadSpecialMethodSettingsFromDatabase(methodKey, defaults) {
+            try {
+                const response = await fetch(specialMethodSettingsLoadUrl, {
+                    method: 'POST',
+                    headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ method: methodKey }),
+                });
+                const data = await parseJsonResponse(response);
+                if (!response.ok || data?.error) {
+                    throw new Error(data?.error || `Failed to load settings (status ${response.status}).`);
+                }
+                return normalizeSpecialMethodSettings(data?.settings, defaults);
+            } catch (error) {
+                showNonBlockingModal(formatMessage(messages.specialMethodSettingsLoadError, { error }));
+                return normalizeSpecialMethodSettings(null, defaults);
+            }
+        }
+
+        async function ensureSpecialMethodSettingsLoaded(methodKey, defaults, applySettings) {
+            if (specialMethodSettingsCache.has(methodKey)) {
+                const cached = specialMethodSettingsCache.get(methodKey);
+                if (applySettings) {
+                    applySettings(cached);
+                }
+                return cached;
+            }
+
+            if (specialMethodSettingsLoading.has(methodKey)) {
+                const pending = await specialMethodSettingsLoading.get(methodKey);
+                if (applySettings) {
+                    applySettings(pending);
+                }
+                return pending;
+            }
+
+            const loadPromise = loadSpecialMethodSettingsFromDatabase(methodKey, defaults);
+            specialMethodSettingsLoading.set(methodKey, loadPromise);
+            const loaded = await loadPromise;
+            specialMethodSettingsLoading.delete(methodKey);
+            specialMethodSettingsCache.set(methodKey, loaded);
+            if (applySettings) {
+                applySettings(loaded);
+            }
+            return loaded;
+        }
+
+        function saveSpecialMethodSettingsToDatabase(methodKey, settings, options = {}) {
+            const { onSuccess, onError } = options;
+            return fetch(specialMethodSettingsSaveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ method: methodKey, settings }),
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data?.error) {
+                        showNonBlockingModal(data.error);
+                        if (typeof onError === 'function') {
+                            onError(data.error);
+                        }
+                        return false;
+                    }
+
+                    const saveSucceeded = data && data.success === true;
+
+                    if (saveSucceeded) {
+                        showNonBlockingModal(messages.specialMethodSettingsSavedDb);
+                        specialMethodSettingsCache.set(methodKey, normalizeSpecialMethodSettings(data.settings, settings));
+                    }
+
+                    if (typeof onSuccess === 'function') {
+                        onSuccess(data);
+                    }
+                    return saveSucceeded;
+                })
+                .catch((err) => {
+                    showNonBlockingModal(formatMessage(messages.specialMethodSettingsSaveError, { error: err }));
+                    if (typeof onError === 'function') {
+                        onError(err);
+                    }
+                    return false;
+                });
         }
 
         function hasActiveImport() {
@@ -1483,7 +1640,12 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             const previousStep = semEdxInstructionStep;
             semEdxInstructionStep = step;
             if (!semEdxInstructions) return;
-            setSemEdxInstructionLines(step === 2 ? semEdxStep2Lines : semEdxStep1Lines);
+            const instructionLines = step === 2
+                ? semEdxStep2Lines
+                : step === 3
+                    ? semEdxStep3Lines
+                    : semEdxStep1Lines;
+            setSemEdxInstructionLines(instructionLines);
             if (step > 1 && previousStep <= 1) {
                 semEdxExpandedNodes.clear();
                 semEdxExpandedNodesInitialized = false;
@@ -1497,6 +1659,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             updateUploadControlAvailability();
             if (uploadCard) {
                 uploadCard.classList.toggle('sem-edx-step-two', isSemEdxSelected() && step > 1);
+                uploadCard.classList.toggle('sem-edx-step-three', isSemEdxSelected() && step > 2);
             }
         }
 
@@ -3692,6 +3855,10 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             if (isSemEdxSelected()) {
                 semEdxAssociations = buildSemEdxAssociationPayload(entries);
             }
+            let semEdxSettings = null;
+            if (isSemEdxSelected()) {
+                semEdxSettings = getSemEdxSettingsPayload();
+            }
 
             const response = await fetch(startUrl, {
                 method: 'POST',
@@ -3702,6 +3869,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                     project_name: projectName,
                     special_upload: specialUploadValue,
                     sem_edx_associations: semEdxAssociations,
+                    sem_edx_settings: semEdxSettings,
                     batch_size: currentUploadBatchFiles,
                 }),
                 credentials: 'same-origin',
@@ -4455,8 +4623,29 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                     return;
                 }
 
-                if (semEdxAssociationMode !== 'manual') {
-                    await ensureSemEdxAutomaticAssociations();
+                if (semEdxInstructionStep === 2) {
+                    if (semEdxAssociationMode !== 'manual') {
+                        await ensureSemEdxAutomaticAssociations();
+                    }
+
+                    if (!updateSemEdxStatus()) {
+                        return;
+                    }
+
+                    const appendedCount = getSemEdxAppendedCount();
+                    if (appendedCount < 1) {
+                        updateSemEdxStatus();
+                        return;
+                    }
+
+                    await ensureSpecialMethodSettingsLoaded(
+                        'sem_edx_spectra',
+                        semEdxSettingsDefaults,
+                        applySemEdxSettings
+                    );
+                    setSemEdxInstructionsStep(3);
+                    updateSemEdxStatus();
+                    return;
                 }
 
                 if (!updateSemEdxStatus()) {
@@ -4481,7 +4670,8 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         if (previousStepBtn) {
             previousStepBtn.addEventListener('click', () => {
                 if (!isSemEdxSelected()) return;
-                setSemEdxInstructionsStep(1);
+                const nextStep = Math.max(1, semEdxInstructionStep - 1);
+                setSemEdxInstructionsStep(nextStep);
                 updateSemEdxStatus();
             });
         }
@@ -4564,6 +4754,16 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                     }
                 }
                 resetUserSettingsToDefaults();
+            });
+        }
+
+        if (semEdxSettingsSave) {
+            semEdxSettingsSave.addEventListener('click', () => {
+                if (!isSemEdxSelected()) {
+                    return;
+                }
+                const settings = getSemEdxSettingsPayload();
+                saveSpecialMethodSettingsToDatabase('sem_edx_spectra', settings);
             });
         }
 
