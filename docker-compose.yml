@@ -112,14 +112,16 @@ services:
       # OMERO_WEB_JOB_SERVICE_GROUP: "123"
       # Configure Django to use Redis for rate limiting
       CONFIG_omero_web_caches: '{"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": "redis://redis:6379/1", "KEY_PREFIX": "omero", "TIMEOUT": 300}}'
-      CONFIG_omero_web_apps: '["omero_figure","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload","omeroweb_admin_tools"]' # modify if needed when the developers update Omero Web
-#      CONFIG_omero_web_open__with: '[
-#        ["omero_fpbioimage", "fpbioimage_index", {
-#          "script_url": "fpbioimage/openwith.js",
-#          "supported_objects": ["image"],
-#          "label": "FPBioimage"
-#        }]
-#      ]'
+      CONFIG_omero_web_apps: '["omero_figure","omero_fpbioimage","omero_iviewer","omero_mapr","omero_parade","omero_autotag","omero_tagsearch","omeroweb_omp_plugin","omeroweb_upload","omeroweb_admin_tools"]' # modify if needed when the developers update Omero Web
+      CONFIG_omero_web_open__with: '[
+        ["omero_figure", "new_figure",
+          {"supported_objects":["images"], "target": "_blank", "label": "OMERO.figure"}],
+        ["omero_iviewer", "omero_iviewer_index",
+          {"supported_objects":["images", "dataset", "well"],
+           "script_url": "omero_iviewer/openwith.js", "label": "OMERO.iviewer"}],
+        ["omero_fpbioimage", "fpbioimage_index",
+          {"script_url": "fpbioimage/openwith.js", "supported_objects": ["image"], "label": "FPBioimage"}]
+      ]'
       CONFIG_omero_web_ui_top__links: '[
         ["Data", "webindex", {"title": "Browse Data via Projects, Tags etc"}],
         ["History", "history", {"title": "History"}],
