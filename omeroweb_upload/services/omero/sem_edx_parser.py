@@ -184,7 +184,7 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             # Create file annotation
             file_ann = FileAnnotationI()
             file_ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
-            file_ann.setNs(rstring("omero.tables.sem_edx.spectrum"))
+            file_ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
             file_ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
             
             # Save and link to image
