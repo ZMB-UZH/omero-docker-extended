@@ -11,6 +11,8 @@ from .views.index_view import (
     start_upload,
     upload_files,
 )
+from .views.special_method_settings_view import load_settings as load_special_method_settings
+from .views.special_method_settings_view import save_settings as save_special_method_settings
 from .views.user_settings_view import save_settings
 
 urlpatterns = [
@@ -24,4 +26,14 @@ urlpatterns = [
     path("projects/", list_projects, name="omeroweb_upload_projects"),
     path("root-status/", root_status, name="omeroweb_upload_root_status"),
     path("user-settings/save/", save_settings, name="omeroweb_upload_save_user_settings"),
+    path(
+        "special-method-settings/save/",
+        save_special_method_settings,
+        name="omeroweb_upload_save_special_method_settings",
+    ),
+    path(
+        "special-method-settings/load/",
+        load_special_method_settings,
+        name="omeroweb_upload_load_special_method_settings",
+    ),
 ]

@@ -450,7 +450,13 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         raise
 
 
-def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Path, username: str):
+def _attach_txt_to_image_service(
+    conn: BlitzGateway,
+    image_id: int,
+    txt_path: Path,
+    username: str,
+    create_tables: bool = True,
+):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
     Creates:
@@ -517,7 +523,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
 
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
-            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path)
+            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path, persist_table=create_tables)
             if table_id:
                 logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
         except Exception as exc:
@@ -534,5 +540,4 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
             user_conn.close()
         except Exception:
             pass
-
 
