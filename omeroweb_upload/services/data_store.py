@@ -7,6 +7,7 @@ from ..strings import errors
 logger = logging.getLogger(__name__)
 
 TABLE_NAME_USER_SETTINGS = "upload_user_settings"
+TABLE_NAME_SPECIAL_METHOD_SETTINGS = "upload_special_method_settings"
 ENV_USER = "OMP_DATA_USER"
 ENV_PASS = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
@@ -165,6 +166,47 @@ def _ensure_user_settings_schema(conn):
     conn.commit()
 
 
+def _ensure_special_method_settings_schema(conn):
+    sql = _load_psycopg2_sql()
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL(
+                """
+                CREATE TABLE IF NOT EXISTS {} (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    method_key TEXT NOT NULL,
+                    settings JSONB NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE (username, method_key)
+                );
+                """
+            ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
+        )
+        cur.execute(
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_username_idx"),
+                sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS),
+            )
+        )
+        cur.execute(
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS {} ON {} (method_key);
+                """
+            ).format(
+                sql.Identifier(f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_method_idx"),
+                sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS),
+            )
+        )
+    conn.commit()
+
+
 def save_user_settings(username, settings_payload):
     try:
         _, extras = _load_psycopg2()
@@ -205,3 +247,72 @@ def save_user_settings(username, settings_payload):
     except Exception as e:
         logger.exception("Failed to save user settings for %s: %s", username, e)
         raise UserSettingsStoreError(errors.user_settings_save_failed())
+
+
+def save_special_method_settings(username, method_key, settings_payload):
+    try:
+        _, extras = _load_psycopg2()
+        sql = _load_psycopg2_sql()
+        json_payload = extras.Json(settings_payload)
+        with _connect() as conn:
+            _ensure_special_method_settings_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        INSERT INTO {} (username, method_key, settings, updated_at)
+                        VALUES (%s, %s, %s, NOW())
+                        ON CONFLICT (username, method_key)
+                        DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS)),
+                    (username, method_key, json_payload),
+                )
+            conn.commit()
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT settings
+                        FROM {}
+                        WHERE username = %s AND method_key = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS)),
+                    (username, method_key),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise UserSettingsStoreError(errors.special_method_settings_not_persisted())
+    except UserSettingsStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to save special method settings for %s: %s", username, e)
+        raise UserSettingsStoreError(errors.special_method_settings_save_failed())
+
+
+def load_special_method_settings(username, method_key):
+    try:
+        sql = _load_psycopg2_sql()
+        with _connect() as conn:
+            _ensure_special_method_settings_schema(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT settings
+                        FROM {}
+                        WHERE username = %s AND method_key = %s
+                        """
+                    ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS)),
+                    (username, method_key),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                return row[0]
+    except UserSettingsStoreError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to load special method settings for %s: %s", username, e)
+        raise UserSettingsStoreError(errors.db_connection_failed())

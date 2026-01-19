@@ -135,6 +135,7 @@ __all__ = [
     '_load_job',
     '_normalize_job_batch_size',
     '_normalize_sem_edx_associations',
+    '_normalize_sem_edx_settings',
     '_open_service_connection',
     '_open_session_connection',
     '_parse_cli_id',
@@ -246,6 +247,11 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 
 # Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
+SEM_EDX_SETTINGS_DEFAULTS = {
+    "create_tables": True,
+    "create_figures_attachments": True,
+    "create_figures_images": True,
+}
 
 # Cache for directory paths (initialized once per application lifecycle)
 _UPLOAD_ROOT_CACHE = None
@@ -423,6 +429,17 @@ def _normalize_job_batch_size(value, default: int) -> int:
     except (TypeError, ValueError):
         normalized = default
     return max(1, min(10, normalized))
+
+
+def _normalize_sem_edx_settings(raw_settings):
+    if not isinstance(raw_settings, dict):
+        return dict(SEM_EDX_SETTINGS_DEFAULTS)
+
+    normalized = dict(SEM_EDX_SETTINGS_DEFAULTS)
+    for key in normalized:
+        if key in raw_settings:
+            normalized[key] = bool(raw_settings[key])
+    return normalized
 
 
 def _resolve_job_batch_size(job_dict) -> int:
@@ -1335,7 +1352,13 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         raise
 
 
-def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Path, username: str):
+def _attach_txt_to_image_service(
+    conn: BlitzGateway,
+    image_id: int,
+    txt_path: Path,
+    username: str,
+    create_tables: bool = True,
+):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
     Creates:
@@ -1403,7 +1426,7 @@ def _attach_txt_to_image_service(conn: BlitzGateway, image_id: int, txt_path: Pa
         
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
-            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path)
+            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path, persist_table=create_tables)
             if table_id:
                 logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
         except Exception as exc:
@@ -2285,6 +2308,8 @@ def _process_import_job(job_id: str):
 
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
+            sem_edx_settings = job.get("sem_edx_settings") or {}
+            create_tables = sem_edx_settings.get("create_tables", True)
 
             if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
                 # Fallback: derive associations server-side from uploaded file list.
@@ -2444,6 +2469,7 @@ def _process_import_job(job_id: str):
                                             image_id,
                                             txt_path,
                                             username,  # Pass username for suConn
+                                            create_tables,
                                         )
 
                                         # Mark as imported if not already
@@ -2508,4 +2534,3 @@ def _start_import_thread(job_id: str):
 # --------------------------------------------------------------------------
 # VIEWS
 # --------------------------------------------------------------------------
-
