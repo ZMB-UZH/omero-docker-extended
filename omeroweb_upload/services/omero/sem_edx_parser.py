@@ -181,24 +181,27 @@ def create_spectrum_table(conn, image_id: int, spectrum: List[Tuple[float, float
             orig_file = table.getOriginalFile()
             table.close()
             
-            # Create file annotation
-            file_ann = FileAnnotationI()
-            file_ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
-            file_ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
-            file_ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
+            # Create TABLE annotation (so OMERO.web shows it under "Tables", not "Attachments")
+            # OMERO.web recognizes tables by TableAnnotation + the standard table namespace.
+            from omero.model import TableAnnotationI
+            from omero.gateway import TableAnnotationWrapper
+
+            table_ann = TableAnnotationI()
+            table_ann.setFile(OriginalFileI(orig_file.getId().getValue(), False))
+            table_ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
+            table_ann.setDescription(rstring(f"SEM EDX spectrum data from {txt_filename}"))
             
             # Save and link to image
             update_service = conn.getUpdateService()
-            file_ann = update_service.saveAndReturnObject(file_ann)
+            table_ann = update_service.saveAndReturnObject(table_ann)
             
             # Link to image
             image = conn.getObject("Image", image_id)
             if image:
-                from omero.gateway import FileAnnotationWrapper
-                image.linkAnnotation(FileAnnotationWrapper(conn, file_ann))
+                image.linkAnnotation(TableAnnotationWrapper(conn, table_ann))
                 logger.info("Created spectrum table '%s' for image %d (%d rows)", 
                            table_name, image_id, len(spectrum))
-                return file_ann.getId().getValue()
+                return table_ann.getId().getValue()
             
         except Exception as exc:
             logger.error("Failed to populate table for image %d: %s", image_id, exc)
