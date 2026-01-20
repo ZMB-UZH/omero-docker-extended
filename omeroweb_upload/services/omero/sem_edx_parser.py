@@ -196,9 +196,9 @@ def create_edx_spectrum_plot(
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, y_max * 1.05)
 
-    ax.set_xlabel("keV", color="white")
-    ax.set_ylabel("cps/eV", color="white")
-    ax.tick_params(colors="white")
+    ax.set_xlabel("keV", color="white", fontsize=9)
+    ax.set_ylabel("cps/eV", color="white", fontsize=9)
+    ax.tick_params(colors="white", labelsize=8)
     for spine in ax.spines.values():
         spine.set_color("white")
 
@@ -218,9 +218,12 @@ def create_edx_spectrum_plot(
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     axes_bbox = ax.get_window_extent(renderer=renderer)
+    points_per_pixel = 72 / fig.dpi
+    default_offset_points = axes_bbox.height * 0.15 * points_per_pixel
 
     used_labels = set()
     placed_bboxes = []
+    last_center_x = axes_bbox.x0
     for energy, symbol in sorted(element_labels, key=lambda item: item[0]):
         if (energy, symbol) in used_labels:
             continue
@@ -232,7 +235,7 @@ def create_edx_spectrum_plot(
         annotation = ax.annotate(
             symbol,
             xy=(energy, y_val),
-            xytext=(0, 0),
+            xytext=(0, default_offset_points),
             textcoords="offset points",
             ha="center",
             va="bottom",
@@ -252,33 +255,29 @@ def create_edx_spectrum_plot(
             },
         )
 
-        candidate_offsets = []
-        y_ratio = y_val / y_max if y_max else 0
-        base_offset = 8 + (1 - y_ratio) * 12
-        vertical_steps = [0, 10, 20, 30, 42, 56, 72]
-        for level, step in enumerate(vertical_steps):
-            y_offset = base_offset + step + (level * 2)
-            candidate_offsets.append((0, y_offset))
-
-        tilt_offsets = (-16, 16, -28, 28, -40, 40)
-        for level, step in enumerate(vertical_steps[1:]):
-            y_offset = base_offset + step + (level * 3)
-            for x_offset in tilt_offsets:
-                candidate_offsets.append((x_offset, y_offset))
+        candidate_offsets = [(0, default_offset_points)]
+        vertical_steps = [0, 8, 16, 26, 38, 52, 68, 86]
+        horizontal_steps = [0, -14, 14, -26, 26, -38, 38]
+        for step in vertical_steps[1:]:
+            for x_offset in horizontal_steps:
+                candidate_offsets.append((x_offset, default_offset_points + step))
 
         chosen_bbox = None
+        chosen_center_x = None
         for x_offset, y_offset in candidate_offsets:
             annotation.set_position((x_offset, y_offset))
             bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
-            if bbox.y1 > axes_bbox.y1:
+            center_x = (bbox.x0 + bbox.x1) / 2
+            if center_x < last_center_x - 2:
                 continue
-            if bbox.y0 < axes_bbox.y0:
+            if bbox.y1 > axes_bbox.y1 or bbox.y0 < axes_bbox.y0:
                 continue
             if bbox.x0 < axes_bbox.x0 or bbox.x1 > axes_bbox.x1:
                 continue
             if any(bbox.overlaps(existing) for existing in placed_bboxes):
                 continue
             chosen_bbox = bbox
+            chosen_center_x = center_x
             break
 
         if chosen_bbox is None:
@@ -295,7 +294,6 @@ def create_edx_spectrum_plot(
             elif chosen_bbox.y1 > axes_bbox.y1:
                 dy_pixels = axes_bbox.y1 - chosen_bbox.y1
             if dx_pixels or dy_pixels:
-                points_per_pixel = 72 / fig.dpi
                 current_x, current_y = annotation.get_position()
                 annotation.set_position(
                     (
@@ -304,10 +302,12 @@ def create_edx_spectrum_plot(
                     )
                 )
                 chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
+            chosen_center_x = (chosen_bbox.x0 + chosen_bbox.x1) / 2
 
         placed_bboxes.append(chosen_bbox)
+        last_center_x = max(last_center_x, chosen_center_x or last_center_x)
 
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.06, right=0.985, top=0.965, bottom=0.12)
     fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
     plt.close(fig)
 
