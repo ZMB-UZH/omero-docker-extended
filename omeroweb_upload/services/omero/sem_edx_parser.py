@@ -7,8 +7,15 @@ one OMERO Table containing the spectrum X,Y data.
 import logging
 import re
 import time
+from bisect import bisect_left
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+from matplotlib import pyplot as plt
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +139,113 @@ def parse_emsa_file(txt_path: Path) -> Dict[str, Any]:
         'elements': elements,
         'spectrum': spectrum
     }
+
+
+def _nearest_spectrum_point(
+    spectrum: List[Tuple[float, float]],
+    energy_kev: float,
+) -> Optional[Tuple[float, float]]:
+    if not spectrum:
+        return None
+    energies = [point[0] for point in spectrum]
+    idx = bisect_left(energies, energy_kev)
+    if idx == 0:
+        return spectrum[0]
+    if idx >= len(spectrum):
+        return spectrum[-1]
+    before = spectrum[idx - 1]
+    after = spectrum[idx]
+    if abs(before[0] - energy_kev) <= abs(after[0] - energy_kev):
+        return before
+    return after
+
+
+def create_edx_spectrum_plot(
+    txt_path: Path,
+    output_path: Optional[Path] = None,
+) -> Optional[Path]:
+    parsed = parse_emsa_file(txt_path)
+    spectrum = parsed.get("spectrum") or []
+    if not spectrum:
+        logger.warning("No spectrum data available to plot for %s", txt_path.name)
+        return None
+
+    if output_path is None:
+        output_path = txt_path.with_name(f"{txt_path.stem}_edx.png")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    energies = [point[0] for point in spectrum]
+    counts = [point[1] for point in spectrum]
+    x_min = min(energies)
+    x_max = max(energies)
+    y_max = max(counts) if counts else 1.0
+    y_max = y_max if y_max > 0 else 1.0
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.0), dpi=150)
+    fig.patch.set_facecolor("#1f4d7a")
+    ax.set_facecolor("#1f4d7a")
+
+    ax.plot(energies, counts, color="#ffe600", linewidth=1.4)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(0, y_max * 1.05)
+
+    ax.set_xlabel("keV", color="white")
+    ax.set_ylabel("cps/eV", color="white")
+    ax.tick_params(colors="white")
+    for spine in ax.spines.values():
+        spine.set_color("white")
+
+    element_labels = []
+    for element in parsed.get("elements", []):
+        try:
+            energy = float(element.get("energy_kev"))
+        except (TypeError, ValueError):
+            continue
+        symbol = element.get("symbol") or ""
+        if not symbol:
+            continue
+        if energy < x_min or energy > x_max:
+            continue
+        element_labels.append((energy, symbol))
+
+    used_labels = set()
+    for energy, symbol in sorted(element_labels, key=lambda item: item[0]):
+        if (energy, symbol) in used_labels:
+            continue
+        used_labels.add((energy, symbol))
+        nearest = _nearest_spectrum_point(spectrum, energy)
+        if not nearest:
+            continue
+        _, y_val = nearest
+        label_y = min(y_val + (y_max * 0.08), y_max * 0.98)
+        ax.annotate(
+            symbol,
+            xy=(energy, y_val),
+            xytext=(energy, label_y),
+            textcoords="data",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="#ffef5a",
+            bbox={
+                "boxstyle": "round,pad=0.2",
+                "facecolor": "#294f73",
+                "edgecolor": "#ffe600",
+                "linewidth": 0.6,
+            },
+            arrowprops={
+                "arrowstyle": "-",
+                "color": "#ffe600",
+                "linewidth": 0.6,
+            },
+        )
+
+    fig.tight_layout()
+    fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
+    plt.close(fig)
+
+    logger.info("Created SEM EDX spectrum plot %s", output_path.name)
+    return output_path
 
 
 def build_spectrum_columns(
