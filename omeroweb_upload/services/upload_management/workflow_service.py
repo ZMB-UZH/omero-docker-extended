@@ -445,22 +445,47 @@ def _start_compatibility_check_thread(job_id: str):
 
 
 
-def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, orphan_dataset_name):
+def _import_job_entry(
+    entry,
+    upload_root,
+    session_key,
+    host,
+    port,
+    dataset_map,
+    orphan_dataset_name,
+):
     rel_path = entry.get("relative_path")
-    if not rel_path:
-        return {"skip": True}
+    staged_rel = entry.get("staged_path")
 
-    staged_path = entry.get("staged_path") or rel_path
-    file_path = upload_root / staged_path
-    if not file_path.exists():
-        error_msg = errors.missing_staged_file(rel_path)
-        return {
-            "index": entry.get("index"),
-            "status": "error",
-            "entry_error": error_msg,
-            "job_error": error_msg,
-            "job_message": error_msg,
-        }
+    # ------------------------------------------------------------------
+    # CRITICAL FIX:
+    # Allow callers (SEM-EDX) to FORCE the dataset via dataset_id_override.
+    # If not provided, fall back to dataset_map resolution.
+    # ------------------------------------------------------------------
+    dataset_id = entry.get("dataset_id_override")
+
+    if dataset_id is None:
+        dataset_name = _dataset_name_for_path(
+            rel_path,
+            orphan_dataset_name,
+        )
+        dataset_id = dataset_map.get(dataset_name)
+
+    logger.info(
+        "Import entry resolved: rel_path=%s staged_rel=%s dataset_id=%s",
+        rel_path,
+        staged_rel,
+        dataset_id,
+    )
+
+    return _import_file(
+        upload_root=upload_root,
+        session_key=session_key,
+        host=host,
+        port=port,
+        staged_rel=staged_rel,
+        dataset_id=dataset_id,
+    )
 
     dataset_id = entry.get("dataset_id_override")
     if dataset_id is None:
@@ -764,9 +789,39 @@ def _process_import_job(job_id: str):
 
                                     image_id = _get_id(image_obj)
                                     if not image_id:
-                                        logger.warning("Could not get image ID for %s, skipping %s", image_name, txt_name)
-                                        _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                        logger.warning(
+                                            "Could not get image ID for %s, skipping %s",
+                                            image_name,
+                                            txt_name,
+                                        )
+                                        _append_txt_attachment_message(
+                                            job,
+                                            txt_name,
+                                            image_name or image_rel,
+                                            False,
+                                        )
                                         continue
+
+                                    # ------------------------------------------------------------------
+                                    # CRITICAL FIX:
+                                    # Determine the REAL dataset ID of the SEM image directly from OMERO.
+                                    # dataset_map may not contain this dataset if the SEM image was not
+                                    # imported in the current job's main import phase.
+                                    # ------------------------------------------------------------------
+                                    sem_dataset_id = None
+                                    try:
+                                        for ds in image_obj.listParents():
+                                            sem_dataset_id = ds.getId()
+                                            break
+                                    except Exception:
+                                        sem_dataset_id = None
+
+                                    logger.info(
+                                        "SEM-EDX: SEM image dataset resolved from OMERO: image=%s image_id=%s sem_dataset_id=%s",
+                                        image_name,
+                                        image_id,
+                                        sem_dataset_id,
+                                    )
 
                                     txt_entry = entries_by_path.get(txt_rel)
                                     if not txt_entry:
@@ -796,27 +851,28 @@ def _process_import_job(job_id: str):
                                                 plot_rel_cache[txt_rel] = plot_rel
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
-                                        # IMPORTANT:
-                                        # - The plot file is physically created next to the TXT (plot_rel / staged_path).
-                                        # - But the plot must be imported into the SAME dataset/path as the SEM image (image_rel).
-                                        plot_import_rel = str(PurePosixPath(image_rel).with_name(PurePosixPath(plot_rel).name))
-
-                                        plot_staged_rel = str(PurePosixPath(staged_path).with_name(PurePosixPath(plot_rel).name))
+                                        # ------------------------------------------------------------------
+                                        # Import the EDX plot PNG as a SEPARATE OMERO Image
+                                        # into the SAME dataset as the SEM image.
+                                        #
+                                        # - relative_path controls dataset mapping
+                                        # - staged_path controls on-disk location
+                                        # - dataset_id_override FORCES dataset selection
+                                        # ------------------------------------------------------------------
+                                        plot_import_rel = str(
+                                            PurePosixPath(image_rel).with_name(
+                                                PurePosixPath(plot_rel).name
+                                            )
+                                        )
 
                                         import_entry = {
-                                            "relative_path": plot_import_rel,  # controls dataset/path mapping
-                                            "staged_path": plot_staged_rel,    # correct on-disk location (same folder as TXT staged file)
+                                            "relative_path": plot_import_rel,
+                                            "staged_path": plot_rel,
+                                            "dataset_id_override": sem_dataset_id,
                                         }
 
-                                        # FORCE plot PNG into the SAME dataset as the SEM image
-                                        sem_dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
-                                        sem_dataset_id = dataset_map.get(sem_dataset_name)
-
                                         import_result = _import_job_entry(
-                                            {
-                                                **import_entry,
-                                                "dataset_id_override": sem_dataset_id,
-                                            },
+                                            import_entry,
                                             upload_root,
                                             session_key,
                                             host,
@@ -824,23 +880,26 @@ def _process_import_job(job_id: str):
                                             dataset_map,
                                             orphan_dataset_name,
                                         )
+
                                         if import_result.get("status") == "error":
                                             if import_result.get("job_error"):
                                                 _append_job_error(job, import_result["job_error"])
                                             if import_result.get("job_message"):
                                                 _append_job_message(job, import_result["job_message"])
                                             logger.error(
-                                                "Failed to import SEM EDX plot %s (staged=%s)",
+                                                "Failed to import SEM-EDX plot %s (dataset_id=%s staged=%s)",
                                                 plot_import_rel,
+                                                sem_dataset_id,
                                                 plot_rel,
                                             )
                                         elif import_result.get("status") == "imported":
                                             _append_job_message(job, messages.imported_file(plot_import_rel))
                                             logger.info(
-                                                "Imported SEM EDX plot %s (staged=%s)",
+                                                "Imported SEM-EDX plot %s into dataset_id=%s",
                                                 plot_import_rel,
-                                                plot_rel,
+                                                sem_dataset_id,
                                             )
+
                                         imported_plots.add(txt_rel)
 
                                     # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
