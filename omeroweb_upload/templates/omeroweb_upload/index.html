@@ -351,6 +351,15 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const specialUploadWrapper = document.getElementById('special_upload_wrapper');
         const specialUploadArrow = specialUploadWrapper?.querySelector('.project-select-arrow') || null;
         const specialUploadDisplay = document.getElementById('special_upload_display');
+        if (!specialMethodsEnabled && specialUploadWrapper) {
+            specialUploadWrapper.style.display = 'none';
+            if (specialUploadInput) {
+                specialUploadInput.disabled = true;
+            }
+            if (specialUploadSelect) {
+                specialUploadSelect.value = '';
+            }
+        }
         const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
         const projectDataScript = document.getElementById('project-data');
         const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
@@ -450,6 +459,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
         const currentUserId = {{ user_id|default:"null"|safe }};
+        const specialMethodsEnabled = {{ special_methods_enabled|yesno:"true,false" }};
         const storage =
             (() => {
                 try {
@@ -475,10 +485,12 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const compatibilityToggleStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_v1');
         const compatibilityPausedStorageKey = makeStorageKey('omeroweb_upload_compatibility_toggle_paused_v1');
         const semEdxAssociationsStorageKey = makeStorageKey('omeroweb_upload_sem_edx_associations_v1');
-        const specialUploadOptions = [
-            { value: '', label: 'No special method (clear selection)', isEmpty: true },
-            { value: 'sem_edx_spectra', label: 'Zeiss GeminiSEM 450: EDX spectra' },
-        ];
+        const specialUploadOptions = specialMethodsEnabled
+            ? [
+                { value: '', label: 'No special method (clear selection)', isEmpty: true },
+                { value: 'sem_edx_spectra', label: 'Zeiss GeminiSEM 450: EDX spectra' },
+            ]
+            : [{ value: '', label: 'No special method (clear selection)', isEmpty: true }];
         let activeSpecialUploadIndex = -1;
         let semEdxModeActive = false;
         let semEdxInstructionStep = 1;
@@ -1771,6 +1783,10 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
 
         function setSpecialUploadSelection(value, label, options = {}) {
             const { persist = true, modeOptions = {} } = options;
+            if (!specialMethodsEnabled && value) {
+                clearSpecialUploadSelection({ persist });
+                return;
+            }
             if (specialUploadSelect) {
                 specialUploadSelect.value = value || '';
             }
@@ -1802,6 +1818,10 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         }
 
         function restoreSpecialUploadSelection() {
+            if (!specialMethodsEnabled) {
+                clearSpecialUploadSelection({ persist: false });
+                return;
+            }
             const stored = loadSpecialUploadSelection();
             if (!stored) return;
             if (!stored.value) {
@@ -3844,7 +3864,11 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
                     window.pendingImportFiles = uploadedFiles;
                     pendingFiles = [...uploadedFiles];
                     applyCompatibilityFlags(pendingFiles, incompatibleFiles);
-                    refreshFileList();
+                    if (isSemEdxSelected()) {
+                        setSemEdxInstructionsStep(1);
+                    } else {
+                        refreshFileList();
+                    }
                     updateUploadButtonLabel();
                     setStatus(
                         'Upload complete. Import halted because incompatible files were detected. Remove all incompatible files and click "Continue Import".',
