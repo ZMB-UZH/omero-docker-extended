@@ -487,52 +487,6 @@ def _import_job_entry(
         dataset_id=dataset_id,
     )
 
-    dataset_id = entry.get("dataset_id_override")
-    if dataset_id is None:
-        dataset_name = _dataset_name_for_path(rel_path, orphan_dataset_name)
-        dataset_id = dataset_map.get(dataset_name)
-
-    try:
-        success, stdout, stderr = _import_file(
-            conn=None,
-            session_key=session_key,
-            host=host,
-            port=port,
-            path=file_path,
-            dataset_id=dataset_id,
-        )
-    except Exception:
-        logger.exception("Import failed for %s.", rel_path)
-        success = False
-        stdout = ""
-        stderr = ""
-
-    if not success:
-        logger.warning(
-            "Import failed for %s (stdout=%r, stderr=%r).",
-            rel_path,
-            str(stdout).strip(),
-            str(stderr).strip(),
-        )
-        error_msg = errors.import_failed()
-        job_error = messages.job_error_with_path(rel_path, error_msg)
-        return {
-            "index": entry.get("index"),
-            "status": "error",
-            "entry_error": error_msg,
-            "job_error": job_error,
-            "job_message": job_error,
-        }
-
-    return {
-        "index": entry.get("index"),
-        "status": "imported",
-        "rel_path": rel_path,
-        "file_path": file_path,
-    }
-
-
-
 
 def _process_import_job(job_id: str):
     job = _load_job(job_id)
@@ -856,7 +810,7 @@ def _process_import_job(job_id: str):
                                         # into the SAME dataset as the SEM image.
                                         #
                                         # - relative_path controls dataset mapping
-                                        # - staged_path controls on-disk location
+                                        # - staged_path MUST point to the real on-disk file location
                                         # - dataset_id_override FORCES dataset selection
                                         # ------------------------------------------------------------------
                                         plot_import_rel = str(
@@ -865,9 +819,15 @@ def _process_import_job(job_id: str):
                                             )
                                         )
 
+                                        plot_staged_rel = str(
+                                            PurePosixPath(staged_path).with_name(
+                                                PurePosixPath(plot_rel).name
+                                            )
+                                        )
+
                                         import_entry = {
                                             "relative_path": plot_import_rel,
-                                            "staged_path": plot_rel,
+                                            "staged_path": plot_staged_rel,
                                             "dataset_id_override": sem_dataset_id,
                                         }
 
@@ -890,7 +850,7 @@ def _process_import_job(job_id: str):
                                                 "Failed to import SEM-EDX plot %s (dataset_id=%s staged=%s)",
                                                 plot_import_rel,
                                                 sem_dataset_id,
-                                                plot_rel,
+                                                plot_staged_rel,
                                             )
                                         elif import_result.get("status") == "imported":
                                             _append_job_message(job, messages.imported_file(plot_import_rel))
