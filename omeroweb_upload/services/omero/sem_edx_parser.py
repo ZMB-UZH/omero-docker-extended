@@ -185,7 +185,11 @@ def create_edx_spectrum_plot(
     fig.patch.set_facecolor("#1f4d7a")
     ax.set_facecolor("#1f4d7a")
 
-    ax.plot(energies, counts, color="#ffe600", linewidth=1.4)
+    spectrum_color = "#ffe600"
+    label_color = "#0b3d1a"
+
+    ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
+    ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.18)
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, y_max * 1.05)
 
@@ -208,7 +212,12 @@ def create_edx_spectrum_plot(
             continue
         element_labels.append((energy, symbol))
 
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    axes_bbox = ax.get_window_extent(renderer=renderer)
+
     used_labels = set()
+    placed_bboxes = []
     for energy, symbol in sorted(element_labels, key=lambda item: item[0]):
         if (energy, symbol) in used_labels:
             continue
@@ -217,28 +226,54 @@ def create_edx_spectrum_plot(
         if not nearest:
             continue
         _, y_val = nearest
-        label_y = min(y_val + (y_max * 0.08), y_max * 0.98)
-        ax.annotate(
+        annotation = ax.annotate(
             symbol,
             xy=(energy, y_val),
-            xytext=(energy, label_y),
-            textcoords="data",
+            xytext=(0, 0),
+            textcoords="offset points",
             ha="center",
             va="bottom",
             fontsize=8,
-            color="#ffef5a",
+            color="white",
             bbox={
                 "boxstyle": "round,pad=0.2",
-                "facecolor": "#294f73",
-                "edgecolor": "#ffe600",
-                "linewidth": 0.6,
+                "facecolor": label_color,
+                "edgecolor": label_color,
+                "linewidth": 0.8,
+                "alpha": 0.3,
             },
             arrowprops={
                 "arrowstyle": "-",
-                "color": "#ffe600",
-                "linewidth": 0.6,
+                "color": label_color,
+                "linewidth": 0.7,
             },
         )
+
+        candidate_offsets = []
+        base_offset = 10
+        for level in range(7):
+            y_offset = base_offset + (level * 12)
+            for x_offset in (0, -20, 20, -40, 40):
+                candidate_offsets.append((x_offset, y_offset))
+
+        chosen_bbox = None
+        for x_offset, y_offset in candidate_offsets:
+            annotation.set_position((x_offset, y_offset))
+            bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
+            if bbox.y1 > axes_bbox.y1:
+                continue
+            if bbox.y0 < axes_bbox.y0:
+                continue
+            if any(bbox.overlaps(existing) for existing in placed_bboxes):
+                continue
+            chosen_bbox = bbox
+            break
+
+        if chosen_bbox is None:
+            annotation.set_position(candidate_offsets[-1])
+            chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
+
+        placed_bboxes.append(chosen_bbox)
 
     fig.tight_layout()
     fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
