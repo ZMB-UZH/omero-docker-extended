@@ -3855,7 +3855,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
             if (statusData.confirmation_required && incompatibleFiles.length) {
                 const isSemEdx = specialUploadSelect?.value === 'sem_edx_spectra';
                 const message = isSemEdx
-                    ? 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No [Go to the previous step to edit the list of files]'
+                    ? 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No'
                     : 'Incompatible file(s) found. Do you still want to continue with the upload?\nSUGGESTED: No';
                 const proceed = await showCompatibilityPopup(message);
                 if (!proceed) {
