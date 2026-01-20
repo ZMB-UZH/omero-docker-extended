@@ -18,7 +18,7 @@ import omero
 
 import portalocker
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from pathlib import Path, PurePosixPath
 from django.conf import settings
@@ -1161,7 +1161,14 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                 params.addString("name", file_name)
                 params.page(0, 100)  # Limit results
                 
-                images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+                images = _run_query_with_timeout(
+                    qs,
+                    query,
+                    params,
+                    conn.SERVICE_OPTS,
+                    timeout_seconds,
+                    f"dataset image lookup for '{file_name}' in dataset {dataset_id}",
+                )
                 
                 if images:
                     elapsed = time.time() - start_time
@@ -1177,7 +1184,14 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
             params.addString("name", file_name)
             params.page(0, 100)
             
-            images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+            images = _run_query_with_timeout(
+                qs,
+                query,
+                params,
+                conn.SERVICE_OPTS,
+                timeout_seconds,
+                f"global image lookup for '{file_name}'",
+            )
             
             if images:
                 elapsed = time.time() - start_time
@@ -1214,38 +1228,66 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
     
     try:
         qs = conn.getQueryService()
-        
-        # Build IN clause safely
-        escaped_names = [name.replace("'", "''") for name in file_names]
-        name_list = ", ".join([f"'{name}'" for name in escaped_names])
-        
-        if dataset_id:
-            query = f"""
-                SELECT i FROM Image i
-                JOIN FETCH i.datasetLinks dil
-                WHERE dil.parent.id = :did
-                AND i.name IN ({name_list})
-            """
-            params = omero.sys.ParametersI()
-            params.addLong("did", dataset_id)
-        else:
-            query = f"""
-                SELECT i FROM Image i
-                WHERE i.name IN ({name_list})
-            """
-            params = omero.sys.ParametersI()
-        
-        logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
-        images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-        
-        for image_obj in images:
-            img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
-            if img_wrapper:
-                results[img_wrapper.getName()] = img_wrapper
-        
+        chunk_size = 200
+        total_chunks = max(1, (len(file_names) + chunk_size - 1) // chunk_size)
+
+        for chunk_index, chunk in enumerate(_chunked(file_names, chunk_size), start=1):
+            # Build IN clause safely
+            escaped_names = [name.replace("'", "''") for name in chunk]
+            name_list = ", ".join([f"'{name}'" for name in escaped_names])
+
+            if dataset_id:
+                query = f"""
+                    SELECT i FROM Image i
+                    JOIN FETCH i.datasetLinks dil
+                    WHERE dil.parent.id = :did
+                    AND i.name IN ({name_list})
+                """
+                params = omero.sys.ParametersI()
+                params.addLong("did", dataset_id)
+            else:
+                query = f"""
+                    SELECT i FROM Image i
+                    WHERE i.name IN ({name_list})
+                """
+                params = omero.sys.ParametersI()
+
+            logger.info(
+                "Batch searching chunk %d/%d for %d images (dataset_id=%s)",
+                chunk_index,
+                total_chunks,
+                len(chunk),
+                dataset_id,
+            )
+            images = _run_query_with_timeout(
+                qs,
+                query,
+                params,
+                conn.SERVICE_OPTS,
+                timeout_seconds,
+                f"batch image lookup chunk {chunk_index}/{total_chunks} (dataset_id={dataset_id})",
+            )
+
+            if images is None:
+                logger.error(
+                    "Batch search timed out for chunk %d/%d; falling back to per-image lookup.",
+                    chunk_index,
+                    total_chunks,
+                )
+                for name in chunk:
+                    image = _find_image_by_name(conn, name, dataset_id=dataset_id, timeout_seconds=15)
+                    if image:
+                        results[image.getName()] = image
+                continue
+
+            for image_obj in images:
+                img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
+                if img_wrapper:
+                    results[img_wrapper.getName()] = img_wrapper
+
         elapsed = time.time() - start_time
         logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
-        
+
         missing = set(file_names) - set(results.keys())
         if missing:
             logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
@@ -1253,6 +1295,29 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
         logger.error("Batch image search failed: %s", exc)
     
     return results
+
+
+def _chunked(values, chunk_size):
+    for idx in range(0, len(values), chunk_size):
+        yield values[idx:idx + chunk_size]
+
+
+def _run_query_with_timeout(qs, query, params, service_opts, timeout_seconds, description):
+    if not timeout_seconds or timeout_seconds <= 0:
+        return qs.findAllByQuery(query, params, service_opts)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(qs.findAllByQuery, query, params, service_opts)
+        return future.result(timeout=timeout_seconds)
+    except TimeoutError:
+        logger.error("Timed out after %ss while running %s", timeout_seconds, description)
+        return None
+    finally:
+        try:
+            executor.shutdown(wait=False)
+        except TypeError:
+            executor.shutdown()
 
 
 def _get_job_service_credentials():
@@ -2423,6 +2488,7 @@ def _process_import_job(job_id: str):
 
                             plot_cache = {}
                             plot_rel_cache = {}
+                            plot_staged_cache = {}
                             imported_plots = set()
                             if create_figures_attachments or create_figures_images:
                                 from ..services.omero.sem_edx_parser import create_edx_spectrum_plot
@@ -2506,21 +2572,25 @@ def _process_import_job(job_id: str):
 
                                     plot_path = None
                                     plot_rel = None
+                                    plot_staged = None
                                     if create_figures_attachments or create_figures_images:
                                         if txt_rel in plot_cache:
                                             plot_path = plot_cache.get(txt_rel)
                                             plot_rel = plot_rel_cache.get(txt_rel)
+                                            plot_staged = plot_staged_cache.get(txt_rel)
                                         else:
                                             plot_path = create_edx_spectrum_plot(txt_path)
                                             plot_cache[txt_rel] = plot_path
                                             if plot_path:
                                                 plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
+                                                plot_staged = str(PurePosixPath(staged_path).with_name(plot_path.name))
                                                 plot_rel_cache[txt_rel] = plot_rel
+                                                plot_staged_cache[txt_rel] = plot_staged
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
                                         import_entry = {
                                             "relative_path": plot_rel,
-                                            "staged_path": plot_rel,
+                                            "staged_path": plot_staged or plot_rel,
                                         }
                                         import_result = _import_job_entry(
                                             import_entry,
