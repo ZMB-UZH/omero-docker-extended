@@ -462,8 +462,10 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
             "job_message": error_msg,
         }
 
-    dataset_name = _dataset_name_for_path(rel_path, orphan_dataset_name)
-    dataset_id = dataset_map.get(dataset_name)
+    dataset_id = entry.get("dataset_id_override")
+    if dataset_id is None:
+        dataset_name = _dataset_name_for_path(rel_path, orphan_dataset_name)
+        dataset_id = dataset_map.get(dataset_name)
 
     try:
         success, stdout, stderr = _import_file(
@@ -806,8 +808,15 @@ def _process_import_job(job_id: str):
                                             "staged_path": plot_staged_rel,    # correct on-disk location (same folder as TXT staged file)
                                         }
 
+                                        # FORCE plot PNG into the SAME dataset as the SEM image
+                                        sem_dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
+                                        sem_dataset_id = dataset_map.get(sem_dataset_name)
+
                                         import_result = _import_job_entry(
-                                            import_entry,
+                                            {
+                                                **import_entry,
+                                                "dataset_id_override": sem_dataset_id,
+                                            },
                                             upload_root,
                                             session_key,
                                             host,
