@@ -845,9 +845,26 @@ def _process_import_job(job_id: str):
                                         
                                         # CRITICAL: Verify file exists before attempting import
                                         import_file_path = upload_root / plot_staged
-                                        if not import_file_path.exists():
+                                        
+                                        # Retry check with small delay (matplotlib buffer flush race condition)
+                                        max_retries = 3
+                                        file_exists = False
+                                        for retry in range(max_retries):
+                                            if import_file_path.exists():
+                                                file_exists = True
+                                                break
+                                            if retry < max_retries - 1:
+                                                logger.warning(
+                                                    "Plot file not yet available at %s, retry %d/%d",
+                                                    import_file_path,
+                                                    retry + 1,
+                                                    max_retries
+                                                )
+                                                time.sleep(0.5)
+                                        
+                                        if not file_exists:
                                             logger.error(
-                                                "Plot file missing at %s (plot_path=%s, plot_staged=%s)",
+                                                "Plot file missing after retries at %s (plot_path=%s, plot_staged=%s)",
                                                 import_file_path,
                                                 plot_path,
                                                 plot_staged
