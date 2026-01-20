@@ -621,6 +621,8 @@ def _process_import_job(job_id: str):
             sem_edx_associations = job.get("sem_edx_associations") or {}
             sem_edx_settings = job.get("sem_edx_settings") or {}
             create_tables = sem_edx_settings.get("create_tables", True)
+            create_figures_attachments = sem_edx_settings.get("create_figures_attachments", True)
+            create_figures_images = sem_edx_settings.get("create_figures_images", True)
 
             if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
                 # Fallback: derive associations server-side from uploaded file list.
@@ -694,6 +696,12 @@ def _process_import_job(job_id: str):
                                 image_cache.update(global_results)
                             
                             logger.info("Image cache loaded: %d/%d found", len(image_cache), len(all_image_names))
+
+                            plot_cache = {}
+                            plot_rel_cache = {}
+                            imported_plots = set()
+                            if create_figures_attachments or create_figures_images:
+                                from ..omero.sem_edx_parser import create_edx_spectrum_plot
                             
                             # Now process attachments using cached images
                             for attachment_idx, (image_rel, txt_paths) in enumerate(sem_edx_associations.items()):
@@ -772,6 +780,44 @@ def _process_import_job(job_id: str):
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
 
+                                    plot_path = None
+                                    plot_rel = None
+                                    if create_figures_attachments or create_figures_images:
+                                        if txt_rel in plot_cache:
+                                            plot_path = plot_cache.get(txt_rel)
+                                            plot_rel = plot_rel_cache.get(txt_rel)
+                                        else:
+                                            plot_path = create_edx_spectrum_plot(txt_path)
+                                            plot_cache[txt_rel] = plot_path
+                                            if plot_path:
+                                                plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
+                                                plot_rel_cache[txt_rel] = plot_rel
+
+                                    if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
+                                        import_entry = {
+                                            "relative_path": plot_rel,
+                                            "staged_path": plot_rel,
+                                        }
+                                        import_result = _import_job_entry(
+                                            import_entry,
+                                            upload_root,
+                                            session_key,
+                                            host,
+                                            port,
+                                            dataset_map,
+                                            orphan_dataset_name,
+                                        )
+                                        if import_result.get("status") == "error":
+                                            if import_result.get("job_error"):
+                                                _append_job_error(job, import_result["job_error"])
+                                            if import_result.get("job_message"):
+                                                _append_job_message(job, import_result["job_message"])
+                                            logger.error("Failed to import SEM EDX plot %s", plot_rel)
+                                        elif import_result.get("status") == "imported":
+                                            _append_job_message(job, messages.imported_file(plot_rel))
+                                            logger.info("Imported SEM EDX plot %s", plot_rel)
+                                        imported_plots.add(txt_rel)
+
                                     # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:
                                         logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
@@ -781,6 +827,7 @@ def _process_import_job(job_id: str):
                                             txt_path,
                                             username,  # Pass username for suConn
                                             create_tables,
+                                            plot_path=plot_path if create_figures_attachments else None,
                                         )
 
                                         # Mark as imported if not already
@@ -944,4 +991,3 @@ def _build_sem_edx_associations_from_entries(entries):
             associations[image_rel] = txt_rels
 
     return associations
-
