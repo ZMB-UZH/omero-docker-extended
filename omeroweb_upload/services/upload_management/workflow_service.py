@@ -8,8 +8,7 @@ import threading
 import time
 import subprocess
 import re
-import uuid
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
@@ -18,41 +17,6 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
-
-# Import OMERO_CLI constant
-from ...constants import OMERO_CLI
-
-
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None, timeout=300):
-    """
-    Import a file into OMERO using CLI with timeout protection.
-    """
-    cmd = [OMERO_CLI, "import"]
-    if session_key:
-        cmd.extend(["-k", session_key])
-    if host:
-        cmd.extend(["-s", host])
-    if port:
-        cmd.extend(["-p", str(port)])
-    if dataset_id:
-        cmd.extend(["-d", str(dataset_id)])
-    cmd.append(str(path))
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
-        )
-        return result.returncode == 0, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        logger.error("OMERO import timed out after %ds for: %s", timeout, path)
-        return False, "", f"Timeout after {timeout}s"
-    except Exception as e:
-        logger.exception("Import error for %s", path)
-        return False, "", str(e)
 
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     """
@@ -830,108 +794,29 @@ def _process_import_job(job_id: str):
                                                 plot_rel_cache[txt_rel] = plot_rel
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
-                                        logger.error(
-                                            "DEBUG PLOT IMPORT START: txt_rel=%s, plot_path=%s, upload_root=%s",
-                                            txt_rel,
-                                            plot_path,
-                                            upload_root
+                                        import_entry = {
+                                            "relative_path": plot_rel,
+                                            "staged_path": plot_rel,
+                                        }
+                                        import_result = _import_job_entry(
+                                            import_entry,
+                                            upload_root,
+                                            session_key,
+                                            host,
+                                            port,
+                                            dataset_map,
+                                            orphan_dataset_name,
                                         )
-                                        
-                                        # Calculate the actual staged path relative to upload_root
-                                        # plot_path is absolute, we need it relative to upload_root
-                                        try:
-                                            plot_staged = str(plot_path.relative_to(upload_root))
-                                            logger.error("DEBUG: plot_staged (relative_to) = %s", plot_staged)
-                                        except ValueError as e:
-                                            # Fallback if not under upload_root
-                                            plot_staged = plot_rel
-                                            logger.error(
-                                                "DEBUG: relative_to FAILED: %s, using fallback plot_staged=%s",
-                                                e,
-                                                plot_staged
-                                            )
-                                        
-                                        # CRITICAL: Verify file exists before attempting import
-                                        import_file_path = upload_root / plot_staged
-                                        
-                                        logger.error(
-                                            "DEBUG: Will check if file exists at: %s",
-                                            import_file_path
-                                        )
-                                        
-                                        # Retry check with small delay (matplotlib buffer flush race condition)
-                                        max_retries = 3
-                                        file_exists = False
-                                        for retry in range(max_retries):
-                                            exists_check = import_file_path.exists()
-                                            logger.error(
-                                                "DEBUG: Attempt %d/%d - exists()=%s",
-                                                retry + 1,
-                                                max_retries,
-                                                exists_check
-                                            )
-                                            if exists_check:
-                                                file_exists = True
-                                                break
-                                            if retry < max_retries - 1:
-                                                logger.warning(
-                                                    "Plot file not yet available at %s, retry %d/%d",
-                                                    import_file_path,
-                                                    retry + 1,
-                                                    max_retries
-                                                )
-                                                time.sleep(0.5)
-                                        
-                                        if not file_exists:
-                                            logger.error(
-                                                "FINAL: Plot file missing at %s (plot_path=%s, plot_staged=%s, upload_root=%s)",
-                                                import_file_path,
-                                                plot_path,
-                                                plot_staged,
-                                                upload_root
-                                            )
-                                            _append_job_error(
-                                                job,
-                                                f"Plot file not found for import: {plot_rel}"
-                                            )
-                                        else:
-                                            # File exists - proceed
-                                            logger.info(
-                                                "Importing plot: rel=%s, staged=%s, size=%d",
-                                                plot_rel,
-                                                plot_staged,
-                                                import_file_path.stat().st_size
-                                            )
-                                            
-                                            import_entry = {
-                                                "relative_path": plot_rel,
-                                                "staged_path": plot_staged,
-                                            }
-                                            
-                                            try:
-                                                import_result = _import_job_entry(
-                                                    import_entry,
-                                                    upload_root,
-                                                    session_key,
-                                                    host,
-                                                    port,
-                                                    dataset_map,
-                                                    orphan_dataset_name,
-                                                )
-                                                
-                                                if import_result.get("status") == "error":
-                                                    if import_result.get("job_error"):
-                                                        _append_job_error(job, import_result["job_error"])
-                                                    if import_result.get("job_message"):
-                                                        _append_job_message(job, import_result["job_message"])
-                                                    logger.error("Failed to import plot %s", plot_rel)
-                                                elif import_result.get("status") == "imported":
-                                                    _append_job_message(job, messages.imported_file(plot_rel))
-                                                    logger.info("Successfully imported plot %s", plot_rel)
-                                                    imported_plots.add(txt_rel)
-                                            except Exception as exc:
-                                                logger.exception("Exception importing plot %s", plot_rel)
-                                                _append_job_error(job, f"Exception: {exc}")
+                                        if import_result.get("status") == "error":
+                                            if import_result.get("job_error"):
+                                                _append_job_error(job, import_result["job_error"])
+                                            if import_result.get("job_message"):
+                                                _append_job_message(job, import_result["job_message"])
+                                            logger.error("Failed to import SEM EDX plot %s", plot_rel)
+                                        elif import_result.get("status") == "imported":
+                                            _append_job_message(job, messages.imported_file(plot_rel))
+                                            logger.info("Imported SEM EDX plot %s", plot_rel)
+                                        imported_plots.add(txt_rel)
 
                                     # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:

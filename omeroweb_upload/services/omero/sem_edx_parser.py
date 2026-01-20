@@ -171,10 +171,7 @@ def create_edx_spectrum_plot(
         return None
 
     if output_path is None:
-        # Use _edx suffix to match txt filename pattern
         output_path = txt_path.with_name(f"{txt_path.stem}_edx.png")
-    
-    logger.info("create_edx_spectrum_plot: txt_path=%s, output_path=%s", txt_path, output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     energies = [point[0] for point in spectrum]
@@ -246,16 +243,6 @@ def create_edx_spectrum_plot(
     fig.tight_layout()
     fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
     plt.close(fig)
-    
-    # CRITICAL: Ensure file is fully written to disk before returning
-    # matplotlib may buffer writes, causing race conditions in downstream imports
-    try:
-        import os
-        # Force sync to disk
-        with open(output_path, 'rb') as f:
-            os.fsync(f.fileno())
-    except Exception as e:
-        logger.warning("Could not fsync plot file %s: %s", output_path, e)
 
     logger.info("Created SEM EDX spectrum plot %s", output_path.name)
     return output_path
