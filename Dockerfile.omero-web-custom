@@ -106,6 +106,7 @@ RUN set -euo pipefail; \
     cp -a /tmp/omeroweb_admin_tools "${SITE_PACKAGES}/omeroweb_admin_tools"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+        matplotlib \
         psycopg2-binary \
         redis>=5.0.0 \
         django-redis>=5.4.0 \

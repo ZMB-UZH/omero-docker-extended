@@ -1373,6 +1373,7 @@ def _attach_txt_to_image_service(
     txt_path: Path,
     username: str,
     create_tables: bool = True,
+    plot_path: Optional[Path] = None,
 ):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
@@ -1381,6 +1382,7 @@ def _attach_txt_to_image_service(
       - FileAnnotation (ns=SEM_EDX_FILEANNOTATION_NS)
       - ImageAnnotationLink
       - OMERO Table with spectrum data
+      - Optional PNG plot attachment (if plot_path provided)
 
     This is safe to run in background threads and does NOT touch the user's session.
     Uses suConn to impersonate the user so annotations are created in the correct group.
@@ -1389,6 +1391,43 @@ def _attach_txt_to_image_service(
     from omero.rtypes import rstring, rlong
     from omero.gateway import FileAnnotationWrapper
     from ..services.omero.sem_edx_parser import attach_sem_edx_tables
+
+    def _attach_file(
+        user_connection,
+        image_obj,
+        file_path: Path,
+        mimetype: str,
+    ):
+        try:
+            binary_data = file_path.read_bytes()
+        except Exception as exc:
+            raise RuntimeError(f"Unable to read file {file_path}: {exc}") from exc
+
+        update_service = user_connection.getUpdateService()
+        of = OriginalFileI()
+        of.setName(rstring(file_path.name))
+        of.setPath(rstring(f"sem_edx/img_{image_id}/"))
+        of.setSize(rlong(len(binary_data)))
+        of.setMimetype(rstring(mimetype))
+
+        of = update_service.saveAndReturnObject(of)
+
+        store = user_connection.c.sf.createRawFileStore()
+        try:
+            store.setFileId(of.getId().getValue())
+            store.write(binary_data, 0, len(binary_data))
+        finally:
+            try:
+                store.close()
+            except Exception:
+                pass
+
+        fa = FileAnnotationI()
+        fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
+        fa.setFile(of.proxy())
+
+        fa = update_service.saveAndReturnObject(fa)
+        image_obj.linkAnnotation(FileAnnotationWrapper(user_connection, fa))
 
     # CRITICAL FIX: Use suConn() to impersonate the user
     # This is the OMERO-approved way for admins to create objects as another user
@@ -1403,41 +1442,7 @@ def _attach_txt_to_image_service(
         if not image_obj:
             raise RuntimeError(f"Image:{image_id} not found for user {username}")
 
-        # Read bytes
-        try:
-            binary = txt_path.read_bytes()
-        except Exception as exc:
-            raise RuntimeError(f"Unable to read txt file {txt_path}: {exc}")
-
-        # Get UpdateService in user's context - objects will be created in correct group
-        update = user_conn.getUpdateService()
-
-        of = OriginalFileI()
-        of.setName(rstring(txt_path.name))
-        of.setPath(rstring(f"sem_edx/img_{image_id}/"))
-        of.setSize(rlong(len(binary)))
-        of.setMimetype(rstring("text/plain"))
-
-        of = update.saveAndReturnObject(of)
-
-        store = user_conn.c.sf.createRawFileStore()
-        try:
-            store.setFileId(of.getId().getValue())
-            store.write(binary, 0, len(binary))
-        finally:
-            try:
-                store.close()
-            except Exception:
-                pass
-
-        fa = FileAnnotationI()
-        fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
-        fa.setFile(of.proxy())
-
-        fa = update.saveAndReturnObject(fa)
-        
-        # Link annotation using gateway method
-        image_obj.linkAnnotation(FileAnnotationWrapper(user_conn, fa))
+        _attach_file(user_conn, image_obj, txt_path, "text/plain")
         
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
@@ -1446,8 +1451,23 @@ def _attach_txt_to_image_service(
                 logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
         except Exception as exc:
             # Don't fail the entire attachment if table creation fails
-            logger.error("Failed to create OMERO Table for image %d from %s: %s", 
-                        image_id, txt_path.name, exc)
+            logger.error(
+                "Failed to create OMERO Table for image %d from %s: %s",
+                image_id,
+                txt_path.name,
+                exc,
+            )
+        if plot_path and plot_path.exists():
+            try:
+                _attach_file(user_conn, image_obj, plot_path, "image/png")
+                logger.info("Attached SEM EDX spectrum plot %s to image %d", plot_path.name, image_id)
+            except Exception as exc:
+                logger.error(
+                    "Failed to attach SEM EDX plot %s to image %d: %s",
+                    plot_path.name,
+                    image_id,
+                    exc,
+                )
     finally:
         # Always close the user connection
         try:
@@ -2325,6 +2345,8 @@ def _process_import_job(job_id: str):
             sem_edx_associations = job.get("sem_edx_associations") or {}
             sem_edx_settings = job.get("sem_edx_settings") or {}
             create_tables = sem_edx_settings.get("create_tables", True)
+            create_figures_attachments = sem_edx_settings.get("create_figures_attachments", True)
+            create_figures_images = sem_edx_settings.get("create_figures_images", True)
 
             if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
                 # Fallback: derive associations server-side from uploaded file list.
@@ -2398,6 +2420,12 @@ def _process_import_job(job_id: str):
                                 image_cache.update(global_results)
                             
                             logger.info("Image cache loaded: %d/%d found", len(image_cache), len(all_image_names))
+
+                            plot_cache = {}
+                            plot_rel_cache = {}
+                            imported_plots = set()
+                            if create_figures_attachments or create_figures_images:
+                                from ..services.omero.sem_edx_parser import create_edx_spectrum_plot
                             
                             # Now process attachments using cached images
                             for attachment_idx, (image_rel, txt_paths) in enumerate(sem_edx_associations.items()):
@@ -2476,6 +2504,44 @@ def _process_import_job(job_id: str):
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
 
+                                    plot_path = None
+                                    plot_rel = None
+                                    if create_figures_attachments or create_figures_images:
+                                        if txt_rel in plot_cache:
+                                            plot_path = plot_cache.get(txt_rel)
+                                            plot_rel = plot_rel_cache.get(txt_rel)
+                                        else:
+                                            plot_path = create_edx_spectrum_plot(txt_path)
+                                            plot_cache[txt_rel] = plot_path
+                                            if plot_path:
+                                                plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
+                                                plot_rel_cache[txt_rel] = plot_rel
+
+                                    if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
+                                        import_entry = {
+                                            "relative_path": plot_rel,
+                                            "staged_path": plot_rel,
+                                        }
+                                        import_result = _import_job_entry(
+                                            import_entry,
+                                            upload_root,
+                                            session_key,
+                                            host,
+                                            port,
+                                            dataset_map,
+                                            orphan_dataset_name,
+                                        )
+                                        if import_result.get("status") == "error":
+                                            if import_result.get("job_error"):
+                                                _append_job_error(job, import_result["job_error"])
+                                            if import_result.get("job_message"):
+                                                _append_job_message(job, import_result["job_message"])
+                                            logger.error("Failed to import SEM EDX plot %s", plot_rel)
+                                        elif import_result.get("status") == "imported":
+                                            _append_job_message(job, messages.imported_file(plot_rel))
+                                            logger.info("Imported SEM EDX plot %s", plot_rel)
+                                        imported_plots.add(txt_rel)
+
                                     # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:
                                         logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
@@ -2485,6 +2551,7 @@ def _process_import_job(job_id: str):
                                             txt_path,
                                             username,  # Pass username for suConn
                                             create_tables,
+                                            plot_path=plot_path if create_figures_attachments else None,
                                         )
 
                                         # Mark as imported if not already
