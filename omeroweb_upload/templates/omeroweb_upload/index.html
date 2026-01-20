@@ -351,6 +351,7 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const specialUploadWrapper = document.getElementById('special_upload_wrapper');
         const specialUploadArrow = specialUploadWrapper?.querySelector('.project-select-arrow') || null;
         const specialUploadDisplay = document.getElementById('special_upload_display');
+        const specialMethodsEnabled = {{ special_methods_enabled|yesno:"true,false" }};
         if (!specialMethodsEnabled && specialUploadWrapper) {
             specialUploadWrapper.style.display = 'none';
             if (specialUploadInput) {
@@ -459,7 +460,6 @@ const rootStatusUrl = new URL('root-status/', window.location.href);
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
         const currentUserId = {{ user_id|default:"null"|safe }};
-        const specialMethodsEnabled = {{ special_methods_enabled|yesno:"true,false" }};
         const storage =
             (() => {
                 try {
