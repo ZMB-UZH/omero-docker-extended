@@ -631,13 +631,11 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
             continue
         if image_rel.lower().endswith(".txt"):
             continue
-        image_entry = available_paths.get(image_rel)
-        if not image_entry:
+        if image_rel not in available_paths:
             continue
         if not isinstance(txt_paths, list):
             continue
 
-        canonical_image_rel = image_entry.get("relative_path") or image_rel
         cleaned_txt = []
 
         for txt_path in txt_paths:
@@ -646,15 +644,13 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
                 continue
             if not txt_rel.lower().endswith(".txt"):
                 continue
-            txt_entry = available_paths.get(txt_rel)
-            if not txt_entry:
+            if txt_rel not in available_paths:
                 continue
-            canonical_txt_rel = txt_entry.get("relative_path") or txt_rel
-            if canonical_txt_rel not in cleaned_txt:
-                cleaned_txt.append(canonical_txt_rel)
+            if txt_rel not in cleaned_txt:
+                cleaned_txt.append(txt_rel)
 
         if cleaned_txt:
-            normalized[canonical_image_rel] = cleaned_txt
+            normalized[image_rel] = cleaned_txt
 
     return normalized
 
@@ -2445,14 +2441,9 @@ def _process_import_job(job_id: str):
                         _save_job(job)
                     else:
                         try:
-                            entries_by_path = {}
-                            for entry in job.get("files", []):
-                                rel_path = entry.get("relative_path")
-                                if rel_path:
-                                    entries_by_path[rel_path] = entry
-                                staged_path = entry.get("staged_path")
-                                if staged_path:
-                                    entries_by_path[staged_path] = entry
+                            entries_by_path = {
+                                entry.get("relative_path"): entry for entry in job.get("files", [])
+                            }
                             attachment_count = 0
                             total_attachments = sum(
                                 len(txt_paths) for txt_paths in sem_edx_associations.values() 
