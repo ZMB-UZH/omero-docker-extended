@@ -186,10 +186,13 @@ def create_edx_spectrum_plot(
     ax.set_facecolor("#1f4d7a")
 
     spectrum_color = "#ffe600"
-    label_color = "#0b3d1a"
+    label_text_color = "#0b3d1a"
+    label_fill_color = "#b8f0b0"
+    label_edge_color = "#ffffff"
+    label_line_color = "#ffffff"
 
     ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
-    ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.18)
+    ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.38)
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, y_max * 1.05)
 
@@ -234,26 +237,33 @@ def create_edx_spectrum_plot(
             ha="center",
             va="bottom",
             fontsize=8,
-            color="white",
+            color=label_text_color,
             bbox={
                 "boxstyle": "round,pad=0.2",
-                "facecolor": label_color,
-                "edgecolor": label_color,
+                "facecolor": label_fill_color,
+                "edgecolor": label_edge_color,
                 "linewidth": 0.8,
-                "alpha": 0.3,
+                "alpha": 0.6,
             },
             arrowprops={
                 "arrowstyle": "-",
-                "color": label_color,
-                "linewidth": 0.7,
+                "color": label_line_color,
+                "linewidth": 0.8,
             },
         )
 
         candidate_offsets = []
-        base_offset = 10
-        for level in range(7):
-            y_offset = base_offset + (level * 12)
-            for x_offset in (0, -20, 20, -40, 40):
+        y_ratio = y_val / y_max if y_max else 0
+        base_offset = 8 + (1 - y_ratio) * 12
+        vertical_steps = [0, 10, 20, 30, 42, 56, 72]
+        for level, step in enumerate(vertical_steps):
+            y_offset = base_offset + step + (level * 2)
+            candidate_offsets.append((0, y_offset))
+
+        tilt_offsets = (-16, 16, -28, 28, -40, 40)
+        for level, step in enumerate(vertical_steps[1:]):
+            y_offset = base_offset + step + (level * 3)
+            for x_offset in tilt_offsets:
                 candidate_offsets.append((x_offset, y_offset))
 
         chosen_bbox = None
@@ -264,6 +274,8 @@ def create_edx_spectrum_plot(
                 continue
             if bbox.y0 < axes_bbox.y0:
                 continue
+            if bbox.x0 < axes_bbox.x0 or bbox.x1 > axes_bbox.x1:
+                continue
             if any(bbox.overlaps(existing) for existing in placed_bboxes):
                 continue
             chosen_bbox = bbox
@@ -272,6 +284,26 @@ def create_edx_spectrum_plot(
         if chosen_bbox is None:
             annotation.set_position(candidate_offsets[-1])
             chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
+            dx_pixels = 0.0
+            dy_pixels = 0.0
+            if chosen_bbox.x0 < axes_bbox.x0:
+                dx_pixels = axes_bbox.x0 - chosen_bbox.x0
+            elif chosen_bbox.x1 > axes_bbox.x1:
+                dx_pixels = axes_bbox.x1 - chosen_bbox.x1
+            if chosen_bbox.y0 < axes_bbox.y0:
+                dy_pixels = axes_bbox.y0 - chosen_bbox.y0
+            elif chosen_bbox.y1 > axes_bbox.y1:
+                dy_pixels = axes_bbox.y1 - chosen_bbox.y1
+            if dx_pixels or dy_pixels:
+                points_per_pixel = 72 / fig.dpi
+                current_x, current_y = annotation.get_position()
+                annotation.set_position(
+                    (
+                        current_x + dx_pixels * points_per_pixel,
+                        current_y + dy_pixels * points_per_pixel,
+                    )
+                )
+                chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
 
         placed_bboxes.append(chosen_bbox)
 
