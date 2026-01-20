@@ -15,6 +15,7 @@ def index(request, conn=None, url=None, **kwargs):
     upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
     upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
     projects = _collect_project_payload(conn, user_id)
+    special_methods_enabled = _special_methods_enabled()
     return render(
         request,
         "omeroweb_upload/index.html",
@@ -24,6 +25,7 @@ def index(request, conn=None, url=None, **kwargs):
             "upload_start_url": reverse("omeroweb_upload_start"),
             "upload_concurrency": upload_concurrency,
             "upload_batch_files": upload_batch_files,
+            "special_methods_enabled": special_methods_enabled,
             "user_id": user_id,
             "messages_json": json.dumps(messages.index_messages()),
             "projects": projects,
@@ -95,6 +97,10 @@ def _start_upload(request, conn):
     special_upload = (payload.get("special_upload") or "").strip()
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     raw_sem_edx_settings = payload.get("sem_edx_settings") or {}
+    if not _special_methods_enabled():
+        special_upload = ""
+        raw_sem_edx_associations = {}
+        raw_sem_edx_settings = {}
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
         raw_sem_edx_settings = {}
