@@ -799,9 +799,11 @@ def _process_import_job(job_id: str):
                                         # - But the plot must be imported into the SAME dataset/path as the SEM image (image_rel).
                                         plot_import_rel = str(PurePosixPath(image_rel).with_name(PurePosixPath(plot_rel).name))
 
+                                        plot_staged_rel = str(PurePosixPath(staged_path).with_name(PurePosixPath(plot_rel).name))
+
                                         import_entry = {
                                             "relative_path": plot_import_rel,  # controls dataset/path mapping
-                                            "staged_path": plot_rel,           # controls where the file actually is on disk
+                                            "staged_path": plot_staged_rel,    # correct on-disk location (same folder as TXT staged file)
                                         }
 
                                         import_result = _import_job_entry(
@@ -914,7 +916,7 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
     if not isinstance(raw_associations, dict):
         return {}
 
-    # ACCEPT BOTH relative_path AND staged_path
+    # ACCEPT BOTH relative_path AND staged_path, but CANONICALIZE to relative_path.
     available_paths = {}
 
     for entry in normalized_entries:
@@ -929,26 +931,33 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
     normalized = {}
 
     for image_path, txt_paths in raw_associations.items():
-        image_rel = _safe_relative_path(image_path or "")
-        if not image_rel:
+        image_key = _safe_relative_path(image_path or "")
+        if not image_key:
             continue
-        if image_rel.lower().endswith(".txt"):
+        if image_key.lower().endswith(".txt"):
             continue
-        if image_rel not in available_paths:
+        if image_key not in available_paths:
             continue
         if not isinstance(txt_paths, list):
             continue
 
+        image_entry = available_paths.get(image_key) or {}
+        image_rel = image_entry.get("relative_path") or image_key
+
         cleaned_txt = []
 
         for txt_path in txt_paths:
-            txt_rel = _safe_relative_path(txt_path or "")
-            if not txt_rel:
+            txt_key = _safe_relative_path(txt_path or "")
+            if not txt_key:
                 continue
-            if not txt_rel.lower().endswith(".txt"):
+            if not txt_key.lower().endswith(".txt"):
                 continue
-            if txt_rel not in available_paths:
+            if txt_key not in available_paths:
                 continue
+
+            txt_entry = available_paths.get(txt_key) or {}
+            txt_rel = txt_entry.get("relative_path") or txt_key
+
             if txt_rel not in cleaned_txt:
                 cleaned_txt.append(txt_rel)
 
@@ -956,7 +965,6 @@ def _normalize_sem_edx_associations(raw_associations, normalized_entries):
             normalized[image_rel] = cleaned_txt
 
     return normalized
-
 
 
 def _build_sem_edx_associations_from_entries(entries):
