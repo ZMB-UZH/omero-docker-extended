@@ -699,7 +699,6 @@ def _process_import_job(job_id: str):
 
                             plot_cache = {}
                             plot_rel_cache = {}
-                            plot_staged_cache = {}
                             imported_plots = set()
                             if create_figures_attachments or create_figures_images:
                                 from ..omero.sem_edx_parser import create_edx_spectrum_plot
@@ -783,25 +782,21 @@ def _process_import_job(job_id: str):
 
                                     plot_path = None
                                     plot_rel = None
-                                    plot_staged = None
                                     if create_figures_attachments or create_figures_images:
                                         if txt_rel in plot_cache:
                                             plot_path = plot_cache.get(txt_rel)
                                             plot_rel = plot_rel_cache.get(txt_rel)
-                                            plot_staged = plot_staged_cache.get(txt_rel)
                                         else:
                                             plot_path = create_edx_spectrum_plot(txt_path)
                                             plot_cache[txt_rel] = plot_path
                                             if plot_path:
                                                 plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
-                                                plot_staged = str(PurePosixPath(staged_path).with_name(plot_path.name))
                                                 plot_rel_cache[txt_rel] = plot_rel
-                                                plot_staged_cache[txt_rel] = plot_staged
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
                                         import_entry = {
                                             "relative_path": plot_rel,
-                                            "staged_path": plot_staged or plot_rel,
+                                            "staged_path": plot_rel,
                                         }
                                         import_result = _import_job_entry(
                                             import_entry,
