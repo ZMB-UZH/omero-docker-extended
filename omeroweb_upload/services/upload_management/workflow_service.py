@@ -26,20 +26,6 @@ from ...constants import OMERO_CLI
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None, timeout=300):
     """
     Import a file into OMERO using CLI with timeout protection.
-    
-    This function is defined here to ensure timeout support for plot imports.
-    
-    Args:
-        conn: OMERO connection (unused, kept for interface compatibility)
-        session_key: OMERO session key
-        host: OMERO server host
-        port: OMERO server port
-        path: Path to file to import
-        dataset_id: Optional dataset ID to import into
-        timeout: Maximum time to wait for import (seconds, default: 5 minutes)
-    
-    Returns:
-        Tuple of (success: bool, stdout: str, stderr: str)
     """
     cmd = [OMERO_CLI, "import"]
     if session_key:
@@ -62,15 +48,11 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         )
         return result.returncode == 0, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
-        logger.error(
-            "OMERO import command timed out after %d seconds for file: %s",
-            timeout,
-            path
-        )
-        return False, "", f"Command timed out after {timeout} seconds. The file may be too large or the OMERO server may be experiencing issues."
+        logger.error("OMERO import timed out after %ds for: %s", timeout, path)
+        return False, "", f"Timeout after {timeout}s"
     except Exception as e:
-        logger.exception("Unexpected error during import of %s", path)
-        return False, "", f"Unexpected error: {str(e)}"
+        logger.exception("Import error for %s", path)
+        return False, "", str(e)
 
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     """
@@ -753,7 +735,6 @@ def _process_import_job(job_id: str):
 
                             plot_cache = {}
                             plot_rel_cache = {}
-                            plot_staged_cache = {}
                             imported_plots = set()
                             if create_figures_attachments or create_figures_images:
                                 from ..omero.sem_edx_parser import create_edx_spectrum_plot
@@ -837,53 +818,56 @@ def _process_import_job(job_id: str):
 
                                     plot_path = None
                                     plot_rel = None
-                                    plot_staged = None
                                     if create_figures_attachments or create_figures_images:
                                         if txt_rel in plot_cache:
                                             plot_path = plot_cache.get(txt_rel)
                                             plot_rel = plot_rel_cache.get(txt_rel)
-                                            plot_staged = plot_staged_cache.get(txt_rel)
                                         else:
                                             plot_path = create_edx_spectrum_plot(txt_path)
                                             plot_cache[txt_rel] = plot_path
                                             if plot_path:
-                                                # plot_rel: path for dataset organization (uses original upload structure)
                                                 plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
                                                 plot_rel_cache[txt_rel] = plot_rel
-                                                
-                                                # plot_staged: actual file location (uses staged structure)
-                                                # CRITICAL FIX: Use staged_path to find where the file actually is
-                                                plot_staged = str(PurePosixPath(staged_path).with_name(plot_path.name))
-                                                plot_staged_cache[txt_rel] = plot_staged
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
-                                        # CRITICAL FIX: Use plot_staged for actual file location
-                                        import_file_path = upload_root / plot_staged if plot_staged else upload_root / plot_rel
+                                        # Calculate the actual staged path relative to upload_root
+                                        # plot_path is absolute, we need it relative to upload_root
+                                        try:
+                                            plot_staged = str(plot_path.relative_to(upload_root))
+                                        except ValueError:
+                                            # Fallback if not under upload_root
+                                            plot_staged = plot_rel
+                                            logger.warning(
+                                                "Plot %s not under upload_root %s, using fallback",
+                                                plot_path,
+                                                upload_root
+                                            )
                                         
-                                        # Pre-flight check: verify file exists
+                                        # CRITICAL: Verify file exists before attempting import
+                                        import_file_path = upload_root / plot_staged
                                         if not import_file_path.exists():
                                             logger.error(
-                                                "Plot file not found at %s for %s - skipping image import",
+                                                "Plot file missing at %s (plot_path=%s, plot_staged=%s)",
                                                 import_file_path,
-                                                plot_rel
+                                                plot_path,
+                                                plot_staged
                                             )
                                             _append_job_error(
                                                 job,
                                                 f"Plot file not found for import: {plot_rel}"
                                             )
                                         else:
-                                            # File exists - proceed with import
-                                            file_size = import_file_path.stat().st_size
+                                            # File exists - proceed
                                             logger.info(
-                                                "Importing plot as image: %s (size: %d bytes, staged at: %s)",
+                                                "Importing plot: rel=%s, staged=%s, size=%d",
                                                 plot_rel,
-                                                file_size,
-                                                plot_staged or plot_rel
+                                                plot_staged,
+                                                import_file_path.stat().st_size
                                             )
                                             
                                             import_entry = {
                                                 "relative_path": plot_rel,
-                                                "staged_path": plot_staged or plot_rel,  # CRITICAL FIX
+                                                "staged_path": plot_staged,
                                             }
                                             
                                             try:
@@ -897,57 +881,21 @@ def _process_import_job(job_id: str):
                                                     orphan_dataset_name,
                                                 )
                                                 
-                                                # CRITICAL FIX: Only mark as imported on confirmed success
                                                 if import_result.get("status") == "error":
-                                                    error_detail = import_result.get("entry_error", "Unknown error")
                                                     if import_result.get("job_error"):
                                                         _append_job_error(job, import_result["job_error"])
                                                     if import_result.get("job_message"):
                                                         _append_job_message(job, import_result["job_message"])
-                                                    
-                                                    logger.error(
-                                                        "Failed to import SEM EDX plot %s: %s",
-                                                        plot_rel,
-                                                        error_detail
-                                                    )
-                                                    
-                                                    # Check if this was a timeout
-                                                    stderr = str(import_result.get("stderr", ""))
-                                                    if "timed out" in stderr.lower():
-                                                        logger.warning(
-                                                            "Plot import timed out - file may be too large or server busy. "
-                                                            "Continuing with text attachments."
-                                                        )
-                                                    
-                                                    # DO NOT mark as imported on error - allow processing to continue
-                                                    
+                                                    logger.error("Failed to import plot %s", plot_rel)
                                                 elif import_result.get("status") == "imported":
                                                     _append_job_message(job, messages.imported_file(plot_rel))
-                                                    logger.info("Successfully imported SEM EDX plot: %s", plot_rel)
-                                                    # FIXED: Only mark as imported on success
+                                                    logger.info("Successfully imported plot %s", plot_rel)
                                                     imported_plots.add(txt_rel)
-                                                    
-                                                else:
-                                                    logger.warning(
-                                                        "Unexpected import status '%s' for plot %s - continuing",
-                                                        import_result.get("status"),
-                                                        plot_rel
-                                                    )
-                                                    
                                             except Exception as exc:
-                                                # Catch any unexpected exceptions and continue processing
-                                                logger.exception(
-                                                    "Unexpected exception during plot import for %s",
-                                                    plot_rel
-                                                )
-                                                _append_job_error(
-                                                    job,
-                                                    f"Exception importing plot {plot_rel}: {type(exc).__name__}: {str(exc)}"
-                                                )
-                                                # Continue processing - don't let one failure stop everything
+                                                logger.exception("Exception importing plot %s", plot_rel)
+                                                _append_job_error(job, f"Exception: {exc}")
 
-                                    # CRITICAL: Process text attachment REGARDLESS of plot import result
-                                    # This ensures attachments work even if plot import fails/times out
+                                    # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:
                                         logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
                                         _attach_txt_to_image_service(
