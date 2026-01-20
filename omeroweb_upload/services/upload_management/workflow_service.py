@@ -830,27 +830,47 @@ def _process_import_job(job_id: str):
                                                 plot_rel_cache[txt_rel] = plot_rel
 
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
+                                        logger.error(
+                                            "DEBUG PLOT IMPORT START: txt_rel=%s, plot_path=%s, upload_root=%s",
+                                            txt_rel,
+                                            plot_path,
+                                            upload_root
+                                        )
+                                        
                                         # Calculate the actual staged path relative to upload_root
                                         # plot_path is absolute, we need it relative to upload_root
                                         try:
                                             plot_staged = str(plot_path.relative_to(upload_root))
-                                        except ValueError:
+                                            logger.error("DEBUG: plot_staged (relative_to) = %s", plot_staged)
+                                        except ValueError as e:
                                             # Fallback if not under upload_root
                                             plot_staged = plot_rel
-                                            logger.warning(
-                                                "Plot %s not under upload_root %s, using fallback",
-                                                plot_path,
-                                                upload_root
+                                            logger.error(
+                                                "DEBUG: relative_to FAILED: %s, using fallback plot_staged=%s",
+                                                e,
+                                                plot_staged
                                             )
                                         
                                         # CRITICAL: Verify file exists before attempting import
                                         import_file_path = upload_root / plot_staged
                                         
+                                        logger.error(
+                                            "DEBUG: Will check if file exists at: %s",
+                                            import_file_path
+                                        )
+                                        
                                         # Retry check with small delay (matplotlib buffer flush race condition)
                                         max_retries = 3
                                         file_exists = False
                                         for retry in range(max_retries):
-                                            if import_file_path.exists():
+                                            exists_check = import_file_path.exists()
+                                            logger.error(
+                                                "DEBUG: Attempt %d/%d - exists()=%s",
+                                                retry + 1,
+                                                max_retries,
+                                                exists_check
+                                            )
+                                            if exists_check:
                                                 file_exists = True
                                                 break
                                             if retry < max_retries - 1:
@@ -864,10 +884,11 @@ def _process_import_job(job_id: str):
                                         
                                         if not file_exists:
                                             logger.error(
-                                                "Plot file missing after retries at %s (plot_path=%s, plot_staged=%s)",
+                                                "FINAL: Plot file missing at %s (plot_path=%s, plot_staged=%s, upload_root=%s)",
                                                 import_file_path,
                                                 plot_path,
-                                                plot_staged
+                                                plot_staged,
+                                                upload_root
                                             )
                                             _append_job_error(
                                                 job,

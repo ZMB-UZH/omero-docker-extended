@@ -171,8 +171,10 @@ def create_edx_spectrum_plot(
         return None
 
     if output_path is None:
-        # Use exact txt filename but with .png extension (remove _edx suffix)
-        output_path = txt_path.with_suffix(".png")
+        # Use _edx suffix to match txt filename pattern
+        output_path = txt_path.with_name(f"{txt_path.stem}_edx.png")
+    
+    logger.info("create_edx_spectrum_plot: txt_path=%s, output_path=%s", txt_path, output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     energies = [point[0] for point in spectrum]
