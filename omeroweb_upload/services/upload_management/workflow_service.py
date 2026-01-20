@@ -22,6 +22,57 @@ _IMPORT_LOCKS_GUARD = threading.Lock()
 # Import OMERO_CLI constant
 from ...constants import OMERO_CLI
 
+
+def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None, timeout=300):
+    """
+    Import a file into OMERO using CLI with timeout protection.
+    
+    This function is defined here because workflow_service.py is executed in a context
+    where many functions are injected at runtime, but _import_file needs timeout support.
+    
+    Args:
+        conn: OMERO connection (unused, kept for interface compatibility)
+        session_key: OMERO session key
+        host: OMERO server host
+        port: OMERO server port
+        path: Path to file to import
+        dataset_id: Optional dataset ID to import into
+        timeout: Maximum time to wait for import (seconds, default: 5 minutes)
+    
+    Returns:
+        Tuple of (success: bool, stdout: str, stderr: str)
+    """
+    cmd = [OMERO_CLI, "import"]
+    if session_key:
+        cmd.extend(["-k", session_key])
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    if dataset_id:
+        cmd.extend(["-d", str(dataset_id)])
+    cmd.append(str(path))
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+        return result.returncode == 0, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "OMERO import command timed out after %d seconds for file: %s",
+            timeout,
+            path
+        )
+        return False, "", f"Command timed out after {timeout} seconds. The file may be corrupted, in an unexpected format, or the OMERO server may be experiencing issues."
+    except Exception as e:
+        logger.exception("Unexpected error during import of %s", path)
+        return False, "", f"Unexpected error: {str(e)}"
+
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     """
     Classify OMERO import compatibility check output.
