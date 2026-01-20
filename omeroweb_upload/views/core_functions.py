@@ -70,6 +70,7 @@ __all__ = [
     'ProjectDatasetLinkI',
     'ProjectI',
     'PurePosixPath',
+    'SPECIAL_METHODS_DISABLED_ENV',
     'SEM_EDX_FILEANNOTATION_NS',
     'ThreadPoolExecutor',
     'UPLOAD_BATCH_FILES_ENV',
@@ -110,6 +111,7 @@ __all__ = [
     '_find_image_by_name',
     '_find_project_dataset',
     '_generate_orphan_dataset_name',
+    '_get_env_bool',
     '_get_env_int',
     '_get_id',
     '_get_import_lock',
@@ -153,6 +155,7 @@ __all__ = [
     '_safe_relative_path',
     '_safe_remove_tree',
     '_save_job',
+    '_special_methods_enabled',
     '_should_run_cleanup',
     '_should_start_compatibility_check',
     '_start_compatibility_check_thread',
@@ -204,6 +207,7 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 DEFAULT_UPLOAD_BATCH_FILES = 5
+SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
 UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
 UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
 UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
@@ -421,6 +425,17 @@ def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> 
     except (TypeError, ValueError):
         value = default
     return max(min_value, min(max_value, value))
+
+
+def _get_env_bool(env_key: str, default: bool = False) -> bool:
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _special_methods_enabled() -> bool:
+    return not _get_env_bool(SPECIAL_METHODS_DISABLED_ENV, False)
 
 
 def _normalize_job_batch_size(value, default: int) -> int:
