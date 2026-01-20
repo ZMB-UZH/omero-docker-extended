@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 import subprocess
+import shutil
 import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -807,10 +808,18 @@ def _process_import_job(job_id: str):
                                     if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
                                         # ------------------------------------------------------------------
                                         # Import the EDX plot PNG as a SEPARATE OMERO Image
-                                        # into the SAME dataset as the SEM image.
+                                        # into the SAME dataset/path as the SEM image.
                                         #
-                                        # - relative_path controls dataset mapping
-                                        # - staged_path MUST point to the real on-disk file location
+                                        # CRITICAL DETAIL:
+                                        # The OMERO import pipeline can ONLY import files that exist under
+                                        # upload_root (staged files). The plot is generated next to the TXT
+                                        # (txt_path), which may NOT match the SEM image's staged directory.
+                                        #
+                                        # Therefore we MUST stage the plot PNG into the SEM image's path
+                                        # under upload_root BEFORE calling _import_job_entry.
+                                        #
+                                        # - plot_import_rel controls dataset/path mapping (same as SEM image)
+                                        # - staged_path MUST point to an existing file under upload_root
                                         # - dataset_id_override FORCES dataset selection
                                         # ------------------------------------------------------------------
                                         plot_import_rel = str(
@@ -819,15 +828,36 @@ def _process_import_job(job_id: str):
                                             )
                                         )
 
-                                        plot_staged_rel = str(
-                                            PurePosixPath(staged_path).with_name(
-                                                PurePosixPath(plot_rel).name
+                                        staged_plot_path = upload_root / plot_import_rel
+                                        try:
+                                            staged_plot_path.parent.mkdir(parents=True, exist_ok=True)
+                                            # Copy the generated plot into the SEM image's staged directory
+                                            # so that the existing import pipeline can pick it up.
+                                            shutil.copy2(plot_path, staged_plot_path)
+                                        except Exception as exc:
+                                            logger.exception(
+                                                "Failed to stage SEM-EDX plot PNG for import: src=%s dst=%s error=%s",
+                                                plot_path,
+                                                staged_plot_path,
+                                                exc,
                                             )
+                                            _append_job_error(
+                                                job,
+                                                f"Failed to stage SEM-EDX plot PNG for import: {staged_plot_path.name}",
+                                            )
+                                            imported_plots.add(txt_rel)
+                                            continue
+
+                                        logger.info(
+                                            "SEM-EDX: plot staged for import: rel=%s staged=%s exists=%s",
+                                            plot_import_rel,
+                                            staged_plot_path,
+                                            staged_plot_path.exists(),
                                         )
 
                                         import_entry = {
                                             "relative_path": plot_import_rel,
-                                            "staged_path": plot_staged_rel,
+                                            "staged_path": plot_import_rel,
                                             "dataset_id_override": sem_dataset_id,
                                         }
 
@@ -850,7 +880,7 @@ def _process_import_job(job_id: str):
                                                 "Failed to import SEM-EDX plot %s (dataset_id=%s staged=%s)",
                                                 plot_import_rel,
                                                 sem_dataset_id,
-                                                plot_staged_rel,
+                                                str(staged_plot_path),
                                             )
                                         elif import_result.get("status") == "imported":
                                             _append_job_message(job, messages.imported_file(plot_import_rel))
