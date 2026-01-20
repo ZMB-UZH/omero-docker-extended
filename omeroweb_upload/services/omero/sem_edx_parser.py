@@ -160,37 +160,6 @@ def _nearest_spectrum_point(
     return after
 
 
-def _layout_element_labels(ax, annotations, base_offset=10, tier_step=8, x_spread=18):
-    fig = ax.figure
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    used_boxes = []
-    max_offset = base_offset
-
-    x_offsets = [0]
-    for i in range(1, 6):
-        x_offsets.extend([i * x_spread, -i * x_spread])
-
-    for index, annotation in enumerate(annotations):
-        placed = False
-        tier = 0
-        while not placed:
-            y_offset = base_offset + (tier * tier_step)
-            for x_offset in x_offsets:
-                annotation.set_position((x_offset, y_offset))
-                bbox = annotation.get_window_extent(renderer=renderer)
-                if not any(bbox.overlaps(existing) for existing in used_boxes):
-                    used_boxes.append(bbox)
-                    max_offset = max(max_offset, y_offset)
-                    placed = True
-                    break
-            tier += 1
-        annotation.set_ha("center" if annotation.get_position()[0] == 0 else "left" if annotation.get_position()[0] > 0 else "right")
-        annotation.set_va("bottom")
-
-    return max_offset
-
-
 def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
@@ -217,7 +186,6 @@ def create_edx_spectrum_plot(
     ax.set_facecolor("#1f4d7a")
 
     ax.plot(energies, counts, color="#ffe600", linewidth=1.4)
-    ax.fill_between(energies, counts, 0, color="#ffe600", alpha=0.2)
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, y_max * 1.05)
 
@@ -241,7 +209,6 @@ def create_edx_spectrum_plot(
         element_labels.append((energy, symbol))
 
     used_labels = set()
-    annotations = []
     for energy, symbol in sorted(element_labels, key=lambda item: item[0]):
         if (energy, symbol) in used_labels:
             continue
@@ -250,41 +217,28 @@ def create_edx_spectrum_plot(
         if not nearest:
             continue
         _, y_val = nearest
-        annotation = ax.annotate(
+        label_y = min(y_val + (y_max * 0.08), y_max * 0.98)
+        ax.annotate(
             symbol,
             xy=(energy, y_val),
-            xytext=(0, 0),
-            textcoords="offset points",
+            xytext=(energy, label_y),
+            textcoords="data",
+            ha="center",
+            va="bottom",
             fontsize=8,
-            color="white",
+            color="#ffef5a",
             bbox={
                 "boxstyle": "round,pad=0.2",
-                "facecolor": (0.0, 0.25, 0.0, 0.3),
-                "edgecolor": "#1c3f1c",
-                "linewidth": 0.8,
+                "facecolor": "#294f73",
+                "edgecolor": "#ffe600",
+                "linewidth": 0.6,
             },
             arrowprops={
                 "arrowstyle": "-",
-                "color": "#1c3f1c",
-                "linewidth": 0.8,
-                "connectionstyle": "angle3",
+                "color": "#ffe600",
+                "linewidth": 0.6,
             },
         )
-        annotations.append(annotation)
-
-    if annotations:
-        max_offset = _layout_element_labels(ax, annotations)
-        if max_offset > 0:
-            pixels_per_point = fig.dpi / 72.0
-            extra_pixels = max_offset * pixels_per_point
-            display_bottom = ax.transData.transform((x_min, y_max * 1.05))[1]
-            data_per_pixel = (
-                ax.transData.inverted().transform((0, display_bottom + 1))[1]
-                - ax.transData.inverted().transform((0, display_bottom))[1]
-            )
-            extra_data = extra_pixels * data_per_pixel
-            if extra_data > 0:
-                ax.set_ylim(0, (y_max * 1.05) + extra_data)
 
     fig.tight_layout()
     fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
