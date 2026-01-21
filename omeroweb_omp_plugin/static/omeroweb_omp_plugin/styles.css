@@ -413,8 +413,8 @@ html, body {min-width: 632px;}
         background: #e7f1ff;
         color: #9c7a00;
     }
-    .project-option:hover,
-    .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
+    .project-option:not(.is-collab):not(.is-collab-annotate):hover,
+    .project-option:not(.is-collab):not(.is-collab-annotate).is-active {background:#e7f1ff; color:#1d4ed8;}
     #project_select_dropdown.keyboard-active .project-option:hover {background:transparent; color:inherit;}
     .separator-option-text {white-space:nowrap;}
     .ai-option-btn {
