@@ -1,3 +1,5 @@
+import random
+import math
 """
 SEM EDX EMSA/MAS format parser and OMERO Table creator.
 
@@ -163,41 +165,7 @@ def _nearest_spectrum_point(
 
 
 class BBox:
-    """Simple bounding box class for collision detection."""
-    def __init__(self, x0, y0, x1, y1):
-        self.x0 = x0
-        self.y0 = y0
-        self.x1 = x1
-        self.y1 = y1
-        
-    @property
-    def width(self):
-        return self.x1 - self.x0
-    
-    @property
-    def height(self):
-        return self.y1 - self.y0
-    
-    @property
-    def center_x(self):
-        return (self.x0 + self.x1) / 2
-    
-    @property
-    def center_y(self):
-        return (self.y0 + self.y1) / 2
-    
-    def overlaps(self, other):
-        """Check if this bbox overlaps with another."""
-        return not (self.x1 < other.x0 or self.x0 > other.x1 or 
-                   self.y1 < other.y0 or self.y0 > other.y1)
-    
-    def translate(self, dx, dy):
-        """Return a new bbox translated by dx, dy."""
-        return BBox(self.x0 + dx, self.y0 + dy, self.x1 + dx, self.y1 + dy)
-
-
-# COMPLETE REWRITE - Research-based greedy algorithm
-class BBox:
+    """Bounding box for collision detection"""
     def __init__(self, x0, y0, x1, y1):
         self.x0 = x0
         self.y0 = y0
@@ -205,12 +173,22 @@ class BBox:
         self.y1 = y1
     
     def overlaps(self, other):
+        """Check if this bbox overlaps with another"""
         return not (self.x1 <= other.x0 or self.x0 >= other.x1 or 
                    self.y1 <= other.y0 or self.y0 >= other.y1)
+    
+    def overlap_area(self, other):
+        """Calculate overlap area with another bbox"""
+        if not self.overlaps(other):
+            return 0.0
+        
+        x_overlap = min(self.x1, other.x1) - max(self.x0, other.x0)
+        y_overlap = min(self.y1, other.y1) - max(self.y0, other.y0)
+        return x_overlap * y_overlap
 
 
 def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
-    """Check if line (x1,y1)-(x2,y2) crosses line (x3,y3)-(x4,y4)"""
+    """Check if line segment (x1,y1)-(x2,y2) crosses (x3,y3)-(x4,y4)"""
     def ccw(ax, ay, bx, by, cx, cy):
         return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
     
@@ -218,7 +196,319 @@ def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
             ccw(x1, y1, x2, y2, x3, y3) != ccw(x1, y1, x2, y2, x4, y4))
 
 
-def smart_label_placement_v2(
+class LabelGene:
+    """Single label placement gene"""
+    def __init__(self, label_id: int, x: float, y: float):
+        self.label_id = label_id
+        self.x = x
+        self.y = y
+    
+    def __repr__(self):
+        return f"Gene(id={self.label_id}, x={self.x:.1f}, y={self.y:.1f})"
+
+
+class Chromosome:
+    """
+    A complete solution (placement of all labels)
+    genes: List of LabelGene objects
+    fitness: Score (lower is better)
+    """
+    def __init__(self, genes: List[LabelGene]):
+        self.genes = genes
+        self.fitness = float('inf')
+    
+    def copy(self):
+        """Deep copy of chromosome"""
+        return Chromosome([LabelGene(g.label_id, g.x, g.y) for g in self.genes])
+    
+    def __repr__(self):
+        return f"Chromosome(genes={len(self.genes)}, fitness={self.fitness:.2f})"
+
+
+class GeneticLabelPlacer:
+    """
+    Genetic algorithm for optimal label placement
+    """
+    def __init__(
+        self,
+        label_specs: List[Dict[str, Any]],
+        axes_bbox: BBox,
+        ax,
+        population_size: int = 80,
+        generations: int = 200,
+        mutation_rate: float = 0.15,
+        elite_size: int = 10
+    ):
+        self.label_specs = label_specs
+        self.axes_bbox = axes_bbox
+        self.ax = ax
+        self.population_size = population_size
+        self.generations = generations
+        self.mutation_rate = mutation_rate
+        self.elite_size = elite_size
+        
+        # Store for line crossing checks
+        self.peak_positions = {}
+        for spec in label_specs:
+            self.peak_positions[spec['id']] = []
+            for peak_e in spec['peak_energies']:
+                px, py = ax.transData.transform((peak_e, spec['spectrum_y']))
+                self.peak_positions[spec['id']].append((px, py))
+        
+        print(f"\n=== Genetic Algorithm Setup ===")
+        print(f"Labels: {len(label_specs)}")
+        print(f"Population: {population_size}")
+        print(f"Generations: {generations}")
+        print(f"Mutation rate: {mutation_rate}")
+        print(f"Elite size: {elite_size}")
+    
+    def generate_initial_chromosome(self) -> Chromosome:
+        """
+        IMPROVEMENT 4: Initial placement in INCREASING X order (left to right)
+        """
+        genes = []
+        
+        for spec in self.label_specs:
+            # Initial position: slightly above peak, centered on X
+            w = spec['width']
+            h = spec['height']
+            
+            x = spec['x_peak']
+            y = spec['y_peak'] + 30 + h/2
+            
+            # Clamp to bounds
+            min_x = self.axes_bbox.x0 + 10 + w/2
+            max_x = self.axes_bbox.x1 - 10 - w/2
+            min_y = spec['y_peak'] + 25 + h/2
+            max_y = self.axes_bbox.y1 - 10 - h/2
+            
+            x = max(min_x, min(max_x, x))
+            y = max(min_y, min(max_y, y))
+            
+            genes.append(LabelGene(spec['id'], x, y))
+        
+        return Chromosome(genes)
+    
+    def generate_random_chromosome(self) -> Chromosome:
+        """Generate random valid placement"""
+        genes = []
+        
+        for spec in self.label_specs:
+            w = spec['width']
+            h = spec['height']
+            
+            min_x = self.axes_bbox.x0 + 10 + w/2
+            max_x = self.axes_bbox.x1 - 10 - w/2
+            min_y = spec['y_peak'] + 25 + h/2
+            max_y = self.axes_bbox.y1 - 10 - h/2
+            
+            if min_x > max_x or min_y > max_y:
+                x = spec['x_peak']
+                y = spec['y_peak'] + 30
+            else:
+                x = random.uniform(min_x, max_x)
+                y = random.uniform(min_y, max_y)
+            
+            genes.append(LabelGene(spec['id'], x, y))
+        
+        return Chromosome(genes)
+    
+    def calculate_fitness(self, chromosome: Chromosome) -> float:
+        """
+        Calculate fitness score (LOWER is better)
+        """
+        score = 0.0
+        
+        # Build bboxes
+        bboxes = []
+        for gene in chromosome.genes:
+            spec = self.label_specs[gene.label_id]
+            w = spec['width']
+            h = spec['height']
+            bbox = BBox(gene.x - w/2, gene.y - h/2, gene.x + w/2, gene.y + h/2)
+            bboxes.append(bbox)
+        
+        # 1. OVERLAP PENALTY (huge)
+        overlap_penalty = 0.0
+        for i in range(len(bboxes)):
+            for j in range(i + 1, len(bboxes)):
+                overlap = bboxes[i].overlap_area(bboxes[j])
+                if overlap > 0:
+                    overlap_penalty += overlap * 1000
+        
+        # 2. LINE CROSSING PENALTY (large)
+        crossing_penalty = 0.0
+        for i, gene_i in enumerate(chromosome.genes):
+            for j, gene_j in enumerate(chromosome.genes):
+                if i >= j:
+                    continue
+                
+                for px1, py1 in self.peak_positions[gene_i.label_id]:
+                    for px2, py2 in self.peak_positions[gene_j.label_id]:
+                        if lines_cross(px1, py1, gene_i.x, gene_i.y,
+                                     px2, py2, gene_j.x, gene_j.y):
+                            crossing_penalty += 100
+        
+        # 3. DISTANCE PENALTY (exponential - punish far labels)
+        distance_penalty = 0.0
+        for gene in chromosome.genes:
+            spec = self.label_specs[gene.label_id]
+            ideal_x = spec['x_peak']
+            ideal_y = spec['y_peak'] + 30
+            
+            dx = gene.x - ideal_x
+            dy = gene.y - ideal_y
+            distance = math.sqrt(dx*dx + dy*dy)
+            
+            # Exponential penalty
+            distance_penalty += (distance ** 1.5) * 0.5
+        
+        # 4. OUT OF BOUNDS PENALTY (massive)
+        bounds_penalty = 0.0
+        for i, gene in enumerate(chromosome.genes):
+            bbox = bboxes[i]
+            spec = self.label_specs[gene.label_id]
+            
+            if bbox.x0 < self.axes_bbox.x0 or bbox.x1 > self.axes_bbox.x1:
+                bounds_penalty += 10000
+            if bbox.y0 < self.axes_bbox.y0 or bbox.y1 > self.axes_bbox.y1:
+                bounds_penalty += 10000
+            
+            if bbox.y0 < spec['y_peak'] + 20:
+                bounds_penalty += 5000
+            
+            # Maximum distance constraint
+            dx = gene.x - spec['x_peak']
+            dy = gene.y - (spec['y_peak'] + 30)
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist > 300:
+                bounds_penalty += (dist - 300) * 50
+        
+        score = overlap_penalty + crossing_penalty + distance_penalty + bounds_penalty
+        return score
+    
+    def tournament_selection(self, population: List[Chromosome], tournament_size: int = 3) -> Chromosome:
+        """Select parent using tournament selection"""
+        tournament = random.sample(population, tournament_size)
+        return min(tournament, key=lambda c: c.fitness)
+    
+    def crossover(self, parent1: Chromosome, parent2: Chromosome) -> Tuple[Chromosome, Chromosome]:
+        """Ordered crossover"""
+        n = len(parent1.genes)
+        split = random.randint(1, n - 1)
+        
+        child1_genes = []
+        child2_genes = []
+        
+        for i in range(n):
+            if i < split:
+                child1_genes.append(LabelGene(
+                    parent1.genes[i].label_id,
+                    parent1.genes[i].x,
+                    parent1.genes[i].y
+                ))
+                child2_genes.append(LabelGene(
+                    parent2.genes[i].label_id,
+                    parent2.genes[i].x,
+                    parent2.genes[i].y
+                ))
+            else:
+                child1_genes.append(LabelGene(
+                    parent2.genes[i].label_id,
+                    parent2.genes[i].x,
+                    parent2.genes[i].y
+                ))
+                child2_genes.append(LabelGene(
+                    parent1.genes[i].label_id,
+                    parent1.genes[i].x,
+                    parent1.genes[i].y
+                ))
+        
+        return Chromosome(child1_genes), Chromosome(child2_genes)
+    
+    def mutate(self, chromosome: Chromosome) -> Chromosome:
+        """Mutate by randomly adjusting positions"""
+        mutated = chromosome.copy()
+        
+        for gene in mutated.genes:
+            if random.random() < self.mutation_rate:
+                spec = self.label_specs[gene.label_id]
+                w = spec['width']
+                h = spec['height']
+                
+                dx = random.uniform(-30, 30)
+                dy = random.uniform(-20, 40)
+                
+                new_x = gene.x + dx
+                new_y = gene.y + dy
+                
+                # Clamp to bounds
+                min_x = self.axes_bbox.x0 + 10 + w/2
+                max_x = self.axes_bbox.x1 - 10 - w/2
+                min_y = spec['y_peak'] + 25 + h/2
+                max_y = self.axes_bbox.y1 - 10 - h/2
+                
+                gene.x = max(min_x, min(max_x, new_x))
+                gene.y = max(min_y, min(max_y, new_y))
+        
+        return mutated
+    
+    def evolve(self) -> Chromosome:
+        """Main genetic algorithm loop"""
+        print(f"\n=== Starting Evolution ===")
+        
+        # Initialize population: ONE initial ordered + rest random
+        population = [self.generate_initial_chromosome()]
+        population.extend([self.generate_random_chromosome() 
+                          for _ in range(self.population_size - 1)])
+        
+        # Calculate initial fitness
+        for chrom in population:
+            chrom.fitness = self.calculate_fitness(chrom)
+        
+        population.sort(key=lambda c: c.fitness)
+        print(f"Generation 0: Best fitness = {population[0].fitness:.2f}")
+        
+        # Evolution loop
+        for gen in range(1, self.generations + 1):
+            new_population = []
+            
+            # Elitism
+            elite = population[:self.elite_size]
+            new_population.extend([e.copy() for e in elite])
+            
+            # Generate rest
+            while len(new_population) < self.population_size:
+                parent1 = self.tournament_selection(population)
+                parent2 = self.tournament_selection(population)
+                
+                child1, child2 = self.crossover(parent1, parent2)
+                
+                child1 = self.mutate(child1)
+                child2 = self.mutate(child2)
+                
+                new_population.append(child1)
+                if len(new_population) < self.population_size:
+                    new_population.append(child2)
+            
+            # Calculate fitness
+            for chrom in new_population:
+                chrom.fitness = self.calculate_fitness(chrom)
+            
+            population = new_population
+            population.sort(key=lambda c: c.fitness)
+            
+            if gen % 20 == 0 or gen == self.generations:
+                print(f"Generation {gen}: Best fitness = {population[0].fitness:.2f}")
+        
+        best_solution = population[0]
+        print(f"\n=== Evolution Complete ===")
+        print(f"Final best fitness: {best_solution.fitness:.2f}")
+        
+        return best_solution
+
+
+def genetic_label_placement(
     labels_data: List[Tuple[float, float, str]],
     axes_bbox: BBox,
     fig,
@@ -227,15 +517,12 @@ def smart_label_placement_v2(
     fixed_offset_pixels: float = 30,
 ) -> List[Tuple[float, float, str, float, float, List[float]]]:
     """
-    Research-based algorithm:
-    1. Sort by Y coordinate (tallest peaks first)
-    2. Place greedily without line crossings
-    3. Hard bounds enforcement
+    Genetic algorithm for label placement
     """
     if not labels_data:
         return []
     
-    # Merge duplicates
+    # IMPROVEMENT 3: Don't merge elements with same symbol but very different Y values
     from collections import defaultdict
     symbol_groups = defaultdict(list)
     for energy, spectrum_y, symbol in labels_data:
@@ -243,12 +530,20 @@ def smart_label_placement_v2(
     
     merged_labels = []
     for symbol, peaks in symbol_groups.items():
-        peaks.sort(key=lambda x: x[0])
+        peaks.sort(key=lambda x: x[0])  # Sort by X
         groups = []
         current_group = [peaks[0]]
         
         for i in range(1, len(peaks)):
-            if peaks[i][0] - current_group[-1][0] < 0.5:
+            # IMPROVEMENT 3: Check both X proximity AND Y similarity
+            x_close = peaks[i][0] - current_group[-1][0] < 0.5
+            
+            # Check Y difference
+            y_current_avg = sum(p[1] for p in current_group) / len(current_group)
+            y_diff_ratio = abs(peaks[i][1] - y_current_avg) / max(peaks[i][1], y_current_avg, 1.0)
+            y_similar = y_diff_ratio < 0.3  # Less than 30% difference
+            
+            if x_close and y_similar:
                 current_group.append(peaks[i])
             else:
                 groups.append(current_group)
@@ -261,12 +556,12 @@ def smart_label_placement_v2(
             max_y = max(p[1] for p in group)
             merged_labels.append((center_energy, max_y, symbol, energies))
     
-    # KEY: Sort by Y coordinate (tallest first)
-    merged_labels.sort(key=lambda x: x[1], reverse=True)
+    # IMPROVEMENT 4: Sort by X coordinate (left to right) for initial placement
+    merged_labels.sort(key=lambda x: x[0])  # Sort by energy (X position)
     
     # Measure labels
     label_specs = []
-    for center_energy, spectrum_y, symbol, peak_energies in merged_labels:
+    for idx, (center_energy, spectrum_y, symbol, peak_energies) in enumerate(merged_labels):
         x_peak_disp, y_peak_disp = ax.transData.transform((center_energy, spectrum_y))
         
         temp = ax.text(0, 0, symbol, fontsize=7.5,
@@ -277,6 +572,7 @@ def smart_label_placement_v2(
         temp.remove()
         
         label_specs.append({
+            'id': idx,
             'energy': center_energy,
             'spectrum_y': spectrum_y,
             'symbol': symbol,
@@ -287,110 +583,33 @@ def smart_label_placement_v2(
             'height': bbox.height + 8
         })
     
-    # Greedy placement
-    placed = []
-    MIN_CLEARANCE = 25  # Minimum pixels above peak
-    MARGIN = 10
+    # Run genetic algorithm
+    ga = GeneticLabelPlacer(
+        label_specs=label_specs,
+        axes_bbox=axes_bbox,
+        ax=ax,
+        population_size=80,
+        generations=200,
+        mutation_rate=0.15,
+        elite_size=10
+    )
     
-    for spec in label_specs:
-        x_peak = spec['x_peak']
-        y_peak = spec['y_peak']
-        w = spec['width']
-        h = spec['height']
-        
-        # Hard bounds
-        min_x = axes_bbox.x0 + MARGIN + w/2
-        max_x = axes_bbox.x1 - MARGIN - w/2
-        min_y = y_peak + MIN_CLEARANCE + h/2
-        max_y = axes_bbox.y1 - MARGIN - h/2
-        
-        # Ensure bounds are valid
-        if min_y > max_y or min_x > max_x:
-            print(f"WARNING: {spec['symbol']} cannot fit - bounds too tight")
-            continue
-        
-        # Try positions: start at fixed offset, spiral out
-        best_pos = None
-        
-        for y_try in range(int(min_y), int(max_y) + 1, 5):
-            for x_offset in [0, -15, 15, -30, 30, -45, 45]:
-                x_try = x_peak + x_offset
-                
-                # Check bounds
-                if x_try < min_x or x_try > max_x:
-                    continue
-                if y_try < min_y or y_try > max_y:
-                    continue
-                
-                # Check bbox overlap
-                test_bbox = BBox(x_try - w/2, y_try - h/2, x_try + w/2, y_try + h/2)
-                
-                has_overlap = False
-                for p in placed:
-                    if test_bbox.overlaps(p['bbox']):
-                        has_overlap = True
-                        break
-                
-                if has_overlap:
-                    continue
-                
-                # Check line crossing
-                has_crossing = False
-                for peak_e in spec['peak_energies']:
-                    px, py = ax.transData.transform((peak_e, spec['spectrum_y']))
-                    
-                    for p in placed:
-                        for prev_peak_e in p['peak_energies']:
-                            ppx, ppy = ax.transData.transform((prev_peak_e, p['spectrum_y']))
-                            
-                            if lines_cross(px, py, x_try, y_try, 
-                                         ppx, ppy, p['x'], p['y']):
-                                has_crossing = True
-                                break
-                        if has_crossing:
-                            break
-                    if has_crossing:
-                        break
-                
-                if not has_crossing:
-                    best_pos = (x_try, y_try)
-                    break
-            
-            if best_pos:
-                break
-        
-        # If no position found, force placement at peak
-        if not best_pos:
-            x_final = max(min_x, min(max_x, x_peak))
-            y_final = max(min_y, min(max_y, y_peak + fixed_offset_pixels))
-            print(f"WARNING: {spec['symbol']} forced placement (no valid position)")
-        else:
-            x_final, y_final = best_pos
-        
-        final_bbox = BBox(x_final - w/2, y_final - h/2, x_final + w/2, y_final + h/2)
-        
-        placed.append({
-            'energy': spec['energy'],
-            'spectrum_y': spec['spectrum_y'],
-            'symbol': spec['symbol'],
-            'peak_energies': spec['peak_energies'],
-            'x': x_final,
-            'y': y_final,
-            'bbox': final_bbox
-        })
+    best_solution = ga.evolve()
     
-    # Verify no overlaps
-    for i, p1 in enumerate(placed):
-        for j, p2 in enumerate(placed):
-            if i >= j:
-                continue
-            if p1['bbox'].overlaps(p2['bbox']):
-                print(f"ERROR: Overlap {p1['symbol']} vs {p2['symbol']}")
+    # Convert to output format
+    final_positions = []
+    for gene in best_solution.genes:
+        spec = label_specs[gene.label_id]
+        final_positions.append((
+            spec['energy'],
+            spec['spectrum_y'],
+            spec['symbol'],
+            gene.x,
+            gene.y,
+            spec['peak_energies']
+        ))
     
-    # Return
-    return [(p['energy'], p['spectrum_y'], p['symbol'], p['x'], p['y'], p['peak_energies']) 
-            for p in placed]
-
+    return final_positions
 
 
 def create_edx_spectrum_plot(
@@ -411,8 +630,11 @@ def create_edx_spectrum_plot(
     counts = [point[1] for point in spectrum]
     x_min = min(energies)
     x_max = max(energies)
-    y_max = max(counts) if counts else 1.0
-    y_max = y_max if y_max > 0 else 1.0
+    y_max_data = max(counts) if counts else 1.0
+    y_max_data = y_max_data if y_max_data > 0 else 1.0
+    
+    # IMPROVEMENT 1: Spectrum fills 85% of Y-axis, 15% reserved for labels
+    y_max_plot = y_max_data / 0.85
 
     # Create figure with proper margins for axis labels
     fig, ax = plt.subplots(figsize=(8.5, 5.0), dpi=150)
@@ -429,8 +651,13 @@ def create_edx_spectrum_plot(
     ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
     ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.38)
     ax.set_xlim(x_min, x_max)
-    ax.set_ylim(0, y_max * 1.05)
+    ax.set_ylim(0, y_max_plot * 1.05)
 
+    # IMPROVEMENT 2: Denser ticks (2x more frequent)
+    from matplotlib.ticker import MaxNLocator, AutoMinorLocator
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=20))  # 2x density
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=10))  # 2x density
+    
     # Set axis labels with proper spacing
     ax.set_xlabel("keV", color="white", fontsize=10, labelpad=2)
     ax.set_ylabel("cps/eV", color="white", fontsize=10, labelpad=2)
@@ -462,7 +689,6 @@ def create_edx_spectrum_plot(
             labels_data.append((energy, spectrum_y, symbol))
     
     # Adjust subplot margins BEFORE calculating positions
-    # Small margins to maximize plot area while ensuring axis labels are visible
     fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.10)
     
     # Initial rendering to get axes bbox
@@ -471,28 +697,26 @@ def create_edx_spectrum_plot(
     axes_bbox_raw = ax.get_window_extent(renderer=renderer)
     axes_bbox = BBox(axes_bbox_raw.x0, axes_bbox_raw.y0, axes_bbox_raw.x1, axes_bbox_raw.y1)
     
-    # Compute smart label positions - EXACTLY 10 pixels from peak to bottom of box
-    final_positions = smart_label_placement_v2(
+    # Run genetic algorithm for label placement
+    final_positions = genetic_label_placement(
         labels_data,
         axes_bbox,
         fig,
         ax,
         renderer,
-        fixed_offset_pixels=25  # 25 pixels above peak
+        fixed_offset_pixels=30
     )
     
-    # Draw labels and connector lines with minimal crossing
+    # Draw labels and connector lines
     for center_energy, spectrum_y, symbol, label_x, label_y, peak_energies in final_positions:
         # Draw connector lines from EACH peak to the label
         for peak_energy in peak_energies:
-            # Get the point on the spectrum at this peak
             nearest = _nearest_spectrum_point(spectrum, peak_energy)
             if nearest:
                 peak_x, peak_y = nearest
                 
-                # Draw straight vertical line from peak to label
                 annotation = ax.annotate(
-                    '',  # No text on the line itself
+                    '',
                     xy=(peak_x, peak_y),
                     xytext=(label_x, label_y),
                     xycoords='data',
@@ -505,7 +729,7 @@ def create_edx_spectrum_plot(
                     ),
                 )
         
-        # Draw the label box (once for all peaks)
+        # Draw the label box
         annotation = ax.annotate(
             symbol,
             xy=(center_energy, spectrum_y),
@@ -612,9 +836,6 @@ def create_spectrum_table(
                 len(columns[1].values),
             )
 
-            # IMPORTANT:
-            # initialize() defines ONLY the schema; values are ignored.
-            # addData() must receive the populated columns.
             from omero.grid import DoubleColumn, LongColumn
 
             init_columns = [
@@ -631,7 +852,6 @@ def create_spectrum_table(
             orig_file_id = orig_file_obj.getId().getValue()
             table.close()
 
-            # Create FileAnnotation for the table (THIS is how OMERO represents tables)
             from omero.model import FileAnnotationI, DatasetAnnotationLinkI, ImageAnnotationLinkI, OriginalFileI
             from omero.rtypes import rstring
 
@@ -640,10 +860,6 @@ def create_spectrum_table(
                 logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
                 return None
 
-            # IMPORTANT:
-            # Do NOT re-save/modify the OriginalFile object returned by table.getOriginalFile().
-            # Reference it by ID only, otherwise the server may attempt to change its update-event
-            # and throw OptimisticLockException (exactly what you're seeing).
             ann = FileAnnotationI()
             ann.setFile(OriginalFileI(orig_file_id, False))
             ann.setNs(rstring("openmicroscopy.org/omero/client/table"))
@@ -651,9 +867,6 @@ def create_spectrum_table(
 
             ann = conn.getUpdateService().saveAndReturnObject(ann)
 
-            # OMERO.web Table rendering works reliably when the "table file annotation" is attached
-            # to a Dataset (or Project). The Image view then shows row values when the table has a
-            # column named "Image" that references image IDs (we create that column above).
             parents = list(image.listParents())
             dataset = parents[0] if parents else None
 
@@ -661,7 +874,6 @@ def create_spectrum_table(
                 link = DatasetAnnotationLinkI()
                 link.setParent(dataset._obj)
             else:
-                # Fallback: no dataset parent, attach to the Image so it's still accessible
                 link = ImageAnnotationLinkI()
                 link.setParent(image._obj)
 
@@ -710,7 +922,7 @@ def attach_sem_edx_tables(
     """
     logger.info("Parsing SEM EDX file %s for image %d", txt_path.name, image_id)
     
-    # Parse the file (keep all parsing logic for future use)
+    # Parse the file
     parsed = parse_emsa_file(txt_path)
     
     # Create spectrum table ONLY
