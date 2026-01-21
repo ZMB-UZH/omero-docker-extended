@@ -2107,7 +2107,7 @@ const previewForm = document.getElementById('preview_form');
     }
 
     function saveUserSettingsToDatabase(settings, options = {}) {
-        const { showSuccessMessage = true, onSuccess, onError } = options;
+        const { showSuccessMessage = true, applySettings = true, onSuccess, onError } = options;
         return fetch(userSettingsSaveUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2133,7 +2133,7 @@ const previewForm = document.getElementById('preview_form');
                         ? data.success === true
                         : true;
 
-                if (saveSucceeded && data && data.settings) {
+                if (saveSucceeded && data && data.settings && applySettings) {
                     applyUserSettingsValues(data.settings);
                 }
 
@@ -3112,7 +3112,7 @@ const previewForm = document.getElementById('preview_form');
     }
 
     function persistAiDefaults(updatedDefaults, options = {}) {
-        const { onSuccess, onError } = options;
+        const { onSuccess, onError, applySettings = true } = options;
         clearUserSettingErrors();
         const validated = validateUserSettings();
         if (!validated) {
@@ -3130,6 +3130,7 @@ const previewForm = document.getElementById('preview_form');
         applyDefaultAiProviderSelections({ force: true });
         saveUserSettingsToDatabase(payload, {
             showSuccessMessage: false,
+            applySettings,
             onSuccess: () => {
                 if (typeof onSuccess === 'function') {
                     onSuccess();
@@ -3183,7 +3184,7 @@ const previewForm = document.getElementById('preview_form');
             },
         });
         aiDefaultsState = updatedDefaults;
-        persistAiDefaults(updatedDefaults);
+        persistAiDefaults(updatedDefaults, { applySettings: false });
     }
 
     function handleDefaultsApply(config) {
