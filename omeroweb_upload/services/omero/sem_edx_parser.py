@@ -234,8 +234,8 @@ class GeneticLabelPlacer:
         label_specs: List[Dict[str, Any]],
         axes_bbox: BBox,
         ax,
-        population_size: int = 80,
-        generations: int = 200,
+        population_size: int = 200,
+        generations: int = 500,
         mutation_rate: float = 0.15,
         elite_size: int = 10
     ):
