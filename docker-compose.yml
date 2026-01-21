@@ -112,7 +112,7 @@ services:
     volumes:
       - database_plugin:/var/lib/postgresql:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 10s
       timeout: 5s
       retries: 10
