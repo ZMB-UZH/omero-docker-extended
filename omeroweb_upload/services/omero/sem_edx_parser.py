@@ -788,7 +788,7 @@ def create_spectrum_table(
     
     Args:
         conn: OMERO BlitzGateway connection
-        image_id: ID of the image to attach the table to
+        image_id: ID of the image to use for dataset lookup
         spectrum: List of (x, y) tuples
         txt_filename: Name of the source txt file (for table name)
         
@@ -807,6 +807,21 @@ def create_spectrum_table(
     )
     
     try:
+        image = conn.getObject("Image", image_id)
+        if not image:
+            logger.error("Image %d not found; cannot create SEM EDX table", image_id)
+            return None
+
+        parents = list(image.listParents())
+        dataset = parents[0] if parents else None
+        if dataset is None:
+            logger.warning(
+                "No dataset found for image %d; skipping SEM EDX table creation for %s",
+                image_id,
+                txt_filename,
+            )
+            return None
+
         from omero.grid import DoubleColumn, LongColumn
         from omero.model import OriginalFileI
         from omero.rtypes import rstring
@@ -852,18 +867,8 @@ def create_spectrum_table(
             orig_file_id = orig_file_obj.getId().getValue()
             table.close()
 
-            from omero.model import (
-                DatasetAnnotationLinkI,
-                FileAnnotationI,
-                ImageAnnotationLinkI,
-                OriginalFileI,
-            )
+            from omero.model import DatasetAnnotationLinkI, FileAnnotationI, OriginalFileI
             from omero.rtypes import rstring
-
-            image = conn.getObject("Image", image_id)
-            if not image:
-                logger.error("Image %d not found; cannot attach SEM EDX table", image_id)
-                return None
 
             ann = FileAnnotationI()
             ann.setFile(OriginalFileI(orig_file_id, False))
@@ -872,16 +877,8 @@ def create_spectrum_table(
 
             ann = conn.getUpdateService().saveAndReturnObject(ann)
 
-            parents = list(image.listParents())
-            dataset = parents[0] if parents else None
-
-            if dataset is not None:
-                link = DatasetAnnotationLinkI()
-                link.setParent(dataset._obj)
-            else:
-                link = ImageAnnotationLinkI()
-                link.setParent(image._obj)
-
+            link = DatasetAnnotationLinkI()
+            link.setParent(dataset._obj)
             link.setChild(ann)
             conn.getUpdateService().saveObject(link)
 
@@ -913,13 +910,13 @@ def attach_sem_edx_tables(
     persist_table: bool = True,
 ) -> Optional[int]:
     """
-    Parse SEM EDX txt file and create OMERO Table with spectrum data attached to the image.
+    Parse SEM EDX txt file and create OMERO Table with spectrum data attached to the dataset.
     
     This is the main function to call from the upload workflow.
     
     Args:
         conn: OMERO BlitzGateway connection
-        image_id: ID of the image to attach table to
+        image_id: ID of the image to use for dataset lookup
         txt_path: Path to the SEM EDX txt file
         
     Returns:
