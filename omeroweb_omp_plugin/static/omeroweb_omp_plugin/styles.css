@@ -283,7 +283,7 @@ html, body {min-width: 632px;}
         font-weight: 400;
     }
     .project-select-input.is-collab-annotate {
-        color: #a16207;
+        color: #8a6d00;
         font-weight: 400;
     }
     .project-select-wrapper.is-display-active .project-select-input {
@@ -310,7 +310,7 @@ html, body {min-width: 632px;}
         color: #065f46;
     }
     .project-select-display.is-collab-annotate {
-        color: #a16207;
+        color: #8a6d00;
     }
     .project-select-display .project-select-owner {
         font-weight: 700;
@@ -406,12 +406,12 @@ html, body {min-width: 632px;}
         color: #065f46;
     }
     .project-option.is-collab-annotate {
-        color: #a16207;
+        color: #8a6d00;
     }
     .project-option.is-collab-annotate:hover,
     .project-option.is-collab-annotate.is-active {
         background: #e7f1ff;
-        color: #a16207;
+        color: #8a6d00;
     }
     .project-option:hover,
     .project-option.is-active {background:#e7f1ff; color:#1d4ed8;}
