@@ -45,7 +45,7 @@ services:
         hard: 50000
 
   redis: # shared cache across Omero web workers (required for rate limiting)
-    image: "redis:7-alpine"
+    image: "redis:8-alpine"
     restart: unless-stopped
     # Disable persistence for RAM storage only
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
