@@ -852,7 +852,12 @@ def create_spectrum_table(
             orig_file_id = orig_file_obj.getId().getValue()
             table.close()
 
-            from omero.model import FileAnnotationI, ImageAnnotationLinkI, OriginalFileI
+            from omero.model import (
+                DatasetAnnotationLinkI,
+                FileAnnotationI,
+                ImageAnnotationLinkI,
+                OriginalFileI,
+            )
             from omero.rtypes import rstring
 
             image = conn.getObject("Image", image_id)
@@ -867,8 +872,15 @@ def create_spectrum_table(
 
             ann = conn.getUpdateService().saveAndReturnObject(ann)
 
-            link = ImageAnnotationLinkI()
-            link.setParent(image._obj)
+            parents = list(image.listParents())
+            dataset = parents[0] if parents else None
+
+            if dataset is not None:
+                link = DatasetAnnotationLinkI()
+                link.setParent(dataset._obj)
+            else:
+                link = ImageAnnotationLinkI()
+                link.setParent(image._obj)
 
             link.setChild(ann)
             conn.getUpdateService().saveObject(link)
