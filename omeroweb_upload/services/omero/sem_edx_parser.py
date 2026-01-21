@@ -16,6 +16,8 @@ import matplotlib
 matplotlib.use("Agg")
 
 from matplotlib import pyplot as plt
+from matplotlib.patches import FancyBboxPatch
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +162,237 @@ def _nearest_spectrum_point(
     return after
 
 
+class BBox:
+    """Simple bounding box class for collision detection."""
+    def __init__(self, x0, y0, x1, y1):
+        self.x0 = x0
+        self.y0 = y0
+        self.x1 = x1
+        self.y1 = y1
+        
+    @property
+    def width(self):
+        return self.x1 - self.x0
+    
+    @property
+    def height(self):
+        return self.y1 - self.y0
+    
+    @property
+    def center_x(self):
+        return (self.x0 + self.x1) / 2
+    
+    @property
+    def center_y(self):
+        return (self.y0 + self.y1) / 2
+    
+    def overlaps(self, other):
+        """Check if this bbox overlaps with another."""
+        return not (self.x1 < other.x0 or self.x0 > other.x1 or 
+                   self.y1 < other.y0 or self.y0 > other.y1)
+    
+    def translate(self, dx, dy):
+        """Return a new bbox translated by dx, dy."""
+        return BBox(self.x0 + dx, self.y0 + dy, self.x1 + dx, self.y1 + dy)
+
+
+# COMPLETE REWRITE - Research-based greedy algorithm
+class BBox:
+    def __init__(self, x0, y0, x1, y1):
+        self.x0 = x0
+        self.y0 = y0
+        self.x1 = x1
+        self.y1 = y1
+    
+    def overlaps(self, other):
+        return not (self.x1 <= other.x0 or self.x0 >= other.x1 or 
+                   self.y1 <= other.y0 or self.y0 >= other.y1)
+
+
+def lines_cross(x1, y1, x2, y2, x3, y3, x4, y4):
+    """Check if line (x1,y1)-(x2,y2) crosses line (x3,y3)-(x4,y4)"""
+    def ccw(ax, ay, bx, by, cx, cy):
+        return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
+    
+    return (ccw(x1, y1, x3, y3, x4, y4) != ccw(x2, y2, x3, y3, x4, y4) and
+            ccw(x1, y1, x2, y2, x3, y3) != ccw(x1, y1, x2, y2, x4, y4))
+
+
+def smart_label_placement_v2(
+    labels_data: List[Tuple[float, float, str]],
+    axes_bbox: BBox,
+    fig,
+    ax,
+    renderer,
+    fixed_offset_pixels: float = 30,
+) -> List[Tuple[float, float, str, float, float, List[float]]]:
+    """
+    Research-based algorithm:
+    1. Sort by Y coordinate (tallest peaks first)
+    2. Place greedily without line crossings
+    3. Hard bounds enforcement
+    """
+    if not labels_data:
+        return []
+    
+    # Merge duplicates
+    from collections import defaultdict
+    symbol_groups = defaultdict(list)
+    for energy, spectrum_y, symbol in labels_data:
+        symbol_groups[symbol].append((energy, spectrum_y))
+    
+    merged_labels = []
+    for symbol, peaks in symbol_groups.items():
+        peaks.sort(key=lambda x: x[0])
+        groups = []
+        current_group = [peaks[0]]
+        
+        for i in range(1, len(peaks)):
+            if peaks[i][0] - current_group[-1][0] < 0.5:
+                current_group.append(peaks[i])
+            else:
+                groups.append(current_group)
+                current_group = [peaks[i]]
+        groups.append(current_group)
+        
+        for group in groups:
+            energies = [p[0] for p in group]
+            center_energy = sum(energies) / len(energies)
+            max_y = max(p[1] for p in group)
+            merged_labels.append((center_energy, max_y, symbol, energies))
+    
+    # KEY: Sort by Y coordinate (tallest first)
+    merged_labels.sort(key=lambda x: x[1], reverse=True)
+    
+    # Measure labels
+    label_specs = []
+    for center_energy, spectrum_y, symbol, peak_energies in merged_labels:
+        x_peak_disp, y_peak_disp = ax.transData.transform((center_energy, spectrum_y))
+        
+        temp = ax.text(0, 0, symbol, fontsize=7.5,
+                      bbox=dict(boxstyle='round,pad=0.35', facecolor='#b8f0b0'),
+                      ha='center', va='center', alpha=0)
+        fig.canvas.draw()
+        bbox = temp.get_window_extent(renderer=renderer)
+        temp.remove()
+        
+        label_specs.append({
+            'energy': center_energy,
+            'spectrum_y': spectrum_y,
+            'symbol': symbol,
+            'peak_energies': peak_energies,
+            'x_peak': x_peak_disp,
+            'y_peak': y_peak_disp,
+            'width': bbox.width + 8,
+            'height': bbox.height + 8
+        })
+    
+    # Greedy placement
+    placed = []
+    MIN_CLEARANCE = 25  # Minimum pixels above peak
+    MARGIN = 10
+    
+    for spec in label_specs:
+        x_peak = spec['x_peak']
+        y_peak = spec['y_peak']
+        w = spec['width']
+        h = spec['height']
+        
+        # Hard bounds
+        min_x = axes_bbox.x0 + MARGIN + w/2
+        max_x = axes_bbox.x1 - MARGIN - w/2
+        min_y = y_peak + MIN_CLEARANCE + h/2
+        max_y = axes_bbox.y1 - MARGIN - h/2
+        
+        # Ensure bounds are valid
+        if min_y > max_y or min_x > max_x:
+            print(f"WARNING: {spec['symbol']} cannot fit - bounds too tight")
+            continue
+        
+        # Try positions: start at fixed offset, spiral out
+        best_pos = None
+        
+        for y_try in range(int(min_y), int(max_y) + 1, 5):
+            for x_offset in [0, -15, 15, -30, 30, -45, 45]:
+                x_try = x_peak + x_offset
+                
+                # Check bounds
+                if x_try < min_x or x_try > max_x:
+                    continue
+                if y_try < min_y or y_try > max_y:
+                    continue
+                
+                # Check bbox overlap
+                test_bbox = BBox(x_try - w/2, y_try - h/2, x_try + w/2, y_try + h/2)
+                
+                has_overlap = False
+                for p in placed:
+                    if test_bbox.overlaps(p['bbox']):
+                        has_overlap = True
+                        break
+                
+                if has_overlap:
+                    continue
+                
+                # Check line crossing
+                has_crossing = False
+                for peak_e in spec['peak_energies']:
+                    px, py = ax.transData.transform((peak_e, spec['spectrum_y']))
+                    
+                    for p in placed:
+                        for prev_peak_e in p['peak_energies']:
+                            ppx, ppy = ax.transData.transform((prev_peak_e, p['spectrum_y']))
+                            
+                            if lines_cross(px, py, x_try, y_try, 
+                                         ppx, ppy, p['x'], p['y']):
+                                has_crossing = True
+                                break
+                        if has_crossing:
+                            break
+                    if has_crossing:
+                        break
+                
+                if not has_crossing:
+                    best_pos = (x_try, y_try)
+                    break
+            
+            if best_pos:
+                break
+        
+        # If no position found, force placement at peak
+        if not best_pos:
+            x_final = max(min_x, min(max_x, x_peak))
+            y_final = max(min_y, min(max_y, y_peak + fixed_offset_pixels))
+            print(f"WARNING: {spec['symbol']} forced placement (no valid position)")
+        else:
+            x_final, y_final = best_pos
+        
+        final_bbox = BBox(x_final - w/2, y_final - h/2, x_final + w/2, y_final + h/2)
+        
+        placed.append({
+            'energy': spec['energy'],
+            'spectrum_y': spec['spectrum_y'],
+            'symbol': spec['symbol'],
+            'peak_energies': spec['peak_energies'],
+            'x': x_final,
+            'y': y_final,
+            'bbox': final_bbox
+        })
+    
+    # Verify no overlaps
+    for i, p1 in enumerate(placed):
+        for j, p2 in enumerate(placed):
+            if i >= j:
+                continue
+            if p1['bbox'].overlaps(p2['bbox']):
+                print(f"ERROR: Overlap {p1['symbol']} vs {p2['symbol']}")
+    
+    # Return
+    return [(p['energy'], p['spectrum_y'], p['symbol'], p['x'], p['y'], p['peak_energies']) 
+            for p in placed]
+
+
+
 def create_edx_spectrum_plot(
     txt_path: Path,
     output_path: Optional[Path] = None,
@@ -181,6 +414,7 @@ def create_edx_spectrum_plot(
     y_max = max(counts) if counts else 1.0
     y_max = y_max if y_max > 0 else 1.0
 
+    # Create figure with proper margins for axis labels
     fig, ax = plt.subplots(figsize=(8.5, 5.0), dpi=150)
     fig.patch.set_facecolor("#1f4d7a")
     ax.set_facecolor("#1f4d7a")
@@ -191,17 +425,21 @@ def create_edx_spectrum_plot(
     label_edge_color = "#ffffff"
     label_line_color = "#ffffff"
 
+    # Plot spectrum
     ax.plot(energies, counts, color=spectrum_color, linewidth=1.4)
     ax.fill_between(energies, counts, 0, color=spectrum_color, alpha=0.38)
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(0, y_max * 1.05)
 
-    ax.set_xlabel("keV", color="white", fontsize=9)
-    ax.set_ylabel("cps/eV", color="white", fontsize=9)
-    ax.tick_params(colors="white", labelsize=8)
+    # Set axis labels with proper spacing
+    ax.set_xlabel("keV", color="white", fontsize=10, labelpad=2)
+    ax.set_ylabel("cps/eV", color="white", fontsize=10, labelpad=2)
+    ax.tick_params(colors="white", labelsize=8, pad=2)
+    
     for spine in ax.spines.values():
         spine.set_color("white")
 
+    # Collect element labels
     element_labels = []
     for element in parsed.get("elements", []):
         try:
@@ -215,99 +453,78 @@ def create_edx_spectrum_plot(
             continue
         element_labels.append((energy, symbol))
 
+    # Prepare labels data with spectrum y positions
+    labels_data = []
+    for energy, symbol in element_labels:
+        nearest = _nearest_spectrum_point(spectrum, energy)
+        if nearest:
+            _, spectrum_y = nearest
+            labels_data.append((energy, spectrum_y, symbol))
+    
+    # Adjust subplot margins BEFORE calculating positions
+    # Small margins to maximize plot area while ensuring axis labels are visible
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.10)
+    
+    # Initial rendering to get axes bbox
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    axes_bbox = ax.get_window_extent(renderer=renderer)
-    points_per_pixel = 72 / fig.dpi
-    default_offset_points = axes_bbox.height * 0.15 * points_per_pixel
-
-    used_labels = set()
-    placed_bboxes = []
-    last_center_x = axes_bbox.x0
-    for energy, symbol in sorted(element_labels, key=lambda item: item[0]):
-        if (energy, symbol) in used_labels:
-            continue
-        used_labels.add((energy, symbol))
-        nearest = _nearest_spectrum_point(spectrum, energy)
-        if not nearest:
-            continue
-        _, y_val = nearest
+    axes_bbox_raw = ax.get_window_extent(renderer=renderer)
+    axes_bbox = BBox(axes_bbox_raw.x0, axes_bbox_raw.y0, axes_bbox_raw.x1, axes_bbox_raw.y1)
+    
+    # Compute smart label positions - EXACTLY 10 pixels from peak to bottom of box
+    final_positions = smart_label_placement_v2(
+        labels_data,
+        axes_bbox,
+        fig,
+        ax,
+        renderer,
+        fixed_offset_pixels=25  # 25 pixels above peak
+    )
+    
+    # Draw labels and connector lines with minimal crossing
+    for center_energy, spectrum_y, symbol, label_x, label_y, peak_energies in final_positions:
+        # Draw connector lines from EACH peak to the label
+        for peak_energy in peak_energies:
+            # Get the point on the spectrum at this peak
+            nearest = _nearest_spectrum_point(spectrum, peak_energy)
+            if nearest:
+                peak_x, peak_y = nearest
+                
+                # Draw straight vertical line from peak to label
+                annotation = ax.annotate(
+                    '',  # No text on the line itself
+                    xy=(peak_x, peak_y),
+                    xytext=(label_x, label_y),
+                    xycoords='data',
+                    textcoords='figure pixels',
+                    arrowprops=dict(
+                        arrowstyle='-',
+                        color=label_line_color,
+                        linewidth=0.6,
+                        alpha=0.8,
+                    ),
+                )
+        
+        # Draw the label box (once for all peaks)
         annotation = ax.annotate(
             symbol,
-            xy=(energy, y_val),
-            xytext=(0, default_offset_points),
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=8,
+            xy=(center_energy, spectrum_y),
+            xytext=(label_x, label_y),
+            xycoords='data',
+            textcoords='figure pixels',
+            fontsize=7.5,
             color=label_text_color,
-            bbox={
-                "boxstyle": "round,pad=0.2",
-                "facecolor": label_fill_color,
-                "edgecolor": label_edge_color,
-                "linewidth": 0.8,
-                "alpha": 0.6,
-            },
-            arrowprops={
-                "arrowstyle": "-",
-                "color": label_line_color,
-                "linewidth": 0.8,
-            },
+            bbox=dict(
+                boxstyle='round,pad=0.35',
+                facecolor=label_fill_color,
+                edgecolor=label_edge_color,
+                linewidth=0.8,
+            ),
+            ha='center',
+            va='center',
         )
-
-        candidate_offsets = [(0, default_offset_points)]
-        vertical_steps = [0, 8, 16, 26, 38, 52, 68, 86]
-        horizontal_steps = [0, -14, 14, -26, 26, -38, 38]
-        for step in vertical_steps[1:]:
-            for x_offset in horizontal_steps:
-                candidate_offsets.append((x_offset, default_offset_points + step))
-
-        chosen_bbox = None
-        chosen_center_x = None
-        for x_offset, y_offset in candidate_offsets:
-            annotation.set_position((x_offset, y_offset))
-            bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
-            center_x = (bbox.x0 + bbox.x1) / 2
-            if center_x < last_center_x - 2:
-                continue
-            if bbox.y1 > axes_bbox.y1 or bbox.y0 < axes_bbox.y0:
-                continue
-            if bbox.x0 < axes_bbox.x0 or bbox.x1 > axes_bbox.x1:
-                continue
-            if any(bbox.overlaps(existing) for existing in placed_bboxes):
-                continue
-            chosen_bbox = bbox
-            chosen_center_x = center_x
-            break
-
-        if chosen_bbox is None:
-            annotation.set_position(candidate_offsets[-1])
-            chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
-            dx_pixels = 0.0
-            dy_pixels = 0.0
-            if chosen_bbox.x0 < axes_bbox.x0:
-                dx_pixels = axes_bbox.x0 - chosen_bbox.x0
-            elif chosen_bbox.x1 > axes_bbox.x1:
-                dx_pixels = axes_bbox.x1 - chosen_bbox.x1
-            if chosen_bbox.y0 < axes_bbox.y0:
-                dy_pixels = axes_bbox.y0 - chosen_bbox.y0
-            elif chosen_bbox.y1 > axes_bbox.y1:
-                dy_pixels = axes_bbox.y1 - chosen_bbox.y1
-            if dx_pixels or dy_pixels:
-                current_x, current_y = annotation.get_position()
-                annotation.set_position(
-                    (
-                        current_x + dx_pixels * points_per_pixel,
-                        current_y + dy_pixels * points_per_pixel,
-                    )
-                )
-                chosen_bbox = annotation.get_window_extent(renderer=renderer).expanded(1.05, 1.1)
-            chosen_center_x = (chosen_bbox.x0 + chosen_bbox.x1) / 2
-
-        placed_bboxes.append(chosen_bbox)
-        last_center_x = max(last_center_x, chosen_center_x or last_center_x)
-
-    fig.subplots_adjust(left=0.06, right=0.985, top=0.965, bottom=0.12)
+    
+    # Save the figure
     fig.savefig(output_path, format="png", facecolor=fig.get_facecolor())
     plt.close(fig)
 
