@@ -304,7 +304,7 @@ class GeneticLabelPlacer:
             
             if min_x > max_x or min_y > max_y:
                 x = spec['x_peak']
-                y = spec['y_peak'] + 30
+                y = spec['y_peak'] + 30 + h/2
             else:
                 x = random.uniform(min_x, max_x)
                 y = random.uniform(min_y, max_y)
@@ -354,7 +354,7 @@ class GeneticLabelPlacer:
         for gene in chromosome.genes:
             spec = self.label_specs[gene.label_id]
             ideal_x = spec['x_peak']
-            ideal_y = spec['y_peak'] + 30
+            ideal_y = spec['y_peak'] + 30 + (spec['height'] / 2)
             
             dx = gene.x - ideal_x
             dy = gene.y - ideal_y
@@ -362,6 +362,17 @@ class GeneticLabelPlacer:
             
             # Exponential penalty
             distance_penalty += (distance ** 1.5) * 0.5
+
+            # Strongly discourage unnecessary horizontal drift
+            # (vertical movement is preferred over x-movement)
+            distance_penalty += abs(dx) * 25.0
+
+            # Penalize excessive vertical lift (labels drifting too far up)
+            excess_y = gene.y - ideal_y
+            if excess_y > 25:
+                distance_penalty += (excess_y ** 2) * 3.0
+
+
         
         # 4. OUT OF BOUNDS PENALTY (massive)
         bounds_penalty = 0.0
@@ -379,7 +390,7 @@ class GeneticLabelPlacer:
             
             # Maximum distance constraint
             dx = gene.x - spec['x_peak']
-            dy = gene.y - (spec['y_peak'] + 30)
+            dy = gene.y - (spec['y_peak'] + 30 + (spec['height'] / 2))
             dist = math.sqrt(dx*dx + dy*dy)
             if dist > 300:
                 bounds_penalty += (dist - 300) * 50
