@@ -1187,7 +1187,7 @@ const previewForm = document.getElementById('preview_form');
         }
         if (aiCredentialProviders.has(provider)) {
             updateAiModalStatus(messages.providerKeyReady);
-            ensureAiModels(provider, aiModelSelect, updateAiModalStatus, null, { container: aiModelWrapper });
+            ensureAiModels(provider, aiModelSelect, updateAiModalStatus, getAiDefaultModel('regex', provider), { container: aiModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
@@ -1207,7 +1207,7 @@ const previewForm = document.getElementById('preview_form');
         }
         if (aiCredentialProviders.has(provider)) {
             updateAiParseModalStatus(messages.providerKeyReady);
-            ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, null, { container: aiParseModelWrapper });
+            ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, getAiDefaultModel('parse', provider), { container: aiParseModelWrapper });
             updateAiModalPlaceholders();
             return;
         }
@@ -1288,6 +1288,12 @@ const previewForm = document.getElementById('preview_form');
             });
         providerModelsRequest.set(provider, request);
         return request;
+    }
+
+    function getAiDefaultModel(key, provider) {
+        if (!key || !provider) return '';
+        const defaults = aiDefaultsState?.[key];
+        return defaults?.modelsByProvider?.[provider] || '';
     }
 
     function ensureAiModels(
