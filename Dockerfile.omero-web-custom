@@ -164,31 +164,6 @@ RUN set -euo pipefail; \
         cryptography>=42.0.0 \
         urllib3>=2.6.3
 
-# Enable OMERO.gallery in OMERO.web config
-# ---------------------------------------
-RUN set -euo pipefail; \
-    CFG="/opt/omero/web/config/omero-web.conf"; \
-    if [[ ! -f "${CFG}" ]]; then \
-        echo "ERROR: ${CFG} not found"; \
-        exit 1; \
-    fi; \
-    grep -q "OMEROWEB_APPS" "${CFG}" || echo "OMEROWEB_APPS = []" >> "${CFG}"; \
-    grep -q "omero_gallery" "${CFG}" || echo "OMEROWEB_APPS += ['omero_gallery']" >> "${CFG}"
-
-# Add Gallery to top navigation
-# -----------------------------
-RUN set -euo pipefail; \
-    CFG="/opt/omero/web/config/omero-web.conf"; \
-    grep -q "TOP_LINKS" "${CFG}" || echo "TOP_LINKS = []" >> "${CFG}"; \
-    grep -q "omero_gallery:index" "${CFG}" || cat >> "${CFG}" << 'EOF'
-
-TOP_LINKS += [{
-    'label': 'Gallery',
-    'url': 'omero_gallery:index',
-    'icon': 'fa-th',
-}]
-EOF
-
 # Drop privileges for runtime
 # ---------------------------
 USER omero-web
