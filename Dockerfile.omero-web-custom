@@ -111,7 +111,8 @@ RUN set -euo pipefail; \
         redis>=5.0.0 \
         django-redis>=5.4.0 \
         omero-fpbioimage \
-        omero-gallery; \
+        omero-gallery \
+        omero-parade; \
     chown -R omero-web:omero-web \
         "${SITE_PACKAGES}/omeroweb_omp_plugin" \
         "${SITE_PACKAGES}/omeroweb_upload" \
