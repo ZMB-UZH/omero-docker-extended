@@ -33,7 +33,21 @@ echo "[OMERO scripts] Waiting for OMERO.server to be fully ready..."
         </dev/null \
         >/dev/null 2>&1
 
-echo "[OMERO scripts] OMERO.server is ready"
+echo "[OMERO scripts] Waiting for Script service to be available..."
+
+until "${OMERO_BIN}" script list \
+        -s "${OMERO_HOST}" \
+        -p "${OMERO_PORT}" \
+        -u root \
+        -w "${ROOTPASS}" \
+        --sudo root \
+        </dev/null \
+        >/dev/null 2>&1
+do
+    sleep 2
+done
+
+echo "[OMERO scripts] Script service ready"
 
 echo "[OMERO scripts] Glacier2 is ready"
 
