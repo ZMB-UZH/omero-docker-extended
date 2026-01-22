@@ -53,14 +53,15 @@ RUN set -euo pipefail; \
         reportlab \
         markdown
 
-# Install Omero CLI plugins (render, metadata, duplicate)
-# -------------------------------------------------------
+# Install several Omero CLI plugins (official + unofficial)
+# ---------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         omero-cli-render \
         omero-metadata \
-        omero-cli-duplicate
+        omero-cli-duplicate \
+        omero-rdf
 
 # Install runtime diagnostics + git
 # ---------------------------------
