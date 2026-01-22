@@ -41,7 +41,6 @@ export OMERO_BIN
 export OMERO_HOST
 export OMERO_PORT
 export ROOTPASS
-export REGISTERED_SCRIPTS
 
 upload_one() {
     script="$1"
