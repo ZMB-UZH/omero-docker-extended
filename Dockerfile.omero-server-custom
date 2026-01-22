@@ -132,9 +132,9 @@ RUN set -euo pipefail; \
     echo "Found Export_CellProfiler_IDs.py at: ${SCRIPT_SRC}"; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts; \
     cp -f "${SCRIPT_SRC}" /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts/Export_CellProfiler_IDs.py; \
-    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts; \
-    find /opt/omero/server/OMERO.server/lib/scripts -type d -exec chmod 0755 {} \; \
-    find /opt/omero/server/OMERO.server/lib/scripts -type f -exec chmod 0644 {} \; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts && \
+    find /opt/omero/server/OMERO.server/lib/scripts -type d -exec chmod 0755 {} \; && \
+    find /opt/omero/server/OMERO.server/lib/scripts -type f -exec chmod 0644 {} \; && \
     rm -rf /tmp/biop-omero-scripts
 
 # Copy the Figure Export to PDF script file (root-owned, immutable)
