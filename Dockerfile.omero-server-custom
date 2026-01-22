@@ -67,7 +67,6 @@ RUN set -euo pipefail; \
         procps-ng \
         iproute \
         net-tools \
-        curl \
         lsof; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
