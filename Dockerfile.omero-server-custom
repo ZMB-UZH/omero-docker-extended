@@ -79,7 +79,7 @@ RUN set -euo pipefail; \
     echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_REF}"; \
     git clone --depth 1 --branch "${BIOP_OMERO_SCRIPTS_REF}" "${BIOP_OMERO_SCRIPTS_REPO}" /tmp/biop-omero-scripts; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts; \
-    cp -f /tmp/biop-omero-scripts/util_scripts/Export_CellProfiler_IDs.py \
+    cp -f /tmp/biop-omero-scripts/omero/util_scripts/Export_CellProfiler_IDs.py \
         /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts/Export_CellProfiler_IDs.py; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts; \
     chmod -R 755 /opt/omero/server/OMERO.server/lib/scripts; \
