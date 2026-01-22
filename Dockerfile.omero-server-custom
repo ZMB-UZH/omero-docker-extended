@@ -143,6 +143,13 @@ RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
 
+# Register official OMERO scripts on startup
+# ------------------------------------------
+COPY startup/60-register-official-scripts.sh /startup/60-register-official-scripts.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/60-register-official-scripts.sh; \
+    chmod 0555 /startup/60-register-official-scripts.sh
+
 # Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
 # secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
 # -------------------------------------------------------------------------
