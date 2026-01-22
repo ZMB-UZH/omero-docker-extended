@@ -2,27 +2,35 @@
 set -euo pipefail
 
 OMERO_BIN="/opt/omero/server/OMERO.server/bin/omero"
+OMERO_HOST="localhost"
+OMERO_PORT="4064"
 SCRIPTS_DIR="/opt/omero/server/OMERO.server/lib/scripts/omero"
 MAX_PARALLEL=4
 
-: "${OMERO_ROOT_PASSWORD:?OMERO_ROOT_PASSWORD must be set}"
+: "${ROOTPASS:?ROOTPASS must be set}"
 
-echo "[OMERO scripts] Waiting for Glacier2 to be ready..."
+echo "[OMERO scripts] Waiting for Glacier2 (Ice) to be ready..."
 
-until "${OMERO_BIN}" version \
+until "${OMERO_BIN}" admin status \
+        -s "${OMERO_HOST}" \
+        -p "${OMERO_PORT}" \
         -u root \
-        -w "${OMERO_ROOT_PASSWORD}" \
+        -w "${ROOTPASS}" \
         >/dev/null 2>&1
 do
     sleep 2
 done
 
+echo "[OMERO scripts] Glacier2 is ready"
+
 echo "[OMERO scripts] Collecting already registered scripts..."
 
 REGISTERED_SCRIPTS="$(
     "${OMERO_BIN}" script list \
+        -s "${OMERO_HOST}" \
+        -p "${OMERO_PORT}" \
         -u root \
-        -w "${OMERO_ROOT_PASSWORD}" \
+        -w "${ROOTPASS}" \
         --sudo root \
         | awk -F'|' '{print $2}' \
         | sed 's/^ *//;s/ *$//' \
@@ -30,7 +38,9 @@ REGISTERED_SCRIPTS="$(
 )"
 
 export OMERO_BIN
-export OMERO_ROOT_PASSWORD
+export OMERO_HOST
+export OMERO_PORT
+export ROOTPASS
 export REGISTERED_SCRIPTS
 
 upload_one() {
@@ -47,8 +57,10 @@ upload_one() {
     "${OMERO_BIN}" script upload \
         --official \
         --sudo root \
+        -s "${OMERO_HOST}" \
+        -p "${OMERO_PORT}" \
         -u root \
-        -w "${OMERO_ROOT_PASSWORD}" \
+        -w "${ROOTPASS}" \
         "${script}"
 }
 
