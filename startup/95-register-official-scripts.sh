@@ -9,18 +9,18 @@ MAX_PARALLEL=4
 
 : "${ROOTPASS:?ROOTPASS must be set}"
 
-echo "[OMERO scripts] Waiting for Glacier2 (Ice) to be ready..."
+echo "[OMERO scripts] Waiting for OMERO.server to be fully ready..."
 
-until "${OMERO_BIN}" login \
+"${OMERO_BIN}" admin status \
         -s "${OMERO_HOST}" \
         -p "${OMERO_PORT}" \
         -u root \
         -w "${ROOTPASS}" \
+        --wait \
         </dev/null \
         >/dev/null 2>&1
-do
-    sleep 2
-done
+
+echo "[OMERO scripts] OMERO.server is ready"
 
 echo "[OMERO scripts] Glacier2 is ready"
 
