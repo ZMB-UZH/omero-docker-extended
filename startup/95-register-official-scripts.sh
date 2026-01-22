@@ -11,11 +11,12 @@ MAX_PARALLEL=4
 
 echo "[OMERO scripts] Waiting for Glacier2 (Ice) to be ready..."
 
-until "${OMERO_BIN}" admin status \
+until "${OMERO_BIN}" login \
         -s "${OMERO_HOST}" \
         -p "${OMERO_PORT}" \
         -u root \
         -w "${ROOTPASS}" \
+        </dev/null \
         >/dev/null 2>&1
 do
     sleep 2
@@ -32,6 +33,7 @@ REGISTERED_SCRIPTS="$(
         -u root \
         -w "${ROOTPASS}" \
         --sudo root \
+        </dev/null \
         | awk -F'|' '{print $2}' \
         | sed 's/^ *//;s/ *$//' \
         | sed 's/\.py$//'
@@ -61,7 +63,8 @@ upload_one() {
         -p "${OMERO_PORT}" \
         -u root \
         -w "${ROOTPASS}" \
-        "${script}"
+        "${script}" \
+        </dev/null
 }
 
 export -f upload_one
