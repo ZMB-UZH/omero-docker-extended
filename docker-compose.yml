@@ -50,8 +50,8 @@ services:
     ulimits:
     # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
       nofile:
-        soft: 50000
-        hard: 50000
+        soft: 15000
+        hard: 15000
     healthcheck:
       test:
         [
