@@ -9,6 +9,15 @@ MAX_PARALLEL=4
 
 : "${ROOTPASS:?ROOTPASS must be set}"
 
+echo "[OMERO scripts] Waiting for OMERO.server JVM to start..."
+
+until pgrep -f "omero.server.Server" >/dev/null 2>&1
+do
+    sleep 2
+done
+
+echo "[OMERO scripts] OMERO.server JVM detected"
+
 echo "[OMERO scripts] Waiting for OMERO.server to be fully ready..."
 
 "${OMERO_BIN}" admin status \
