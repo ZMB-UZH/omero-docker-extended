@@ -113,6 +113,7 @@ RUN set -euo pipefail; \
         omero-fpbioimage \
         omero-gallery \
         omero-parade \
+        "zarr<3" \
         omero-web-zarr; \
     chown -R omero-web:omero-web \
         "${SITE_PACKAGES}/omeroweb_omp_plugin" \
