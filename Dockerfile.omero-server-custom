@@ -71,10 +71,10 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
-# Install official OMERO scripts (ome/omero-scripts, master)
-# ----------------------------------------------------------
+# Install official OMERO scripts (ome/omero-scripts)
+# --------------------------------------------------
 ARG OME_OMERO_SCRIPTS_REPO="https://github.com/ome/omero-scripts.git"
-ARG OME_OMERO_SCRIPTS_REF="master"
+ARG OME_OMERO_SCRIPTS_REF="develop" # Recommended branch: "develop"; change to "master" for old/stable scripts
 RUN set -euo pipefail; \
     echo "Installing official OMERO scripts from ${OME_OMERO_SCRIPTS_REPO} @ ${OME_OMERO_SCRIPTS_REF}"; \
     \
