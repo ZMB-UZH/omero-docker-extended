@@ -28,7 +28,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO web venv" >&2; \
+        echo "ERROR: Could not find valid Omero web venv" >&2; \
         exit 1; \
     fi
 
@@ -39,7 +39,7 @@ RUN set -euo pipefail; \
         dnf -y update --security || dnf -y update; \
     fi
 
-# Install build dependencies required for installing OMERO Python API (omero-py)
+# Install build dependencies required for installing Omero Python API (omero-py)
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler.
 # --------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
@@ -51,13 +51,13 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
-# Install OMERO Python API into OMERO.web venv (needed for BlitzGateway + TXT attachments)
-# IMPORTANT: Pin omero-py to match server stack (OMERO.server 5.6.x -> omero-py 5.21.2)
+# Install Omero Python API into Omero web venv (needed for BlitzGateway + TXT attachments)
+# IMPORTANT: Pin omero-py to match server stack (Omero server 5.6.x -> omero-py 5.21.2)
 # -------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO web venv" >&2; \
+        echo "ERROR: Could not find valid Omero web venv" >&2; \
         exit 1; \
     fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
@@ -151,7 +151,7 @@ RUN set -euo pipefail; \
     fi; \
     rm -f /tmp/logo.png*
 
-# Sync OMERO.web static + media files
+# Sync Omero.web static + media files
 # -----------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
