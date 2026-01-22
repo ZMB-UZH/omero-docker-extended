@@ -151,12 +151,14 @@ RUN set -euo pipefail; \
     fi; \
     rm -f /tmp/logo.png*
 
-# Collect Django static files
-# ---------------------------
+# Collect Django static files (MUST run as omero-web)
+# --------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
-    source "${VENV_DIR}/bin/activate"; \
-    omero web collectstatic --noinput
+    su -s /bin/bash omero-web -c "\
+        source \"${VENV_DIR}/bin/activate\" && \
+        omero web collectstatic --noinput \
+    "
 
 # Security hardening: upgrade selected Python tooling inside Omero web venv
 # WARNING:
