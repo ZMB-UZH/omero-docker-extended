@@ -112,7 +112,8 @@ RUN set -euo pipefail; \
         django-redis>=5.4.0 \
         omero-fpbioimage \
         omero-gallery \
-        omero-parade; \
+        omero-parade \
+        omero-web-zarr; \
     chown -R omero-web:omero-web \
         "${SITE_PACKAGES}/omeroweb_omp_plugin" \
         "${SITE_PACKAGES}/omeroweb_upload" \
@@ -131,7 +132,8 @@ RUN set -euo pipefail; \
         /opt/omero/web/OMERO.web/var/static/omero_figure \
         /opt/omero/web/OMERO.web/var/static/omeroweb_omp_plugin \
         /opt/omero/web/OMERO.web/var/static/omeroweb_upload \
-        /opt/omero/web/OMERO.web/var/static/omeroweb_admin_tools; \
+        /opt/omero/web/OMERO.web/var/static/omeroweb_admin_tools \
+        /opt/omero/web/OMERO.web/var/static/omero_web_zarr; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
 # Copy branding logo (skip cleanly if it doesn't exist)
