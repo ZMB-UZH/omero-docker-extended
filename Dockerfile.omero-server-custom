@@ -71,6 +71,45 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
+# Install official OMERO scripts (ome/omero-scripts, master)
+# ----------------------------------------------------------
+ARG OME_OMERO_SCRIPTS_REPO="https://github.com/ome/omero-scripts.git"
+ARG OME_OMERO_SCRIPTS_REF="master"
+RUN set -euo pipefail; \
+    echo "Installing official OMERO scripts from ${OME_OMERO_SCRIPTS_REPO} @ ${OME_OMERO_SCRIPTS_REF}"; \
+    \
+    rm -rf /tmp/ome-omero-scripts; \
+    git clone --depth 1 --branch "${OME_OMERO_SCRIPTS_REF}" \
+        "${OME_OMERO_SCRIPTS_REPO}" \
+        /tmp/ome-omero-scripts; \
+    \
+    if [[ ! -d /tmp/ome-omero-scripts/omero ]]; then \
+        echo "ERROR: Expected path 'omero/' not found in omero-scripts repo" >&2; \
+        echo "Repo layout:" >&2; \
+        (cd /tmp/ome-omero-scripts && find . -maxdepth 2 -type d -print) >&2 || true; \
+        exit 1; \
+    fi; \
+    \
+    mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero; \
+    \
+    echo "Copying official OMERO scripts into OMERO.server lib/scripts/omero"; \
+    cp -a /tmp/ome-omero-scripts/omero/. \
+        /opt/omero/server/OMERO.server/lib/scripts/omero/; \
+    \
+    if [[ ! -d /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts ]]; then \
+        echo "ERROR: figure_scripts not found after copy (expected from omero-scripts repo)" >&2; \
+        ls -la /opt/omero/server/OMERO.server/lib/scripts/omero >&2 || true; \
+        exit 1; \
+    fi; \
+    \
+    chown -R omero-server:omero-server \
+        /opt/omero/server/OMERO.server/lib/scripts/omero; \
+    \
+    find /opt/omero/server/OMERO.server/lib/scripts/omero -type d -exec chmod 0755 {} \; ; \
+    find /opt/omero/server/OMERO.server/lib/scripts/omero -type f -exec chmod 0644 {} \; ; \
+    \
+    rm -rf /tmp/ome-omero-scripts
+
 # Install BIOP OMERO script: Export_CellProfiler_IDs.py
 # -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
