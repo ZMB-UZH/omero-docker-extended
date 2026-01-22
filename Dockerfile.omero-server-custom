@@ -71,16 +71,28 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
-# Install BIOP OMERO script: util_scripts/Export_CellProfiler_IDs.py
-# ------------------------------------------------------------------
+# Install BIOP OMERO script: Export_CellProfiler_IDs.py
+# -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
 ARG BIOP_OMERO_SCRIPTS_REF="main"
 RUN set -euo pipefail; \
     echo "Installing BIOP OMERO scripts from ${BIOP_OMERO_SCRIPTS_REPO} @ ${BIOP_OMERO_SCRIPTS_REF}"; \
+    rm -rf /tmp/biop-omero-scripts; \
     git clone --depth 1 --branch "${BIOP_OMERO_SCRIPTS_REF}" "${BIOP_OMERO_SCRIPTS_REPO}" /tmp/biop-omero-scripts; \
+    \
+    SCRIPT_SRC="$(find /tmp/biop-omero-scripts -type f -name 'Export_CellProfiler_IDs.py' -print -quit)"; \
+    if [[ -z "${SCRIPT_SRC}" ]]; then \
+        echo "ERROR: Export_CellProfiler_IDs.py not found anywhere in the cloned BIOP repo." >&2; \
+        echo "Repo top-level layout is (FYI):" >&2; \
+        (cd /tmp/biop-omero-scripts && find . -maxdepth 2 -type d -print) >&2 || true; \
+        echo "Nearest matches (filenames containing 'CellProfiler'):" >&2; \
+        (cd /tmp/biop-omero-scripts && find . -type f -iname '*cellprofiler*' -print) >&2 || true; \
+        exit 1; \
+    fi; \
+    \
+    echo "Found Export_CellProfiler_IDs.py at: ${SCRIPT_SRC}"; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts; \
-    cp -f /tmp/biop-omero-scripts/omero/util_scripts/Export_CellProfiler_IDs.py \
-        /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts/Export_CellProfiler_IDs.py; \
+    cp -f "${SCRIPT_SRC}" /opt/omero/server/OMERO.server/lib/scripts/omero/util_scripts/Export_CellProfiler_IDs.py; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts; \
     chmod -R 755 /opt/omero/server/OMERO.server/lib/scripts; \
     rm -rf /tmp/biop-omero-scripts
