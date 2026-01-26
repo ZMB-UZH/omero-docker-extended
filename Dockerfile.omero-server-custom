@@ -152,7 +152,7 @@ RUN set -euo pipefail; \
 
 # Copy the Figure Export to PDF script file (root-owned, immutable)
 # -----------------------------------------------------------------
-COPY install-figure-script.sh /startup/55-install-figure-script.sh
+COPY startup/55-install-figure-script.sh /startup/55-install-figure-script.sh
 RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
