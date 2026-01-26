@@ -86,7 +86,7 @@ RUN set -euo pipefail; \
 
 # Install Omero downloader
 # ------------------------
-ARG OMERO_DOWNLOADER_VERSION="0.3.3"
+ARG OMERO_DOWNLOADER_VERSION
 ARG OMERO_DOWNLOADER_URL="https://github.com/ome/omero-downloader/releases/download/v${OMERO_DOWNLOADER_VERSION}/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}-release.zip"
 RUN set -euo pipefail; \
     echo "Installing OMERO.downloader ${OMERO_DOWNLOADER_VERSION}"; \
