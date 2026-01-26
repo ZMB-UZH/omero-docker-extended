@@ -70,6 +70,7 @@ RUN set -euo pipefail; \
         dnf -y update --security || dnf -y update; \
     fi; \
     dnf -y install \
+        --allowerasing \
         --setopt=install_weak_deps=False \
         --setopt=tsflags=nodocs \
         --nodocs \
