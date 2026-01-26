@@ -84,6 +84,14 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
+# Prepare writable paths for startup-installed tools
+# -------------------------------------------------
+RUN set -euo pipefail; \
+    mkdir -p /opt/omero/downloader; \
+    chown -R omero-server:omero-server /opt/omero/downloader; \
+    chgrp omero-server /usr/local/bin; \
+    chmod 0775 /usr/local/bin
+
 # Install official OMERO scripts (ome/omero-scripts)
 # --------------------------------------------------
 ARG OME_OMERO_SCRIPTS_REPO="https://github.com/ome/omero-scripts.git"
