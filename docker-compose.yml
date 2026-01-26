@@ -33,6 +33,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.omero-server-custom
+      args:
+        OMERO_DOWNLOADER_VERSION: ${OMERO_DOWNLOADER_VERSION:-0.3.3}
     restart: unless-stopped
     depends_on:
       database:
