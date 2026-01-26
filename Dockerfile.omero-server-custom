@@ -172,6 +172,20 @@ RUN set -euo pipefail; \
     chown root:root /startup/50-install-omero-downloader.sh; \
     chmod 0555 /startup/50-install-omero-downloader.sh
 
+# Install ImarisConvertBioformats at startup
+# ------------------------------------------
+COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/51-install-imarisconvert.sh; \
+    chmod 0555 /startup/51-install-imarisconvert.sh
+
+# Copy IMS conversion script to Omero scripts directory
+# -----------------------------------------------------
+COPY Convert_To_IMS.py /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py
+RUN set -euo pipefail; \
+    chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py; \
+    chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py
+
 # Register official OMERO scripts AFTER OMERO.server startup
 # ----------------------------------------------------------
 COPY startup/99-register-official-scripts.sh /startup/99-register-official-scripts.sh
