@@ -73,13 +73,30 @@ RUN set -euo pipefail; \
         --setopt=install_weak_deps=False \
         --setopt=tsflags=nodocs \
         --nodocs \
+        curl \
         git \
         procps-ng \
         iproute \
         net-tools \
-        lsof; \
+        lsof \
+        unzip; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
+
+# Install OMERO.downloader (bulk download client)
+# ------------------------------------------------
+ARG OMERO_DOWNLOADER_VERSION="0.3.3"
+ARG OMERO_DOWNLOADER_URL="https://github.com/ome/omero-downloader/releases/download/v${OMERO_DOWNLOADER_VERSION}/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}-release.zip"
+RUN set -euo pipefail; \
+    echo "Installing OMERO.downloader ${OMERO_DOWNLOADER_VERSION}"; \
+    mkdir -p /opt/omero/downloader; \
+    curl -fsSL "${OMERO_DOWNLOADER_URL}" -o /tmp/omero-downloader.zip; \
+    unzip -q /tmp/omero-downloader.zip -d /tmp; \
+    cp -a "/tmp/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}/." /opt/omero/downloader/; \
+    chmod 0755 /opt/omero/downloader/download.sh; \
+    ln -sf /opt/omero/downloader/download.sh /usr/local/bin/omero-downloader; \
+    chown -R omero-server:omero-server /opt/omero/downloader; \
+    rm -rf /tmp/omero-downloader.zip "/tmp/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}"
 
 # Install official OMERO scripts (ome/omero-scripts)
 # --------------------------------------------------
