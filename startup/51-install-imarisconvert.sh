@@ -18,37 +18,46 @@ fi
 
 echo "Installing ImarisConvertBioformats ${TARGET_VERSION}..."
 
-mkdir -p "${INSTALL_DIR}"
 cd /tmp
 
-dnf install -y cmake gcc gcc-c++ make git java-11-openjdk-devel boost-devel hdf5-devel zlib-devel lz4-devel freeimage-devel
-
+# Clone ImarisConvertBioformats
 git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git
 cd ImarisConvertBioformats
 
+# Download bioformats jar
 mkdir -p bioformats
-curl -L "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" -o bioformats/bioformats_package.jar
+curl -L "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" \
+    -o bioformats/bioformats_package.jar
 
+# Clone ImarisWriter
 cd ..
 git clone --depth 1 https://github.com/imaris/ImarisWriter.git
 mv ImarisWriter ImarisConvertBioformats/
 
+# Build
 cd ImarisConvertBioformats/ImarisConvertBioformats
 mkdir build
 cd build
 
-cmake .. -DCMAKE_BUILD_TYPE=Release -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
+    -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk
 
 make -j$(nproc)
 make install
 
+# Copy binary to install directory
 cp -f ../build/ImarisConvertBioformats "${INSTALL_DIR}/"
 chmod +x "${INSTALL_DIR}/ImarisConvertBioformats"
 
+# Create symlink
 ln -sf "${INSTALL_DIR}/ImarisConvertBioformats" /usr/local/bin/imarisconvert
 
+# Mark version
 echo "${TARGET_VERSION}" > "${VERSION_FILE}"
 
+# Cleanup
 cd /
 rm -rf /tmp/ImarisConvertBioformats /tmp/ImarisWriter
 
