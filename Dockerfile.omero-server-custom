@@ -80,7 +80,17 @@ RUN set -euo pipefail; \
         iproute \
         net-tools \
         lsof \
-        unzip; \
+        unzip \
+        cmake \
+        gcc \
+        gcc-c++ \
+        make \
+        java-11-openjdk-devel \
+        boost-devel \
+        hdf5-devel \
+        zlib-devel \
+        lz4-devel \
+        freeimage-devel; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
