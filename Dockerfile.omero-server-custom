@@ -88,7 +88,9 @@ RUN set -euo pipefail; \
 # --------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/downloader; \
+    mkdir -p /opt/omero/imarisconvert; \
     chown -R omero-server:omero-server /opt/omero/downloader; \
+    chown -R omero-server:omero-server /opt/omero/imarisconvert; \
     chgrp omero-server /usr/local/bin; \
     chmod 0775 /usr/local/bin
 
