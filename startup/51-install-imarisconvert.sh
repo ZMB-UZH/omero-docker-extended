@@ -39,10 +39,20 @@ cd ImarisConvertBioformats/ImarisConvertBioformats
 mkdir build
 cd build
 
+# Find FreeImage library
+FREEIMAGE_LIB=$(find /usr/lib64 /usr/lib -name "libfreeimage.so*" 2>/dev/null | head -1)
+if [[ -z "${FREEIMAGE_LIB}" ]]; then
+    echo "ERROR: FreeImage library not found!"
+    exit 1
+fi
+echo "Found FreeImage library: ${FREEIMAGE_LIB}"
+
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
-    -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk
+    -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk \
+    -DFreeImage_ROOT=/usr \
+    -DFreeImage_LIBRARIES="${FREEIMAGE_LIB}"
 
 make -j$(nproc)
 make install
