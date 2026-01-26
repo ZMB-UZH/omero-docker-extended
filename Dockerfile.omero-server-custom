@@ -85,7 +85,7 @@ RUN set -euo pipefail; \
     rm -rf /var/cache/dnf /var/tmp/*
 
 # Prepare writable paths for startup-installed tools
-# -------------------------------------------------
+# --------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/downloader; \
     chown -R omero-server:omero-server /opt/omero/downloader; \
