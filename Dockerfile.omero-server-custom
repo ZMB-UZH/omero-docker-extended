@@ -83,8 +83,8 @@ RUN set -euo pipefail; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
-# Install OMERO.downloader (bulk download client)
-# ------------------------------------------------
+# Install Omero downloader
+# ------------------------
 ARG OMERO_DOWNLOADER_VERSION="0.3.3"
 ARG OMERO_DOWNLOADER_URL="https://github.com/ome/omero-downloader/releases/download/v${OMERO_DOWNLOADER_VERSION}/OMERO.downloader-${OMERO_DOWNLOADER_VERSION}-release.zip"
 RUN set -euo pipefail; \
