@@ -11,8 +11,8 @@ USER root
 # ---------------------------------------------
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Optional: enable OS package security updates at build time.
-# -----------------------------------------------------------
+# Optional: enable OS package security updates at build time
+# ----------------------------------------------------------
 ARG APPLY_DNF_UPDATES=1
 
 # Basic hardening for pip (no behavior change expected)
@@ -170,29 +170,29 @@ RUN set -euo pipefail; \
     find /opt/omero/server/OMERO.server/lib/scripts -type f -exec chmod 0644 {} \; && \
     rm -rf /tmp/biop-omero-scripts
 
-# Copy the Figure Export to PDF script file (root-owned, immutable)
-# -----------------------------------------------------------------
+# Copy the Figure Export to PDF script file
+# -----------------------------------------
 COPY startup/55-install-figure-script.sh /startup/55-install-figure-script.sh
 RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
 
-# Install OMERO.downloader at startup (version from env)
-# ------------------------------------------------------
+# Install Omero downloader
+# ------------------------
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 RUN set -euo pipefail; \
     chown root:root /startup/50-install-omero-downloader.sh; \
     chmod 0555 /startup/50-install-omero-downloader.sh
 
-# Install ImarisConvertBioformats at startup
-# ------------------------------------------
+# Install ImarisConvertBioformats
+# -------------------------------
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
     chown root:root /startup/51-install-imarisconvert.sh; \
     chmod 0555 /startup/51-install-imarisconvert.sh
 
-# Pre-configure library path for ImarisConvert
-# --------------------------------------------
+# Pre-configure library path for ImarisConvertBioformats
+# ------------------------------------------------------
 RUN set -euo pipefail; \
     echo "/opt/omero/imarisconvert" > /etc/ld.so.conf.d/imarisconvert.conf; \
     ldconfig
@@ -208,15 +208,15 @@ RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py; \
     chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py
 
-# Register official OMERO scripts AFTER OMERO.server startup
+# Register official Omero scripts AFTER Omero server startup
 # ----------------------------------------------------------
 COPY startup/99-register-official-scripts.sh /startup/99-register-official-scripts.sh
 RUN set -euo pipefail; \
     chown root:root /startup/99-register-official-scripts.sh; \
     chmod 0555 /startup/99-register-official-scripts.sh
 
-# Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
-# secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
+# Ensure Omero SSL cert contains SAN DNS:omeroserver (required for
+# secure BlitzGateway from Omero web when connecting to host "omeroserver")
 # -------------------------------------------------------------------------
 COPY startup/omero-server.sh /startup/05-omero-cert-sans.sh
 RUN set -euo pipefail; \
@@ -224,7 +224,7 @@ RUN set -euo pipefail; \
     chmod 0555 /startup/05-omero-cert-sans.sh
 
 # Bootstrap job-service user (auto-create if missing)
-# MUST run AFTER OMERO.server (Glacier2) is up
+# MUST run AFTER Omero server (Glacier2) is up
 # --------------------------------------------
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
