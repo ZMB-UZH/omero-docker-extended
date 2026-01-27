@@ -148,6 +148,13 @@ def convert_to_ims(input_file, output_file):
         ld_parts.append(IMARISCONVERT_INSTALL_DIR)
         env["LD_LIBRARY_PATH"] = ":".join([p for p in ld_parts if p])
 
+        # Force Bio-Formats onto the Java classpath (covers launchers that rely on CLASSPATH).
+        # Preserve any existing CLASSPATH by appending.
+        if env.get("CLASSPATH"):
+            env["CLASSPATH"] = jar_path + os.pathsep + env["CLASSPATH"]
+        else:
+            env["CLASSPATH"] = jar_path
+
         # Run from the REAL binary directory (not /usr/local/bin) to match any internal
         # "find files relative to executable" logic.
         converter_dir = os.path.dirname(converter_path)
