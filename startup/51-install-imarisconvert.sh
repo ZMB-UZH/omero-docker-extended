@@ -71,6 +71,12 @@ cp -f ../../fileiobioformats/build/*.so* "${INSTALL_DIR}/" 2>/dev/null || true
 cp -f ../../ImarisWriter/build/*.so* "${INSTALL_DIR}/" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/ImarisConvertBioformats"
 
+# Copy Bio-Formats runtime into install directory.
+# ImarisConvertBioformats expects to find the Bio-Formats jar at runtime.
+mkdir -p "${INSTALL_DIR}/bioformats"
+cp -f "../../bioformats/bioformats_package.jar" "${INSTALL_DIR}/bioformats/bioformats_package.jar"
+chmod 0644 "${INSTALL_DIR}/bioformats/bioformats_package.jar"
+
 # Create symlink
 ln -sf "${INSTALL_DIR}/ImarisConvertBioformats" /usr/local/bin/imarisconvert
 
