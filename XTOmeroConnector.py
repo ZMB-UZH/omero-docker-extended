@@ -430,6 +430,45 @@ class OMEROWebClient:
                 continue
 
         return None
+
+    def download_ims_export(self, image_id, output_dir, fallback_name=None):
+        """Download IMS export via the Omero.web Imaris connector endpoint."""
+        import urllib.request
+        import urllib.error
+
+        os.makedirs(output_dir, exist_ok=True)
+
+        url = f"{self.base_url}/omeroweb_imaris_connector/imaris-export/?image={image_id}"
+
+        try:
+            req = urllib.request.Request(url)
+            if hasattr(self, 'csrf_token'):
+                req.add_header('X-CSRFToken', self.csrf_token)
+
+            response = self.opener.open(req, timeout=3600)
+            content_type = response.headers.get('Content-Type', '')
+            content_disposition = response.headers.get('Content-Disposition', '')
+            data = response.read()
+
+            if self._is_html_response(content_type, data):
+                raise RuntimeError(
+                    "IMS export failed: server returned HTML instead of the file. "
+                    "Check the OMERO.web URL/port, credentials, and HTTPS setting."
+                )
+
+            filename = self._extract_filename(content_disposition)
+            if not filename:
+                filename = fallback_name or f"img_{image_id}.ims"
+
+            file_path = os.path.join(output_dir, filename)
+            with open(file_path, 'wb') as f:
+                f.write(data)
+            return file_path
+        except urllib.error.HTTPError as e:
+            print(f"IMS export error ({e.code}) for {url}: {e.reason}")
+        except Exception as e:
+            print(f"IMS export error for {url}: {e}")
+        return None
     
     def list_projects(self):
         """List all projects."""
@@ -741,68 +780,21 @@ class OMEROBrowserDialog:
     
     def _load_worker(self, img):
         try:
-            self._set_status(f"Checking server-side IMS for {img['name']}...", "#fff3cd")
-            
+            self._set_status(f"Exporting IMS for {img['name']}...", "#fff3cd")
+
             # Download directory
             download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
             os.makedirs(download_dir, exist_ok=True)
-            
-            ims_annotation_id = self.client.find_converted_ims_annotation(img['id'])
 
-            if not ims_annotation_id:
-                self._set_status("Submitting server conversion job...", "#fff3cd")
-
-                script_id = self.client.find_script_id("Convert_To_IMS.py")
-                if not script_id:
-                    raise RuntimeError("Convert_To_IMS.py script not found on the server.")
-
-                run_response = self.client.run_script(script_id, {"Image_ID": img['id']})
-                if not run_response:
-                    raise RuntimeError("Failed to start server-side IMS conversion.")
-
-                job_id = (
-                    run_response.get("job_id")
-                    or run_response.get("jobId")
-                    or run_response.get("id")
-                )
-                if not job_id:
-                    raise RuntimeError("Server did not return a conversion job id.")
-
-                self._set_status("Waiting for server conversion to finish...", "#fff3cd")
-                activity = self.client.poll_activity(job_id, timeout=3600, interval=5)
-                if not activity:
-                    raise RuntimeError("Timed out waiting for server conversion.")
-
-                output = (
-                    activity.get("outputs")
-                    or activity.get("output")
-                    or activity.get("results")
-                    or activity.get("result")
-                    or {}
-                )
-                if isinstance(output, dict):
-                    file_ann = output.get("File_Annotation") or output.get("file_annotation")
-                    if isinstance(file_ann, dict):
-                        ims_annotation_id = file_ann.get("value") or file_ann.get("id")
-                    elif isinstance(file_ann, (int, str)):
-                        ims_annotation_id = file_ann
-
-            if not ims_annotation_id:
-                self._set_status("Checking for IMS file annotation...", "#fff3cd")
-                ims_annotation_id = self.client.find_converted_ims_annotation(img['id'])
-
-            if not ims_annotation_id:
-                raise RuntimeError("IMS conversion did not produce a file annotation.")
-
-            self._set_status("Downloading converted IMS...", "#fff3cd")
-            downloaded_file = self.client.download_file_annotation(
-                ims_annotation_id,
+            self._set_status("Running server-side IMS export...", "#fff3cd")
+            downloaded_file = self.client.download_ims_export(
+                img['id'],
                 download_dir,
                 fallback_name=f"img_{img['id']}.ims"
             )
             
             if not downloaded_file or not os.path.exists(downloaded_file):
-                raise RuntimeError("Failed to download image from OMERO.")
+                raise RuntimeError("Failed to download IMS export from OMERO.")
 
             if not is_ims_file(downloaded_file):
                 raise RuntimeError(
