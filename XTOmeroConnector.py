@@ -247,10 +247,19 @@ class OMEROWebClient:
 
     def list_datasets(self, project_id):
         """List datasets in a project."""
+        data = self._api_request(f"m/projects/{project_id}/datasets/")
+        if data:
+            datasets = data.get('data') or []
+            if datasets:
+                return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
         data = self._api_request(f"m/projects/{project_id}/")
         if not data:
             return []
-        datasets = data.get('data', {}).get('Datasets') or []
+        datasets = (
+            data.get('data', {}).get('Datasets')
+            or data.get('data', {}).get('datasets')
+            or []
+        )
         return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
 
     def list_images(self, dataset_id):
@@ -338,11 +347,11 @@ class OMEROWebClient:
             
             # Look for File_Annotation in outputs
             file_annotation_id = None
-            for key in ['File_Annotation', 'file_annotation', 'FileAnnotation']:
+            for key in ['File_Annotation', 'file_annotation', 'FileAnnotation', 'File_Annotation_Id']:
                 value = outputs.get(key)
                 if value:
                     if isinstance(value, dict):
-                        file_annotation_id = value.get('value') or value.get('id')
+                        file_annotation_id = value.get('value') or value.get('id') or value.get('@id')
                     else:
                         file_annotation_id = value
                     break
