@@ -29,39 +29,51 @@ def get_original_file_path(conn, image):
 
 def convert_to_ims(input_file, output_file):
     try:
-        converter = shutil.which("imarisconvert")
-        if not converter:
-            converter = "/opt/omero/imarisconvert/ImarisConvertBioformats"
-        
-        if not os.path.exists(converter):
-            print("ERROR: ImarisConvertBioformats not found!")
-            return False
-        
-        cmd = [converter, "-i", input_file, "-o", output_file]
-        
+        tools_dir = os.path.join(os.path.dirname(__file__), "tools")
+        os.makedirs(tools_dir, exist_ok=True)
+
+        bioformats_jar = os.path.join(tools_dir, "bioformats_package.jar")
+        bioformats_url = (
+            "https://downloads.openmicroscopy.org/bio-formats/7.1.0/"
+            "artifacts/bioformats_package.jar"
+        )
+
+        if not os.path.exists(bioformats_jar):
+            print("Bio-Formats not found, downloading automatically...")
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(bioformats_url, bioformats_jar)
+            except Exception as e:
+                print(f"ERROR: Failed to download Bio-Formats: {e}")
+                return False
+
+        cmd = [
+            "java",
+            "-Xmx16G",
+            "-cp", bioformats_jar,
+            "com.bitplane.imaris.convert.ImarisConvert",
+            "-i", input_file,
+            "-o", output_file
+        ]
+
         print(f"Running: {' '.join(cmd)}")
-        
-        # Set LD_LIBRARY_PATH to find shared libraries
-        env = os.environ.copy()
-        env['LD_LIBRARY_PATH'] = '/opt/omero/imarisconvert:/usr/lib/jvm/java-11-openjdk/lib:/usr/lib/jvm/java-11-openjdk/lib/server'
-        
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,
-            env=env  # Add this!
+            timeout=600
         )
-        
+
         if result.returncode != 0:
-            print(f"Conversion failed!")
+            print("Conversion failed!")
             print(f"STDOUT: {result.stdout}")
             print(f"STDERR: {result.stderr}")
             return False
-        
-        print(f"Conversion successful!")
+
+        print("Conversion successful!")
         return os.path.exists(output_file)
-        
+
     except Exception as e:
         print(f"Conversion error: {e}")
         return False
