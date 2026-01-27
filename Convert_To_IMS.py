@@ -120,7 +120,8 @@ def convert_to_ims(input_file, output_file):
         # Prefer the binary installed by startup/51-install-imarisconvert.sh
         converter = shutil.which("imarisconvert")
         if converter and os.path.exists(converter):
-            converter_path = converter
+            # IMPORTANT: resolve symlink (/usr/local/bin/imarisconvert -> /opt/omero/imarisconvert/ImarisConvertBioformats)
+            converter_path = os.path.realpath(converter)
         else:
             converter_path = os.path.join(IMARISCONVERT_INSTALL_DIR, "ImarisConvertBioformats")
 
@@ -146,14 +147,16 @@ def convert_to_ims(input_file, output_file):
         ld_parts.append(IMARISCONVERT_INSTALL_DIR)
         env["LD_LIBRARY_PATH"] = ":".join([p for p in ld_parts if p])
 
-        # Run from the install directory so relative lookups (e.g. bioformats/bioformats_package.jar) work.
+        # Run from the REAL binary directory to match any internal "find jars relative to executable" logic.
+        converter_dir = os.path.dirname(converter_path)
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=DEFAULT_TIMEOUT_SECONDS,
             env=env,
-            cwd=IMARISCONVERT_INSTALL_DIR
+            cwd=converter_dir
         )
 
         if result.returncode != 0:
