@@ -32,19 +32,36 @@ def convert_to_ims(input_file, output_file):
         converter = shutil.which("imarisconvert")
         if not converter:
             converter = "/opt/omero/imarisconvert/ImarisConvertBioformats"
+        
         if not os.path.exists(converter):
             print("ERROR: ImarisConvertBioformats not found!")
             return False
+        
         cmd = [converter, "-i", input_file, "-o", output_file]
+        
         print(f"Running: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        
+        # Set LD_LIBRARY_PATH to find shared libraries
+        env = os.environ.copy()
+        env['LD_LIBRARY_PATH'] = '/opt/omero/imarisconvert:/usr/lib/jvm/java-11-openjdk/lib:/usr/lib/jvm/java-11-openjdk/lib/server'
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env  # Add this!
+        )
+        
         if result.returncode != 0:
             print(f"Conversion failed!")
             print(f"STDOUT: {result.stdout}")
             print(f"STDERR: {result.stderr}")
             return False
+        
         print(f"Conversion successful!")
         return os.path.exists(output_file)
+        
     except Exception as e:
         print(f"Conversion error: {e}")
         return False
