@@ -3,6 +3,7 @@
 from omero.gateway import BlitzGateway
 from omero.rtypes import rstring
 from omero import scripts
+import omero.rtypes
 import os
 import subprocess
 import shutil
@@ -292,9 +293,45 @@ def run_script():
         conn = BlitzGateway(client_obj=client)
         success, message, export_path = run_conversion(conn, image_id)
         client.setOutput("Message", rstring(message))
-        if success and export_path:
-            client.setOutput("Export_Path", rstring(export_path))
-            client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+        
+        if success and export_path and os.path.exists(export_path):
+            # Attach the IMS file as a FileAnnotation to the image
+            # This makes it downloadable from the Activities panel
+            try:
+                from omero.model import FileAnnotationI, OriginalFileI
+                from omero.gateway import FileAnnotationWrapper
+                
+                image = conn.getObject("Image", image_id)
+                if image:
+                    # Create file annotation
+                    file_ann = conn.createFileAnnfromLocalFile(
+                        export_path,
+                        mimetype="application/octet-stream",
+                        ns="omero.export.ims",
+                        desc=f"IMS export of {image.getName()}"
+                    )
+                    
+                    # Link to image
+                    image.linkAnnotation(file_ann)
+                    
+                    # Return the file annotation ID so client can download it
+                    client.setOutput("File_Annotation", omero.rtypes.rlong(file_ann.getId()))
+                    client.setOutput("Export_Path", rstring(export_path))
+                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+                    
+                    print(f"Attached file annotation {file_ann.getId()} to image {image_id}")
+                else:
+                    print(f"WARNING: Could not retrieve image {image_id} to attach file")
+                    client.setOutput("Export_Path", rstring(export_path))
+                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+            except Exception as e:
+                print(f"WARNING: Failed to attach file annotation: {e}")
+                import traceback
+                traceback.print_exc()
+                # Still return the path even if attachment fails
+                client.setOutput("Export_Path", rstring(export_path))
+                client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+        
     except Exception as e:
         client.setOutput("Message", rstring(f"Script error: {e}"))
         import traceback
