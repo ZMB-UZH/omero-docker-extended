@@ -96,6 +96,55 @@ def _ensure_bioformats_jar(install_dir):
     return jar_path
 
 
+def _get_voxel_size_from_image(image):
+    """
+    Return voxel sizes (vx, vy, vz) in micrometers as floats.
+    ImarisConvert fails if any axis has voxel size <= 0, so we ensure safe defaults.
+
+    Fallback policy (minimal, safe):
+      - If X missing/<=0 -> 1.0
+      - If Y missing/<=0 -> X
+      - If Z missing/<=0 -> X  (common for single-plane / missing Z metadata)
+    """
+    vx = None
+    vy = None
+    vz = None
+
+    try:
+        px = image.getPrimaryPixels()
+        if px:
+            psx = px.getPhysicalSizeX()
+            psy = px.getPhysicalSizeY()
+            psz = px.getPhysicalSizeZ()
+
+            if psx is not None:
+                try:
+                    vx = float(psx.getValue())
+                except Exception:
+                    vx = None
+            if psy is not None:
+                try:
+                    vy = float(psy.getValue())
+                except Exception:
+                    vy = None
+            if psz is not None:
+                try:
+                    vz = float(psz.getValue())
+                except Exception:
+                    vz = None
+    except Exception:
+        vx = vy = vz = None
+
+    if vx is None or vx <= 0:
+        vx = 1.0
+    if vy is None or vy <= 0:
+        vy = vx
+    if vz is None or vz <= 0:
+        vz = vx
+
+    return vx, vy, vz
+
+
 def get_original_file_path(conn, image):
     try:
         fileset = image.getFileset()
@@ -115,12 +164,12 @@ def get_original_file_path(conn, image):
         return None
 
 
-def convert_to_ims(input_file, output_file):
+def convert_to_ims(image, input_file, output_file):
     try:
         # Prefer the binary installed by startup/51-install-imarisconvert.sh
         converter = shutil.which("imarisconvert")
         if converter and os.path.exists(converter):
-            # IMPORTANT: /usr/local/bin/imarisconvert is a symlink in this project.
+            # IMPORTANT: /usr/local/bin/imarisconvert may be a symlink or wrapper.
             # Resolve to the real binary so ImarisConvertBioformats can find its runtime files.
             converter_path = os.path.realpath(converter)
         else:
@@ -136,7 +185,17 @@ def convert_to_ims(input_file, output_file):
             print("ERROR: Bio-Formats jar could not be ensured. Aborting conversion.")
             return False
 
-        cmd = [converter_path, "-i", input_file, "-o", output_file]
+        # Ensure voxel size is valid for ImarisConvert (it fails if any axis is 0).
+        vsx, vsy, vsz = _get_voxel_size_from_image(image)
+
+        cmd = [
+            converter_path,
+            "-i", input_file,
+            "-o", output_file,
+            "-vsx", str(vsx),
+            "-vsy", str(vsy),
+            "-vsz", str(vsz),
+        ]
 
         print(f"Running: {' '.join(cmd)}")
 
@@ -219,7 +278,7 @@ def run_conversion(conn, image_id):
         safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
         output_file = os.path.join(temp_dir, f"{safe_name}.ims")
 
-        success = convert_to_ims(input_file, output_file)
+        success = convert_to_ims(image, input_file, output_file)
         if not success:
             # Keep temp dir on failure for debugging unless explicitly disabled.
             keep_tmp = os.environ.get("OMERO_IMS_KEEP_TEMP", "1").strip().lower() in ("1", "true", "yes", "y")
