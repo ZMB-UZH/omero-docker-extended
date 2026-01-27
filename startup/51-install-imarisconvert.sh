@@ -11,8 +11,13 @@ else
     INSTALLED_VERSION=""
 fi
 
-if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisConvertBioformats" ]]; then
-    echo "ImarisConvertBioformats ${TARGET_VERSION} already installed."
+BIOFORMATS_JAR="${INSTALL_DIR}/bioformats/bioformats_package.jar"
+
+if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" \
+      && -x "${INSTALL_DIR}/ImarisConvertBioformats" \
+      && -s "${BIOFORMATS_JAR}" \
+      && -x /usr/local/bin/imarisconvert ]]; then
+    echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + Bio-Formats jar present)."
     exit 0
 fi
 
