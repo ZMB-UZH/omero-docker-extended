@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import omero
 from omero.gateway import BlitzGateway
-from omero.rtypes import rstring, rlong
+from omero.rtypes import rstring
 from omero import scripts
 import os
-import tempfile
 import subprocess
 import shutil
 import re
 import urllib.request
 import urllib.error
+from datetime import datetime
 
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
@@ -19,7 +18,7 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
 BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 DEFAULT_TIMEOUT_SECONDS = 600
-DEFAULT_JAVA_MAX_HEAP = "16G"
+EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 
 
 def _safe_filename(name, fallback="image"):
@@ -241,21 +240,12 @@ def convert_to_ims(image, input_file, output_file):
         return False
 
 
-def upload_file_to_omero(conn, file_path, image_id):
-    try:
-        file_ann = conn.createFileAnnfromLocalFile(
-            file_path,
-            mimetype="application/octet-stream",
-            ns="imaris.ims.converted",
-            desc="IMS file converted from original using ImarisConvertBioformats"
-        )
-        image = conn.getObject("Image", image_id)
-        if image:
-            image.linkAnnotation(file_ann)
-        return file_ann.getId()
-    except Exception as e:
-        print(f"Error uploading file: {e}")
-        return None
+def _build_export_path(image, image_id):
+    safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    output_dir = os.path.join(EXPORT_ROOT, f"image_{image_id}")
+    os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, f"{safe_name}_{timestamp}.ims")
 
 
 def run_conversion(conn, image_id):
@@ -273,43 +263,24 @@ def run_conversion(conn, image_id):
 
     print(f"Input file: {input_file}")
 
-    temp_dir = tempfile.mkdtemp(prefix="omero_ims_")
-    try:
-        safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
-        output_file = os.path.join(temp_dir, f"{safe_name}.ims")
+    output_file = _build_export_path(image, image_id)
 
-        success = convert_to_ims(image, input_file, output_file)
-        if not success:
-            # Keep temp dir on failure for debugging unless explicitly disabled.
-            keep_tmp = os.environ.get("OMERO_IMS_KEEP_TEMP", "1").strip().lower() in ("1", "true", "yes", "y")
-            if keep_tmp:
-                return (False, f"Conversion to IMS failed. Temp dir kept for debugging: {temp_dir}", None)
-            return (False, "Conversion to IMS failed", None)
+    success = convert_to_ims(image, input_file, output_file)
+    if not success:
+        return (False, "Conversion to IMS failed", None)
 
-        file_ann_id = upload_file_to_omero(conn, output_file, image_id)
-        if not file_ann_id:
-            return (False, "Failed to upload IMS file to OMERO", None)
-
-        return (True, f"Successfully converted to IMS (FileAnnotation:{file_ann_id})", file_ann_id)
-
-    finally:
-        try:
-            keep_tmp = os.environ.get("OMERO_IMS_KEEP_TEMP", "0").strip().lower() in ("1", "true", "yes", "y")
-            if not keep_tmp:
-                shutil.rmtree(temp_dir)
-        except Exception:
-            pass
+    return (True, f"Successfully exported IMS: {output_file}", output_file)
 
 
 def run_script():
     client = scripts.client(
-        'Convert_To_IMS.py',
-        """Convert an OMERO image to IMS format using ImarisConvertBioformats.""",
+        "IMS_Export.py",
+        """Export an OMERO image to IMS format using ImarisConvertBioformats.""",
         scripts.Long(
             "Image_ID",
             optional=False,
             grouping="1",
-            description="ID of the image to convert to IMS format"
+            description="ID of the image to export to IMS format"
         ),
         authors=["OMERO Team"],
         institutions=["University"],
@@ -319,10 +290,11 @@ def run_script():
         params = client.getInputs(unwrap=True)
         image_id = params.get("Image_ID")
         conn = BlitzGateway(client_obj=client)
-        success, message, file_ann_id = run_conversion(conn, image_id)
+        success, message, export_path = run_conversion(conn, image_id)
         client.setOutput("Message", rstring(message))
-        if success and file_ann_id:
-            client.setOutput("File_Annotation", rlong(file_ann_id))
+        if success and export_path:
+            client.setOutput("Export_Path", rstring(export_path))
+            client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
     except Exception as e:
         client.setOutput("Message", rstring(f"Script error: {e}"))
         import traceback
