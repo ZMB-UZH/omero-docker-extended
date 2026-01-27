@@ -16,8 +16,9 @@ BIOFORMATS_JAR="${INSTALL_DIR}/bioformats/bioformats_package.jar"
 if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" \
       && -x "${INSTALL_DIR}/ImarisConvertBioformats" \
       && -s "${BIOFORMATS_JAR}" \
+      && "$(stat -c%s "${BIOFORMATS_JAR}")" -gt 10000000 \
       && -x /usr/local/bin/imarisconvert ]]; then
-    echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + Bio-Formats jar present)."
+    echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + VALID Bio-Formats jar)."
     exit 0
 fi
 
@@ -38,8 +39,17 @@ sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
 
 # Download bioformats jar
 mkdir -p bioformats
-curl -L "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" \
+curl -L --fail --retry 5 --retry-delay 3 \
+    "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" \
     -o bioformats/bioformats_package.jar
+
+# Validate Bio-Formats jar (must be large; real file is ~80–90 MB)
+if [[ ! -s bioformats/bioformats_package.jar ]] || \
+   [[ "$(stat -c%s bioformats/bioformats_package.jar)" -lt 10000000 ]]; then
+    echo "ERROR: bioformats_package.jar download failed or is invalid"
+    ls -lh bioformats/bioformats_package.jar || true
+    exit 1
+fi
 
 # Clone ImarisWriter
 cd ..
