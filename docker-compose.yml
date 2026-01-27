@@ -61,7 +61,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 10
-      start_period: 60s
+      start_period: 120s
 
   redis: # shared cache across Omero web workers (required for rate limiting)
     image: "redis:8-alpine"
@@ -110,7 +110,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   database_plugin: # database exclusive to the OME plugin
     image: "postgres:18"
