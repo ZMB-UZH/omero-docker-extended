@@ -314,8 +314,10 @@ def run_script():
                     # Link to image
                     image.linkAnnotation(file_ann)
                     
-                    # Return the file annotation ID so client can download it
-                    client.setOutput("File_Annotation", omero.rtypes.rlong(file_ann.getId()))
+                    # Return the file annotation object so OMERO.web shows a download button
+                    client.setOutput("File_Annotation", file_ann._obj)
+                    # Also return the ID for clients that only parse numeric outputs
+                    client.setOutput("File_Annotation_Id", omero.rtypes.rlong(file_ann.getId()))
                     client.setOutput("Export_Path", rstring(export_path))
                     client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
                     
