@@ -27,6 +27,10 @@ cd /tmp
 git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git
 cd ImarisConvertBioformats
 
+# PATCH: Fix missing #include <limits> in bpUtils.cxx
+echo "Patching bpUtils.cxx to add missing #include <limits>..."
+sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
+
 # Download bioformats jar
 mkdir -p bioformats
 curl -L "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" \
@@ -61,7 +65,7 @@ make -j$(nproc)
 make install
 
 # Copy binary to install directory
-cp -f ../build/ImarisConvertBioformats "${INSTALL_DIR}/"
+cp -f ImarisConvertBioformats "${INSTALL_DIR}/"
 chmod +x "${INSTALL_DIR}/ImarisConvertBioformats"
 
 # Create symlink
