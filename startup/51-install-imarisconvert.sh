@@ -64,9 +64,16 @@ cmake .. \
 make -j$(nproc)
 make install
 
-# Copy binary to install directory
+# Copy binary and ALL shared libraries to install directory
 cp -f ImarisConvertBioformats "${INSTALL_DIR}/"
+cp -f ../build/Release/*.so* "${INSTALL_DIR}/" 2>/dev/null || true
+cp -f ../../fileiobioformats/build/*.so* "${INSTALL_DIR}/" 2>/dev/null || true
+cp -f ../../ImarisWriter/build/*.so* "${INSTALL_DIR}/" 2>/dev/null || true
 chmod +x "${INSTALL_DIR}/ImarisConvertBioformats"
+
+# Add library path to system
+echo "${INSTALL_DIR}" > /etc/ld.so.conf.d/imarisconvert.conf
+ldconfig
 
 # Create symlink
 ln -sf "${INSTALL_DIR}/ImarisConvertBioformats" /usr/local/bin/imarisconvert
