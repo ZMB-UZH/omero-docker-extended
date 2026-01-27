@@ -191,6 +191,19 @@ RUN set -euo pipefail; \
     chown root:root /startup/51-install-imarisconvert.sh; \
     chmod 0555 /startup/51-install-imarisconvert.sh
 
+# Install ImarisConvertBioformats at startup
+# ------------------------------------------
+COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/51-install-imarisconvert.sh; \
+    chmod 0555 /startup/51-install-imarisconvert.sh
+
+# Pre-configure library path for ImarisConvert
+# --------------------------------------------
+RUN set -euo pipefail; \
+    echo "/opt/omero/imarisconvert" > /etc/ld.so.conf.d/imarisconvert.conf; \
+    ldconfig
+
 # Copy IMS conversion script to Omero scripts directory
 # -----------------------------------------------------
 RUN set -euo pipefail; \
