@@ -77,8 +77,15 @@ mkdir -p "${INSTALL_DIR}/bioformats"
 cp -f "../../bioformats/bioformats_package.jar" "${INSTALL_DIR}/bioformats/bioformats_package.jar"
 chmod 0644 "${INSTALL_DIR}/bioformats/bioformats_package.jar"
 
-# Create symlink
-ln -sf "${INSTALL_DIR}/ImarisConvertBioformats" /usr/local/bin/imarisconvert
+# Create a wrapper instead of a symlink so runtime discovery works reliably
+cat > /usr/local/bin/imarisconvert <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+INSTALL_DIR="/opt/omero/imarisconvert"
+cd "${INSTALL_DIR}"
+exec "${INSTALL_DIR}/ImarisConvertBioformats" "$@"
+SH
+chmod 0755 /usr/local/bin/imarisconvert
 
 # Mark version
 echo "${TARGET_VERSION}" > "${VERSION_FILE}"
