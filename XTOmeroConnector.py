@@ -10,8 +10,7 @@
 
 """
 ImarisXT OMERO Connector
-Downloads ORIGINAL files from OMERO and opens in Imaris.
-Imaris auto-converts to IMS format when opening.
+Requests server-side IMS conversion and opens the resulting IMS in Imaris.
 """
 
 import sys
@@ -125,6 +124,44 @@ class OMEROWebClient:
             print(f"API error: {e}")
             return None
 
+    def _api_post(self, endpoint, payload=None):
+        """POST JSON to OMERO.web API and parse JSON response."""
+        import urllib.request
+        import urllib.error
+
+        if not hasattr(self, 'opener'):
+            return None
+
+        url = f"{self.api_url}/{endpoint}"
+        data = None
+        if payload is not None:
+            data = json.dumps(payload).encode('utf-8')
+
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        if hasattr(self, 'csrf_token'):
+            req.add_header('X-CSRFToken', self.csrf_token)
+
+        try:
+            response = self.opener.open(req, timeout=30)
+            raw = response.read()
+            if not raw:
+                return None
+            try:
+                return json.loads(raw.decode('utf-8'))
+            except Exception:
+                return None
+        except urllib.error.HTTPError as e:
+            print(f"API POST error ({e.code}): {e.reason}")
+            try:
+                print(e.read().decode('utf-8'))
+            except Exception:
+                pass
+            return None
+        except Exception as e:
+            print(f"API POST error: {e}")
+            return None
+
     def get_image_metadata(self, image_id):
         """Get image metadata including original filename."""
         data = self._api_request(f"m/images/{image_id}/")
@@ -143,6 +180,98 @@ class OMEROWebClient:
             result['original_file'] = files[0].get("Name")
         
         return result
+
+    def list_scripts(self):
+        """List available scripts."""
+        data = self._api_request("scripts/")
+        if data and isinstance(data, dict):
+            return data.get('data') or data.get('scripts') or []
+        return []
+
+    def find_script_id(self, script_name):
+        """Find script ID by matching script name or path."""
+        scripts_list = self.list_scripts()
+        for item in scripts_list:
+            name = item.get('name') or item.get('Name') or item.get('scriptName')
+            path = item.get('path') or item.get('Path')
+            sid = item.get('id') or item.get('@id')
+            if not sid:
+                continue
+            if name == script_name or path == script_name:
+                return sid
+            if name and os.path.basename(name) == script_name:
+                return sid
+            if path and os.path.basename(path) == script_name:
+                return sid
+        return None
+
+    def run_script(self, script_id, inputs):
+        """Run a script with provided inputs."""
+        payloads = [
+            {"inputs": inputs},
+            {"inputs": {key: {"value": value} for key, value in inputs.items()}},
+        ]
+        for payload in payloads:
+            response = self._api_post(f"scripts/{script_id}/run/", payload)
+            if response:
+                return response
+        return None
+
+    def poll_activity(self, job_id, timeout=900, interval=2):
+        """Poll a script activity until completion."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            data = self._api_request(f"activities/{job_id}/")
+            if not data:
+                time.sleep(interval)
+                continue
+
+            status = (data.get('status') or data.get('state') or '').upper()
+            if status in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+                return data
+            if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+                return data
+
+            time.sleep(interval)
+
+        return None
+
+    def list_file_annotations(self, image_id):
+        """List file annotations for an image."""
+        data = self._api_request(f"m/images/{image_id}/")
+        if not data:
+            return []
+
+        annotations = data.get('Annotations') or data.get('annotations') or {}
+        if isinstance(annotations, dict):
+            file_annotations = (
+                annotations.get('file')
+                or annotations.get('File')
+                or annotations.get('file_annotations')
+                or annotations.get('FileAnnotations')
+                or []
+            )
+        else:
+            file_annotations = []
+
+        if isinstance(file_annotations, dict):
+            file_annotations = file_annotations.get('data') or []
+
+        return file_annotations if isinstance(file_annotations, list) else []
+
+    def find_converted_ims_annotation(self, image_id):
+        """Find IMS conversion FileAnnotation ID for an image if present."""
+        for ann in self.list_file_annotations(image_id):
+            ns = ann.get('ns') or ann.get('namespace') or ann.get('Namespace')
+            if ns != "imaris.ims.converted":
+                continue
+            ann_id = ann.get('id') or ann.get('@id')
+            if not ann_id:
+                continue
+            return ann_id
+        return None
     
     def download_original_file(self, image_id, output_dir, preferred_filename=None):
         """
@@ -255,6 +384,49 @@ class OMEROWebClient:
             return True
         snippet = data[:200].lower()
         return b"<!doctype html" in snippet or b"<html" in snippet
+
+    def download_file_annotation(self, annotation_id, output_dir, fallback_name=None):
+        """Download a file annotation by ID."""
+        import urllib.request
+        import urllib.error
+
+        os.makedirs(output_dir, exist_ok=True)
+
+        urls = [
+            f"{self.base_url}/webgateway/annotation/{annotation_id}/",
+            f"{self.base_url}/webgateway/annotation/{annotation_id}/download/",
+            f"{self.base_url}/webclient/annotation/{annotation_id}/",
+        ]
+
+        for url in urls:
+            try:
+                req = urllib.request.Request(url)
+                if hasattr(self, 'csrf_token'):
+                    req.add_header('X-CSRFToken', self.csrf_token)
+
+                response = self.opener.open(req, timeout=600)
+                content_type = response.headers.get('Content-Type', '')
+                content_disposition = response.headers.get('Content-Disposition', '')
+                data = response.read()
+
+                if self._is_html_response(content_type, data):
+                    continue
+
+                filename = self._extract_filename(content_disposition)
+                if not filename:
+                    filename = fallback_name or f"annotation_{annotation_id}.ims"
+
+                file_path = os.path.join(output_dir, filename)
+                with open(file_path, 'wb') as f:
+                    f.write(data)
+                return file_path
+            except urllib.error.HTTPError as e:
+                print(f"Download error ({e.code}) for {url}: {e.reason}")
+            except Exception as e:
+                print(f"Download error for {url}: {e}")
+                continue
+
+        return None
     
     def list_projects(self):
         """List all projects."""
@@ -297,7 +469,7 @@ class OMEROWebClient:
 def open_file_in_imaris(filepath, imaris_app=None):
     """
     Open file in Imaris. If imaris_app is provided, use it. Otherwise launch Imaris.
-    Imaris will auto-convert to IMS format when opening.
+    IMS files should open without triggering local conversion.
     """
     if imaris_app and hasattr(imaris_app, 'FileOpen'):
         try:
@@ -547,7 +719,7 @@ class OMEROBrowserDialog:
         
         if not messagebox.askyesno("Confirm Load", 
                                    f"Download and open:\n{img['name']}\n\n"
-                                   f"Imaris will auto-convert to IMS format."):
+                                   f"Conversion will run on the server if needed."):
             return
         
         self.load_btn.config(state=tk.DISABLED)
@@ -555,22 +727,64 @@ class OMEROBrowserDialog:
     
     def _load_worker(self, img):
         try:
-            self._set_status(f"Downloading {img['name']}...", "#fff3cd")
+            self._set_status(f"Checking server-side IMS for {img['name']}...", "#fff3cd")
             
             # Download directory
             download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
             os.makedirs(download_dir, exist_ok=True)
             
-            metadata = self.client.get_image_metadata(img['id'])
-            preferred_name = metadata.get("original_file")
-            if preferred_name:
-                print(f"Preferred filename from metadata: {preferred_name}")
+            ims_annotation_id = self.client.find_converted_ims_annotation(img['id'])
 
-            # Download original file
-            downloaded_file = self.client.download_original_file(
-                img['id'],
+            if not ims_annotation_id:
+                self._set_status("Submitting server conversion job...", "#fff3cd")
+
+                script_id = self.client.find_script_id("Convert_To_IMS.py")
+                if not script_id:
+                    raise RuntimeError("Convert_To_IMS.py script not found on the server.")
+
+                run_response = self.client.run_script(script_id, {"Image_ID": img['id']})
+                if not run_response:
+                    raise RuntimeError("Failed to start server-side IMS conversion.")
+
+                job_id = (
+                    run_response.get("job_id")
+                    or run_response.get("jobId")
+                    or run_response.get("id")
+                )
+                if not job_id:
+                    raise RuntimeError("Server did not return a conversion job id.")
+
+                self._set_status("Waiting for server conversion to finish...", "#fff3cd")
+                activity = self.client.poll_activity(job_id, timeout=3600, interval=5)
+                if not activity:
+                    raise RuntimeError("Timed out waiting for server conversion.")
+
+                output = (
+                    activity.get("outputs")
+                    or activity.get("output")
+                    or activity.get("results")
+                    or activity.get("result")
+                    or {}
+                )
+                if isinstance(output, dict):
+                    file_ann = output.get("File_Annotation") or output.get("file_annotation")
+                    if isinstance(file_ann, dict):
+                        ims_annotation_id = file_ann.get("value") or file_ann.get("id")
+                    elif isinstance(file_ann, (int, str)):
+                        ims_annotation_id = file_ann
+
+            if not ims_annotation_id:
+                self._set_status("Checking for IMS file annotation...", "#fff3cd")
+                ims_annotation_id = self.client.find_converted_ims_annotation(img['id'])
+
+            if not ims_annotation_id:
+                raise RuntimeError("IMS conversion did not produce a file annotation.")
+
+            self._set_status("Downloading converted IMS...", "#fff3cd")
+            downloaded_file = self.client.download_file_annotation(
+                ims_annotation_id,
                 download_dir,
-                preferred_filename=preferred_name
+                fallback_name=f"img_{img['id']}.ims"
             )
             
             if not downloaded_file or not os.path.exists(downloaded_file):
@@ -582,7 +796,7 @@ class OMEROBrowserDialog:
             self.temp_files.append(downloaded_file)
             
             # Open in Imaris
-            self._set_status(f"Opening in Imaris (will auto-convert to IMS)...", "#fff3cd")
+            self._set_status("Opening IMS in Imaris...", "#fff3cd")
             
             success = open_file_in_imaris(downloaded_file, self.imaris)
             
@@ -590,8 +804,7 @@ class OMEROBrowserDialog:
                 self._set_status("✓ Opened in Imaris", "#d4edda")
                 self._show_info("Success", 
                               f"File opened in Imaris!\n"
-                              f"Imaris will auto-convert to IMS format.\n\n"
-                              f"Original file: {downloaded_file}")
+                              f"Opened IMS file: {downloaded_file}")
             else:
                 raise RuntimeError(f"Failed to open in Imaris.\n\nFile: {downloaded_file}")
             
