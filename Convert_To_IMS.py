@@ -17,7 +17,7 @@ IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
 BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
-BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar"
+BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 DEFAULT_TIMEOUT_SECONDS = 600
 DEFAULT_JAVA_MAX_HEAP = "16G"
 
