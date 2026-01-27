@@ -193,6 +193,10 @@ RUN set -euo pipefail; \
 
 # Copy IMS conversion script to Omero scripts directory
 # -----------------------------------------------------
+RUN set -euo pipefail; \
+    mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero
+
 COPY Convert_To_IMS.py /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py
 RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/Convert_To_IMS.py; \
