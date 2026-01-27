@@ -18,6 +18,9 @@ fi
 
 echo "Installing ImarisConvertBioformats ${TARGET_VERSION}..."
 
+# Clean up any previous failed attempts
+rm -rf /tmp/ImarisConvertBioformats /tmp/ImarisWriter
+
 cd /tmp
 
 # Clone ImarisConvertBioformats
