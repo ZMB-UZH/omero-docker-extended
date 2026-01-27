@@ -63,7 +63,7 @@ def _poll_activity(conn, request, job_id):
 def _extract_output_value(output, key):
     value = output.get(key)
     if isinstance(value, dict):
-        return value.get("value") or value.get("id")
+        return value.get("value") or value.get("id") or value.get("@id")
     return value
 
 
