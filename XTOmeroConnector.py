@@ -415,6 +415,9 @@ class OMEROWebClient:
                 filename = self._extract_filename(content_disposition)
                 if not filename:
                     filename = fallback_name or f"annotation_{annotation_id}.ims"
+                elif fallback_name and filename and not filename.lower().endswith(".ims"):
+                    if fallback_name.lower().endswith(".ims"):
+                        filename = fallback_name
 
                 file_path = os.path.join(output_dir, filename)
                 with open(file_path, 'wb') as f:
@@ -505,6 +508,17 @@ def open_file_in_imaris(filepath, imaris_app=None):
         except Exception as e:
             print(f"Error launching Imaris: {e}")
             return False
+
+
+def is_ims_file(filepath):
+    """Validate IMS files by checking for the HDF5 magic header."""
+    try:
+        with open(filepath, "rb") as handle:
+            header = handle.read(8)
+        return header == b"\x89HDF\r\n\x1a\n"
+    except Exception as e:
+        print(f"IMS validation error: {e}")
+        return False
 
 
 # =============================================================================
@@ -789,6 +803,13 @@ class OMEROBrowserDialog:
             
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download image from OMERO.")
+
+            if not is_ims_file(downloaded_file):
+                raise RuntimeError(
+                    "Downloaded file is not a valid IMS (HDF5) file. "
+                    "Refusing to open to avoid triggering Imaris File Converter. "
+                    "Please verify that the server-side conversion completed successfully."
+                )
             
             self._set_status(f"Downloaded: {os.path.basename(downloaded_file)}", "#d4edda")
             print(f"Downloaded: {downloaded_file}")
