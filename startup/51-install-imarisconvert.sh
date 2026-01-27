@@ -40,7 +40,7 @@ sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
 # Download bioformats jar
 mkdir -p bioformats
 curl -L --fail --retry 5 --retry-delay 3 \
-    "https://downloads.openmicroscopy.org/bio-formats/7.4.0/artifacts/bioformats_package.jar" \
+    "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar" \
     -o bioformats/bioformats_package.jar
 
 # Validate Bio-Formats jar (must be large; real file is ~80–90 MB)
