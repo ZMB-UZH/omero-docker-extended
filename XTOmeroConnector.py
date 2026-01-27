@@ -30,15 +30,21 @@ import time
 
 class OMEROWebClient:
     """Client for OMERO.web API."""
-    
-    def __init__(self, host, port, username, password):
-        self.base_url = f"http://{host}:{port}"
+
+    def __init__(self, host, port, username, password, scheme="http"):
+        self.base_url = self._build_base_url(host, port, scheme)
         self.api_url = f"{self.base_url}/api/v0"
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.session = None
+        self.scheme = scheme
+
+    def _build_base_url(self, host, port, scheme):
+        if host.startswith("http://") or host.startswith("https://"):
+            return host.rstrip("/")
+        return f"{scheme}://{host}:{port}"
         
     def connect(self):
         """Authenticate with OMERO.web."""
@@ -98,7 +104,8 @@ class OMEROWebClient:
     def _api_request(self, endpoint):
         """Make API request."""
         import urllib.request
-        
+        import urllib.error
+
         if not hasattr(self, 'opener'):
             return None
             
@@ -111,6 +118,9 @@ class OMEROWebClient:
         try:
             response = self.opener.open(req, timeout=10)
             return json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            print(f"API error ({e.code}): {e.reason}")
+            return None
         except Exception as e:
             print(f"API error: {e}")
             return None
@@ -134,13 +144,14 @@ class OMEROWebClient:
         
         return result
     
-    def download_original_file(self, image_id, output_dir):
+    def download_original_file(self, image_id, output_dir, preferred_filename=None):
         """
         Download ORIGINAL file from OMERO using webgateway archived_files endpoint.
         Returns path to downloaded file.
         """
         try:
             import urllib.request
+            import urllib.error
             import zipfile
             import io
             
@@ -164,6 +175,12 @@ class OMEROWebClient:
             print(f"Content-Disposition: {content_disposition}")
             
             data = response.read()
+
+            if self._is_html_response(content_type, data):
+                raise RuntimeError(
+                    "Download failed: server returned HTML instead of the file. "
+                    "Check that the OMERO.web URL/port, credentials, and HTTPS setting are correct."
+                )
             
             # Check if it's a zip file
             if content_type == 'application/zip' or b'PK\x03\x04' in data[:4]:
@@ -182,10 +199,16 @@ class OMEROWebClient:
                                  and not f.endswith('.txt')
                                  and os.path.basename(f)
                                  and not os.path.basename(f).startswith('.')]
-                    
+
+                    if preferred_filename:
+                        preferred_base = os.path.basename(preferred_filename)
+                        for candidate in main_files:
+                            if os.path.basename(candidate) == preferred_base:
+                                return os.path.join(output_dir, candidate)
+
                     if main_files:
                         return os.path.join(output_dir, main_files[0])
-                    elif file_list:
+                    if file_list:
                         return os.path.join(output_dir, file_list[0])
             else:
                 # Single file
@@ -203,6 +226,9 @@ class OMEROWebClient:
             
             return None
             
+        except urllib.error.HTTPError as e:
+            print(f"Download error ({e.code}): {e.reason}")
+            return None
         except Exception as e:
             print(f"Download error: {e}")
             import traceback
@@ -223,6 +249,12 @@ class OMEROWebClient:
                 return match.group(1)
         
         return None
+
+    def _is_html_response(self, content_type, data):
+        if "text/html" in (content_type or "").lower():
+            return True
+        snippet = data[:200].lower()
+        return b"<!doctype html" in snippet or b"<html" in snippet
     
     def list_projects(self):
         """List all projects."""
@@ -342,8 +374,13 @@ class OMEROBrowserDialog:
         
         tk.Label(conn, text="Port:").grid(row=0, column=2, sticky=tk.W, padx=5)
         self.port_entry = tk.Entry(conn, width=10)
-        self.port_entry.insert(0, "4090")
+        self.port_entry.insert(0, "4080")
         self.port_entry.grid(row=0, column=3, padx=5, pady=5)
+
+        self.https_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(conn, text="Use HTTPS", variable=self.https_var).grid(
+            row=0, column=4, padx=5, pady=5
+        )
         
         tk.Label(conn, text="User:").grid(row=1, column=0, sticky=tk.W, padx=5)
         self.user_entry = tk.Entry(conn, width=30)
@@ -447,7 +484,8 @@ class OMEROBrowserDialog:
         
         self._set_status("Connecting to OMERO...", "#fff3cd")
         
-        self.client = OMEROWebClient(h, int(p), u, pw)
+        scheme = "https" if self.https_var.get() else "http"
+        self.client = OMEROWebClient(h, int(p), u, pw, scheme=scheme)
         
         if self.client.connect():
             self._set_status(f"✓ Connected to {h}:{p} as {u}", "#d4edda")
@@ -523,8 +561,17 @@ class OMEROBrowserDialog:
             download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
             os.makedirs(download_dir, exist_ok=True)
             
+            metadata = self.client.get_image_metadata(img['id'])
+            preferred_name = metadata.get("original_file")
+            if preferred_name:
+                print(f"Preferred filename from metadata: {preferred_name}")
+
             # Download original file
-            downloaded_file = self.client.download_original_file(img['id'], download_dir)
+            downloaded_file = self.client.download_original_file(
+                img['id'],
+                download_dir,
+                preferred_filename=preferred_name
+            )
             
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download image from OMERO.")
