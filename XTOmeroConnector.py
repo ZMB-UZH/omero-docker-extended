@@ -225,400 +225,328 @@ class OMEROWebClient:
         while time.time() < deadline:
             data = self._api_request(f"activities/{job_id}/")
             if not data:
-                time.sleep(interval)
-                continue
+                return None
 
             status = (data.get('status') or data.get('state') or '').upper()
-            if status in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+            if status in {'FINISHED', 'SUCCESS', 'COMPLETE', 'DONE'}:
                 return data
-            if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
                 return data
 
             time.sleep(interval)
 
         return None
 
-    def list_file_annotations(self, image_id):
-        """List file annotations for an image."""
-        data = self._api_request(f"m/images/{image_id}/")
+    def list_projects(self):
+        """List all projects."""
+        data = self._api_request("m/projects/")
         if not data:
             return []
+        projects = data.get('data') or []
+        return [{'id': p['@id'], 'name': p['Name']} for p in projects]
 
-        annotations = data.get('Annotations') or data.get('annotations') or {}
-        if isinstance(annotations, dict):
-            file_annotations = (
-                annotations.get('file')
-                or annotations.get('File')
-                or annotations.get('file_annotations')
-                or annotations.get('FileAnnotations')
-                or []
-            )
-        else:
-            file_annotations = []
+    def list_datasets(self, project_id):
+        """List datasets in a project."""
+        data = self._api_request(f"m/projects/{project_id}/")
+        if not data:
+            return []
+        datasets = data.get('data', {}).get('Datasets') or []
+        return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
 
-        if isinstance(file_annotations, dict):
-            file_annotations = file_annotations.get('data') or []
+    def list_images(self, dataset_id):
+        """List images in a dataset."""
+        data = self._api_request(f"m/datasets/{dataset_id}/images/")
+        if not data:
+            return []
+        images = data.get('data') or []
+        return [{
+            'id': img['@id'],
+            'name': img['Name'],
+            'sizeX': img.get('Pixels', {}).get('SizeX', 0),
+            'sizeY': img.get('Pixels', {}).get('SizeY', 0),
+            'sizeZ': img.get('Pixels', {}).get('SizeZ', 1),
+            'sizeC': img.get('Pixels', {}).get('SizeC', 1),
+            'sizeT': img.get('Pixels', {}).get('SizeT', 1),
+        } for img in images]
 
-        return file_annotations if isinstance(file_annotations, list) else []
-
-    def find_converted_ims_annotation(self, image_id):
-        """Find IMS conversion FileAnnotation ID for an image if present."""
-        for ann in self.list_file_annotations(image_id):
-            ns = ann.get('ns') or ann.get('namespace') or ann.get('Namespace')
-            if ns != "imaris.ims.converted":
-                continue
-            ann_id = ann.get('id') or ann.get('@id')
-            if not ann_id:
-                continue
-            return ann_id
-        return None
-    
-    def download_original_file(self, image_id, output_dir, preferred_filename=None):
+    def download_ims_export(self, image_id, download_dir, fallback_name="export.ims"):
         """
-        Download ORIGINAL file from OMERO using webgateway archived_files endpoint.
-        Returns path to downloaded file.
+        Run IMS_Export script and download the resulting IMS file attachment.
+        
+        This method:
+        1. Finds and runs the IMS_Export.py script on the OMERO server
+        2. Polls until the export job completes
+        3. Downloads the file attachment created by the script
+        4. Saves it to the local download directory
+        
+        Returns:
+            str: Path to the downloaded file, or None on failure
         """
+        import urllib.request
+        import urllib.error
+        
         try:
-            import urllib.request
-            import urllib.error
-            import zipfile
-            import io
+            # Step 1: Find the IMS_Export script
+            print("Finding IMS_Export script...")
+            script_id = self.find_script_id("IMS_Export.py")
+            if not script_id:
+                print("ERROR: IMS_Export.py script not found on server")
+                print("Available scripts:")
+                for s in self.list_scripts():
+                    print(f"  - {s.get('name')} (ID: {s.get('id')})")
+                raise RuntimeError("IMS_Export.py script not found. Please ensure it's installed on the OMERO server.")
             
-            os.makedirs(output_dir, exist_ok=True)
+            print(f"Found IMS_Export script (ID: {script_id})")
             
-            # Download original file via webgateway
-            download_url = f"{self.base_url}/webgateway/archived_files/download/{image_id}/"
+            # Step 2: Run the script
+            print(f"Running IMS export for image {image_id}...")
+            run_response = self.run_script(script_id, {"Image_ID": image_id})
+            if not run_response:
+                raise RuntimeError("Failed to start IMS export script")
             
-            print(f"Downloading original file from: {download_url}")
+            job_id = (
+                run_response.get('job_id') 
+                or run_response.get('jobId') 
+                or run_response.get('id')
+            )
+            if not job_id:
+                raise RuntimeError("Script started but no job ID returned")
             
-            req = urllib.request.Request(download_url)
-            if hasattr(self, 'csrf_token'):
-                req.add_header('X-CSRFToken', self.csrf_token)
+            print(f"Export job started (Job ID: {job_id})")
             
-            response = self.opener.open(req, timeout=600)
+            # Step 3: Poll until completion
+            print("Waiting for export to complete...")
+            activity = self.poll_activity(job_id, timeout=900, interval=2)
             
-            content_type = response.headers.get('Content-Type', '')
-            content_disposition = response.headers.get('Content-Disposition', '')
+            if not activity:
+                raise RuntimeError("Export job timed out (15 minutes)")
             
-            print(f"Content-Type: {content_type}")
-            print(f"Content-Disposition: {content_disposition}")
+            status = (activity.get('status') or activity.get('state') or '').upper()
+            print(f"Export job status: {status}")
             
-            data = response.read()
-
-            if self._is_html_response(content_type, data):
+            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
+                message = activity.get('message', 'Unknown error')
+                raise RuntimeError(f"Export job failed: {message}")
+            
+            # Step 4: Get the file annotation from outputs
+            outputs = (
+                activity.get('outputs') 
+                or activity.get('output') 
+                or activity.get('results')
+                or {}
+            )
+            
+            # Look for File_Annotation in outputs
+            file_annotation_id = None
+            for key in ['File_Annotation', 'file_annotation', 'FileAnnotation']:
+                value = outputs.get(key)
+                if value:
+                    if isinstance(value, dict):
+                        file_annotation_id = value.get('value') or value.get('id')
+                    else:
+                        file_annotation_id = value
+                    break
+            
+            if not file_annotation_id:
+                # Fallback: check for direct file ID
+                for key in ['File', 'file', 'FileID', 'file_id']:
+                    value = outputs.get(key)
+                    if value:
+                        if isinstance(value, dict):
+                            file_annotation_id = value.get('value') or value.get('id')
+                        else:
+                            file_annotation_id = value
+                        break
+            
+            if not file_annotation_id:
+                print(f"ERROR: No file attachment found in job outputs")
+                print(f"Available outputs: {list(outputs.keys())}")
+                print(f"Output values: {outputs}")
                 raise RuntimeError(
-                    "Download failed: server returned HTML instead of the file. "
-                    "Check that the OMERO.web URL/port, credentials, and HTTPS setting are correct."
+                    "IMS export completed but no file attachment was created. "
+                    "This likely means the script failed to attach the file properly."
                 )
             
-            # Check if it's a zip file
-            if content_type == 'application/zip' or b'PK\x03\x04' in data[:4]:
-                print("Received ZIP archive, extracting...")
-                
-                with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                    file_list = zf.namelist()
-                    print(f"Files in archive: {file_list}")
-                    
-                    zf.extractall(output_dir)
-                    
-                    # Find main image file
-                    main_files = [f for f in file_list 
-                                 if not f.startswith('__MACOSX') 
-                                 and not f.startswith('.')
-                                 and not f.endswith('.txt')
-                                 and os.path.basename(f)
-                                 and not os.path.basename(f).startswith('.')]
-
-                    if preferred_filename:
-                        preferred_base = os.path.basename(preferred_filename)
-                        for candidate in main_files:
-                            if os.path.basename(candidate) == preferred_base:
-                                return os.path.join(output_dir, candidate)
-
-                    if main_files:
-                        return os.path.join(output_dir, main_files[0])
-                    if file_list:
-                        return os.path.join(output_dir, file_list[0])
-            else:
-                # Single file
-                filename = self._extract_filename(content_disposition)
-                if not filename:
-                    filename = f"image_{image_id}.dat"
-                
-                file_path = os.path.join(output_dir, filename)
-                
-                with open(file_path, 'wb') as f:
-                    f.write(data)
-                
-                print(f"Downloaded: {file_path} ({len(data)} bytes)")
-                return file_path
+            print(f"Found file attachment (ID: {file_annotation_id})")
             
-            return None
+            # Step 5: Get the original file ID from the annotation
+            annotation_data = self._api_request(f"m/annotations/{file_annotation_id}/")
+            if not annotation_data:
+                raise RuntimeError(f"Could not retrieve file annotation {file_annotation_id}")
+            
+            file_obj = annotation_data.get('data', {}).get('file')
+            if not file_obj:
+                raise RuntimeError(f"File annotation {file_annotation_id} has no file object")
+            
+            original_file_id = file_obj.get('id')
+            original_filename = file_obj.get('name', fallback_name)
+            
+            if not original_file_id:
+                raise RuntimeError(f"File annotation has no original file ID")
+            
+            print(f"Original file: {original_filename} (ID: {original_file_id})")
+            
+            # Step 6: Download the file via the annotation download endpoint
+            download_url = f"{self.base_url}/webclient/annotation/{file_annotation_id}/"
+            print(f"Downloading from: {download_url}")
+            
+            # Ensure download directory exists
+            os.makedirs(download_dir, exist_ok=True)
+            
+            # Sanitize filename
+            safe_filename = re.sub(r'[^\w\s.-]', '_', original_filename)
+            local_path = os.path.join(download_dir, safe_filename)
+            
+            # Download with progress
+            req = urllib.request.Request(download_url)
+            
+            with self.opener.open(req, timeout=300) as response:
+                total_size = int(response.headers.get('content-length', 0))
+                
+                print(f"Downloading {safe_filename} ({total_size / (1024*1024):.1f} MB)...")
+                
+                downloaded = 0
+                chunk_size = 8192
+                
+                with open(local_path, 'wb') as f:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        if total_size > 0:
+                            percent = (downloaded / total_size) * 100
+                            print(f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)", end='\r')
+                
+                print()  # New line after progress
+            
+            if not os.path.exists(local_path):
+                raise RuntimeError(f"Download completed but file not found at {local_path}")
+            
+            file_size = os.path.getsize(local_path)
+            if file_size == 0:
+                raise RuntimeError("Downloaded file is empty")
+            
+            print(f"Successfully downloaded: {local_path} ({file_size / (1024*1024):.1f} MB)")
+            return local_path
             
         except urllib.error.HTTPError as e:
-            print(f"Download error ({e.code}): {e.reason}")
-            return None
+            error_body = ""
+            try:
+                error_body = e.read().decode('utf-8')
+            except:
+                pass
+            print(f"HTTP Error {e.code}: {e.reason}")
+            if error_body:
+                print(f"Error details: {error_body}")
+            raise RuntimeError(f"Download failed: HTTP {e.code} - {e.reason}")
+            
         except Exception as e:
             print(f"Download error: {e}")
             import traceback
             traceback.print_exc()
-            return None
-    
-    def _extract_filename(self, content_disposition):
-        """Extract filename from Content-Disposition header."""
-        import urllib.parse
-        
-        if content_disposition:
-            utf8_match = re.search(r"filename\*=UTF-8''([^;]+)", content_disposition)
-            if utf8_match:
-                return urllib.parse.unquote(utf8_match.group(1))
-            
-            match = re.search(r'filename="?([^"]+)"?', content_disposition)
-            if match:
-                return match.group(1)
-        
-        return None
-
-    def _is_html_response(self, content_type, data):
-        if "text/html" in (content_type or "").lower():
-            return True
-        snippet = data[:200].lower()
-        return b"<!doctype html" in snippet or b"<html" in snippet
-
-    def download_file_annotation(self, annotation_id, output_dir, fallback_name=None):
-        """Download a file annotation by ID."""
-        import urllib.request
-        import urllib.error
-
-        os.makedirs(output_dir, exist_ok=True)
-
-        urls = [
-            f"{self.base_url}/webgateway/annotation/{annotation_id}/",
-            f"{self.base_url}/webgateway/annotation/{annotation_id}/download/",
-            f"{self.base_url}/webclient/annotation/{annotation_id}/",
-        ]
-
-        for url in urls:
-            try:
-                req = urllib.request.Request(url)
-                if hasattr(self, 'csrf_token'):
-                    req.add_header('X-CSRFToken', self.csrf_token)
-
-                response = self.opener.open(req, timeout=600)
-                content_type = response.headers.get('Content-Type', '')
-                content_disposition = response.headers.get('Content-Disposition', '')
-                data = response.read()
-
-                if self._is_html_response(content_type, data):
-                    continue
-
-                filename = self._extract_filename(content_disposition)
-                if not filename:
-                    filename = fallback_name or f"annotation_{annotation_id}.ims"
-                elif fallback_name and filename and not filename.lower().endswith(".ims"):
-                    if fallback_name.lower().endswith(".ims"):
-                        filename = fallback_name
-
-                file_path = os.path.join(output_dir, filename)
-                with open(file_path, 'wb') as f:
-                    f.write(data)
-                return file_path
-            except urllib.error.HTTPError as e:
-                print(f"Download error ({e.code}) for {url}: {e.reason}")
-            except Exception as e:
-                print(f"Download error for {url}: {e}")
-                continue
-
-        return None
-
-    def download_ims_export(self, image_id, output_dir, fallback_name=None):
-        """Download IMS export via the Omero.web Imaris connector endpoint."""
-        import urllib.request
-        import urllib.error
-
-        os.makedirs(output_dir, exist_ok=True)
-
-        url = f"{self.base_url}/omeroweb_imaris_connector/imaris-export/?image={image_id}"
-
-        try:
-            req = urllib.request.Request(url)
-            if hasattr(self, 'csrf_token'):
-                req.add_header('X-CSRFToken', self.csrf_token)
-
-            response = self.opener.open(req, timeout=3600)
-            content_type = response.headers.get('Content-Type', '')
-            content_disposition = response.headers.get('Content-Disposition', '')
-            data = response.read()
-
-            if self._is_html_response(content_type, data):
-                raise RuntimeError(
-                    "IMS export failed: server returned HTML instead of the file. "
-                    "Check the OMERO.web URL/port, credentials, and HTTPS setting."
-                )
-
-            filename = self._extract_filename(content_disposition)
-            if not filename:
-                filename = fallback_name or f"img_{image_id}.ims"
-
-            file_path = os.path.join(output_dir, filename)
-            with open(file_path, 'wb') as f:
-                f.write(data)
-            return file_path
-        except urllib.error.HTTPError as e:
-            print(f"IMS export error ({e.code}) for {url}: {e.reason}")
-        except Exception as e:
-            print(f"IMS export error for {url}: {e}")
-        return None
-    
-    def list_projects(self):
-        """List all projects."""
-        data = self._api_request('m/projects/')
-        if data and 'data' in data:
-            return [{'id': p['@id'], 'name': p['Name']} for p in data['data']]
-        return []
-    
-    def list_datasets(self, project_id):
-        """List datasets in project."""
-        data = self._api_request(f'm/projects/{project_id}/datasets/')
-        if data and 'data' in data:
-            return [{'id': d['@id'], 'name': d['Name']} for d in data['data']]
-        return []
-    
-    def list_images(self, dataset_id):
-        """List images in dataset."""
-        data = self._api_request(f'm/datasets/{dataset_id}/images/')
-        if data and 'data' in data:
-            images = []
-            for i in data['data']:
-                pixels = i.get('Pixels', {})
-                images.append({
-                    'id': i['@id'],
-                    'name': i['Name'],
-                    'sizeX': pixels.get('SizeX', 0),
-                    'sizeY': pixels.get('SizeY', 0),
-                    'sizeZ': pixels.get('SizeZ', 0),
-                    'sizeC': pixels.get('SizeC', 0),
-                    'sizeT': pixels.get('SizeT', 0),
-                })
-            return images
-        return []
+            raise
 
 
 # =============================================================================
-# IMARIS FILE OPENER
+# HELPER FUNCTIONS
 # =============================================================================
 
-def open_file_in_imaris(filepath, imaris_app=None):
-    """
-    Open file in Imaris. If imaris_app is provided, use it. Otherwise launch Imaris.
-    IMS files should open without triggering local conversion.
-    """
-    if imaris_app and hasattr(imaris_app, 'FileOpen'):
-        try:
-            print(f"Opening in current Imaris session: {filepath}")
-            imaris_app.FileOpen(filepath, "")
-            return True
-        except Exception as e:
-            print(f"Error opening in Imaris: {e}")
-            return False
-    else:
-        # Launch Imaris with file
-        import subprocess
-        imaris_paths = [
-            r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe",
-            r"C:\Program Files\Bitplane\Imaris 10.0.0\Imaris.exe",
-            r"C:\Program Files\Bitplane\Imaris 9.9.1\Imaris.exe",
-        ]
-        
-        imaris_exe = None
-        for path in imaris_paths:
-            if os.path.exists(path):
-                imaris_exe = path
-                break
-        
-        if not imaris_exe:
-            print("Imaris not found")
-            return False
-        
-        try:
-            print(f"Launching Imaris: {imaris_exe} {filepath}")
-            subprocess.Popen([imaris_exe, filepath])
-            return True
-        except Exception as e:
-            print(f"Error launching Imaris: {e}")
-            return False
-
-
-def is_ims_file(filepath):
-    """Validate IMS files by checking for the HDF5 magic header."""
+def is_ims_file(file_path):
+    """Check if file is a valid IMS (HDF5) file."""
+    if not os.path.exists(file_path):
+        return False
+    
+    if os.path.getsize(file_path) < 8:
+        return False
+    
     try:
-        with open(filepath, "rb") as handle:
-            header = handle.read(8)
-        return header == b"\x89HDF\r\n\x1a\n"
+        with open(file_path, 'rb') as f:
+            signature = f.read(8)
+            return signature == b'\x89HDF\r\n\x1a\n'
+    except Exception:
+        return False
+
+
+def open_file_in_imaris(file_path, imaris_app):
+    """Open a file in Imaris."""
+    if not imaris_app:
+        print(f"No Imaris application instance. File saved at: {file_path}")
+        return True
+    
+    try:
+        print(f"Opening in Imaris: {file_path}")
+        imaris_app.FileOpen(file_path, "")
+        print("Successfully opened in Imaris")
+        return True
     except Exception as e:
-        print(f"IMS validation error: {e}")
+        print(f"Error opening in Imaris: {e}")
         return False
 
 
 # =============================================================================
-# GUI
+# GUI DIALOG
 # =============================================================================
 
 class OMEROBrowserDialog:
-    """Main GUI."""
+    """GUI for browsing and loading OMERO images into Imaris."""
     
-    def __init__(self, imaris_app):
-        self.imaris = imaris_app
+    def __init__(self, imaris):
+        self.imaris = imaris
         self.client = None
-        self.root = tk.Tk()
-        self.root.title("OMERO Image Loader")
-        self.root.geometry("1000x600")
-        
         self.projects_data = []
         self.datasets_data = []
         self.images_data = []
         self.temp_files = []
         
+        # Get export directory
         self.export_dir = self._get_export_dir()
         
-        self._build_ui()
+        self.root = tk.Tk()
+        self.root.title("OMERO → Imaris Connector")
+        self.root.geometry("1000x700")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+        self._build_ui()
     
     def _on_close(self):
+        """Handle window close - don't delete temp files as Imaris might still be using them."""
         self.root.destroy()
     
     def _build_ui(self):
-        # Connection
-        conn = tk.LabelFrame(self.root, text="OMERO Connection", font=('Arial', 10, 'bold'))
-        conn.pack(fill=tk.X, padx=10, pady=10)
+        # Connection frame
+        conn_frame = tk.LabelFrame(self.root, text="OMERO Connection", padx=10, pady=10)
+        conn_frame.pack(fill=tk.X, padx=10, pady=10)
         
-        tk.Label(conn, text="Host:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        self.host_entry = tk.Entry(conn, width=30)
+        tk.Label(conn_frame, text="Host:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.host_entry = tk.Entry(conn_frame, width=25)
         self.host_entry.insert(0, "172.23.208.90")
-        self.host_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.host_entry.grid(row=0, column=1, pady=5, padx=5)
         
-        tk.Label(conn, text="Port:").grid(row=0, column=2, sticky=tk.W, padx=5)
-        self.port_entry = tk.Entry(conn, width=10)
-        self.port_entry.insert(0, "4080")
-        self.port_entry.grid(row=0, column=3, padx=5, pady=5)
-
+        tk.Label(conn_frame, text="Port:").grid(row=0, column=2, sticky=tk.W, pady=5)
+        self.port_entry = tk.Entry(conn_frame, width=8)
+        self.port_entry.insert(0, "4090")
+        self.port_entry.grid(row=0, column=3, pady=5, padx=5)
+        
         self.https_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(conn, text="Use HTTPS", variable=self.https_var).grid(
-            row=0, column=4, padx=5, pady=5
+        tk.Checkbutton(conn_frame, text="Use HTTPS", variable=self.https_var).grid(
+            row=0, column=4, pady=5, padx=5
         )
         
-        tk.Label(conn, text="User:").grid(row=1, column=0, sticky=tk.W, padx=5)
-        self.user_entry = tk.Entry(conn, width=30)
+        tk.Label(conn_frame, text="Username:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.user_entry = tk.Entry(conn_frame, width=25)
         self.user_entry.insert(0, "test")
-        self.user_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.user_entry.grid(row=1, column=1, pady=5, padx=5)
         
-        tk.Label(conn, text="Pass:").grid(row=1, column=2, sticky=tk.W, padx=5)
-        self.pass_entry = tk.Entry(conn, width=30, show="*")
-        self.pass_entry.grid(row=1, column=3, padx=5, pady=5)
+        tk.Label(conn_frame, text="Password:").grid(row=1, column=2, sticky=tk.W, pady=5)
+        self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
+        self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
         
-        tk.Button(conn, text="Connect", command=self._connect,
-                 bg='#3498db', fg='white', font=('Arial', 10, 'bold')).grid(
-                     row=2, column=0, columnspan=4, pady=10)
+        tk.Button(conn_frame, text="Connect", command=self._connect,
+                 bg='#3498db', fg='white', font=('Arial', 10, 'bold'),
+                 width=15).grid(row=0, column=5, rowspan=2, padx=10, pady=5)
         
         # Browser
         browser = tk.Frame(self.root)
