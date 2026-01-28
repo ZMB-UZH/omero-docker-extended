@@ -25,7 +25,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 30
       start_period: 5s
 
@@ -59,7 +59,7 @@ services:
           "/opt/omero/server/OMERO.server/bin/omero -s localhost -p 4064 login >/dev/null 2>&1"
         ]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 30
       start_period: 30s
 
@@ -77,7 +77,7 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 30
       start_period: 5s
 
@@ -108,7 +108,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 30
       start_period: 15s
 
@@ -135,7 +135,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 5s
-      timeout: 10s
+      timeout: 5s
       retries: 30
       start_period: 5s
 
