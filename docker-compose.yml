@@ -139,6 +139,34 @@ services:
       retries: 30
       start_period: 5s
 
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.omero-web-custom
+    restart: unless-stopped
+    depends_on:
+      omeroserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./omeroweb.env
+    networks:
+      - omero
+    command: >
+      bash -lc "celery -A omeroweb_imaris_connector.celery_app worker
+      --loglevel=${OMERO_IMS_CELERY_LOGLEVEL:-info}
+      --concurrency=${OMERO_IMS_CELERY_WORKER_CONCURRENCY:-2}
+      -Q ${OMERO_IMS_CELERY_QUEUE:-imaris_export}"
+    healthcheck:
+      test: >
+        bash -lc "celery -A omeroweb_imaris_connector.celery_app inspect ping
+        -d celery@${HOSTNAME}"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
 networks:
   omero:
 
