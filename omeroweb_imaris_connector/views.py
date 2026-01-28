@@ -251,6 +251,55 @@ def _is_process_handle(job):
     return hasattr(job, "poll") and hasattr(job, "getResults")
 
 
+def _is_async_result(job):
+    if job is None:
+        return False
+    return hasattr(job, "waitForCompleted") and (
+        hasattr(job, "getResponse")
+        or hasattr(job, "getResult")
+        or hasattr(job, "getResults")
+        or hasattr(job, "get")
+    )
+
+
+def _resolve_async_result(svc, meth_name, async_result):
+    if async_result is None:
+        return None
+    if not _is_async_result(async_result):
+        return async_result
+
+    candidates = []
+    if meth_name.startswith("begin_"):
+        candidates.append("end_" + meth_name[len("begin_"):])
+    if meth_name.endswith("_async"):
+        base_name = meth_name[:-6]
+        candidates.append(base_name)
+        candidates.append("end_" + base_name)
+    candidates.extend(["end_runScript", "end_run_script"])
+
+    for end_name in candidates:
+        end_meth = getattr(svc, end_name, None)
+        if callable(end_meth):
+            try:
+                return end_meth(async_result)
+            except Exception:
+                logger.exception("ScriptService.%s failed to end async call", end_name)
+
+    try:
+        async_result.waitForCompleted()
+    except Exception:
+        logger.exception("AsyncResult.waitForCompleted failed")
+
+    for getter in ("getResponse", "getResult", "getResults", "get"):
+        meth = getattr(async_result, getter, None)
+        if callable(meth):
+            try:
+                return meth()
+            except Exception:
+                logger.exception("AsyncResult.%s failed", getter)
+    return async_result
+
+
 def _iter_script_methods(svc):
     preferred = [
         "runScriptAsync",
@@ -374,6 +423,8 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
                 if job is None:
                     errors.append(f"{meth_name}: returned None")
                     continue
+                if _is_async_result(job):
+                    job = _resolve_async_result(svc, meth_name, job)
                 if _is_process_handle(job):
                     logger.debug("IMS export script returned process handle via %s", meth_name)
                     return job
