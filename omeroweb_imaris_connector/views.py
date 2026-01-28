@@ -338,6 +338,16 @@ def _get_job_state_and_outputs(conn, job_id):
             except Exception:
                 pass
 
+    # 1b) Outputs-only fallback (some versions expose getJobOutputs without status)
+    out_fn = getattr(svc, "getJobOutputs", None) or getattr(svc, "get_job_outputs", None)
+    if out_fn:
+        try:
+            outputs = out_fn(job_id)
+            if outputs:
+                return "FINISHED", outputs
+        except Exception:
+            pass
+
     # 2) Older pattern: getJobs() returns job objects with .id/.status and maybe outputs elsewhere
     get_jobs = getattr(svc, "getJobs", None)
     if get_jobs:
@@ -422,6 +432,15 @@ def _extract_output_value(outputs, key):
     if v is None:
         return None
     return _unwrap_rtype(v)
+
+
+def _infer_finished_from_outputs(outputs):
+    if not isinstance(outputs, dict):
+        return False
+    for key in ("Export_Path", "File_Annotation_Id", "Export_Name"):
+        if _extract_output_value(outputs, key):
+            return True
+    return False
 
 
 def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
@@ -542,6 +561,8 @@ def imaris_export(request, conn=None, **kwargs):
             state, outputs = _get_job_state_and_outputs(conn, job_id_int)
             normalized_state = _normalize_job_state(state)
             error = None
+            if not normalized_state and _infer_finished_from_outputs(outputs):
+                normalized_state = "FINISHED"
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
         is_finished = normalized_state in finished_states
@@ -619,6 +640,8 @@ def imaris_export(request, conn=None, **kwargs):
                 last_state = _normalize_job_state(state)
                 if outs:
                     outputs = outs
+                if not last_state and _infer_finished_from_outputs(outputs):
+                    last_state = "FINISHED"
 
                 if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                     break
