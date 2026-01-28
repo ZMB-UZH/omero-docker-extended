@@ -24,6 +24,53 @@ import re
 import tempfile
 import time
 import datetime
+import urllib.request
+import urllib.parse
+import urllib.error
+
+EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
+
+
+def is_ims_file(file_path):
+    """Check if a file looks like an Imaris IMS (HDF5) file."""
+    hdf5_signature = b"\x89HDF\r\n\x1a\n"
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(len(hdf5_signature))
+        return header == hdf5_signature
+    except Exception:
+        return False
+
+
+def open_file_in_imaris(file_path, imaris_app):
+    """Attempt to open a file in Imaris using available API methods."""
+    if imaris_app is None:
+        print("Imaris application handle is not available.")
+        return False
+
+    last_error = None
+    candidates = [
+        ("FileOpen", (file_path, "")),
+        ("FileOpen", (file_path,)),
+        ("OpenFile", (file_path,)),
+        ("LoadFile", (file_path,)),
+    ]
+    for method_name, args in candidates:
+        method = getattr(imaris_app, method_name, None)
+        if not method:
+            continue
+        try:
+            method(*args)
+            return True
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    if last_error:
+        print(f"Imaris open failed: {last_error}")
+    else:
+        print("Imaris open failed: no supported API method found.")
+    return False
 
 # =============================================================================
 # OMERO WEB CLIENT
@@ -50,8 +97,6 @@ class OMEROWebClient:
     def connect(self):
         """Authenticate with OMERO.web."""
         try:
-            import urllib.request
-            import urllib.parse
             import http.cookiejar
             
             cookie_jar = http.cookiejar.CookieJar()
@@ -94,6 +139,7 @@ class OMEROWebClient:
                 self.opener = opener
                 self.csrf_token = csrf_token
                 self.session_id = session_id
+                self.session_key = session_id
                 return True
             
             return False
@@ -303,7 +349,7 @@ class OMEROWebClient:
             download_dir = os.path.join(os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports")
 
         # Ensure logged in (cookie present)
-        if not getattr(self, "session_key", None):
+        if not getattr(self, "session_id", None):
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
 
         base = self.base_url.rstrip("/")
@@ -378,6 +424,10 @@ class OMEROWebClient:
             raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}") from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
+
+
+class OMEROBrowserDialog:
+    """UI dialog for browsing OMERO data and loading IMS into Imaris."""
 
     def __init__(self, imaris):
         self.imaris = imaris
