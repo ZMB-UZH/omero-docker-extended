@@ -2,7 +2,12 @@ import os
 import time
 import logging
 
-from django.http import FileResponse, HttpResponse, HttpResponseBadRequest
+from django.http import (
+    FileResponse,
+    HttpResponse,
+    HttpResponseBadRequest,
+    StreamingHttpResponse,
+)
 from omeroweb.decorators import login_required
 
 logger = logging.getLogger(__name__)
@@ -137,6 +142,70 @@ def _extract_output_value(outputs, key):
     return _unwrap_rtype(v)
 
 
+def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
+    offset = 0
+    try:
+        while True:
+            if size is not None and offset >= size:
+                break
+            to_read = chunk_size if size is None else min(chunk_size, size - offset)
+            data = store.read(offset, to_read)
+            if not data:
+                break
+            if isinstance(data, memoryview):
+                data = data.tobytes()
+            yield data
+            offset += len(data)
+    finally:
+        try:
+            store.close()
+        except Exception:
+            pass
+
+
+def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
+    try:
+        file_ann_id = int(file_ann_id)
+    except (TypeError, ValueError):
+        return None
+
+    file_ann = conn.getObject("FileAnnotation", file_ann_id)
+    if not file_ann:
+        return None
+
+    original_file = file_ann.getFile()
+    if not original_file:
+        return None
+
+    name = None
+    size = None
+    try:
+        name = original_file.getName()
+    except Exception:
+        name = None
+    try:
+        size = original_file.getSize()
+    except Exception:
+        size = None
+
+    name = _unwrap_rtype(name) or filename_fallback or "export.ims"
+    try:
+        size = int(_unwrap_rtype(size)) if size is not None else None
+    except (TypeError, ValueError):
+        size = None
+
+    store = conn.c.sf.createRawFileStore()
+    store.setFileId(int(_unwrap_rtype(original_file.getId())))
+    response = StreamingHttpResponse(
+        _raw_file_generator(store, size),
+        content_type="application/octet-stream",
+    )
+    if size is not None:
+        response["Content-Length"] = str(size)
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
     image_id = request.GET.get("image") or request.GET.get("image_id")
@@ -181,27 +250,31 @@ def imaris_export(request, conn=None, **kwargs):
 
         export_path = _extract_output_value(outputs or {}, "Export_Path")
         export_name = _extract_output_value(outputs or {}, "Export_Name")
+        file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")
+
+        if export_path:
+            export_root = os.path.realpath(EXPORT_ROOT)
+            export_path = os.path.realpath(export_path)
+            if export_path.startswith(export_root + os.sep) and os.path.exists(export_path):
+                filename = export_name or os.path.basename(export_path)
+                response = FileResponse(
+                    open(export_path, "rb"),
+                    as_attachment=True,
+                    filename=filename,
+                )
+                response["Content-Type"] = "application/octet-stream"
+                return response
+
+        if file_ann_id:
+            response = _response_from_file_annotation(conn, file_ann_id, export_name)
+            if response:
+                return response
 
         if not export_path:
             return HttpResponse("IMS export did not return a file path.", status=500)
-
-        export_root = os.path.realpath(EXPORT_ROOT)
-        export_path = os.path.realpath(export_path)
-
-        if not export_path.startswith(export_root + os.sep):
-            return HttpResponse("IMS export path is invalid.", status=500)
-        if not os.path.exists(export_path):
+        if export_path and not os.path.exists(export_path):
             return HttpResponse("IMS export file not found on server.", status=404)
-
-        filename = export_name or os.path.basename(export_path)
-
-        response = FileResponse(
-            open(export_path, "rb"),
-            as_attachment=True,
-            filename=filename,
-        )
-        response["Content-Type"] = "application/octet-stream"
-        return response
+        return HttpResponse("IMS export path is invalid.", status=500)
 
     except Exception as exc:
         logger.exception("IMS export failed: %s", exc)
