@@ -142,13 +142,15 @@ services:
   celery:
     build:
       context: .
-      dockerfile: Dockerfile.omero-web-custom
+      dockerfile: Dockerfile.omero-celery-worker
     restart: unless-stopped
     depends_on:
       omeroserver:
         condition: service_healthy
       redis:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - ./omeroweb.env
     networks:

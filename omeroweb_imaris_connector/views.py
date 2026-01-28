@@ -1,8 +1,8 @@
+import logging
 import os
 import time
-import logging
 
-from celery import states
+from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
 
@@ -12,15 +12,9 @@ from .imaris_service import (
     EXPORT_TIMEOUT,
     _bool_from_request,
     _build_download_response,
-    _find_script_id,
-    _get_job_state_and_outputs,
     _extract_output_value,
-    _infer_finished_from_outputs,
+    _find_script_id,
     _normalize_job_state,
-    _poll_process_job,
-    _register_process_job,
-    _run_script,
-    _wait_for_process,
 )
 from .tasks import run_ims_export_task
 
@@ -34,25 +28,13 @@ CELERY_QUEUE = os.environ.get("OMERO_IMS_CELERY_QUEUE", "imaris_export")
 def imaris_export(request, conn=None, **kwargs):
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
-        try:
-            job_id_int = int(job_id)
-        except (TypeError, ValueError):
-            job_id_int = None
-
-        if job_id_int is None:
-            if job_id.startswith(CELERY_JOB_PREFIX):
-                state, outputs, error = _poll_celery_job(job_id)
-            else:
-                state, outputs, error = _poll_process_job(job_id)
-            normalized_state = _normalize_job_state(state)
-            if error == "Unknown job id":
-                return HttpResponse(error, status=404)
-        else:
-            state, outputs = _get_job_state_and_outputs(conn, job_id_int)
-            normalized_state = _normalize_job_state(state)
-            error = None
-            if not normalized_state and _infer_finished_from_outputs(outputs):
-                normalized_state = "FINISHED"
+        if not job_id.startswith(CELERY_JOB_PREFIX):
+            return HttpResponse(
+                "Only Celery-backed IMS export jobs are supported.",
+                status=400,
+            )
+        state, outputs, error = _poll_celery_job(job_id)
+        normalized_state = _normalize_job_state(state)
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
         is_finished = normalized_state in finished_states
@@ -94,6 +76,11 @@ def imaris_export(request, conn=None, **kwargs):
     if wait_param is not None:
         async_mode = not _bool_from_request(wait_param)
     use_celery = _bool_from_request(os.environ.get("OMERO_IMS_USE_CELERY", "true"))
+    if not use_celery:
+        return HttpResponse(
+            "Celery is required for IMS exports. Set OMERO_IMS_USE_CELERY=true.",
+            status=500,
+        )
 
     try:
         logger.info(
@@ -106,58 +93,31 @@ def imaris_export(request, conn=None, **kwargs):
         if not script_id:
             return HttpResponse("IMS export script not found on OMERO.server.", status=500)
 
-        wait_secs = 0 if async_mode else None
-        if async_mode and use_celery:
-            celery_job_id = _start_celery_job(conn, image_id)
-            status_url = request.build_absolute_uri(
-                f"{request.path}?job={celery_job_id}"
-            )
+        celery_job_id = _start_celery_job(conn, image_id)
+        status_url = request.build_absolute_uri(f"{request.path}?job={celery_job_id}")
+        if async_mode:
             return JsonResponse({"job_id": celery_job_id, "status_url": status_url})
-
-        job_handle = _run_script(conn, script_id, image_id, wait_secs=wait_secs)
-        if not job_handle:
-            return HttpResponse("Failed to start IMS export job.", status=500)
-
-        if isinstance(job_handle, int):
-            job_id = job_handle
-            if async_mode:
-                status_url = request.build_absolute_uri(
-                    f"{request.path}?job={job_id}"
-                )
-                return JsonResponse({"job_id": job_id, "status_url": status_url})
-        else:
-            job_id = None
-            if async_mode:
-                logger.warning("Async IMS export requested but script returned a process handle.")
-                job_id = _register_process_job(job_handle)
-                status_url = request.build_absolute_uri(
-                    f"{request.path}?job={job_id}"
-                )
-                return JsonResponse({"job_id": job_id, "status_url": status_url})
 
         deadline = time.time() + EXPORT_TIMEOUT
         outputs = None
         last_state = None
+        last_error = None
 
-        if isinstance(job_handle, int):
-            while time.time() < deadline:
-                state, outs = _get_job_state_and_outputs(conn, job_id)
-                last_state = _normalize_job_state(state)
-                if outs:
-                    outputs = outs
-                if not last_state and _infer_finished_from_outputs(outputs):
-                    last_state = "FINISHED"
-
-                if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-                    break
-                if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-                    return HttpResponse("IMS export job failed.", status=500)
-
-                time.sleep(EXPORT_POLL_INTERVAL)
-        else:
-            last_state, outputs = _wait_for_process(job_handle, EXPORT_TIMEOUT)
+        while time.time() < deadline:
+            state, outs, error = _poll_celery_job(celery_job_id)
+            last_state = _normalize_job_state(state)
+            if outs:
+                outputs = outs
+            if error:
+                last_error = error
+            if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+                break
             if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-                return HttpResponse("IMS export job failed.", status=500)
+                return HttpResponse(
+                    f"IMS export job failed: {last_error or 'unknown error'}",
+                    status=500,
+                )
+            time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
             return HttpResponse("Could not determine IMS export job status.", status=500)
@@ -176,11 +136,15 @@ def imaris_export(request, conn=None, **kwargs):
 def _poll_celery_job(job_id):
     task_id = job_id[len(CELERY_JOB_PREFIX):]
     async_result = celery_app.AsyncResult(task_id)
-    if async_result.state in {states.PENDING, states.RECEIVED, states.STARTED}:
+    if async_result.state in {
+        celery_states.PENDING,
+        celery_states.RECEIVED,
+        celery_states.STARTED,
+    }:
         return "RUNNING", None, None
-    if async_result.state == states.FAILURE:
+    if async_result.state == celery_states.FAILURE:
         return "FAILED", None, str(async_result.result)
-    if async_result.state == states.SUCCESS:
+    if async_result.state == celery_states.SUCCESS:
         payload = async_result.result or {}
         return (
             payload.get("state", "FINISHED"),
@@ -198,6 +162,14 @@ def _start_celery_job(conn, image_id):
         raise RuntimeError("IMS export session key unavailable for background job.")
     if not host or not port:
         raise RuntimeError("IMS export host/port unavailable for background job.")
+    logger.info(
+        "Dispatching IMS export task image_id=%s host=%s port=%s secure=%s queue=%s",
+        image_id,
+        host,
+        port,
+        secure,
+        CELERY_QUEUE,
+    )
     async_result = run_ims_export_task.apply_async(
         kwargs={
             "image_id": int(image_id),
@@ -208,7 +180,14 @@ def _start_celery_job(conn, image_id):
         },
         queue=CELERY_QUEUE,
     )
-    return f"{CELERY_JOB_PREFIX}{async_result.id}"
+    task_id = async_result.id
+    logger.info(
+        "Dispatched IMS export task image_id=%s task_id=%s queue=%s",
+        image_id,
+        task_id,
+        CELERY_QUEUE,
+    )
+    return f"{CELERY_JOB_PREFIX}{task_id}"
 
 
 def _get_session_key(conn):
