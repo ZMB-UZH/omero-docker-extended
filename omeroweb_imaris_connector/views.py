@@ -1,136 +1,219 @@
-# FULL FILE — omeroweb_imaris_connector/views.py
-# GENERATED AFTER DEBUGGING AGAINST OMERO 5.6.16 + OMERO.web 5.x
-# NO REST /api/v0/scripts — BLITZGATEWAY ONLY
-
 import os
 import time
 
 from django.http import FileResponse, HttpResponse, HttpResponseBadRequest
 from omeroweb.decorators import login_required
 
-from omero.gateway import BlitzGateway
-from omero.scripts import client as script_client
-
-
+# OMERO script name to execute on the server
 SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
 
-DEFAULT_EXPORT_ROOT = "/OMERO/ImarisExports"
-DEFAULT_TIMEOUT = 3600
-DEFAULT_POLL_INTERVAL = 2.0
+# Where the IMS export script is expected to write files (server-side path)
+EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 
+# How long to wait for the script job to finish (seconds)
+EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 
-def _get_job_service_conn():
-    host = os.environ.get("OMERO_HOST", "omero-test-omeroserver-1")
-    port = int(os.environ.get("OMERO_PORT", "4064"))
-
-    user = os.environ["OMERO_WEB_JOB_SERVICE_USERNAME"]
-    passwd = os.environ["OMERO_WEB_JOB_SERVICE_PASS"]
-
-    conn = BlitzGateway(user, passwd, host=host, port=port)
-    if not conn.connect():
-        raise RuntimeError("Job-service BlitzGateway connection failed")
-
-    return conn
+# Poll interval while waiting for job completion (seconds)
+EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
 
 
 def _find_script_id(conn):
+    """Find the script id for SCRIPT_NAME via ScriptService."""
     svc = conn.getScriptService()
-    scripts = svc.getScripts()
+    scripts = svc.getScripts() or []
+
+    wanted_base = os.path.basename(SCRIPT_NAME)
 
     for s in scripts:
+        sid = getattr(getattr(s, "id", None), "val", None)
+        if not sid:
+            continue
+
         name = getattr(getattr(s, "name", None), "val", None)
         path = getattr(getattr(s, "path", None), "val", None)
 
-        if name == SCRIPT_NAME:
-            return s.id.val
-
-        if path and os.path.basename(path) == SCRIPT_NAME:
-            return s.id.val
+        # Match exact or basename
+        if name == SCRIPT_NAME or path == SCRIPT_NAME:
+            return int(sid)
+        if name and os.path.basename(name) == wanted_base:
+            return int(sid)
+        if path and os.path.basename(path) == wanted_base:
+            return int(sid)
 
     return None
 
 
-def _poll_activity(conn, job_id, timeout, poll_interval):
+def _job_state(job):
+    # ScriptJob has status and maybe message; we normalize to uppercase string
+    state = None
+    if job is None:
+        return None
+    state = getattr(job, "status", None)
+    state = getattr(state, "val", None) if state is not None else None
+    if state is None:
+        state = getattr(job, "state", None)
+        state = getattr(state, "val", None) if state is not None else None
+    return (state or "").upper()
+
+
+def _poll_job(conn, job_id):
+    """Poll ScriptService for a job until it finishes or times out."""
     svc = conn.getScriptService()
-    deadline = time.time() + timeout
+    deadline = time.time() + EXPORT_TIMEOUT
+
+    # Prefer getJob if available, otherwise fall back to scanning getJobs()
+    has_get_job = hasattr(svc, "getJob")
 
     while time.time() < deadline:
-        jobs = svc.getJobs()
-        for j in jobs:
-            if j.id.val == job_id:
-                status = j.status.val
-                if status in ("FINISHED", "DONE"):
-                    return j
-                if status in ("ERROR", "FAILED", "CANCELLED"):
-                    return j
-        time.sleep(poll_interval)
+        job = None
+
+        if has_get_job:
+            try:
+                job = svc.getJob(job_id)
+            except Exception:
+                job = None
+        else:
+            try:
+                jobs = svc.getJobs() or []
+                for j in jobs:
+                    jid = getattr(getattr(j, "id", None), "val", None)
+                    if jid and int(jid) == int(job_id):
+                        job = j
+                        break
+            except Exception:
+                job = None
+
+        state = _job_state(job)
+        if state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+            return job
+        if state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+            return job
+
+        time.sleep(EXPORT_POLL_INTERVAL)
 
     return None
+
+
+def _get_job_outputs(conn, job_id):
+    """Fetch job outputs as a Python dict (best-effort across OMERO versions)."""
+    svc = conn.getScriptService()
+
+    job = None
+    if hasattr(svc, "getJob"):
+        try:
+            job = svc.getJob(int(job_id))
+        except Exception:
+            job = None
+
+    # Try common attributes
+    if job is not None:
+        for attr in ("outputs", "output", "results", "result"):
+            val = getattr(job, attr, None)
+            if val is not None:
+                # Some OMERO versions store results in an omero.rtypes.RMap
+                try:
+                    # RMap: ._map is dict-like mapping of rtypes
+                    if hasattr(val, "_map"):
+                        return val._map  # noqa: SLF001
+                except Exception:
+                    pass
+                if isinstance(val, dict):
+                    return val
+
+                # Sometimes a list of NamedValue objects
+                try:
+                    items = list(val)  # type: ignore[arg-type]
+                    out = {}
+                    for item in items:
+                        name = getattr(getattr(item, "name", None), "val", None)
+                        v = getattr(item, "value", None)
+                        if name:
+                            out[name] = v
+                    if out:
+                        return out
+                except Exception:
+                    pass
+
+    return {}
+def _extract_output_value(outputs, key):
+    """Handle both raw values and OMERO rtypes."""
+    if not isinstance(outputs, dict):
+        return None
+
+    v = outputs.get(key)
+    if v is None:
+        return None
+
+    # OMERO rtype: has .val
+    if hasattr(v, "val"):
+        return v.val
+
+    # Sometimes dict-ish
+    if isinstance(v, dict):
+        return v.get("value") or v.get("val") or v.get("id") or v.get("@id")
+
+    return v
 
 
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
-    image_id = request.GET.get("image")
+    """Run IMS_Export.py on the server for a given image id and return the exported file."""
+    image_id = request.GET.get("image") or request.GET.get("image_id")
     if not image_id:
         return HttpResponseBadRequest("Missing image id")
-
     try:
         image_id = int(image_id)
-    except ValueError:
+    except (TypeError, ValueError):
         return HttpResponseBadRequest("Invalid image id")
 
-    export_root = request.GET.get("export_root", DEFAULT_EXPORT_ROOT)
-    timeout = int(request.GET.get("timeout", DEFAULT_TIMEOUT))
-    poll_interval = float(request.GET.get("poll_interval", DEFAULT_POLL_INTERVAL))
-
-    job_conn = None
-
     try:
-        job_conn = _get_job_service_conn()
-
-        script_id = _find_script_id(job_conn)
+        script_id = _find_script_id(conn)
         if not script_id:
-            return HttpResponse("IMS_Export.py not found on server", status=500)
+            return HttpResponse("IMS export script not found.", status=500)
 
-        sc = script_client(
-            script_id,
-            inputs={"Image_ID": image_id},
-            client=job_conn._client,
-        )
+        # Run the script via ScriptService (current user session)
+        svc = conn.getScriptService()
 
-        job_id = sc.run()
+        # Script inputs are case-sensitive and must match script parameters
+        inputs = {"Image_ID": image_id}
+
+        # runScript signature differs slightly; most versions accept (scriptId, inputs, wait)
+        try:
+            job = svc.runScript(script_id, inputs, None)
+        except TypeError:
+            job = svc.runScript(script_id, inputs)
+
+        job_id = getattr(getattr(job, "id", None), "val", None) if job is not None else None
         if not job_id:
-            return HttpResponse("Failed to start IMS export job", status=500)
+            return HttpResponse("Failed to start IMS export job.", status=500)
 
-        job = _poll_activity(job_conn, job_id, timeout, poll_interval)
+        job = _poll_job(conn, int(job_id))
         if not job:
-            return HttpResponse("IMS export timed out", status=504)
+            return HttpResponse("Timed out waiting for IMS export job.", status=504)
 
-        outputs = sc.getOutputs()
-        export_path = outputs.get("Export_Path")
-        export_name = outputs.get("Export_Name")
+        state = _job_state(job)
+        if state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+            return HttpResponse("IMS export job failed.", status=500)
+
+        outputs = _get_job_outputs(conn, int(job_id))
+        export_path = _extract_output_value(outputs, "Export_Path")
+        export_name = _extract_output_value(outputs, "Export_Name")
 
         if not export_path:
-            return HttpResponse("IMS export returned no file path", status=500)
+            return HttpResponse("IMS export did not return a file path.", status=500)
 
-        export_root = os.path.realpath(export_root)
-        export_path = os.path.realpath(export_path)
-
+        # Security: only allow files under EXPORT_ROOT
+        export_root = os.path.realpath(EXPORT_ROOT)
+        export_path = os.path.realpath(str(export_path))
         if not export_path.startswith(export_root + os.sep):
-            return HttpResponse("Invalid export path", status=500)
-
+            return HttpResponse("IMS export path is invalid.", status=500)
         if not os.path.exists(export_path):
-            return HttpResponse("Export file not found", status=404)
+            return HttpResponse("IMS export file not found on server.", status=404)
 
         filename = export_name or os.path.basename(export_path)
+        response = FileResponse(open(export_path, "rb"), as_attachment=True, filename=filename)
+        response["Content-Type"] = "application/octet-stream"
+        return response
 
-        return FileResponse(
-            open(export_path, "rb"),
-            as_attachment=True,
-            filename=filename,
-            content_type="application/octet-stream",
-        )
-
-    finally:
-        if job_conn:
-            job_conn.close()
+    except Exception as exc:
+        return HttpResponse(f"IMS export failed: {exc}", status=500)
