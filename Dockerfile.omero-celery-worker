@@ -1,7 +1,7 @@
 ## Dedicated Celery worker image for Omero Imaris exports
 # Keeps Celery runtime separate from Omero web and OMERO server images.
 
-FROM python:3.12.8-slim-trixie
+FROM python:alpine
 
 USER root
 
