@@ -85,33 +85,52 @@ def _extract_job_id(job):
     if job is None:
         return None
     job_id = _unwrap_rtype(job)
-    if job_id is None:
-        return None
     if isinstance(job_id, (int, str)):
         try:
             return int(job_id)
         except (TypeError, ValueError):
             pass
-    for attr_name in ("getId", "get_id", "getJobId", "get_job_id"):
-        attr = getattr(job_id, attr_name, None)
-        if not attr:
+    if isinstance(job_id, dict):
+        for key in ("job_id", "jobId", "id", "JobId", "JobID"):
+            if key in job_id:
+                try:
+                    return int(_unwrap_rtype(job_id[key]))
+                except (TypeError, ValueError):
+                    continue
+    if isinstance(job_id, (list, tuple)) and job_id:
+        for entry in job_id:
+            try:
+                return int(_unwrap_rtype(entry))
+            except (TypeError, ValueError):
+                continue
+
+    def _get_attr_value(obj, attr_name):
+        attr = getattr(obj, attr_name, None)
+        if attr is None:
+            return None
+        try:
+            return attr() if callable(attr) else attr
+        except Exception:
+            return None
+
+    for attr_name in (
+        "getJobId",
+        "get_job_id",
+        "jobId",
+        "job_id",
+        "getId",
+        "get_id",
+        "id",
+        "value",
+        "getValue",
+    ):
+        value = _get_attr_value(job_id, attr_name)
+        if value is None:
             continue
         try:
-            value = attr()
             return int(_unwrap_rtype(value))
         except (TypeError, ValueError):
             continue
-        except Exception:
-            continue
-    for attr_name in ("id", "jobId", "job_id"):
-        if hasattr(job_id, attr_name):
-            try:
-                value = getattr(job_id, attr_name)
-                return int(_unwrap_rtype(value))
-            except (TypeError, ValueError):
-                continue
-            except Exception:
-                continue
     return None
 
 
