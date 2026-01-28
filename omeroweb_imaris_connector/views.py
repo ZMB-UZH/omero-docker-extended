@@ -249,11 +249,11 @@ def _run_script(conn, script_id, image_id):
                 job = meth(script_id, inputs, None)
             except TypeError:
                 job = meth(script_id, inputs)
+            if _is_process_handle(job):
+                return job
             job_id = _extract_job_id(job)
             if job_id is not None:
                 return job_id
-            if _is_process_handle(job):
-                return job
             return None
         except Exception as e:
             logger.exception("ScriptService.%s failed: %s", meth_name, e)
