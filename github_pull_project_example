@@ -7,7 +7,7 @@ BASE_DIR="/opt/omero-test"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
-USE_CACHE_BUILD="${USE_CACHE_BUILD:-0}" # set to 1 to enable cached builds
+USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
 set -euo pipefail
@@ -96,4 +96,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
