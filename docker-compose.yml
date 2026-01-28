@@ -24,7 +24,7 @@ services:
       - database:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 30
       start_period: 5s
@@ -58,7 +58,7 @@ services:
           "CMD-SHELL",
           "/opt/omero/server/OMERO.server/bin/omero -s localhost -p 4064 login >/dev/null 2>&1"
         ]
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 30
       start_period: 30s
@@ -76,7 +76,7 @@ services:
       - /data:size=512m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 30
       start_period: 5s
@@ -107,7 +107,7 @@ services:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 30
       start_period: 15s
@@ -134,7 +134,7 @@ services:
       - database_plugin:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
-      interval: 10s
+      interval: 5s
       timeout: 10s
       retries: 30
       start_period: 5s
