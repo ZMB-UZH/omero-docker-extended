@@ -32,7 +32,6 @@ class OMEROWebClient:
 
     def __init__(self, host, port, username, password, scheme="http"):
         self.base_url = self._build_base_url(host, port, scheme)
-        self.api_url = f"{self.base_url}/api/v0"
         self.host = host
         self.port = port
         self.username = username
@@ -100,20 +99,23 @@ class OMEROWebClient:
             print(f"Connection error: {e}")
             return False
     
-    def _api_request(self, endpoint):
-        """Make API request."""
+    def _webclient_api_request(self, endpoint, params=None):
+        """Make a webclient API request."""
         import urllib.request
         import urllib.error
+        import urllib.parse
 
         if not hasattr(self, 'opener'):
             return None
-            
-        url = f"{self.api_url}/{endpoint}"
+
+        url = f"{self.base_url}/webclient/api/{endpoint.lstrip('/')}"
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url)
-        
+
         if hasattr(self, 'csrf_token'):
             req.add_header('X-CSRFToken', self.csrf_token)
-        
+
         try:
             response = self.opener.open(req, timeout=10)
             return json.loads(response.read().decode('utf-8'))
@@ -124,85 +126,37 @@ class OMEROWebClient:
             print(f"API error: {e}")
             return None
 
-    def _api_post(self, endpoint, payload=None):
-        """POST JSON to OMERO.web API and parse JSON response."""
-        import urllib.request
-        import urllib.error
-
-        if not hasattr(self, 'opener'):
-            return None
-
-        url = f"{self.api_url}/{endpoint}"
-        data = None
-        if payload is not None:
-            data = json.dumps(payload).encode('utf-8')
-
-        req = urllib.request.Request(url, data=data, method='POST')
-        req.add_header('Content-Type', 'application/json')
-        if hasattr(self, 'csrf_token'):
-            req.add_header('X-CSRFToken', self.csrf_token)
-
-        try:
-            response = self.opener.open(req, timeout=30)
-            raw = response.read()
-            if not raw:
-                return None
-            try:
-                return json.loads(raw.decode('utf-8'))
-            except Exception:
-                return None
-        except urllib.error.HTTPError as e:
-            print(f"API POST error ({e.code}): {e.reason}")
-            try:
-                print(e.read().decode('utf-8'))
-            except Exception:
-                pass
-            return None
-        except Exception as e:
-            print(f"API POST error: {e}")
-            return None
-
     def get_image_metadata(self, image_id):
         """Get image metadata including original filename."""
-        data = self._api_request(f"m/images/{image_id}/")
+        data = self._get_first_webclient_response([
+            ("images/{}/".format(image_id), None),
+            ("objects/", {"type": "image", "id": image_id}),
+            ("metadata/", {"type": "image", "id": image_id}),
+        ])
         if not data:
             return {}
-        
+
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        data = data.get('data') or data
+
         result = {
             'id': image_id,
-            'name': data.get('Name', ''),
+            'name': data.get('Name') or data.get('name', ''),
             'original_file': None,
         }
-        
-        fileset = data.get("Fileset") or {}
+
+        fileset = data.get("Fileset") or data.get("fileset") or {}
         files = fileset.get("Files") or []
         if files:
-            result['original_file'] = files[0].get("Name")
-        
+            result['original_file'] = files[0].get("Name") or files[0].get("name")
+
         return result
 
     def list_scripts(self):
         """List available scripts."""
-        # Try multiple possible endpoints
-        endpoints = [
-            "scripts/",  # API v0
-            "../webclient/list_scripts/",  # Webclient endpoint (relative to api/v0)
-        ]
-        
-        data = None
-        for endpoint in endpoints:
-            print(f"DEBUG: Trying endpoint: {endpoint}")
-            test_data = self._api_request(endpoint)
-            if test_data:
-                data = test_data
-                print(f"DEBUG: Success with endpoint: {endpoint}")
-                break
-        
-        # If API failed, try direct webclient call
-        if not data:
-            print("DEBUG: API endpoints failed, trying direct webclient call")
-            data = self._webclient_list_scripts()
-        
+        data = self._webclient_list_scripts()
+
         print(f"DEBUG: Raw API response type: {type(data)}")
         
         # Handle response - could be list or dict
@@ -252,6 +206,87 @@ class OMEROWebClient:
         except Exception as e:
             print(f"DEBUG: Webclient API error: {e}")
             return None
+
+    def _webclient_annotations(self, image_id):
+        """Fetch annotations using webclient API as a fallback."""
+        import urllib.request
+        import urllib.error
+        import urllib.parse
+
+        if not hasattr(self, 'opener'):
+            return None
+
+        query = urllib.parse.urlencode({
+            "image": image_id,
+            "type": "FileAnnotation",
+        })
+        url = f"{self.base_url}/webclient/api/annotations/?{query}"
+        req = urllib.request.Request(url)
+
+        if hasattr(self, 'csrf_token'):
+            req.add_header('X-CSRFToken', self.csrf_token)
+
+        try:
+            response = self.opener.open(req, timeout=10)
+            return json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            print(f"DEBUG: Webclient annotations error ({e.code}): {e.reason}")
+            return None
+        except Exception as e:
+            print(f"DEBUG: Webclient annotations error: {e}")
+            return None
+
+    def _extract_file_annotation_ids(self, annotation_data):
+        if not annotation_data:
+            return set()
+
+        annotations = []
+        if isinstance(annotation_data, list):
+            annotations = annotation_data
+        elif isinstance(annotation_data, dict):
+            annotations = (
+                annotation_data.get('data', {}).get('annotations')
+                or annotation_data.get('annotations')
+                or annotation_data.get('data')
+                or []
+            )
+
+        file_ann_ids = set()
+        for annotation in annotations:
+            ann_type = annotation.get('@type') or annotation.get('type') or ""
+            if "FileAnnotation" in ann_type:
+                ann_id = annotation.get('@id') or annotation.get('id')
+                if ann_id is not None:
+                    file_ann_ids.add(ann_id)
+        return file_ann_ids
+
+    def get_image_file_annotations(self, image_id):
+        """Return file annotation IDs for an image with fallbacks."""
+        webclient_data = self._webclient_annotations(image_id)
+        return self._extract_file_annotation_ids(webclient_data)
+
+    def _get_first_webclient_response(self, endpoints):
+        for endpoint, params in endpoints:
+            data = self._webclient_api_request(endpoint, params=params)
+            if data:
+                return data
+        return None
+
+    def _extract_objects(self, data):
+        if not data:
+            return []
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            return (
+                data.get('data')
+                or data.get('objects')
+                or data.get('projects')
+                or data.get('datasets')
+                or data.get('images')
+                or []
+            )
+        return []
 
     def find_script_id(self, script_name):
         """Find script ID by matching script name or path."""
@@ -426,43 +461,46 @@ class OMEROWebClient:
 
     def list_projects(self):
         """List all projects."""
-        data = self._api_request("m/projects/")
-        if not data:
-            return []
-        projects = data.get('data') or []
-        return [{'id': p['@id'], 'name': p['Name']} for p in projects]
+        data = self._get_first_webclient_response([
+            ("projects/", None),
+            ("containers/", {"type": "project"}),
+            ("objects/", {"type": "project"}),
+        ])
+        projects = self._extract_objects(data)
+        return [{
+            'id': p.get('@id') or p.get('id'),
+            'name': p.get('Name') or p.get('name')
+        } for p in projects if p]
 
     def list_datasets(self, project_id):
         """List datasets in a project."""
-        data = self._api_request(f"m/projects/{project_id}/datasets/")
-        if data:
-            datasets = data.get('data') or []
-            if datasets:
-                return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
-        data = self._api_request(f"m/projects/{project_id}/")
-        if not data:
-            return []
-        datasets = (
-            data.get('data', {}).get('Datasets')
-            or data.get('data', {}).get('datasets')
-            or []
-        )
-        return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
+        data = self._get_first_webclient_response([
+            (f"projects/{project_id}/datasets/", None),
+            ("containers/", {"type": "dataset", "parent": project_id}),
+            ("objects/", {"type": "dataset", "parent": project_id}),
+        ])
+        datasets = self._extract_objects(data)
+        return [{
+            'id': d.get('@id') or d.get('id'),
+            'name': d.get('Name') or d.get('name')
+        } for d in datasets if d]
 
     def list_images(self, dataset_id):
         """List images in a dataset."""
-        data = self._api_request(f"m/datasets/{dataset_id}/images/")
-        if not data:
-            return []
-        images = data.get('data') or []
+        data = self._get_first_webclient_response([
+            (f"datasets/{dataset_id}/images/", None),
+            ("containers/", {"type": "image", "parent": dataset_id}),
+            ("objects/", {"type": "image", "parent": dataset_id}),
+        ])
+        images = self._extract_objects(data)
         return [{
-            'id': img['@id'],
-            'name': img['Name'],
-            'sizeX': img.get('Pixels', {}).get('SizeX', 0),
-            'sizeY': img.get('Pixels', {}).get('SizeY', 0),
-            'sizeZ': img.get('Pixels', {}).get('SizeZ', 1),
-            'sizeC': img.get('Pixels', {}).get('SizeC', 1),
-            'sizeT': img.get('Pixels', {}).get('SizeT', 1),
+            'id': img.get('@id') or img.get('id'),
+            'name': img.get('Name') or img.get('name'),
+            'sizeX': (img.get('Pixels') or img.get('pixels') or {}).get('SizeX', 0),
+            'sizeY': (img.get('Pixels') or img.get('pixels') or {}).get('SizeY', 0),
+            'sizeZ': (img.get('Pixels') or img.get('pixels') or {}).get('SizeZ', 1),
+            'sizeC': (img.get('Pixels') or img.get('pixels') or {}).get('SizeC', 1),
+            'sizeT': (img.get('Pixels') or img.get('pixels') or {}).get('SizeT', 1),
         } for img in images]
 
     def download_ims_export(self, image_id, download_dir, fallback_name="export.ims"):
@@ -497,14 +535,7 @@ class OMEROWebClient:
             
             # Step 2: Get existing annotations before running script
             print(f"Checking existing annotations on image {image_id}...")
-            annotations_url = f"m/images/{image_id}/annotations/"
-            existing_ann_data = self._api_request(annotations_url)
-            existing_file_ann_ids = set()
-            if existing_ann_data:
-                annotations = existing_ann_data.get('data', {}).get('annotations', [])
-                for a in annotations:
-                    if a.get('@type') == 'http://www.openmicroscopy.org/Schemas/OME/2016-06#FileAnnotation':
-                        existing_file_ann_ids.add(a.get('@id'))
+            existing_file_ann_ids = self.get_image_file_annotations(image_id)
             print(f"Found {len(existing_file_ann_ids)} existing file annotations")
             
             # Step 3: Run the script
@@ -529,19 +560,12 @@ class OMEROWebClient:
                     print(f"Still waiting... ({elapsed}s elapsed)")
                 
                 # Check for new file annotations
-                ann_data = self._api_request(annotations_url)
-                if ann_data:
-                    annotations = ann_data.get('data', {}).get('annotations', [])
-                    # Look for NEW file annotations
-                    for a in annotations:
-                        if a.get('@type') == 'http://www.openmicroscopy.org/Schemas/OME/2016-06#FileAnnotation':
-                            ann_id = a.get('@id')
-                            if ann_id not in existing_file_ann_ids:
-                                # Found a new file annotation!
-                                file_annotation_id = ann_id
-                                print(f"Found new file annotation: {file_annotation_id}")
-                                break
-                
+                current_file_ann_ids = self.get_image_file_annotations(image_id)
+                new_file_ann_ids = current_file_ann_ids - existing_file_ann_ids
+                if new_file_ann_ids:
+                    file_annotation_id = next(iter(new_file_ann_ids))
+                    print(f"Found new file annotation: {file_annotation_id}")
+
                 if file_annotation_id:
                     break
                 
@@ -556,16 +580,19 @@ class OMEROWebClient:
             print(f"Export completed! File attachment ID: {file_annotation_id}")
             
             # Step 5: Get the original file ID from the annotation
-            annotation_data = self._api_request(f"m/annotations/{file_annotation_id}/")
+            annotation_data = self._webclient_api_request(
+                f"annotations/{file_annotation_id}/"
+            )
             if not annotation_data:
                 raise RuntimeError(f"Could not retrieve file annotation {file_annotation_id}")
-            
-            file_obj = annotation_data.get('data', {}).get('file')
+
+            annotation_payload = annotation_data.get('data') or annotation_data
+            file_obj = annotation_payload.get('file') or {}
             if not file_obj:
                 raise RuntimeError(f"File annotation {file_annotation_id} has no file object")
             
-            original_file_id = file_obj.get('id')
-            original_filename = file_obj.get('name', fallback_name)
+            original_file_id = file_obj.get('id') or file_obj.get('@id')
+            original_filename = file_obj.get('name') or file_obj.get('Name') or fallback_name
             
             if not original_file_id:
                 raise RuntimeError(f"File annotation has no original file ID")
