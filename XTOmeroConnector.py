@@ -185,12 +185,16 @@ class OMEROWebClient:
         """List available scripts."""
         data = self._api_request("scripts/")
         if data and isinstance(data, dict):
-            return data.get('data') or data.get('scripts') or []
+            scripts = data.get('data') or data.get('scripts') or []
+            if isinstance(scripts, dict):
+                scripts = scripts.get('data') or scripts.get('scripts') or []
+            return scripts
         return []
 
     def find_script_id(self, script_name):
         """Find script ID by matching script name or path."""
         scripts_list = self.list_scripts()
+        normalized_name = os.path.splitext(script_name)[0]
         for item in scripts_list:
             name = item.get('name') or item.get('Name') or item.get('scriptName')
             path = item.get('path') or item.get('Path')
@@ -203,6 +207,11 @@ class OMEROWebClient:
                 return sid
             if path and os.path.basename(path) == script_name:
                 return sid
+            if normalized_name:
+                if name and os.path.splitext(os.path.basename(name))[0] == normalized_name:
+                    return sid
+                if path and os.path.splitext(os.path.basename(path))[0] == normalized_name:
+                    return sid
         return None
 
     def run_script(self, script_id, inputs):
