@@ -228,7 +228,7 @@ def _is_process_handle(job):
     return hasattr(job, "poll") and hasattr(job, "getResults")
 
 
-def _run_script(conn, script_id, image_id):
+def _run_script(conn, script_id, image_id, wait_secs=None):
     svc = conn.getScriptService()
 
     # Build inputs
@@ -238,6 +238,12 @@ def _run_script(conn, script_id, image_id):
     except Exception:
         inputs = {"Image_ID": int(image_id)}
 
+    logger.debug(
+        "Starting IMS export script id=%s image_id=%s wait_secs=%s",
+        script_id,
+        image_id,
+        wait_secs,
+    )
     # Different omero-py versions expose different method names; try a few.
     for meth_name in ("runScript", "run_script", "run"):
         meth = getattr(svc, meth_name, None)
@@ -246,13 +252,18 @@ def _run_script(conn, script_id, image_id):
         try:
             # Common signature: runScript(scriptId, inputs, None)
             try:
-                job = meth(script_id, inputs, None)
+                if wait_secs is None:
+                    job = meth(script_id, inputs, None)
+                else:
+                    job = meth(script_id, inputs, int(wait_secs))
             except TypeError:
                 job = meth(script_id, inputs)
             if _is_process_handle(job):
+                logger.debug("IMS export script returned process handle via %s", meth_name)
                 return job
             job_id = _extract_job_id(job)
             if job_id is not None:
+                logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
                 return job_id
             return None
         except Exception as e:
@@ -605,11 +616,18 @@ def imaris_export(request, conn=None, **kwargs):
         async_mode = not _bool_from_request(wait_param)
 
     try:
+        logger.info(
+            "IMS export request image_id=%s async=%s wait_param=%s",
+            image_id,
+            async_mode,
+            wait_param,
+        )
         script_id = _find_script_id(conn)
         if not script_id:
             return HttpResponse("IMS export script not found on OMERO.server.", status=500)
 
-        job_handle = _run_script(conn, script_id, image_id)
+        wait_secs = 0 if async_mode else None
+        job_handle = _run_script(conn, script_id, image_id, wait_secs=wait_secs)
         if not job_handle:
             return HttpResponse("Failed to start IMS export job.", status=500)
 
