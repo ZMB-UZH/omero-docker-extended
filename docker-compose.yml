@@ -112,7 +112,7 @@ services:
       retries: 30
       start_period: 15s
 
-  database_plugin: # database exclusive to the OME plugin
+  database_plugin:
     image: "postgres:18"
     restart: unless-stopped
     command:
