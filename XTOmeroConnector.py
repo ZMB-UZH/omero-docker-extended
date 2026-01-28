@@ -272,12 +272,23 @@ class OMEROWebClient:
                 return data
         return None
 
-    def _extract_objects(self, data):
+    def _extract_objects(self, data, preferred_keys=None):
         if not data:
             return []
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
+            if preferred_keys:
+                for key in preferred_keys:
+                    if key in data:
+                        return data.get(key) or []
+
+                nested_data = data.get('data')
+                if isinstance(nested_data, dict):
+                    for key in preferred_keys:
+                        if key in nested_data:
+                            return nested_data.get(key) or []
+
             return (
                 data.get('data')
                 or data.get('objects')
@@ -466,7 +477,7 @@ class OMEROWebClient:
             ("containers/", {"type": "project"}),
             ("objects/", {"type": "project"}),
         ])
-        projects = self._extract_objects(data)
+        projects = self._extract_objects(data, preferred_keys=['projects'])
         return [{
             'id': p.get('@id') or p.get('id'),
             'name': p.get('Name') or p.get('name')
@@ -479,7 +490,7 @@ class OMEROWebClient:
             ("containers/", {"type": "dataset", "parent": project_id}),
             ("objects/", {"type": "dataset", "parent": project_id}),
         ])
-        datasets = self._extract_objects(data)
+        datasets = self._extract_objects(data, preferred_keys=['datasets'])
         return [{
             'id': d.get('@id') or d.get('id'),
             'name': d.get('Name') or d.get('name')
@@ -492,7 +503,7 @@ class OMEROWebClient:
             ("containers/", {"type": "image", "parent": dataset_id}),
             ("objects/", {"type": "image", "parent": dataset_id}),
         ])
-        images = self._extract_objects(data)
+        images = self._extract_objects(data, preferred_keys=['images'])
         return [{
             'id': img.get('@id') or img.get('id'),
             'name': img.get('Name') or img.get('name'),
