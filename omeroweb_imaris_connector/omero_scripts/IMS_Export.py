@@ -304,6 +304,10 @@ def run_script():
                 
                 image = conn.getObject("Image", image_id)
                 if image:
+                    # Switch to the image's group for write operations
+                    image_group = image.getDetails().getGroup().getId()
+                    conn.SERVICE_OPTS.setOmeroGroup(image_group)
+                    
                     # Create file annotation
                     file_ann = conn.createFileAnnfromLocalFile(
                         export_path,
