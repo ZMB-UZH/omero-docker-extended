@@ -160,6 +160,13 @@ RUN set -euo pipefail; \
     fi; \
     rm -f /tmp/logo.png*
 
+# Start Imaris Celery worker inside OMERO.web container
+# -----------------------------------------------------
+COPY startup/40-start-imaris-celery-worker.sh /startup/40-start-imaris-celery-worker.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/40-start-imaris-celery-worker.sh; \
+    chmod 0555 /startup/40-start-imaris-celery-worker.sh
+
 # Sync Omero.web static + media files
 # -----------------------------------
 RUN set -euo pipefail; \
