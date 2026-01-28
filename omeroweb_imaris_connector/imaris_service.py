@@ -5,8 +5,6 @@ import threading
 import time
 import uuid
 
-from django.http import FileResponse, HttpResponse, StreamingHttpResponse
-
 logger = logging.getLogger(__name__)
 
 SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
@@ -675,6 +673,8 @@ def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
 
     store = conn.c.sf.createRawFileStore()
     store.setFileId(int(_unwrap_rtype(original_file.getId())))
+    from django.http import StreamingHttpResponse
+
     response = StreamingHttpResponse(
         _raw_file_generator(store, size),
         content_type="application/octet-stream",
@@ -692,6 +692,8 @@ def _bool_from_request(value):
 
 
 def _build_download_response(conn, outputs, export_name=None):
+    from django.http import FileResponse, HttpResponse
+
     export_path = _extract_output_value(outputs or {}, "Export_Path")
     export_name = export_name or _extract_output_value(outputs or {}, "Export_Name")
     file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")

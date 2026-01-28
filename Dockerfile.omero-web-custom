@@ -111,8 +111,8 @@ RUN set -euo pipefail; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         matplotlib \
         psycopg2-binary \
-        "celery[redis]>=5.3.6" \
-        redis>=5.0.0 \
+        celery==5.3.6 \
+        redis==5.0.8 \
         django-redis>=5.4.0 \
         omero-fpbioimage \
         omero-gallery \

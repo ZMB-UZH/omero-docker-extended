@@ -22,8 +22,11 @@ from .imaris_service import (
 logger = logging.getLogger(__name__)
 
 
-def _open_session_connection(session_key, host, port):
-    client = omero.client(host=host, port=port)
+def _open_session_connection(session_key, host, port, secure=None):
+    if secure is None:
+        client = omero.client(host=host, port=port)
+    else:
+        client = omero.client(host=host, port=port, secure=secure)
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
@@ -34,11 +37,23 @@ def _open_session_connection(session_key, host, port):
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     conn = None
     try:
-        conn = _open_session_connection(session_key, host, port)
+        logger.info(
+            "IMS export task starting image_id=%s host=%s port=%s secure=%s",
+            image_id,
+            host,
+            port,
+            secure,
+        )
+        conn = _open_session_connection(session_key, host, port, secure=secure)
         script_id = _find_script_id(conn)
         if not script_id:
             raise RuntimeError("IMS export script not found on OMERO.server.")
 
+        logger.info(
+            "IMS export task running script_id=%s image_id=%s",
+            script_id,
+            image_id,
+        )
         job_handle = _run_script(conn, script_id, image_id, wait_secs=0)
         if not job_handle:
             raise RuntimeError("Failed to start IMS export job.")
@@ -70,6 +85,11 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         if normalized_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
             raise RuntimeError("IMS export job did not complete successfully.")
 
+        logger.info(
+            "IMS export task completed image_id=%s state=%s",
+            image_id,
+            normalized_state,
+        )
         return {
             "state": normalized_state,
             "outputs": _serialize_outputs(outputs),

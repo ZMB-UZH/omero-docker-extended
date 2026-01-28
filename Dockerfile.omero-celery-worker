@@ -1,0 +1,50 @@
+## Dedicated Celery worker image for OMERO Imaris exports
+# Keeps Celery runtime separate from Omero.web and OMERO server images.
+
+FROM python:3.12.8-slim-trixie
+
+USER root
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN set -euo pipefail; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gcc \
+        g++ \
+        libstdc++6 \
+        libssl3 \
+        curl; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -euo pipefail; \
+    python -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
+    python -m pip install --no-cache-dir \
+        "celery==5.3.6" \
+        "redis==5.0.8" \
+        "omero-py==5.21.2"
+
+RUN set -euo pipefail; \
+    groupadd --gid 10001 celery; \
+    useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin celery
+
+COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
+COPY omero_plugin_common /tmp/omero_plugin_common
+
+RUN set -euo pipefail; \
+    PY_VER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="/usr/local/lib/python${PY_VER}/site-packages"; \
+    rm -rf "${SITE_PACKAGES}/omeroweb_imaris_connector" "${SITE_PACKAGES}/omero_plugin_common"; \
+    cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
+    cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
+    chown -R celery:celery \
+        "${SITE_PACKAGES}/omeroweb_imaris_connector" \
+        "${SITE_PACKAGES}/omero_plugin_common"; \
+    rm -rf /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common
+
+USER celery
