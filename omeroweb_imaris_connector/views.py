@@ -78,7 +78,8 @@ def imaris_export(request, conn=None, **kwargs):
     use_celery = _bool_from_request(os.environ.get("OMERO_IMS_USE_CELERY", "true"))
     if not use_celery:
         return HttpResponse(
-            "Celery is required for IMS exports. Set OMERO_IMS_USE_CELERY=true.",
+            "Celery is required for IMS exports. Set OMERO_IMS_USE_CELERY=true and "
+            "ensure the OMERO.web Imaris Celery worker is running.",
             status=500,
         )
 
