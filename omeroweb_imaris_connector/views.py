@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import logging
@@ -20,9 +21,76 @@ SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
 EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
+PROCESS_JOB_DIR = os.environ.get("OMERO_IMS_PROCESS_JOB_DIR", "/tmp/omero_ims_process_jobs")
 
 _PROCESS_JOBS = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
+
+
+def _process_job_path(job_id):
+    return os.path.join(PROCESS_JOB_DIR, f"{job_id}.json")
+
+
+def _ensure_process_job_dir():
+    try:
+        os.makedirs(PROCESS_JOB_DIR, exist_ok=True)
+    except Exception:
+        logger.exception("Failed to create process job dir: %s", PROCESS_JOB_DIR)
+
+
+def _write_process_job_file(job_id, payload):
+    _ensure_process_job_dir()
+    path = _process_job_path(job_id)
+    tmp_path = f"{path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(tmp_path, path)
+    except Exception:
+        logger.exception("Failed to write process job file for %s", job_id)
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def _read_process_job_file(job_id):
+    path = _process_job_path(job_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        logger.exception("Failed to read process job file for %s", job_id)
+        return None
+
+
+def _serialize_outputs(outputs):
+    if not isinstance(outputs, dict):
+        return None
+    serialized = {}
+    for key, value in outputs.items():
+        serialized[str(key)] = _unwrap_rtype(value)
+    return serialized
+
+
+def _monitor_process_job(job_id, proc):
+    state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
+    normalized_state = _normalize_job_state(state) if state else "TIMEOUT"
+    error = None
+    if normalized_state == "TIMEOUT":
+        error = "Timed out waiting for IMS export job."
+    payload = {
+        "job_id": job_id,
+        "state": normalized_state,
+        "outputs": _serialize_outputs(outputs),
+        "error": error,
+        "created": time.time(),
+    }
+    _write_process_job_file(job_id, payload)
+    _forget_process_job(job_id)
 
 
 def _register_process_job(proc):
@@ -32,6 +100,22 @@ def _register_process_job(proc):
             "handle": proc,
             "created": time.time(),
         }
+    _write_process_job_file(
+        job_id,
+        {
+            "job_id": job_id,
+            "state": "RUNNING",
+            "outputs": None,
+            "error": None,
+            "created": time.time(),
+        },
+    )
+    thread = threading.Thread(
+        target=_monitor_process_job,
+        args=(job_id, proc),
+        daemon=True,
+    )
+    thread.start()
     return job_id
 
 
@@ -48,7 +132,20 @@ def _forget_process_job(job_id):
 def _poll_process_job(job_id):
     record = _get_process_job(job_id)
     if not record:
-        return None, None, "Unknown job id"
+        file_record = _read_process_job_file(job_id)
+        if not file_record:
+            return None, None, "Unknown job id"
+
+        created = file_record.get("created")
+        state = file_record.get("state")
+        outputs = file_record.get("outputs")
+        error = file_record.get("error")
+        if state == "RUNNING" and created and time.time() - created > EXPORT_TIMEOUT:
+            state = "TIMEOUT"
+            error = "Timed out waiting for IMS export job."
+            file_record.update({"state": state, "error": error})
+            _write_process_job_file(job_id, file_record)
+        return state, outputs, error
 
     if time.time() - record["created"] > EXPORT_TIMEOUT:
         _forget_process_job(job_id)
@@ -68,7 +165,16 @@ def _poll_process_job(job_id):
         outputs = proc.getResults(0)
     except Exception:
         outputs = None
-
+    _write_process_job_file(
+        job_id,
+        {
+            "job_id": job_id,
+            "state": state,
+            "outputs": _serialize_outputs(outputs),
+            "error": None,
+            "created": record["created"],
+        },
+    )
     _forget_process_job(job_id)
     return state, outputs, None
 
