@@ -133,6 +133,33 @@ def _get_job_state_and_outputs(conn, job_id):
     return None, None
 
 
+def _normalize_job_state(state):
+    if state is None:
+        return None
+    try:
+        if hasattr(state, "val"):
+            state = state.val
+    except Exception:
+        pass
+    try:
+        if hasattr(state, "getValue"):
+            state = state.getValue()
+    except Exception:
+        pass
+    try:
+        if hasattr(state, "name"):
+            state = state.name
+    except Exception:
+        pass
+    try:
+        state = str(state).strip()
+    except Exception:
+        return None
+    if not state:
+        return None
+    return state.upper()
+
+
 def _extract_output_value(outputs, key):
     if outputs is None:
         return None
@@ -231,7 +258,7 @@ def imaris_export(request, conn=None, **kwargs):
 
         while time.time() < deadline:
             state, outs = _get_job_state_and_outputs(conn, job_id)
-            last_state = (state or "").upper() if state else None
+            last_state = _normalize_job_state(state)
             if outs:
                 outputs = outs
 
