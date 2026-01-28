@@ -7,6 +7,8 @@ BASE_DIR="/opt/omero-test"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
+USE_CACHE_BUILD="${USE_CACHE_BUILD:-0}" # set to 1 to enable cached builds
+KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
 set -euo pipefail
 
@@ -49,11 +51,15 @@ if [ ! -d "temp_clone" ]; then
 fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
 echo "Stopping containers with latest docker-compose.yml and removing referenced images..."
-docker compose -f docker-compose.yml.new down --remove-orphans --rmi all || docker compose down --remove-orphans --rmi all || true
-echo "Removing ALL images referenced by docker-compose.yml..."
-COMPOSE_IMAGES="$(docker compose -f docker-compose.yml.new config --images 2>/dev/null || true)"
-if [ -n "${COMPOSE_IMAGES}" ]; then
-    echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
+if [ "${KEEP_IMAGES}" -eq 1 ]; then
+    docker compose -f docker-compose.yml.new down --remove-orphans || docker compose down --remove-orphans || true
+else
+    docker compose -f docker-compose.yml.new down --remove-orphans --rmi all || docker compose down --remove-orphans --rmi all || true
+    echo "Removing ALL images referenced by docker-compose.yml..."
+    COMPOSE_IMAGES="$(docker compose -f docker-compose.yml.new config --images 2>/dev/null || true)"
+    if [ -n "${COMPOSE_IMAGES}" ]; then
+        echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
+    fi
 fi
 # echo "Removing dangling images..."
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
@@ -78,8 +84,13 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
     exit 1
 fi
 
-echo "Building all Omero-related containers (no cache)..."
-docker compose -f "${COMPOSE_FILE}" build --no-cache
+if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
+    echo "Building all Omero-related containers (cache enabled)..."
+    docker compose -f "${COMPOSE_FILE}" build
+else
+    echo "Building all Omero-related containers (no cache)..."
+    docker compose -f "${COMPOSE_FILE}" build --no-cache
+fi
 
 echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
