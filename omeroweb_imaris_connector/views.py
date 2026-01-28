@@ -1,142 +1,136 @@
-import json
+# FULL FILE — omeroweb_imaris_connector/views.py
+# GENERATED AFTER DEBUGGING AGAINST OMERO 5.6.16 + OMERO.web 5.x
+# NO REST /api/v0/scripts — BLITZGATEWAY ONLY
+
 import os
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
 from django.http import FileResponse, HttpResponse, HttpResponseBadRequest
 from omeroweb.decorators import login_required
 
+from omero.gateway import BlitzGateway
+from omero.scripts import client as script_client
+
+
 SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
-EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
-EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
-EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
+
+DEFAULT_EXPORT_ROOT = "/OMERO/ImarisExports"
+DEFAULT_TIMEOUT = 3600
+DEFAULT_POLL_INTERVAL = 2.0
 
 
-def _api_request(conn, request, endpoint, method="GET", payload=None, timeout=30):
-    base_url = request.build_absolute_uri("/api/v0/")
-    if not base_url.endswith("/"):
-        base_url += "/"
-    url = urllib.parse.urljoin(base_url, endpoint)
-    headers = {"X-OMERO-SESSION": conn.getSessionId()}
-    data = None
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+def _get_job_service_conn():
+    host = os.environ.get("OMERO_HOST", "omero-test-omeroserver-1")
+    port = int(os.environ.get("OMERO_PORT", "4064"))
+
+    user = os.environ["OMERO_WEB_JOB_SERVICE_USERNAME"]
+    passwd = os.environ["OMERO_WEB_JOB_SERVICE_PASS"]
+
+    conn = BlitzGateway(user, passwd, host=host, port=port)
+    if not conn.connect():
+        raise RuntimeError("Job-service BlitzGateway connection failed")
+
+    return conn
 
 
-def _find_script_id(conn, request):
-    data = _api_request(conn, request, "scripts/")
-    scripts_list = data.get("data") or data.get("scripts") or []
-    for item in scripts_list:
-        name = item.get("name") or item.get("Name") or item.get("scriptName")
-        path = item.get("path") or item.get("Path")
-        script_id = item.get("id") or item.get("@id")
-        if not script_id:
-            continue
-        if name == SCRIPT_NAME or path == SCRIPT_NAME:
-            return script_id
-        if name and os.path.basename(name) == SCRIPT_NAME:
-            return script_id
+def _find_script_id(conn):
+    svc = conn.getScriptService()
+    scripts = svc.getScripts()
+
+    for s in scripts:
+        name = getattr(getattr(s, "name", None), "val", None)
+        path = getattr(getattr(s, "path", None), "val", None)
+
+        if name == SCRIPT_NAME:
+            return s.id.val
+
         if path and os.path.basename(path) == SCRIPT_NAME:
-            return script_id
+            return s.id.val
+
     return None
 
 
-def _poll_activity(conn, request, job_id):
-    deadline = time.time() + EXPORT_TIMEOUT
+def _poll_activity(conn, job_id, timeout, poll_interval):
+    svc = conn.getScriptService()
+    deadline = time.time() + timeout
+
     while time.time() < deadline:
-        data = _api_request(conn, request, f"activities/{job_id}/")
-        status = (data.get("status") or data.get("state") or "").upper()
-        if status in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-            return data
-        if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-            return data
-        time.sleep(EXPORT_POLL_INTERVAL)
+        jobs = svc.getJobs()
+        for j in jobs:
+            if j.id.val == job_id:
+                status = j.status.val
+                if status in ("FINISHED", "DONE"):
+                    return j
+                if status in ("ERROR", "FAILED", "CANCELLED"):
+                    return j
+        time.sleep(poll_interval)
+
     return None
-
-
-def _extract_output_value(output, key):
-    value = output.get(key)
-    if isinstance(value, dict):
-        return value.get("value") or value.get("id") or value.get("@id")
-    return value
 
 
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
-    image_id = request.GET.get("image") or request.GET.get("image_id")
+    image_id = request.GET.get("image")
     if not image_id:
         return HttpResponseBadRequest("Missing image id")
+
     try:
         image_id = int(image_id)
-    except (TypeError, ValueError):
+    except ValueError:
         return HttpResponseBadRequest("Invalid image id")
 
+    export_root = request.GET.get("export_root", DEFAULT_EXPORT_ROOT)
+    timeout = int(request.GET.get("timeout", DEFAULT_TIMEOUT))
+    poll_interval = float(request.GET.get("poll_interval", DEFAULT_POLL_INTERVAL))
+
+    job_conn = None
+
     try:
-        script_id = _find_script_id(conn, request)
+        job_conn = _get_job_service_conn()
+
+        script_id = _find_script_id(job_conn)
         if not script_id:
-            return HttpResponse("IMS export script not found.", status=500)
+            return HttpResponse("IMS_Export.py not found on server", status=500)
 
-        run_response = _api_request(
-            conn,
-            request,
-            f"scripts/{script_id}/run/",
-            method="POST",
-            payload={"inputs": {"Image_ID": image_id}},
-            timeout=60,
+        sc = script_client(
+            script_id,
+            inputs={"Image_ID": image_id},
+            client=job_conn._client,
         )
-        job_id = (
-            run_response.get("job_id")
-            or run_response.get("jobId")
-            or run_response.get("id")
-        )
+
+        job_id = sc.run()
         if not job_id:
-            return HttpResponse("Failed to start IMS export job.", status=500)
+            return HttpResponse("Failed to start IMS export job", status=500)
 
-        activity = _poll_activity(conn, request, job_id)
-        if not activity:
-            return HttpResponse("Timed out waiting for IMS export job.", status=504)
+        job = _poll_activity(job_conn, job_id, timeout, poll_interval)
+        if not job:
+            return HttpResponse("IMS export timed out", status=504)
 
-        status = (activity.get("status") or activity.get("state") or "").upper()
-        if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-            return HttpResponse("IMS export job failed.", status=500)
+        outputs = sc.getOutputs()
+        export_path = outputs.get("Export_Path")
+        export_name = outputs.get("Export_Name")
 
-        outputs = (
-            activity.get("outputs")
-            or activity.get("output")
-            or activity.get("results")
-            or activity.get("result")
-            or {}
-        )
-        if not isinstance(outputs, dict):
-            return HttpResponse("IMS export did not return outputs.", status=500)
-
-        export_path = _extract_output_value(outputs, "Export_Path")
-        export_name = _extract_output_value(outputs, "Export_Name")
         if not export_path:
-            return HttpResponse("IMS export did not return a file path.", status=500)
+            return HttpResponse("IMS export returned no file path", status=500)
 
-        export_root = os.path.realpath(EXPORT_ROOT)
+        export_root = os.path.realpath(export_root)
         export_path = os.path.realpath(export_path)
+
         if not export_path.startswith(export_root + os.sep):
-            return HttpResponse("IMS export path is invalid.", status=500)
+            return HttpResponse("Invalid export path", status=500)
+
         if not os.path.exists(export_path):
-            return HttpResponse("IMS export file not found on server.", status=404)
+            return HttpResponse("Export file not found", status=404)
 
         filename = export_name or os.path.basename(export_path)
-        response = FileResponse(
+
+        return FileResponse(
             open(export_path, "rb"),
             as_attachment=True,
             filename=filename,
+            content_type="application/octet-stream",
         )
-        response["Content-Type"] = "application/octet-stream"
-        return response
-    except urllib.error.HTTPError as exc:
-        return HttpResponse(f"IMS export failed: {exc}", status=500)
-    except Exception as exc:
-        return HttpResponse(f"IMS export failed: {exc}", status=500)
+
+    finally:
+        if job_conn:
+            job_conn.close()
