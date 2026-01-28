@@ -65,6 +65,10 @@ def _find_script_id(conn):
     return None
 
 
+def _is_process_handle(job):
+    return hasattr(job, "poll") and hasattr(job, "getResults")
+
+
 def _run_script(conn, script_id, image_id):
     svc = conn.getScriptService()
 
@@ -83,10 +87,15 @@ def _run_script(conn, script_id, image_id):
         try:
             # Common signature: runScript(scriptId, inputs, None)
             try:
-                job_id = meth(script_id, inputs, None)
+                job = meth(script_id, inputs, None)
             except TypeError:
-                job_id = meth(script_id, inputs)
-            return _extract_job_id(job_id)
+                job = meth(script_id, inputs)
+            job_id = _extract_job_id(job)
+            if job_id is not None:
+                return job_id
+            if _is_process_handle(job):
+                return job
+            return None
         except Exception as e:
             logger.exception("ScriptService.%s failed: %s", meth_name, e)
             continue
@@ -198,6 +207,26 @@ def _get_job_state_and_outputs(conn, job_id):
             pass
 
     return None, None
+
+
+def _wait_for_process(proc, timeout):
+    deadline = time.time() + timeout
+    last_state = None
+    while time.time() < deadline:
+        try:
+            last_state = _normalize_job_state(proc.poll())
+        except Exception:
+            last_state = None
+        if last_state:
+            break
+        time.sleep(EXPORT_POLL_INTERVAL)
+    outputs = None
+    if last_state:
+        try:
+            outputs = proc.getResults(0)
+        except Exception:
+            outputs = None
+    return last_state, outputs
 
 
 def _normalize_job_state(state):
@@ -390,32 +419,44 @@ def imaris_export(request, conn=None, **kwargs):
         if not script_id:
             return HttpResponse("IMS export script not found on OMERO.server.", status=500)
 
-        job_id = _run_script(conn, script_id, image_id)
-        if not job_id:
+        job_handle = _run_script(conn, script_id, image_id)
+        if not job_handle:
             return HttpResponse("Failed to start IMS export job.", status=500)
 
-        if async_mode:
-            status_url = request.build_absolute_uri(
-                f"{request.path}?job={job_id}"
-            )
-            return JsonResponse({"job_id": job_id, "status_url": status_url})
+        if isinstance(job_handle, int):
+            job_id = job_handle
+            if async_mode:
+                status_url = request.build_absolute_uri(
+                    f"{request.path}?job={job_id}"
+                )
+                return JsonResponse({"job_id": job_id, "status_url": status_url})
+        else:
+            job_id = None
+            if async_mode:
+                logger.warning("Async IMS export requested but script returned a process handle.")
+                async_mode = False
 
         deadline = time.time() + EXPORT_TIMEOUT
         outputs = None
         last_state = None
 
-        while time.time() < deadline:
-            state, outs = _get_job_state_and_outputs(conn, job_id)
-            last_state = _normalize_job_state(state)
-            if outs:
-                outputs = outs
+        if isinstance(job_handle, int):
+            while time.time() < deadline:
+                state, outs = _get_job_state_and_outputs(conn, job_id)
+                last_state = _normalize_job_state(state)
+                if outs:
+                    outputs = outs
 
-            if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-                break
+                if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+                    break
+                if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
+                    return HttpResponse("IMS export job failed.", status=500)
+
+                time.sleep(EXPORT_POLL_INTERVAL)
+        else:
+            last_state, outputs = _wait_for_process(job_handle, EXPORT_TIMEOUT)
             if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
                 return HttpResponse("IMS export job failed.", status=500)
-
-            time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
             return HttpResponse("Could not determine IMS export job status.", status=500)
