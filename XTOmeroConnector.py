@@ -183,67 +183,245 @@ class OMEROWebClient:
 
     def list_scripts(self):
         """List available scripts."""
-        data = self._api_request("scripts/")
-        if data and isinstance(data, dict):
+        # Try multiple possible endpoints
+        endpoints = [
+            "scripts/",  # API v0
+            "../webclient/list_scripts/",  # Webclient endpoint (relative to api/v0)
+        ]
+        
+        data = None
+        for endpoint in endpoints:
+            print(f"DEBUG: Trying endpoint: {endpoint}")
+            test_data = self._api_request(endpoint)
+            if test_data:
+                data = test_data
+                print(f"DEBUG: Success with endpoint: {endpoint}")
+                break
+        
+        # If API failed, try direct webclient call
+        if not data:
+            print("DEBUG: API endpoints failed, trying direct webclient call")
+            data = self._webclient_list_scripts()
+        
+        print(f"DEBUG: Raw API response type: {type(data)}")
+        
+        # Handle response - could be list or dict
+        if isinstance(data, list):
+            # Direct list response from webclient
+            scripts = data
+            print(f"DEBUG: Direct list response with {len(scripts)} scripts")
+            if len(scripts) > 0:
+                print(f"DEBUG: First script sample: {scripts[0]}")
+            return scripts
+        elif isinstance(data, dict):
+            # Nested dict response from API
+            print(f"DEBUG: Dict response with keys: {data.keys()}")
             scripts = data.get('data') or data.get('scripts') or []
             if isinstance(scripts, dict):
                 scripts = scripts.get('data') or scripts.get('scripts') or []
+            print(f"DEBUG: Parsed scripts type: {type(scripts)}")
+            print(f"DEBUG: Number of scripts: {len(scripts) if isinstance(scripts, list) else 'N/A'}")
+            if isinstance(scripts, list) and len(scripts) > 0:
+                print(f"DEBUG: First script sample: {scripts[0]}")
             return scripts
+        
         return []
+    
+    def _webclient_list_scripts(self):
+        """List scripts using direct webclient endpoint."""
+        import urllib.request
+        import urllib.error
+        
+        if not hasattr(self, 'opener'):
+            return None
+        
+        url = f"{self.base_url}/webclient/list_scripts/"
+        req = urllib.request.Request(url)
+        
+        if hasattr(self, 'csrf_token'):
+            req.add_header('X-CSRFToken', self.csrf_token)
+        
+        try:
+            response = self.opener.open(req, timeout=10)
+            data = json.loads(response.read().decode('utf-8'))
+            print(f"DEBUG: Webclient response: {data}")
+            return data
+        except urllib.error.HTTPError as e:
+            print(f"DEBUG: Webclient API error ({e.code}): {e.reason}")
+            return None
+        except Exception as e:
+            print(f"DEBUG: Webclient API error: {e}")
+            return None
 
     def find_script_id(self, script_name):
         """Find script ID by matching script name or path."""
+        print(f"\nDEBUG: Searching for script: '{script_name}'")
         scripts_list = self.list_scripts()
+        print(f"DEBUG: Total categories to search: {len(scripts_list)}")
+        
         normalized_name = os.path.splitext(script_name)[0]
+        print(f"DEBUG: Normalized name: '{normalized_name}'")
+        
+        # Flatten nested structure if scripts are grouped by category
+        flat_scripts = []
         for item in scripts_list:
+            # Check if this is a category with nested scripts
+            if 'ul' in item and isinstance(item['ul'], list):
+                category_name = item.get('name', 'unknown')
+                print(f"DEBUG: Found category '{category_name}' with {len(item['ul'])} scripts")
+                flat_scripts.extend(item['ul'])
+            else:
+                # Direct script item
+                flat_scripts.append(item)
+        
+        print(f"DEBUG: Total flattened scripts: {len(flat_scripts)}")
+        
+        for idx, item in enumerate(flat_scripts):
             name = item.get('name') or item.get('Name') or item.get('scriptName')
             path = item.get('path') or item.get('Path')
             sid = item.get('id') or item.get('@id')
+            
+            if idx < 5:  # Print first 5 scripts for debugging
+                print(f"DEBUG: Script {idx}: name='{name}', path='{path}', id={sid}")
+            
+            # Check if this is IMS_Export
+            if name and 'IMS_Export' in name:
+                print(f"DEBUG: FOUND IMS_Export by name: {name}, ID: {sid}")
+            if path and 'IMS_Export' in path:
+                print(f"DEBUG: FOUND IMS_Export by path: {path}, ID: {sid}")
+            
             if not sid:
                 continue
             if name == script_name or path == script_name:
+                print(f"DEBUG: MATCH by exact name/path!")
                 return sid
             if name and os.path.basename(name) == script_name:
+                print(f"DEBUG: MATCH by basename(name)!")
                 return sid
             if path and os.path.basename(path) == script_name:
+                print(f"DEBUG: MATCH by basename(path)!")
                 return sid
             if normalized_name:
                 if name and os.path.splitext(os.path.basename(name))[0] == normalized_name:
+                    print(f"DEBUG: MATCH by normalized name!")
                     return sid
                 if path and os.path.splitext(os.path.basename(path))[0] == normalized_name:
+                    print(f"DEBUG: MATCH by normalized path!")
                     return sid
+        
+        print(f"DEBUG: NO MATCH FOUND for '{script_name}'")
         return None
 
     def run_script(self, script_id, inputs):
         """Run a script with provided inputs."""
-        payloads = [
-            {"inputs": inputs},
-            {"inputs": {key: {"value": value} for key, value in inputs.items()}},
-        ]
-        for payload in payloads:
-            response = self._api_post(f"scripts/{script_id}/run/", payload)
-            if response:
-                return response
-        return None
+        import urllib.request
+        import urllib.error
+        import urllib.parse
+        
+        if not hasattr(self, 'opener'):
+            return None
+        
+        # Use webclient endpoint for running scripts
+        url = f"{self.base_url}/webclient/script_run/{script_id}/"
+        
+        # Convert inputs to the format expected by webclient
+        # Format: key=value pairs in the POST data
+        data = urllib.parse.urlencode(inputs).encode('utf-8')
+        
+        req = urllib.request.Request(url, data=data, method='POST')
+        req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+        
+        if hasattr(self, 'csrf_token'):
+            req.add_header('X-CSRFToken', self.csrf_token)
+            req.add_header('Referer', url)
+        
+        try:
+            print(f"DEBUG: Posting to {url} with inputs: {inputs}")
+            response = self.opener.open(req, timeout=30)
+            raw = response.read()
+            print(f"DEBUG: Script run response: {raw[:200]}")
+            
+            if not raw:
+                return None
+            
+            try:
+                result = json.loads(raw.decode('utf-8'))
+                print(f"DEBUG: Parsed run result: {result}")
+                return result
+            except Exception:
+                # Response might not be JSON
+                print(f"DEBUG: Non-JSON response")
+                return None
+                
+        except urllib.error.HTTPError as e:
+            print(f"DEBUG: Script run error ({e.code}): {e.reason}")
+            try:
+                error_body = e.read().decode('utf-8')
+                print(f"DEBUG: Error body: {error_body}")
+            except Exception:
+                pass
+            return None
+        except Exception as e:
+            print(f"DEBUG: Script run exception: {e}")
+            return None
 
     def poll_activity(self, job_id, timeout=900, interval=2):
-        """Poll a script activity until completion."""
+        """Poll a script activity until completion via webclient."""
         import time
-
+        import urllib.request
+        import urllib.error
+        
+        if not hasattr(self, 'opener'):
+            return None
+        
+        # Extract just the UUID from the Ice proxy string if needed
+        # Format: ProcessCallback/UUID -t -e 1.1:tcp...
+        job_uuid = job_id
+        if '/' in job_id:
+            parts = job_id.split('/')
+            if len(parts) >= 2:
+                # Get the UUID part
+                uuid_part = parts[1].split()[0]  # Get first token after /
+                job_uuid = uuid_part
+                print(f"DEBUG: Extracted UUID: {job_uuid}")
+        
+        url = f"{self.base_url}/webclient/activities/json/"
+        
         deadline = time.time() + timeout
         while time.time() < deadline:
-            data = self._api_request(f"activities/{job_id}/")
-            if not data:
-                return None
-
-            status = (data.get('status') or data.get('state') or '').upper()
-            if status in {'FINISHED', 'SUCCESS', 'COMPLETE', 'DONE'}:
-                return data
-            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
-                return data
-
-            time.sleep(interval)
-
+            try:
+                req = urllib.request.Request(url)
+                if hasattr(self, 'csrf_token'):
+                    req.add_header('X-CSRFToken', self.csrf_token)
+                
+                response = self.opener.open(req, timeout=10)
+                data = json.loads(response.read().decode('utf-8'))
+                
+                # Look for our job in the activities list
+                activities = data.get('activities', [])
+                for activity in activities:
+                    act_id = str(activity.get('id', ''))
+                    # Match by UUID
+                    if job_uuid in act_id or act_id in job_id:
+                        status = str(activity.get('status', '')).lower()
+                        print(f"DEBUG: Found activity, status: {status}")
+                        
+                        if status in ['finished', 'success', 'complete', 'done', 'succeeded']:
+                            print("DEBUG: Activity completed successfully")
+                            return activity
+                        elif status in ['failed', 'error', 'cancelled', 'canceled']:
+                            print(f"DEBUG: Activity failed with status: {status}")
+                            return activity
+                
+                # Activity not found or still running
+                print(f"DEBUG: Activity not finished yet, waiting...")
+                time.sleep(interval)
+                
+            except Exception as e:
+                print(f"DEBUG: Poll error: {e}")
+                time.sleep(interval)
+        
+        print("DEBUG: Polling timed out")
         return None
 
     def list_projects(self):
@@ -293,8 +471,8 @@ class OMEROWebClient:
         
         This method:
         1. Finds and runs the IMS_Export.py script on the OMERO server
-        2. Polls until the export job completes
-        3. Downloads the file attachment created by the script
+        2. Polls for file annotation to appear (script runs asynchronously)
+        3. Downloads the file attachment
         4. Saves it to the local download directory
         
         Returns:
@@ -302,6 +480,7 @@ class OMEROWebClient:
         """
         import urllib.request
         import urllib.error
+        import time
         
         try:
             # Step 1: Find the IMS_Export script
@@ -316,76 +495,65 @@ class OMEROWebClient:
             
             print(f"Found IMS_Export script (ID: {script_id})")
             
-            # Step 2: Run the script
+            # Step 2: Get existing annotations before running script
+            print(f"Checking existing annotations on image {image_id}...")
+            annotations_url = f"m/images/{image_id}/annotations/"
+            existing_ann_data = self._api_request(annotations_url)
+            existing_file_ann_ids = set()
+            if existing_ann_data:
+                annotations = existing_ann_data.get('data', {}).get('annotations', [])
+                for a in annotations:
+                    if a.get('@type') == 'http://www.openmicroscopy.org/Schemas/OME/2016-06#FileAnnotation':
+                        existing_file_ann_ids.add(a.get('@id'))
+            print(f"Found {len(existing_file_ann_ids)} existing file annotations")
+            
+            # Step 3: Run the script
             print(f"Running IMS export for image {image_id}...")
             run_response = self.run_script(script_id, {"Image_ID": image_id})
             if not run_response:
                 raise RuntimeError("Failed to start IMS export script")
             
-            job_id = (
-                run_response.get('job_id') 
-                or run_response.get('jobId') 
-                or run_response.get('id')
-            )
-            if not job_id:
-                raise RuntimeError("Script started but no job ID returned")
+            print(f"Script submitted. Waiting for export to complete...")
             
-            print(f"Export job started (Job ID: {job_id})")
-            
-            # Step 3: Poll until completion
-            print("Waiting for export to complete...")
-            activity = self.poll_activity(job_id, timeout=900, interval=2)
-            
-            if not activity:
-                raise RuntimeError("Export job timed out (15 minutes)")
-            
-            status = (activity.get('status') or activity.get('state') or '').upper()
-            print(f"Export job status: {status}")
-            
-            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
-                message = activity.get('message', 'Unknown error')
-                raise RuntimeError(f"Export job failed: {message}")
-            
-            # Step 4: Get the file annotation from outputs
-            outputs = (
-                activity.get('outputs') 
-                or activity.get('output') 
-                or activity.get('results')
-                or {}
-            )
-            
-            # Look for File_Annotation in outputs
+            # Step 4: Poll for new file annotation to appear (up to 60 minutes)
+            timeout = 3600  # 60 minutes
+            interval = 5  # Check every 5 seconds
+            deadline = time.time() + timeout
             file_annotation_id = None
-            for key in ['File_Annotation', 'file_annotation', 'FileAnnotation', 'File_Annotation_Id']:
-                value = outputs.get(key)
-                if value:
-                    if isinstance(value, dict):
-                        file_annotation_id = value.get('value') or value.get('id') or value.get('@id')
-                    else:
-                        file_annotation_id = value
+            
+            poll_count = 0
+            while time.time() < deadline:
+                poll_count += 1
+                if poll_count % 6 == 0:  # Print status every 30 seconds
+                    elapsed = int(time.time() - (deadline - timeout))
+                    print(f"Still waiting... ({elapsed}s elapsed)")
+                
+                # Check for new file annotations
+                ann_data = self._api_request(annotations_url)
+                if ann_data:
+                    annotations = ann_data.get('data', {}).get('annotations', [])
+                    # Look for NEW file annotations
+                    for a in annotations:
+                        if a.get('@type') == 'http://www.openmicroscopy.org/Schemas/OME/2016-06#FileAnnotation':
+                            ann_id = a.get('@id')
+                            if ann_id not in existing_file_ann_ids:
+                                # Found a new file annotation!
+                                file_annotation_id = ann_id
+                                print(f"Found new file annotation: {file_annotation_id}")
+                                break
+                
+                if file_annotation_id:
                     break
+                
+                time.sleep(interval)
             
             if not file_annotation_id:
-                # Fallback: check for direct file ID
-                for key in ['File', 'file', 'FileID', 'file_id']:
-                    value = outputs.get(key)
-                    if value:
-                        if isinstance(value, dict):
-                            file_annotation_id = value.get('value') or value.get('id')
-                        else:
-                            file_annotation_id = value
-                        break
-            
-            if not file_annotation_id:
-                print(f"ERROR: No file attachment found in job outputs")
-                print(f"Available outputs: {list(outputs.keys())}")
-                print(f"Output values: {outputs}")
                 raise RuntimeError(
-                    "IMS export completed but no file attachment was created. "
-                    "This likely means the script failed to attach the file properly."
+                    f"IMS export timed out after {timeout} seconds. "
+                    "No new file annotation was created. Check OMERO server logs for script errors."
                 )
             
-            print(f"Found file attachment (ID: {file_annotation_id})")
+            print(f"Export completed! File attachment ID: {file_annotation_id}")
             
             # Step 5: Get the original file ID from the annotation
             annotation_data = self._api_request(f"m/annotations/{file_annotation_id}/")
