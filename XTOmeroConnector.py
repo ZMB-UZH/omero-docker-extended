@@ -1,3 +1,4 @@
+import traceback
 #
 # <CustomTools>
 #  <Menu>
@@ -22,6 +23,7 @@ import threading
 import re
 import tempfile
 import time
+import datetime
 
 # =============================================================================
 # OMERO WEB CLIENT
@@ -287,49 +289,40 @@ class OMEROWebClient:
             'sizeT': img.get('Pixels', {}).get('SizeT', 1),
         } for img in images]
 
+
     def download_ims_export(self, image_id, download_dir, fallback_name="export.ims"):
         """
-        Download an Imaris .ims export for the given OMERO image id.
+        Download an Imaris .ims export for a given image_id.
 
-        This calls the OMERO.web plugin endpoint:
+        Uses the OMERO.web plugin endpoint:
             /omeroweb_imaris_connector/imaris-export/?image=<id>
 
-        Requirements:
-          - self.connect() must have been called successfully (so cookies/session exist)
-          - user must be authenticated in OMERO.web
+        This intentionally avoids /api/v0/scripts/ (often not available).
         """
-        if not self.connected:
-            raise RuntimeError("Not connected. Call connect() first.")
+        if download_dir is None:
+            download_dir = os.path.join(os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports")
 
-        try:
-            image_id_int = int(image_id)
-        except Exception:
-            raise ValueError("image_id must be an integer")
+        # Ensure logged in (cookie present)
+        if not getattr(self, "session_key", None):
+            raise RuntimeError("Not logged in to OMERO.web (missing session key).")
+
+        base = self.base_url.rstrip("/")
+        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={int(image_id)}"
+        print(f"Requesting IMS export from: {export_url}")
 
         os.makedirs(download_dir, exist_ok=True)
 
-        # Build URL to the plugin endpoint (not the /api/v0 REST API)
-        base = self.base_url.rstrip("/")
-        url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={image_id_int}"
+        req = urllib.request.Request(export_url)
+        try:
+            with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
+                final_url = getattr(response, "geturl", lambda: export_url)()
+                if "/webclient/login/" in str(final_url):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web (redirected to login). Please login again."
+                    )
 
-        req = urllib.request.Request(url)
-
-        # Some OMERO.web installs require Referer + CSRF header for authenticated requests.
-        # We best-effort attach these.
-        if self.csrf_token:
-            req.add_header("X-CSRFToken", self.csrf_token)
-        req.add_header("Referer", base + "/")
-
-        with self.opener.open(req, timeout=120) as resp:
-            # Handle redirects-to-login (means session not valid)
-            final_url = getattr(resp, "url", "") or url
-            if "/webclient/login/" in final_url:
-                raise RuntimeError("Not authenticated (redirected to OMERO.web login).")
-
-            # Determine filename from Content-Disposition if present
-            filename = None
-            cd = resp.headers.get("Content-Disposition") or resp.headers.get("content-disposition")
-            if cd:
+                cd = response.headers.get("Content-Disposition", "")
+                filename = None
                 m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
                 if m:
                     filename = urllib.parse.unquote(m.group(1))
@@ -337,21 +330,55 @@ class OMEROWebClient:
                     m = re.search(r'filename="([^"]+)"', cd)
                     if m:
                         filename = m.group(1)
-                    else:
-                        m = re.search(r"filename=([^;]+)", cd)
-                        if m:
-                            filename = m.group(1).strip()
 
-            if not filename:
-                filename = fallback_name
+                if not filename:
+                    filename = fallback_name
+                    if not filename.lower().endswith(".ims"):
+                        filename += ".ims"
 
-            outpath = os.path.join(download_dir, filename)
+                safe_filename = re.sub(r'[^\w\s.-]', "_", filename).strip()
+                if not safe_filename:
+                    safe_filename = fallback_name
 
-            # Stream download to disk
-            with open(outpath, "wb") as f:
-                shutil.copyfileobj(resp, f)
+                local_path = os.path.join(download_dir, safe_filename)
 
-            return outpath
+                total_size = int(response.headers.get("content-length", 0) or 0)
+                downloaded = 0
+                chunk_size = 1024 * 1024  # 1MB
+
+                print(f"Downloading to: {local_path}")
+                with open(local_path, "wb") as f:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size:
+                            percent = (downloaded / total_size) * 100.0
+                            print(f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)", end="\r")
+
+                if total_size:
+                    print()
+
+            if not os.path.exists(local_path):
+                raise RuntimeError(f"Download completed but file not found at {local_path}")
+            if os.path.getsize(local_path) <= 0:
+                raise RuntimeError("Downloaded IMS file is empty")
+
+            print(f"IMS export downloaded OK: {local_path}")
+            return local_path
+
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"IMS export failed (URLError): {e}") from e
+
     def __init__(self, imaris):
         self.imaris = imaris
         self.client = None
@@ -624,18 +651,73 @@ class OMEROWebClient:
 # XTENSION ENTRY POINT
 # =============================================================================
 
+def _xt_log_path():
+    try:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    except Exception:
+        ts = "unknown"
+    return os.path.join(tempfile.gettempdir(), f"XTOmeroConnector_{ts}.log")
+
+
+def _xt_write_log(log_path, msg):
+    try:
+        with open(log_path, "a", encoding="utf-8", errors="replace") as f:
+            f.write(msg)
+            if not msg.endswith("\n"):
+                f.write("\n")
+    except Exception:
+        pass
+
+
+def _xt_show_fatal(title, message):
+    try:
+        import tkinter.messagebox as _mb
+        _mb.showerror(title, message)
+    except Exception:
+        print(title + ": " + message)
+
+
 def XTOmeroConnector(aImarisId):
     """Called by Imaris."""
-    vImaris = None
+    log_path = _xt_log_path()
     try:
-        import ImarisLib
-        vImaris = ImarisLib.GetApplication(aImarisId)
-    except:
-        vImaris = aImarisId if not isinstance(aImarisId, int) else None
-    
-    dialog = OMEROBrowserDialog(vImaris)
-    dialog.show()
+        _xt_write_log(log_path, "=== XTOmeroConnector starting ===")
+        _xt_write_log(log_path, f"Python: {sys.version}")
+        _xt_write_log(log_path, f"argv: {sys.argv}")
+        _xt_write_log(log_path, f"cwd: {os.getcwd()}")
+
+        vImaris = None
+        try:
+            import ImarisLib
+            vImaris = ImarisLib.GetApplication(aImarisId)
+        except Exception:
+            # When run outside Imaris (manual debug), aImarisId may be None or already an app object.
+            vImaris = aImarisId if not isinstance(aImarisId, int) else None
+
+        dialog = OMEROBrowserDialog(vImaris)
+        dialog.show()
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        _xt_write_log(log_path, tb)
+        _xt_show_fatal(
+            "XTOmeroConnector crashed",
+            f"{e}\n\nA detailed log was written to:\n{log_path}",
+        )
+        # Keep console open when launched by double-click / Imaris
+        try:
+            input("Press ENTER to close...")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
-    OMEROBrowserDialog(None).show()
+    # Manual debug mode (outside Imaris): keep the console open on error.
+    try:
+        XTOmeroConnector(None)
+    except Exception as e:
+        print("Fatal:", e)
+        try:
+            input("Press ENTER to close...")
+        except Exception:
+            pass
