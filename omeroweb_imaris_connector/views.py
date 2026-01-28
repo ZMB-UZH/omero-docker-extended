@@ -251,6 +251,100 @@ def _is_process_handle(job):
     return hasattr(job, "poll") and hasattr(job, "getResults")
 
 
+def _iter_script_methods(svc):
+    preferred = [
+        "runScriptAsync",
+        "runScript",
+        "run_script",
+        "run",
+        "runScript_async",
+        "run_script_async",
+        "begin_runScript",
+        "begin_run_script",
+        "runScriptEx",
+        "executeScript",
+        "execute_script",
+    ]
+    seen = set()
+    for name in preferred:
+        try:
+            meth = getattr(svc, name, None)
+        except Exception:
+            meth = None
+        if callable(meth):
+            seen.add(name)
+            yield name, meth
+    try:
+        for name in dir(svc):
+            if name in seen:
+                continue
+            lower_name = name.lower()
+            if "script" not in lower_name:
+                continue
+            if "run" not in lower_name and "exec" not in lower_name:
+                continue
+            try:
+                meth = getattr(svc, name, None)
+            except Exception:
+                meth = None
+            if callable(meth):
+                seen.add(name)
+                yield name, meth
+    except Exception:
+        logger.exception("Failed to introspect ScriptService methods")
+
+
+def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
+    args_to_try = []
+    lowered = meth_name.lower()
+    is_async = "async" in lowered or lowered.startswith("begin_")
+    if is_async:
+        args_to_try.extend(
+            [
+                (script_id, inputs),
+                (script_id, inputs, None),
+                (script_id, inputs, ""),
+            ]
+        )
+        if wait_secs is not None:
+            args_to_try.append((script_id, inputs, int(wait_secs)))
+    else:
+        if wait_secs is None:
+            args_to_try.extend(
+                [
+                    (script_id, inputs, None),
+                    (script_id, inputs),
+                    (script_id, inputs, ""),
+                    (script_id, inputs, 0),
+                ]
+            )
+        else:
+            args_to_try.extend(
+                [
+                    (script_id, inputs, int(wait_secs)),
+                    (script_id, inputs, None),
+                    (script_id, inputs),
+                    (script_id, inputs, ""),
+                ]
+            )
+    args_to_try.extend(
+        [
+            (script_id, inputs, None, None),
+            (script_id, inputs, int(wait_secs or 0), None),
+        ]
+    )
+    last_type_error = None
+    for args in args_to_try:
+        try:
+            return meth(*args)
+        except TypeError as exc:
+            last_type_error = exc
+            continue
+    if last_type_error is not None:
+        raise last_type_error
+    return meth(script_id, inputs)
+
+
 def _run_script(conn, script_id, image_id, wait_secs=None):
 
     # Build inputs
@@ -266,22 +360,20 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
         image_id,
         wait_secs,
     )
+    services = _get_script_services(conn)
+    if not services:
+        raise RuntimeError("Could not start script: ScriptService unavailable")
     # Different omero-py versions expose different method names; try a few.
     errors = []
-    for svc in _get_script_services(conn):
-        for meth_name in ("runScript", "runScriptAsync", "run_script", "run"):
-            meth = getattr(svc, meth_name, None)
-            if meth is None:
-                continue
+    seen_methods = set()
+    for svc in services:
+        for meth_name, meth in _iter_script_methods(svc):
+            seen_methods.add(meth_name)
             try:
-                # Common signature: runScript(scriptId, inputs, None)
-                try:
-                    if wait_secs is None:
-                        job = meth(script_id, inputs, None)
-                    else:
-                        job = meth(script_id, inputs, int(wait_secs))
-                except TypeError:
-                    job = meth(script_id, inputs)
+                job = _call_script_method(meth, meth_name, script_id, inputs, wait_secs)
+                if job is None:
+                    errors.append(f"{meth_name}: returned None")
+                    continue
                 if _is_process_handle(job):
                     logger.debug("IMS export script returned process handle via %s", meth_name)
                     return job
@@ -289,7 +381,7 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
                 if job_id is not None:
                     logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
                     return job_id
-                return None
+                errors.append(f"{meth_name}: unsupported return type {type(job)}")
             except Exception as e:
                 logger.exception("ScriptService.%s failed: %s", meth_name, e)
                 errors.append(f"{meth_name}: {e}")
@@ -298,6 +390,9 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
     if errors:
         joined = "; ".join(errors)
         raise RuntimeError(f"Could not start script: {joined}")
+
+    if seen_methods:
+        raise RuntimeError("Could not start script: ScriptService run methods did not succeed")
 
     raise RuntimeError("Could not start script: ScriptService has no supported run method")
 
