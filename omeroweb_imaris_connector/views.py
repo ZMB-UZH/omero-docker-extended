@@ -7,6 +7,7 @@ from django.http import (
     HttpResponse,
     HttpResponseBadRequest,
     StreamingHttpResponse,
+    JsonResponse,
 )
 from omeroweb.decorators import login_required
 
@@ -233,8 +234,78 @@ def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
     return response
 
 
+def _bool_from_request(value):
+    if value is None:
+        return None
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _build_download_response(conn, outputs, export_name=None):
+    export_path = _extract_output_value(outputs or {}, "Export_Path")
+    export_name = export_name or _extract_output_value(outputs or {}, "Export_Name")
+    file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")
+
+    if export_path:
+        export_root = os.path.realpath(EXPORT_ROOT)
+        export_path = os.path.realpath(export_path)
+        if export_path.startswith(export_root + os.sep) and os.path.exists(export_path):
+            filename = export_name or os.path.basename(export_path)
+            response = FileResponse(
+                open(export_path, "rb"),
+                as_attachment=True,
+                filename=filename,
+            )
+            response["Content-Type"] = "application/octet-stream"
+            return response
+
+    if file_ann_id:
+        response = _response_from_file_annotation(conn, file_ann_id, export_name)
+        if response:
+            return response
+
+    if not export_path:
+        return HttpResponse("IMS export did not return a file path.", status=500)
+    if export_path and not os.path.exists(export_path):
+        return HttpResponse("IMS export file not found on server.", status=404)
+    return HttpResponse("IMS export path is invalid.", status=500)
+
+
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
+    job_id = request.GET.get("job") or request.GET.get("job_id")
+    if job_id:
+        try:
+            job_id = int(job_id)
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Invalid job id")
+
+        state, outputs = _get_job_state_and_outputs(conn, job_id)
+        normalized_state = _normalize_job_state(state)
+        finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
+        failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
+        is_finished = normalized_state in finished_states
+        is_failed = normalized_state in failed_states
+
+        if _bool_from_request(request.GET.get("download")):
+            if not is_finished:
+                return HttpResponse("IMS export is not ready for download.", status=409)
+            return _build_download_response(conn, outputs)
+
+        payload = {
+            "job_id": job_id,
+            "state": normalized_state,
+            "finished": is_finished,
+            "failed": is_failed,
+        }
+        if is_finished:
+            download_url = request.build_absolute_uri(
+                f"{request.path}?job={job_id}&download=1"
+            )
+            payload["download_url"] = download_url
+        if is_failed:
+            payload["error"] = "IMS export job failed."
+        return JsonResponse(payload)
+
     image_id = request.GET.get("image") or request.GET.get("image_id")
     if not image_id:
         return HttpResponseBadRequest("Missing image id")
@@ -242,6 +313,11 @@ def imaris_export(request, conn=None, **kwargs):
         image_id = int(image_id)
     except (TypeError, ValueError):
         return HttpResponseBadRequest("Invalid image id")
+
+    async_mode = _bool_from_request(request.GET.get("async"))
+    wait_param = request.GET.get("wait")
+    if wait_param is not None:
+        async_mode = not _bool_from_request(wait_param)
 
     try:
         script_id = _find_script_id(conn)
@@ -251,6 +327,12 @@ def imaris_export(request, conn=None, **kwargs):
         job_id = _run_script(conn, script_id, image_id)
         if not job_id:
             return HttpResponse("Failed to start IMS export job.", status=500)
+
+        if async_mode:
+            status_url = request.build_absolute_uri(
+                f"{request.path}?job={job_id}"
+            )
+            return JsonResponse({"job_id": job_id, "status_url": status_url})
 
         deadline = time.time() + EXPORT_TIMEOUT
         outputs = None
@@ -275,33 +357,8 @@ def imaris_export(request, conn=None, **kwargs):
         if last_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
             return HttpResponse("Timed out waiting for IMS export job.", status=504)
 
-        export_path = _extract_output_value(outputs or {}, "Export_Path")
         export_name = _extract_output_value(outputs or {}, "Export_Name")
-        file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")
-
-        if export_path:
-            export_root = os.path.realpath(EXPORT_ROOT)
-            export_path = os.path.realpath(export_path)
-            if export_path.startswith(export_root + os.sep) and os.path.exists(export_path):
-                filename = export_name or os.path.basename(export_path)
-                response = FileResponse(
-                    open(export_path, "rb"),
-                    as_attachment=True,
-                    filename=filename,
-                )
-                response["Content-Type"] = "application/octet-stream"
-                return response
-
-        if file_ann_id:
-            response = _response_from_file_annotation(conn, file_ann_id, export_name)
-            if response:
-                return response
-
-        if not export_path:
-            return HttpResponse("IMS export did not return a file path.", status=500)
-        if export_path and not os.path.exists(export_path):
-            return HttpResponse("IMS export file not found on server.", status=404)
-        return HttpResponse("IMS export path is invalid.", status=500)
+        return _build_download_response(conn, outputs, export_name)
 
     except Exception as exc:
         logger.exception("IMS export failed: %s", exc)
