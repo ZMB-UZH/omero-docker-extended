@@ -69,15 +69,31 @@ if [[ -z "${FREEIMAGE_LIB}" ]]; then
 fi
 echo "Found FreeImage library: ${FREEIMAGE_LIB}"
 
+PARALLEL_JOBS="$(nproc)"
+NINJA_GENERATOR=""
+if command -v ninja >/dev/null 2>&1; then
+    NINJA_GENERATOR="-G Ninja"
+fi
+
+CCACHE_LAUNCHER=()
+if command -v ccache >/dev/null 2>&1; then
+    CCACHE_LAUNCHER=(
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+    )
+fi
+
 cmake .. \
+    ${NINJA_GENERATOR} \
     -DCMAKE_BUILD_TYPE=Release \
     -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
     -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk \
     -DFreeImage_ROOT=/usr \
-    -DFreeImage_LIBRARIES="${FREEIMAGE_LIB}"
+    -DFreeImage_LIBRARIES="${FREEIMAGE_LIB}" \
+    "${CCACHE_LAUNCHER[@]}"
 
-make -j$(nproc)
-make install
+cmake --build . --parallel "${PARALLEL_JOBS}"
+cmake --install .
 
 # Copy binary and ALL shared libraries to install directory
 cp -f ImarisConvertBioformats "${INSTALL_DIR}/"
