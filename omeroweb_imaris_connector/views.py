@@ -187,40 +187,63 @@ def _unwrap_rtype(v):
         return v
 
 
-def _find_script_id(conn):
-    svc = conn.getScriptService()
-    scripts = svc.getScripts()
-    for s in scripts:
-        name = _unwrap_rtype(getattr(s, "name", None))
-        path = _unwrap_rtype(getattr(s, "path", None))
-        sid = (
-            _unwrap_rtype(getattr(getattr(s, "id", None), "val", None))
-            if hasattr(getattr(s, "id", None), "val")
-            else _unwrap_rtype(getattr(s, "id", None))
-        )
-        # some versions: s.id is omero.RLong
-        if not sid:
-            try:
-                sid = s.id.val
-            except Exception:
-                sid = None
-        if not sid:
-            continue
+def _get_script_services(conn):
+    services = []
+    if conn is None:
+        return services
+    try:
+        svc = conn.getScriptService()
+        if svc:
+            services.append(svc)
+    except Exception:
+        logger.exception("Failed to get ScriptService via conn.getScriptService()")
+    try:
+        raw_svc = conn.c.sf.getScriptService()
+        if raw_svc and raw_svc not in services:
+            services.append(raw_svc)
+    except Exception:
+        logger.exception("Failed to get ScriptService via conn.c.sf.getScriptService()")
+    return services
 
-        for candidate in (name, path):
-            if not candidate:
+
+def _find_script_id(conn):
+    for svc in _get_script_services(conn):
+        try:
+            scripts = svc.getScripts()
+        except Exception:
+            logger.exception("ScriptService.getScripts failed")
+            continue
+        for s in scripts:
+            name = _unwrap_rtype(getattr(s, "name", None))
+            path = _unwrap_rtype(getattr(s, "path", None))
+            sid = (
+                _unwrap_rtype(getattr(getattr(s, "id", None), "val", None))
+                if hasattr(getattr(s, "id", None), "val")
+                else _unwrap_rtype(getattr(s, "id", None))
+            )
+            # some versions: s.id is omero.RLong
+            if not sid:
+                try:
+                    sid = s.id.val
+                except Exception:
+                    sid = None
+            if not sid:
                 continue
-            candidate = str(candidate)
-            basename = os.path.basename(candidate)
-            basename_no_ext = os.path.splitext(basename)[0]
-            candidate_no_ext = os.path.splitext(candidate)[0]
-            if (
-                candidate in {SCRIPT_NAME, SCRIPT_BASENAME}
-                or candidate_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
-                or basename in {SCRIPT_NAME, SCRIPT_BASENAME}
-                or basename_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
-            ):
-                return int(sid)
+
+            for candidate in (name, path):
+                if not candidate:
+                    continue
+                candidate = str(candidate)
+                basename = os.path.basename(candidate)
+                basename_no_ext = os.path.splitext(basename)[0]
+                candidate_no_ext = os.path.splitext(candidate)[0]
+                if (
+                    candidate in {SCRIPT_NAME, SCRIPT_BASENAME}
+                    or candidate_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
+                    or basename in {SCRIPT_NAME, SCRIPT_BASENAME}
+                    or basename_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
+                ):
+                    return int(sid)
     return None
 
 
@@ -229,7 +252,6 @@ def _is_process_handle(job):
 
 
 def _run_script(conn, script_id, image_id, wait_secs=None):
-    svc = conn.getScriptService()
 
     # Build inputs
     try:
@@ -245,30 +267,37 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
         wait_secs,
     )
     # Different omero-py versions expose different method names; try a few.
-    for meth_name in ("runScript", "run_script", "run"):
-        meth = getattr(svc, meth_name, None)
-        if meth is None:
-            continue
-        try:
-            # Common signature: runScript(scriptId, inputs, None)
+    errors = []
+    for svc in _get_script_services(conn):
+        for meth_name in ("runScript", "runScriptAsync", "run_script", "run"):
+            meth = getattr(svc, meth_name, None)
+            if meth is None:
+                continue
             try:
-                if wait_secs is None:
-                    job = meth(script_id, inputs, None)
-                else:
-                    job = meth(script_id, inputs, int(wait_secs))
-            except TypeError:
-                job = meth(script_id, inputs)
-            if _is_process_handle(job):
-                logger.debug("IMS export script returned process handle via %s", meth_name)
-                return job
-            job_id = _extract_job_id(job)
-            if job_id is not None:
-                logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
-                return job_id
-            return None
-        except Exception as e:
-            logger.exception("ScriptService.%s failed: %s", meth_name, e)
-            continue
+                # Common signature: runScript(scriptId, inputs, None)
+                try:
+                    if wait_secs is None:
+                        job = meth(script_id, inputs, None)
+                    else:
+                        job = meth(script_id, inputs, int(wait_secs))
+                except TypeError:
+                    job = meth(script_id, inputs)
+                if _is_process_handle(job):
+                    logger.debug("IMS export script returned process handle via %s", meth_name)
+                    return job
+                job_id = _extract_job_id(job)
+                if job_id is not None:
+                    logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
+                    return job_id
+                return None
+            except Exception as e:
+                logger.exception("ScriptService.%s failed: %s", meth_name, e)
+                errors.append(f"{meth_name}: {e}")
+                continue
+
+    if errors:
+        joined = "; ".join(errors)
+        raise RuntimeError(f"Could not start script: {joined}")
 
     raise RuntimeError("Could not start script: ScriptService has no supported run method")
 
@@ -331,60 +360,59 @@ def _get_job_state_and_outputs(conn, job_id):
     Try several ways to get job state/outputs across OMERO versions.
     Returns (state, outputs_dict_or_None).
     """
-    svc = conn.getScriptService()
+    for svc in _get_script_services(conn):
+        # 1) Dedicated methods (if available)
+        for state_m, out_m in (
+            ("getJobStatus", "getJobOutputs"),
+            ("getJobInfo", "getJobOutputs"),
+            ("get_job_status", "get_job_outputs"),
+        ):
+            state_fn = getattr(svc, state_m, None)
+            out_fn = getattr(svc, out_m, None)
+            if state_fn and out_fn:
+                try:
+                    state = state_fn(job_id)
+                    outputs = out_fn(job_id)
+                    return str(_unwrap_rtype(state)), outputs
+                except Exception:
+                    pass
 
-    # 1) Dedicated methods (if available)
-    for state_m, out_m in (
-        ("getJobStatus", "getJobOutputs"),
-        ("getJobInfo", "getJobOutputs"),
-        ("get_job_status", "get_job_outputs"),
-    ):
-        state_fn = getattr(svc, state_m, None)
-        out_fn = getattr(svc, out_m, None)
-        if state_fn and out_fn:
+        # 1b) Outputs-only fallback (some versions expose getJobOutputs without status)
+        out_fn = getattr(svc, "getJobOutputs", None) or getattr(svc, "get_job_outputs", None)
+        if out_fn:
             try:
-                state = state_fn(job_id)
                 outputs = out_fn(job_id)
-                return str(_unwrap_rtype(state)), outputs
+                if outputs:
+                    return "FINISHED", outputs
             except Exception:
                 pass
 
-    # 1b) Outputs-only fallback (some versions expose getJobOutputs without status)
-    out_fn = getattr(svc, "getJobOutputs", None) or getattr(svc, "get_job_outputs", None)
-    if out_fn:
-        try:
-            outputs = out_fn(job_id)
-            if outputs:
-                return "FINISHED", outputs
-        except Exception:
-            pass
-
-    # 2) Older pattern: getJobs() returns job objects with .id/.status and maybe outputs elsewhere
-    get_jobs = getattr(svc, "getJobs", None)
-    if get_jobs:
-        try:
-            jobs = get_jobs()
-            for j in jobs:
-                try:
-                    jid = _unwrap_rtype(getattr(getattr(j, "id", None), "val", None))
-                    if jid is None and hasattr(getattr(j, "id", None), "val"):
-                        jid = j.id.val
-                    if str(jid) != str(job_id):
+        # 2) Older pattern: getJobs() returns job objects with .id/.status and maybe outputs elsewhere
+        get_jobs = getattr(svc, "getJobs", None)
+        if get_jobs:
+            try:
+                jobs = get_jobs()
+                for j in jobs:
+                    try:
+                        jid = _unwrap_rtype(getattr(getattr(j, "id", None), "val", None))
+                        if jid is None and hasattr(getattr(j, "id", None), "val"):
+                            jid = j.id.val
+                        if str(jid) != str(job_id):
+                            continue
+                        status = _unwrap_rtype(getattr(getattr(j, "status", None), "val", None)) or _unwrap_rtype(getattr(j, "status", None))
+                        # Outputs usually via getJobOutputs, but if missing we return None
+                        outputs = None
+                        out_fn = getattr(svc, "getJobOutputs", None)
+                        if out_fn:
+                            try:
+                                outputs = out_fn(job_id)
+                            except Exception:
+                                outputs = None
+                        return str(status), outputs
+                    except Exception:
                         continue
-                    status = _unwrap_rtype(getattr(getattr(j, "status", None), "val", None)) or _unwrap_rtype(getattr(j, "status", None))
-                    # Outputs usually via getJobOutputs, but if missing we return None
-                    outputs = None
-                    out_fn = getattr(svc, "getJobOutputs", None)
-                    if out_fn:
-                        try:
-                            outputs = out_fn(job_id)
-                        except Exception:
-                            outputs = None
-                    return str(status), outputs
-                except Exception:
-                    continue
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     return None, None
 
