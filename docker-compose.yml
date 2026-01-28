@@ -1,4 +1,4 @@
-# Docker compose file of a minimal Omero installation based on the official documentation but modified for our server needs.
+# Docker compose file of a minimal Omero installation based on the official documentation, but modified with many custom packages and plugins for enhanced functionality.
 # Using the tag :latest might be tempting but is extremely risky! Have a backup plan!
 # Always check compatibility in the following link or in the official Omero documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html
 services:
@@ -63,7 +63,7 @@ services:
       retries: 30
       start_period: 30s
 
-  redis: # shared cache across Omero web workers (required for rate limiting)
+  redis:
     image: "redis:8-alpine"
     restart: unless-stopped
     # Disable persistence for RAM storage only
