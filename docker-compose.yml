@@ -162,10 +162,10 @@ services:
       test: >
         bash -lc "celery -A omeroweb_imaris_connector.celery_app inspect ping
         -d celery@${HOSTNAME}"
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
 networks:
   omero:
