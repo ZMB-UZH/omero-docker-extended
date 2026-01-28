@@ -73,12 +73,46 @@ def _run_script(conn, script_id, image_id):
                 job_id = meth(script_id, inputs, None)
             except TypeError:
                 job_id = meth(script_id, inputs)
-            return _unwrap_rtype(job_id)
+            return _extract_job_id(job_id)
         except Exception as e:
             logger.exception("ScriptService.%s failed: %s", meth_name, e)
             continue
 
     raise RuntimeError("Could not start script: ScriptService has no supported run method")
+
+
+def _extract_job_id(job):
+    if job is None:
+        return None
+    job_id = _unwrap_rtype(job)
+    if job_id is None:
+        return None
+    if isinstance(job_id, (int, str)):
+        try:
+            return int(job_id)
+        except (TypeError, ValueError):
+            pass
+    for attr_name in ("getId", "get_id", "getJobId", "get_job_id"):
+        attr = getattr(job_id, attr_name, None)
+        if not attr:
+            continue
+        try:
+            value = attr()
+            return int(_unwrap_rtype(value))
+        except (TypeError, ValueError):
+            continue
+        except Exception:
+            continue
+    for attr_name in ("id", "jobId", "job_id"):
+        if hasattr(job_id, attr_name):
+            try:
+                value = getattr(job_id, attr_name)
+                return int(_unwrap_rtype(value))
+            except (TypeError, ValueError):
+                continue
+            except Exception:
+                continue
+    return None
 
 
 def _get_job_state_and_outputs(conn, job_id):
