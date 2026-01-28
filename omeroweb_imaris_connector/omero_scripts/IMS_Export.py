@@ -291,6 +291,7 @@ def run_script():
         params = client.getInputs(unwrap=True)
         image_id = params.get("Image_ID")
         conn = BlitzGateway(client_obj=client)
+        conn.SERVICE_OPTS.setOmeroGroup(-1)  # Enable cross-group access
         success, message, export_path = run_conversion(conn, image_id)
         client.setOutput("Message", rstring(message))
         
