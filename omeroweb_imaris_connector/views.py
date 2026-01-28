@@ -14,6 +14,7 @@ from omeroweb.decorators import login_required
 logger = logging.getLogger(__name__)
 
 SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
+SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
 EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
@@ -33,7 +34,11 @@ def _find_script_id(conn):
     for s in scripts:
         name = _unwrap_rtype(getattr(s, "name", None))
         path = _unwrap_rtype(getattr(s, "path", None))
-        sid = _unwrap_rtype(getattr(getattr(s, "id", None), "val", None)) if hasattr(getattr(s, "id", None), "val") else _unwrap_rtype(getattr(s, "id", None))
+        sid = (
+            _unwrap_rtype(getattr(getattr(s, "id", None), "val", None))
+            if hasattr(getattr(s, "id", None), "val")
+            else _unwrap_rtype(getattr(s, "id", None))
+        )
         # some versions: s.id is omero.RLong
         if not sid:
             try:
@@ -43,12 +48,20 @@ def _find_script_id(conn):
         if not sid:
             continue
 
-        if name == SCRIPT_NAME or path == SCRIPT_NAME:
-            return int(sid)
-        if name and os.path.basename(str(name)) == SCRIPT_NAME:
-            return int(sid)
-        if path and os.path.basename(str(path)) == SCRIPT_NAME:
-            return int(sid)
+        for candidate in (name, path):
+            if not candidate:
+                continue
+            candidate = str(candidate)
+            basename = os.path.basename(candidate)
+            basename_no_ext = os.path.splitext(basename)[0]
+            candidate_no_ext = os.path.splitext(candidate)[0]
+            if (
+                candidate in {SCRIPT_NAME, SCRIPT_BASENAME}
+                or candidate_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
+                or basename in {SCRIPT_NAME, SCRIPT_BASENAME}
+                or basename_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
+            ):
+                return int(sid)
     return None
 
 
