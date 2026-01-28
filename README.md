@@ -1,1 +1,0 @@
-# omero-zmb-omp-plugin
