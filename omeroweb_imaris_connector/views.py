@@ -1,6 +1,8 @@
 import os
 import time
 import logging
+import threading
+import uuid
 
 from django.http import (
     FileResponse,
@@ -18,6 +20,57 @@ SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
 EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
+
+_PROCESS_JOBS = {}
+_PROCESS_JOBS_LOCK = threading.Lock()
+
+
+def _register_process_job(proc):
+    job_id = f"proc-{uuid.uuid4().hex}"
+    with _PROCESS_JOBS_LOCK:
+        _PROCESS_JOBS[job_id] = {
+            "handle": proc,
+            "created": time.time(),
+        }
+    return job_id
+
+
+def _get_process_job(job_id):
+    with _PROCESS_JOBS_LOCK:
+        return _PROCESS_JOBS.get(job_id)
+
+
+def _forget_process_job(job_id):
+    with _PROCESS_JOBS_LOCK:
+        _PROCESS_JOBS.pop(job_id, None)
+
+
+def _poll_process_job(job_id):
+    record = _get_process_job(job_id)
+    if not record:
+        return None, None, "Unknown job id"
+
+    if time.time() - record["created"] > EXPORT_TIMEOUT:
+        _forget_process_job(job_id)
+        return "TIMEOUT", None, "Timed out waiting for IMS export job."
+
+    proc = record["handle"]
+    try:
+        state = _normalize_job_state(proc.poll())
+    except Exception:
+        state = None
+
+    if not state:
+        return None, None, None
+
+    outputs = None
+    try:
+        outputs = proc.getResults(0)
+    except Exception:
+        outputs = None
+
+    _forget_process_job(job_id)
+    return state, outputs, None
 
 
 def _unwrap_rtype(v):
@@ -370,16 +423,26 @@ def imaris_export(request, conn=None, **kwargs):
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
         try:
-            job_id = int(job_id)
+            job_id_int = int(job_id)
         except (TypeError, ValueError):
-            return HttpResponseBadRequest("Invalid job id")
+            job_id_int = None
 
-        state, outputs = _get_job_state_and_outputs(conn, job_id)
-        normalized_state = _normalize_job_state(state)
+        if job_id_int is None:
+            state, outputs, error = _poll_process_job(job_id)
+            normalized_state = _normalize_job_state(state)
+            if error == "Unknown job id":
+                return HttpResponse(error, status=404)
+        else:
+            state, outputs = _get_job_state_and_outputs(conn, job_id_int)
+            normalized_state = _normalize_job_state(state)
+            error = None
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
         is_finished = normalized_state in finished_states
         is_failed = normalized_state in failed_states
+        if normalized_state == "TIMEOUT":
+            is_failed = True
+            error = error or "Timed out waiting for IMS export job."
 
         if _bool_from_request(request.GET.get("download")):
             if not is_finished:
@@ -398,7 +461,7 @@ def imaris_export(request, conn=None, **kwargs):
             )
             payload["download_url"] = download_url
         if is_failed:
-            payload["error"] = "IMS export job failed."
+            payload["error"] = error or "IMS export job failed."
         return JsonResponse(payload)
 
     image_id = request.GET.get("image") or request.GET.get("image_id")
@@ -434,7 +497,11 @@ def imaris_export(request, conn=None, **kwargs):
             job_id = None
             if async_mode:
                 logger.warning("Async IMS export requested but script returned a process handle.")
-                async_mode = False
+                job_id = _register_process_job(job_handle)
+                status_url = request.build_absolute_uri(
+                    f"{request.path}?job={job_id}"
+                )
+                return JsonResponse({"job_id": job_id, "status_url": status_url})
 
         deadline = time.time() + EXPORT_TIMEOUT
         outputs = None
