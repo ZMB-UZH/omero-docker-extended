@@ -289,228 +289,69 @@ class OMEROWebClient:
 
     def download_ims_export(self, image_id, download_dir, fallback_name="export.ims"):
         """
-        Run IMS_Export script and download the resulting IMS file attachment.
-        
-        This method:
-        1. Finds and runs the IMS_Export.py script on the OMERO server
-        2. Polls until the export job completes
-        3. Downloads the file attachment created by the script
-        4. Saves it to the local download directory
-        
-        Returns:
-            str: Path to the downloaded file, or None on failure
+        Download an Imaris .ims export for the given OMERO image id.
+
+        This calls the OMERO.web plugin endpoint:
+            /omeroweb_imaris_connector/imaris-export/?image=<id>
+
+        Requirements:
+          - self.connect() must have been called successfully (so cookies/session exist)
+          - user must be authenticated in OMERO.web
         """
-        import urllib.request
-        import urllib.error
-        
+        if not self.connected:
+            raise RuntimeError("Not connected. Call connect() first.")
+
         try:
-            # Step 1: Find the IMS_Export script
-            print("Finding IMS_Export script...")
-            script_id = self.find_script_id("IMS_Export.py")
-            if not script_id:
-                print("ERROR: IMS_Export.py script not found on server")
-                print("Available scripts:")
-                for s in self.list_scripts():
-                    print(f"  - {s.get('name')} (ID: {s.get('id')})")
-                raise RuntimeError("IMS_Export.py script not found. Please ensure it's installed on the OMERO server.")
-            
-            print(f"Found IMS_Export script (ID: {script_id})")
-            
-            # Step 2: Run the script
-            print(f"Running IMS export for image {image_id}...")
-            run_response = self.run_script(script_id, {"Image_ID": image_id})
-            if not run_response:
-                raise RuntimeError("Failed to start IMS export script")
-            
-            job_id = (
-                run_response.get('job_id') 
-                or run_response.get('jobId') 
-                or run_response.get('id')
-            )
-            if not job_id:
-                raise RuntimeError("Script started but no job ID returned")
-            
-            print(f"Export job started (Job ID: {job_id})")
-            
-            # Step 3: Poll until completion
-            print("Waiting for export to complete...")
-            activity = self.poll_activity(job_id, timeout=900, interval=2)
-            
-            if not activity:
-                raise RuntimeError("Export job timed out (15 minutes)")
-            
-            status = (activity.get('status') or activity.get('state') or '').upper()
-            print(f"Export job status: {status}")
-            
-            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
-                message = activity.get('message', 'Unknown error')
-                raise RuntimeError(f"Export job failed: {message}")
-            
-            # Step 4: Get the file annotation from outputs
-            outputs = (
-                activity.get('outputs') 
-                or activity.get('output') 
-                or activity.get('results')
-                or {}
-            )
-            
-            # Look for File_Annotation in outputs
-            file_annotation_id = None
-            for key in ['File_Annotation', 'file_annotation', 'FileAnnotation', 'File_Annotation_Id']:
-                value = outputs.get(key)
-                if value:
-                    if isinstance(value, dict):
-                        file_annotation_id = value.get('value') or value.get('id') or value.get('@id')
+            image_id_int = int(image_id)
+        except Exception:
+            raise ValueError("image_id must be an integer")
+
+        os.makedirs(download_dir, exist_ok=True)
+
+        # Build URL to the plugin endpoint (not the /api/v0 REST API)
+        base = self.base_url.rstrip("/")
+        url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={image_id_int}"
+
+        req = urllib.request.Request(url)
+
+        # Some OMERO.web installs require Referer + CSRF header for authenticated requests.
+        # We best-effort attach these.
+        if self.csrf_token:
+            req.add_header("X-CSRFToken", self.csrf_token)
+        req.add_header("Referer", base + "/")
+
+        with self.opener.open(req, timeout=120) as resp:
+            # Handle redirects-to-login (means session not valid)
+            final_url = getattr(resp, "url", "") or url
+            if "/webclient/login/" in final_url:
+                raise RuntimeError("Not authenticated (redirected to OMERO.web login).")
+
+            # Determine filename from Content-Disposition if present
+            filename = None
+            cd = resp.headers.get("Content-Disposition") or resp.headers.get("content-disposition")
+            if cd:
+                m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
+                if m:
+                    filename = urllib.parse.unquote(m.group(1))
+                else:
+                    m = re.search(r'filename="([^"]+)"', cd)
+                    if m:
+                        filename = m.group(1)
                     else:
-                        file_annotation_id = value
-                    break
-            
-            if not file_annotation_id:
-                # Fallback: check for direct file ID
-                for key in ['File', 'file', 'FileID', 'file_id']:
-                    value = outputs.get(key)
-                    if value:
-                        if isinstance(value, dict):
-                            file_annotation_id = value.get('value') or value.get('id')
-                        else:
-                            file_annotation_id = value
-                        break
-            
-            if not file_annotation_id:
-                print(f"ERROR: No file attachment found in job outputs")
-                print(f"Available outputs: {list(outputs.keys())}")
-                print(f"Output values: {outputs}")
-                raise RuntimeError(
-                    "IMS export completed but no file attachment was created. "
-                    "This likely means the script failed to attach the file properly."
-                )
-            
-            print(f"Found file attachment (ID: {file_annotation_id})")
-            
-            # Step 5: Get the original file ID from the annotation
-            annotation_data = self._api_request(f"m/annotations/{file_annotation_id}/")
-            if not annotation_data:
-                raise RuntimeError(f"Could not retrieve file annotation {file_annotation_id}")
-            
-            file_obj = annotation_data.get('data', {}).get('file')
-            if not file_obj:
-                raise RuntimeError(f"File annotation {file_annotation_id} has no file object")
-            
-            original_file_id = file_obj.get('id')
-            original_filename = file_obj.get('name', fallback_name)
-            
-            if not original_file_id:
-                raise RuntimeError(f"File annotation has no original file ID")
-            
-            print(f"Original file: {original_filename} (ID: {original_file_id})")
-            
-            # Step 6: Download the file via the annotation download endpoint
-            download_url = f"{self.base_url}/webclient/annotation/{file_annotation_id}/"
-            print(f"Downloading from: {download_url}")
-            
-            # Ensure download directory exists
-            os.makedirs(download_dir, exist_ok=True)
-            
-            # Sanitize filename
-            safe_filename = re.sub(r'[^\w\s.-]', '_', original_filename)
-            local_path = os.path.join(download_dir, safe_filename)
-            
-            # Download with progress
-            req = urllib.request.Request(download_url)
-            
-            with self.opener.open(req, timeout=300) as response:
-                total_size = int(response.headers.get('content-length', 0))
-                
-                print(f"Downloading {safe_filename} ({total_size / (1024*1024):.1f} MB)...")
-                
-                downloaded = 0
-                chunk_size = 8192
-                
-                with open(local_path, 'wb') as f:
-                    while True:
-                        chunk = response.read(chunk_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        if total_size > 0:
-                            percent = (downloaded / total_size) * 100
-                            print(f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)", end='\r')
-                
-                print()  # New line after progress
-            
-            if not os.path.exists(local_path):
-                raise RuntimeError(f"Download completed but file not found at {local_path}")
-            
-            file_size = os.path.getsize(local_path)
-            if file_size == 0:
-                raise RuntimeError("Downloaded file is empty")
-            
-            print(f"Successfully downloaded: {local_path} ({file_size / (1024*1024):.1f} MB)")
-            return local_path
-            
-        except urllib.error.HTTPError as e:
-            error_body = ""
-            try:
-                error_body = e.read().decode('utf-8')
-            except:
-                pass
-            print(f"HTTP Error {e.code}: {e.reason}")
-            if error_body:
-                print(f"Error details: {error_body}")
-            raise RuntimeError(f"Download failed: HTTP {e.code} - {e.reason}")
-            
-        except Exception as e:
-            print(f"Download error: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
+                        m = re.search(r"filename=([^;]+)", cd)
+                        if m:
+                            filename = m.group(1).strip()
 
+            if not filename:
+                filename = fallback_name
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+            outpath = os.path.join(download_dir, filename)
 
-def is_ims_file(file_path):
-    """Check if file is a valid IMS (HDF5) file."""
-    if not os.path.exists(file_path):
-        return False
-    
-    if os.path.getsize(file_path) < 8:
-        return False
-    
-    try:
-        with open(file_path, 'rb') as f:
-            signature = f.read(8)
-            return signature == b'\x89HDF\r\n\x1a\n'
-    except Exception:
-        return False
+            # Stream download to disk
+            with open(outpath, "wb") as f:
+                shutil.copyfileobj(resp, f)
 
-
-def open_file_in_imaris(file_path, imaris_app):
-    """Open a file in Imaris."""
-    if not imaris_app:
-        print(f"No Imaris application instance. File saved at: {file_path}")
-        return True
-    
-    try:
-        print(f"Opening in Imaris: {file_path}")
-        imaris_app.FileOpen(file_path, "")
-        print("Successfully opened in Imaris")
-        return True
-    except Exception as e:
-        print(f"Error opening in Imaris: {e}")
-        return False
-
-
-# =============================================================================
-# GUI DIALOG
-# =============================================================================
-
-class OMEROBrowserDialog:
-    """GUI for browsing and loading OMERO images into Imaris."""
-    
+            return outpath
     def __init__(self, imaris):
         self.imaris = imaris
         self.client = None
