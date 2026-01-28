@@ -161,7 +161,7 @@ services:
     healthcheck:
       test: >
         bash -lc "celery -A omeroweb_imaris_connector.celery_app inspect ping
-        -d celery@${HOSTNAME}"
+        -d celery@$$HOSTNAME"
       interval: 5s
       timeout: 5s
       retries: 30
