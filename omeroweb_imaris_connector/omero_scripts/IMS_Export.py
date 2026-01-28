@@ -315,7 +315,10 @@ def run_script():
                     image.linkAnnotation(file_ann)
                     
                     # Return the file annotation object so OMERO.web shows a download button
-                    client.setOutput("File_Annotation", file_ann._obj)
+                    try:
+                        client.setOutput("File_Annotation", omero.rtypes.robject(file_ann._obj))
+                    except Exception as output_error:
+                        print(f"WARNING: Failed to set File_Annotation output: {output_error}")
                     # Also return the ID for clients that only parse numeric outputs
                     client.setOutput("File_Annotation_Id", omero.rtypes.rlong(file_ann.getId()))
                     client.setOutput("Export_Path", rstring(export_path))
