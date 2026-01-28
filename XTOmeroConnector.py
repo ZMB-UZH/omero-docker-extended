@@ -29,6 +29,7 @@ import urllib.parse
 import urllib.error
 
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
+EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "5"))
 
 
 def is_ims_file(file_path):
@@ -353,20 +354,46 @@ class OMEROWebClient:
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
 
         base = self.base_url.rstrip("/")
-        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={int(image_id)}"
+        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={int(image_id)}&async=1"
         print(f"Requesting IMS export from: {export_url}")
 
         os.makedirs(download_dir, exist_ok=True)
 
         req = urllib.request.Request(export_url)
         try:
-            with self.opener.open(req, timeout=EXPORT_TIMEOUT + 60) as response:
+            with self.opener.open(req, timeout=30) as response:
                 final_url = getattr(response, "geturl", lambda: export_url)()
                 if "/webclient/login/" in str(final_url):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web (redirected to login). Please login again."
                     )
 
+                payload = json.loads(response.read().decode("utf-8"))
+                job_id = payload.get("job_id")
+                status_url = payload.get("status_url")
+                if not job_id or not status_url:
+                    raise RuntimeError(f"Unexpected response from server: {payload}")
+
+            deadline = time.time() + EXPORT_TIMEOUT
+            download_url = None
+            last_state = None
+            while time.time() < deadline:
+                poll_req = urllib.request.Request(status_url)
+                with self.opener.open(poll_req, timeout=30) as poll_response:
+                    poll_payload = json.loads(poll_response.read().decode("utf-8"))
+                last_state = poll_payload.get("state")
+                if poll_payload.get("failed"):
+                    raise RuntimeError(f"IMS export failed: {poll_payload.get('error', 'unknown error')}")
+                if poll_payload.get("finished"):
+                    download_url = poll_payload.get("download_url")
+                    break
+                time.sleep(EXPORT_POLL_INTERVAL)
+
+            if not download_url:
+                raise RuntimeError(f"IMS export timed out (last state: {last_state})")
+
+            download_req = urllib.request.Request(download_url)
+            with self.opener.open(download_req, timeout=EXPORT_TIMEOUT + 60) as response:
                 cd = response.headers.get("Content-Disposition", "")
                 filename = None
                 m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
