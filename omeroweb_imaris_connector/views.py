@@ -86,6 +86,23 @@ def imaris_export(request, conn=None, **kwargs):
         )
 
     try:
+        host_override = request.GET.get("omero_host")
+        if host_override is not None:
+            host_override = str(host_override).strip() or None
+
+        port_override = None
+        port_param = request.GET.get("omero_port")
+        if port_param is not None and str(port_param).strip():
+            try:
+                port_override = _parse_port_param(port_param)
+            except ValueError as exc:
+                return HttpResponseBadRequest(str(exc))
+
+        secure_override = None
+        secure_param = request.GET.get("omero_secure")
+        if secure_param is not None:
+            secure_override = _bool_from_request(secure_param)
+
         logger.info(
             "IMS export request image_id=%s async=%s wait_param=%s",
             image_id,
@@ -96,7 +113,13 @@ def imaris_export(request, conn=None, **kwargs):
         if not script_id:
             return HttpResponse("IMS export script not found on OMERO.server.", status=500)
 
-        celery_job_id = _start_celery_job(conn, image_id)
+        celery_job_id = _start_celery_job(
+            conn,
+            image_id,
+            host_override=host_override,
+            port_override=port_override,
+            secure_override=secure_override,
+        )
         status_url = request.build_absolute_uri(f"{request.path}?job={celery_job_id}")
         if async_mode:
             logger.debug("IMS export async response image_id=%s job_id=%s", image_id, celery_job_id)
@@ -171,10 +194,22 @@ def _poll_celery_job(job_id):
     return async_result.state, None, None
 
 
-def _start_celery_job(conn, image_id):
+def _start_celery_job(
+    conn,
+    image_id,
+    host_override=None,
+    port_override=None,
+    secure_override=None,
+):
     session_key = _get_session_key(conn)
     host, port = _resolve_omero_host_port(conn)
     secure = _resolve_omero_secure(conn)
+    if host_override:
+        host = host_override
+    if port_override is not None:
+        port = port_override
+    if secure_override is not None:
+        secure = secure_override
     if not session_key:
         raise RuntimeError("IMS export session key unavailable for background job.")
     if not host or not port:
@@ -213,6 +248,21 @@ def _start_celery_job(conn, image_id):
         CELERY_QUEUE,
     )
     return f"{CELERY_JOB_PREFIX}{task_id}"
+
+
+def _parse_port_param(value):
+    try:
+        port_text = str(value).strip()
+    except Exception:
+        return None
+    if not port_text:
+        return None
+    if not port_text.isdigit():
+        raise ValueError(f"Invalid port value: {value}")
+    port = int(port_text)
+    if port <= 0 or port > 65535:
+        raise ValueError(f"Port out of range: {port}")
+    return port
 
 
 def _get_session_key(conn):
