@@ -14,7 +14,7 @@ services:
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
     healthcheck:
-      test: ["CMD", "/usr/bin/loki", "-health"]
+      test: wget --quiet --tries=1 --output-document=- http://localhost:3100/ready | grep -q -w ready || exit 1
       interval: 10s
       timeout: 5s
       retries: 30
