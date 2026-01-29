@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import urllib.parse
 
 from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
@@ -24,8 +25,41 @@ CELERY_JOB_PREFIX = "celery-"
 CELERY_QUEUE = os.environ.get("OMERO_IMS_CELERY_QUEUE", "imaris_export")
 
 
+def _parse_base_url(value):
+    if not value:
+        return None
+    try:
+        raw = str(value).strip()
+    except Exception as exc:
+        raise ValueError("Invalid base_url value.") from exc
+    if not raw:
+        return None
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(
+            "base_url must include scheme and host, e.g. https://omero.example.org:4090"
+        )
+    if parsed.path not in {"", "/"}:
+        raise ValueError("base_url must not include a path component.")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _build_absolute_url(request, path, base_url_override=None):
+    if base_url_override:
+        base = base_url_override.rstrip("/") + "/"
+        return urllib.parse.urljoin(base, path.lstrip("/"))
+    return request.build_absolute_uri(path)
+
+
 @login_required()
 def imaris_export(request, conn=None, **kwargs):
+    base_url_override = None
+    if "base_url" in request.GET:
+        try:
+            base_url_override = _parse_base_url(request.GET.get("base_url"))
+        except ValueError as exc:
+            return HttpResponseBadRequest(str(exc))
+
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
         logger.debug("IMS export status request job_id=%s", job_id)
@@ -57,8 +91,10 @@ def imaris_export(request, conn=None, **kwargs):
             "failed": is_failed,
         }
         if is_finished:
-            download_url = request.build_absolute_uri(
-                f"{request.path}?job={job_id}&download=1"
+            download_url = _build_absolute_url(
+                request,
+                f"{request.path}?job={job_id}&download=1",
+                base_url_override=base_url_override,
             )
             payload["download_url"] = download_url
         if is_failed:
@@ -120,7 +156,14 @@ def imaris_export(request, conn=None, **kwargs):
             port_override=port_override,
             secure_override=secure_override,
         )
-        status_url = request.build_absolute_uri(f"{request.path}?job={celery_job_id}")
+        status_params = {"job": celery_job_id}
+        if base_url_override:
+            status_params["base_url"] = base_url_override
+        status_url = _build_absolute_url(
+            request,
+            f"{request.path}?{urllib.parse.urlencode(status_params)}",
+            base_url_override=base_url_override,
+        )
         if async_mode:
             logger.debug("IMS export async response image_id=%s job_id=%s", image_id, celery_job_id)
             return JsonResponse({"job_id": celery_job_id, "status_url": status_url})
