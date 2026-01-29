@@ -30,6 +30,15 @@ import urllib.error
 
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "5"))
+_XT_LOG_PATH = None
+
+
+def _xt_debug(message):
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {message}"
+    print(line)
+    if _XT_LOG_PATH:
+        _xt_write_log(_XT_LOG_PATH, line)
 
 def _parse_port(port_value):
     """Parse a port value into an integer or return None if invalid."""
@@ -121,8 +130,10 @@ class OMEROWebClient:
             opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
             
             login_url = f"{self.base_url}/webclient/login/"
+            _xt_debug(f"Connecting to OMERO.web login url={login_url}")
             req = urllib.request.Request(login_url)
             response = opener.open(req, timeout=10)
+            _xt_debug(f"Login GET response={getattr(response, 'status', 'unknown')}")
             
             csrf_token = None
             for cookie in cookie_jar:
@@ -131,6 +142,7 @@ class OMEROWebClient:
                     break
             
             if not csrf_token:
+                _xt_debug("Login failed: CSRF token missing")
                 return False
             
             data = urllib.parse.urlencode({
@@ -145,6 +157,7 @@ class OMEROWebClient:
             req.add_header('X-CSRFToken', csrf_token)
             
             response = opener.open(req, timeout=10)
+            _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
             
             session_id = None
             for cookie in cookie_jar:
@@ -153,6 +166,7 @@ class OMEROWebClient:
                     break
             
             if session_id:
+                _xt_debug("Login succeeded; session cookie received")
                 self.cookie_jar = cookie_jar
                 self.opener = opener
                 self.csrf_token = csrf_token
@@ -160,10 +174,11 @@ class OMEROWebClient:
                 self.session_key = session_id
                 return True
             
+            _xt_debug("Login failed: session cookie missing")
             return False
             
         except Exception as e:
-            print(f"Connection error: {e}")
+            _xt_debug(f"Connection error: {e}")
             return False
     
     def _api_request(self, endpoint):
@@ -172,9 +187,11 @@ class OMEROWebClient:
         import urllib.error
 
         if not hasattr(self, 'opener'):
+            _xt_debug("API request skipped: no opener/session")
             return None
             
         url = f"{self.api_url}/{endpoint}"
+        _xt_debug(f"API GET url={url}")
         req = urllib.request.Request(url)
         
         if hasattr(self, 'csrf_token'):
@@ -182,12 +199,13 @@ class OMEROWebClient:
         
         try:
             response = self.opener.open(req, timeout=10)
+            _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
             return json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as e:
-            print(f"API error ({e.code}): {e.reason}")
+            _xt_debug(f"API error ({e.code}): {e.reason}")
             return None
         except Exception as e:
-            print(f"API error: {e}")
+            _xt_debug(f"API error: {e}")
             return None
 
     def _api_post(self, endpoint, payload=None):
@@ -196,6 +214,7 @@ class OMEROWebClient:
         import urllib.error
 
         if not hasattr(self, 'opener'):
+            _xt_debug("API POST skipped: no opener/session")
             return None
 
         url = f"{self.api_url}/{endpoint}"
@@ -210,6 +229,7 @@ class OMEROWebClient:
 
         try:
             response = self.opener.open(req, timeout=30)
+            _xt_debug(f"API POST url={url} response={getattr(response, 'status', 'unknown')}")
             raw = response.read()
             if not raw:
                 return None
@@ -218,14 +238,14 @@ class OMEROWebClient:
             except Exception:
                 return None
         except urllib.error.HTTPError as e:
-            print(f"API POST error ({e.code}): {e.reason}")
+            _xt_debug(f"API POST error ({e.code}): {e.reason}")
             try:
-                print(e.read().decode('utf-8'))
+                _xt_debug(e.read().decode('utf-8'))
             except Exception:
                 pass
             return None
         except Exception as e:
-            print(f"API POST error: {e}")
+            _xt_debug(f"API POST error: {e}")
             return None
 
     def get_image_metadata(self, image_id):
@@ -372,7 +392,7 @@ class OMEROWebClient:
 
         base = self.base_url.rstrip("/")
         export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={int(image_id)}&async=1"
-        print(f"Requesting IMS export from: {export_url}")
+        _xt_debug(f"Requesting IMS export from: {export_url}")
 
         os.makedirs(download_dir, exist_ok=True)
 
@@ -399,6 +419,7 @@ class OMEROWebClient:
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
                     raise RuntimeError(f"Unexpected response from server: {payload}")
+                _xt_debug(f"IMS export started job_id={job_id} status_url={status_url}")
 
             deadline = time.time() + EXPORT_TIMEOUT
             download_url = None
@@ -408,6 +429,7 @@ class OMEROWebClient:
                 with self.opener.open(poll_req, timeout=30) as poll_response:
                     poll_payload = json.loads(poll_response.read().decode("utf-8"))
                 last_state = poll_payload.get("state")
+                _xt_debug(f"IMS export poll state={last_state} payload={poll_payload}")
                 if poll_payload.get("failed"):
                     raise RuntimeError(f"IMS export failed: {poll_payload.get('error', 'unknown error')}")
                 if poll_payload.get("finished"):
@@ -445,7 +467,7 @@ class OMEROWebClient:
                 downloaded = 0
                 chunk_size = 1024 * 1024  # 1MB
 
-                print(f"Downloading to: {local_path}")
+                _xt_debug(f"Downloading to: {local_path}")
                 with open(local_path, "wb") as f:
                     while True:
                         chunk = response.read(chunk_size)
@@ -455,7 +477,10 @@ class OMEROWebClient:
                         downloaded += len(chunk)
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
-                            print(f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)", end="\r")
+                            print(
+                                f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)",
+                                end="\r",
+                            )
 
                 if total_size:
                     print()
@@ -465,7 +490,7 @@ class OMEROWebClient:
             if os.path.getsize(local_path) <= 0:
                 raise RuntimeError("Downloaded IMS file is empty")
 
-            print(f"IMS export downloaded OK: {local_path}")
+            _xt_debug(f"IMS export downloaded OK: {local_path}")
             return local_path
 
         except urllib.error.HTTPError as e:
@@ -705,6 +730,7 @@ class OMEROBrowserDialog:
     
     def _load_worker(self, img):
         try:
+            _xt_debug(f"Load worker starting image_id={img['id']} name={img['name']}")
             self._set_status(f"Exporting IMS for {img['name']}...", "#fff3cd")
 
             # Download directory
@@ -729,7 +755,7 @@ class OMEROBrowserDialog:
                 )
             
             self._set_status(f"Downloaded: {os.path.basename(downloaded_file)}", "#d4edda")
-            print(f"Downloaded: {downloaded_file}")
+            _xt_debug(f"Downloaded: {downloaded_file}")
             
             self.temp_files.append(downloaded_file)
             
@@ -751,6 +777,7 @@ class OMEROBrowserDialog:
             self._show_error("Error", str(e))
             import traceback
             traceback.print_exc()
+            _xt_debug(f"Load worker failed: {e}")
         finally:
             self.load_btn.config(state=tk.NORMAL)
     
@@ -791,6 +818,8 @@ def _xt_show_fatal(title, message):
 def XTOmeroConnector(aImarisId):
     """Called by Imaris."""
     log_path = _xt_log_path()
+    global _XT_LOG_PATH
+    _XT_LOG_PATH = log_path
     try:
         _xt_write_log(log_path, "=== XTOmeroConnector starting ===")
         _xt_write_log(log_path, f"Python: {sys.version}")
