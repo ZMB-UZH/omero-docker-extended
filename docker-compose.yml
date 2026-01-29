@@ -4,7 +4,7 @@
 services:
 
   loki:
-    image: "grafana/loki:2.9.8"
+    image: "grafana/loki:3.6.4"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -21,7 +21,7 @@ services:
       start_period: 10s
 
   promtail:
-    image: "grafana/promtail:2.9.8"
+    image: "grafana/promtail:3.6.4"
     restart: unless-stopped
     command: -config.file=/etc/promtail/promtail-config.yml
     networks:
