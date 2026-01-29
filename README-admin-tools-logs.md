@@ -22,14 +22,28 @@ ADMIN_TOOLS_LOG_MAX_ENTRIES=500
 ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 ```
 
+## Optional environment variables (compose)
+
+Configure where the OMERO containers write internal log files. These are mounted into
+Grafana Alloy for file-based log collection.
+
+```
+OMERO_SERVER_LOG_DIR=/opt/omero/server/OMERO.server/var/log
+OMERO_WEB_LOG_DIR=/opt/omero/web/OMERO.web/var/log
+OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
+```
+
 ## How it works
 
 1. Grafana Alloy discovers containers via Docker socket and labels them with the compose service
    name (e.g., `omeroserver`, `omeroweb`, `database`, `database_plugin`, `redis`). The Admin tools
    backend queries Loki using the `compose_service` label so the service names must match the
    Docker Compose service keys.
-2. Loki stores the entries.
-3. The Admin tools plugin queries Loki via its backend (`/logs/data/`) and renders the UI
+2. Grafana Alloy also tails internal OMERO log files and labels them with dedicated
+   `compose_service` values (`omeroserver_internal`, `omeroweb_internal`) so they show up as
+   distinct sources in the Admin tools UI.
+3. Loki stores the entries.
+4. The Admin tools plugin queries Loki via its backend (`/logs/data/`) and renders the UI
    without exposing Loki directly to the browser.
 
 ## Notes
