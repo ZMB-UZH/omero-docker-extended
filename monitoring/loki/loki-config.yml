@@ -28,8 +28,8 @@ limits_config:
   ingestion_rate_mb: 8
   ingestion_burst_size_mb: 16
   max_entries_limit_per_query: 5000
-  reject_old_samples: true
-  reject_old_samples_max_age: 744h # Accept logs up to 31 days old
+  reject_old_samples: false
+  reject_old_samples_max_age: 744h # Accept logs up to 31 days old (ignored when reject_old_samples is false)
 
 compactor:
   working_directory: /loki/compactor
