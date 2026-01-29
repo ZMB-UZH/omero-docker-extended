@@ -5,6 +5,9 @@ import re
 import threading
 import time
 import uuid
+from typing import Iterator
+
+import omero
 
 logger = logging.getLogger(__name__)
 
@@ -451,9 +454,9 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
                     logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
                     return job_id
                 errors.append(f"{meth_name}: unsupported return type {type(job)}")
-            except Exception as e:
-                logger.exception("ScriptService.%s failed: %s", meth_name, e)
-                errors.append(f"{meth_name}: {e}")
+            except Exception as exc:
+                logger.exception("ScriptService.%s failed: %s", meth_name, exc)
+                errors.append(f"{meth_name}: {_format_script_exception(exc)}")
                 continue
 
     if errors:
@@ -464,6 +467,43 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
         raise RuntimeError("Could not start script: ScriptService run methods did not succeed")
 
     raise RuntimeError("Could not start script: ScriptService has no supported run method")
+
+
+def _format_script_exception(exc: Exception) -> str:
+    if _is_no_processor_available(exc):
+        return (
+            "No OMERO script processor is available to run IMS export. "
+            "Start OMERO.script processors or increase omero.scripts.processors."
+        )
+    return str(exc)
+
+
+def _is_no_processor_available(exc: Exception) -> bool:
+    no_processor_type = getattr(omero, "NoProcessorAvailable", None)
+    for err in _iter_exception_chain(exc):
+        if no_processor_type and isinstance(err, no_processor_type):
+            return True
+        name = err.__class__.__name__
+        if name == "NoProcessorAvailable":
+            return True
+        message = str(err)
+        if "NoProcessorAvailable" in message:
+            return True
+        if "No processor available" in message:
+            return True
+    return False
+
+
+def _iter_exception_chain(exc: Exception) -> Iterator[BaseException]:
+    seen = set()
+    current = exc
+    while current and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        if current.__cause__ is not None:
+            current = current.__cause__
+            continue
+        current = current.__context__
 
 
 def _extract_job_id(job):
