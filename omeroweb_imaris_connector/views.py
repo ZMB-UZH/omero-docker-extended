@@ -143,8 +143,13 @@ def _poll_celery_job(job_id):
         celery_states.STARTED,
     }:
         return "RUNNING", None, None
-    if async_result.state == celery_states.FAILURE:
-        return "FAILED", None, str(async_result.result)
+    if async_result.state in {celery_states.FAILURE, celery_states.IGNORED}:
+        error = None
+        if isinstance(async_result.info, dict):
+            error = async_result.info.get("error")
+        if not error:
+            error = str(async_result.result)
+        return "FAILED", None, error
     if async_result.state == celery_states.SUCCESS:
         payload = async_result.result or {}
         return (
