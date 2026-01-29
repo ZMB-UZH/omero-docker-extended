@@ -104,7 +104,7 @@
                 {% endfor %}
             </div>
             <div class="log-sources">
-                <span class="log-sources-label">Omero logs</span>
+                <span class="log-sources-label">Internal logs</span>
                 {% for source in omero_log_sources %}
                 <label class="log-source-pill" data-source-key="{{ source.key }}">
                     <input type="checkbox" checked value="{{ source.container }}">
@@ -118,7 +118,7 @@
                     <thead>
                         <tr>
                             <th>Timestamp</th>
-                            <th>Container</th>
+                            <th>Container/File</th>
                             <th>Severity</th>
                             <th>Message</th>
                         </tr>

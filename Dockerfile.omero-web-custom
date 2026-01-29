@@ -32,6 +32,18 @@ RUN set -euo pipefail; \
         exit 1; \
     fi
 
+# Ensure stable OMERO.web path points at the versioned installation
+# ----------------------------------------------------------------
+RUN set -euo pipefail; \
+    WEB_DIR="$(ls -d /opt/omero/web/OMERO.web-* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${WEB_DIR}" ]]; then \
+        echo "ERROR: Could not find versioned OMERO.web directory." >&2; \
+        exit 1; \
+    fi; \
+    if [[ ! -e /opt/omero/web/OMERO.web ]]; then \
+        ln -s "${WEB_DIR}" /opt/omero/web/OMERO.web; \
+    fi
+
 # Optional: apply OS updates at build time (security-only if supported)
 # ---------------------------------------------------------------------
 RUN set -euo pipefail; \
