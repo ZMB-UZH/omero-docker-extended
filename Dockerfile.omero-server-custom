@@ -231,6 +231,14 @@ RUN set -euo pipefail; \
     chown root:root /startup/99-job-service-bootstrap.sh; \
     chmod 0555 /startup/99-job-service-bootstrap.sh
 
+# Ensure OMERO server runtime directories are owned by omero-server
+# so named volumes inherit correct permissions on first run.
+# ----------------------------------------------------------------
+RUN set -euo pipefail; \
+    mkdir -p /opt/omero/server/OMERO.server/var/log; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
+    chmod -R g+rwX /opt/omero/server/OMERO.server/var
+
 # Drop privileges for runtime
 # ---------------------------
 USER omero-server
