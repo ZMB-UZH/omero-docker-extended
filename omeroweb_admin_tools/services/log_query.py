@@ -29,7 +29,7 @@ def build_loki_query(containers: List[str]) -> str:
     if not containers:
         raise ValueError("At least one container must be selected for log query.")
     container_selector = "|".join(containers)
-    return f'{{container=~"{container_selector}"}}'
+    return f'{{compose_service=~"{container_selector}"}}'
 
 
 def _format_timestamp(value_ns: str) -> str:
