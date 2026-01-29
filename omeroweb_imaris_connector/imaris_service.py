@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -640,6 +641,20 @@ def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
             pass
 
 
+def _sanitize_filename(filename, fallback="export.ims"):
+    if not filename:
+        return fallback
+    safe_name = os.path.basename(str(filename))
+    safe_name = re.sub(r"[\x00-\x1f\x7f]+", "", safe_name)
+    safe_name = safe_name.replace(os.sep, "_")
+    if os.altsep:
+        safe_name = safe_name.replace(os.altsep, "_")
+    safe_name = safe_name.strip().strip(". ")
+    if not safe_name:
+        return fallback
+    return safe_name
+
+
 def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
     try:
         file_ann_id = int(file_ann_id)
@@ -665,7 +680,10 @@ def _response_from_file_annotation(conn, file_ann_id, filename_fallback=None):
     except Exception:
         size = None
 
-    name = _unwrap_rtype(name) or filename_fallback or "export.ims"
+    name = _sanitize_filename(
+        _unwrap_rtype(name) or filename_fallback or "export.ims",
+        fallback=filename_fallback or "export.ims",
+    )
     try:
         size = int(_unwrap_rtype(size)) if size is not None else None
     except (TypeError, ValueError):
@@ -702,7 +720,10 @@ def _build_download_response(conn, outputs, export_name=None):
         export_root = os.path.realpath(EXPORT_ROOT)
         export_path = os.path.realpath(export_path)
         if export_path.startswith(export_root + os.sep) and os.path.exists(export_path):
-            filename = export_name or os.path.basename(export_path)
+            filename = _sanitize_filename(
+                export_name or os.path.basename(export_path),
+                fallback=os.path.basename(export_path),
+            )
             response = FileResponse(
                 open(export_path, "rb"),
                 as_attachment=True,
