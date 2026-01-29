@@ -31,6 +31,23 @@ import urllib.error
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "5"))
 
+def _parse_port(port_value):
+    """Parse a port value into an integer or return None if invalid."""
+    if port_value is None:
+        return None
+    port_text = str(port_value).strip()
+    if not port_text:
+        return None
+    if not port_text.isdigit():
+        return None
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError):
+        return None
+    if port <= 0 or port > 65535:
+        return None
+    return port
+
 
 def is_ims_file(file_path):
     """Check if a file looks like an Imaris IMS (HDF5) file."""
@@ -368,7 +385,16 @@ class OMEROWebClient:
                         "Not authenticated to OMERO.web (redirected to login). Please login again."
                     )
 
-                payload = json.loads(response.read().decode("utf-8"))
+                raw_body = response.read().decode("utf-8", errors="replace")
+                try:
+                    payload = json.loads(raw_body)
+                except json.JSONDecodeError as exc:
+                    snippet = raw_body[:2000].strip()
+                    raise RuntimeError(
+                        "IMS export failed: server returned a non-JSON response. "
+                        "Please verify the OMERO.web Imaris connector is healthy.\n\n"
+                        f"Response preview:\n{snippet}"
+                    ) from exc
                 job_id = payload.get("job_id")
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
@@ -597,11 +623,19 @@ class OMEROBrowserDialog:
         if not all([h, p, u, pw]):
             messagebox.showwarning("Missing Fields", "Please fill all connection fields")
             return
+
+        port = _parse_port(p)
+        if port is None:
+            messagebox.showerror(
+                "Invalid Port",
+                "Please enter a valid numeric port (1-65535) for the OMERO.web server.",
+            )
+            return
         
         self._set_status("Connecting to OMERO...", "#fff3cd")
         
         scheme = "https" if self.https_var.get() else "http"
-        self.client = OMEROWebClient(h, int(p), u, pw, scheme=scheme)
+        self.client = OMEROWebClient(h, port, u, pw, scheme=scheme)
         
         if self.client.connect():
             self._set_status(f"✓ Connected to {h}:{p} as {u}", "#d4edda")
