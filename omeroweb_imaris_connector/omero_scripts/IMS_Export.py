@@ -283,9 +283,9 @@ def run_script():
             grouping="1",
             description="ID of the image to export to IMS format"
         ),
-        authors=["OMERO Team"],
-        institutions=["University"],
-        contact="support@example.com",
+        authors=["Efstratios Mitridis"],
+        institutions=["ZMB/UZH"],
+        contact="mitridisefstratios@gmail.com",
     )
     try:
         params = client.getInputs(unwrap=True)
