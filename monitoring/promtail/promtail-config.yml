@@ -12,7 +12,6 @@ scrape_configs:
   - job_name: docker-containers
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
-        api_version: 1.44
         refresh_interval: 5s
     relabel_configs:
       - source_labels: [__meta_docker_container_name]
