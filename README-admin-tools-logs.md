@@ -25,7 +25,9 @@ ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 ## How it works
 
 1. Grafana Alloy discovers containers via Docker socket and labels them with the compose service
-   name (e.g., `omeroserver`, `omeroweb`, `database`, `database_plugin`, `redis`).
+   name (e.g., `omeroserver`, `omeroweb`, `database`, `database_plugin`, `redis`). The Admin tools
+   backend queries Loki using the `compose_service` label so the service names must match the
+   Docker Compose service keys.
 2. Loki stores the entries.
 3. The Admin tools plugin queries Loki via its backend (`/logs/data/`) and renders the UI
    without exposing Loki directly to the browser.
@@ -35,6 +37,8 @@ ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 - Root user access is enforced by the Admin tools plugin.
 - Auto-refresh is enabled by default and can be disabled in the UI.
 - Filtering supports time range, severity, and a free-text search.
+- The Grafana Alloy v1.12.2 Docker image does not include `wget` or `curl`, so the
+  Docker Compose healthcheck uses a process check (`kill -0 1`) instead of an HTTP probe.
 - Grafana Alloy reads container stdout/stderr. If a service writes logs to files only, route
   those logs to stdout or mount the log paths and extend `monitoring/alloy/alloy-config.alloy`
   accordingly.
