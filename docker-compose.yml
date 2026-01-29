@@ -20,20 +20,22 @@ services:
       retries: 30
       start_period: 10s
 
-  promtail:
-    image: "grafana/promtail:3.6.4"
+  alloy:
+    image: "grafana/alloy:v1.12.2"
     restart: unless-stopped
-    command: -config.file=/etc/promtail/promtail-config.yml
+    command:
+      - "run"
+      - "/etc/alloy/alloy-config.alloy"
     networks:
       - omero
     volumes:
-      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9080/ready >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:12345/-/ready >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 30
