@@ -30,6 +30,18 @@ RUN set -euo pipefail; \
         exit 1; \
     fi
 
+# Ensure stable OMERO.server path points at the versioned installation
+# -------------------------------------------------------------------
+RUN set -euo pipefail; \
+    SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${SERVER_DIR}" ]]; then \
+        echo "ERROR: Could not find versioned OMERO.server directory." >&2; \
+        exit 1; \
+    fi; \
+    if [[ ! -e /opt/omero/server/OMERO.server ]]; then \
+        ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
+    fi
+
 # Security hardening: upgrade selected Python tooling inside OMERO server venv
 # WARNING:
 # - Affects Omero server Python gateway
