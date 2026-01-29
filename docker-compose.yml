@@ -4,7 +4,7 @@
 services:
 
   loki:
-    image: "grafana/loki:latest"
+    image: "grafana/loki:main"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -17,7 +17,7 @@ services:
       test: ["CMD", "/usr/bin/loki", "-health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 30
       start_period: 10s
 
   alloy:
