@@ -305,8 +305,6 @@ def _iter_script_methods(svc):
         "run",
         "runScript_async",
         "run_script_async",
-        "begin_runScript",
-        "begin_run_script",
         "runScriptEx",
         "executeScript",
         "execute_script",
@@ -323,6 +321,11 @@ def _iter_script_methods(svc):
     try:
         for name in dir(svc):
             if name in seen:
+                continue
+            lowered = name.lower()
+            if lowered.startswith("begin_") or lowered.startswith("end_"):
+                continue
+            if "canrun" in lowered or "can_run" in lowered:
                 continue
             lower_name = name.lower()
             if "script" not in lower_name:

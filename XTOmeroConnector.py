@@ -437,7 +437,21 @@ class OMEROWebClient:
             while time.time() < deadline:
                 poll_req = urllib.request.Request(status_url)
                 with self.opener.open(poll_req, timeout=30) as poll_response:
-                    poll_payload = json.loads(poll_response.read().decode("utf-8"))
+                    poll_final_url = getattr(poll_response, "geturl", lambda: status_url)()
+                    if "/webclient/login/" in str(poll_final_url):
+                        raise RuntimeError(
+                            "Not authenticated to OMERO.web (redirected to login) while polling IMS export."
+                        )
+                    poll_body = poll_response.read().decode("utf-8", errors="replace")
+                    try:
+                        poll_payload = json.loads(poll_body)
+                    except json.JSONDecodeError as exc:
+                        snippet = poll_body[:2000].strip()
+                        raise RuntimeError(
+                            "IMS export poll failed: server returned a non-JSON response. "
+                            "Please verify the OMERO.web Imaris connector is healthy.\n\n"
+                            f"Response preview:\n{snippet}"
+                        ) from exc
                 last_state = poll_payload.get("state")
                 _xt_debug(f"IMS export poll state={last_state} payload={poll_payload}")
                 if poll_payload.get("failed"):
@@ -452,6 +466,11 @@ class OMEROWebClient:
 
             download_req = urllib.request.Request(download_url)
             with self.opener.open(download_req, timeout=EXPORT_TIMEOUT + 60) as response:
+                download_final_url = getattr(response, "geturl", lambda: download_url)()
+                if "/webclient/login/" in str(download_final_url):
+                    raise RuntimeError(
+                        "Not authenticated to OMERO.web (redirected to login) while downloading IMS export."
+                    )
                 cd = response.headers.get("Content-Disposition", "")
                 filename = None
                 m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
