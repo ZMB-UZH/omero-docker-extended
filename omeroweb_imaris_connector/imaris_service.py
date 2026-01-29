@@ -87,6 +87,7 @@ def _monitor_process_job(job_id, proc):
 
 def _register_process_job(proc):
     job_id = f"proc-{uuid.uuid4().hex}"
+    logger.debug("Registering IMS process job %s", job_id)
     with _PROCESS_JOBS_LOCK:
         _PROCESS_JOBS[job_id] = {
             "handle": proc,
@@ -122,10 +123,12 @@ def _forget_process_job(job_id):
 
 
 def _poll_process_job(job_id):
+    logger.debug("Polling process job %s", job_id)
     record = _get_process_job(job_id)
     if not record:
         file_record = _read_process_job_file(job_id)
         if not file_record:
+            logger.debug("Process job %s not found in memory or on disk", job_id)
             return None, None, "Unknown job id"
 
         created = file_record.get("created")
@@ -150,6 +153,7 @@ def _poll_process_job(job_id):
         state = None
 
     if not state:
+        logger.debug("Process job %s still running", job_id)
         return None, None, None
 
     outputs = None
@@ -157,6 +161,7 @@ def _poll_process_job(job_id):
         outputs = proc.getResults(0)
     except Exception:
         outputs = None
+    logger.debug("Process job %s finished state=%s outputs=%s", job_id, state, _serialize_outputs(outputs))
     _write_process_job_file(
         job_id,
         {
@@ -402,6 +407,7 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
         wait_secs,
     )
     services = _get_script_services(conn)
+    logger.debug("ScriptService count=%s", len(services))
     if not services:
         raise RuntimeError("Could not start script: ScriptService unavailable")
     # Different omero-py versions expose different method names; try a few.
@@ -410,6 +416,7 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
     for svc in services:
         for meth_name, meth in _iter_script_methods(svc):
             seen_methods.add(meth_name)
+            logger.debug("Attempting ScriptService.%s for IMS export", meth_name)
             try:
                 job = _call_script_method(meth, meth_name, script_id, inputs, wait_secs)
                 if job is None:
@@ -511,6 +518,14 @@ def _get_job_state_and_outputs(conn, job_id):
                 try:
                     state = state_fn(job_id)
                     outputs = out_fn(job_id)
+                    logger.debug(
+                        "Job %s state via %s/%s: %s outputs=%s",
+                        job_id,
+                        state_m,
+                        out_m,
+                        state,
+                        _serialize_outputs(outputs),
+                    )
                     return str(_unwrap_rtype(state)), outputs
                 except Exception:
                     pass
@@ -521,6 +536,7 @@ def _get_job_state_and_outputs(conn, job_id):
             try:
                 outputs = out_fn(job_id)
                 if outputs:
+                    logger.debug("Job %s outputs via outputs-only path: %s", job_id, _serialize_outputs(outputs))
                     return "FINISHED", outputs
             except Exception:
                 pass
@@ -546,6 +562,7 @@ def _get_job_state_and_outputs(conn, job_id):
                                 outputs = out_fn(job_id)
                             except Exception:
                                 outputs = None
+                        logger.debug("Job %s state via getJobs(): %s outputs=%s", job_id, status, _serialize_outputs(outputs))
                         return str(status), outputs
                     except Exception:
                         continue
@@ -572,6 +589,7 @@ def _wait_for_process(proc, timeout):
             outputs = proc.getResults(0)
         except Exception:
             outputs = None
+    logger.debug("Process wait completed state=%s outputs=%s", last_state, _serialize_outputs(outputs))
     return last_state, outputs
 
 
@@ -715,6 +733,12 @@ def _build_download_response(conn, outputs, export_name=None):
     export_path = _extract_output_value(outputs or {}, "Export_Path")
     export_name = export_name or _extract_output_value(outputs or {}, "Export_Name")
     file_ann_id = _extract_output_value(outputs or {}, "File_Annotation_Id")
+    logger.debug(
+        "Building IMS download response export_path=%s export_name=%s file_ann_id=%s",
+        export_path,
+        export_name,
+        file_ann_id,
+    )
 
     if export_path:
         export_root = os.path.realpath(EXPORT_ROOT)
@@ -738,7 +762,10 @@ def _build_download_response(conn, outputs, export_name=None):
             return response
 
     if not export_path:
+        logger.error("IMS export outputs missing Export_Path and File_Annotation_Id")
         return HttpResponse("IMS export did not return a file path.", status=500)
     if export_path and not os.path.exists(export_path):
+        logger.error("IMS export path not found on server: %s", export_path)
         return HttpResponse("IMS export file not found on server.", status=404)
+    logger.error("IMS export path invalid: %s", export_path)
     return HttpResponse("IMS export path is invalid.", status=500)

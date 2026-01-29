@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def _open_session_connection(session_key, host, port, secure=None):
+    logger.debug("Opening OMERO session host=%s port=%s secure=%s", host, port, secure)
     if secure is None:
         client = omero.client(host=host, port=port)
     else:
@@ -69,6 +70,13 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
                     outputs = outs
                 if not last_state and _infer_finished_from_outputs(outputs):
                     last_state = "FINISHED"
+                logger.debug(
+                    "IMS export job poll image_id=%s job_id=%s state=%s outputs=%s",
+                    image_id,
+                    job_handle,
+                    last_state,
+                    _serialize_outputs(outputs),
+                )
                 if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                     break
                 if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
@@ -76,6 +84,12 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
                 time.sleep(EXPORT_POLL_INTERVAL)
         else:
             last_state, outputs = _wait_for_process(job_handle, EXPORT_TIMEOUT)
+            logger.debug(
+                "IMS export process handle completed image_id=%s state=%s outputs=%s",
+                image_id,
+                last_state,
+                _serialize_outputs(outputs),
+            )
 
         if not last_state:
             raise RuntimeError("Could not determine IMS export job status.")

@@ -28,6 +28,7 @@ CELERY_QUEUE = os.environ.get("OMERO_IMS_CELERY_QUEUE", "imaris_export")
 def imaris_export(request, conn=None, **kwargs):
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
+        logger.debug("IMS export status request job_id=%s", job_id)
         if not job_id.startswith(CELERY_JOB_PREFIX):
             return HttpResponse(
                 "Only Celery-backed IMS export jobs are supported.",
@@ -46,6 +47,7 @@ def imaris_export(request, conn=None, **kwargs):
         if _bool_from_request(request.GET.get("download")):
             if not is_finished:
                 return HttpResponse("IMS export is not ready for download.", status=409)
+            logger.info("IMS export download requested job_id=%s", job_id)
             return _build_download_response(conn, outputs)
 
         payload = {
@@ -97,6 +99,7 @@ def imaris_export(request, conn=None, **kwargs):
         celery_job_id = _start_celery_job(conn, image_id)
         status_url = request.build_absolute_uri(f"{request.path}?job={celery_job_id}")
         if async_mode:
+            logger.debug("IMS export async response image_id=%s job_id=%s", image_id, celery_job_id)
             return JsonResponse({"job_id": celery_job_id, "status_url": status_url})
 
         deadline = time.time() + EXPORT_TIMEOUT
@@ -111,6 +114,12 @@ def imaris_export(request, conn=None, **kwargs):
                 outputs = outs
             if error:
                 last_error = error
+            logger.debug(
+                "IMS export poll job_id=%s state=%s error=%s",
+                celery_job_id,
+                last_state,
+                last_error,
+            )
             if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                 break
             if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
@@ -137,6 +146,7 @@ def imaris_export(request, conn=None, **kwargs):
 def _poll_celery_job(job_id):
     task_id = job_id[len(CELERY_JOB_PREFIX):]
     async_result = celery_app.AsyncResult(task_id)
+    logger.debug("Polling Celery job task_id=%s state=%s", task_id, async_result.state)
     if async_result.state in {
         celery_states.PENDING,
         celery_states.RECEIVED,
@@ -152,6 +162,7 @@ def _poll_celery_job(job_id):
         return "FAILED", None, error
     if async_result.state == celery_states.SUCCESS:
         payload = async_result.result or {}
+        logger.debug("Celery job %s success payload=%s", task_id, payload)
         return (
             payload.get("state", "FINISHED"),
             payload.get("outputs"),
