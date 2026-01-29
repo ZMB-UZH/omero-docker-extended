@@ -148,7 +148,7 @@ body {
             border-radius: 8px;
         }
         .admin-tools-button-link {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
             text-decoration: none;
