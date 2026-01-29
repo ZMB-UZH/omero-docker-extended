@@ -283,6 +283,8 @@ def run_script():
             grouping="1",
             description="ID of the image to export to IMS format"
         ),
+        namespaces=["omero.export"],
+        version="1.0.0",
         authors=["Efstratios Mitridis"],
         institutions=["ZMB/UZH"],
         contact="mitridisefstratios@gmail.com",
