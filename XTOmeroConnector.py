@@ -374,7 +374,15 @@ class OMEROWebClient:
         } for img in images]
 
 
-    def download_ims_export(self, image_id, download_dir, fallback_name="export.ims"):
+    def download_ims_export(
+        self,
+        image_id,
+        download_dir,
+        fallback_name="export.ims",
+        server_host=None,
+        server_port=None,
+        server_secure=None,
+    ):
         """
         Download an Imaris .ims export for a given image_id.
 
@@ -391,7 +399,18 @@ class OMEROWebClient:
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
 
         base = self.base_url.rstrip("/")
-        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?image={int(image_id)}&async=1"
+        query_params = {
+            "image": int(image_id),
+            "async": 1,
+        }
+        if server_host:
+            query_params["omero_host"] = server_host
+        if server_port is not None:
+            query_params["omero_port"] = server_port
+        if server_secure is not None:
+            query_params["omero_secure"] = int(bool(server_secure))
+
+        export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?{urllib.parse.urlencode(query_params)}"
         _xt_debug(f"Requesting IMS export from: {export_url}")
 
         os.makedirs(download_dir, exist_ok=True)
@@ -557,10 +576,23 @@ class OMEROBrowserDialog:
         tk.Label(conn_frame, text="Password:").grid(row=1, column=2, sticky=tk.W, pady=5)
         self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
         self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
-        
+
+        tk.Label(conn_frame, text="OMERO.server Host:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.server_host_entry = tk.Entry(conn_frame, width=25)
+        self.server_host_entry.grid(row=2, column=1, pady=5, padx=5)
+
+        tk.Label(conn_frame, text="OMERO.server Port:").grid(row=2, column=2, sticky=tk.W, pady=5)
+        self.server_port_entry = tk.Entry(conn_frame, width=8)
+        self.server_port_entry.grid(row=2, column=3, pady=5, padx=5)
+
+        self.server_secure_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(conn_frame, text="Use server SSL", variable=self.server_secure_var).grid(
+            row=2, column=4, pady=5, padx=5
+        )
+
         tk.Button(conn_frame, text="Connect", command=self._connect,
                  bg='#3498db', fg='white', font=('Arial', 10, 'bold'),
-                 width=15).grid(row=0, column=5, rowspan=2, padx=10, pady=5)
+                 width=15).grid(row=0, column=5, rowspan=3, padx=10, pady=5)
         
         # Browser
         browser = tk.Frame(self.root)
@@ -737,11 +769,32 @@ class OMEROBrowserDialog:
             download_dir = os.path.join(self.export_dir, f"img_{img['id']}")
             os.makedirs(download_dir, exist_ok=True)
 
+            server_host = None
+            server_host_value = self.server_host_entry.get().strip()
+            if server_host_value:
+                server_host = server_host_value
+
+            server_port = None
+            server_port_value = self.server_port_entry.get().strip()
+            if server_port_value:
+                server_port = _parse_port(server_port_value)
+                if server_port is None:
+                    raise RuntimeError(
+                        "Invalid OMERO.server port. Please enter a value between 1 and 65535."
+                    )
+
+            server_secure = None
+            if self.server_secure_var.get():
+                server_secure = True
+
             self._set_status("Running server-side IMS export...", "#fff3cd")
             downloaded_file = self.client.download_ims_export(
                 img['id'],
                 download_dir,
-                fallback_name=f"img_{img['id']}.ims"
+                fallback_name=f"img_{img['id']}.ims",
+                server_host=server_host,
+                server_port=server_port,
+                server_secure=server_secure,
             )
             
             if not downloaded_file or not os.path.exists(downloaded_file):
