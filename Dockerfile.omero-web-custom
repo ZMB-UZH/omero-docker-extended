@@ -35,14 +35,15 @@ RUN set -euo pipefail; \
 # Ensure stable OMERO.web path points at the versioned installation
 # ----------------------------------------------------------------
 RUN set -euo pipefail; \
-    WEB_DIR="$(ls -d /opt/omero/web/OMERO.web-* 2>/dev/null | sort -V | tail -n 1)"; \
+    WEB_DIR="$(find /opt/omero -maxdepth 4 -type d -name 'OMERO.web*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -n "${WEB_DIR}" ]]; then \
+        mkdir -p /opt/omero/web; \
         if [[ ! -e /opt/omero/web/OMERO.web ]]; then \
             ln -s "${WEB_DIR}" /opt/omero/web/OMERO.web; \
         fi; \
     else \
         if [[ ! -d /opt/omero/web/OMERO.web ]]; then \
-            echo "ERROR: Could not find versioned OMERO.web directory or fallback /opt/omero/web/OMERO.web." >&2; \
+            echo "ERROR: Could not find OMERO.web directory under /opt/omero or fallback /opt/omero/web/OMERO.web." >&2; \
             exit 1; \
         fi; \
     fi
