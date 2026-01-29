@@ -21,6 +21,16 @@ from .imaris_service import (
 logger = logging.getLogger(__name__)
 
 
+def _build_failure_meta(exc: Exception) -> dict[str, str]:
+    exc_message = str(exc)
+    return {
+        "exc_type": exc.__class__.__name__,
+        "exc_module": exc.__class__.__module__,
+        "exc_message": exc_message,
+        "error": exc_message,
+    }
+
+
 def _open_session_connection(session_key, host, port, secure=None):
     logger.debug("Opening OMERO session host=%s port=%s", host, port)
     client = omero.client(host, port)
@@ -107,7 +117,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         }
     except Exception as exc:
         logger.exception("IMS export task failed: %s", exc)
-        self.update_state(state=states.FAILURE, meta={"error": str(exc)})
+        self.update_state(state=states.FAILURE, meta=_build_failure_meta(exc))
         raise
     finally:
         if conn:
