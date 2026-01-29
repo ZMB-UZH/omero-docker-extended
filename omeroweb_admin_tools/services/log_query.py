@@ -28,23 +28,20 @@ class LogEntry:
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
 
-    Primary label is ``compose_service`` (set by Grafana Alloy from Docker Compose metadata).
-    Some deployments may not expose that label, so we fall back to common alternatives:
+    We intentionally query ONLY by ``compose_service`` which is guaranteed by our Alloy config:
 
-    - ``service``: seen in some Loki/Promtail configurations
-    - ``container``: container name (we match as a substring)
+    - Docker logs: derived from Docker Compose label ``com.docker.compose.service``
+    - Internal logs: explicitly set in ``monitoring/alloy/alloy-config.alloy``
+
+    This avoids LogQL parser issues caused by combining multiple stream selectors with ``or``
+    (which is not consistently supported across Loki versions/configurations for log queries).
     """
     if not containers:
         raise ValueError("At least one container must be selected for log query.")
 
-    selector = "|".join(containers)
-    # NOTE: Loki uses RE2 regex. Container names are typically prefixed with the compose project
-    # name, so we match the selected service key as a substring for the ``container`` label.
-    return (
-        f'{{compose_service=~"{selector}"}}'
-        f' or {{service=~"{selector}"}}'
-        f' or {{container=~".*({selector}).*"}}'
-    )
+    # Loki uses RE2 regex. Escape any user-provided values so they cannot break the query.
+    selector = "|".join(re.escape(c) for c in containers)
+    return f'{{compose_service=~"^({selector})$"}}'
 
 
 def _format_timestamp(value_ns: str) -> str:
@@ -76,7 +73,25 @@ def fetch_loki_logs(
     request = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            raw = response.read()
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError as exc:
+                snippet = raw[:800].decode("utf-8", errors="replace")
+                raise RuntimeError(
+                    f"Loki returned non-JSON response (status {getattr(response, 'status', 'unknown')}): "
+                    f"{snippet}"
+                ) from exc
+
+    except urllib.error.HTTPError as exc:
+        # HTTPError is also a file-like object; read the body for diagnostics.
+        try:
+            body = exc.read()
+            snippet = body[:800].decode("utf-8", errors="replace")
+        except Exception:
+            snippet = "<unable to read error body>"
+        raise RuntimeError(f"Loki HTTP error {exc.code}: {snippet}") from exc
+
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Loki request failed: {exc}") from exc
     entries: List[LogEntry] = []
