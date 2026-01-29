@@ -22,3 +22,5 @@ app.conf.update(
     worker_prefetch_multiplier=int(os.environ.get("OMERO_IMS_CELERY_PREFETCH", "1")),
     task_acks_late=True,
 )
+
+app.autodiscover_tasks(["omeroweb_imaris_connector"])

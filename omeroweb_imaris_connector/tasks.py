@@ -3,7 +3,6 @@ import time
 
 import omero
 from celery import states
-from celery.exceptions import Ignore
 from omero.gateway import BlitzGateway
 
 from .celery_app import app
@@ -98,7 +97,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     except Exception as exc:
         logger.exception("IMS export task failed: %s", exc)
         self.update_state(state=states.FAILURE, meta={"error": str(exc)})
-        raise Ignore()
+        raise
     finally:
         if conn:
             try:
