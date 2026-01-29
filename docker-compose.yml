@@ -31,6 +31,9 @@ services:
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - omero_server_logs:/var/log/omero-server:ro
+      - omero_web_logs:/var/log/omero-web:ro
+      - omero_web_supervisor_logs:/var/log/omero-web-supervisor:ro
     depends_on:
       loki:
         condition: service_healthy
@@ -85,6 +88,7 @@ services:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
+      - omero_server_logs:${OMERO_SERVER_LOG_DIR:-/opt/omero/server/OMERO.server/var/log}:rw
     ulimits:
     # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
       nofile:
@@ -141,6 +145,8 @@ services:
       - omero:/OMERO
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
       - omero_upload:/opt/tmp:rw
+      - omero_web_logs:${OMERO_WEB_LOG_DIR:-/opt/omero/web/OMERO.web/var/log}:rw
+      - omero_web_supervisor_logs:${OMERO_WEB_SUPERVISOR_LOG_DIR:-/opt/omero/web/logs}:rw
     tmpfs:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
     healthcheck:
@@ -185,3 +191,6 @@ volumes:
   omero:
   omero_upload:
   database_plugin:
+  omero_server_logs:
+  omero_web_logs:
+  omero_web_supervisor_logs:

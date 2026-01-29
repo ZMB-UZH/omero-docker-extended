@@ -22,7 +22,7 @@ def index(request, conn=None, url=None, **kwargs):
 
 
 def _build_log_sources() -> List[Dict[str, str]]:
-    """Return ordered log sources for the UI."""
+    """Return ordered Docker log sources for the UI."""
     return [
         {
             "key": "omeroserver",
@@ -52,6 +52,22 @@ def _build_log_sources() -> List[Dict[str, str]]:
     ]
 
 
+def _build_omero_log_sources() -> List[Dict[str, str]]:
+    """Return ordered OMERO internal log sources for the UI."""
+    return [
+        {
+            "key": "omeroserver_internal",
+            "label": "Omero server internal",
+            "container": "omeroserver_internal",
+        },
+        {
+            "key": "omeroweb_internal",
+            "label": "Omero web internal",
+            "container": "omeroweb_internal",
+        },
+    ]
+
+
 @login_required()
 def logs_view(request, conn=None, url=None, **kwargs):
     """Render the logs view."""
@@ -62,6 +78,7 @@ def logs_view(request, conn=None, url=None, **kwargs):
         {
             "log_config": json.dumps(asdict(log_config)) if log_config else "null",
             "log_sources": _build_log_sources(),
+            "omero_log_sources": _build_omero_log_sources(),
         },
     )
 

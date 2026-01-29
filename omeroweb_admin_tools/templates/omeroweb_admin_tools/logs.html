@@ -95,8 +95,17 @@
                 </div>
             </div>
             <div class="log-sources">
-                <span class="log-sources-label">Sources</span>
+                <span class="log-sources-label">Docker logs</span>
                 {% for source in log_sources %}
+                <label class="log-source-pill" data-source-key="{{ source.key }}">
+                    <input type="checkbox" checked value="{{ source.container }}">
+                    {{ source.label }}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="log-sources">
+                <span class="log-sources-label">Omero logs</span>
+                {% for source in omero_log_sources %}
                 <label class="log-source-pill" data-source-key="{{ source.key }}">
                     <input type="checkbox" checked value="{{ source.container }}">
                     {{ source.label }}
