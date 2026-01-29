@@ -35,5 +35,7 @@ ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 - Root user access is enforced by the Admin tools plugin.
 - Auto-refresh is enabled by default and can be disabled in the UI.
 - Filtering supports time range, severity, and a free-text search.
+- Promtail is configured with Docker API version 1.44 to match newer Docker daemon
+  requirements when discovering containers via the socket.
 - This setup reads container stdout/stderr. If a service writes logs to files only, route
   those logs to stdout or mount the log paths and extend `promtail-config.yml` accordingly.
