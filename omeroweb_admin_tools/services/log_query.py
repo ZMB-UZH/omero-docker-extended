@@ -26,11 +26,25 @@ class LogEntry:
 
 
 def build_loki_query(containers: List[str]) -> str:
-    """Build a Loki query that matches any of the selected containers."""
+    """Build a Loki query that matches any of the selected container sources.
+
+    Primary label is ``compose_service`` (set by Grafana Alloy from Docker Compose metadata).
+    Some deployments may not expose that label, so we fall back to common alternatives:
+
+    - ``service``: seen in some Loki/Promtail configurations
+    - ``container``: container name (we match as a substring)
+    """
     if not containers:
         raise ValueError("At least one container must be selected for log query.")
-    container_selector = "|".join(containers)
-    return f'{{compose_service=~"{container_selector}"}}'
+
+    selector = "|".join(containers)
+    # NOTE: Loki uses RE2 regex. Container names are typically prefixed with the compose project
+    # name, so we match the selected service key as a substring for the ``container`` label.
+    return (
+        f'{{compose_service=~"{selector}"}}'
+        f' or {{service=~"{selector}"}}'
+        f' or {{container=~".*({selector}).*"}}'
+    )
 
 
 def _format_timestamp(value_ns: str) -> str:
