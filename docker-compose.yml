@@ -15,7 +15,7 @@ services:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready >/dev/null 2>&1"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 30
       start_period: 10s
@@ -34,7 +34,7 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9080/ready >/dev/null 2>&1"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 30
       start_period: 10s
