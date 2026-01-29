@@ -399,6 +399,7 @@ class OMEROWebClient:
         query_params = {
             "image": int(image_id),
             "async": 1,
+            "base_url": base,
         }
 
         export_url = f"{base}/omeroweb_imaris_connector/imaris-export/?{urllib.parse.urlencode(query_params)}"
@@ -429,6 +430,7 @@ class OMEROWebClient:
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
                     raise RuntimeError(f"Unexpected response from server: {payload}")
+                status_url = self._normalize_url(status_url, base)
                 _xt_debug(f"IMS export started job_id={job_id} status_url={status_url}")
 
             deadline = time.time() + EXPORT_TIMEOUT
@@ -458,6 +460,8 @@ class OMEROWebClient:
                     raise RuntimeError(f"IMS export failed: {poll_payload.get('error', 'unknown error')}")
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
+                    if download_url:
+                        download_url = self._normalize_url(download_url, base)
                     break
                 time.sleep(EXPORT_POLL_INTERVAL)
 
@@ -531,6 +535,27 @@ class OMEROWebClient:
             raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}") from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
+
+    def _normalize_url(self, url, base_url):
+        if not url:
+            return url
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme and parsed.netloc:
+            base_parsed = urllib.parse.urlparse(base_url)
+            if parsed.netloc != base_parsed.netloc:
+                rebuilt = urllib.parse.urlunparse(
+                    (
+                        base_parsed.scheme,
+                        base_parsed.netloc,
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
+                return rebuilt
+            return url
+        return urllib.parse.urljoin(base_url.rstrip("/") + "/", url.lstrip("/"))
 
 
 class OMEROBrowserDialog:
