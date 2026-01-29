@@ -1,0 +1,368 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - Logs</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS ROOT USER<br>
+        TO USE THIS PLUGIN
+    </div>
+    <div class="admin-tools-page admin-tools-page--wide">
+        <div class="admin-tools-header">
+            <div class="admin-tools-header-left">
+                <a class="admin-tools-back-link"
+                   href="{% url 'omeroweb_admin_tools_index' %}">
+                    ← Back to admin tools
+                </a>
+                <h1 class="admin-tools-title">Logs and analysis</h1>
+                <p class="admin-tools-subtitle">
+                    Aggregated logs from Omero server, web, databases, and Redis.
+                </p>
+            </div>
+            <div class="admin-tools-header-actions">
+                <div style="position:relative;">
+                    <button type="button"
+                            id="settings_menu_btn"
+                            class="icon-btn"
+                            title="Settings"
+                            aria-label="Settings">
+                        ⚙
+                    </button>
+                    <div id="settings_menu"
+                         class="settings-menu"
+                         style="display:none;">
+                        <button type="button"
+                                id="admin_settings_btn"
+                                class="settings-menu-item">
+                            Admin settings
+                        </button>
+                    </div>
+                </div>
+                <button type="button"
+                        id="help_btn"
+                        class="help-btn"
+                        title="Help"
+                        aria-label="Help">
+                    ?
+                </button>
+            </div>
+        </div>
+        <div class="admin-tools-card admin-tools-card--wide">
+            <div class="log-toolbar">
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_filter_input">Search</label>
+                    <input id="log_filter_input"
+                           class="log-input"
+                           type="text"
+                           placeholder="Filter by text, container, or severity">
+                </div>
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_time_range">Time range</label>
+                    <select id="log_time_range" class="log-select">
+                        <option value="300">Last 5 minutes</option>
+                        <option value="900" selected>Last 15 minutes</option>
+                        <option value="3600">Last 1 hour</option>
+                        <option value="21600">Last 6 hours</option>
+                        <option value="86400">Last 24 hours</option>
+                    </select>
+                </div>
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_level">Severity</label>
+                    <select id="log_level" class="log-select">
+                        <option value="">All</option>
+                        <option value="debug">Debug</option>
+                        <option value="info">Info</option>
+                        <option value="warn">Warn</option>
+                        <option value="error">Error</option>
+                        <option value="fatal">Fatal</option>
+                    </select>
+                </div>
+                <div class="log-toolbar-group log-toolbar-toggle">
+                    <label class="log-checkbox">
+                        <input id="log_autorefresh" type="checkbox" checked>
+                        Auto refresh
+                    </label>
+                </div>
+                <div class="log-toolbar-group">
+                    <button type="button" id="log_refresh_btn" class="admin-tools-button log-refresh-button">
+                        Refresh now
+                    </button>
+                </div>
+            </div>
+            <div class="log-sources">
+                <span class="log-sources-label">Sources</span>
+                {% for source in log_sources %}
+                <label class="log-source-pill" data-source-key="{{ source.key }}">
+                    <input type="checkbox" checked value="{{ source.container }}">
+                    {{ source.label }}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="log-status" id="log_status">Ready.</div>
+            <div class="log-table-container">
+                <table class="log-table" aria-label="Log entries">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Container</th>
+                            <th>Severity</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log_table_body">
+                        <tr>
+                            <td colspan="4" class="log-empty">No logs loaded yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script defer>
+        const logConfig = {{ log_config|safe }};
+        const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
+        const rootStatusUrl = new URL('root-status/', window.location.href);
+
+        const applyRootUserState = (isRootUser) => {
+            if (isRootUser) {
+                return;
+            }
+            document.documentElement.classList.add('root-user-blocked');
+            if (document.body) {
+                document.body.classList.add('root-user-blocked');
+            }
+        };
+
+        fetch(rootStatusUrl, { credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (data && data.is_root_user === false) {
+                    applyRootUserState(false);
+                }
+            })
+            .catch(() => {
+                // Ignore root user lookup failures.
+            });
+
+        const settingsMenuBtn = document.getElementById('settings_menu_btn');
+        const settingsMenu = document.getElementById('settings_menu');
+
+        function showSettingsMenu(show) {
+            if (!settingsMenu) {
+                return;
+            }
+            settingsMenu.style.display = show ? 'block' : 'none';
+        }
+
+        if (settingsMenuBtn) {
+            settingsMenuBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const shouldShow = settingsMenu?.style.display !== 'block';
+                showSettingsMenu(shouldShow);
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!settingsMenu) {
+                return;
+            }
+            if (settingsMenu.contains(event.target) || settingsMenuBtn?.contains(event.target)) {
+                return;
+            }
+            showSettingsMenu(false);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                showSettingsMenu(false);
+            }
+        });
+
+        const tableBody = document.getElementById('log_table_body');
+        const statusEl = document.getElementById('log_status');
+        const filterInput = document.getElementById('log_filter_input');
+        const timeRangeSelect = document.getElementById('log_time_range');
+        const levelSelect = document.getElementById('log_level');
+        const autoRefreshToggle = document.getElementById('log_autorefresh');
+        const refreshBtn = document.getElementById('log_refresh_btn');
+        let refreshTimer = null;
+        let activeEntries = [];
+
+        function setStatus(text) {
+            if (statusEl) {
+                statusEl.textContent = text;
+            }
+        }
+
+        function setLoading(isLoading) {
+            if (!refreshBtn) {
+                return;
+            }
+            refreshBtn.disabled = isLoading;
+            refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
+        }
+
+        function getSelectedContainers() {
+            return Array.from(document.querySelectorAll('.log-source-pill input:checked'))
+                .map((input) => input.value);
+        }
+
+        function formatTimestamp(value) {
+            if (!value) {
+                return '';
+            }
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderTable(entries) {
+            if (!tableBody) {
+                return;
+            }
+            if (!entries.length) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
+                return;
+            }
+            tableBody.innerHTML = entries
+                .map((entry) => `
+                    <tr>
+                        <td>${escapeHtml(formatTimestamp(entry.timestamp))}</td>
+                        <td>${escapeHtml(entry.container)}</td>
+                        <td class="log-level log-level-${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</td>
+                        <td class="log-message">${escapeHtml(entry.message)}</td>
+                    </tr>
+                `)
+                .join('');
+        }
+
+        function applyFilters() {
+            const query = filterInput?.value.trim().toLowerCase() || '';
+            const level = levelSelect?.value || '';
+            const filtered = activeEntries.filter((entry) => {
+                const matchesLevel = level ? entry.level === level : true;
+                if (!matchesLevel) {
+                    return false;
+                }
+                if (!query) {
+                    return true;
+                }
+                return (
+                    entry.message.toLowerCase().includes(query) ||
+                    entry.container.toLowerCase().includes(query) ||
+                    entry.level.toLowerCase().includes(query)
+                );
+            });
+            renderTable(filtered);
+        }
+
+        function getLookbackSeconds() {
+            const fallback = logConfig?.lookback_seconds || 900;
+            const selected = parseInt(timeRangeSelect?.value || '', 10);
+            if (Number.isNaN(selected) || selected <= 0) {
+                return fallback;
+            }
+            return selected;
+        }
+
+        function normalizeEntries(entries) {
+            return entries
+                .map((entry) => ({
+                    timestamp: entry.timestamp,
+                    container: entry.container,
+                    level: entry.level || 'info',
+                    message: entry.message,
+                }))
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        }
+
+        async function fetchLogs() {
+            if (!logConfig) {
+                setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
+                return;
+            }
+            const containers = getSelectedContainers();
+            if (!containers.length) {
+                activeEntries = [];
+                renderTable(activeEntries);
+                setStatus('No log sources selected.');
+                return;
+            }
+            setLoading(true);
+            setStatus('Loading logs…');
+            const lookbackSeconds = getLookbackSeconds();
+            const limit = logConfig.max_entries || 500;
+            const params = new URLSearchParams({
+                lookback: String(lookbackSeconds),
+                limit: String(limit),
+            });
+            containers.forEach((container) => params.append('container', container));
+            const url = `${logsDataUrl.toString()}?${params.toString()}`;
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                const payload = response.ok ? await response.json() : null;
+                if (!response.ok || payload?.error) {
+                    const message = payload?.error || 'Unable to load logs.';
+                    setStatus(message);
+                    activeEntries = [];
+                    renderTable(activeEntries);
+                    setLoading(false);
+                    return;
+                }
+                activeEntries = normalizeEntries(payload.entries || []);
+                applyFilters();
+                setStatus(`Loaded ${activeEntries.length} log entries.`);
+            } catch (error) {
+                setStatus('Failed to fetch logs from backend.');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function clearRefreshTimer() {
+            if (refreshTimer) {
+                window.clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        function scheduleRefresh() {
+            clearRefreshTimer();
+            if (!autoRefreshToggle?.checked) {
+                return;
+            }
+            refreshTimer = window.setInterval(fetchLogs, 10000);
+        }
+
+        function setupHandlers() {
+            filterInput?.addEventListener('input', applyFilters);
+            levelSelect?.addEventListener('change', applyFilters);
+            timeRangeSelect?.addEventListener('change', () => {
+                fetchLogs();
+            });
+            autoRefreshToggle?.addEventListener('change', scheduleRefresh);
+            refreshBtn?.addEventListener('click', fetchLogs);
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                input.addEventListener('change', fetchLogs);
+            });
+        }
+
+        setupHandlers();
+        fetchLogs();
+        scheduleRefresh();
+    </script>
+</body>
+</html>
