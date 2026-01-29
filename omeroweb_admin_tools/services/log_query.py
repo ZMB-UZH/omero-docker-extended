@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import urllib.error
 import urllib.parse
@@ -66,19 +67,34 @@ def fetch_loki_logs(
         raise RuntimeError(f"Loki request failed: {exc}") from exc
     entries: List[LogEntry] = []
     for stream in payload.get("data", {}).get("result", []):
-        level = stream.get("stream", {}).get("level", "info")
-        container = stream.get("stream", {}).get("container", "unknown")
+        stream_labels = stream.get("stream", {})
+        level = stream_labels.get("level", "info")
+        container = stream_labels.get("container", "unknown")
+        compose_service = stream_labels.get("compose_service")
+        display_container = compose_service or container
+        filename = _extract_filename(stream_labels)
+        if compose_service and compose_service.endswith("_internal") and filename:
+            display_container = f"{compose_service}/{filename}"
         for value in stream.get("values", []):
             timestamp_ns, message = value
             entries.append(
                 LogEntry(
                     timestamp=_format_timestamp(timestamp_ns),
-                    container=container,
+                    container=display_container,
                     level=str(level).lower(),
                     message=message,
                 )
             )
     return entries
+
+
+def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
+    """Extract the filename label for internal OMERO log streams."""
+    for key in ("filename", "__path__", "path", "file"):
+        value = stream_labels.get(key)
+        if value:
+            return os.path.basename(value)
+    return None
 
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
