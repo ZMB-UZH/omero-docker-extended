@@ -23,6 +23,8 @@ services:
   alloy:
     image: "grafana/alloy:v1.12.2"
     restart: unless-stopped
+    # Run as root to ensure read access to OMERO log volumes (file-based internal logs).
+    user: "0:0"
     command:
       - "run"
       - "/etc/alloy/alloy-config.alloy"

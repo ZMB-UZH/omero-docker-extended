@@ -56,3 +56,12 @@ OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
 - Grafana Alloy reads container stdout/stderr. If a service writes logs to files only, route
   those logs to stdout or mount the log paths and extend `monitoring/alloy/alloy-config.alloy`
   accordingly.
+
+## Internal log availability troubleshooting
+
+- The internal log sources (`omeroserver_internal`, `omeroweb_internal`) are file-based and
+  only appear after the OMERO server/web containers have started and written log files into
+  their log directories. The Grafana Alloy container continuously tails the mounted volumes,
+  so **it does not require a restart** once log files appear.
+- If the UI shows no internal log entries, confirm the OMERO server and web containers are
+  healthy and expand the time range selector in the UI (the default is the last 15 minutes).
