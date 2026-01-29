@@ -167,7 +167,15 @@ def _start_celery_job(conn, image_id):
     if not session_key:
         raise RuntimeError("IMS export session key unavailable for background job.")
     if not host or not port:
-        raise RuntimeError("IMS export host/port unavailable for background job.")
+        raise RuntimeError(
+            "IMS export host/port unavailable for background job. "
+            "Ensure OMEROHOST and OMERO_PORT are configured for OMERO.web."
+        )
+    if port <= 0 or port > 65535:
+        raise RuntimeError(
+            f"IMS export port is out of range: {port}. "
+            "Ensure OMERO_PORT is set to a valid port."
+        )
     logger.info(
         "Dispatching IMS export task image_id=%s host=%s port=%s secure=%s queue=%s",
         image_id,
@@ -181,7 +189,7 @@ def _start_celery_job(conn, image_id):
             "image_id": int(image_id),
             "session_key": session_key,
             "host": host,
-            "port": int(port),
+            "port": port,
             "secure": secure,
         },
         queue=CELERY_QUEUE,
@@ -217,9 +225,15 @@ def _resolve_omero_host_port(conn):
     if not port:
         port = os.environ.get("OMERO_PORT")
     if port is not None:
-        try:
-            port = int(port)
-        except (TypeError, ValueError):
+        port_text = str(port).strip()
+        if not port_text:
+            port = None
+        elif port_text.isdigit():
+            try:
+                port = int(port_text)
+            except (TypeError, ValueError):
+                port = None
+        else:
             port = None
     return host, port
 
