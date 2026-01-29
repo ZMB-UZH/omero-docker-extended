@@ -341,6 +341,7 @@ def _iter_script_methods(svc):
 
 
 def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
+    import omero
     args_to_try = []
     lowered = meth_name.lower()
     is_async = "async" in lowered or lowered.startswith("begin_")
@@ -364,7 +365,15 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
                     (script_id, inputs, 0),
                 ]
             )
+            try:
+                args_to_try.append((script_id, inputs, omero.rtypes.rint(0)))
+            except Exception:
+                pass
         else:
+            try:
+                args_to_try.append((script_id, inputs, omero.rtypes.rint(int(wait_secs))))
+            except Exception:
+                pass
             args_to_try.extend(
                 [
                     (script_id, inputs, int(wait_secs)),
@@ -379,11 +388,18 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
             (script_id, inputs, int(wait_secs or 0), None),
         ]
     )
+    try:
+        args_to_try.append((script_id, inputs, omero.rtypes.rint(int(wait_secs or 0)), None))
+    except Exception:
+        pass
     last_type_error = None
     for args in args_to_try:
         try:
             return meth(*args)
         except TypeError as exc:
+            last_type_error = exc
+            continue
+        except ValueError as exc:
             last_type_error = exc
             continue
     if last_type_error is not None:
