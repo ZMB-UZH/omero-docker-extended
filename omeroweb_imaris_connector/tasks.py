@@ -22,40 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 def _open_session_connection(session_key, host, port, secure=None):
-    """
-    Open an OMERO session connection.
-    
-    Fixed to handle both old and new OMERO Python API versions:
-    - Old API: omero.client(host, port) - doesn't support 'secure' kwarg
-    - New API: omero.client(host=host, port=port, secure=secure)
-    """
-    logger.debug("Opening OMERO session host=%s port=%s secure=%s", host, port, secure)
-    
-    # Try the new API first (with secure parameter)
-    try:
-        if secure is None:
-            client = omero.client(host=host, port=port)
-        else:
-            client = omero.client(host=host, port=port, secure=secure)
-    except TypeError as e:
-        # Fall back to old API if 'secure' parameter is not supported
-        if "'secure'" in str(e) or "unexpected keyword argument" in str(e):
-            logger.warning(
-                "OMERO client doesn't support 'secure' parameter. "
-                "Using legacy initialization. Consider upgrading OMERO Python library."
-            )
-            # Old API: positional arguments only
-            # The secure connection is typically handled via Ice configuration or environment
-            client = omero.client(host, port)
-            
-            # For old API, if SSL is required, it's usually configured via Ice properties
-            if secure is True:
-                logger.info("SSL requested but 'secure' parameter not supported. "
-                           "Ensure Ice.Default.Router or omero.host uses SSL protocol.")
-        else:
-            # Re-raise if it's a different TypeError
-            raise
-    
+    logger.debug("Opening OMERO session host=%s port=%s", host, port)
+    client = omero.client(host, port)
     client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
