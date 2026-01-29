@@ -32,6 +32,93 @@ loki.source.docker "containers" {
   forward_to = [loki.write.local.receiver]
 }
 
+loki.source.file "omeroserver_internal_logs" {
+  targets = [
+    {
+      __path__        = "/var/log/omero-server/*.log",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+    {
+      __path__        = "/var/log/omero-server/*.out",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+    {
+      __path__        = "/var/log/omero-server/*.err",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+    {
+      __path__        = "/var/log/omero-server/*/*.log",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+    {
+      __path__        = "/var/log/omero-server/*/*.out",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+    {
+      __path__        = "/var/log/omero-server/*/*.err",
+      compose_service = "omeroserver_internal",
+      container       = "omeroserver-internal",
+    },
+  ]
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.source.file "omeroweb_internal_logs" {
+  targets = [
+    {
+      __path__        = "/var/log/omero-web/*.log",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web/*.out",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web/*.err",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web/*/*.log",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web/*/*.out",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web/*/*.err",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web-supervisor/*.log",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web-supervisor/*.out",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+    {
+      __path__        = "/var/log/omero-web-supervisor/*.err",
+      compose_service = "omeroweb_internal",
+      container       = "omeroweb-internal",
+    },
+  ]
+  forward_to = [loki.write.local.receiver]
+}
+
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
