@@ -7,19 +7,19 @@ body {
             width: 950px;
             margin: 0 auto;
         }
-        .admin-tools-page button:not(.log-refresh-button),
+        .admin-tools-page .admin-tools-button:not(.log-refresh-button),
         .admin-tools-page .help-btn {
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.2s ease;
         }
-        .admin-tools-page button:not(.log-refresh-button):hover,
+        .admin-tools-page .admin-tools-button:not(.log-refresh-button):hover,
         .admin-tools-page .help-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             filter: brightness(105%);
         }
-        .admin-tools-page button:not(.log-refresh-button):active,
+        .admin-tools-page .admin-tools-button:not(.log-refresh-button):active,
         .admin-tools-page .help-btn:active {
             transform: translateY(2px);
             box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.2);
