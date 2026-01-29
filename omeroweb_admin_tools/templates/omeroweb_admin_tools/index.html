@@ -46,7 +46,10 @@
         <div class="admin-tools-card">
             <div class="admin-tools-actions">
                 <button type="button" class="admin-tools-button">User permission manager</button>
-                <button type="button" class="admin-tools-button">Logs and analysis</button>
+                <a class="admin-tools-button admin-tools-button-link"
+                   href="{% url 'omeroweb_admin_tools_logs' %}">
+                    Logs and analysis
+                </a>
                 <button type="button" class="admin-tools-button">Resource monitoring</button>
                 <button type="button" class="admin-tools-button">Server and database testing</button>
             </div>
