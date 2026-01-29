@@ -1,4 +1,5 @@
 # Docker compose file of a minimal Omero installation based on the official documentation, but modified with many custom packages and plugins for enhanced functionality.
+# Added Grafana logging.
 # Using the tag :latest for Omero and databases might be tempting but is extremely risky! Have a backup plan!
 # Always check compatibility in the following link or in the official Omero documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html
 services:
@@ -16,9 +17,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 60s
+      start_period: 30s
 
   alloy:
     image: "grafana/alloy:v1.12.2"
@@ -40,7 +41,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "kill -0 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
       start_period: 10s
 
@@ -66,9 +67,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 5s
+      start_period: 10s
 
   omeroserver:
     build:
@@ -101,9 +102,9 @@ services:
           "/opt/omero/server/OMERO.server/bin/omero -s localhost -p 4064 login >/dev/null 2>&1"
         ]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 30s
+      start_period: 60s
 
   redis:
     image: "redis:8-alpine"
@@ -119,9 +120,9 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 5s
+      start_period: 10s
 
   omeroweb:
     build:
@@ -152,9 +153,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 15s
+      start_period: 20s
 
   database_plugin:
     image: "postgres:18"
@@ -179,9 +180,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 30
-      start_period: 5s
+      start_period: 10s
 
 networks:
   omero:
