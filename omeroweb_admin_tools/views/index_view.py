@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import asdict
 from typing import Dict, List
 
@@ -150,6 +151,7 @@ def internal_log_labels(request, conn=None, url=None, **kwargs):
         )
     try:
         labels, _label_key = fetch_internal_log_labels(log_config, service)
-    except RuntimeError:
+    except Exception:
+        logger.exception("Failed to fetch internal log labels for service=%s", service)
         labels = []
     return JsonResponse({"service": service, "labels": labels})
