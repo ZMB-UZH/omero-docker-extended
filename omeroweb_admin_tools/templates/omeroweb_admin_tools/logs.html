@@ -456,7 +456,7 @@
             const internal = [];
             Object.keys(internalState).forEach((service) => {
                 const state = internalState[service];
-                if (state.selected.size > 0) {
+                if (state.selected.size > 0 || !state.loaded) {
                     internal.push(service);
                 }
             });
@@ -505,22 +505,23 @@
             return name.includes('_internal');
         }
 
-        /* Build the set of selected internal filenames for filtering. */
-        function getSelectedInternalFiles() {
-            const files = new Set();
-            Object.keys(internalState).forEach((service) => {
-                const state = internalState[service];
-                state.selected.forEach((filename) => {
-                    files.add(`${service}/${filename}`);
-                });
-            });
-            return files;
+        function allowInternalEntry(containerName) {
+            const parts = containerName.split('/', 2);
+            const service = parts[0] || '';
+            const filename = parts.length > 1 ? parts[1] : '';
+            const state = internalState[service];
+            if (!state) {
+                return true;
+            }
+            if (!state.loaded || state.labels.length === 0) {
+                return true;
+            }
+            return state.selected.has(filename);
         }
 
         function applyFilters() {
             const query = filterInput?.value.trim().toLowerCase() || '';
             const level = levelSelect?.value || '';
-            const selectedFiles = getSelectedInternalFiles();
 
             const filtered = activeEntries.filter((entry) => {
                 const matchesLevel = level ? entry.level === level : true;
@@ -530,7 +531,7 @@
 
                 /* Filter internal log entries by selected files. */
                 if (isInternalContainer(entry.container)) {
-                    if (!selectedFiles.has(entry.container)) {
+                    if (!allowInternalEntry(entry.container)) {
                         return false;
                     }
                 }
