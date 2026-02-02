@@ -105,12 +105,46 @@
             </div>
             <div class="log-sources">
                 <span class="log-sources-label">Internal logs</span>
-                {% for source in omero_log_sources %}
-                <label class="log-source-pill" data-source-key="{{ source.key }}">
-                    <input type="checkbox" checked value="{{ source.container }}">
-                    {{ source.label }}
-                </label>
-                {% endfor %}
+                <div class="log-internal-group" data-service="omeroserver_internal">
+                    <button type="button"
+                            class="log-internal-trigger"
+                            aria-haspopup="true"
+                            aria-expanded="false">
+                        <span class="log-internal-trigger-text">Omero server</span>
+                        <span class="log-internal-badge badge-zero">0</span>
+                        <span class="log-internal-arrow" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="log-internal-panel" role="listbox" aria-label="Omero server internal logs">
+                        <div class="log-internal-panel-header">
+                            <span class="log-internal-panel-title">Server log files</span>
+                            <div class="log-internal-select-actions">
+                                <button type="button" class="log-internal-select-action" data-action="all">All</button>
+                                <button type="button" class="log-internal-select-action" data-action="none">None</button>
+                            </div>
+                        </div>
+                        <div class="log-internal-panel-list"></div>
+                    </div>
+                </div>
+                <div class="log-internal-group" data-service="omeroweb_internal">
+                    <button type="button"
+                            class="log-internal-trigger"
+                            aria-haspopup="true"
+                            aria-expanded="false">
+                        <span class="log-internal-trigger-text">Omero web</span>
+                        <span class="log-internal-badge badge-zero">0</span>
+                        <span class="log-internal-arrow" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="log-internal-panel" role="listbox" aria-label="Omero web internal logs">
+                        <div class="log-internal-panel-header">
+                            <span class="log-internal-panel-title">Web log files</span>
+                            <div class="log-internal-select-actions">
+                                <button type="button" class="log-internal-select-action" data-action="all">All</button>
+                                <button type="button" class="log-internal-select-action" data-action="none">None</button>
+                            </div>
+                        </div>
+                        <div class="log-internal-panel-list"></div>
+                    </div>
+                </div>
             </div>
             <div class="log-status" id="log_status">Ready.</div>
             <div class="log-table-container">
@@ -136,6 +170,7 @@
         const logConfig = {{ log_config|safe }};
         const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
         const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
+        const internalLabelsUrl = new URL('{% url "omeroweb_admin_tools_internal_labels" %}', window.location.href);
 
         const applyRootUserState = (isRootUser) => {
             if (isRootUser) {
@@ -189,6 +224,7 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 showSettingsMenu(false);
+                closeAllInternalPanels();
             }
         });
 
@@ -216,9 +252,209 @@
             refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
         }
 
+        /* ── Internal log dropdown state ── */
+        const internalGroups = document.querySelectorAll('.log-internal-group');
+        const internalState = {};
+
+        internalGroups.forEach((group) => {
+            const service = group.dataset.service;
+            internalState[service] = {
+                labels: [],
+                selected: new Set(),
+                loaded: false,
+                loading: false,
+                group: group,
+                trigger: group.querySelector('.log-internal-trigger'),
+                panel: group.querySelector('.log-internal-panel'),
+                list: group.querySelector('.log-internal-panel-list'),
+                badge: group.querySelector('.log-internal-badge'),
+            };
+        });
+
+        function closeAllInternalPanels(exceptService) {
+            Object.keys(internalState).forEach((service) => {
+                if (service === exceptService) {
+                    return;
+                }
+                const state = internalState[service];
+                state.panel.classList.remove('is-visible');
+                state.trigger.classList.remove('is-open');
+                state.trigger.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        function updateInternalBadge(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const count = state.selected.size;
+            state.badge.textContent = String(count);
+            if (count > 0) {
+                state.badge.classList.remove('badge-zero');
+                state.trigger.classList.add('has-selection');
+            } else {
+                state.badge.classList.add('badge-zero');
+                state.trigger.classList.remove('has-selection');
+            }
+        }
+
+        function renderInternalOptions(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const list = state.list;
+            list.innerHTML = '';
+
+            if (state.loading) {
+                const loading = document.createElement('div');
+                loading.className = 'log-internal-panel-loading';
+                loading.textContent = 'Discovering log files';
+                list.appendChild(loading);
+                return;
+            }
+
+            if (state.labels.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'log-internal-panel-empty';
+                empty.textContent = 'No log files discovered yet.';
+                list.appendChild(empty);
+                return;
+            }
+
+            state.labels.forEach((label) => {
+                const option = document.createElement('label');
+                option.className = 'log-internal-option';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = label;
+                checkbox.checked = state.selected.has(label);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        state.selected.add(label);
+                    } else {
+                        state.selected.delete(label);
+                    }
+                    updateInternalBadge(service);
+                    fetchLogs();
+                });
+
+                const text = document.createElement('span');
+                text.className = 'log-internal-option-label';
+                text.textContent = label;
+                text.title = label;
+
+                option.appendChild(checkbox);
+                option.appendChild(text);
+                list.appendChild(option);
+            });
+        }
+
+        function setInternalSelectAll(service, selectAll) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            state.selected.clear();
+            if (selectAll) {
+                state.labels.forEach((label) => state.selected.add(label));
+            }
+            renderInternalOptions(service);
+            updateInternalBadge(service);
+            fetchLogs();
+        }
+
+        async function loadInternalLabels(service) {
+            const state = internalState[service];
+            if (!state || state.loaded || state.loading) {
+                return;
+            }
+            state.loading = true;
+            renderInternalOptions(service);
+            const url = `${internalLabelsUrl.toString()}?service=${encodeURIComponent(service)}`;
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                const payload = response.ok ? await response.json() : null;
+                if (payload && Array.isArray(payload.labels)) {
+                    state.labels = payload.labels;
+                    state.loaded = true;
+                    // Select all by default on first load.
+                    state.labels.forEach((label) => state.selected.add(label));
+                }
+            } catch (error) {
+                // Silently fail — panel will show empty state.
+            } finally {
+                state.loading = false;
+                renderInternalOptions(service);
+                updateInternalBadge(service);
+                fetchLogs();
+            }
+        }
+
+        function toggleInternalPanel(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const isOpen = state.panel.classList.contains('is-visible');
+            closeAllInternalPanels(isOpen ? undefined : service);
+
+            if (isOpen) {
+                state.panel.classList.remove('is-visible');
+                state.trigger.classList.remove('is-open');
+                state.trigger.setAttribute('aria-expanded', 'false');
+            } else {
+                state.panel.classList.add('is-visible');
+                state.trigger.classList.add('is-open');
+                state.trigger.setAttribute('aria-expanded', 'true');
+                if (!state.loaded && !state.loading) {
+                    loadInternalLabels(service);
+                }
+            }
+        }
+
+        /* Wire up the triggers and actions. */
+        internalGroups.forEach((group) => {
+            const service = group.dataset.service;
+            const trigger = group.querySelector('.log-internal-trigger');
+            const panel = group.querySelector('.log-internal-panel');
+
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleInternalPanel(service);
+            });
+
+            panel.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+
+            panel.querySelectorAll('.log-internal-select-action').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    setInternalSelectAll(service, btn.dataset.action === 'all');
+                });
+            });
+        });
+
+        document.addEventListener('click', () => {
+            closeAllInternalPanels();
+        });
+
+        /* ── Container selection (Docker pills + internal) ── */
         function getSelectedContainers() {
-            return Array.from(document.querySelectorAll('.log-source-pill input:checked'))
+            const docker = Array.from(document.querySelectorAll('.log-source-pill input:checked'))
                 .map((input) => input.value);
+
+            const internal = [];
+            Object.keys(internalState).forEach((service) => {
+                const state = internalState[service];
+                if (state.selected.size > 0) {
+                    internal.push(service);
+                }
+            });
+
+            return docker.concat(internal);
         }
 
         function formatTimestamp(value) {
@@ -258,14 +494,40 @@
                 .join('');
         }
 
+        /* Build the set of selected internal filenames for filtering. */
+        function getSelectedInternalFiles() {
+            const files = new Set();
+            Object.keys(internalState).forEach((service) => {
+                const state = internalState[service];
+                state.selected.forEach((filename) => {
+                    files.add(`${service}/${filename}`);
+                });
+            });
+            return files;
+        }
+
+        function isInternalContainer(name) {
+            return name.includes('_internal');
+        }
+
         function applyFilters() {
             const query = filterInput?.value.trim().toLowerCase() || '';
             const level = levelSelect?.value || '';
+            const selectedFiles = getSelectedInternalFiles();
+
             const filtered = activeEntries.filter((entry) => {
                 const matchesLevel = level ? entry.level === level : true;
                 if (!matchesLevel) {
                     return false;
                 }
+
+                /* Filter internal log entries by selected files. */
+                if (isInternalContainer(entry.container)) {
+                    if (!selectedFiles.has(entry.container)) {
+                        return false;
+                    }
+                }
+
                 if (!query) {
                     return true;
                 }
@@ -369,8 +631,15 @@
             });
         }
 
+        /* Auto-load internal labels on page load. */
+        function initInternalLabels() {
+            Object.keys(internalState).forEach((service) => {
+                loadInternalLabels(service);
+            });
+        }
+
         setupHandlers();
-        fetchLogs();
+        initInternalLabels();
         scheduleRefresh();
     </script>
 </body>
