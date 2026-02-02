@@ -135,8 +135,19 @@ def fetch_internal_log_labels(
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
     """
-    query = f'{{compose_service="{compose_service}"}}'
-    params = urllib.parse.urlencode({"query": query})
+    selector = f'{{compose_service="{compose_service}"}}'
+    end_time = dt.datetime.now(tz=dt.timezone.utc)
+    start_time = end_time - dt.timedelta(seconds=config.lookback_seconds)
+    # The Loki /series endpoint requires the parameter name ``match[]``,
+    # NOT ``query`` (which is for /query_range).  Using the wrong name
+    # causes Loki to silently ignore the selector and return ALL series.
+    params = urllib.parse.urlencode(
+        {
+            "match[]": selector,
+            "start": str(int(start_time.timestamp() * 1e9)),
+            "end": str(int(end_time.timestamp() * 1e9)),
+        }
+    )
     url = f"{config.loki_url}/loki/api/v1/series?{params}"
     request = urllib.request.Request(url, method="GET")
     try:
@@ -151,6 +162,10 @@ def fetch_internal_log_labels(
 
     filenames: set[str] = set()
     for series in payload.get("data", []):
+        # Double-check the compose_service label matches, in case Loki
+        # returns broader results than expected.
+        if series.get("compose_service") != compose_service:
+            continue
         fname = _extract_filename(series)
         if fname:
             filenames.add(fname)
