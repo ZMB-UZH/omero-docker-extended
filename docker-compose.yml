@@ -117,6 +117,8 @@ services:
       TZ: Europe/Zurich
     networks:
       - omero
+    sysctls:
+      - vm.overcommit_memory=1
     tmpfs:
       - /data:size=512m
     healthcheck:
