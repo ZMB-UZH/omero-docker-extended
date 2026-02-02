@@ -149,8 +149,7 @@ def internal_log_labels(request, conn=None, url=None, **kwargs):
             status=400,
         )
     try:
-        labels = fetch_internal_log_labels(log_config, service)
+        labels, _label_key = fetch_internal_log_labels(log_config, service)
     except RuntimeError:
         labels = []
     return JsonResponse({"service": service, "labels": labels})
-
