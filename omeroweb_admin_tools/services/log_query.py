@@ -329,7 +329,9 @@ def fetch_internal_log_labels(
             try:
                 payload = json.loads(raw.decode("utf-8", errors="replace"))
             except json.JSONDecodeError:
-                return []
+                # Keep return type consistent (Tuple[List[str], str]) to avoid
+                # a ValueError during unpacking in the Django view.
+                return [], "filepath"
     except (urllib.error.HTTPError, urllib.error.URLError):
         return [], "filepath"
 
