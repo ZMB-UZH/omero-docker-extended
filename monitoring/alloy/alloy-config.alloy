@@ -55,6 +55,13 @@ discovery.relabel "omeroserver_internal_labels" {
     target_label = "container"
     replacement  = "omeroserver-internal"
   }
+
+  // Explicitly copy __path__ to a queryable "filepath" label so that
+  // the filename is always present even if loki.source.file omits it.
+  rule {
+    source_labels = ["__path__"]
+    target_label  = "filepath"
+  }
 }
 
 loki.source.file "omeroserver_internal_logs" {
@@ -88,6 +95,13 @@ discovery.relabel "omeroweb_internal_labels" {
   rule {
     target_label = "container"
     replacement  = "omeroweb-internal"
+  }
+
+  // Explicitly copy __path__ to a queryable "filepath" label so that
+  // the filename is always present even if loki.source.file omits it.
+  rule {
+    source_labels = ["__path__"]
+    target_label  = "filepath"
   }
 }
 

@@ -97,14 +97,13 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     return None
 
 
-def fetch_loki_logs(
+def _execute_loki_query(
     config: LogConfig,
-    containers: List[str],
+    query: str,
     lookback_seconds: int,
     max_entries: int,
-) -> List[LogEntry]:
-    """Fetch logs from Loki for the selected containers and time window."""
-    query = build_loki_query(containers)
+) -> dict:
+    """Execute a single Loki query_range request and return the parsed JSON payload."""
     end_time = dt.datetime.now(tz=dt.timezone.utc)
     start_time = end_time - dt.timedelta(seconds=lookback_seconds)
     params = urllib.parse.urlencode(
@@ -122,7 +121,7 @@ def fetch_loki_logs(
         with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
             raw = response.read()
             try:
-                payload = json.loads(raw.decode("utf-8", errors="replace"))
+                return json.loads(raw.decode("utf-8", errors="replace"))
             except json.JSONDecodeError as exc:
                 snippet = raw[:800].decode("utf-8", errors="replace")
                 raise RuntimeError(
@@ -131,7 +130,6 @@ def fetch_loki_logs(
                 ) from exc
 
     except urllib.error.HTTPError as exc:
-        # HTTPError is also a file-like object; read the body for diagnostics.
         try:
             body = exc.read()
             snippet = body[:800].decode("utf-8", errors="replace")
@@ -141,6 +139,10 @@ def fetch_loki_logs(
 
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Loki request failed: {exc}") from exc
+
+
+def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
+    """Extract LogEntry objects from a Loki query_range response payload."""
     entries: List[LogEntry] = []
     for stream in payload.get("data", {}).get("result", []):
         stream_labels = stream.get("stream", {})
@@ -183,9 +185,117 @@ def fetch_loki_logs(
     return entries
 
 
+def _fetch_internal_logs_per_file(
+    config: LogConfig,
+    service: str,
+    lookback_seconds: int,
+    max_entries: int,
+) -> List[LogEntry]:
+    """Fetch internal logs by issuing a separate Loki query for each known file.
+
+    Loki's ``query_range`` applies the ``limit`` globally across all matched
+    streams.  When one file (e.g. Blitz-0.log) is significantly more active
+    than the others, it can consume the entire limit leaving every other file
+    with zero entries.
+
+    To guarantee that ALL files get representation we:
+      1. Discover the known filenames via the ``/series`` endpoint.
+      2. Issue one ``query_range`` per file, each with the full ``max_entries``
+         limit (capped server-side by Loki's ``max_entries_limit_per_query``).
+      3. Merge the results.
+    """
+    labels = fetch_internal_log_labels(config, service)
+    if not labels:
+        # Fallback: query the whole service at once (best-effort).
+        query = f'{{compose_service="{service}"}}'
+        payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+        return _parse_entries_from_payload(payload)
+
+    all_entries: List[LogEntry] = []
+    for label in labels:
+        if label == "unknown":
+            # The synthetic "unknown" entry added by the JS — skip querying
+            # for it; entries without a filename label will still come through
+            # when we query by compose_service alone.
+            continue
+        # Query by compose_service AND filename/filepath to isolate this file's stream.
+        escaped = re.escape(label)
+        # Use stream-level label matchers (not line filters) so Loki can
+        # use its index.  Try filename first (Alloy default), then filepath
+        # (our custom label).  OR is not supported across label matchers in
+        # older Loki, so we use a regex that matches either label's value.
+        query = f'{{compose_service="{service}", filename=~".*{escaped}$"}}'
+        try:
+            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            entries = _parse_entries_from_payload(payload)
+            if entries:
+                all_entries.extend(entries)
+            else:
+                # filename label might not exist; try filepath instead.
+                query = f'{{compose_service="{service}", filepath=~".*{escaped}$"}}'
+                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+                all_entries.extend(_parse_entries_from_payload(payload))
+        except RuntimeError:
+            # If one file query fails, continue with the others.
+            pass
+
+    # Also fetch any entries without a recognized filename (the "unknown"
+    # bucket) by querying the service without a filename filter and keeping
+    # only entries that didn't match any known file.
+    known_basenames = {l for l in labels if l != "unknown"}
+    if known_basenames:
+        try:
+            query = f'{{compose_service="{service}"}}'
+            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            for entry in _parse_entries_from_payload(payload):
+                # entry.container is like "service/filename" or "service/unknown"
+                parts = entry.container.split("/", 1)
+                fname = parts[1] if len(parts) > 1 else ""
+                if fname not in known_basenames:
+                    all_entries.append(entry)
+        except RuntimeError:
+            pass
+
+    return all_entries
+
+
+def fetch_loki_logs(
+    config: LogConfig,
+    containers: List[str],
+    lookback_seconds: int,
+    max_entries: int,
+) -> List[LogEntry]:
+    """Fetch logs from Loki for the selected containers and time window.
+
+    Docker container sources are queried together in a single Loki request.
+    Internal log sources (``*_internal``) are queried **per-file** so that
+    a single high-volume file cannot starve the others of their share of
+    the global Loki ``limit``.
+    """
+    docker_containers = [c for c in containers if not c.endswith("_internal")]
+    internal_services = [c for c in containers if c.endswith("_internal")]
+
+    all_entries: List[LogEntry] = []
+
+    # ── Docker container logs: single combined query ──
+    if docker_containers:
+        query = build_loki_query(docker_containers)
+        payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+        all_entries.extend(_parse_entries_from_payload(payload))
+
+    # ── Internal logs: per-file queries to avoid starvation ──
+    for service in internal_services:
+        entries = _fetch_internal_logs_per_file(
+            config, service, lookback_seconds, max_entries,
+        )
+        all_entries.extend(entries)
+
+    return all_entries
+
+
 def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     """Extract the filename label for internal OMERO log streams."""
-    for key in ("filename", "__path__", "path", "file"):
+    for key in ("filename", "filepath", "__path__", "path", "file"):
         value = stream_labels.get(key)
         if value:
             return os.path.basename(value)
