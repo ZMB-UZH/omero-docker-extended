@@ -7,6 +7,10 @@ body {
             width: 950px;
             margin: 0 auto;
         }
+        .admin-tools-page--wide {
+            width: 100%;
+            min-width: 1400px;
+        }
         .admin-tools-page .admin-tools-button:not(.log-refresh-button),
         .admin-tools-page .help-btn {
             cursor: pointer;
@@ -107,6 +111,7 @@ body {
         .admin-tools-page--wide .admin-tools-header,
         .admin-tools-page--wide .admin-tools-card {
             width: 100%;
+            max-width: none;
         }
         .admin-tools-actions {
             display: flex;
@@ -166,6 +171,9 @@ body {
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.1s ease;
+            box-sizing: border-box;
+            line-height: normal;
+            border: 1px solid transparent;
         }
         .log-refresh-button:hover {
             background: #2f5be0;
@@ -284,6 +292,8 @@ body {
             padding: 7px 10px;
             font-size: 13px;
             background: #f9fbff;
+            box-sizing: border-box;
+            line-height: normal;
         }
         .log-input {
             min-width: 280px;
@@ -401,13 +411,7 @@ body {
         .log-level {
             text-transform: uppercase;
             font-weight: 700;
-            font-size: 11px;
         }
-        .log-level-debug { color: #64748b; }
-        .log-level-info { color: #2563eb; }
-        .log-level-warn { color: #d97706; }
-        .log-level-error { color: #dc2626; }
-        .log-level-fatal { color: #b91c1c; }
 
         /* ── Internal log dropdown ── */
         .log-internal-group {
