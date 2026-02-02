@@ -559,7 +559,7 @@
 
 <script defer>
 const previewForm = document.getElementById('preview_form');
-    const rootStatusUrl = new URL('root-status/', window.location.href);
+    const rootStatusUrl = new URL('{% url "omeroweb_omp_plugin_root_status" %}', window.location.href);
     const applyRootUserState = (isRootUser) => {
         if (!isRootUser) {
             return;
