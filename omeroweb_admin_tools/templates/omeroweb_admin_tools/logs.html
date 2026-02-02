@@ -69,6 +69,7 @@
                         <option value="3600">Last 1 hour</option>
                         <option value="21600">Last 6 hours</option>
                         <option value="86400">Last 24 hours</option>
+                        <option value="604800">Last 7 days</option>
                     </select>
                 </div>
                 <div class="log-toolbar-group">
@@ -379,6 +380,12 @@
                 const payload = response.ok ? await response.json() : null;
                 if (payload && Array.isArray(payload.labels)) {
                     state.labels = payload.labels;
+                    /* Include a synthetic "unknown" entry so that log
+                       lines whose stream lacked a filename label are
+                       not silently filtered out. */
+                    if (!state.labels.includes('unknown')) {
+                        state.labels.push('unknown');
+                    }
                     state.loaded = true;
                     // Select all by default on first load.
                     state.labels.forEach((label) => state.selected.add(label));
@@ -549,14 +556,42 @@
             return selected;
         }
 
+        /**
+         * Attempt to parse a log-level keyword from a message string.
+         * Returns a canonical lowercase level or null.
+         */
+        function parseLevelFromMessage(msg) {
+            if (!msg) return null;
+            const m = msg.substring(0, 500).match(
+                /(?:^|[\s\[(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\])\-:]|$)/
+            );
+            if (!m) return null;
+            const token = m[1].toUpperCase();
+            const map = {
+                TRACE: 'debug', DEBUG: 'debug', INFO: 'info', NOTICE: 'info',
+                WARN: 'warn', WARNING: 'warn', ERROR: 'error', SEVERE: 'error',
+                CRITICAL: 'fatal', FATAL: 'fatal', PANIC: 'fatal', LOG: 'info',
+            };
+            return map[token] || null;
+        }
+
         function normalizeEntries(entries) {
             return entries
-                .map((entry) => ({
-                    timestamp: entry.timestamp,
-                    container: entry.container,
-                    level: entry.level || 'info',
-                    message: entry.message,
-                }))
+                .map((entry) => {
+                    let level = entry.level || 'info';
+                    /* If server sent generic "info", try to refine from
+                       message content (belt-and-suspenders with backend). */
+                    if (level === 'info') {
+                        const parsed = parseLevelFromMessage(entry.message);
+                        if (parsed) level = parsed;
+                    }
+                    return {
+                        timestamp: entry.timestamp,
+                        container: entry.container,
+                        level: level,
+                        message: entry.message,
+                    };
+                })
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         }
 
@@ -575,7 +610,7 @@
             setLoading(true);
             setStatus('Loading logs…');
             const lookbackSeconds = getLookbackSeconds();
-            const limit = logConfig.max_entries || 500;
+            const limit = logConfig.max_entries || 5000;
             const params = new URLSearchParams({
                 lookback: String(lookbackSeconds),
                 limit: String(limit),
