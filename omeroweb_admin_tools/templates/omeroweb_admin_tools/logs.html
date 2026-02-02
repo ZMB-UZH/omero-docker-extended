@@ -135,7 +135,7 @@
     <script defer>
         const logConfig = {{ log_config|safe }};
         const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
-        const rootStatusUrl = new URL('root-status/', window.location.href);
+        const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
 
         const applyRootUserState = (isRootUser) => {
             if (isRootUser) {
