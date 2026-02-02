@@ -61,7 +61,14 @@ OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
 
 - The internal log sources (`omeroserver_internal`, `omeroweb_internal`) are file-based and
   only appear after the OMERO server/web containers have started and written log files into
-  their log directories. The Grafana Alloy container continuously tails the mounted volumes,
-  so **it does not require a restart** once log files appear.
+  their log directories.
+- Grafana Alloy uses `local.file_match` to discover log files via glob patterns and
+  `discovery.relabel` to attach the `compose_service` / `container` labels. **Do not** use
+  inline glob patterns in `loki.source.file` static targets — `loki.source.file` treats
+  `__path__` as a literal path when targets are defined inline, which causes `stat` errors.
 - If the UI shows no internal log entries, confirm the OMERO server and web containers are
   healthy and expand the time range selector in the UI (the default is the last 15 minutes).
+- Verify that the named volume mount paths in `docker-compose.yml` match the actual
+  directories where OMERO writes its logs. The `omeroserver` service must mount
+  `omero_server_logs` at the real log directory (default:
+  `/opt/omero/server/OMERO.server/var/log`), not at an unrelated path.
