@@ -277,8 +277,7 @@ body {
         .log-toolbar-toggle {
             min-width: auto;
             justify-content: center;
-            align-self: center;
-            padding-top: 14px;
+            align-self: flex-end;
         }
         .log-label {
             font-size: 12px;
@@ -316,6 +315,13 @@ body {
             font-weight: 600;
             color: #1f2937;
             white-space: nowrap;
+            /* Match height of .log-input / .log-select so the
+               checkbox label aligns at the same baseline when
+               the toolbar uses align-items: flex-end. */
+            padding: 7px 0;
+            border: 1px solid transparent;
+            box-sizing: border-box;
+            line-height: normal;
         }
         .log-sources {
             display: flex;
