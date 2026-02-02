@@ -12,4 +12,4 @@ def test_build_loki_query_requires_containers() -> None:
 
 def test_build_loki_query_builds_regex() -> None:
     query = build_loki_query(["omeroserver", "omeroweb"])
-    assert query == '{compose_service=~"omeroserver|omeroweb"}'
+    assert query == '{compose_service=~"^(omeroserver|omeroweb)$"}'

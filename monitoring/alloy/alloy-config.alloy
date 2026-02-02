@@ -31,90 +31,68 @@ loki.source.docker "containers" {
   forward_to = [loki.write.local.receiver]
 }
 
-loki.source.file "omeroserver_internal_logs" {
-  targets = [
-    {
-      __path__        = "/var/log/omero-server/*.log",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
-    {
-      __path__        = "/var/log/omero-server/*.out",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
-    {
-      __path__        = "/var/log/omero-server/*.err",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
-    {
-      __path__        = "/var/log/omero-server/*/*.log",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
-    {
-      __path__        = "/var/log/omero-server/*/*.out",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
-    {
-      __path__        = "/var/log/omero-server/*/*.err",
-      compose_service = "omeroserver_internal",
-      container       = "omeroserver-internal",
-    },
+local.file_match "omeroserver_internal_logs" {
+  path_targets = [
+    { __path__ = "/var/log/omero-server/*.log" },
+    { __path__ = "/var/log/omero-server/*.out" },
+    { __path__ = "/var/log/omero-server/*.err" },
+    { __path__ = "/var/log/omero-server/*/*.log" },
+    { __path__ = "/var/log/omero-server/*/*.out" },
+    { __path__ = "/var/log/omero-server/*/*.err" },
   ]
+  sync_period = "5s"
+}
+
+discovery.relabel "omeroserver_internal_labels" {
+  targets = local.file_match.omeroserver_internal_logs.targets
+
+  rule {
+    target_label = "compose_service"
+    replacement  = "omeroserver_internal"
+  }
+
+  rule {
+    target_label = "container"
+    replacement  = "omeroserver-internal"
+  }
+}
+
+loki.source.file "omeroserver_internal_logs" {
+  targets    = discovery.relabel.omeroserver_internal_labels.output
   forward_to = [loki.write.local.receiver]
 }
 
-loki.source.file "omeroweb_internal_logs" {
-  targets = [
-    {
-      __path__        = "/var/log/omero-web/*.log",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web/*.out",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web/*.err",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web/*/*.log",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web/*/*.out",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web/*/*.err",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web-supervisor/*.log",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web-supervisor/*.out",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
-    {
-      __path__        = "/var/log/omero-web-supervisor/*.err",
-      compose_service = "omeroweb_internal",
-      container       = "omeroweb-internal",
-    },
+local.file_match "omeroweb_internal_logs" {
+  path_targets = [
+    { __path__ = "/var/log/omero-web/*.log" },
+    { __path__ = "/var/log/omero-web/*.out" },
+    { __path__ = "/var/log/omero-web/*.err" },
+    { __path__ = "/var/log/omero-web/*/*.log" },
+    { __path__ = "/var/log/omero-web/*/*.out" },
+    { __path__ = "/var/log/omero-web/*/*.err" },
+    { __path__ = "/var/log/omero-web-supervisor/*.log" },
+    { __path__ = "/var/log/omero-web-supervisor/*.out" },
+    { __path__ = "/var/log/omero-web-supervisor/*.err" },
   ]
+  sync_period = "5s"
+}
+
+discovery.relabel "omeroweb_internal_labels" {
+  targets = local.file_match.omeroweb_internal_logs.targets
+
+  rule {
+    target_label = "compose_service"
+    replacement  = "omeroweb_internal"
+  }
+
+  rule {
+    target_label = "container"
+    replacement  = "omeroweb-internal"
+  }
+}
+
+loki.source.file "omeroweb_internal_logs" {
+  targets    = discovery.relabel.omeroweb_internal_labels.output
   forward_to = [loki.write.local.receiver]
 }
 
