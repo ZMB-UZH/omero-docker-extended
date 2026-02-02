@@ -26,6 +26,17 @@ class LogEntry:
     message: str
 
 
+def _normalize_internal_service(service: str) -> str:
+    """
+    UI uses service keys like 'omeroserver_internal' and 'omeroweb_internal'.
+    Loki streams in this project are labeled with compose_service='omeroserver'/'omeroweb'
+    and log_type='internal'.  Normalize keys so queries match what Loki actually stores.
+    """
+    if service.endswith("_internal"):
+        return service[: -len("_internal")]
+    return service
+
+
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
 
@@ -218,7 +229,8 @@ def fetch_loki_logs(
     for service in internal_services:
         labels, label_key = fetch_internal_log_labels(config, service)
         if not labels:
-            query = f'{{compose_service="{service}"}}'
+            normalized = _normalize_internal_service(service)
+            query = f'{{compose_service="{normalized}", log_type="internal"}}'
             try:
                 payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
                 all_entries.extend(_parse_entries_from_payload(payload))
@@ -272,8 +284,9 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
 
 def _build_internal_file_query(service: str, filename: str, label_key: str = "filepath") -> str:
     """Build a Loki query for a specific internal log file."""
+    normalized = _normalize_internal_service(service)
     escaped = re.escape(filename)
-    return f'{{compose_service="{service}", {label_key}=~"(^|.*/){escaped}$"}}'
+    return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
 
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
@@ -308,7 +321,8 @@ def fetch_internal_log_labels(
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
     """
-    selector = f'{{compose_service="{compose_service}"}}'
+    normalized = _normalize_internal_service(compose_service)
+    selector = f'{{compose_service="{normalized}", log_type="internal"}}'
     end_time = dt.datetime.now(tz=dt.timezone.utc)
     start_time = end_time - dt.timedelta(seconds=config.lookback_seconds)
     # The Loki /series endpoint requires the parameter name ``match[]``,
@@ -339,9 +353,10 @@ def fetch_internal_log_labels(
     label_key = "filepath"
     label_candidates = ("filepath", "filename", "__path__", "path", "file")
     for series in payload.get("data", []):
-        # Double-check the compose_service label matches, in case Loki
-        # returns broader results than expected.
-        if series.get("compose_service") != compose_service:
+        # Double-check labels match, in case Loki returns broader results than expected.
+        if series.get("compose_service") != normalized:
+            continue
+        if series.get("log_type") != "internal":
             continue
         for candidate in label_candidates:
             if candidate in series:
