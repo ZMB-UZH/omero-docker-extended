@@ -127,6 +127,36 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     return None
 
 
+def fetch_internal_log_labels(
+    config: LogConfig,
+    compose_service: str,
+) -> List[str]:
+    """Query Loki for distinct filenames collected under a compose_service label.
+
+    Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
+    """
+    query = f'{{compose_service="{compose_service}"}}'
+    params = urllib.parse.urlencode({"query": query})
+    url = f"{config.loki_url}/loki/api/v1/series?{params}"
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+            raw = response.read()
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError:
+                return []
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        return []
+
+    filenames: set[str] = set()
+    for series in payload.get("data", []):
+        fname = _extract_filename(series)
+        if fname:
+            filenames.add(fname)
+    return sorted(filenames)
+
+
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
     """Serialize LogEntry objects for JSON responses."""
     return [
