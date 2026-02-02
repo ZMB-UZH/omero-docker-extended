@@ -218,27 +218,26 @@ def _fetch_internal_logs_per_file(
             # for it; entries without a filename label will still come through
             # when we query by compose_service alone.
             continue
-        # Query by compose_service AND filename/filepath to isolate this file's stream.
-        escaped = re.escape(label)
-        # Use stream-level label matchers (not line filters) so Loki can
-        # use its index.  Try filename first (Alloy default), then filepath
-        # (our custom label).  OR is not supported across label matchers in
-        # older Loki, so we use a regex that matches either label's value.
-        query = f'{{compose_service="{service}", filename=~".*{escaped}$"}}'
-        try:
-            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-            entries = _parse_entries_from_payload(payload)
-            if entries:
-                all_entries.extend(entries)
-            else:
-                # filename label might not exist; try filepath instead.
-                query = f'{{compose_service="{service}", filepath=~".*{escaped}$"}}'
-                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-                all_entries.extend(_parse_entries_from_payload(payload))
-        except RuntimeError:
-            # If one file query fails, continue with the others.
-            pass
 
+        # Query by compose_service AND a filename/path label to isolate this file's stream.
+        escaped = re.escape(label)
+
+        # Different Loki/Alloy pipelines expose the file identity under different label keys.
+        # We try all the common ones in order. (Series discovery uses _extract_filename which
+        # already checks these keys, so if we don't try them here we can end up with 0 hits.)
+        label_keys = ("filename", "filepath", "__path__", "path", "file")
+
+        for key in label_keys:
+            query = f'{{compose_service="{service}", {key}=~".*{escaped}$"}}'
+            try:
+                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+                entries = _parse_entries_from_payload(payload)
+                if entries:
+                    all_entries.extend(entries)
+                    break
+            except RuntimeError:
+                # If one key doesn't exist (or a query fails), try the next key.
+                continue
     # Also fetch any entries without a recognized filename (the "unknown"
     # bucket) by querying the service without a filename filter and keeping
     # only entries that didn't match any known file.
