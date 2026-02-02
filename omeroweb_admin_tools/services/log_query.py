@@ -7,7 +7,7 @@ import re
 import json
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import urllib.error
 import urllib.parse
@@ -175,6 +175,9 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
                 level = parsed
             elif not stream_level:
                 level = "info"
+            cleaned_message = _strip_message_prefix(message)
+            if cleaned_message:
+                message = cleaned_message
             entries.append(
                 LogEntry(
                     timestamp=_format_timestamp(timestamp_ns),
@@ -194,36 +197,68 @@ def fetch_loki_logs(
 ) -> List[LogEntry]:
     """Fetch logs from Loki for the selected containers and time window.
 
-    Docker container sources are queried together in a single Loki request.
-    Each internal log source (``*_internal``) is queried **individually** so
-    that every service gets its own share of ``max_entries`` and a single
-    high-volume service cannot starve others.
+    Docker container sources and internal log files are queried independently
+    so that each source can receive up to ``max_entries`` entries without
+    starving other selections.
     """
     docker_containers = [c for c in containers if not c.endswith("_internal")]
     internal_services = [c for c in containers if c.endswith("_internal")]
 
     all_entries: List[LogEntry] = []
 
-    # ── Docker container logs: single combined query ──
-    if docker_containers:
-        query = build_loki_query(docker_containers)
+    # ── Docker container logs: query each container independently ──
+    for container in docker_containers:
+        query = f'{{compose_service="{container}"}}'
         payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
         all_entries.extend(_parse_entries_from_payload(payload))
 
     # ── Internal logs: one query per service ──
-    # Each service (omeroserver_internal, omeroweb_internal) gets its own
-    # query with the full max_entries limit.  This ensures that both
-    # services are always represented even when one is far more active.
+    # Each service (omeroserver_internal, omeroweb_internal) gets queried
+    # per file so every file receives up to max_entries lines.
     for service in internal_services:
-        query = f'{{compose_service="{service}"}}'
+        labels = fetch_internal_log_labels(config, service)
+        if not labels:
+            query = f'{{compose_service="{service}"}}'
+            try:
+                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+                all_entries.extend(_parse_entries_from_payload(payload))
+            except RuntimeError:
+                pass
+            continue
         try:
-            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-            all_entries.extend(_parse_entries_from_payload(payload))
+            for filename in labels:
+                query = _build_internal_file_query(service, filename)
+                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+                all_entries.extend(_parse_entries_from_payload(payload))
         except RuntimeError:
             # If one service query fails, continue with the others.
             pass
 
-    return all_entries
+    return _cap_entries_per_container(all_entries, max_entries)
+
+
+def _strip_message_prefix(message: str) -> str:
+    """Remove duplicate timestamp/level prefixes from a log message."""
+    if not message:
+        return message
+
+    patterns = [
+        re.compile(
+            r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+"
+            r"\[?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)\]?\s+",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"^\s*\[?(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)\]?\s+"
+            r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?\s+",
+            re.IGNORECASE,
+        ),
+    ]
+    for pattern in patterns:
+        cleaned = pattern.sub("", message, count=1)
+        if cleaned != message:
+            return cleaned.lstrip()
+    return message
 
 
 def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
@@ -233,6 +268,36 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
         if value:
             return os.path.basename(value)
     return None
+
+
+def _build_internal_file_query(service: str, filename: str) -> str:
+    """Build a Loki query for a specific internal log file."""
+    escaped = re.escape(filename)
+    return f'{{compose_service="{service}", filepath=~".*/{escaped}$"}}'
+
+
+def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
+    """Limit entries per container/file to the most recent `limit` items."""
+    if limit <= 0:
+        return []
+    buckets: Dict[str, List[LogEntry]] = {}
+    for entry in entries:
+        buckets.setdefault(entry.container, []).append(entry)
+
+    capped: List[LogEntry] = []
+    for container, container_entries in buckets.items():
+        container_entries.sort(key=_entry_sort_key, reverse=True)
+        capped.extend(container_entries[:limit])
+    return capped
+
+
+def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
+    """Sort key for log entries based on timestamp."""
+    try:
+        timestamp = dt.datetime.fromisoformat(entry.timestamp)
+        return int(timestamp.timestamp()), entry.timestamp
+    except ValueError:
+        return 0, entry.timestamp
 
 
 def fetch_internal_log_labels(

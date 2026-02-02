@@ -106,7 +106,12 @@ def logs_data(request, conn=None, url=None, **kwargs):
     except ValueError:
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
     try:
-        entries = fetch_loki_logs(log_config, containers, lookback_seconds, max_entries)
+        entries = fetch_loki_logs(
+            log_config,
+            containers,
+            lookback_seconds,
+            max_entries,
+        )
     except RuntimeError as exc:  # pragma: no cover - network errors
         return JsonResponse(
             {"error": f"Failed to fetch logs: {exc}"},
@@ -148,3 +153,4 @@ def internal_log_labels(request, conn=None, url=None, **kwargs):
     except RuntimeError:
         labels = []
     return JsonResponse({"service": service, "labels": labels})
+
