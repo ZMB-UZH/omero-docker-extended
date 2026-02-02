@@ -6,7 +6,7 @@ presented in the Admin tools "Logs and analysis" view.
 
 ## Services added
 
-- **Loki** (Grafana Loki 2.9.8) stores logs.
+- **Loki** (Grafana Loki 3.2.0) stores logs.
 - **Grafana Alloy** (Grafana Alloy v1.12.2) reads Docker logs from the host and ships them to Loki.
 
 Both services are defined in `docker-compose.yml` with pinned versions and healthchecks.
