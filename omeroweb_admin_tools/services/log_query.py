@@ -273,7 +273,7 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
 def _build_internal_file_query(service: str, filename: str, label_key: str = "filepath") -> str:
     """Build a Loki query for a specific internal log file."""
     escaped = re.escape(filename)
-    return f'{{compose_service="{service}", {label_key}=~".*/{escaped}$"}}'
+    return f'{{compose_service="{service}", {label_key}=~"(^|.*/){escaped}$"}}'
 
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
