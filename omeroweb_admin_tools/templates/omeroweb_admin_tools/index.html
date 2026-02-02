@@ -56,7 +56,7 @@
         </div>
     </div>
     <script defer>
-const rootStatusUrl = new URL('root-status/', window.location.href);
+const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
         const applyRootUserState = (isRootUser) => {
             if (isRootUser) {
                 return;
