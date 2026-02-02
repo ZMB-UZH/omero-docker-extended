@@ -380,12 +380,6 @@
                 const payload = response.ok ? await response.json() : null;
                 if (payload && Array.isArray(payload.labels)) {
                     state.labels = payload.labels;
-                    /* Include a synthetic "unknown" entry so that log
-                       lines whose stream lacked a filename label are
-                       not silently filtered out. */
-                    if (!state.labels.includes('unknown')) {
-                        state.labels.push('unknown');
-                    }
                     state.loaded = true;
                     // Select all by default on first load.
                     state.labels.forEach((label) => state.selected.add(label));
@@ -481,6 +475,17 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function displayContainerName(name) {
+            /* For internal logs like "omeroserver_internal/Blitz-0.log",
+               show only the filename portion in the table. The full
+               service/filename value is kept in entry.container for
+               filtering and search purposes. */
+            if (name.includes('_internal/')) {
+                return name.split('/').pop();
+            }
+            return name;
+        }
+
         function renderTable(entries) {
             if (!tableBody) {
                 return;
@@ -493,7 +498,7 @@
                 .map((entry) => `
                     <tr>
                         <td>${escapeHtml(formatTimestamp(entry.timestamp))}</td>
-                        <td>${escapeHtml(entry.container)}</td>
+                        <td>${escapeHtml(displayContainerName(entry.container))}</td>
                         <td class="log-level log-level-${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</td>
                         <td class="log-message">${escapeHtml(entry.message)}</td>
                     </tr>
