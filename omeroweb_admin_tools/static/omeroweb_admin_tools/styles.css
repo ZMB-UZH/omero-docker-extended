@@ -377,7 +377,7 @@ body {
         }
         .log-table th:nth-child(2),
         .log-table td:nth-child(2) {
-            width: 195px;
+            width: 110px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -411,7 +411,13 @@ body {
         .log-level {
             text-transform: uppercase;
             font-weight: 700;
+            font-size: 11px;
         }
+        .log-level-debug { color: #64748b; }
+        .log-level-info { color: #2563eb; }
+        .log-level-warn { color: #d97706; }
+        .log-level-error { color: #dc2626; }
+        .log-level-fatal { color: #b91c1c; }
 
         /* ── Internal log dropdown ── */
         .log-internal-group {
