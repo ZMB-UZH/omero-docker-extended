@@ -51,6 +51,52 @@ def _format_timestamp(value_ns: str) -> str:
     return timestamp.isoformat()
 
 
+def _parse_level_from_message(message: str) -> Optional[str]:
+    """Try to extract a log level from the message text.
+
+    OMERO log lines typically contain level keywords such as DEBUG, INFO, WARN,
+    WARNING, ERROR, FATAL, CRITICAL, SEVERE, or TRACE either as standalone
+    tokens or inside bracket-delimited fields.  Docker container logs from
+    Postgres, Redis, OMERO.web (gunicorn), etc. use varying formats.  We try
+    a few common patterns and return the first match (normalised to lowercase).
+    """
+    if not message:
+        return None
+
+    # Map of recognised tokens → canonical level names.
+    _LEVEL_MAP = {
+        "TRACE": "debug",
+        "DEBUG": "debug",
+        "INFO": "info",
+        "NOTICE": "info",
+        "WARN": "warn",
+        "WARNING": "warn",
+        "ERROR": "error",
+        "SEVERE": "error",
+        "CRITICAL": "fatal",
+        "FATAL": "fatal",
+        "PANIC": "fatal",
+        "LOG": "info",        # Postgres uses "LOG"
+    }
+
+    # Pattern 1: level keyword in square brackets or after a timestamp, e.g.
+    #   "2026-02-02 11:01:49,631 DEBUG [..."
+    #   "[INFO] some message"
+    #   "... INFO  [..."
+    # We look for a standalone level token surrounded by whitespace, brackets,
+    # or start/end of string.
+    m = re.search(
+        r'(?:^|[\s\[\(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\]\):]|$)',
+        message[:500],  # limit search to first 500 chars for performance
+    )
+    if m:
+        token = m.group(1).upper()
+        if token in _LEVEL_MAP:
+            return _LEVEL_MAP[token]
+
+    return None
+
+
 def fetch_loki_logs(
     config: LogConfig,
     containers: List[str],
@@ -98,20 +144,39 @@ def fetch_loki_logs(
     entries: List[LogEntry] = []
     for stream in payload.get("data", {}).get("result", []):
         stream_labels = stream.get("stream", {})
-        level = stream_labels.get("level", "info")
+        stream_level = stream_labels.get("level", "").strip().lower() or ""
+        # Treat Loki/Alloy-detected_level if present (some Loki versions
+        # auto-detect it).
+        if not stream_level or stream_level == "info":
+            stream_level = stream_labels.get("detected_level", "").strip().lower() or stream_level
         container = stream_labels.get("container", "unknown")
         compose_service = stream_labels.get("compose_service")
         display_container = compose_service or container
         filename = _extract_filename(stream_labels)
-        if compose_service and compose_service.endswith("_internal") and filename:
-            display_container = f"{compose_service}/{filename}"
+        # For internal log streams, ALWAYS include the filename in the
+        # display_container so the JS filter can match them against the
+        # user's file selection.  When no filename label is available
+        # (which can happen when Alloy/Loki drops __path__ on query) we
+        # still tag with "unknown" so the entry is visible instead of
+        # silently hidden.
+        if compose_service and compose_service.endswith("_internal"):
+            display_container = f"{compose_service}/{filename or 'unknown'}"
         for value in stream.get("values", []):
             timestamp_ns, message = value
+            # Determine severity: prefer the stream-level label, but if
+            # it is missing / generic "info" we try to parse a more
+            # specific level from the log message content.
+            level = stream_level or "info"
+            parsed = _parse_level_from_message(message)
+            if parsed:
+                level = parsed
+            elif not stream_level:
+                level = "info"
             entries.append(
                 LogEntry(
                     timestamp=_format_timestamp(timestamp_ns),
                     container=display_container,
-                    level=str(level).lower(),
+                    level=level,
                     message=message,
                 )
             )

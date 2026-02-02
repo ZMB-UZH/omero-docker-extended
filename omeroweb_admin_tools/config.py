@@ -48,7 +48,7 @@ def build_log_config() -> LogConfig:
         )
 
     lookback_seconds = _get_int_env("ADMIN_TOOLS_LOG_LOOKBACK_SECONDS", 900)
-    max_entries = _get_int_env("ADMIN_TOOLS_LOG_MAX_ENTRIES", 500)
+    max_entries = _get_int_env("ADMIN_TOOLS_LOG_MAX_ENTRIES", 5000)
     timeout_seconds = _get_float_env("ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS", 10.0)
 
     if lookback_seconds <= 0:

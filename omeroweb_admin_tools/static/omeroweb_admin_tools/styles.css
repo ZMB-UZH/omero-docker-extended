@@ -1,6 +1,6 @@
 body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-            margin: 24px;
+            margin: 16px 24px;
             color: #111827;
         }
         .admin-tools-page {
@@ -71,12 +71,12 @@ body {
             justify-content: space-between;
             gap: 12px;
             width: 520px;
-            margin: 0 auto 16px;
+            margin: 0 auto 10px;
         }
         .admin-tools-header-left {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
             max-width: 70%;
         }
         .admin-tools-title {
@@ -91,14 +91,14 @@ body {
         .admin-tools-card {
             border: 2px solid #007bff;
             border-radius: 12px;
-            padding: 24px;
+            padding: 14px 18px;
             text-align: center;
             background: #f8fafc;
             width: 520px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 8px;
             box-sizing: border-box;
         }
         .admin-tools-card--wide {
@@ -159,13 +159,31 @@ body {
         }
         .log-refresh-button {
             width: auto;
-            padding: 10px 16px;
+            padding: 7px 10px;
             font-size: 13px;
             background: #3b6df2;
             color: #fff;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.1s ease;
         }
         .log-refresh-button:hover {
             background: #2f5be0;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            filter: brightness(105%);
+        }
+        .log-refresh-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            filter: none;
+        }
+        .log-refresh-button:disabled {
+            cursor: wait;
+            opacity: 0.75;
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            filter: none;
         }
         .admin-tools-back-link {
             display: inline-flex;
@@ -239,19 +257,20 @@ body {
         .log-toolbar {
             display: flex;
             flex-wrap: wrap;
-            gap: 16px;
+            gap: 8px;
             align-items: flex-end;
-            margin-bottom: 18px;
+            margin-bottom: 10px;
         }
         .log-toolbar-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            min-width: 160px;
+            gap: 4px;
         }
         .log-toolbar-toggle {
             min-width: auto;
-            padding-top: 22px;
+            justify-content: center;
+            align-self: center;
+            padding-top: 14px;
         }
         .log-label {
             font-size: 12px;
@@ -262,9 +281,16 @@ body {
         .log-select {
             border: 1px solid #d6deea;
             border-radius: 8px;
-            padding: 8px 10px;
+            padding: 7px 10px;
             font-size: 13px;
             background: #f9fbff;
+        }
+        .log-input {
+            min-width: 280px;
+        }
+        .log-select {
+            min-width: 0;
+            width: auto;
         }
         .log-input:focus,
         .log-select:focus {
@@ -275,17 +301,18 @@ body {
         .log-checkbox {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-size: 13px;
             font-weight: 600;
             color: #1f2937;
+            white-space: nowrap;
         }
         .log-sources {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
         }
         .log-sources-label {
             font-size: 12px;
@@ -297,8 +324,8 @@ body {
         .log-source-pill {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px 12px;
+            gap: 6px;
+            padding: 4px 10px;
             border-radius: 999px;
             background: #eef4ff;
             color: #1e3a8a;
@@ -312,7 +339,7 @@ body {
         .log-status {
             font-size: 12px;
             color: #64748b;
-            margin-bottom: 12px;
+            margin-bottom: 4px;
         }
         .log-table-container {
             background: #f9fbff;
@@ -324,13 +351,31 @@ body {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
+            table-layout: fixed;
         }
         .log-table th,
         .log-table td {
-            padding: 10px 12px;
+            padding: 5px 8px;
             text-align: left;
             border-bottom: 1px solid #e2e8f0;
             vertical-align: top;
+        }
+        .log-table th:nth-child(1),
+        .log-table td:nth-child(1) {
+            width: 155px;
+            white-space: nowrap;
+        }
+        .log-table th:nth-child(2),
+        .log-table td:nth-child(2) {
+            width: 195px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .log-table th:nth-child(3),
+        .log-table td:nth-child(3) {
+            width: 62px;
+            white-space: nowrap;
         }
         .log-table th {
             background: #3b6df2;
@@ -351,7 +396,7 @@ body {
         .log-empty {
             text-align: center;
             color: #64748b;
-            padding: 24px;
+            padding: 16px;
         }
         .log-level {
             text-transform: uppercase;
@@ -373,8 +418,8 @@ body {
         .log-internal-trigger {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px 12px;
+            gap: 6px;
+            padding: 4px 10px;
             border-radius: 999px;
             background: #eef4ff;
             color: #1e3a8a;
