@@ -216,7 +216,7 @@ def fetch_loki_logs(
     # Each service (omeroserver_internal, omeroweb_internal) gets queried
     # per file so every file receives up to max_entries lines.
     for service in internal_services:
-        labels = fetch_internal_log_labels(config, service)
+        labels, label_key = fetch_internal_log_labels(config, service)
         if not labels:
             query = f'{{compose_service="{service}"}}'
             try:
@@ -227,7 +227,7 @@ def fetch_loki_logs(
             continue
         try:
             for filename in labels:
-                query = _build_internal_file_query(service, filename)
+                query = _build_internal_file_query(service, filename, label_key)
                 payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
                 all_entries.extend(_parse_entries_from_payload(payload))
         except RuntimeError:
@@ -270,10 +270,10 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     return None
 
 
-def _build_internal_file_query(service: str, filename: str) -> str:
+def _build_internal_file_query(service: str, filename: str, label_key: str = "filepath") -> str:
     """Build a Loki query for a specific internal log file."""
     escaped = re.escape(filename)
-    return f'{{compose_service="{service}", filename=~".*/{escaped}$"}}'
+    return f'{{compose_service="{service}", {label_key}=~".*/{escaped}$"}}'
 
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
@@ -303,7 +303,7 @@ def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
 def fetch_internal_log_labels(
     config: LogConfig,
     compose_service: str,
-) -> List[str]:
+) -> Tuple[List[str], str]:
     """Query Loki for distinct filenames collected under a compose_service label.
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
@@ -331,18 +331,24 @@ def fetch_internal_log_labels(
             except json.JSONDecodeError:
                 return []
     except (urllib.error.HTTPError, urllib.error.URLError):
-        return []
+        return [], "filepath"
 
     filenames: set[str] = set()
+    label_key = "filepath"
+    label_candidates = ("filepath", "filename", "__path__", "path", "file")
     for series in payload.get("data", []):
         # Double-check the compose_service label matches, in case Loki
         # returns broader results than expected.
         if series.get("compose_service") != compose_service:
             continue
+        for candidate in label_candidates:
+            if candidate in series:
+                label_key = candidate
+                break
         fname = _extract_filename(series)
         if fname:
             filenames.add(fname)
-    return sorted(filenames)
+    return sorted(filenames), label_key
 
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
