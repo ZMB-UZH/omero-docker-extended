@@ -108,6 +108,13 @@ services:
       retries: 30
       start_period: 60s
 
+  redis-sysctl-init:
+    image: "redis:8-alpine"
+    privileged: true
+    restart: "no"
+    command: ["sh", "-c", "sysctl -w vm.overcommit_memory=1 || true"]
+    network_mode: none
+
   redis:
     image: "redis:8-alpine"
     restart: unless-stopped
@@ -117,8 +124,9 @@ services:
       TZ: Europe/Zurich
     networks:
       - omero
-    sysctls:
-      - vm.overcommit_memory=1
+    depends_on:
+      redis-sysctl-init:
+        condition: service_completed_successfully
     tmpfs:
       - /data:size=512m
     healthcheck:
