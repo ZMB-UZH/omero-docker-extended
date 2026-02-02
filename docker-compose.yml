@@ -34,9 +34,9 @@ services:
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - omero_server_logs:/var/log/omero-server:ro
-      - omero_web_logs:/var/log/omero-web:ro
-      - omero_web_supervisor_logs:/var/log/omero-web-supervisor:ro
+      - omero_server_logs:/opt/omero/server/OMERO.server/var/log:ro
+      - omero_web_logs:/opt/omero/web/OMERO.web/var/log:ro
+      - omero_web_supervisor_logs:/opt/omero/web/logs:ro
     depends_on:
       loki:
         condition: service_healthy
