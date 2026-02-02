@@ -54,4 +54,9 @@ def test_cap_entries_per_container_keeps_most_recent() -> None:
 
 def test_build_internal_file_query_uses_filepath_label() -> None:
     query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log")
-    assert query == '{compose_service="omeroserver_internal", filepath=~".*/Blitz\\-0\\.log$"}'
+    assert query == '{compose_service="omeroserver_internal", filepath=~"(^|.*/)Blitz\\-0\\.log$"}'
+
+
+def test_build_internal_file_query_handles_filename_label() -> None:
+    query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log", "filename")
+    assert query == '{compose_service="omeroserver_internal", filename=~"(^|.*/)Blitz\\-0\\.log$"}'
