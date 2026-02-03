@@ -5,9 +5,9 @@ import re
 import threading
 import time
 import uuid
+import omero
 from typing import Iterator
 
-import omero
 
 logger = logging.getLogger(__name__)
 
@@ -447,7 +447,7 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
 
         try:
             # timeout/wait parameter: 0 = return immediately with ScriptProcess
-            proc = svc.runScript(int(script_id), inputs, 0)
+            proc = svc.runScript(int(script_id), inputs, omero.rtypes.rint(0))
 
             if proc is None:
                 raise RuntimeError("IMS export script returned no process handle")
