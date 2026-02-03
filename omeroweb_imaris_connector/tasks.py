@@ -184,7 +184,17 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
 
         # Run the script
         _update_task_state("running_script")
-        job_handle = _run_script(conn, script_id, image_id, wait_secs=0)
+
+        def _script_status_callback(status: str, details: dict) -> None:
+            _update_task_state(status, details)
+
+        job_handle = _run_script(
+            conn,
+            script_id,
+            image_id,
+            wait_secs=0,
+            status_callback=_script_status_callback,
+        )
         if not job_handle:
             raise RuntimeError("Failed to start IMS export job.")
 
