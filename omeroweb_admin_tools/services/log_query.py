@@ -276,6 +276,8 @@ def fetch_loki_logs(
             logger.warning("Internal log query failed for %s: %s", service, exc)
 
     result = _cap_entries_per_container(all_entries, max_entries)
+    # Apply global cap to ensure total entries don't exceed max_entries
+    result = _apply_global_cap(result, max_entries)
     logger.debug("fetch_loki_logs returning %d entries (from %d total)", len(result), len(all_entries))
     return result
 
@@ -333,6 +335,17 @@ def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogE
         container_entries.sort(key=_entry_sort_key, reverse=True)
         capped.extend(container_entries[:limit])
     return capped
+
+
+def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
+    """Apply a global cap on total entries, keeping the most recent ones."""
+    if limit <= 0:
+        return []
+    if len(entries) <= limit:
+        return entries
+    # Sort by timestamp descending and take the most recent `limit` entries
+    sorted_entries = sorted(entries, key=_entry_sort_key, reverse=True)
+    return sorted_entries[:limit]
 
 
 def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
