@@ -419,7 +419,6 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
     # Build inputs
     try:
         from omero.rtypes import rlong
-
         inputs = {"Image_ID": rlong(int(image_id))}
     except Exception:
         inputs = {"Image_ID": int(image_id)}
@@ -430,77 +429,76 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
         image_id,
         wait_secs,
     )
+
     services = _get_script_services(conn)
-    logger.debug("ScriptService count=%s", len(services))
     if not services:
         raise RuntimeError("Could not start script: ScriptService unavailable")
-    # Different omero-py versions expose different method names; try a few.
+
+    # Use a single, known-good call path:
+    # - runScript returns a ScriptProcess
+    # - MUST detach/close it, otherwise processor slots can be exhausted
+    #   (causing NoProcessorAvailable for later runs).
     start_time = time.time()
     attempt = 0
+
     while True:
         attempt += 1
-        errors = []
-        seen_methods = set()
-        saw_no_processor = False
-        saw_other_exception = False
-        for svc in services:
-            for meth_name, meth in _iter_script_methods(svc):
-                seen_methods.add(meth_name)
-                logger.debug(
-                    "Attempting ScriptService.%s for IMS export (attempt %s)",
-                    meth_name,
-                    attempt,
-                )
-                try:
-                    job = _call_script_method(meth, meth_name, script_id, inputs, wait_secs)
-                    if job is None:
-                        errors.append(f"{meth_name}: returned None")
-                        continue
-                    if _is_async_result(job):
-                        job = _resolve_async_result(svc, meth_name, job)
-                    if _is_process_handle(job):
-                        logger.debug("IMS export script returned process handle via %s", meth_name)
-                        return job
-                    job_id = _extract_job_id(job)
-                    if job_id is not None:
-                        logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
-                        return job_id
-                    errors.append(f"{meth_name}: unsupported return type {type(job)}")
-                except Exception as exc:
-                    is_no_processor = _is_no_processor_available(exc)
-                    saw_no_processor = saw_no_processor or is_no_processor
-                    saw_other_exception = saw_other_exception or not is_no_processor
-                    logger.exception("ScriptService.%s failed: %s", meth_name, exc)
-                    errors.append(f"{meth_name}: {_format_script_exception(exc)}")
+        svc = services[0]
+
+        try:
+            # timeout/wait parameter: 0 = return immediately with ScriptProcess
+            proc = svc.runScript(int(script_id), inputs, 0)
+
+            if proc is None:
+                raise RuntimeError("IMS export script returned no process handle")
+
+            # Try to extract the Job id, then detach so the script continues server-side
+            job_id = None
+            try:
+                job = proc.getJob()
+                if job is not None and hasattr(job, "id") and hasattr(job.id, "val"):
+                    job_id = int(job.id.val)
+            except Exception:
+                job_id = None
+
+            try:
+                # Detach: script continues even if client session later closes.
+                # This also releases the processor slot reservation on the server side.
+                proc.close(True)
+            except Exception:
+                logger.exception("Failed to detach ScriptProcess via proc.close(True)")
+
+            if job_id is not None:
+                logger.debug("IMS export script started job_id=%s (detached)", job_id)
+                return job_id
+
+            # Fallback: if job id is not available, return the process handle
+            # (but we already attempted to detach to avoid slot leaks)
+            logger.debug("IMS export script started (no job id available)")
+            return proc
+
+        except Exception as exc:
+            if _is_no_processor_available(exc):
+                elapsed = time.time() - start_time
+                if elapsed < SCRIPT_START_TIMEOUT:
+                    logger.warning(
+                        "No OMERO script processor slot available; retrying in %ss "
+                        "(attempt %s, elapsed %.1fs/%ss)",
+                        SCRIPT_START_RETRY_INTERVAL,
+                        attempt,
+                        elapsed,
+                        SCRIPT_START_TIMEOUT,
+                    )
+                    time.sleep(SCRIPT_START_RETRY_INTERVAL)
                     continue
 
-        if saw_no_processor and not saw_other_exception:
-            elapsed = time.time() - start_time
-            if elapsed < SCRIPT_START_TIMEOUT:
-                logger.warning(
-                    "No OMERO script processor available; retrying IMS export start in %ss "
-                    "(attempt %s, elapsed %.1fs/%ss)",
-                    SCRIPT_START_RETRY_INTERVAL,
-                    attempt,
-                    elapsed,
-                    SCRIPT_START_TIMEOUT,
-                )
-                time.sleep(SCRIPT_START_RETRY_INTERVAL)
-                continue
-            raise RuntimeError(
-                "Could not start script: No OMERO script processor is available to run IMS export "
-                f"after waiting {elapsed:.1f}s. Start OMERO.script processors or increase "
-                "omero.scripts.processors."
-            )
+                raise RuntimeError(
+                    "Could not start IMS export: No script processor slot available "
+                    f"after waiting {elapsed:.1f}s. (This usually means leaked ScriptProcess "
+                    "handles or too many concurrent starts.)"
+                ) from exc
 
-        if errors:
-            joined = "; ".join(errors)
-            raise RuntimeError(f"Could not start script: {joined}")
-
-        if seen_methods:
-            raise RuntimeError("Could not start script: ScriptService run methods did not succeed")
-
-        raise RuntimeError("Could not start script: ScriptService has no supported run method")
+            raise
 
 
 def _format_script_exception(exc: Exception) -> str:
