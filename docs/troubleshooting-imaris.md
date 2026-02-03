@@ -10,6 +10,8 @@ You may see:
 - Repeated retries in `omeroweb` logs: `No OMERO script processor slot available`.
 - `SecurityViolation: Cannot read configuration: omero.scripts.processors`.
 - `omero.NoProcessorAvailable` in `Blitz-0.log`.
+- Celery job polling stuck in `STARTED` with repeated log lines like
+  `Polling Celery job ... state=STARTED`.
 
 ## Root causes to check
 
@@ -20,6 +22,11 @@ You may see:
    so non-admin users receive `SecurityViolation` when trying to read it.
 4. **Leaked ScriptProcess handles**: If clients never detach script handles, slots
    can be exhausted.
+5. **Celery worker/queue mismatch**: IMS export uses a Celery task. If no worker is
+   consuming the configured queue, jobs will remain in `STARTED`/`RECEIVED` and
+   never complete.
+6. **Missing Processor service in node descriptors**: If `Processor-0` is not
+   listed in `omero.server.nodedescriptors`, script processes will not start.
 
 ## Diagnostic commands (Docker Compose)
 
@@ -63,6 +70,49 @@ If no script processes are listed, ensure the server starts them (and that
 <compose> logs --since=10m omeroweb
 ```
 
+### 5) Verify the Processor service is enabled (node descriptors)
+
+```bash
+<compose> exec omeroserver \
+  /opt/omero/server/OMERO.server/bin/omero config get omero.server.nodedescriptors
+```
+
+Expected: the descriptor includes `Processor-0` (or more). If missing, set it and
+restart:
+
+```bash
+<compose> exec omeroserver \
+  /opt/omero/server/OMERO.server/bin/omero config set omero.server.nodedescriptors \
+  "master:Blitz-0,Tables-0,Indexer-0,PixelData-0,DropBox,MonitorServer,FileServer,Processor-0"
+<compose> restart omeroserver
+```
+
+### 6) Check Celery worker health and queue configuration
+
+Confirm that a Celery worker is running and listening to the same queue as
+OMERO.web (default: `imaris_export`):
+
+```bash
+<compose> exec omeroweb env | rg -n "OMERO_IMS_CELERY_(QUEUE|BROKER|BACKEND)"
+<compose> exec omeroweb python - <<'PY'
+import os
+print("OMERO_IMS_CELERY_QUEUE=", os.environ.get("OMERO_IMS_CELERY_QUEUE"))
+print("OMERO_IMS_CELERY_BROKER_URL=", os.environ.get("OMERO_IMS_CELERY_BROKER_URL"))
+print("OMERO_IMS_CELERY_BACKEND_URL=", os.environ.get("OMERO_IMS_CELERY_BACKEND_URL"))
+PY
+```
+
+Then check the worker container and logs:
+
+```bash
+<compose> ps
+<compose> logs --since=10m omero-celery-worker
+```
+
+If the worker is missing or is listening to a different queue, align
+`OMERO_IMS_CELERY_QUEUE` across both OMERO.web and the Celery worker and restart
+the services.
+
 ## Notes
 
 - `SecurityViolation: Cannot read configuration: omero.scripts.processors` does
@@ -75,3 +125,10 @@ If no script processes are listed, ensure the server starts them (and that
   `Blitz-0.log` are expected when ScriptProcess handles are detached or cleaned
   up after starting scripts. These are cleanup logs and not a failure by
   themselves.
+- If Celery jobs remain in `STARTED` but OMERO.server shows repeated
+  `NoProcessorAvailable`, focus on script processor capacity first: without
+  processors, the Celery task cannot start the export script and will continue
+  to report `STARTED` while retrying.
+- IMS export tasks use the job-service account by default. If you disable this
+  by setting `OMERO_IMS_USE_JOB_SERVICE_SESSION=false`, ensure the end-user
+  session is valid and has access to the target data.
