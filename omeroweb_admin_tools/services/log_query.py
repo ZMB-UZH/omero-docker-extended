@@ -40,6 +40,16 @@ def _normalize_internal_service(service: str) -> str:
     return service
 
 
+def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
+    """Split a container string like 'omeroserver_internal/Blitz-0.log'."""
+    if "_internal/" not in container:
+        return None
+    service, filename = container.split("/", 1)
+    if not service or not filename:
+        return None
+    return service, filename
+
+
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
 
@@ -215,6 +225,7 @@ def fetch_loki_logs(
     containers: List[str],
     lookback_seconds: int,
     max_entries: int,
+    internal_files: Optional[Dict[str, set[str]]] = None,
 ) -> List[LogEntry]:
     """Fetch logs from Loki for the selected containers and time window.
 
@@ -267,6 +278,17 @@ def fetch_loki_logs(
         try:
             payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
             entries = _parse_entries_from_payload(payload)
+            selected_files = internal_files.get(service) if internal_files else None
+            if selected_files:
+                filtered_entries: List[LogEntry] = []
+                for entry in entries:
+                    parsed = _split_internal_container(entry.container)
+                    if not parsed:
+                        continue
+                    entry_service, filename = parsed
+                    if entry_service == service and filename in selected_files:
+                        filtered_entries.append(entry)
+                entries = filtered_entries
             logger.debug(
                 "Internal query for %s (normalized=%s): got %d entries",
                 service, normalized, len(entries)
