@@ -154,6 +154,8 @@
             </div>
             <div class="log-status" id="log_status">Ready.</div>
             <div class="log-table-container">
+                <div class="log-table-resize-handle" aria-hidden="true"></div>
+                <div class="log-table-resize-corner" aria-hidden="true"></div>
                 <table class="log-table" aria-label="Log entries">
                     <thead>
                         <tr>
@@ -266,10 +268,13 @@
         const refreshBtn = document.getElementById('log_refresh_btn');
         const downloadBtn = document.getElementById('log_download_btn');
         const tableContainer = document.querySelector('.log-table-container');
+        const tableResizeHandle = document.querySelector('.log-table-resize-handle');
+        const tableResizeCorner = document.querySelector('.log-table-resize-corner');
         let refreshTimer = null;
         let activeEntries = [];
         let currentViewEntries = [];
-        const defaultTableHeight = 500;
+        const defaultTableHeight = 600;
+        const minTableHeight = 600;
 
         function setStatus(text) {
             if (statusEl) {
@@ -300,7 +305,6 @@
             const tableSize = {};
             if (tableContainer) {
                 const rect = tableContainer.getBoundingClientRect();
-                tableSize.width = Math.round(rect.width);
                 tableSize.height = Math.round(rect.height);
             }
             const payload = {
@@ -337,9 +341,6 @@
                 const height = Math.max(defaultTableHeight, storedState.tableSize.height || 0);
                 if (height) {
                     tableContainer.style.height = `${height}px`;
-                }
-                if (storedState.tableSize.width) {
-                    tableContainer.style.width = `${storedState.tableSize.width}px`;
                 }
             }
         }
@@ -778,7 +779,7 @@
                 }
                 activeEntries = normalizeEntries(payload.entries || []);
                 applyFilters();
-                setStatus(`Loaded ${activeEntries.length} log entries.`);
+                setStatus(`Loaded ${currentViewEntries.length} log entries.`);
             } catch (error) {
                 setStatus('Failed to fetch logs from backend.');
             } finally {
@@ -825,6 +826,37 @@
             });
         }
 
+        function setupTableResize() {
+            if (!tableContainer || !tableResizeHandle || !tableResizeCorner) {
+                return;
+            }
+            const handles = [tableResizeHandle, tableResizeCorner];
+            const onMouseDown = (event) => {
+                event.preventDefault();
+                const startY = event.clientY;
+                const startHeight = tableContainer.getBoundingClientRect().height;
+
+                const onMouseMove = (moveEvent) => {
+                    const delta = moveEvent.clientY - startY;
+                    const nextHeight = Math.max(minTableHeight, Math.round(startHeight + delta));
+                    tableContainer.style.height = `${nextHeight}px`;
+                };
+
+                const onMouseUp = () => {
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    persistState();
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            };
+
+            handles.forEach((handle) => {
+                handle.addEventListener('mousedown', onMouseDown);
+            });
+        }
+
         /* Auto-load internal labels on page load. */
         function initInternalLabels() {
             Object.keys(internalState).forEach((service) => {
@@ -840,6 +872,7 @@
             observer.observe(tableContainer);
         }
         setupHandlers();
+        setupTableResize();
         initInternalLabels();
         scheduleRefresh();
     </script>
