@@ -527,8 +527,16 @@ def _get_script_processor_config(conn):
         if value is None:
             return None
         return str(value).strip()
-    except Exception:
-        logger.exception("Failed to read omero.scripts.processors configuration value")
+    except Exception as exc:
+        if _is_security_violation(exc):
+            logger.warning(
+                "Cannot read omero.scripts.processors due to SecurityViolation. "
+                "Use an admin session to check the configured processor count."
+            )
+        else:
+            logger.exception(
+                "Failed to read omero.scripts.processors configuration value"
+            )
         return None
 
 
@@ -539,6 +547,17 @@ def _format_script_exception(exc: Exception) -> str:
             "Start OMERO.script processors or increase omero.scripts.processors."
         )
     return str(exc)
+
+
+def _is_security_violation(exc: Exception) -> bool:
+    for err in _iter_exception_chain(exc):
+        name = err.__class__.__name__
+        if name == "SecurityViolation":
+            return True
+        message = str(err)
+        if "SecurityViolation" in message:
+            return True
+    return False
 
 
 def _is_no_processor_available(exc: Exception) -> bool:
