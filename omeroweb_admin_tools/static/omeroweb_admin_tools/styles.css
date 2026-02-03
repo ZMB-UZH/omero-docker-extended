@@ -365,6 +365,20 @@ body {
             min-height: 500px;
             resize: both;
             overflow: auto;
+            scrollbar-gutter: stable;
+            scrollbar-width: thin;
+            scrollbar-color: #93c5fd transparent;
+        }
+        .log-table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .log-table-container::-webkit-scrollbar-thumb {
+            background: #93c5fd;
+            border-radius: 999px;
+        }
+        .log-table-container::-webkit-scrollbar-track {
+            background: transparent;
         }
         .log-table {
             width: 100%;
