@@ -383,6 +383,8 @@ body {
             overflow: auto;
             scrollbar-width: thin;
             scrollbar-color: #93c5fd transparent;
+            margin-right: 16px;
+            margin-bottom: 16px;
         }
         .log-table-resize-handle {
             position: absolute;
