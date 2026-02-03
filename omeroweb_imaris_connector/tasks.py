@@ -6,6 +6,7 @@ from celery import states
 from omero.gateway import BlitzGateway
 
 from .celery_app import app
+from .config import get_job_service_credentials, use_job_service_session
 from .imaris_service import (
     EXPORT_POLL_INTERVAL,
     EXPORT_TIMEOUT,
@@ -85,6 +86,43 @@ def _open_session_connection(session_key, host, port, secure=None):
         raise RuntimeError(f"Failed to open OMERO session: {e}") from e
 
 
+def _open_job_service_connection(host, port, secure=None):
+    """Open an OMERO connection using the job-service account."""
+    logger.debug("Opening OMERO job-service session host=%s port=%s secure=%s", host, port, secure)
+
+    username, password = get_job_service_credentials()
+    if not username:
+        raise RuntimeError("OMERO job-service username is required but not set.")
+    if not password:
+        raise RuntimeError("OMERO job-service password is required but not set.")
+    if not host:
+        raise RuntimeError("OMERO host is required")
+    if not port:
+        raise RuntimeError("OMERO port is required")
+
+    try:
+        port = int(port)
+    except (TypeError, ValueError) as e:
+        raise RuntimeError(f"Invalid port value: {port}") from e
+
+    try:
+        conn = BlitzGateway(
+            username,
+            password,
+            host=host,
+            port=port,
+            secure=secure,
+        )
+        if not conn.connect():
+            raise RuntimeError("Failed to connect to OMERO with job-service credentials.")
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        logger.debug("Successfully connected to OMERO as job-service=%s", username)
+        return conn
+    except Exception as e:
+        logger.error("Failed to open OMERO job-service session: %s", e)
+        raise RuntimeError(f"Failed to open OMERO job-service session: {e}") from e
+
+
 @app.task(bind=True, name="omeroweb_imaris_connector.run_ims_export_task")
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     """Execute an IMS export task.
@@ -106,7 +144,10 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         # Update task state to show we're starting
         self.update_state(state='STARTED', meta={'image_id': image_id, 'status': 'connecting'})
         
-        conn = _open_session_connection(session_key, host, port, secure=secure)
+        if use_job_service_session():
+            conn = _open_job_service_connection(host, port, secure=secure)
+        else:
+            conn = _open_session_connection(session_key, host, port, secure=secure)
         
         # Find the export script
         self.update_state(state='STARTED', meta={'image_id': image_id, 'status': 'finding_script'})
