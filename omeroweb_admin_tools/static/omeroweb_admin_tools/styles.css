@@ -368,6 +368,18 @@ body {
             height: 600px;
             min-height: 600px;
             resize: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .log-table-header {
+            flex: 0 0 auto;
+        }
+        .log-table-header .log-table th {
+            position: static;
+        }
+        .log-table-scroll {
+            flex: 1 1 auto;
             overflow: auto;
             scrollbar-width: thin;
             scrollbar-color: #93c5fd transparent;
@@ -394,17 +406,17 @@ body {
             z-index: 3;
             pointer-events: auto;
         }
-        .log-table-container::-webkit-scrollbar {
+        .log-table-scroll::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
-        .log-table-container::-webkit-scrollbar-thumb {
+        .log-table-scroll::-webkit-scrollbar-thumb {
             background: #93c5fd;
             border-radius: 999px;
-            min-height: 40px;
-            min-width: 40px;
+            min-height: 50px;
+            min-width: 50px;
         }
-        .log-table-container::-webkit-scrollbar-track {
+        .log-table-scroll::-webkit-scrollbar-track {
             background: transparent;
         }
         .log-table {
