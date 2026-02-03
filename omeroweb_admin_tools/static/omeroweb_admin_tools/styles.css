@@ -269,6 +269,9 @@ body {
             align-items: flex-end;
             margin-bottom: 10px;
         }
+        #log_refresh_btn {
+            min-width: 120px;
+        }
         .log-toolbar-group {
             display: flex;
             flex-direction: column;
@@ -358,16 +361,39 @@ body {
             margin-bottom: 4px;
         }
         .log-table-container {
+            position: relative;
             background: #f9fbff;
             border-radius: 12px;
             border: 1px solid #e0e7ff;
-            height: 500px;
-            min-height: 500px;
-            resize: both;
+            height: 600px;
+            min-height: 600px;
+            resize: none;
             overflow: auto;
             scrollbar-gutter: stable;
             scrollbar-width: thin;
             scrollbar-color: #93c5fd transparent;
+        }
+        .log-table-resize-handle {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 10px;
+            cursor: ns-resize;
+            background: transparent;
+            z-index: 2;
+        }
+        .log-table-resize-corner {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 16px;
+            height: 16px;
+            cursor: ns-resize;
+            background: linear-gradient(135deg, rgba(59, 109, 242, 0) 50%, rgba(59, 109, 242, 0.3) 50%);
+            border-bottom-right-radius: 12px;
+            z-index: 3;
+            pointer-events: auto;
         }
         .log-table-container::-webkit-scrollbar {
             width: 8px;
