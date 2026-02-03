@@ -27,6 +27,7 @@ import datetime
 import urllib.request
 import urllib.parse
 import urllib.error
+import http.cookiejar
 
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "5"))
@@ -115,90 +116,154 @@ class OMEROWebClient:
         self.password = password
         self.session = None
         self.scheme = scheme
+        # Initialize cookie/session attributes
+        self.cookie_jar = None
+        self.opener = None
+        self.csrf_token = None
+        self.session_id = None
+        self.session_key = None
 
     def _build_base_url(self, host, port, scheme):
         if host.startswith("http://") or host.startswith("https://"):
             return host.rstrip("/")
         return f"{scheme}://{host}:{port}"
+
+    def _build_cookie_header(self):
+        """Build Cookie header string from stored session credentials.
+        
+        This ensures cookies are always sent, regardless of cookie jar matching issues.
+        """
+        cookies = []
+        if self.session_id:
+            cookies.append(f'sessionid={self.session_id}')
+        if self.csrf_token:
+            cookies.append(f'csrftoken={self.csrf_token}')
+        return '; '.join(cookies) if cookies else None
+
+    def _create_request_with_cookies(self, url, data=None, method=None):
+        """Create a request with explicit cookie headers.
+        
+        This bypasses potential issues with automatic cookie jar matching.
+        """
+        req = urllib.request.Request(url, data=data, method=method)
+        
+        # Always add cookies explicitly
+        cookie_header = self._build_cookie_header()
+        if cookie_header:
+            req.add_header('Cookie', cookie_header)
+        
+        # Add CSRF token header for POST requests
+        if method == 'POST' or data is not None:
+            if self.csrf_token:
+                req.add_header('X-CSRFToken', self.csrf_token)
+            req.add_header('Referer', self.base_url)
+        
+        return req
+
+    def _extract_cookies_from_jar(self):
+        """Extract session and CSRF cookies from the cookie jar."""
+        if not self.cookie_jar:
+            return
+        
+        for cookie in self.cookie_jar:
+            if cookie.name == 'sessionid':
+                self.session_id = cookie.value
+                self.session_key = cookie.value
+            elif cookie.name == 'csrftoken':
+                self.csrf_token = cookie.value
+
+    def _check_login_redirect(self, response, context="request"):
+        """Check if a response was redirected to login page.
+        
+        Returns True if redirected to login (authentication failed).
+        """
+        final_url = getattr(response, "geturl", lambda: "")()
+        if "/webclient/login/" in str(final_url):
+            _xt_debug(f"Authentication failed during {context}: redirected to {final_url}")
+            return True
+        return False
         
     def connect(self):
         """Authenticate with OMERO.web."""
         try:
-            import http.cookiejar
-            
-            cookie_jar = http.cookiejar.CookieJar()
-            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+            self.cookie_jar = http.cookiejar.CookieJar()
+            self.opener = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(self.cookie_jar)
+            )
             
             login_url = f"{self.base_url}/webclient/login/"
             _xt_debug(f"Connecting to OMERO.web login url={login_url}")
+            
+            # First GET to obtain CSRF token
             req = urllib.request.Request(login_url)
-            response = opener.open(req, timeout=10)
+            response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login GET response={getattr(response, 'status', 'unknown')}")
             
-            csrf_token = None
-            for cookie in cookie_jar:
-                if cookie.name == 'csrftoken':
-                    csrf_token = cookie.value
-                    break
+            # Extract CSRF token from cookies
+            self._extract_cookies_from_jar()
             
-            if not csrf_token:
-                _xt_debug("Login failed: CSRF token missing")
+            if not self.csrf_token:
+                _xt_debug("Login failed: CSRF token missing after GET")
                 return False
             
+            # POST login credentials
             data = urllib.parse.urlencode({
                 'username': self.username,
                 'password': self.password,
                 'server': 1,
-                'csrfmiddlewaretoken': csrf_token
+                'csrfmiddlewaretoken': self.csrf_token
             }).encode()
             
             req = urllib.request.Request(login_url, data=data, method='POST')
             req.add_header('Referer', login_url)
-            req.add_header('X-CSRFToken', csrf_token)
+            req.add_header('X-CSRFToken', self.csrf_token)
+            # Also add existing cookies explicitly
+            cookie_header = self._build_cookie_header()
+            if cookie_header:
+                req.add_header('Cookie', cookie_header)
             
-            response = opener.open(req, timeout=10)
+            response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
             
-            session_id = None
-            for cookie in cookie_jar:
-                if cookie.name == 'sessionid':
-                    session_id = cookie.value
-                    break
+            # Extract session cookie from response
+            self._extract_cookies_from_jar()
             
-            if session_id:
-                _xt_debug("Login succeeded; session cookie received")
-                self.cookie_jar = cookie_jar
-                self.opener = opener
-                self.csrf_token = csrf_token
-                self.session_id = session_id
-                self.session_key = session_id
+            if self.session_id:
+                _xt_debug(f"Login succeeded; session cookie received (sessionid={self.session_id[:8]}...)")
                 return True
             
-            _xt_debug("Login failed: session cookie missing")
+            _xt_debug("Login failed: session cookie missing after POST")
             return False
             
+        except urllib.error.HTTPError as e:
+            _xt_debug(f"Login HTTP error {e.code}: {e.reason}")
+            return False
+        except urllib.error.URLError as e:
+            _xt_debug(f"Login URL error: {e}")
+            return False
         except Exception as e:
             _xt_debug(f"Connection error: {e}")
             return False
     
     def _api_request(self, endpoint):
-        """Make API request."""
-        import urllib.request
-        import urllib.error
-
-        if not hasattr(self, 'opener'):
-            _xt_debug("API request skipped: no opener/session")
+        """Make API request with explicit cookie handling."""
+        if not self.session_id:
+            _xt_debug("API request skipped: no session")
             return None
             
         url = f"{self.api_url}/{endpoint}"
         _xt_debug(f"API GET url={url}")
-        req = urllib.request.Request(url)
         
-        if hasattr(self, 'csrf_token'):
-            req.add_header('X-CSRFToken', self.csrf_token)
+        # Create request with explicit cookies
+        req = self._create_request_with_cookies(url)
         
         try:
-            response = self.opener.open(req, timeout=10)
+            # Use opener for cookie jar updates, but we've also set explicit headers
+            response = self.opener.open(req, timeout=30)
+            
+            if self._check_login_redirect(response, "API request"):
+                return None
+            
             _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
             return json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as e:
@@ -209,12 +274,9 @@ class OMEROWebClient:
             return None
 
     def _api_post(self, endpoint, payload=None):
-        """POST JSON to OMERO.web API and parse JSON response."""
-        import urllib.request
-        import urllib.error
-
-        if not hasattr(self, 'opener'):
-            _xt_debug("API POST skipped: no opener/session")
+        """POST JSON to OMERO.web API with explicit cookie handling."""
+        if not self.session_id:
+            _xt_debug("API POST skipped: no session")
             return None
 
         url = f"{self.api_url}/{endpoint}"
@@ -222,13 +284,15 @@ class OMEROWebClient:
         if payload is not None:
             data = json.dumps(payload).encode('utf-8')
 
-        req = urllib.request.Request(url, data=data, method='POST')
+        req = self._create_request_with_cookies(url, data=data, method='POST')
         req.add_header('Content-Type', 'application/json')
-        if hasattr(self, 'csrf_token'):
-            req.add_header('X-CSRFToken', self.csrf_token)
 
         try:
             response = self.opener.open(req, timeout=30)
+            
+            if self._check_login_redirect(response, "API POST"):
+                return None
+            
             _xt_debug(f"API POST url={url} response={getattr(response, 'status', 'unknown')}")
             raw = response.read()
             if not raw:
@@ -314,8 +378,6 @@ class OMEROWebClient:
 
     def poll_activity(self, job_id, timeout=900, interval=2):
         """Poll a script activity until completion."""
-        import time
-
         deadline = time.time() + timeout
         while time.time() < deadline:
             data = self._api_request(f"activities/{job_id}/")
@@ -391,8 +453,8 @@ class OMEROWebClient:
         if download_dir is None:
             download_dir = os.path.join(os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports")
 
-        # Ensure logged in (cookie present)
-        if not getattr(self, "session_id", None):
+        # Ensure logged in
+        if not self.session_id:
             raise RuntimeError("Not logged in to OMERO.web (missing session key).")
 
         base = self.base_url.rstrip("/")
@@ -407,11 +469,12 @@ class OMEROWebClient:
 
         os.makedirs(download_dir, exist_ok=True)
 
-        req = urllib.request.Request(export_url)
+        # Create request with explicit cookies
+        req = self._create_request_with_cookies(export_url)
+        
         try:
             with self.opener.open(req, timeout=30) as response:
-                final_url = getattr(response, "geturl", lambda: export_url)()
-                if "/webclient/login/" in str(final_url):
+                if self._check_login_redirect(response, "IMS export request"):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web (redirected to login). Please login again."
                     )
@@ -426,55 +489,86 @@ class OMEROWebClient:
                         "Please verify the OMERO.web Imaris connector is healthy.\n\n"
                         f"Response preview:\n{snippet}"
                     ) from exc
+                    
                 job_id = payload.get("job_id")
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
                     raise RuntimeError(f"Unexpected response from server: {payload}")
+                    
                 status_url = self._normalize_url(status_url, base)
                 _xt_debug(f"IMS export started job_id={job_id} status_url={status_url}")
 
+            # Poll for completion
             deadline = time.time() + EXPORT_TIMEOUT
             download_url = None
             last_state = None
+            poll_count = 0
+            
             while time.time() < deadline:
-                poll_req = urllib.request.Request(status_url)
-                with self.opener.open(poll_req, timeout=30) as poll_response:
-                    poll_final_url = getattr(poll_response, "geturl", lambda: status_url)()
-                    if "/webclient/login/" in str(poll_final_url):
+                poll_count += 1
+                _xt_debug(f"IMS export poll #{poll_count} url={status_url}")
+                
+                # Create poll request with explicit cookies
+                poll_req = self._create_request_with_cookies(status_url)
+                
+                try:
+                    with self.opener.open(poll_req, timeout=30) as poll_response:
+                        if self._check_login_redirect(poll_response, "IMS export poll"):
+                            # Try to re-extract cookies in case they were updated
+                            self._extract_cookies_from_jar()
+                            _xt_debug(f"Session state after redirect: sessionid={self.session_id[:8] if self.session_id else 'None'}...")
+                            raise RuntimeError(
+                                "Not authenticated to OMERO.web (redirected to login) while polling IMS export. "
+                                "Session may have expired. Please try again."
+                            )
+                        
+                        poll_body = poll_response.read().decode("utf-8", errors="replace")
+                        try:
+                            poll_payload = json.loads(poll_body)
+                        except json.JSONDecodeError as exc:
+                            snippet = poll_body[:2000].strip()
+                            raise RuntimeError(
+                                "IMS export poll failed: server returned a non-JSON response. "
+                                "Please verify the OMERO.web Imaris connector is healthy.\n\n"
+                                f"Response preview:\n{snippet}"
+                            ) from exc
+                            
+                except urllib.error.HTTPError as e:
+                    if e.code == 401 or e.code == 403:
                         raise RuntimeError(
-                            "Not authenticated to OMERO.web (redirected to login) while polling IMS export."
+                            f"Authentication error ({e.code}) while polling IMS export. "
+                            "Session may have expired. Please try again."
                         )
-                    poll_body = poll_response.read().decode("utf-8", errors="replace")
-                    try:
-                        poll_payload = json.loads(poll_body)
-                    except json.JSONDecodeError as exc:
-                        snippet = poll_body[:2000].strip()
-                        raise RuntimeError(
-                            "IMS export poll failed: server returned a non-JSON response. "
-                            "Please verify the OMERO.web Imaris connector is healthy.\n\n"
-                            f"Response preview:\n{snippet}"
-                        ) from exc
+                    raise
+                
                 last_state = poll_payload.get("state")
                 _xt_debug(f"IMS export poll state={last_state} payload={poll_payload}")
+                
                 if poll_payload.get("failed"):
-                    raise RuntimeError(f"IMS export failed: {poll_payload.get('error', 'unknown error')}")
+                    error_msg = poll_payload.get('error', 'unknown error')
+                    raise RuntimeError(f"IMS export failed: {error_msg}")
+                    
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
                     if download_url:
                         download_url = self._normalize_url(download_url, base)
                     break
+                    
                 time.sleep(EXPORT_POLL_INTERVAL)
 
             if not download_url:
                 raise RuntimeError(f"IMS export timed out (last state: {last_state})")
 
-            download_req = urllib.request.Request(download_url)
+            # Download the file
+            _xt_debug(f"Downloading IMS from: {download_url}")
+            download_req = self._create_request_with_cookies(download_url)
+            
             with self.opener.open(download_req, timeout=EXPORT_TIMEOUT + 60) as response:
-                download_final_url = getattr(response, "geturl", lambda: download_url)()
-                if "/webclient/login/" in str(download_final_url):
+                if self._check_login_redirect(response, "IMS export download"):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web (redirected to login) while downloading IMS export."
                     )
+                    
                 cd = response.headers.get("Content-Disposition", "")
                 filename = None
                 m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
@@ -537,12 +631,21 @@ class OMEROWebClient:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
 
     def _normalize_url(self, url, base_url):
+        """Normalize a URL to use the base_url's scheme and host.
+        
+        This ensures all URLs point to the same server the client authenticated with.
+        """
         if not url:
             return url
+            
         parsed = urllib.parse.urlparse(url)
+        base_parsed = urllib.parse.urlparse(base_url)
+        
+        # If URL has scheme and netloc
         if parsed.scheme and parsed.netloc:
-            base_parsed = urllib.parse.urlparse(base_url)
-            if parsed.netloc != base_parsed.netloc:
+            # Always rebuild to use base_url's scheme and netloc
+            # This handles cases where server returns localhost, Docker hostname, etc.
+            if parsed.netloc != base_parsed.netloc or parsed.scheme != base_parsed.scheme:
                 rebuilt = urllib.parse.urlunparse(
                     (
                         base_parsed.scheme,
@@ -553,9 +656,13 @@ class OMEROWebClient:
                         parsed.fragment,
                     )
                 )
+                _xt_debug(f"Normalized URL: {url} -> {rebuilt}")
                 return rebuilt
             return url
-        return urllib.parse.urljoin(base_url.rstrip("/") + "/", url.lstrip("/"))
+            
+        # Relative URL - join with base
+        result = urllib.parse.urljoin(base_url.rstrip("/") + "/", url.lstrip("/"))
+        return result
 
 
 class OMEROBrowserDialog:
