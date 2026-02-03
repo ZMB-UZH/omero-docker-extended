@@ -109,6 +109,10 @@ def logs_data(request, conn=None, url=None, **kwargs):
         max_entries = int(request.GET.get("limit", log_config.max_entries))
     except ValueError:
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
+    query = request.GET.get("query", "").strip()
+    level = request.GET.get("level", "").strip().lower()
+    if level and level not in {"debug", "info", "warn", "error", "fatal"}:
+        return JsonResponse({"error": "Invalid log level."}, status=400)
     try:
         internal_files = {}
         for value in internal_files_raw:
@@ -131,6 +135,17 @@ def logs_data(request, conn=None, url=None, **kwargs):
             {"error": f"Failed to fetch logs: {exc}"},
             status=502,
         )
+    if level:
+        entries = [entry for entry in entries if entry.level == level]
+    if query:
+        needle = query.lower()
+        entries = [
+            entry
+            for entry in entries
+            if needle in entry.message.lower()
+            or needle in entry.container.lower()
+            or needle in entry.level.lower()
+        ]
     return JsonResponse({"entries": serialize_entries(entries)})
 
 
