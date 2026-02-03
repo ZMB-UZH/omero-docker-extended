@@ -552,7 +552,7 @@
             const internal = [];
             Object.keys(internalState).forEach((service) => {
                 const state = internalState[service];
-                if (state.selected.size > 0 || !state.loaded) {
+                if (state.selected.size > 0) {
                     internal.push(service);
                 }
             });
