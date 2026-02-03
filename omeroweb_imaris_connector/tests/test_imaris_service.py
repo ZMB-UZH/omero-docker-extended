@@ -75,5 +75,49 @@ def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(imaris_service, "SCRIPT_START_RETRY_INTERVAL", 0)
     monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
 
-    with pytest.raises(RuntimeError, match="No OMERO script processor is available"):
+    with pytest.raises(RuntimeError, match="No script processor slot available"):
         imaris_service._run_script(None, script_id=1, image_id=2, wait_secs=0)
+
+
+def test_run_script_fails_fast_when_processors_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_omero_stub()
+    from omeroweb_imaris_connector import imaris_service
+
+    class DummyService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def runScript(self, *args, **kwargs):
+            self.calls += 1
+            raise NoProcessorAvailable("No processor available")
+
+    class DummyConfigService:
+        def getConfigValue(self, key):
+            assert key == "omero.scripts.processors"
+            return "0"
+
+    class DummyServiceFactory:
+        def getConfigService(self):
+            return DummyConfigService()
+
+    class DummyConn:
+        def __init__(self) -> None:
+            self.c = types.SimpleNamespace(sf=DummyServiceFactory())
+
+    service = DummyService()
+    conn = DummyConn()
+
+    monkeypatch.setattr(imaris_service, "_get_script_services", lambda conn: [service])
+    monkeypatch.setattr(
+        imaris_service,
+        "_iter_script_methods",
+        lambda svc: [("runScript", svc.runScript)],
+    )
+    monkeypatch.setattr(imaris_service, "SCRIPT_START_TIMEOUT", 999)
+    monkeypatch.setattr(imaris_service, "SCRIPT_START_RETRY_INTERVAL", 0)
+    monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
+
+    with pytest.raises(RuntimeError, match="omero.scripts.processors=0"):
+        imaris_service._run_script(conn, script_id=1, image_id=2, wait_secs=0)
+
+    assert service.calls == 1
