@@ -8,6 +8,8 @@ import uuid
 import omero
 from typing import Iterator
 
+from omero.rtypes import rint
+
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +351,6 @@ def _iter_script_methods(svc):
 
 
 def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
-    import omero
     args_to_try = []
     lowered = meth_name.lower()
     is_async = "async" in lowered or lowered.startswith("begin_")
@@ -374,12 +375,12 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
                 ]
             )
             try:
-                args_to_try.append((script_id, inputs, omero.rtypes.rint(0)))
+                args_to_try.append((script_id, inputs, rint(0)))
             except Exception:
                 pass
         else:
             try:
-                args_to_try.append((script_id, inputs, omero.rtypes.rint(int(wait_secs))))
+                args_to_try.append((script_id, inputs, rint(int(wait_secs))))
             except Exception:
                 pass
             args_to_try.extend(
@@ -397,7 +398,7 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
         ]
     )
     try:
-        args_to_try.append((script_id, inputs, omero.rtypes.rint(int(wait_secs or 0)), None))
+        args_to_try.append((script_id, inputs, rint(int(wait_secs or 0)), None))
     except Exception:
         pass
     last_type_error = None
@@ -447,7 +448,7 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
 
         try:
             # timeout/wait parameter: 0 = return immediately with ScriptProcess
-            proc = svc.runScript(int(script_id), inputs, omero.rtypes.rint(0))
+            proc = svc.runScript(int(script_id), inputs, rint(0))
 
             if proc is None:
                 raise RuntimeError("IMS export script returned no process handle")
