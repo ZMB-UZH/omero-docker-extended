@@ -279,6 +279,7 @@
         let refreshTimer = null;
         let activeEntries = [];
         let currentViewEntries = [];
+        let loadedEntriesCount = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
 
@@ -286,6 +287,21 @@
             if (statusEl) {
                 statusEl.textContent = text;
             }
+        }
+
+        function updateLoadedStatus() {
+            const query = filterInput?.value.trim() || '';
+            const level = levelSelect?.value || '';
+            if (loadedEntriesCount === 0) {
+                setStatus('Loaded 0 log entries.');
+                return;
+            }
+            const hasClientFilter = Boolean(query) || Boolean(level);
+            if (hasClientFilter && currentViewEntries.length !== loadedEntriesCount) {
+                setStatus(`Loaded ${loadedEntriesCount} log entries (showing ${currentViewEntries.length}).`);
+                return;
+            }
+            setStatus(`Loaded ${loadedEntriesCount} log entries.`);
         }
 
         function setLoading(isLoading) {
@@ -687,6 +703,7 @@
             });
             currentViewEntries = filtered;
             renderTable(filtered);
+            updateLoadedStatus();
         }
 
         function buildDownloadTsv(entries) {
@@ -769,13 +786,14 @@
             const containers = getSelectedContainers();
             if (!containers.length) {
                 activeEntries = [];
+                loadedEntriesCount = 0;
                 renderTable(activeEntries);
                 setStatus('No log sources selected.');
                 return;
             }
             setLoading(true);
-            if (currentViewEntries.length > 0) {
-                setStatus(`Loaded ${currentViewEntries.length} log entries. Refreshing...`);
+            if (loadedEntriesCount > 0) {
+                setStatus(`Loaded ${loadedEntriesCount} log entries. Refreshing...`);
             } else {
                 setStatus('Loading logs…');
             }
@@ -801,8 +819,8 @@
                     return;
                 }
                 activeEntries = normalizeEntries(payload.entries || []);
+                loadedEntriesCount = activeEntries.length;
                 applyFilters();
-                setStatus(`Loaded ${currentViewEntries.length} log entries.`);
             } catch (error) {
                 setStatus('Failed to fetch logs from backend.');
             } finally {
@@ -837,6 +855,9 @@
             });
             autoRefreshToggle?.addEventListener('change', () => {
                 persistState();
+                if (autoRefreshToggle?.checked) {
+                    fetchLogs();
+                }
                 scheduleRefresh();
             });
             refreshBtn?.addEventListener('click', fetchLogs);

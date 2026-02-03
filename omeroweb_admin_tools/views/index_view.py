@@ -29,17 +29,17 @@ def _build_log_sources() -> List[Dict[str, str]]:
     return [
         {
             "key": "omeroserver",
-            "label": "Omero server",
+            "label": "OMERO.server",
             "container": "omeroserver",
         },
         {
             "key": "omeroweb",
-            "label": "Omero web",
+            "label": "OMERO.web",
             "container": "omeroweb",
         },
         {
             "key": "database",
-            "label": "Database",
+            "label": "OMERO database",
             "container": "database",
         },
         {
