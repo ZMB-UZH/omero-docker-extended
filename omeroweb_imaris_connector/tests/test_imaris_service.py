@@ -124,3 +124,34 @@ def test_run_script_fails_fast_when_processors_disabled(monkeypatch: pytest.Monk
         imaris_service._run_script(conn, script_id=1, image_id=2, wait_secs=0)
 
     assert service.calls == 1
+
+
+def test_wait_for_process_detaches_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    from omeroweb_imaris_connector import imaris_service
+
+    class DummyProcess:
+        def __init__(self) -> None:
+            self.closed = False
+            self.poll_calls = 0
+
+        def poll(self):
+            self.poll_calls += 1
+            return "FINISHED"
+
+        def getResults(self, *_args):
+            return {"Export_Path": "/tmp/export.ims"}
+
+        def close(self, *_args):
+            self.closed = True
+
+    proc = DummyProcess()
+    monkeypatch.setattr(imaris_service, "EXPORT_POLL_INTERVAL", 0)
+
+    state, outputs = imaris_service._wait_for_process(proc, timeout=1)
+
+    assert state == "FINISHED"
+    assert outputs == {"Export_Path": "/tmp/export.ims"}
+    assert proc.closed is True

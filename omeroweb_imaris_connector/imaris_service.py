@@ -152,6 +152,7 @@ def _poll_process_job(job_id):
         return state, outputs, error
 
     if time.time() - record["created"] > EXPORT_TIMEOUT:
+        _detach_script_process(record.get("handle"), reason="process job timeout")
         _forget_process_job(job_id)
         return "TIMEOUT", None, "Timed out waiting for IMS export job."
 
@@ -171,6 +172,7 @@ def _poll_process_job(job_id):
     except Exception:
         outputs = None
     logger.debug("Process job %s finished state=%s outputs=%s", job_id, state, _serialize_outputs(outputs))
+    _detach_script_process(proc, reason="process job completed")
     _write_process_job_file(
         job_id,
         {
@@ -464,19 +466,15 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
             except Exception:
                 job_id = None
 
-            try:
+            if job_id is not None:
                 # Detach: script continues even if client session later closes.
                 # This also releases the processor slot reservation on the server side.
-                proc.close(True)
-            except Exception:
-                logger.exception("Failed to detach ScriptProcess via proc.close(True)")
-
-            if job_id is not None:
+                _detach_script_process(proc, reason="job started")
                 logger.debug("IMS export script started job_id=%s (detached)", job_id)
                 return job_id
 
             # Fallback: if job id is not available, return the process handle
-            # (but we already attempted to detach to avoid slot leaks)
+            # (callers will wait on it and detach afterward)
             logger.debug("IMS export script started (no job id available)")
             return proc
 
@@ -745,22 +743,29 @@ def _get_job_state_and_outputs(conn, job_id):
 def _wait_for_process(proc, timeout):
     deadline = time.time() + timeout
     last_state = None
-    while time.time() < deadline:
-        try:
-            last_state = _normalize_job_state(proc.poll())
-        except Exception:
-            last_state = None
+    try:
+        while time.time() < deadline:
+            try:
+                last_state = _normalize_job_state(proc.poll())
+            except Exception:
+                last_state = None
+            if last_state:
+                break
+            time.sleep(EXPORT_POLL_INTERVAL)
+        outputs = None
         if last_state:
-            break
-        time.sleep(EXPORT_POLL_INTERVAL)
-    outputs = None
-    if last_state:
-        try:
-            outputs = proc.getResults(0)
-        except Exception:
-            outputs = None
-    logger.debug("Process wait completed state=%s outputs=%s", last_state, _serialize_outputs(outputs))
-    return last_state, outputs
+            try:
+                outputs = proc.getResults(0)
+            except Exception:
+                outputs = None
+        logger.debug(
+            "Process wait completed state=%s outputs=%s",
+            last_state,
+            _serialize_outputs(outputs),
+        )
+        return last_state, outputs
+    finally:
+        _detach_script_process(proc, reason="process wait completed")
 
 
 def _normalize_job_state(state):
@@ -788,6 +793,31 @@ def _normalize_job_state(state):
     if not state:
         return None
     return state.upper()
+
+
+def _detach_script_process(proc, reason=""):
+    if proc is None:
+        return
+    close = getattr(proc, "close", None)
+    if not callable(close):
+        return
+    try:
+        close(True)
+        if reason:
+            logger.debug("Detached ScriptProcess (%s).", reason)
+        return
+    except TypeError:
+        pass
+    except Exception:
+        logger.exception("Failed to detach ScriptProcess (%s).", reason)
+        return
+
+    try:
+        close()
+        if reason:
+            logger.debug("Closed ScriptProcess (%s).", reason)
+    except Exception:
+        logger.exception("Failed to close ScriptProcess (%s).", reason)
 
 
 def _extract_output_value(outputs, key):
