@@ -277,11 +277,13 @@
         const tableResizeHandle = document.querySelector('.log-table-resize-handle');
         const tableResizeCorner = document.querySelector('.log-table-resize-corner');
         let refreshTimer = null;
+        let filterTimer = null;
         let activeEntries = [];
         let currentViewEntries = [];
         let loadedEntriesCount = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
+        const filterDebounceMs = 300;
 
         function setStatus(text) {
             if (statusEl) {
@@ -290,15 +292,8 @@
         }
 
         function updateLoadedStatus() {
-            const query = filterInput?.value.trim() || '';
-            const level = levelSelect?.value || '';
             if (loadedEntriesCount === 0) {
                 setStatus('Loaded 0 log entries.');
-                return;
-            }
-            const hasClientFilter = Boolean(query) || Boolean(level);
-            if (hasClientFilter && currentViewEntries.length !== loadedEntriesCount) {
-                setStatus(`Loaded ${loadedEntriesCount} log entries (showing ${currentViewEntries.length}).`);
                 return;
             }
             setStatus(`Loaded ${loadedEntriesCount} log entries.`);
@@ -657,52 +652,10 @@
                 .join('');
         }
 
-        function isInternalContainer(name) {
-            return name.includes('_internal');
-        }
-
-        function allowInternalEntry(containerName) {
-            const parts = containerName.split('/', 2);
-            const service = parts[0] || '';
-            const filename = parts.length > 1 ? parts[1] : '';
-            const state = internalState[service];
-            if (!state) {
-                return true;
-            }
-            if (!state.loaded || state.labels.length === 0) {
-                return true;
-            }
-            return state.selected.has(filename);
-        }
-
         function applyFilters() {
-            const query = filterInput?.value.trim().toLowerCase() || '';
-            const level = levelSelect?.value || '';
-
-            const filtered = activeEntries.filter((entry) => {
-                const matchesLevel = level ? entry.level === level : true;
-                if (!matchesLevel) {
-                    return false;
-                }
-
-                /* Filter internal log entries by selected files. */
-                if (isInternalContainer(entry.container)) {
-                    if (!allowInternalEntry(entry.container)) {
-                        return false;
-                    }
-                }
-
-                if (!query) {
-                    return true;
-                }
-                return (
-                    entry.message.toLowerCase().includes(query) ||
-                    entry.container.toLowerCase().includes(query) ||
-                    entry.level.toLowerCase().includes(query)
-                );
-            });
-            currentViewEntries = filtered;
-            renderTable(filtered);
+            currentViewEntries = activeEntries;
+            loadedEntriesCount = currentViewEntries.length;
+            renderTable(currentViewEntries);
             updateLoadedStatus();
         }
 
@@ -799,10 +752,18 @@
             }
             const lookbackSeconds = getLookbackSeconds();
             const limit = logConfig.max_entries || 5000;
+            const query = filterInput?.value.trim() || '';
+            const level = levelSelect?.value || '';
             const params = new URLSearchParams({
                 lookback: String(lookbackSeconds),
                 limit: String(limit),
             });
+            if (query) {
+                params.set('query', query);
+            }
+            if (level) {
+                params.set('level', level);
+            }
             containers.forEach((container) => params.append('container', container));
             const internalFiles = getSelectedInternalFiles();
             internalFiles.forEach((internalFile) => params.append('internal_file', internalFile));
@@ -819,7 +780,6 @@
                     return;
                 }
                 activeEntries = normalizeEntries(payload.entries || []);
-                loadedEntriesCount = activeEntries.length;
                 applyFilters();
             } catch (error) {
                 setStatus('Failed to fetch logs from backend.');
@@ -843,11 +803,21 @@
             refreshTimer = window.setInterval(fetchLogs, 10000);
         }
 
-        function setupHandlers() {
-            filterInput?.addEventListener('input', applyFilters);
-            levelSelect?.addEventListener('change', () => {
-                applyFilters();
+        function scheduleFilterFetch() {
+            if (filterTimer) {
+                window.clearTimeout(filterTimer);
+            }
+            filterTimer = window.setTimeout(() => {
                 persistState();
+                fetchLogs();
+            }, filterDebounceMs);
+        }
+
+        function setupHandlers() {
+            filterInput?.addEventListener('input', scheduleFilterFetch);
+            levelSelect?.addEventListener('change', () => {
+                persistState();
+                fetchLogs();
             });
             timeRangeSelect?.addEventListener('change', () => {
                 persistState();
