@@ -17,6 +17,8 @@ EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
 EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
 EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
 PROCESS_JOB_DIR = os.environ.get("OMERO_IMS_PROCESS_JOB_DIR", "/tmp/omero_ims_process_jobs")
+SCRIPT_START_TIMEOUT = int(os.environ.get("OMERO_IMS_SCRIPT_START_TIMEOUT", "180"))
+SCRIPT_START_RETRY_INTERVAL = float(os.environ.get("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "5"))
 
 _PROCESS_JOBS = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
@@ -433,40 +435,72 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
     if not services:
         raise RuntimeError("Could not start script: ScriptService unavailable")
     # Different omero-py versions expose different method names; try a few.
-    errors = []
-    seen_methods = set()
-    for svc in services:
-        for meth_name, meth in _iter_script_methods(svc):
-            seen_methods.add(meth_name)
-            logger.debug("Attempting ScriptService.%s for IMS export", meth_name)
-            try:
-                job = _call_script_method(meth, meth_name, script_id, inputs, wait_secs)
-                if job is None:
-                    errors.append(f"{meth_name}: returned None")
+    start_time = time.time()
+    attempt = 0
+    while True:
+        attempt += 1
+        errors = []
+        seen_methods = set()
+        saw_no_processor = False
+        saw_other_exception = False
+        for svc in services:
+            for meth_name, meth in _iter_script_methods(svc):
+                seen_methods.add(meth_name)
+                logger.debug(
+                    "Attempting ScriptService.%s for IMS export (attempt %s)",
+                    meth_name,
+                    attempt,
+                )
+                try:
+                    job = _call_script_method(meth, meth_name, script_id, inputs, wait_secs)
+                    if job is None:
+                        errors.append(f"{meth_name}: returned None")
+                        continue
+                    if _is_async_result(job):
+                        job = _resolve_async_result(svc, meth_name, job)
+                    if _is_process_handle(job):
+                        logger.debug("IMS export script returned process handle via %s", meth_name)
+                        return job
+                    job_id = _extract_job_id(job)
+                    if job_id is not None:
+                        logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
+                        return job_id
+                    errors.append(f"{meth_name}: unsupported return type {type(job)}")
+                except Exception as exc:
+                    is_no_processor = _is_no_processor_available(exc)
+                    saw_no_processor = saw_no_processor or is_no_processor
+                    saw_other_exception = saw_other_exception or not is_no_processor
+                    logger.exception("ScriptService.%s failed: %s", meth_name, exc)
+                    errors.append(f"{meth_name}: {_format_script_exception(exc)}")
                     continue
-                if _is_async_result(job):
-                    job = _resolve_async_result(svc, meth_name, job)
-                if _is_process_handle(job):
-                    logger.debug("IMS export script returned process handle via %s", meth_name)
-                    return job
-                job_id = _extract_job_id(job)
-                if job_id is not None:
-                    logger.debug("IMS export script returned job id=%s via %s", job_id, meth_name)
-                    return job_id
-                errors.append(f"{meth_name}: unsupported return type {type(job)}")
-            except Exception as exc:
-                logger.exception("ScriptService.%s failed: %s", meth_name, exc)
-                errors.append(f"{meth_name}: {_format_script_exception(exc)}")
+
+        if saw_no_processor and not saw_other_exception:
+            elapsed = time.time() - start_time
+            if elapsed < SCRIPT_START_TIMEOUT:
+                logger.warning(
+                    "No OMERO script processor available; retrying IMS export start in %ss "
+                    "(attempt %s, elapsed %.1fs/%ss)",
+                    SCRIPT_START_RETRY_INTERVAL,
+                    attempt,
+                    elapsed,
+                    SCRIPT_START_TIMEOUT,
+                )
+                time.sleep(SCRIPT_START_RETRY_INTERVAL)
                 continue
+            raise RuntimeError(
+                "Could not start script: No OMERO script processor is available to run IMS export "
+                f"after waiting {elapsed:.1f}s. Start OMERO.script processors or increase "
+                "omero.scripts.processors."
+            )
 
-    if errors:
-        joined = "; ".join(errors)
-        raise RuntimeError(f"Could not start script: {joined}")
+        if errors:
+            joined = "; ".join(errors)
+            raise RuntimeError(f"Could not start script: {joined}")
 
-    if seen_methods:
-        raise RuntimeError("Could not start script: ScriptService run methods did not succeed")
+        if seen_methods:
+            raise RuntimeError("Could not start script: ScriptService run methods did not succeed")
 
-    raise RuntimeError("Could not start script: ScriptService has no supported run method")
+        raise RuntimeError("Could not start script: ScriptService has no supported run method")
 
 
 def _format_script_exception(exc: Exception) -> str:
