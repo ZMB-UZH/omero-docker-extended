@@ -480,6 +480,20 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
 
         except Exception as exc:
             if _is_no_processor_available(exc):
+                config_value = _get_script_processor_config(conn)
+                if config_value is not None:
+                    try:
+                        config_int = int(str(config_value).strip())
+                    except (TypeError, ValueError):
+                        config_int = None
+                    if config_int is not None and config_int < 1:
+                        raise RuntimeError(
+                            "No OMERO script processor is available because "
+                            f"omero.scripts.processors={config_int}. "
+                            "Set CONFIG_omero_scripts_processors to a value >= 1 "
+                            "and restart OMERO.server."
+                        ) from exc
+
                 elapsed = time.time() - start_time
                 if elapsed < SCRIPT_START_TIMEOUT:
                     logger.warning(
@@ -500,6 +514,22 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
                 ) from exc
 
             raise
+
+
+def _get_script_processor_config(conn):
+    if conn is None:
+        return None
+    try:
+        config_service = conn.c.sf.getConfigService()
+        if config_service is None:
+            return None
+        value = config_service.getConfigValue("omero.scripts.processors")
+        if value is None:
+            return None
+        return str(value).strip()
+    except Exception:
+        logger.exception("Failed to read omero.scripts.processors configuration value")
+        return None
 
 
 def _format_script_exception(exc: Exception) -> str:
