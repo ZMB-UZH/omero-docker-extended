@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_failure_meta(exc: Exception) -> dict[str, str]:
+    """Build metadata dictionary for failed tasks."""
     exc_message = str(exc)
     return {
         "exc_type": exc.__class__.__name__,
@@ -32,35 +33,96 @@ def _build_failure_meta(exc: Exception) -> dict[str, str]:
 
 
 def _open_session_connection(session_key, host, port, secure=None):
-    logger.debug("Opening OMERO session host=%s port=%s", host, port)
-    client = omero.client(host, port)
-    client.joinSession(session_key)
-    conn = BlitzGateway(client_obj=client)
-    conn.SERVICE_OPTS.setOmeroGroup("-1")
-    return conn
+    """Open an OMERO connection using an existing session key.
+    
+    This creates a new BlitzGateway connection by joining an existing
+    OMERO session, allowing background tasks to work with the user's
+    data access permissions.
+    """
+    logger.debug("Opening OMERO session host=%s port=%s secure=%s", host, port, secure)
+    
+    # Validate parameters
+    if not session_key:
+        raise RuntimeError("Session key is required")
+    if not host:
+        raise RuntimeError("OMERO host is required")
+    if not port:
+        raise RuntimeError("OMERO port is required")
+    
+    try:
+        port = int(port)
+    except (TypeError, ValueError) as e:
+        raise RuntimeError(f"Invalid port value: {port}") from e
+    
+    try:
+        # Create OMERO client
+        client = omero.client(host, port)
+        
+        # Join the existing session
+        logger.debug("Joining session with key=%s...", session_key[:8] if session_key else 'None')
+        session = client.joinSession(session_key)
+        
+        if not session:
+            raise RuntimeError("Failed to join OMERO session")
+        
+        # Create BlitzGateway from the client
+        conn = BlitzGateway(client_obj=client)
+        
+        # Enable cross-group access for the export
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        
+        logger.debug("Successfully connected to OMERO as session=%s", session_key[:8])
+        return conn
+        
+    except omero.ClientError as e:
+        logger.error("OMERO client error: %s", e)
+        raise RuntimeError(f"Failed to connect to OMERO: {e}") from e
+    except omero.SecurityViolation as e:
+        logger.error("OMERO security violation: %s", e)
+        raise RuntimeError(f"Access denied: {e}") from e
+    except Exception as e:
+        logger.error("Failed to open OMERO session: %s", e)
+        raise RuntimeError(f"Failed to open OMERO session: {e}") from e
 
 
 @app.task(bind=True, name="omeroweb_imaris_connector.run_ims_export_task")
 def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
+    """Execute an IMS export task.
+    
+    This task runs in the Celery worker and performs the actual OMERO
+    script execution for IMS conversion.
+    """
     conn = None
     try:
         logger.info(
-            "IMS export task starting image_id=%s host=%s port=%s secure=%s",
+            "IMS export task starting image_id=%s host=%s port=%s secure=%s task_id=%s",
             image_id,
             host,
             port,
             secure,
+            self.request.id,
         )
+        
+        # Update task state to show we're starting
+        self.update_state(state='STARTED', meta={'image_id': image_id, 'status': 'connecting'})
+        
         conn = _open_session_connection(session_key, host, port, secure=secure)
+        
+        # Find the export script
+        self.update_state(state='STARTED', meta={'image_id': image_id, 'status': 'finding_script'})
         script_id = _find_script_id(conn)
         if not script_id:
             raise RuntimeError("IMS export script not found on OMERO.server.")
 
         logger.info(
-            "IMS export task running script_id=%s image_id=%s",
+            "IMS export task running script_id=%s image_id=%s task_id=%s",
             script_id,
             image_id,
+            self.request.id,
         )
+        
+        # Run the script
+        self.update_state(state='STARTED', meta={'image_id': image_id, 'status': 'running_script'})
         job_handle = _run_script(conn, script_id, image_id, wait_secs=0)
         if not job_handle:
             raise RuntimeError("Failed to start IMS export job.")
@@ -68,28 +130,48 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         outputs = None
         last_state = None
 
+        # Poll for script completion
         if isinstance(job_handle, int):
+            # Job handle is a job ID - poll via OMERO API
             deadline = time.time() + EXPORT_TIMEOUT
+            poll_count = 0
             while time.time() < deadline:
+                poll_count += 1
                 state, outs = _get_job_state_and_outputs(conn, job_handle)
                 last_state = _normalize_job_state(state)
                 if outs:
                     outputs = outs
                 if not last_state and _infer_finished_from_outputs(outputs):
                     last_state = "FINISHED"
+                    
                 logger.debug(
-                    "IMS export job poll image_id=%s job_id=%s state=%s outputs=%s",
+                    "IMS export job poll #%d image_id=%s job_id=%s state=%s outputs=%s",
+                    poll_count,
                     image_id,
                     job_handle,
                     last_state,
                     _serialize_outputs(outputs),
                 )
+                
+                # Update task state with progress
+                self.update_state(
+                    state='STARTED',
+                    meta={
+                        'image_id': image_id,
+                        'status': 'polling',
+                        'job_state': last_state,
+                        'poll_count': poll_count,
+                    }
+                )
+                
                 if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                     break
                 if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-                    raise RuntimeError("IMS export job failed.")
+                    raise RuntimeError(f"IMS export job failed with state: {last_state}")
                 time.sleep(EXPORT_POLL_INTERVAL)
         else:
+            # Job handle is a process handle - wait for completion
+            logger.debug("IMS export using process handle for image_id=%s", image_id)
             last_state, outputs = _wait_for_process(job_handle, EXPORT_TIMEOUT)
             logger.debug(
                 "IMS export process handle completed image_id=%s state=%s outputs=%s",
@@ -103,18 +185,21 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
 
         normalized_state = _normalize_job_state(last_state) or "UNKNOWN"
         if normalized_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-            raise RuntimeError("IMS export job did not complete successfully.")
+            raise RuntimeError(f"IMS export job did not complete successfully (state: {normalized_state})")
 
         logger.info(
-            "IMS export task completed image_id=%s state=%s",
+            "IMS export task completed image_id=%s state=%s task_id=%s",
             image_id,
             normalized_state,
+            self.request.id,
         )
+        
         return {
             "state": normalized_state,
             "outputs": _serialize_outputs(outputs),
             "error": None,
         }
+        
     except Exception as exc:
         logger.exception("IMS export task failed: %s", exc)
         self.update_state(state=states.FAILURE, meta=_build_failure_meta(exc))
@@ -123,5 +208,6 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         if conn:
             try:
                 conn.close()
-            except Exception:
-                pass
+                logger.debug("OMERO connection closed for image_id=%s", image_id)
+            except Exception as e:
+                logger.warning("Error closing OMERO connection: %s", e)
