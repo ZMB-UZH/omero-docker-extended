@@ -233,21 +233,28 @@ def fetch_loki_logs(
     all_entries: List[LogEntry] = []
 
     # ── Docker container logs: query each container independently ──
-    # We query by compose_service which may also return internal file logs
-    # (since they share the same compose_service in the new Alloy config).
-    # We filter out internal logs in Python by checking the container name.
+    # For containers that also have internal file logs (omeroserver, omeroweb),
+    # we use the container_id label to filter to ONLY Docker container logs.
+    # Docker logs have container_id set, internal file logs do not.
+    # For other containers (database, redis), we query normally.
+    containers_with_internal_logs = {"omeroserver", "omeroweb"}
+    
     for container in docker_containers:
-        query = f'{{compose_service="{container}"}}'
+        if container in containers_with_internal_logs:
+            # Use container_id=~".+" to match only Docker logs (which have container_id)
+            # Internal file logs don't have container_id label, so they won't match
+            query = f'{{compose_service="{container}", container_id=~".+"}}'
+        else:
+            query = f'{{compose_service="{container}"}}'
+        
         try:
             payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
             entries = _parse_entries_from_payload(payload)
-            # Filter out internal log entries - they have "_internal/" in container name
-            docker_only = [e for e in entries if "_internal/" not in e.container]
             logger.debug(
-                "Docker query for %s: got %d entries, %d after filtering internal",
-                container, len(entries), len(docker_only)
+                "Docker query for %s: got %d entries",
+                container, len(entries)
             )
-            all_entries.extend(docker_only)
+            all_entries.extend(entries)
         except RuntimeError as exc:
             logger.warning("Docker log query failed for %s: %s", container, exc)
 
