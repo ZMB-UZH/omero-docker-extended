@@ -182,6 +182,15 @@ class OMEROWebClient:
             _xt_debug(f"Authentication failed during {context}: redirected to {final_url}")
             return True
         return False
+
+    def _attempt_reauth(self, context):
+        """Attempt to re-authenticate and return True on success."""
+        _xt_debug(f"Attempting to re-authenticate during {context}")
+        if self.connect():
+            _xt_debug("Re-authentication succeeded.")
+            return True
+        _xt_debug("Re-authentication failed.")
+        return False
         
     def connect(self):
         """Authenticate with OMERO.web."""
@@ -475,8 +484,14 @@ class OMEROWebClient:
         try:
             with self.opener.open(req, timeout=30) as response:
                 if self._check_login_redirect(response, "IMS export request"):
-                    raise RuntimeError(
-                        "Not authenticated to OMERO.web (redirected to login). Please login again."
+                    if not self._attempt_reauth("IMS export request"):
+                        raise RuntimeError(
+                            "Not authenticated to OMERO.web (redirected to login). Please login again."
+                        )
+                    return self.download_ims_export(
+                        image_id,
+                        download_dir,
+                        fallback_name=fallback_name,
                     )
 
                 raw_body = response.read().decode("utf-8", errors="replace")
@@ -503,6 +518,7 @@ class OMEROWebClient:
             download_url = None
             last_state = None
             poll_count = 0
+            reauth_attempted = False
             
             while time.time() < deadline:
                 poll_count += 1
@@ -516,7 +532,14 @@ class OMEROWebClient:
                         if self._check_login_redirect(poll_response, "IMS export poll"):
                             # Try to re-extract cookies in case they were updated
                             self._extract_cookies_from_jar()
-                            _xt_debug(f"Session state after redirect: sessionid={self.session_id[:8] if self.session_id else 'None'}...")
+                            _xt_debug(
+                                "Session state after redirect: "
+                                f"sessionid={self.session_id[:8] if self.session_id else 'None'}..."
+                            )
+                            if not reauth_attempted:
+                                reauth_attempted = True
+                                if self._attempt_reauth("IMS export poll"):
+                                    continue
                             raise RuntimeError(
                                 "Not authenticated to OMERO.web (redirected to login) while polling IMS export. "
                                 "Session may have expired. Please try again."
@@ -535,6 +558,10 @@ class OMEROWebClient:
                             
                 except urllib.error.HTTPError as e:
                     if e.code == 401 or e.code == 403:
+                        if not reauth_attempted:
+                            reauth_attempted = True
+                            if self._attempt_reauth("IMS export poll HTTP error"):
+                                continue
                         raise RuntimeError(
                             f"Authentication error ({e.code}) while polling IMS export. "
                             "Session may have expired. Please try again."
