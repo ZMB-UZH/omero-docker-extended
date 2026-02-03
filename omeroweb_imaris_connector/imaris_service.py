@@ -21,9 +21,11 @@ EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2
 PROCESS_JOB_DIR = os.environ.get("OMERO_IMS_PROCESS_JOB_DIR", "/tmp/omero_ims_process_jobs")
 SCRIPT_START_TIMEOUT = int(os.environ.get("OMERO_IMS_SCRIPT_START_TIMEOUT", "180"))
 SCRIPT_START_RETRY_INTERVAL = float(os.environ.get("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "5"))
+PROCESSOR_CONFIG_CACHE_TTL = int(os.environ.get("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "30"))
 
 _PROCESS_JOBS = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
+_PROCESSOR_CONFIG_CACHE = {"value": None, "checked_at": 0.0}
 
 
 def _process_job_path(job_id):
@@ -519,6 +521,17 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
 def _get_script_processor_config(conn):
     if conn is None:
         return None
+    if not _can_read_script_config(conn):
+        logger.debug(
+            "Skipping omero.scripts.processors lookup for non-admin session."
+        )
+        return None
+    now = time.time()
+    if (
+        _PROCESSOR_CONFIG_CACHE["checked_at"]
+        and now - _PROCESSOR_CONFIG_CACHE["checked_at"] < PROCESSOR_CONFIG_CACHE_TTL
+    ):
+        return _PROCESSOR_CONFIG_CACHE["value"]
     try:
         config_service = conn.c.sf.getConfigService()
         if config_service is None:
@@ -526,10 +539,13 @@ def _get_script_processor_config(conn):
         value = config_service.getConfigValue("omero.scripts.processors")
         if value is None:
             return None
-        return str(value).strip()
+        value = str(value).strip()
+        _PROCESSOR_CONFIG_CACHE["value"] = value
+        _PROCESSOR_CONFIG_CACHE["checked_at"] = now
+        return value
     except Exception as exc:
         if _is_security_violation(exc):
-            logger.warning(
+            logger.debug(
                 "Cannot read omero.scripts.processors due to SecurityViolation. "
                 "Use an admin session to check the configured processor count."
             )
@@ -538,6 +554,19 @@ def _get_script_processor_config(conn):
                 "Failed to read omero.scripts.processors configuration value"
             )
         return None
+
+
+def _can_read_script_config(conn) -> bool:
+    if conn is None:
+        return False
+    is_admin = getattr(conn, "isAdmin", None)
+    if callable(is_admin):
+        try:
+            return bool(is_admin())
+        except Exception:
+            logger.exception("Failed to determine OMERO admin status for config read")
+            return False
+    return True
 
 
 def _format_script_exception(exc: Exception) -> str:
