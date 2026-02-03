@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 import json
 import os
@@ -14,6 +15,8 @@ import urllib.parse
 import urllib.request
 
 from ..config import LogConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -222,39 +225,52 @@ def fetch_loki_logs(
     docker_containers = [c for c in containers if not c.endswith("_internal")]
     internal_services = [c for c in containers if c.endswith("_internal")]
 
+    logger.debug(
+        "fetch_loki_logs called: docker=%s, internal=%s, lookback=%d, max=%d",
+        docker_containers, internal_services, lookback_seconds, max_entries
+    )
+
     all_entries: List[LogEntry] = []
 
     # ── Docker container logs: query each container independently ──
+    # We query by compose_service which may also return internal file logs
+    # (since they share the same compose_service in the new Alloy config).
+    # We filter out internal logs in Python by checking the container name.
     for container in docker_containers:
         query = f'{{compose_service="{container}"}}'
-        payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-        all_entries.extend(_parse_entries_from_payload(payload))
+        try:
+            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            entries = _parse_entries_from_payload(payload)
+            # Filter out internal log entries - they have "_internal/" in container name
+            docker_only = [e for e in entries if "_internal/" not in e.container]
+            logger.debug(
+                "Docker query for %s: got %d entries, %d after filtering internal",
+                container, len(entries), len(docker_only)
+            )
+            all_entries.extend(docker_only)
+        except RuntimeError as exc:
+            logger.warning("Docker log query failed for %s: %s", container, exc)
 
     # ── Internal logs: one query per service ──
-    # Each service (omeroserver_internal, omeroweb_internal) gets queried
-    # per file so every file receives up to max_entries lines.
+    # Query all internal logs for each service. File-level filtering is done
+    # on the frontend based on user's checkbox selections.
     for service in internal_services:
-        labels, label_key = fetch_internal_log_labels(config, service)
-        if not labels:
-            normalized = _normalize_internal_service(service)
-            query = f'{{compose_service="{normalized}", log_type="internal"}}'
-            try:
-                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-                all_entries.extend(_parse_entries_from_payload(payload))
-            except RuntimeError:
-                pass
-            continue
-        # Query each file independently so one failure doesn't abort all files
-        for filename in labels:
-            try:
-                query = _build_internal_file_query(service, filename, label_key)
-                payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
-                all_entries.extend(_parse_entries_from_payload(payload))
-            except RuntimeError:
-                # If one file query fails, continue with the others.
-                pass
+        normalized = _normalize_internal_service(service)
+        query = f'{{compose_service="{normalized}", log_type="internal"}}'
+        try:
+            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            entries = _parse_entries_from_payload(payload)
+            logger.debug(
+                "Internal query for %s (normalized=%s): got %d entries",
+                service, normalized, len(entries)
+            )
+            all_entries.extend(entries)
+        except RuntimeError as exc:
+            logger.warning("Internal log query failed for %s: %s", service, exc)
 
-    return _cap_entries_per_container(all_entries, max_entries)
+    result = _cap_entries_per_container(all_entries, max_entries)
+    logger.debug("fetch_loki_logs returning %d entries (from %d total)", len(result), len(all_entries))
+    return result
 
 
 def _strip_message_prefix(message: str) -> str:
@@ -344,23 +360,29 @@ def fetch_internal_log_labels(
         }
     )
     url = f"{config.loki_url}/loki/api/v1/series?{params}"
+    logger.debug("fetch_internal_log_labels: querying %s", url)
     request = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
             raw = response.read()
             try:
                 payload = json.loads(raw.decode("utf-8", errors="replace"))
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                logger.warning("fetch_internal_log_labels: JSON decode error: %s", exc)
                 # Keep return type consistent (Tuple[List[str], str]) to avoid
                 # a ValueError during unpacking in the Django view.
                 return [], "filepath"
-    except (urllib.error.HTTPError, urllib.error.URLError):
+    except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+        logger.warning("fetch_internal_log_labels: request failed: %s", exc)
         return [], "filepath"
 
     filenames: set[str] = set()
     label_key = "filepath"
     label_candidates = ("filepath", "filename", "__path__", "path", "file")
-    for series in payload.get("data", []):
+    series_data = payload.get("data", [])
+    logger.debug("fetch_internal_log_labels: got %d series from Loki", len(series_data))
+    
+    for series in series_data:
         # Double-check labels match, in case Loki returns broader results than expected.
         if series.get("compose_service") != normalized:
             continue
@@ -373,7 +395,12 @@ def fetch_internal_log_labels(
         fname = _extract_filename(series)
         if fname:
             filenames.add(fname)
-    return sorted(filenames), label_key
+    result = sorted(filenames)
+    logger.debug(
+        "fetch_internal_log_labels: found %d files for %s: %s",
+        len(result), compose_service, result[:5]  # Log first 5 filenames
+    )
+    return result, label_key
 
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
