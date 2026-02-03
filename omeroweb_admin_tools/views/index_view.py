@@ -11,6 +11,8 @@ from ..config import optional_log_config
 from ..services.log_query import fetch_loki_logs, fetch_internal_log_labels, serialize_entries
 from .utils import current_username
 
+logger = logging.getLogger(__name__)
+
 
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
