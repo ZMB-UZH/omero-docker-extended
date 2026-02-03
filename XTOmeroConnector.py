@@ -158,6 +158,11 @@ class OMEROWebClient:
                 req.add_header('X-CSRFToken', self.csrf_token)
             req.add_header('Referer', self.base_url)
         
+        # Add common headers to prevent caching issues
+        req.add_header('Cache-Control', 'no-cache')
+        req.add_header('Pragma', 'no-cache')
+        req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
+        
         return req
 
     def _extract_cookies_from_jar(self):
@@ -169,8 +174,10 @@ class OMEROWebClient:
             if cookie.name == 'sessionid':
                 self.session_id = cookie.value
                 self.session_key = cookie.value
+                _xt_debug(f"Extracted sessionid: {cookie.value[:8]}...")
             elif cookie.name == 'csrftoken':
                 self.csrf_token = cookie.value
+                _xt_debug(f"Extracted csrftoken: {cookie.value[:8]}...")
 
     def _check_login_redirect(self, response, context="request"):
         """Check if a response was redirected to login page.
@@ -186,6 +193,11 @@ class OMEROWebClient:
     def _attempt_reauth(self, context):
         """Attempt to re-authenticate and return True on success."""
         _xt_debug(f"Attempting to re-authenticate during {context}")
+        # Clear existing session
+        self.session_id = None
+        self.csrf_token = None
+        self.session_key = None
+        
         if self.connect():
             _xt_debug("Re-authentication succeeded.")
             return True
@@ -195,16 +207,20 @@ class OMEROWebClient:
     def connect(self):
         """Authenticate with OMERO.web."""
         try:
+            # Create fresh cookie jar
             self.cookie_jar = http.cookiejar.CookieJar()
             self.opener = urllib.request.build_opener(
                 urllib.request.HTTPCookieProcessor(self.cookie_jar)
             )
+            # Set default timeout
+            urllib.request.install_opener(self.opener)
             
             login_url = f"{self.base_url}/webclient/login/"
             _xt_debug(f"Connecting to OMERO.web login url={login_url}")
             
             # First GET to obtain CSRF token
             req = urllib.request.Request(login_url)
+            req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login GET response={getattr(response, 'status', 'unknown')}")
             
@@ -226,6 +242,7 @@ class OMEROWebClient:
             req = urllib.request.Request(login_url, data=data, method='POST')
             req.add_header('Referer', login_url)
             req.add_header('X-CSRFToken', self.csrf_token)
+            req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
             # Also add existing cookies explicitly
             cookie_header = self._build_cookie_header()
             if cookie_header:
@@ -252,6 +269,8 @@ class OMEROWebClient:
             return False
         except Exception as e:
             _xt_debug(f"Connection error: {e}")
+            import traceback
+            _xt_debug(traceback.format_exc())
             return False
     
     def _api_request(self, endpoint):
