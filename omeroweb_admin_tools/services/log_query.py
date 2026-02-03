@@ -165,6 +165,7 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
             stream_level = stream_labels.get("detected_level", "").strip().lower() or stream_level
         container = stream_labels.get("container", "unknown")
         compose_service = stream_labels.get("compose_service")
+        log_type = stream_labels.get("log_type", "")
         display_container = compose_service or container
         filename = _extract_filename(stream_labels)
         # For internal log streams, ALWAYS include the filename in the
@@ -173,8 +174,14 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
         # (which can happen when Alloy/Loki drops __path__ on query) we
         # still tag with "unknown" so the entry is visible instead of
         # silently hidden.
-        if compose_service and compose_service.endswith("_internal"):
-            display_container = f"{compose_service}/{filename or 'unknown'}"
+        # Detection: check for log_type="internal" OR compose_service ending with "_internal"
+        # to support both old and new Alloy configurations.
+        is_internal = (log_type == "internal") or (compose_service and compose_service.endswith("_internal"))
+        if is_internal:
+            # For the UI, we need the container name to include "_internal" suffix
+            # so the JS filtering logic can identify internal log entries.
+            service_base = _normalize_internal_service(compose_service) if compose_service else "unknown"
+            display_container = f"{service_base}_internal/{filename or 'unknown'}"
         for value in stream.get("values", []):
             timestamp_ns, message = value
             # Determine severity: prefer the stream-level label, but if
@@ -237,14 +244,15 @@ def fetch_loki_logs(
             except RuntimeError:
                 pass
             continue
-        try:
-            for filename in labels:
+        # Query each file independently so one failure doesn't abort all files
+        for filename in labels:
+            try:
                 query = _build_internal_file_query(service, filename, label_key)
                 payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
                 all_entries.extend(_parse_entries_from_payload(payload))
-        except RuntimeError:
-            # If one service query fails, continue with the others.
-            pass
+            except RuntimeError:
+                # If one file query fails, continue with the others.
+                pass
 
     return _cap_entries_per_container(all_entries, max_entries)
 
