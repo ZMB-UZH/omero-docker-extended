@@ -196,6 +196,13 @@ RUN set -euo pipefail; \
     chown root:root /startup/10-configure-script-processors.sh; \
     chmod 0555 /startup/10-configure-script-processors.sh
 
+# Configure grid node descriptors early in startup
+# ------------------------------------------------
+COPY startup/11-configure-nodedescriptors.sh /startup/11-configure-nodedescriptors.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/11-configure-nodedescriptors.sh; \
+    chmod 0555 /startup/11-configure-nodedescriptors.sh
+
 # Install Omero downloader
 # ------------------------
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
