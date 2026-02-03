@@ -94,6 +94,11 @@
                         Refresh now
                     </button>
                 </div>
+                <div class="log-toolbar-group">
+                    <button type="button" id="log_download_btn" class="admin-tools-button log-refresh-button">
+                        Download log entries
+                    </button>
+                </div>
             </div>
             <div class="log-sources">
                 <span class="log-sources-label">Docker logs</span>
@@ -172,6 +177,29 @@
         const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
         const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
         const internalLabelsUrl = new URL('{% url "omeroweb_admin_tools_internal_labels" %}', window.location.href);
+        const storage =
+            (() => {
+                try {
+                    const testKey = '__admin_tools_logs_storage_test__';
+                    window.localStorage.setItem(testKey, '1');
+                    window.localStorage.removeItem(testKey);
+                    return window.localStorage;
+                } catch (error) {
+                    return null;
+                }
+            })();
+        const logStateStorageKey = 'omeroweb_admin_tools_logs_state_v1';
+        const parseStoredState = (raw) => {
+            if (!raw) {
+                return null;
+            }
+            try {
+                return JSON.parse(raw);
+            } catch (error) {
+                return null;
+            }
+        };
+        const storedState = parseStoredState(storage?.getItem(logStateStorageKey));
 
         const applyRootUserState = (isRootUser) => {
             if (isRootUser) {
@@ -236,8 +264,12 @@
         const levelSelect = document.getElementById('log_level');
         const autoRefreshToggle = document.getElementById('log_autorefresh');
         const refreshBtn = document.getElementById('log_refresh_btn');
+        const downloadBtn = document.getElementById('log_download_btn');
+        const tableContainer = document.querySelector('.log-table-container');
         let refreshTimer = null;
         let activeEntries = [];
+        let currentViewEntries = [];
+        const defaultTableHeight = 500;
 
         function setStatus(text) {
             if (statusEl) {
@@ -253,15 +285,76 @@
             refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
         }
 
+        function persistState() {
+            if (!storage) {
+                return;
+            }
+            const dockerSources = {};
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                dockerSources[input.value] = input.checked;
+            });
+            const internalSources = {};
+            Object.keys(internalState).forEach((service) => {
+                internalSources[service] = Array.from(internalState[service].selected);
+            });
+            const tableSize = {};
+            if (tableContainer) {
+                const rect = tableContainer.getBoundingClientRect();
+                tableSize.width = Math.round(rect.width);
+                tableSize.height = Math.round(rect.height);
+            }
+            const payload = {
+                timeRange: timeRangeSelect?.value || '',
+                level: levelSelect?.value || '',
+                autoRefresh: !!autoRefreshToggle?.checked,
+                dockerSources,
+                internalSources,
+                tableSize,
+            };
+            storage.setItem(logStateStorageKey, JSON.stringify(payload));
+        }
+
+        function applyStoredState() {
+            if (!storedState) {
+                return;
+            }
+            if (timeRangeSelect && storedState.timeRange) {
+                timeRangeSelect.value = storedState.timeRange;
+            }
+            if (levelSelect && storedState.level !== undefined) {
+                levelSelect.value = storedState.level;
+            }
+            if (autoRefreshToggle && storedState.autoRefresh !== undefined) {
+                autoRefreshToggle.checked = Boolean(storedState.autoRefresh);
+            }
+            const dockerSources = storedState.dockerSources || {};
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                if (Object.prototype.hasOwnProperty.call(dockerSources, input.value)) {
+                    input.checked = Boolean(dockerSources[input.value]);
+                }
+            });
+            if (tableContainer && storedState.tableSize) {
+                const height = Math.max(defaultTableHeight, storedState.tableSize.height || 0);
+                if (height) {
+                    tableContainer.style.height = `${height}px`;
+                }
+                if (storedState.tableSize.width) {
+                    tableContainer.style.width = `${storedState.tableSize.width}px`;
+                }
+            }
+        }
+
         /* ── Internal log dropdown state ── */
         const internalGroups = document.querySelectorAll('.log-internal-group');
         const internalState = {};
 
         internalGroups.forEach((group) => {
             const service = group.dataset.service;
+            const storedInternal = storedState?.internalSources?.[service];
+            const initialSelected = Array.isArray(storedInternal) ? new Set(storedInternal) : new Set();
             internalState[service] = {
                 labels: [],
-                selected: new Set(),
+                selected: initialSelected,
                 loaded: false,
                 loading: false,
                 group: group,
@@ -339,6 +432,7 @@
                         state.selected.delete(label);
                     }
                     updateInternalBadge(service);
+                    persistState();
                     fetchLogs();
                 });
 
@@ -364,6 +458,7 @@
             }
             renderInternalOptions(service);
             updateInternalBadge(service);
+            persistState();
             fetchLogs();
         }
 
@@ -381,8 +476,13 @@
                 if (payload && Array.isArray(payload.labels)) {
                     state.labels = payload.labels;
                     state.loaded = true;
-                    // Select all by default on first load.
-                    state.labels.forEach((label) => state.selected.add(label));
+                    const storedInternal = storedState?.internalSources?.[service];
+                    if (Array.isArray(storedInternal)) {
+                        state.selected = new Set(storedInternal.filter((label) => state.labels.includes(label)));
+                    } else {
+                        // Select all by default on first load.
+                        state.labels.forEach((label) => state.selected.add(label));
+                    }
                 }
             } catch (error) {
                 // Silently fail — panel will show empty state.
@@ -390,6 +490,7 @@
                 state.loading = false;
                 renderInternalOptions(service);
                 updateInternalBadge(service);
+                persistState();
                 fetchLogs();
             }
         }
@@ -463,7 +564,23 @@
                 return '';
             }
             const date = new Date(value);
-            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+            if (Number.isNaN(date.getTime())) {
+                return value;
+            }
+            const pad2 = (num) => String(num).padStart(2, '0');
+            const day = pad2(date.getDate());
+            const month = pad2(date.getMonth() + 1);
+            const year = date.getFullYear();
+            let hours = date.getHours();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours %= 12;
+            if (hours === 0) {
+                hours = 12;
+            }
+            const hourStr = pad2(hours);
+            const minuteStr = pad2(date.getMinutes());
+            const secondStr = pad2(date.getSeconds());
+            return `${day}/${month}/${year}, ${hourStr}:${minuteStr}:${secondStr} ${ampm}`;
         }
 
         function escapeHtml(value) {
@@ -550,7 +667,32 @@
                     entry.level.toLowerCase().includes(query)
                 );
             });
+            currentViewEntries = filtered;
             renderTable(filtered);
+        }
+
+        function buildDownloadTsv(entries) {
+            const header = ['Timestamp', 'Container/File', 'Severity', 'Message'];
+            const lines = entries.map((entry) => [
+                formatTimestamp(entry.timestamp),
+                displayContainerName(entry.container),
+                entry.level,
+                entry.message,
+            ].map((value) => String(value ?? '')).join('\t'));
+            return [header.join('\t'), ...lines].join('\n');
+        }
+
+        function downloadCurrentEntries() {
+            const content = buildDownloadTsv(currentViewEntries);
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'omero_logs.txt';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
         }
 
         function getLookbackSeconds() {
@@ -661,14 +803,25 @@
 
         function setupHandlers() {
             filterInput?.addEventListener('input', applyFilters);
-            levelSelect?.addEventListener('change', applyFilters);
+            levelSelect?.addEventListener('change', () => {
+                applyFilters();
+                persistState();
+            });
             timeRangeSelect?.addEventListener('change', () => {
+                persistState();
                 fetchLogs();
             });
-            autoRefreshToggle?.addEventListener('change', scheduleRefresh);
+            autoRefreshToggle?.addEventListener('change', () => {
+                persistState();
+                scheduleRefresh();
+            });
             refreshBtn?.addEventListener('click', fetchLogs);
+            downloadBtn?.addEventListener('click', downloadCurrentEntries);
             document.querySelectorAll('.log-source-pill input').forEach((input) => {
-                input.addEventListener('change', fetchLogs);
+                input.addEventListener('change', () => {
+                    persistState();
+                    fetchLogs();
+                });
             });
         }
 
@@ -679,6 +832,13 @@
             });
         }
 
+        applyStoredState();
+        if (tableContainer && window.ResizeObserver) {
+            const observer = new ResizeObserver(() => {
+                persistState();
+            });
+            observer.observe(tableContainer);
+        }
         setupHandlers();
         initInternalLabels();
         scheduleRefresh();
