@@ -361,7 +361,10 @@ body {
             background: #f9fbff;
             border-radius: 12px;
             border: 1px solid #e0e7ff;
-            overflow: hidden;
+            height: 500px;
+            min-height: 500px;
+            resize: both;
+            overflow: auto;
         }
         .log-table {
             width: 100%;
