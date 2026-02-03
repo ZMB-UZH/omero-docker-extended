@@ -71,4 +71,7 @@ If no script processes are listed, ensure the server starts them (and that
 - If you are using a non-admin account in Imaris, configuration access will be
   denied even though script execution may still be possible once processors are
   running.
-
+- Repeated `Unregistered servant: ProcessorCallback/...` messages in
+  `Blitz-0.log` are expected when ScriptProcess handles are detached or cleaned
+  up after starting scripts. These are cleanup logs and not a failure by
+  themselves.

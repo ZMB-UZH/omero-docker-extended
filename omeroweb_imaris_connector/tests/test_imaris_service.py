@@ -104,6 +104,9 @@ def test_run_script_fails_fast_when_processors_disabled(monkeypatch: pytest.Monk
         def __init__(self) -> None:
             self.c = types.SimpleNamespace(sf=DummyServiceFactory())
 
+        def isAdmin(self) -> bool:
+            return True
+
     service = DummyService()
     conn = DummyConn()
 
