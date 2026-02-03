@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 import omero
-from typing import Iterator
+from typing import Callable, Iterator
 
 from omero.rtypes import rint
 
@@ -420,7 +420,13 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
     return meth(script_id, inputs)
 
 
-def _run_script(conn, script_id, image_id, wait_secs=None):
+def _run_script(
+    conn,
+    script_id,
+    image_id,
+    wait_secs=None,
+    status_callback: Callable[[str, dict], None] | None = None,
+):
     # Build inputs
     try:
         from omero.rtypes import rlong
@@ -496,6 +502,19 @@ def _run_script(conn, script_id, image_id, wait_secs=None):
 
                 elapsed = time.time() - start_time
                 if elapsed < SCRIPT_START_TIMEOUT:
+                    if status_callback:
+                        try:
+                            status_callback(
+                                "waiting_for_processor",
+                                {
+                                    "attempt": attempt,
+                                    "elapsed": elapsed,
+                                    "retry_in": SCRIPT_START_RETRY_INTERVAL,
+                                    "timeout": SCRIPT_START_TIMEOUT,
+                                },
+                            )
+                        except Exception:
+                            logger.exception("Status callback failed during retry")
                     logger.warning(
                         "No OMERO script processor slot available; retrying in %ss "
                         "(attempt %s, elapsed %.1fs/%ss)",
