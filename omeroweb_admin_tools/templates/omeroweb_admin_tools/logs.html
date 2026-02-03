@@ -154,23 +154,29 @@
             </div>
             <div class="log-status" id="log_status">Ready.</div>
             <div class="log-table-container">
+                <div class="log-table-header" aria-hidden="true">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Container/File</th>
+                                <th>Severity</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+                <div class="log-table-scroll">
+                    <table class="log-table" aria-label="Log entries">
+                        <tbody id="log_table_body">
+                            <tr>
+                                <td colspan="4" class="log-empty">No logs loaded yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
                 <div class="log-table-resize-handle" aria-hidden="true"></div>
                 <div class="log-table-resize-corner" aria-hidden="true"></div>
-                <table class="log-table" aria-label="Log entries">
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Container/File</th>
-                            <th>Severity</th>
-                            <th>Message</th>
-                        </tr>
-                    </thead>
-                    <tbody id="log_table_body">
-                        <tr>
-                            <td colspan="4" class="log-empty">No logs loaded yet.</td>
-                        </tr>
-                    </tbody>
-                </table>
             </div>
         </div>
     </div>
@@ -560,6 +566,17 @@
             return docker.concat(internal);
         }
 
+        function getSelectedInternalFiles() {
+            const internalFiles = [];
+            Object.keys(internalState).forEach((service) => {
+                const state = internalState[service];
+                state.selected.forEach((filename) => {
+                    internalFiles.push(`${service}/${filename}`);
+                });
+            });
+            return internalFiles;
+        }
+
         function formatTimestamp(value) {
             if (!value) {
                 return '';
@@ -757,7 +774,11 @@
                 return;
             }
             setLoading(true);
-            setStatus('Loading logs…');
+            if (currentViewEntries.length > 0) {
+                setStatus(`Loaded ${currentViewEntries.length} log entries. Refreshing...`);
+            } else {
+                setStatus('Loading logs…');
+            }
             const lookbackSeconds = getLookbackSeconds();
             const limit = logConfig.max_entries || 5000;
             const params = new URLSearchParams({
@@ -765,6 +786,8 @@
                 limit: String(limit),
             });
             containers.forEach((container) => params.append('container', container));
+            const internalFiles = getSelectedInternalFiles();
+            internalFiles.forEach((internalFile) => params.append('internal_file', internalFile));
             const url = `${logsDataUrl.toString()}?${params.toString()}`;
             try {
                 const response = await fetch(url, { credentials: 'same-origin' });
