@@ -402,6 +402,8 @@ body {
         .log-table-container::-webkit-scrollbar-thumb {
             background: #93c5fd;
             border-radius: 999px;
+            min-height: 40px;
+            min-width: 40px;
         }
         .log-table-container::-webkit-scrollbar-track {
             background: transparent;
@@ -596,6 +598,7 @@ body {
         .log-internal-panel-list::-webkit-scrollbar-thumb {
             background: #c7dbff;
             border-radius: 999px;
+            min-height: 40px;
         }
         .log-internal-panel-list::-webkit-scrollbar-track {
             background: transparent;
