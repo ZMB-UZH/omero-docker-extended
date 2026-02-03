@@ -25,24 +25,6 @@
                 </p>
             </div>
             <div class="admin-tools-header-actions">
-                <div style="position:relative;">
-                    <button type="button"
-                            id="settings_menu_btn"
-                            class="icon-btn"
-                            title="Settings"
-                            aria-label="Settings">
-                        ⚙
-                    </button>
-                    <div id="settings_menu"
-                         class="settings-menu"
-                         style="display:none;">
-                        <button type="button"
-                                id="admin_settings_btn"
-                                class="settings-menu-item">
-                            Admin settings
-                        </button>
-                    </div>
-                </div>
                 <button type="button"
                         id="help_btn"
                         class="help-btn"
@@ -230,37 +212,8 @@
                 // Ignore root user lookup failures.
             });
 
-        const settingsMenuBtn = document.getElementById('settings_menu_btn');
-        const settingsMenu = document.getElementById('settings_menu');
-
-        function showSettingsMenu(show) {
-            if (!settingsMenu) {
-                return;
-            }
-            settingsMenu.style.display = show ? 'block' : 'none';
-        }
-
-        if (settingsMenuBtn) {
-            settingsMenuBtn.addEventListener('click', (event) => {
-                event.stopPropagation();
-                const shouldShow = settingsMenu?.style.display !== 'block';
-                showSettingsMenu(shouldShow);
-            });
-        }
-
-        document.addEventListener('click', (event) => {
-            if (!settingsMenu) {
-                return;
-            }
-            if (settingsMenu.contains(event.target) || settingsMenuBtn?.contains(event.target)) {
-                return;
-            }
-            showSettingsMenu(false);
-        });
-
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                showSettingsMenu(false);
                 closeAllInternalPanels();
             }
         });
