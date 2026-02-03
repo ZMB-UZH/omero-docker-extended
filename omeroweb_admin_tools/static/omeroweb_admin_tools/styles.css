@@ -369,7 +369,6 @@ body {
             min-height: 600px;
             resize: none;
             overflow: auto;
-            scrollbar-gutter: stable;
             scrollbar-width: thin;
             scrollbar-color: #93c5fd transparent;
         }
