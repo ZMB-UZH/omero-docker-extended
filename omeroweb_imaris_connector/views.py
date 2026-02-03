@@ -63,7 +63,7 @@ def _get_client_ip(request):
 def imaris_export(request, conn=None, **kwargs):
     """Handle IMS export requests - both starting exports and polling status."""
     client_ip = _get_client_ip(request)
-    
+
     # Log request for debugging
     logger.debug(
         "IMS export request from %s: %s (user=%s, session=%s)",
@@ -72,7 +72,7 @@ def imaris_export(request, conn=None, **kwargs):
         getattr(conn, 'getUser', lambda: None)() if conn else 'unknown',
         request.session.session_key[:8] if request.session.session_key else 'no-session',
     )
-    
+
     base_url_override = None
     if "base_url" in request.GET:
         try:
@@ -88,7 +88,7 @@ def imaris_export(request, conn=None, **kwargs):
                 "Only Celery-backed IMS export jobs are supported.",
                 status=400,
             )
-        state, outputs, error = _poll_celery_job(job_id)
+        state, outputs, error, meta = _poll_celery_job(job_id)
         normalized_state = _normalize_job_state(state)
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
@@ -110,6 +110,10 @@ def imaris_export(request, conn=None, **kwargs):
             "finished": is_finished,
             "failed": is_failed,
         }
+        if meta and meta.get("status"):
+            payload["status"] = meta.get("status")
+        if meta and meta.get("job_state") and not payload.get("status"):
+            payload["status"] = meta.get("job_state")
         if is_finished:
             download_url = _build_absolute_url(
                 request,
@@ -195,12 +199,14 @@ def imaris_export(request, conn=None, **kwargs):
         last_error = None
 
         while time.time() < deadline:
-            state, outs, error = _poll_celery_job(celery_job_id)
+            state, outs, error, meta = _poll_celery_job(celery_job_id)
             last_state = _normalize_job_state(state)
             if outs:
                 outputs = outs
             if error:
                 last_error = error
+            if not last_error and meta and meta.get("error"):
+                last_error = meta.get("error")
             logger.debug(
                 "IMS export poll job_id=%s state=%s error=%s",
                 celery_job_id,
@@ -235,24 +241,26 @@ def _poll_celery_job(job_id):
     task_id = job_id[len(CELERY_JOB_PREFIX):]
     async_result = celery_app.AsyncResult(task_id)
     logger.debug("Polling Celery job task_id=%s state=%s", task_id, async_result.state)
-    
+
+    meta = async_result.info if isinstance(async_result.info, dict) else None
+
     if async_result.state in {
         celery_states.PENDING,
         celery_states.RECEIVED,
         celery_states.STARTED,
     }:
-        return "RUNNING", None, None
+        return "RUNNING", None, None, meta
     if async_result.state in {celery_states.FAILURE, celery_states.IGNORED}:
         error = None
-        if isinstance(async_result.info, dict):
-            error = async_result.info.get("error")
+        if meta:
+            error = meta.get("error")
         if not error:
             # Try to get error from result
             try:
                 error = str(async_result.result)
             except Exception:
                 error = "Unknown error"
-        return "FAILED", None, error
+        return "FAILED", None, error, meta
     if async_result.state == celery_states.SUCCESS:
         payload = async_result.result or {}
         logger.debug("Celery job %s success payload=%s", task_id, payload)
@@ -260,12 +268,13 @@ def _poll_celery_job(job_id):
             payload.get("state", "FINISHED"),
             payload.get("outputs"),
             payload.get("error"),
+            meta,
         )
     if async_result.state == celery_states.REVOKED:
-        return "CANCELLED", None, "Job was cancelled"
-    
+        return "CANCELLED", None, "Job was cancelled", meta
+
     # Unknown state - return as-is
-    return async_result.state, None, None
+    return async_result.state, None, None, meta
 
 
 def _start_celery_job(
@@ -279,14 +288,14 @@ def _start_celery_job(
     session_key = _get_session_key(conn)
     host, port = _resolve_omero_host_port(conn)
     secure = _resolve_omero_secure(conn)
-    
+
     if host_override:
         host = host_override
     if port_override is not None:
         port = port_override
     if secure_override is not None:
         secure = secure_override
-        
+
     if not session_key:
         raise RuntimeError("IMS export session key unavailable for background job.")
     if not host or not port:
@@ -299,7 +308,7 @@ def _start_celery_job(
             f"IMS export port is out of range: {port}. "
             "Ensure OMERO_PORT is set to a valid port."
         )
-        
+
     logger.info(
         "Dispatching IMS export task image_id=%s host=%s port=%s secure=%s queue=%s",
         image_id,
@@ -308,7 +317,7 @@ def _start_celery_job(
         secure,
         CELERY_QUEUE,
     )
-    
+
     async_result = run_ims_export_task.apply_async(
         kwargs={
             "image_id": int(image_id),
@@ -349,7 +358,7 @@ def _get_session_key(conn):
     """Get the OMERO session key from the connection."""
     if conn is None:
         return None
-        
+
     # Try getSessionId method first (most reliable)
     if callable(getattr(conn, "getSessionId", None)):
         try:
@@ -358,13 +367,13 @@ def _get_session_key(conn):
                 return session_id
         except Exception as e:
             logger.debug("getSessionId() failed: %s", e)
-    
+
     # Try to get from connection attributes
     for attr in ("_sessionUuid", "_session", "session"):
         val = getattr(conn, attr, None)
         if val:
             return val
-    
+
     # Try to get from underlying client
     try:
         if hasattr(conn, 'c') and conn.c:
@@ -374,7 +383,7 @@ def _get_session_key(conn):
                     return session_id
     except Exception as e:
         logger.debug("conn.c.getSessionId() failed: %s", e)
-    
+
     return None
 
 
@@ -382,12 +391,12 @@ def _resolve_omero_host_port(conn):
     """Resolve the OMERO server host and port from the connection or environment."""
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
-    
+
     if not host:
         host = os.environ.get("OMEROHOST")
     if not port:
         port = os.environ.get("OMERO_PORT")
-        
+
     if port is not None:
         port_text = str(port).strip()
         if not port_text:
@@ -399,7 +408,7 @@ def _resolve_omero_host_port(conn):
                 port = None
         else:
             port = None
-            
+
     return host, port
 
 
