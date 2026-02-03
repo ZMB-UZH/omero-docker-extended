@@ -101,6 +101,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
             status=503,
         )
     containers = request.GET.getlist("container")
+    internal_files_raw = request.GET.getlist("internal_file")
     if not containers:
         return JsonResponse({"entries": []})
     try:
@@ -109,11 +110,21 @@ def logs_data(request, conn=None, url=None, **kwargs):
     except ValueError:
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
     try:
+        internal_files = {}
+        for value in internal_files_raw:
+            if not value or "/" not in value:
+                continue
+            service, filename = value.split("/", 1)
+            if service not in ("omeroserver_internal", "omeroweb_internal"):
+                continue
+            if filename:
+                internal_files.setdefault(service, set()).add(filename)
         entries = fetch_loki_logs(
             log_config,
             containers,
             lookback_seconds,
             max_entries,
+            internal_files=internal_files,
         )
     except RuntimeError as exc:  # pragma: no cover - network errors
         return JsonResponse(
