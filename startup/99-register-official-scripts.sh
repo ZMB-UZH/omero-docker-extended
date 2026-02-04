@@ -60,6 +60,16 @@ upload_one() {
     script="$1"
     base="$(basename "${script}" .py)"
 
+    # Compute the expected script "path/name" as shown by `omero script list`.
+    # Depending on OMERO/CLI, it may show either:
+    #   figure_scripts/Roi_Figure.py
+    # or
+    #   omero/figure_scripts/Roi_Figure.py
+    rel="${script#${SCRIPTS_DIR}/}"
+    rel_no_ext="${rel%.py}"
+    match_a="${rel_no_ext}"
+    match_b="omero/${rel_no_ext}"
+
     # Check if script already exists and get its ID
     existing_id=$("${OMERO_BIN}" script list \
             -s "${OMERO_HOST}" \
@@ -70,16 +80,16 @@ upload_one() {
             </dev/null 2>/dev/null \
             | grep -E "^\s*[0-9]+" \
             | while IFS='|' read -r id name rest; do
+                clean_id=$(echo "$id" | sed 's/^ *//;s/ *$//')
                 clean_name=$(echo "$name" | sed 's/^ *//;s/ *$//;s/\.py$//')
-                if [ "$clean_name" = "$base" ]; then
-                    echo "$id" | sed 's/^ *//;s/ *$//'
-                    break
+                if [ "$clean_name" = "$match_a" ] || [ "$clean_name" = "$match_b" ]; then
+                    echo "${clean_id}"
                 fi
-            done)
+            done | sort -n | tail -n 1)
 
     if [ -n "$existing_id" ]; then
         echo "[OMERO scripts] Replacing existing script: ${base} (ID: ${existing_id})"
-        
+
         # Use script replace to update the existing script
         if "${OMERO_BIN}" script replace "${existing_id}" "${script}" \
                 -s "${OMERO_HOST}" \
@@ -99,7 +109,7 @@ upload_one() {
                 -w "${ROOTPASS}" \
                 --sudo root \
                 </dev/null 2>/dev/null || true
-            
+
             "${OMERO_BIN}" script upload \
                 --official \
                 --sudo root \
@@ -137,4 +147,3 @@ echo "[OMERO scripts] Parallel upload (max ${MAX_PARALLEL})"
 
     echo "[OMERO scripts] Registration finished"
 ) >> /opt/omero/server/OMERO.server/var/log/register-official-scripts.log 2>&1 &
-
