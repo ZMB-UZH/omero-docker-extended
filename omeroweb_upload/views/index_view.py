@@ -109,12 +109,12 @@ def _start_upload(request, conn):
 
     session_key = _get_session_key(conn)
     if not session_key:
-        logger.warning("Unable to resolve Omero session key for upload start.")
+        logger.warning("Unable to resolve OMERO session key for upload start.")
         return json_error(errors.unable_resolve_session())
 
     host, port = _resolve_omero_host_port(conn)
     if not host or not port:
-        logger.warning("Unable to resolve Omero host/port for upload start.")
+        logger.warning("Unable to resolve OMERO host/port for upload start.")
         return json_error(errors.unable_resolve_host_port())
 
     normalized = []

@@ -4,7 +4,7 @@ BYTES_PER_GB = 1024 * 1024 * 1024
 MAX_UPLOAD_BATCH_GB = 1024
 MAX_UPLOAD_BATCH_BYTES = MAX_UPLOAD_BATCH_GB * BYTES_PER_GB
 
-# Omero web virtualenv (used for CLI and other tooling).
+# OMERO.web virtualenv (used for CLI and other tooling).
 # Override via environment when the venv name changes.
 OMERO_WEB_ROOT = os.environ.get("OMERO_WEB_ROOT", "/opt/omero/web")
 OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
