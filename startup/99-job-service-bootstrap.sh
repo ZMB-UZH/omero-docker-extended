@@ -158,13 +158,46 @@ DEFAULT_GROUP_NAME="${OMERO_JOB_SERVICE_DEFAULT_GROUP_NAME:-user}"
 
 echo "Ensuring ${JOB_USER} has a default group (${DEFAULT_GROUP_NAME})..."
 
-VENV_BIN_DIR="$(dirname "${OMERO_BIN}")"
-OMERO_PY="${VENV_BIN_DIR}/python"
+resolve_omero_python() {
+    local -a candidates
+    local candidate
 
-if [[ ! -x "${OMERO_PY}" ]]; then
-    echo "ERROR: Cannot find python next to OMERO_BIN: ${OMERO_PY}" >&2
-    exit 1
-fi
+    candidates=()
+    if [[ -n "${OMERO_PYTHON:-}" ]]; then
+        candidates+=("${OMERO_PYTHON}")
+    fi
+
+    candidates+=(
+        "$(dirname "${OMERO_BIN}")/python"
+        "/opt/omero/server/venv-3.11/bin/python"
+        "/opt/omero/server/venv3/bin/python"
+    )
+
+    shopt -s nullglob
+    for candidate in /opt/omero/server/venv-*/bin/python; do
+        candidates+=("${candidate}")
+    done
+    shopt -u nullglob
+
+    for candidate in "${candidates[@]}"; do
+        if [[ -x "${candidate}" ]]; then
+            if "${candidate}" -c "import omero" >/dev/null 2>&1; then
+                echo "${candidate}"
+                return 0
+            fi
+        fi
+    done
+
+    echo "ERROR: Unable to locate a Python interpreter with OMERO.py installed." >&2
+    echo "Tried candidates:" >&2
+    for candidate in "${candidates[@]}"; do
+        echo "  - ${candidate}" >&2
+    done
+    return 1
+}
+
+OMERO_PY="$(resolve_omero_python)"
+echo "Using OMERO Python: ${OMERO_PY}"
 
 "${OMERO_PY}" - <<EOF
 import omero
