@@ -10,7 +10,7 @@ services:
     command: -config.file=/etc/loki/loki-config.yml
     hostname: loki
     networks:
-      omero
+      omero:
         aliases:
           - loki
     ports:
@@ -34,7 +34,7 @@ services:
       - "/etc/alloy/alloy-config.alloy"
     hostname: alloy
     networks:
-      omero
+      omero:
         aliases:
           - alloy
     volumes:
@@ -70,7 +70,7 @@ services:
       PGTZ: Europe/Zurich
     hostname: database
     networks:
-      omero
+      omero:
         aliases:
           - database
     volumes:
@@ -96,7 +96,7 @@ services:
       - ./omeroserver.env
     hostname: omeroserver
     networks:
-      omero
+      omero:
         aliases:
           - omeroserver
     ports:
@@ -136,7 +136,7 @@ services:
       TZ: Europe/Zurich
     hostname: redis
     networks:
-      omero
+      omero:
         aliases:
           - redis
     depends_on:
@@ -167,7 +167,7 @@ services:
       - ./omeroweb.env
     hostname: omeroweb
     networks:
-      omero
+      omero:
         aliases:
           - omeroweb
     ports:
@@ -206,7 +206,7 @@ services:
       PGTZ: Europe/Zurich
     hostname: database-plugin
     networks:
-      omero
+      omero:
         aliases:
           - database-plugin
     volumes:
