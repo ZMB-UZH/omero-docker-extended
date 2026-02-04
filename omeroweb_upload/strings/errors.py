@@ -8,7 +8,7 @@ def upload_start_post_required():
 
 
 def upload_folder_not_writable():
-    return "Upload folder is not writable. Please configure Omero_WEB_UPLOAD_DIR."
+    return "Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR."
 
 
 def no_files_provided():
@@ -20,11 +20,11 @@ def invalid_project_selection():
 
 
 def unable_resolve_session():
-    return "Unable to resolve Omero session."
+    return "Unable to resolve OMERO session."
 
 
 def unable_resolve_host_port():
-    return "Unable to resolve Omero host/port."
+    return "Unable to resolve OMERO host/port."
 
 
 def invalid_file_paths(paths):
@@ -80,7 +80,7 @@ def unexpected_server_error_importing():
 
 
 def missing_omero_connection_details():
-    return "Missing Omero connection details for import."
+    return "Missing OMERO connection details for import."
 
 
 def upload_folder_missing_on_server():

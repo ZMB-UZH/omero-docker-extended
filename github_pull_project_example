@@ -101,10 +101,10 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
 fi
 
 if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
-    echo "Building all Omero-related containers (cache enabled)..."
+    echo "Building all OMERO-related containers (cache enabled)..."
     docker compose -f "${COMPOSE_FILE}" build
 else
-    echo "Building all Omero-related containers (no cache)..."
+    echo "Building all OMERO-related containers (no cache)..."
     docker compose -f "${COMPOSE_FILE}" build --no-cache
 fi
 

@@ -18,8 +18,8 @@ OMERO = OMERO_CLI
 @login_required()
 def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
-    Delete ALL MapAnnotations for ALL images in a given project using Omero CLI.
-    - Logs in once with the current OMERO web user + provided password
+    Delete ALL MapAnnotations for ALL images in a given project using OMERO CLI.
+    - Logs in once with the current OMERO.web user + provided password
     - Deletes in batches for speed
     """
     try:
@@ -38,7 +38,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         if not password:
             return JsonResponse({"error": errors.missing_password()}, status=400)
 
-        # Omero web username from current web session
+        # OMERO.web username from current web session
         username = conn.getUser().getName()
 
         # 1) LOGOUT first to clear any cached sessions

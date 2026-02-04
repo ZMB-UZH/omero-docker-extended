@@ -1,4 +1,4 @@
-## Custom Omero server image with Omero figure PDF export dependencies installed
+## Custom OMERO.server image with OMERO.Figure PDF export dependencies installed
 # Needs to match the tag in docker-compose.yml
 
 FROM openmicroscopy/omero-server@sha256:990f257d4fb5a82d66d2c90f48308671f3b1b40434909de5f59751230b4aace7
@@ -21,7 +21,7 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Locate Omero server venv and fail fast if layout changes
+# Locate OMERO.server venv and fail fast if layout changes
 # --------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
@@ -42,11 +42,11 @@ RUN set -euo pipefail; \
         ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
     fi
 
-# Security hardening: upgrade selected Python tooling inside OMERO server venv
+# Security hardening: upgrade selected Python tooling inside OMERO.server venv
 # WARNING:
-# - Affects Omero server Python gateway
+# - Affects OMERO.server Python gateway
 # - Remove immediately if Blitz / TLS / import issues occur
-# - Uses >= only (no pinning), matching Omero web policy
+# - Uses >= only (no pinning), matching OMERO.web policy
 # ------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
@@ -57,7 +57,7 @@ RUN set -euo pipefail; \
         cryptography>=42.0.0 \
         urllib3>=2.6.3
 
-# Install Omero figure PDF export dependencies in the Omero server virtualenv
+# Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
@@ -65,7 +65,7 @@ RUN set -euo pipefail; \
         reportlab \
         markdown
 
-# Install several Omero CLI plugins (official + unofficial)
+# Install several OMERO CLI plugins (official + unofficial)
 # ---------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
@@ -203,7 +203,7 @@ RUN set -euo pipefail; \
     chown root:root /startup/11-configure-nodedescriptors.sh; \
     chmod 0555 /startup/11-configure-nodedescriptors.sh
 
-# Install Omero downloader
+# Install OMERO downloader
 # ------------------------
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 RUN set -euo pipefail; \
@@ -223,7 +223,7 @@ RUN set -euo pipefail; \
     echo "/opt/omero/imarisconvert" > /etc/ld.so.conf.d/imarisconvert.conf; \
     ldconfig
 
-# Copy IMS export script to Omero scripts directory
+# Copy IMS export script to OMERO scripts directory
 # -------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts; \
@@ -234,15 +234,15 @@ RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py; \
     chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py
 
-# Register official Omero scripts AFTER Omero server startup
+# Register official OMERO scripts AFTER OMERO.server startup
 # ----------------------------------------------------------
 COPY startup/99-register-official-scripts.sh /startup/99-register-official-scripts.sh
 RUN set -euo pipefail; \
     chown root:root /startup/99-register-official-scripts.sh; \
     chmod 0555 /startup/99-register-official-scripts.sh
 
-# Ensure Omero SSL cert contains SAN DNS:omeroserver (required for
-# secure BlitzGateway from Omero web when connecting to host "omeroserver")
+# Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
+# secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
 # -------------------------------------------------------------------------
 COPY startup/omero-server.sh /startup/05-omero-cert-sans.sh
 RUN set -euo pipefail; \
@@ -250,7 +250,7 @@ RUN set -euo pipefail; \
     chmod 0555 /startup/05-omero-cert-sans.sh
 
 # Bootstrap job-service user (auto-create if missing)
-# MUST run AFTER Omero server (Glacier2) is up
+# MUST run AFTER OMERO.server (Glacier2) is up
 # --------------------------------------------
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
