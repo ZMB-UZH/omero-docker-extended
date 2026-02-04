@@ -69,10 +69,12 @@ PROJECT_NAME="$(basename "${BASE_DIR}")"
 OMERO_VOLUME="${PROJECT_NAME}_omero"
 
 if docker volume inspect "${OMERO_VOLUME}" >/dev/null 2>&1; then
+    CLEANUP_IMAGE="alpine:3.20"
     docker run --rm \
         -v "${OMERO_VOLUME}:/OMERO" \
-        alpine:3.20 \
+        "${CLEANUP_IMAGE}" \
         sh -lc 'find /OMERO -name "*.lock" -delete || true'
+    docker image rm "${CLEANUP_IMAGE}" >/dev/null 2>&1 || true
 else
     echo "WARNING: Volume ${OMERO_VOLUME} not found; skipping lock cleanup."
 fi
