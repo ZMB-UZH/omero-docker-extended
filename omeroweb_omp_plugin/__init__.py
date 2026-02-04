@@ -1,4 +1,4 @@
-"""Omero web OMP plugin."""
+"""OMERO.web OMP plugin."""
 default_app_config = "omeroweb_omp_plugin.apps.OMPPluginConfig"
 
 from .views.index_view import index

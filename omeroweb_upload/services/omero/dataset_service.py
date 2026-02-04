@@ -73,7 +73,7 @@ def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
 
 
 # --------------------------------------------------------------------------
-# Omero IMPORT HELPERS
+# OMERO IMPORT HELPERS
 # --------------------------------------------------------------------------
 
 def _resolve_omero_host_port(conn):
@@ -217,5 +217,4 @@ def _iter_accessible_projects(conn):
     except Exception as e:
         logger.warning("Failed to list projects: %s", e)
         return
-
 

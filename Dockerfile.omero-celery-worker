@@ -1,7 +1,7 @@
 ## Dedicated Celery worker image for OMERO Imaris exports
 # Keeps Celery runtime separate from OMERO.web and OMERO.server images.
 
-## Dedicated Celery worker image for Omero Imaris exports
+## Dedicated Celery worker image for OMERO Imaris exports
 ## Ubuntu 24.04 base (NOT slim), pinned Python packages.
 
 FROM ubuntu:24.04

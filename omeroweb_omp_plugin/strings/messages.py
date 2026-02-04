@@ -217,7 +217,7 @@ def progress_completed():
     return "Completed. Processed {done} images (unique IDs)."
 
 def delete_all_password_prompt():
-    return "Enter your Omero password to delete ALL key-value pairs:"
+    return "Enter your OMERO password to delete ALL key-value pairs:"
 
 def delete_all_progress():
     return "Deleting ALL key-value pairs…"
@@ -226,7 +226,7 @@ def delete_all_job_label():
     return "Delete ALL key-value pairs"
 
 def delete_plugin_password_prompt():
-    return "Enter your Omero password to delete ONLY plugin key-value pairs:"
+    return "Enter your OMERO password to delete ONLY plugin key-value pairs:"
 
 def delete_plugin_progress():
     return "Deleting ONLY plugin key-value pairs…"
