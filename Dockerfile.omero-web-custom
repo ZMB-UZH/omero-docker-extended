@@ -48,13 +48,13 @@ RUN set -euo pipefail; \
         fi; \
     fi
 
-## NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!!
-## Optional: apply OS updates at build time
-## -----------------------------------------
-#RUN set -euo pipefail; \
-#    if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
-#        dnf -y update --security || dnf -y update; \
-#    fi
+# NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!!
+# Optional: apply OS updates at build time
+# -----------------------------------------
+RUN set -euo pipefail; \
+    if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
+        dnf -y update --security || dnf -y update; \
+    fi
 
 # Install build dependencies required for installing OMERO Python API (omero-py)
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler.
