@@ -75,8 +75,8 @@ RUN set -euo pipefail; \
         omero-cli-duplicate \
         omero-rdf
 
- Install runtime diagnostics + git
- ---------------------------------
+# Install runtime diagnostics + git
+# ---------------------------------
 RUN set -euo pipefail; \
 # The following 3 lines are NOT SUGGESTED!! Use ONLY for vulnerability testing!!
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
