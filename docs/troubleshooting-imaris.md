@@ -27,6 +27,27 @@ You may see:
    never complete.
 6. **Missing Processor service in node descriptors**: If `Processor-0` is not
    listed in `omero.server.nodedescriptors`, script processes will not start.
+7. **Scripts not registered in OMERO**: OMERO.web lists scripts that are
+   registered with the server. Official scripts are bundled with OMERO.server,
+   but they still need to be registered and visible to the Script service.
+
+> The OMERO.scripts user guide focuses on authoring and uploading scripts. It
+> does not document server-side processor capacity settings, which are required
+> for scripts to run. The checks below target those server-side settings.
+
+## Script registration reference (official docs)
+
+OMERO 5.6 docs confirm that scripts placed under `lib/scripts` are treated as
+trusted and detected by OMERO.server. If the OMERO.web Scripts menu is empty,
+verify that registration ran and the Script service is responding:
+
+- https://omero.readthedocs.io/en/stable/sysadmins/installing-scripts.html
+- https://omero.readthedocs.io/en/stable/developers/scripts/user-guide.html
+
+> Note: The docs describe OMERO.scripts being executed via the internal
+> OMERO.grid services. This does **not** require a separate grid deployment when
+> running OMERO.server and OMERO.web on the same machine; it is still the same
+> single-host setup.
 
 ## Diagnostic commands (Docker Compose)
 
@@ -39,8 +60,10 @@ You may see:
   /opt/omero/server/OMERO.server/bin/omero config get omero.scripts.processors
 ```
 
-Expected: a positive integer (>= 1). If it is missing or `0`, the container
-startup script now attempts to derive a value from
+Expected: a positive integer (>= 1). This property is set by our
+`startup/10-configure-script-processors.sh` during container startup and may not
+be listed in the general OMERO configuration docs. If it is missing or `0`, the
+startup script attempts to derive a value from
 `CONFIG_omero_server_nodedescriptors` (counting `Processor-*` entries). If
 derivation fails, set a value manually and restart:
 
@@ -64,6 +87,13 @@ If no script processes are listed, ensure the server starts them (and that
 ```bash
 <compose> exec omeroserver \
   /opt/omero/server/OMERO.server/bin/omero script list
+```
+
+If this command fails, inspect the script registration log created at startup:
+
+```bash
+<compose> exec omeroserver \
+  tail -n 200 /opt/omero/server/OMERO.server/var/log/register-official-scripts.log
 ```
 
 ### 4) Inspect recent server/web logs
