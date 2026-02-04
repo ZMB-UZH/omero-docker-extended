@@ -3,7 +3,7 @@
 ## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
 # when the Omero developers update the container
 
-FROM openmicroscopy/omero-web-standalone:5
+FROM openmicroscopy/omero-web-standalone@sha256:25c126b9cc555236957b0e59f6690ab892a9a008d407023e7cc739c51ce2a52e
 
 # Run as root to avoid permission issues
 # --------------------------------------
