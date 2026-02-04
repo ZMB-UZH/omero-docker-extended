@@ -113,7 +113,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s localhost -p 4064 login >/dev/null 2>&1"
+          "/opt/omero/server/OMERO.server/bin/omero -s omeroserver -p 4064 login >/dev/null 2>&1"
         ]
       interval: 10s
       timeout: 10s
