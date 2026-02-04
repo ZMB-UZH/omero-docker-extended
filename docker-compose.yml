@@ -8,11 +8,11 @@ services:
     image: "grafana/loki:3.2.0"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
-    hostname: loki
+#    hostname: loki
     networks:
       omero:
-        aliases:
-          - loki
+   #     aliases:
+    #      - loki
     ports:
       - "3100:3100"
     volumes:
@@ -32,11 +32,11 @@ services:
     command:
       - "run"
       - "/etc/alloy/alloy-config.alloy"
-    hostname: alloy
+#    hostname: alloy
     networks:
       omero:
-        aliases:
-          - alloy
+ #       aliases:
+  #        - alloy
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -68,11 +68,11 @@ services:
       POSTGRES_PASSWORD: ShR3K413CPh0Q2r
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-    hostname: database
+   # hostname: database
     networks:
       omero:
-        aliases:
-          - database
+    #    aliases:
+     #     - database
     volumes:
       - database:/var/lib/postgresql:rw
     healthcheck:
@@ -95,11 +95,11 @@ services:
       - no-new-privileges:true
     env_file:
       - ./omeroserver.env
-    hostname: omeroserver
+  #  hostname: omeroserver
     networks:
       omero:
-        aliases:
-          - omeroserver
+   #     aliases:
+    #      - omeroserver
     ports:
       - "4064:4064"
     volumes:
@@ -135,11 +135,11 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
-    hostname: redis
+  #  hostname: redis
     networks:
       omero:
-        aliases:
-          - redis
+   #     aliases:
+    #      - redis
     depends_on:
       redis-sysctl-init:
         condition: service_completed_successfully
@@ -167,11 +167,11 @@ services:
       - no-new-privileges:true
     env_file:
       - ./omeroweb.env
-    hostname: omeroweb
+  #  hostname: omeroweb
     networks:
       omero:
-        aliases:
-          - omeroweb
+   #     aliases:
+    #      - omeroweb
     ports:
       - "4090:4090"
     volumes:
@@ -206,11 +206,11 @@ services:
       PGPORT: 5433
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-    hostname: database-plugin
+   # hostname: database-plugin
     networks:
       omero:
-        aliases:
-          - database-plugin
+    #    aliases:
+     #     - database-plugin
     volumes:
       - database_plugin:/var/lib/postgresql:rw
     healthcheck:
