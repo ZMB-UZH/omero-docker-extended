@@ -4,6 +4,24 @@ set -euo pipefail
 processors_raw="${CONFIG_omero_scripts_processors:-}"
 nodedescriptors_raw="${CONFIG_omero_server_nodedescriptors:-}"
 
+ensure_processor_descriptor() {
+    local raw="${1:-}"
+    if [[ -z "${raw}" ]]; then
+        echo ""
+        return
+    fi
+    if [[ "${raw}" == *"Processor"* ]]; then
+        echo "${raw}"
+        return
+    fi
+    echo "${raw},Processor-0"
+}
+
+nodedescriptors_normalized="$(ensure_processor_descriptor "${nodedescriptors_raw}")"
+if [[ -n "${nodedescriptors_raw}" && "${nodedescriptors_normalized}" != "${nodedescriptors_raw}" ]]; then
+    echo "WARNING: CONFIG_omero_server_nodedescriptors missing Processor entry; using '${nodedescriptors_normalized}' for processor count derivation." >&2
+fi
+
 count_processors() {
     local raw="${1:-}"
     local matches
@@ -23,7 +41,7 @@ count_processors() {
 }
 
 if [[ -z "${processors_raw}" ]]; then
-    derived_count="$(count_processors "${nodedescriptors_raw}")"
+    derived_count="$(count_processors "${nodedescriptors_normalized}")"
     if [[ "${derived_count}" -lt 1 ]]; then
         echo "ERROR: CONFIG_omero_scripts_processors must be set to a positive integer." >&2
         echo "ERROR: CONFIG_omero_server_nodedescriptors does not include Processor entries to derive a default." >&2
@@ -39,7 +57,7 @@ if ! [[ "${processors_raw}" =~ ^[0-9]+$ ]]; then
 fi
 
 if [[ "${processors_raw}" -lt 1 ]]; then
-    derived_count="$(count_processors "${nodedescriptors_raw}")"
+    derived_count="$(count_processors "${nodedescriptors_normalized}")"
     if [[ "${derived_count}" -ge 1 ]]; then
         echo "WARNING: CONFIG_omero_scripts_processors=${processors_raw}; using ${derived_count} derived from CONFIG_omero_server_nodedescriptors." >&2
         processors_raw="${derived_count}"

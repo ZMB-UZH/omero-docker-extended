@@ -9,9 +9,8 @@ if [[ -z "${nodedescriptors_raw}" ]]; then
 fi
 
 if [[ "${nodedescriptors_raw}" != *"Processor"* ]]; then
-    echo "ERROR: CONFIG_omero_server_nodedescriptors must include a Processor service." >&2
-    echo "Example: master:Blitz-0,Tables-0,Indexer-0,PixelData-0,DropBox,MonitorServer,FileServer,Processor-0" >&2
-    exit 1
+    echo "WARNING: CONFIG_omero_server_nodedescriptors missing Processor entry; appending Processor-0." >&2
+    nodedescriptors_raw="${nodedescriptors_raw},Processor-0"
 fi
 
 /opt/omero/server/OMERO.server/bin/omero config set \
