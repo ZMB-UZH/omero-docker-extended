@@ -126,6 +126,61 @@ def test_run_script_fails_fast_when_processors_disabled(monkeypatch: pytest.Monk
     assert service.calls == 1
 
 
+def test_run_script_fails_fast_when_processor_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_omero_stub()
+    from omeroweb_imaris_connector import imaris_service
+
+    class DummyService:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def runScript(self, *args, **kwargs):
+            self.calls += 1
+            raise NoProcessorAvailable("No processor available")
+
+    class DummyConfigService:
+        def getConfigValue(self, key):
+            if key == "omero.scripts.processors":
+                return "2"
+            if key == "omero.server.nodedescriptors":
+                return "master:Blitz-0,Tables-0"
+            raise AssertionError(f"Unexpected config key: {key}")
+
+    class DummyServiceFactory:
+        def getConfigService(self):
+            return DummyConfigService()
+
+    class DummyConn:
+        def __init__(self) -> None:
+            self.c = types.SimpleNamespace(sf=DummyServiceFactory())
+
+        def isAdmin(self) -> bool:
+            return True
+
+    service = DummyService()
+    conn = DummyConn()
+
+    monkeypatch.setattr(imaris_service, "_get_script_services", lambda conn: [service])
+    monkeypatch.setattr(
+        imaris_service,
+        "_iter_script_methods",
+        lambda svc: [("runScript", svc.runScript)],
+    )
+    monkeypatch.setattr(imaris_service, "SCRIPT_START_TIMEOUT", 999)
+    monkeypatch.setattr(imaris_service, "SCRIPT_START_RETRY_INTERVAL", 0)
+    monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        imaris_service,
+        "_PROCESSOR_CONFIG_CACHE",
+        {"value": None, "checked_at": 0.0},
+    )
+
+    with pytest.raises(RuntimeError, match="nodedescriptors does not include a Processor"):
+        imaris_service._run_script(conn, script_id=1, image_id=2, wait_secs=0)
+
+    assert service.calls == 1
+
+
 def test_wait_for_process_detaches_after_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
