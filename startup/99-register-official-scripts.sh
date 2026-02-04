@@ -60,23 +60,60 @@ upload_one() {
     script="$1"
     base="$(basename "${script}" .py)"
 
-    if "${OMERO_BIN}" script list \
+    # Check if script already exists and get its ID
+    existing_id=$("${OMERO_BIN}" script list \
             -s "${OMERO_HOST}" \
             -p "${OMERO_PORT}" \
             -u root \
             -w "${ROOTPASS}" \
             --sudo root \
-            </dev/null \
-            | awk -F'|' '{print $2}' \
-            | sed 's/^ *//;s/ *$//' \
-            | sed 's/\.py$//' \
-            | grep -qx "${base}"
-    then
-        echo "[OMERO scripts] Skipping: ${base}"
+            </dev/null 2>/dev/null \
+            | grep -E "^\s*[0-9]+" \
+            | while IFS='|' read -r id name rest; do
+                clean_name=$(echo "$name" | sed 's/^ *//;s/ *$//;s/\.py$//')
+                if [ "$clean_name" = "$base" ]; then
+                    echo "$id" | sed 's/^ *//;s/ *$//'
+                    break
+                fi
+            done)
+
+    if [ -n "$existing_id" ]; then
+        echo "[OMERO scripts] Replacing existing script: ${base} (ID: ${existing_id})"
+        
+        # Use script replace to update the existing script
+        if "${OMERO_BIN}" script replace "${existing_id}" "${script}" \
+                -s "${OMERO_HOST}" \
+                -p "${OMERO_PORT}" \
+                -u root \
+                -w "${ROOTPASS}" \
+                --sudo root \
+                </dev/null 2>&1; then
+            echo "[OMERO scripts] Replaced: ${base}"
+        else
+            echo "[OMERO scripts] Replace failed for ${base}, trying delete+upload"
+            # Fallback: delete and re-upload
+            "${OMERO_BIN}" script delete "${existing_id}" \
+                -s "${OMERO_HOST}" \
+                -p "${OMERO_PORT}" \
+                -u root \
+                -w "${ROOTPASS}" \
+                --sudo root \
+                </dev/null 2>/dev/null || true
+            
+            "${OMERO_BIN}" script upload \
+                --official \
+                --sudo root \
+                -s "${OMERO_HOST}" \
+                -p "${OMERO_PORT}" \
+                -u root \
+                -w "${ROOTPASS}" \
+                "${script}" \
+                </dev/null
+        fi
         return 0
     fi
 
-    echo "[OMERO scripts] Uploading: ${base}"
+    echo "[OMERO scripts] Uploading new: ${base}"
 
     "${OMERO_BIN}" script upload \
         --official \
