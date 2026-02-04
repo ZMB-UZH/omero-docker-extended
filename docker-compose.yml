@@ -10,9 +10,9 @@ services:
     command: -config.file=/etc/loki/loki-config.yml
     hostname: loki
     networks:
-      - omero
-          aliases:
-            - loki
+      omero
+        aliases:
+          - loki
     ports:
       - "3100:3100"
     volumes:
@@ -34,9 +34,9 @@ services:
       - "/etc/alloy/alloy-config.alloy"
     hostname: alloy
     networks:
-      - omero
-          aliases:
-            - alloy
+      omero
+        aliases:
+          - alloy
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -70,9 +70,9 @@ services:
       PGTZ: Europe/Zurich
     hostname: database
     networks:
-      - omero
-          aliases:
-            - database
+      omero
+        aliases:
+          - database
     volumes:
       - database:/var/lib/postgresql:rw
     healthcheck:
@@ -96,9 +96,9 @@ services:
       - ./omeroserver.env
     hostname: omeroserver
     networks:
-      - omero
-          aliases:
-            - omeroserver
+      omero
+        aliases:
+          - omeroserver
     ports:
       - "4064:4064"
     volumes:
@@ -136,9 +136,9 @@ services:
       TZ: Europe/Zurich
     hostname: redis
     networks:
-      - omero
-          aliases:
-            - redis
+      omero
+        aliases:
+          - redis
     depends_on:
       redis-sysctl-init:
         condition: service_completed_successfully
@@ -167,9 +167,9 @@ services:
       - ./omeroweb.env
     hostname: omeroweb
     networks:
-      - omero
-          aliases:
-            - omeroweb
+      omero
+        aliases:
+          - omeroweb
     ports:
       - "4090:4090"
     volumes:
@@ -206,9 +206,9 @@ services:
       PGTZ: Europe/Zurich
     hostname: database-plugin
     networks:
-      - omero
-          aliases:
-            - database-plugin
+      omero
+        aliases:
+          - database-plugin
     volumes:
       - database_plugin:/var/lib/postgresql:rw
     healthcheck:
