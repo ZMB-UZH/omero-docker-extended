@@ -223,9 +223,9 @@ networks:
 
 volumes:
   database:
+  database_plugin:
   omero:
   omero_upload:
-  database_plugin:
   omero_server_logs:
   omero_web_logs:
   omero_web_supervisor_logs:
