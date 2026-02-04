@@ -54,7 +54,7 @@ services:
       start_period: 10s
 
   database:
-    image: "postgres:18"
+    image: "postgres:18.1"
     restart: unless-stopped
     command:
       - "postgres"
@@ -121,14 +121,14 @@ services:
       start_period: 60s
 
   redis-sysctl-init:
-    image: "redis:8-alpine"
+    image: "redis:8.4.0-alpine"
     privileged: true
     restart: "no"
     command: ["sh", "-c", "sysctl -w vm.overcommit_memory=1 || true"]
     network_mode: none
 
   redis:
-    image: "redis:8-alpine"
+    image: "redis:8.4.0-alpine"
     restart: unless-stopped
     # Disable persistence for RAM storage only
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
@@ -189,7 +189,7 @@ services:
       start_period: 20s
 
   database_plugin:
-    image: "postgres:18"
+    image: "postgres:18.1"
     restart: unless-stopped
     command:
       - "postgres"
