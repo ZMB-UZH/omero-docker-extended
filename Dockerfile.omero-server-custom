@@ -190,12 +190,12 @@ RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
 
-# Reset OMERO runtime state on every container start (KEEP /OMERO + DB)
-# ---------------------------------------------------------------------
-COPY startup/00-reset-omero-runtime.sh /startup/00-reset-omero-runtime.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/00-reset-omero-runtime.sh; \
-    chmod 0555 /startup/00-reset-omero-runtime.sh
+## Reset OMERO runtime state on every container start (KEEP /OMERO + DB)
+## ---------------------------------------------------------------------
+#COPY startup/00-reset-omero-runtime.sh /startup/00-reset-omero-runtime.sh
+#RUN set -euo pipefail; \
+#    chown root:root /startup/00-reset-omero-runtime.sh; \
+#    chmod 0555 /startup/00-reset-omero-runtime.sh
 
 # Install OMERO downloader
 # ------------------------
