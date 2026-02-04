@@ -9,7 +9,6 @@ services:
     image: "grafana/loki:3.2.0"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
-    hostname: loki
     networks:
       omero:
         aliases:
@@ -33,7 +32,6 @@ services:
     command:
       - "run"
       - "/etc/alloy/alloy-config.alloy"
-    hostname: alloy
     networks:
       omero:
         aliases:
@@ -69,7 +67,6 @@ services:
       POSTGRES_PASSWORD: ShR3K413CPh0Q2r
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-    hostname: database
     networks:
       omero:
         aliases:
@@ -96,17 +93,15 @@ services:
       - no-new-privileges:true
     env_file:
       - ./omeroserver.env
-    hostname: omeroserver
     networks:
       omero:
         aliases:
           - omeroserver
     ports:
       - "4064:4064"
-    tmpfs:
-      - /opt/omero/server/OMERO.server/var:rw,nosuid,nodev,size=512m,mode=0755
     volumes:
       - "omero:/OMERO"
+      - omero_server_var:/opt/omero/server/OMERO.server/var:rw
       - omero_server_logs:${OMERO_SERVER_LOG_DIR:-/opt/omero/server/OMERO.server/var/log}:rw
     ulimits:
     # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
@@ -117,7 +112,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s omeroserver -p 4064 login -u root -w \"$${ROOTPASS}\" >/dev/null 2>&1"
+          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\" >/dev/null 2>&1"
         ]
       interval: 10s
       timeout: 10s
@@ -138,7 +133,6 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
-    hostname: redis
     networks:
       omero:
         aliases:
@@ -170,7 +164,6 @@ services:
       - no-new-privileges:true
     env_file:
       - ./omeroweb.env
-    hostname: omeroweb
     networks:
       omero:
         aliases:
@@ -209,7 +202,6 @@ services:
       PGPORT: 5433
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-    hostname: database-plugin
     networks:
       omero:
         aliases:
@@ -225,12 +217,14 @@ services:
 
 networks:
   omero:
+    internal: true
 
 volumes:
   database:
   database_plugin:
   omero:
   omero_upload:
+  omero_server_var:
   omero_server_logs:
   omero_web_logs:
   omero_web_supervisor_logs:
