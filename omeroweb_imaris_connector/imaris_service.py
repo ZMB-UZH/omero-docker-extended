@@ -499,6 +499,14 @@ def _run_script(
                             "Set CONFIG_omero_scripts_processors to a value >= 1 "
                             "and restart OMERO.server."
                         ) from exc
+                nodedescriptors = _get_node_descriptors_config(conn)
+                if nodedescriptors is not None and "Processor" not in nodedescriptors:
+                    raise RuntimeError(
+                        "No OMERO script processor is available because "
+                        "omero.server.nodedescriptors does not include a Processor service. "
+                        "Set CONFIG_omero_server_nodedescriptors to include Processor-0 "
+                        "and restart OMERO.server."
+                    ) from exc
 
                 elapsed = time.time() - start_time
                 if elapsed < SCRIPT_START_TIMEOUT:
@@ -584,6 +592,35 @@ def _can_read_script_config(conn) -> bool:
             logger.exception("Failed to determine OMERO admin status for config read")
             return False
     return True
+
+
+def _get_node_descriptors_config(conn):
+    if conn is None:
+        return None
+    if not _can_read_script_config(conn):
+        logger.debug(
+            "Skipping omero.server.nodedescriptors lookup for non-admin session."
+        )
+        return None
+    try:
+        config_service = conn.c.sf.getConfigService()
+        if config_service is None:
+            return None
+        value = config_service.getConfigValue("omero.server.nodedescriptors")
+        if value is None:
+            return None
+        return str(value).strip()
+    except Exception as exc:
+        if _is_security_violation(exc):
+            logger.debug(
+                "Cannot read omero.server.nodedescriptors due to SecurityViolation. "
+                "Use an admin session to check node descriptor configuration."
+            )
+        else:
+            logger.exception(
+                "Failed to read omero.server.nodedescriptors configuration value"
+            )
+        return None
 
 
 def _format_script_exception(exc: Exception) -> str:
