@@ -39,7 +39,10 @@ You may see:
   /opt/omero/server/OMERO.server/bin/omero config get omero.scripts.processors
 ```
 
-Expected: a positive integer (>= 1). If `0`, set a value and restart:
+Expected: a positive integer (>= 1). If it is missing or `0`, the container
+startup script now attempts to derive a value from
+`CONFIG_omero_server_nodedescriptors` (counting `Processor-*` entries). If
+derivation fails, set a value manually and restart:
 
 ```bash
 <compose> exec omeroserver \
