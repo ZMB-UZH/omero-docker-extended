@@ -60,12 +60,12 @@ def _build_omero_log_sources() -> List[Dict[str, str]]:
     return [
         {
             "key": "omeroserver_internal",
-            "label": "Omero server",
+            "label": "OMERO.server",
             "container": "omeroserver_internal",
         },
         {
             "key": "omeroweb_internal",
-            "label": "Omero web",
+            "label": "OMERO.web",
             "container": "omeroweb_internal",
         },
     ]

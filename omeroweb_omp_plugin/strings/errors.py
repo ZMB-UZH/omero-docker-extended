@@ -20,7 +20,7 @@ def missing_set_name():
     return "Missing set_name"
 
 def omero_web_login_failed():
-    return "Omero web login failed"
+    return "OMERO.web login failed"
 
 def no_images_found():
     return "No images found"

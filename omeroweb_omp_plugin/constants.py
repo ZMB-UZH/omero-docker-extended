@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Omero web virtualenv (used for CLI and other tooling).
+# OMERO.web virtualenv (used for CLI and other tooling).
 # Override via environment when the venv name changes.
 OMERO_WEB_ROOT = os.environ.get("OMERO_WEB_ROOT", "/opt/omero/web")
 OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
@@ -41,7 +41,7 @@ MAX_VARIABLE_SET_ENTRIES = 10
 COMMON_SEPARATORS = ['_', '-', '.', ' ', '__']
 
 # Namespaces used for MapAnnotations
-MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in Omero Web
+MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in OMERO.web
 
 # Plugin prefix marker (hash) for safe delete only what this plugin created
 
@@ -55,7 +55,7 @@ HASH_PREFIX = "omphash_v1:"
 PLUGIN_ID = "omeroweb_omp_plugin"
 
 # Optional secret for hashing. If unset/empty, hashing falls back to plain SHA256, which anyone could theoretically forge.
-# Recommended: set this as an environment variable for Omero web container.
+# Recommended: set this as an environment variable for OMERO.web container.
 HASH_SECRET_ENV = "FMP_HASH_SECRET"
 
 # Major action per-user rate limiter parameters
