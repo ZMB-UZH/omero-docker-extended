@@ -1,7 +1,7 @@
 ## ATTENTION!! Using the tag "latest" might be tempting but is extremely risky in production environments!
 # Needs to match the respective one in docker-compose.yml
 ## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
-# when the Omero developers update the container
+# when the OMERO developers update the container
 
 FROM openmicroscopy/omero-web-standalone@sha256:25c126b9cc555236957b0e59f6690ab892a9a008d407023e7cc739c51ce2a52e
 
@@ -23,7 +23,7 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Locate Omero web venv and fail fast if path or layout changes
+# Locate OMERO.web venv and fail fast if path or layout changes
 # -------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
