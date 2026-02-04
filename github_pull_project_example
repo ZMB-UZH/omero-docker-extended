@@ -61,6 +61,21 @@ else
         echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
     fi
 fi
+
+echo "Removing stale OMERO repository lock files from the OMERO volume (SAFE)..."
+
+PROJECT_NAME="$(basename "${BASE_DIR}")"
+OMERO_VOLUME="${PROJECT_NAME}_omero"
+
+if docker volume inspect "${OMERO_VOLUME}" >/dev/null 2>&1; then
+    docker run --rm \
+        -v "${OMERO_VOLUME}:/OMERO" \
+        alpine:3.20 \
+        sh -lc 'find /OMERO -name "*.lock" -delete || true'
+else
+    echo "WARNING: Volume ${OMERO_VOLUME} not found; skipping lock cleanup."
+fi
+
 # echo "Removing dangling images..."
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
 
@@ -96,3 +111,4 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
