@@ -93,6 +93,7 @@ services:
       - no-new-privileges:true
     env_file:
       - ./omeroserver.env
+    hostname: omeroserver
     networks:
       omero:
         aliases:
