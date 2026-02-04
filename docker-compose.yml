@@ -83,7 +83,7 @@ services:
       start_period: 10s
 
   omeroserver:
-    image: omeroserver_custom
+    image: omeroserver:custom
     build:
       context: .
       dockerfile: Dockerfile.omero-server-custom
@@ -153,7 +153,7 @@ services:
       start_period: 10s
 
   omeroweb:
-    image: omeroweb_custom
+    image: omeroweb:custom
     build:
       context: .
       dockerfile: Dockerfile.omero-web-custom
