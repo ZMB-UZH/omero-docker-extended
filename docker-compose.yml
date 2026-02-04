@@ -103,6 +103,8 @@ services:
           - omeroserver
     ports:
       - "4064:4064"
+    tmpfs:
+      - /opt/omero/server/OMERO.server/var:rw,nosuid,nodev,size=512m,mode=0755
     volumes:
       - "omero:/OMERO"
       - omero_server_logs:${OMERO_SERVER_LOG_DIR:-/opt/omero/server/OMERO.server/var/log}:rw
