@@ -44,6 +44,7 @@ SCRIPT_BACKUP="/tmp/${SCRIPT_NAME}.backup.$(date +%s)"
 cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
 
 echo "Pulling latest docker-compose.yml from GitHub..."
+rm -rf temp_clone
 git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
 if [ ! -d "temp_clone" ]; then
     echo "ERROR: Git clone failed"
@@ -111,4 +112,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
