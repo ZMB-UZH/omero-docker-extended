@@ -42,6 +42,19 @@ RUN set -euo pipefail; \
         ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
     fi
 
+# Create Python symlink in OMERO.server/bin for bootstrap script
+# --------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || -z "${SERVER_DIR}" ]]; then \
+        echo "ERROR: Could not find venv or OMERO.server directory" >&2; \
+        exit 1; \
+    fi; \
+    mkdir -p "${SERVER_DIR}/bin"; \
+    ln -sf "${VENV_DIR}/bin/python" "${SERVER_DIR}/bin/python"; \
+    echo "Created symlink: ${SERVER_DIR}/bin/python -> ${VENV_DIR}/bin/python"
+
 # NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!! Security hardening: upgrade selected Python tooling inside OMERO.server venv
 # WARNING:
 # - Affects OMERO.server Python gateway
