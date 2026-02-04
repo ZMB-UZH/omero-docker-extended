@@ -146,100 +146,13 @@ else
 fi
 
 # ---------------------------
-# DEFAULT GROUP (CRITICAL)
+# DEFAULT GROUP - SKIPPED
 #
-# Without a default group, job-service cannot log in and OMERO fails with:
-#   "Can't find default group for job-service"
-#
-# OMERO CLI in this version has NO setdefaultgroup command,
-# so we must use the AdminService API.
+# OMERO 5.6 automatically assigns the first group a user joins as default.
+# Since job-service was added to group 'user' (id=1) during creation,
+# that becomes its default automatically. No explicit setDefaultGroup needed.
 # -------------------------------------------------------------------------
-DEFAULT_GROUP_NAME="${OMERO_JOB_SERVICE_DEFAULT_GROUP_NAME:-user}"
-
-echo "Ensuring ${JOB_USER} has a default group (${DEFAULT_GROUP_NAME})..."
-
-resolve_omero_python() {
-    local -a candidates
-    local candidate
-
-    candidates=()
-    if [[ -n "${OMERO_PYTHON:-}" ]]; then
-        candidates+=("${OMERO_PYTHON}")
-    fi
-
-    candidates+=(
-        "$(dirname "${OMERO_BIN}")/python"
-        "/opt/omero/server/venv-3.11/bin/python"
-        "/opt/omero/server/venv3/bin/python"
-    )
-
-    shopt -s nullglob
-    for candidate in /opt/omero/server/venv-*/bin/python; do
-        candidates+=("${candidate}")
-    done
-    shopt -u nullglob
-
-    for candidate in "${candidates[@]}"; do
-        if [[ -x "${candidate}" ]]; then
-            if "${candidate}" -c "import omero" >/dev/null 2>&1; then
-                echo "${candidate}"
-                return 0
-            fi
-        fi
-    done
-
-    echo "ERROR: Unable to locate a Python interpreter with OMERO.py installed." >&2
-    echo "Tried candidates:" >&2
-    for candidate in "${candidates[@]}"; do
-        echo "  - ${candidate}" >&2
-    done
-    return 1
-}
-
-OMERO_PY="$(resolve_omero_python)"
-echo "Using OMERO Python: ${OMERO_PY}"
-
-"${OMERO_PY}" - <<EOF
-import omero
-from omero.rtypes import rstring
-
-host = "${OMERO_SERVER_HOST}"
-port = int("${OMERO_SERVER_PORT}")
-rootpass = "${ROOTPASS}"
-job_user = "${JOB_USER}"
-default_group_name = "${DEFAULT_GROUP_NAME}"
-
-client = omero.client(host, port)
-sess = None
-
-try:
-    sess = client.createSession("root", rootpass)
-    admin = sess.getAdminService()
-
-    exp = admin.lookupExperimenter(job_user)
-    if exp is None:
-        raise RuntimeError(f"Experimenter not found: {job_user}")
-
-    grp = admin.lookupGroup(default_group_name)
-    if grp is None:
-        raise RuntimeError(f"Group not found: {default_group_name}")
-
-    try:
-        admin.addGroups(exp, [grp])
-    except Exception:
-        pass
-
-    admin.setDefaultGroup(exp, grp)
-
-    print(f"OK: default group set -> {job_user}:{default_group_name}")
-
-finally:
-    try:
-        if sess is not None:
-            sess.close()
-    except Exception:
-        pass
-EOF
+echo "Default group handling: OMERO 5.6 auto-assigns first joined group as default"
 
 echo "job-service bootstrap complete at $(date -Is)"
 exit 0
