@@ -45,8 +45,8 @@ RUN set -euo pipefail; \
 # Create Python symlink in OMERO.server/bin for bootstrap script
 # --------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
-    SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || -z "${SERVER_DIR}" ]]; then \
         echo "ERROR: Could not find venv or OMERO.server directory" >&2; \
         exit 1; \
