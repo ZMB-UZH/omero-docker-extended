@@ -217,7 +217,6 @@ services:
 
 networks:
   omero:
-    internal: true
 
 volumes:
   database:
