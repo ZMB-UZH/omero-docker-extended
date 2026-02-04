@@ -3,10 +3,17 @@ set -euo pipefail
 
 echo "===== RESET OMERO RUNTIME STATE (KEEPING /OMERO + DB) ====="
 
-OMERO_HOME="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' | sort -V | tail -n 1)"
+if [[ -d "/opt/omero/server/OMERO.server" ]]; then
+    OMERO_HOME="/opt/omero/server/OMERO.server"
+else
+    OMERO_HOME="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' \
+        ! -name '*.zip' \
+        | sort -V | tail -n 1)"
+fi
 
-if [[ -z "${OMERO_HOME}" ]]; then
-    echo "FATAL: Could not locate extracted OMERO.server directory."
+if [[ -z "${OMERO_HOME}" || ! -d "${OMERO_HOME}" ]]; then
+    echo "ERROR: Could not detect a valid OMERO_HOME under /opt/omero/server" >&2
+    ls -la /opt/omero/server >&2 || true
     exit 1
 fi
 
