@@ -1,44 +1,57 @@
-## Dedicated Celery worker image for Omero Imaris exports
-# Keeps Celery runtime separate from Omero web and OMERO server images.
+## Dedicated Celery worker image for OMERO Imaris exports
+# Keeps Celery runtime separate from OMERO.web and OMERO.server images.
 
-FROM python:alpine
+## Dedicated Celery worker image for Omero Imaris exports
+## Ubuntu 24.04 base (NOT slim), pinned Python packages.
+
+FROM ubuntu:24.04
 
 USER root
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-ENV PIP_NO_CACHE_DIR=1 \
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Europe/Zurich \
+    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN set -euo pipefail; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
+        tzdata \
+        python3 \
+        python3-venv \
+        python3-pip \
         gcc \
         g++ \
         libstdc++6 \
-        libssl3 \
-        curl; \
+        libssl3; \
     rm -rf /var/lib/apt/lists/*
 
+# Create a venv so we never depend on "system pip" state
+ENV VENV=/opt/venv
 RUN set -euo pipefail; \
-    python -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
-    python -m pip install --no-cache-dir \
+    python3 -m venv "$VENV"; \
+    "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel; \
+    "$VENV/bin/python" -m pip install \
         "celery==5.3.6" \
         "redis==5.0.8" \
         "omero-py==5.21.2"
 
+# Non-root runtime user
 RUN set -euo pipefail; \
     groupadd --gid 10001 celery; \
     useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin celery
 
+# Install your in-tree python packages into the venv site-packages
 COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
 
 RUN set -euo pipefail; \
-    PY_VER="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
-    SITE_PACKAGES="/usr/local/lib/python${PY_VER}/site-packages"; \
+    SITE_PACKAGES="$("$VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')"; \
     rm -rf "${SITE_PACKAGES}/omeroweb_imaris_connector" "${SITE_PACKAGES}/omero_plugin_common"; \
     cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
@@ -48,3 +61,4 @@ RUN set -euo pipefail; \
     rm -rf /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common
 
 USER celery
+ENV PATH="/opt/venv/bin:${PATH}"
