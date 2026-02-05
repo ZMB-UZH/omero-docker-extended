@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Optional
 
+from omero_plugin_common.env_utils import (
+    ENV_FILE_OMEROWEB,
+    get_float_env,
+    get_int_env,
+    require_env,
+)
 
 @dataclass(frozen=True)
 class LogConfig:
@@ -17,39 +22,26 @@ class LogConfig:
     timeout_seconds: float
 
 
-def _get_int_env(name: str, default: int) -> int:
-    """Read an integer environment variable with validation."""
-    value = os.environ.get(name)
-    if value is None or value.strip() == "":
-        return default
-    try:
-        return int(value)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer.") from exc
-
-
-def _get_float_env(name: str, default: float) -> float:
-    """Read a float environment variable with validation."""
-    value = os.environ.get(name)
-    if value is None or value.strip() == "":
-        return default
-    try:
-        return float(value)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be a number.") from exc
-
-
 def build_log_config() -> LogConfig:
     """Build and validate the log configuration from environment variables."""
-    loki_url = os.environ.get("ADMIN_TOOLS_LOKI_URL")
-    if loki_url is None or loki_url.strip() == "":
-        raise ValueError(
-            "ADMIN_TOOLS_LOKI_URL must be set to the Loki base URL (e.g., http://loki:3100)."
-        )
+    loki_url = require_env(
+        "ADMIN_TOOLS_LOKI_URL",
+        env_file=ENV_FILE_OMEROWEB,
+        hint="Expected the Loki base URL (e.g., http://loki:3100).",
+    )
 
-    lookback_seconds = _get_int_env("ADMIN_TOOLS_LOG_LOOKBACK_SECONDS", 900)
-    max_entries = _get_int_env("ADMIN_TOOLS_LOG_MAX_ENTRIES", 5000)
-    timeout_seconds = _get_float_env("ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS", 10.0)
+    lookback_seconds = get_int_env(
+        "ADMIN_TOOLS_LOG_LOOKBACK_SECONDS",
+        env_file=ENV_FILE_OMEROWEB,
+    )
+    max_entries = get_int_env(
+        "ADMIN_TOOLS_LOG_MAX_ENTRIES",
+        env_file=ENV_FILE_OMEROWEB,
+    )
+    timeout_seconds = get_float_env(
+        "ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS",
+        env_file=ENV_FILE_OMEROWEB,
+    )
 
     if lookback_seconds <= 0:
         raise ValueError("ADMIN_TOOLS_LOG_LOOKBACK_SECONDS must be a positive integer.")
