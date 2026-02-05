@@ -1,48 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -----------------------------------------------------------------------------
-# Ensure OMERO SSL certificates include Docker hostname (omeroserver)
-# This is REQUIRED for secure BlitzGateway connections from OMERO.web.
-#
-# This block is:
-# - idempotent
-# - safe on existing systems
-# - automatic (no manual steps)
-# -----------------------------------------------------------------------------
+echo "[startup] Ensuring OMERO.server cert SAN includes localhost+omeroserver+IP SANs"
 
 CERT_DIR="/OMERO/certs"
-CERT_PEM="${CERT_DIR}/server.pem"
+SERVER_PEM="${CERT_DIR}/server.pem"
 
-NEED_REGEN=0
+need_regen=0
 
-if [ ! -f "${CERT_PEM}" ]; then
-    echo "[CERT] server.pem missing – will generate certificates"
-    NEED_REGEN=1
+CONTAINER_IPV4="$(
+    ip -4 addr show scope global 2>/dev/null \
+        | awk '/inet /{sub(/\/.*/,"",$2); print $2; exit}' \
+        || true
+)"
+
+SAN_VALUE="DNS:localhost,DNS:omeroserver,IP:127.0.0.1"
+if [[ -n "${CONTAINER_IPV4}" && "${CONTAINER_IPV4}" != "127.0.0.1" ]]; then
+    SAN_VALUE="${SAN_VALUE},IP:${CONTAINER_IPV4}"
+fi
+
+if [[ ! -f "${SERVER_PEM}" ]]; then
+    echo "[startup] ${SERVER_PEM} missing -> regen"
+    need_regen=1
 else
-    # Check whether certificate already includes DNS:omeroserver
-    if ! openssl x509 -in "${CERT_PEM}" -noout -text | grep -q "DNS:omeroserver"; then
-        echo "[CERT] server.pem does not include DNS:omeroserver – regenerating"
-        NEED_REGEN=1
+    if ! openssl x509 -in "${SERVER_PEM}" -noout -text | grep -q "DNS:omeroserver"; then
+        echo "[startup] SAN missing DNS:omeroserver -> regen"
+        need_regen=1
+    fi
+    if ! openssl x509 -in "${SERVER_PEM}" -noout -text | grep -q "IP Address:127.0.0.1"; then
+        echo "[startup] SAN missing IP Address:127.0.0.1 -> regen"
+        need_regen=1
+    fi
+    if [[ -n "${CONTAINER_IPV4}" && "${CONTAINER_IPV4}" != "127.0.0.1" ]]; then
+        if ! openssl x509 -in "${SERVER_PEM}" -noout -text | grep -q "IP Address:${CONTAINER_IPV4}"; then
+            echo "[startup] SAN missing IP Address:${CONTAINER_IPV4} -> regen"
+            need_regen=1
+        fi
     fi
 fi
 
-if [ "${NEED_REGEN}" -eq 1 ]; then
-    echo "[CERT] Generating OMERO certificates with SANs: localhost, omeroserver"
+if [[ "${need_regen}" -eq 1 ]]; then
+    echo "[startup] Removing old certs..."
+    rm -f "${CERT_DIR}/server.key" \
+          "${CERT_DIR}/server.pem" \
+          "${CERT_DIR}/server.p12" \
+          "${CERT_DIR}/ca.pem" \
+          "${CERT_DIR}/ca.key" || true
 
-    rm -f "${CERT_DIR}/server."* || true
-
-    # Try to configure SANs via OMERO config keys (supported by some builds).
-    # If a key is unknown in your exact OMERO build, the command will fail;
-    # that's why we ignore errors here and still run plain `omero certificates`.
-    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.commonname localhost || true
-    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver" || true
-
-    # Generate certs WITHOUT passing flags (your current image rejects --overwrite/--hostname/--san)
+    echo "[startup] Setting cert commonname + SAN and regenerating..."
+    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.commonname localhost
+    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.subjectAltName "${SAN_VALUE}"
     /opt/omero/server/OMERO.server/bin/omero certificates
 
-    echo "[CERT] Certificate generation complete"
+    echo "[startup] New cert SAN:"
+    openssl x509 -in "${SERVER_PEM}" -noout -text | awk '/Subject Alternative Name/{print;getline;print}'
 else
-    echo "[CERT] Existing certificates already valid – no regeneration needed"
+    echo "[startup] Cert SAN already OK"
 fi
-
