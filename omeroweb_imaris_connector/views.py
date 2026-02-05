@@ -5,7 +5,7 @@ import urllib.parse
 from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
-from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, ENV_FILE_OMERO_CELERY, get_env
 
 from .celery_app import app as celery_app
 from .config import get_celery_queue, use_celery
@@ -177,9 +177,6 @@ def imaris_export(request, conn=None, **kwargs):
         celery_job_id = _start_celery_job(
             conn,
             image_id,
-            host_override=host_override,
-            port_override=port_override,
-            secure_override=secure_override,
         )
         status_params = {"job": celery_job_id}
         if base_url_override:
@@ -288,13 +285,6 @@ def _start_celery_job(
     session_key = _get_session_key(conn)
     host, port = _resolve_omero_host_port(conn)
     secure = _resolve_omero_secure(conn)
-
-    if host_override:
-        host = host_override
-    if port_override is not None:
-        port = port_override
-    if secure_override is not None:
-        secure = secure_override
 
     if not session_key:
         raise RuntimeError("IMS export session key unavailable for background job.")
