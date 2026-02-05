@@ -4267,7 +4267,11 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             await Promise.all(
                 jobs.map(async (job) => {
-                    const response = await fetch(job.status_url, { credentials: 'same-origin' });
+                    const response = await fetch(job.status_url, {
+                        method: 'POST',
+                        headers: setRequestHeaders({}),
+                        credentials: 'same-origin',
+                    });
                     const data = await parseJsonResponse(response);
                     if (!response.ok || !data.ok) {
                         return;
