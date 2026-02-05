@@ -234,6 +234,8 @@
         let activeEntries = [];
         let currentViewEntries = [];
         let loadedEntriesCount = 0;
+        let requestCounter = 0;
+        let latestRequestId = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
@@ -689,6 +691,8 @@
                 setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
                 return;
             }
+            const requestId = ++requestCounter;
+            latestRequestId = requestId;
             const containers = getSelectedContainers();
             if (!containers.length) {
                 activeEntries = [];
@@ -724,6 +728,9 @@
             try {
                 const response = await fetch(url, { credentials: 'same-origin' });
                 const payload = response.ok ? await response.json() : null;
+                if (requestId !== latestRequestId) {
+                    return;
+                }
                 if (!response.ok || payload?.error) {
                     const message = payload?.error || 'Unable to load logs.';
                     setStatus(message);
@@ -735,9 +742,14 @@
                 activeEntries = normalizeEntries(payload.entries || []);
                 applyFilters();
             } catch (error) {
+                if (requestId !== latestRequestId) {
+                    return;
+                }
                 setStatus('Failed to fetch logs from backend.');
             } finally {
-                setLoading(false);
+                if (requestId === latestRequestId) {
+                    setLoading(false);
+                }
             }
         }
 
