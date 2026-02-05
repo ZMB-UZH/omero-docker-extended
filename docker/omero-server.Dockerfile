@@ -241,6 +241,18 @@ RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py; \
     chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py
 
+# Install shared plugin utilities into OMERO.server venv (used by scripts)
+# ------------------------------------------------------------------------
+COPY omero_plugin_common /tmp/omero_plugin_common
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    rm -rf "${SITE_PACKAGES}/omero_plugin_common"; \
+    cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
+    chown -R omero-server:omero-server "${SITE_PACKAGES}/omero_plugin_common"; \
+    rm -rf /tmp/omero_plugin_common
+
 # Register official OMERO scripts AFTER OMERO.server startup
 # ----------------------------------------------------------
 COPY startup/99-register-official-scripts.sh /startup/99-register-official-scripts.sh

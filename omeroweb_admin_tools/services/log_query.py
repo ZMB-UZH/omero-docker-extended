@@ -390,7 +390,8 @@ def fetch_internal_log_labels(
     normalized = _normalize_internal_service(compose_service)
     selector = f'{{compose_service="{normalized}", log_type="internal"}}'
     end_time = dt.datetime.now(tz=dt.timezone.utc)
-    start_time = end_time - dt.timedelta(seconds=config.lookback_seconds)
+    label_lookback_seconds = max(config.lookback_seconds, 7 * 24 * 60 * 60)
+    start_time = end_time - dt.timedelta(seconds=label_lookback_seconds)
     # The Loki /series endpoint requires the parameter name ``match[]``,
     # NOT ``query`` (which is for /query_range).  Using the wrong name
     # causes Loki to silently ignore the selector and return ALL series.
@@ -423,7 +424,6 @@ def fetch_internal_log_labels(
     label_candidates = ("filepath", "filename", "__path__", "path", "file")
     series_data = payload.get("data", [])
     logger.debug("fetch_internal_log_labels: got %d series from Loki", len(series_data))
-    
     for series in series_data:
         # Double-check labels match, in case Loki returns broader results than expected.
         if series.get("compose_service") != normalized:
