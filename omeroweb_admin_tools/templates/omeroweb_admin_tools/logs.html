@@ -77,7 +77,7 @@
                     </button>
                 </div>
                 <div class="log-toolbar-group">
-                    <button type="button" id="log_download_btn" class="admin-tools-button log-refresh-button">
+                    <button type="button" id="log_download_btn" class="admin-tools-button log-refresh-button log-download-button">
                         Download log entries
                     </button>
                 </div>
@@ -262,6 +262,15 @@
             }
             refreshBtn.disabled = isLoading;
             refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
+        }
+
+        function updateDownloadState() {
+            if (!downloadBtn) {
+                return;
+            }
+            const hasEntries = currentViewEntries.length > 0;
+            downloadBtn.disabled = !hasEntries;
+            downloadBtn.classList.toggle('is-disabled', !hasEntries);
         }
 
         function persistState() {
@@ -627,6 +636,7 @@
             loadedEntriesCount = currentViewEntries.length;
             renderTable(currentViewEntries);
             updateLoadedStatus();
+            updateDownloadState();
         }
 
         function buildDownloadTsv(entries) {
@@ -641,6 +651,9 @@
         }
 
         function downloadCurrentEntries() {
+            if (!currentViewEntries.length) {
+                return;
+            }
             const content = buildDownloadTsv(currentViewEntries);
             const blob = new Blob([content], { type: 'text/plain' });
             const url = window.URL.createObjectURL(blob);
@@ -704,6 +717,11 @@
         async function fetchLogs() {
             if (!logConfig) {
                 setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
+                activeEntries = [];
+                currentViewEntries = [];
+                loadedEntriesCount = 0;
+                renderTable(activeEntries);
+                updateDownloadState();
                 return;
             }
             const requestId = ++requestCounter;
@@ -714,6 +732,7 @@
                 loadedEntriesCount = 0;
                 renderTable(activeEntries);
                 setStatus('No log sources selected.');
+                updateDownloadState();
                 return;
             }
             setLoading(true);
@@ -751,6 +770,7 @@
                     setStatus(message);
                     activeEntries = [];
                     renderTable(activeEntries);
+                    updateDownloadState();
                     setLoading(false);
                     return;
                 }
@@ -761,6 +781,9 @@
                     return;
                 }
                 setStatus('Failed to fetch logs from backend.');
+                activeEntries = [];
+                renderTable(activeEntries);
+                updateDownloadState();
             } finally {
                 if (requestId === latestRequestId) {
                     setLoading(false);
@@ -883,6 +906,7 @@
         initInternalLabels();
         scheduleInternalLabelRefresh();
         scheduleRefresh();
+        updateDownloadState();
     </script>
 </body>
 </html>

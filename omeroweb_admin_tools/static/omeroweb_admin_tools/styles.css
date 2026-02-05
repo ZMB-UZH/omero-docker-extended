@@ -193,6 +193,13 @@ body {
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             filter: none;
         }
+        .log-download-button.is-disabled,
+        .log-download-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+            background: #94a3b8;
+            box-shadow: none;
+        }
         .admin-tools-back-link {
             display: inline-flex;
             align-items: center;
