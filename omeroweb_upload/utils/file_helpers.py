@@ -1,18 +1,17 @@
 """
 File and path utility functions for upload management.
 """
-import os
 import stat
 import logging
 from pathlib import Path
+
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 
 logger = logging.getLogger(__name__)
 
 # Constants
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
-DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 
 _UPLOAD_ROOT_CACHE = None
 _JOBS_ROOT_CACHE = None
@@ -21,13 +20,13 @@ _DIRS_INITIALIZED = False
 
 def resolve_upload_root() -> Path:
     """Resolve upload root directory from environment."""
-    upload_root_str = os.environ.get(UPLOAD_ROOT_ENV, DEFAULT_UPLOAD_ROOT)
+    upload_root_str = get_env(UPLOAD_ROOT_ENV, env_file=ENV_FILE_OMEROWEB)
     return Path(upload_root_str).resolve()
 
 
 def resolve_jobs_root() -> Path:
     """Resolve jobs root directory from environment."""
-    jobs_root_str = os.environ.get(JOBS_DIR_ENV, DEFAULT_JOBS_DIR)
+    jobs_root_str = get_env(JOBS_DIR_ENV, env_file=ENV_FILE_OMEROWEB)
     return Path(jobs_root_str).resolve()
 
 
