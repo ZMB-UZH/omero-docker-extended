@@ -135,16 +135,18 @@ print("OMERO_IMS_CELERY_BACKEND_URL=", os.environ.get("OMERO_IMS_CELERY_BACKEND_
 PY
 ```
 
-Then check the worker container and logs:
+Then check the worker process and logs inside OMERO.web:
 
 ```bash
 <compose> ps
-<compose> logs --since=10m omero-celery-worker
+<compose> logs --since=10m omeroweb
+<compose> exec omeroweb ls -l /opt/omero/web/logs
+<compose> exec omeroweb tail -n 200 /opt/omero/web/logs/imaris-celery.out.log
+<compose> exec omeroweb tail -n 200 /opt/omero/web/logs/imaris-celery.err.log
 ```
 
 If the worker is missing or is listening to a different queue, align
-`OMERO_IMS_CELERY_QUEUE` across both OMERO.web and the Celery worker and restart
-the services.
+`OMERO_IMS_CELERY_QUEUE` across OMERO.web and restart the service.
 
 ## Notes
 
