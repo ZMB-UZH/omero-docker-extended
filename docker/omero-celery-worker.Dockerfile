@@ -34,6 +34,7 @@ RUN set -euo pipefail; \
         gcc \
         g++ \
         libedit-dev \
+        libbz2-dev \
         libstdc++6 \
         libssl3; \
     rm -rf /var/lib/apt/lists/*
