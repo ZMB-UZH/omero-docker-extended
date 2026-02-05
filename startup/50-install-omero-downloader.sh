@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ -z "${OMERO_DOWNLOADER_VERSION:-}" ]]; then
-    echo "ERROR: OMERO_DOWNLOADER_VERSION is not set (expected from omeroserver.env)." >&2
+    echo "ERROR: OMERO_DOWNLOADER_VERSION is not set (expected from env/omeroserver.env)." >&2
     exit 1
 fi
 

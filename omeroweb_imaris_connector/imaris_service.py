@@ -10,14 +10,15 @@ from typing import Callable, Iterator
 
 from omero.rtypes import rint
 
+from .config import get_export_poll_interval, get_export_timeout
 
 logger = logging.getLogger(__name__)
 
 SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
 SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
 EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
-EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
-EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "2"))
+EXPORT_TIMEOUT = get_export_timeout()
+EXPORT_POLL_INTERVAL = get_export_poll_interval()
 PROCESS_JOB_DIR = os.environ.get("OMERO_IMS_PROCESS_JOB_DIR", "/tmp/omero_ims_process_jobs")
 SCRIPT_START_TIMEOUT = int(os.environ.get("OMERO_IMS_SCRIPT_START_TIMEOUT", "180"))
 SCRIPT_START_RETRY_INTERVAL = float(os.environ.get("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "5"))

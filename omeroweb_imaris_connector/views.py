@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 import urllib.parse
 
@@ -8,6 +7,7 @@ from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
 
 from .celery_app import app as celery_app
+from .config import get_celery_queue, use_celery
 from .imaris_service import (
     EXPORT_POLL_INTERVAL,
     EXPORT_TIMEOUT,
@@ -22,7 +22,7 @@ from .tasks import run_ims_export_task
 logger = logging.getLogger(__name__)
 
 CELERY_JOB_PREFIX = "celery-"
-CELERY_QUEUE = os.environ.get("OMERO_IMS_CELERY_QUEUE", "imaris_export")
+CELERY_QUEUE = get_celery_queue()
 
 
 def _parse_base_url(value):
@@ -137,8 +137,7 @@ def imaris_export(request, conn=None, **kwargs):
     wait_param = request.GET.get("wait")
     if wait_param is not None:
         async_mode = not _bool_from_request(wait_param)
-    use_celery = _bool_from_request(os.environ.get("OMERO_IMS_USE_CELERY", "true"))
-    if not use_celery:
+    if not use_celery():
         return HttpResponse(
             "Celery is required for IMS exports. Set OMERO_IMS_USE_CELERY=true and "
             "ensure the OMERO.web Imaris Celery worker is running.",
