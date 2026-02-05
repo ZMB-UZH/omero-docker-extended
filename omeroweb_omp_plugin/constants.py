@@ -1,4 +1,6 @@
 import os
+
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 import time
 import logging
 
@@ -6,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 # OMERO.web virtualenv (used for CLI and other tooling).
 # Override via environment when the venv name changes.
-OMERO_WEB_ROOT = os.environ.get("OMERO_WEB_ROOT", "/opt/omero/web")
-OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
+OMERO_WEB_ROOT = get_env("OMERO_WEB_ROOT", env_file=ENV_FILE_OMEROWEB)
+OMERO_WEB_VENV = get_env("OMERO_WEB_VENV", env_file=ENV_FILE_OMEROWEB)
 OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
 
 # Storage directory for job JSON files

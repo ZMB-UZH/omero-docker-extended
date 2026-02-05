@@ -5,6 +5,7 @@ import urllib.parse
 from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 
 from .celery_app import app as celery_app
 from .config import get_celery_queue, use_celery
@@ -392,9 +393,9 @@ def _resolve_omero_host_port(conn):
     port = getattr(conn, "port", None) or getattr(conn, "_port", None)
 
     if not host:
-        host = os.environ.get("OMEROHOST")
+        host = get_env("OMEROHOST", env_file=ENV_FILE_OMEROWEB)
     if not port:
-        port = os.environ.get("OMERO_PORT")
+        port = get_env("OMERO_PORT", env_file=ENV_FILE_OMEROWEB)
 
     if port is not None:
         port_text = str(port).strip()
@@ -415,9 +416,6 @@ def _resolve_omero_secure(conn):
     """Resolve whether to use secure connection from connection or environment."""
     secure = getattr(conn, "secure", None)
     if secure is None:
-        env_val = os.environ.get("OMERO_SECURE")
-        if env_val is None:
-            env_val = os.environ.get("CONFIG_omero_security_ssl")
-        if env_val is not None:
-            secure = _bool_from_request(env_val)
+        env_val = get_env("CONFIG_omero_security_ssl", env_file=ENV_FILE_OMEROWEB)
+        secure = _bool_from_request(env_val)
     return secure

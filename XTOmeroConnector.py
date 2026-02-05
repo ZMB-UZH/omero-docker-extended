@@ -29,8 +29,20 @@ import urllib.parse
 import urllib.error
 import http.cookiejar
 
-EXPORT_TIMEOUT = int(os.environ.get("OMERO_IMS_EXPORT_TIMEOUT", "3600"))
-EXPORT_POLL_INTERVAL = float(os.environ.get("OMERO_IMS_EXPORT_POLL_INTERVAL", "5"))
+from omero_plugin_common.env_utils import (
+    ENV_FILE_OMERO_CELERY,
+    get_float_env,
+    get_int_env,
+)
+
+EXPORT_TIMEOUT = get_int_env(
+    "OMERO_IMS_EXPORT_TIMEOUT",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
+EXPORT_POLL_INTERVAL = get_float_env(
+    "OMERO_IMS_EXPORT_POLL_INTERVAL",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
 _XT_LOG_PATH = None
 
 

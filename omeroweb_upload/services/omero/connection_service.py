@@ -1,26 +1,21 @@
 """
 OMERO connection and session management.
 """
-import os
 import logging
 from typing import Optional
 from omero.gateway import BlitzGateway
 from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
 from omero.rtypes import rstring
 from pathlib import Path
+from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
 
 logger = logging.getLogger(__name__)
 
 # Service account constants
-JOB_SERVICE_USERNAME_DEFAULT = "job-service"
 JOB_SERVICE_USER_ENV = "OMERO_JOB_SERVICE_USERNAME"
-JOB_SERVICE_USER_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_USERNAME"
 JOB_SERVICE_PASS_ENV = "OMERO_JOB_SERVICE_PASS"
-JOB_SERVICE_PASS_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
 JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
-JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
-JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
 
 def _resolve_omero_host_port(conn):
@@ -344,26 +339,20 @@ def _get_job_service_credentials():
     This is intentionally NOT taken from the end-user's OMERO.web session.
     Using the user's session for background work can invalidate their login.
     """
-    user = (os.environ.get(JOB_SERVICE_USER_ENV) or "").strip()
-    if not user:
-        user = (os.environ.get(JOB_SERVICE_USER_ENV_FALLBACK) or "").strip()
-    if not user:
-        user = JOB_SERVICE_USERNAME_DEFAULT
+    user = get_env(JOB_SERVICE_USER_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
 
-    passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
-    if not passwd:
-        passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
+    passwd = get_env(JOB_SERVICE_PASS_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
-    group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
-    if not group_override:
-        group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
+    group_override = get_env(
+        JOB_SERVICE_GROUP_ENV,
+        env_file=ENV_FILE_OMERO_CELERY,
+        allow_empty=True,
+    ).strip()
 
     # Optional: allow forcing secure/insecure connection
-    secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV) or "").strip()
-    if not secure_raw:
-        secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
+    secure_raw = get_env(JOB_SERVICE_SECURE_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
 
     secure = True
     if secure_raw:
@@ -379,9 +368,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
 
     if not service_pass:
         logger.error(
-            "job-service password missing. Set %s (or %s) in the omeroweb container environment.",
+            "job-service password missing. Set %s in the omeroweb container environment.",
             JOB_SERVICE_PASS_ENV,
-            JOB_SERVICE_PASS_ENV_FALLBACK,
         )
         return None
 

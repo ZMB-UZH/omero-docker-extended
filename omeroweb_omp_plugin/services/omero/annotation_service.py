@@ -1,12 +1,12 @@
 """
 OMERO annotation services for managing MapAnnotations.
 """
-import os
 import json
 import logging
 import hashlib
 import hmac
 
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 from omero.model import MapAnnotationI, ImageAnnotationLinkI
 from omero.rtypes import rstring, rlong
 from omero.sys import ParametersI
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def get_hash_secret():
     """Return secret used to compute/verify plugin hash marker."""
-    return os.environ.get(HASH_SECRET_ENV, "")
+    return get_env(HASH_SECRET_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def canonicalize_mapping(mapping):

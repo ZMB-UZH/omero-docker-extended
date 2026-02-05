@@ -11,18 +11,42 @@ from typing import Callable, Iterator
 from omero.rtypes import rint
 
 from .config import get_export_poll_interval, get_export_timeout
+from omero_plugin_common.env_utils import (
+    ENV_FILE_OMERO_CELERY,
+    get_env,
+    get_float_env,
+    get_int_env,
+)
 
 logger = logging.getLogger(__name__)
 
-SCRIPT_NAME = os.environ.get("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
+SCRIPT_NAME = get_env(
+    "OMERO_IMS_SCRIPT_NAME",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
 SCRIPT_BASENAME = os.path.splitext(SCRIPT_NAME)[0]
-EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
+EXPORT_ROOT = get_env(
+    "OMERO_IMS_EXPORT_DIR",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
 EXPORT_TIMEOUT = get_export_timeout()
 EXPORT_POLL_INTERVAL = get_export_poll_interval()
-PROCESS_JOB_DIR = os.environ.get("OMERO_IMS_PROCESS_JOB_DIR", "/tmp/omero_ims_process_jobs")
-SCRIPT_START_TIMEOUT = int(os.environ.get("OMERO_IMS_SCRIPT_START_TIMEOUT", "180"))
-SCRIPT_START_RETRY_INTERVAL = float(os.environ.get("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "5"))
-PROCESSOR_CONFIG_CACHE_TTL = int(os.environ.get("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "30"))
+PROCESS_JOB_DIR = get_env(
+    "OMERO_IMS_PROCESS_JOB_DIR",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
+SCRIPT_START_TIMEOUT = get_int_env(
+    "OMERO_IMS_SCRIPT_START_TIMEOUT",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
+SCRIPT_START_RETRY_INTERVAL = get_float_env(
+    "OMERO_IMS_SCRIPT_START_RETRY_INTERVAL",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
+PROCESSOR_CONFIG_CACHE_TTL = get_int_env(
+    "OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
 
 _PROCESS_JOBS = {}
 _PROCESS_JOBS_LOCK = threading.Lock()
