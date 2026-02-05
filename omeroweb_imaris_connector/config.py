@@ -22,9 +22,34 @@ def use_job_service_session() -> bool:
 
 
 def get_job_service_credentials() -> tuple[str | None, str | None]:
-    """Return (username, password) for the job-service account."""
-    username = get_env("OMERO_JOB_SERVICE_USERNAME", env_file=ENV_FILE_OMERO_CELERY)
-    password = get_env("OMERO_JOB_SERVICE_PASS", env_file=ENV_FILE_OMERO_CELERY)
+    """Return (username, password) for the job-service account.
+    
+    Prefers OMERO_WEB_JOB_SERVICE_* variables, falls back to OMERO_JOB_SERVICE_*.
+    """
+    from omero_plugin_common.env_utils import get_optional_env
+    
+    # Try web-specific first
+    username = get_optional_env(
+        "OMERO_WEB_JOB_SERVICE_USERNAME",
+        env_file=ENV_FILE_OMERO_CELERY,
+    )
+    password = get_optional_env(
+        "OMERO_WEB_JOB_SERVICE_PASS",
+        env_file=ENV_FILE_OMERO_CELERY,
+    )
+    
+    # Fall back to server-side env vars
+    if not username:
+        username = get_optional_env(
+            "OMERO_JOB_SERVICE_USERNAME",
+            env_file=ENV_FILE_OMERO_CELERY,
+        )
+    if not password:
+        password = get_optional_env(
+            "OMERO_JOB_SERVICE_PASS",
+            env_file=ENV_FILE_OMERO_CELERY,
+        )
+    
     return username, password
 
 
