@@ -12,6 +12,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
@@ -19,7 +20,10 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
 BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 DEFAULT_TIMEOUT_SECONDS = 600
-EXPORT_ROOT = os.environ.get("OMERO_IMS_EXPORT_DIR", "/OMERO/ImarisExports")
+EXPORT_ROOT = get_env(
+    "OMERO_IMS_EXPORT_DIR",
+    env_file=ENV_FILE_OMERO_CELERY,
+)
 
 
 def _safe_filename(name, fallback="image"):
