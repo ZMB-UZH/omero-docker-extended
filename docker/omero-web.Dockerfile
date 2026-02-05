@@ -64,7 +64,8 @@ RUN set -euo pipefail; \
         gcc \
         gcc-c++ \
         make \
-        python3-devel; \
+        python3-devel \
+        supervisor; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
@@ -200,6 +201,17 @@ RUN set -euo pipefail; \
         cryptography>=42.0.0 \
         urllib3>=2.6.3
 
+# Configure supervisord to run OMERO.web and Imaris Celery worker
+# ---------------------------------------------------------------
+COPY supervisord.conf /etc/supervisord.conf
+COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
+RUN set -euo pipefail; \
+    mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
+    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh; \
+    chown -R omero-web:omero-web /opt/omero/web/logs
+
 # Drop privileges for runtime
 # ---------------------------
 USER omero-web
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

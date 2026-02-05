@@ -198,35 +198,6 @@ services:
       retries: 30
       start_period: 20s
 
-  omero-celery-worker:
-    image: omero-celery-worker:custom
-    build:
-      context: .
-      dockerfile: docker/omero-celery-worker.Dockerfile
-    restart: unless-stopped
-    depends_on:
-      omeroserver:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
-    env_file:
-      - ./env/omero-celery.env
-    networks:
-      omero:
-        aliases:
-          - omero-celery-worker
-    volumes:
-      - omero:/OMERO:rw
-    command: ["celery", "-A", "omeroweb_imaris_connector.celery_app", "worker", "--loglevel=info", "--concurrency=1", "-Q", "imaris_export"]
-    healthcheck:
-      test: ["CMD-SHELL", "celery -A omeroweb_imaris_connector.celery_app inspect ping -d celery@$$HOSTNAME"]
-      interval: 10s
-      timeout: 10s
-      retries: 30
-      start_period: 10s
-
   database_plugin:
     image: "postgres:18.1"
     restart: unless-stopped
