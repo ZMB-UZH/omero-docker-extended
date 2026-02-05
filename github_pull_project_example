@@ -52,13 +52,21 @@ if [ ! -d "temp_clone" ]; then
 fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
 echo "Do you want to delete all container images? Y/n (Default: n)"
-read -r -p "> " DELETE_IMAGES_REPLY
-DELETE_IMAGES_REPLY="$(printf '%s' "${DELETE_IMAGES_REPLY}" | tr '[:upper:]' '[:lower:]')"
-if [ "${DELETE_IMAGES_REPLY}" = "y" ] || [ "${DELETE_IMAGES_REPLY}" = "yes" ]; then
-    KEEP_IMAGES=0
-else
-    KEEP_IMAGES=1
-fi
+
+while true; do
+    read -r -p "> " DELETE_IMAGES_REPLY
+    DELETE_IMAGES_REPLY="$(printf '%s' "${DELETE_IMAGES_REPLY}" | tr '[:upper:]' '[:lower:]')"
+
+    if [ -z "${DELETE_IMAGES_REPLY}" ] || [ "${DELETE_IMAGES_REPLY}" = "n" ] || [ "${DELETE_IMAGES_REPLY}" = "no" ]; then
+        KEEP_IMAGES=1
+        break
+    elif [ "${DELETE_IMAGES_REPLY}" = "y" ] || [ "${DELETE_IMAGES_REPLY}" = "yes" ]; then
+        KEEP_IMAGES=0
+        break
+    else
+        echo "Wrong choice. Please enter Y or N."
+    fi
+done
 
 echo "Stopping containers with latest docker-compose.yml..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
@@ -123,4 +131,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
