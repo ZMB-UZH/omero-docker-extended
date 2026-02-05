@@ -270,6 +270,11 @@ RUN set -euo pipefail; \
 # Bootstrap job-service user (auto-create if missing)
 # MUST run AFTER OMERO.server (Glacier2) is up
 # --------------------------------------------
+COPY startup/10-set-script-python.sh /startup/10-set-script-python.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/10-set-script-python.sh; \
+    chmod 0555 /startup/10-set-script-python.sh
+
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
     chown root:root /startup/99-job-service-bootstrap.sh; \
