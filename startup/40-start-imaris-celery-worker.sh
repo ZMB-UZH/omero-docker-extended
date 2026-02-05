@@ -18,7 +18,7 @@ if [[ ! -x "${celery_bin}" ]]; then
     exit 1
 fi
 
-celery_queue="${OMERO_IMS_CELERY_QUEUE:-imaris_export}"
+celery_queue="${OMERO_IMS_CELERY_QUEUE:-imaris}"
 celery_loglevel="${OMERO_IMS_CELERY_LOGLEVEL:-info}"
 celery_concurrency="${OMERO_IMS_CELERY_WORKER_CONCURRENCY:-1}"
 
