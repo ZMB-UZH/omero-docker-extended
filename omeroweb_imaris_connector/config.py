@@ -79,7 +79,7 @@ def get_celery_backend_url() -> str:
 
 def get_celery_queue() -> str:
     """Return the Celery queue name used for IMS export tasks."""
-    return _get_env("OMERO_IMS_CELERY_QUEUE", "imaris_export")
+    return _get_env("OMERO_IMS_CELERY_QUEUE")
 
 
 def get_celery_result_expires() -> int:
