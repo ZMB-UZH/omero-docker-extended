@@ -88,17 +88,6 @@ RUN set -euo pipefail; \
         omero-cli-duplicate \
         omero-rdf
 
-# Install system pip + omero-py for OMERO.server scripts
-# ------------------------------------------------------
-RUN set -euo pipefail; \
-    dnf -y install \
-        python3-pip; \
-    python3 -m pip install --no-cache-dir --upgrade pip; \
-    python3 -m pip install --no-cache-dir \
-        "omero-py==5.21.2"; \
-    dnf clean all; \
-    rm -rf /var/cache/dnf
-
 # Install runtime diagnostics + git
 # ---------------------------------
 RUN set -euo pipefail; \
@@ -270,10 +259,10 @@ RUN set -euo pipefail; \
 # Bootstrap job-service user (auto-create if missing)
 # MUST run AFTER OMERO.server (Glacier2) is up
 # --------------------------------------------
-COPY startup/10-set-script-python.sh /startup/10-set-script-python.sh
+COPY startup/01-set-script-python.sh /startup/01-set-script-python.sh
 RUN set -euo pipefail; \
-    chown root:root /startup/10-set-script-python.sh; \
-    chmod 0555 /startup/10-set-script-python.sh
+    chown root:root /startup/01-set-script-python.sh; \
+    chmod 0555 /startup/01-set-script-python.sh
 
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
