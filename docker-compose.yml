@@ -102,7 +102,6 @@ services:
       - "4064:4064"
     volumes:
       - "omero:/OMERO"
-      - omero_server_var:/opt/omero/server/OMERO.server/var:rw
       - omero_server_logs:${OMERO_SERVER_LOG_DIR:-/opt/omero/server/OMERO.server/var/log}:rw
     ulimits:
     # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
