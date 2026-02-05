@@ -80,7 +80,7 @@ else
     fi
 fi
 
-echo "Removing stale OMERO repository lock files from the OMERO volume (SAFE)..."
+echo "Removing stale OMERO repository lock files from the OMERO volume..."
 
 PROJECT_NAME="$(basename "${BASE_DIR}")"
 OMERO_VOLUME="${PROJECT_NAME}_omero"
@@ -131,5 +131,6 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
+
 
 
