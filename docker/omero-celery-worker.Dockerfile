@@ -22,10 +22,15 @@ RUN set -euo pipefail; \
         ca-certificates \
         curl \
         tzdata \
-        python3 \
-        python3-dev \
-        python3-venv \
-        python3-pip \
+        software-properties-common \
+        gnupg; \
+    add-apt-repository -y ppa:deadsnakes/ppa; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        python3.9 \
+        python3.9-dev \
+        python3.9-venv \
+        python3.9-distutils \
         gcc \
         g++ \
         libedit-dev \
@@ -33,10 +38,10 @@ RUN set -euo pipefail; \
         libssl3; \
     rm -rf /var/lib/apt/lists/*
 
-# Create a venv so we never depend on "system pip" state
+# Create a venv to not depend on "system pip" state
 ENV VENV=/opt/venv
 RUN set -euo pipefail; \
-    python3 -m venv "$VENV"; \
+    python3.9 -m venv "$VENV"; \
     "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel; \
     "$VENV/bin/python" -m pip install \
         "celery==5.3.6" \
