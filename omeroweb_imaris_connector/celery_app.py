@@ -33,3 +33,11 @@ app.conf.update(
 
 # Force=True ensures import errors are raised, not silently ignored
 app.autodiscover_tasks(["omeroweb_imaris_connector"], force=True)
+
+# Explicit import to ensure task is registered even if autodiscover fails
+try:
+    from .tasks import run_ims_export_task  # noqa: F401
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).error("Failed to import tasks: %s", e)
+    raise
