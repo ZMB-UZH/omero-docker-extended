@@ -239,6 +239,8 @@
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
+        const internalLabelRefreshMs = 30000;
+        let internalLabelTimer = null;
 
         function setStatus(text) {
             if (statusEl) {
@@ -435,11 +437,16 @@
             fetchLogs();
         }
 
-        async function loadInternalLabels(service) {
+        async function loadInternalLabels(service, options = {}) {
             const state = internalState[service];
-            if (!state || state.loaded || state.loading) {
+            const force = Boolean(options.force);
+            if (!state || state.loading || (!force && state.loaded)) {
                 return;
             }
+            const previousLabels = state.labels.slice();
+            const wasAllSelected =
+                previousLabels.length > 0 && state.selected.size === previousLabels.length;
+            const hadSelection = state.selected.size > 0;
             state.loading = true;
             renderInternalOptions(service);
             const url = `${internalLabelsUrl.toString()}?service=${encodeURIComponent(service)}`;
@@ -450,11 +457,19 @@
                     state.labels = payload.labels;
                     state.loaded = true;
                     const storedInternal = storedState?.internalSources?.[service];
-                    if (Array.isArray(storedInternal)) {
+                    if (Array.isArray(storedInternal) && !force) {
                         state.selected = new Set(storedInternal.filter((label) => state.labels.includes(label)));
-                    } else {
+                    } else if (!force && !hadSelection) {
                         // Select all by default on first load.
-                        state.labels.forEach((label) => state.selected.add(label));
+                        state.selected = new Set(state.labels);
+                    } else {
+                        const nextSelected = new Set(
+                            Array.from(state.selected).filter((label) => state.labels.includes(label))
+                        );
+                        if (wasAllSelected || (!hadSelection && previousLabels.length === 0)) {
+                            state.labels.forEach((label) => nextSelected.add(label));
+                        }
+                        state.selected = nextSelected;
                     }
                 }
             } catch (error) {
@@ -836,6 +851,19 @@
             });
         }
 
+        function refreshInternalLabels() {
+            Object.keys(internalState).forEach((service) => {
+                loadInternalLabels(service, { force: true });
+            });
+        }
+
+        function scheduleInternalLabelRefresh() {
+            if (internalLabelTimer) {
+                window.clearInterval(internalLabelTimer);
+            }
+            internalLabelTimer = window.setInterval(refreshInternalLabels, internalLabelRefreshMs);
+        }
+
         /* Auto-load internal labels on page load. */
         function initInternalLabels() {
             Object.keys(internalState).forEach((service) => {
@@ -853,6 +881,7 @@
         setupHandlers();
         setupTableResize();
         initInternalLabels();
+        scheduleInternalLabelRefresh();
         scheduleRefresh();
     </script>
 </body>
