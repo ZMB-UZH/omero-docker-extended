@@ -1,6 +1,4 @@
-
-# Docker compose file of a minimal OMERO installation based on the official documentation, but modified with many custom packages and plugins for enhanced functionality.
-# Added Grafana logging.
+# Docker compose file of a minimal OMERO installation based on the official documentation, modified with many custom packages and plugins for enhanced functionality.
 # Using the tag :latest for OMERO and databases might be tempting but is extremely risky! Have a backup plan!
 # Always check compatibility in the following link or in the official OMERO documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html
 services:
