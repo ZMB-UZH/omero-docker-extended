@@ -28,6 +28,7 @@ RUN set -euo pipefail; \
         python3-pip \
         gcc \
         g++ \
+        libedit-dev \
         libstdc++6 \
         libssl3; \
     rm -rf /var/lib/apt/lists/*
