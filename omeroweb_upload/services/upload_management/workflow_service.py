@@ -11,11 +11,11 @@ import shutil
 import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
-DEFAULT_UPLOAD_CONCURRENCY = 3
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
 

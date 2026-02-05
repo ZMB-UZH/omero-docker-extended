@@ -12,8 +12,8 @@ def index(request, conn=None, url=None, **kwargs):
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)
     job_dir_ok = _ensure_dir(_get_jobs_root())
-    upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, DEFAULT_UPLOAD_CONCURRENCY, 1, 10)
-    upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
+    upload_concurrency = _get_env_int(UPLOAD_CONCURRENCY_ENV, 1, 10)
+    upload_batch_files = _get_env_int(UPLOAD_BATCH_FILES_ENV, 1, 10)
     projects = _collect_project_payload(conn, user_id)
     special_methods_enabled = _special_methods_enabled()
     return render(
@@ -104,7 +104,7 @@ def _start_upload(request, conn):
     if special_upload != "sem_edx_spectra":
         raw_sem_edx_associations = {}
         raw_sem_edx_settings = {}
-    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
+    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, 1, 10)
     batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
     session_key = _get_session_key(conn)
