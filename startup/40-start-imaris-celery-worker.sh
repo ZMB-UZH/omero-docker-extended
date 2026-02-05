@@ -9,7 +9,7 @@ if [[ "${use_celery}" != "true" ]]; then
     exit 0
 fi
 
-venv_dir="/opt/omero/web/${OMERO_WEB_VENV:-venv3}"
+venv_dir="/opt/omero/web/${OMERO_WEB_VENV}"
 celery_bin="${venv_dir}/bin/celery"
 
 if [[ ! -x "${celery_bin}" ]]; then
@@ -18,9 +18,9 @@ if [[ ! -x "${celery_bin}" ]]; then
     exit 1
 fi
 
-celery_queue="${OMERO_IMS_CELERY_QUEUE:-imaris}"
-celery_loglevel="${OMERO_IMS_CELERY_LOGLEVEL:-info}"
-celery_concurrency="${OMERO_IMS_CELERY_WORKER_CONCURRENCY:-1}"
+celery_queue="${OMERO_IMS_CELERY_QUEUE}"
+celery_loglevel="${OMERO_IMS_CELERY_LOGLEVEL}"
+celery_concurrency="${OMERO_IMS_CELERY_WORKER_CONCURRENCY}"
 
 echo "Starting Imaris Celery worker with queue '${celery_queue}' (loglevel=${celery_loglevel}, concurrency=${celery_concurrency})."
 exec "${celery_bin}" -A omeroweb_imaris_connector.celery_app worker \
