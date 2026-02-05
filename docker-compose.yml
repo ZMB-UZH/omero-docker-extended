@@ -221,7 +221,7 @@ services:
       - omero:/OMERO:rw
     command: ["celery", "-A", "omeroweb_imaris_connector.celery_app", "worker", "--loglevel=info", "--concurrency=1", "-Q", "imaris_export"]
     healthcheck:
-      test: ["CMD-SHELL", "celery -A omeroweb_imaris_connector.celery_app inspect ping -d celery@$HOSTNAME"]
+      test: ["CMD-SHELL", "celery -A omeroweb_imaris_connector.celery_app inspect ping -d celery@$$HOSTNAME"]
       interval: 10s
       timeout: 10s
       retries: 30
