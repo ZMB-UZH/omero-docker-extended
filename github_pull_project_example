@@ -51,7 +51,16 @@ if [ ! -d "temp_clone" ]; then
     exit 1
 fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
-echo "Stopping containers with latest docker-compose.yml and removing referenced images..."
+echo "Do you want to delete all container images? (Default: No)"
+read -r -p "> " DELETE_IMAGES_REPLY
+DELETE_IMAGES_REPLY="$(printf '%s' "${DELETE_IMAGES_REPLY}" | tr '[:upper:]' '[:lower:]')"
+if [ "${DELETE_IMAGES_REPLY}" = "y" ] || [ "${DELETE_IMAGES_REPLY}" = "yes" ]; then
+    KEEP_IMAGES=0
+else
+    KEEP_IMAGES=1
+fi
+
+echo "Stopping containers with latest docker-compose.yml..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
     docker compose -f docker-compose.yml.new down --remove-orphans || docker compose down --remove-orphans || true
 else
