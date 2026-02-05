@@ -31,4 +31,5 @@ app.conf.update(
     task_acks_late=True,
 )
 
-app.autodiscover_tasks(["omeroweb_imaris_connector"])
+# Force=True ensures import errors are raised, not silently ignored
+app.autodiscover_tasks(["omeroweb_imaris_connector"], force=True)
