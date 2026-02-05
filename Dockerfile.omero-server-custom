@@ -88,11 +88,16 @@ RUN set -euo pipefail; \
         omero-cli-duplicate \
         omero-rdf
 
-# Install omero-py into SYSTEM Python for OMERO.server scripts
-# -----------------------------------------------------------
+# Install system pip + omero-py for OMERO.server scripts
+# ------------------------------------------------------
 RUN set -euo pipefail; \
+    dnf -y install \
+        python3-pip; \
+    python3 -m pip install --no-cache-dir --upgrade pip; \
     python3 -m pip install --no-cache-dir \
-        "omero-py==5.21.2"
+        "omero-py==5.21.2"; \
+    dnf clean all; \
+    rm -rf /var/cache/dnf
 
 # Install runtime diagnostics + git
 # ---------------------------------
