@@ -3,17 +3,10 @@ set -euo pipefail
 
 echo "===== RESET OMERO RUNTIME STATE (KEEPING /OMERO + DB) ====="
 
-# -------------------------------------------------------------------------
-# SAFETY GUARD
-#
-# Deleting OMERO_HOME/var/master resets IceGrid runtime state (DESTRUCTIVE).
-# This can break OMERO.grid services (including Processor-0 used by scripts).
-#
-# Only run this reset when explicitly requested:
-#   OMERO_RESET_ICEGRID_MASTER=1
-# -------------------------------------------------------------------------
-if [[ "${OMERO_RESET_ICEGRID_MASTER:-0}" != "1" ]]; then
-    echo "OMERO_RESET_ICEGRID_MASTER!=1 -> skipping IceGrid runtime reset."
+RESET_OMERO_RUNTIME="${RESET_OMERO_RUNTIME:-0}"
+if [[ "${RESET_OMERO_RUNTIME}" != "1" ]]; then
+    echo "RESET_OMERO_RUNTIME != 1 -> skipping runtime reset."
+    echo "To enable: set RESET_OMERO_RUNTIME=1 for this container start."
     exit 0
 fi
 
@@ -36,10 +29,10 @@ echo "Detected OMERO_HOME=${OMERO_HOME}"
 GRID_DIR="${OMERO_HOME}/var/master"
 
 if [[ -d "${GRID_DIR}" ]]; then
-    echo "Deleting stale IceGrid runtime..."
+    echo "Deleting IceGrid runtime at: ${GRID_DIR}"
     rm -rf "${GRID_DIR}"
 else
-    echo "No IceGrid runtime found."
+    echo "No IceGrid runtime found at: ${GRID_DIR}"
 fi
 
 echo "Runtime reset complete."
