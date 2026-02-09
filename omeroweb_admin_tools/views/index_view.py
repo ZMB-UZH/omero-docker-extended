@@ -896,10 +896,12 @@ def _build_target_service_status(
                 final_health = "down"
             elif healthcheck_state == "healthy":
                 final_health = "healthy"
-            elif healthcheck_state in {"unhealthy", "starting"}:
+            elif healthcheck_state == "unhealthy":
                 final_health = "unhealthy"
-            else:
-                final_health = "unhealthy"
+            elif healthcheck_state == "starting":
+                final_health = "starting"
+            elif final_health == "unknown" and state == "running":
+                final_health = "up"
         elif final_health == "unknown" and state == "running":
             final_health = "up"
 
