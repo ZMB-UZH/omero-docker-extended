@@ -695,13 +695,18 @@ body {
 
 .storage-toolbar {
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
 }
 .storage-toolbar-left {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+}
+.storage-view-toggle-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 6px;
 }
 .storage-view-toggle {
     display: inline-flex;
@@ -729,7 +734,7 @@ body {
 }
 .storage-visual-layout {
     display: grid;
-    grid-template-columns: 430px minmax(0, 1fr);
+    grid-template-columns: 400px minmax(0, 1fr);
     gap: 16px;
     align-items: start;
 }
@@ -739,6 +744,11 @@ body {
     border-radius: 12px;
     background: #ffffff;
     padding: 12px;
+}
+.storage-chart-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
 }
 .storage-chart-caption {
     margin-top: 8px;
