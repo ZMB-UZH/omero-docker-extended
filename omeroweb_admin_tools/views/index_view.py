@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 from http.client import HTTPMessage
 from urllib.parse import urlparse
 from urllib.parse import urlencode
@@ -624,10 +625,71 @@ def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
     return sorted(discovered)
 
 
+def _docker_compose_json(command: List[str]) -> Optional[object]:
+    """Run a docker compose JSON command and return decoded payload."""
+    try:
+        process = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+    stdout = process.stdout.strip()
+    if not stdout:
+        return None
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        logger.warning("Failed to decode JSON from command: %s", " ".join(command))
+        return None
+
+
+def _load_compose_healthcheck_config() -> Dict[str, bool]:
+    """Return whether each compose service defines a Docker healthcheck."""
+    payload = _docker_compose_json(["docker", "compose", "config", "--format", "json"])
+    if not isinstance(payload, dict):
+        return {}
+    services = payload.get("services", {}) or {}
+    if not isinstance(services, dict):
+        return {}
+
+    result: Dict[str, bool] = {}
+    for service_name, config in services.items():
+        if not isinstance(config, dict):
+            continue
+        result[str(service_name)] = "healthcheck" in config
+    return result
+
+
+def _load_compose_runtime_health() -> Dict[str, Dict[str, str]]:
+    """Return runtime state and health values reported by docker compose ps."""
+    payload = _docker_compose_json(["docker", "compose", "ps", "--format", "json"])
+    if not isinstance(payload, list):
+        return {}
+
+    runtime: Dict[str, Dict[str, str]] = {}
+    for container in payload:
+        if not isinstance(container, dict):
+            continue
+        service_name = str(container.get("Service", "")).strip()
+        if not service_name:
+            continue
+        runtime[service_name] = {
+            "state": str(container.get("State", "")).strip().lower(),
+            "health": str(container.get("Health", "")).strip().lower(),
+        }
+    return runtime
+
+
 def _build_target_service_status(
     active_targets: List[Dict[str, object]],
     expected_services: List[str],
     recently_seen_services: Optional[List[str]] = None,
+    service_healthcheck_config: Optional[Dict[str, bool]] = None,
+    runtime_health_by_service: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> List[Dict[str, str]]:
     """Map expected compose services to their Prometheus target health."""
     expected_lookup = {service.lower(): service for service in expected_services}
@@ -705,10 +767,46 @@ def _build_target_service_status(
         if health == "unknown" and service.lower() in recently_seen:
             status_by_service[service] = "up"
 
-    return [
-        {"service": service, "health": status_by_service.get(service, "unknown")}
-        for service in expected_services
-    ]
+    healthcheck_lookup = {
+        str(name).lower(): bool(enabled)
+        for name, enabled in (service_healthcheck_config or {}).items()
+    }
+    runtime_lookup = {
+        str(name).lower(): payload
+        for name, payload in (runtime_health_by_service or {}).items()
+    }
+
+    services: List[Dict[str, str]] = []
+    for service in expected_services:
+        prometheus_health = status_by_service.get(service, "unknown")
+        runtime = runtime_lookup.get(service.lower(), {})
+        state = str(runtime.get("state", "")).lower()
+        healthcheck_state = str(runtime.get("health", "")).lower()
+        has_healthcheck = healthcheck_lookup.get(service.lower(), False)
+
+        final_health = prometheus_health
+        if has_healthcheck:
+            if state and state != "running":
+                final_health = "down"
+            elif healthcheck_state == "healthy":
+                final_health = "healthy"
+            elif healthcheck_state in {"unhealthy", "starting"}:
+                final_health = "unhealthy"
+            else:
+                final_health = "unhealthy"
+        elif final_health == "unknown" and state == "running":
+            final_health = "up"
+
+        services.append(
+            {
+                "service": service,
+                "health": final_health,
+                "state": state or "unknown",
+                "healthcheck": healthcheck_state if has_healthcheck else "none",
+            }
+        )
+
+    return services
 
 
 @login_required()
@@ -764,7 +862,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
     dashboard_direct_url = f"/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
     dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
-    dashboard_url = dashboard_external_url or dashboard_direct_url
+    dashboard_url = dashboard_external_url or dashboard_proxy_url
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
@@ -805,6 +903,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         )
 
         recently_seen_services: List[str] = []
+        service_healthcheck_config = _load_compose_healthcheck_config()
+        runtime_health_by_service = _load_compose_runtime_health()
         try:
             recently_seen_services = _collect_recently_seen_services(
                 prometheus_base_url
@@ -817,6 +917,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             active_targets,
             all_services,
             recently_seen_services=recently_seen_services,
+            service_healthcheck_config=service_healthcheck_config,
+            runtime_health_by_service=runtime_health_by_service,
         )
     except Exception:
         logger.exception("Failed to fetch Prometheus targets overview")
