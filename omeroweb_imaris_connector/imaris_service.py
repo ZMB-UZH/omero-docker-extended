@@ -634,7 +634,10 @@ def _get_node_descriptors_config(conn):
         value = config_service.getConfigValue("omero.server.nodedescriptors")
         if value is None:
             return None
-        return str(value).strip()
+        value = str(value).strip()
+        if not value:
+            return None
+        return value
     except Exception as exc:
         if _is_security_violation(exc):
             logger.debug(
