@@ -28,6 +28,18 @@
         <div id="status" class="log-status">Loading resource dashboard...</div>
         <div class="monitoring-summary-grid">
             <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Host CPU</div>
+                <div id="host_cpu" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Host memory</div>
+                <div id="host_memory" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Root disk usage</div>
+                <div id="host_disk" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
                 <div class="monitoring-summary-label">Grafana</div>
                 <div id="grafana_probe" class="monitoring-summary-value">Checking...</div>
             </div>
@@ -43,6 +55,11 @@
                 <div class="monitoring-summary-label">Healthy targets</div>
                 <div id="targets_up_count" class="monitoring-summary-value">0</div>
             </div>
+        </div>
+
+        <div class="monitoring-container-list-card">
+            <h3>Compose service target health</h3>
+            <div id="targets_service_health" class="monitoring-container-list">No service health data available.</div>
         </div>
         <div class="monitoring-container-list-card">
             <h3>Scraped compose services</h3>
@@ -62,6 +79,10 @@ const prometheusProbeEl = document.getElementById('prometheus_probe');
 const targetsCountEl = document.getElementById('targets_count');
 const targetsUpCountEl = document.getElementById('targets_up_count');
 const targetsContainerListEl = document.getElementById('targets_container_list');
+const targetsServiceHealthEl = document.getElementById('targets_service_health');
+const hostCpuEl = document.getElementById('host_cpu');
+const hostMemoryEl = document.getElementById('host_memory');
+const hostDiskEl = document.getElementById('host_disk');
 const storage = (() => {
     try {
         const testKey = '__admin_tools_resource_monitoring_state_test__';
@@ -130,6 +151,27 @@ function probeLabel(probe) {
     return `Reachable (HTTP ${probe.status})`;
 }
 
+
+
+function formatPercent(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return 'n/a';
+    }
+    return `${value.toFixed(1)}%`;
+}
+
+function renderServiceHealth(services) {
+    if (!services.length) {
+        targetsServiceHealthEl.textContent = 'No service health data available.';
+        return;
+    }
+    targetsServiceHealthEl.innerHTML = services.map(({ service, health }) => {
+        const normalized = String(health || 'unknown').toLowerCase();
+        const icon = normalized === 'up' ? '🟢' : (normalized === 'down' ? '🔴' : '🟡');
+        return `<span class="monitoring-pill">${icon} ${service}: ${normalized}</span>`;
+    }).join('');
+}
+
 function renderContainerList(containers) {
     if (!containers.length) {
         targetsContainerListEl.textContent = 'No compose service labels found on current targets. Ensure cadvisor is scraping Docker metadata.';
@@ -153,16 +195,22 @@ async function loadData() {
             throw new Error('Monitoring endpoints are not configured.');
         }
 
-        openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
+        const dashboardProxyUrl = payload?.grafana?.dashboard_proxy_url || dashboardUrl;
+        openGrafanaBtn.onclick = () => { window.open(dashboardProxyUrl, '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
         grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});
         prometheusProbeEl.textContent = probeLabel(payload?.prometheus?.probe || {});
 
         const overview = payload?.prometheus?.targets_overview || {};
+        const systemMetrics = payload?.system_metrics || {};
+        hostCpuEl.textContent = formatPercent(systemMetrics.cpu_usage_percent);
+        hostMemoryEl.textContent = formatPercent(systemMetrics.memory_usage_percent);
+        hostDiskEl.textContent = formatPercent(systemMetrics.disk_usage_percent);
         targetsCountEl.textContent = String(overview.active || 0);
         targetsUpCountEl.textContent = `${overview.up || 0} up / ${overview.down || 0} down`;
         renderContainerList(Array.isArray(overview.containers) ? overview.containers : []);
+        renderServiceHealth(Array.isArray(overview.services) ? overview.services : []);
 
         statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
     } catch (error) {

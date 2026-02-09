@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 from http.client import HTTPMessage
 from urllib.parse import urlparse
@@ -8,7 +9,7 @@ from urllib.parse import urlunparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import urllib.error
 import urllib.request
@@ -85,14 +86,18 @@ def _proxy_http_get(
                 text = text.replace("action='/", f"action='{proxy_prefix}/")
                 text = text.replace(base_url.rstrip("/"), proxy_prefix)
                 payload = text.encode("utf-8")
-            proxied = HttpResponse(payload, status=response.status, content_type=content_type)
+            proxied = HttpResponse(
+                payload, status=response.status, content_type=content_type
+            )
             for header_name in ("Cache-Control", "ETag", "Last-Modified"):
                 header_value = headers.get(header_name)
                 if header_value:
                     proxied[header_name] = header_value
             location = headers.get("Location")
             if location:
-                proxied["Location"] = location.replace(base_url.rstrip("/"), proxy_prefix)
+                proxied["Location"] = location.replace(
+                    base_url.rstrip("/"), proxy_prefix
+                )
             return proxied
     except urllib.error.HTTPError as exc:
         body = exc.read()
@@ -139,7 +144,10 @@ def _safe_full_name(user_obj) -> str:
     """Return "First Last" for an OMERO experimenter-like object."""
     first_name = ""
     last_name = ""
-    for getter_name, field_name in (("getFirstName", "firstName"), ("getLastName", "lastName")):
+    for getter_name, field_name in (
+        ("getFirstName", "firstName"),
+        ("getLastName", "lastName"),
+    ):
         raw_value = None
         if hasattr(user_obj, getter_name):
             raw_value = _unwrap_rtype_value(getattr(user_obj, getter_name)(), "")
@@ -241,7 +249,12 @@ def _list_all_users_and_groups(conn):
             user_groups = _call_admin_listing(
                 admin_service,
                 "containedGroups",
-                arg_options=((user_id,), (int(user_id),), (user_id, False), (user_id, None)),
+                arg_options=(
+                    (user_id,),
+                    (int(user_id),),
+                    (user_id, False),
+                    (user_id, None),
+                ),
             )
             for group in user_groups:
                 group_name = _safe_group_name(group)
@@ -262,7 +275,12 @@ def _list_all_users_and_groups(conn):
             group_users = _call_admin_listing(
                 admin_service,
                 "containedExperimenters",
-                arg_options=((group_id,), (int(group_id),), (group_id, False), (group_id, None)),
+                arg_options=(
+                    (group_id,),
+                    (int(group_id),),
+                    (group_id, False),
+                    (group_id, None),
+                ),
             )
             for user in group_users:
                 username = _safe_username(user)
@@ -272,7 +290,9 @@ def _list_all_users_and_groups(conn):
                 groups_by_user.setdefault(username, set()).add(group_name)
                 users_by_group.setdefault(group_name, set()).add(username)
     except Exception:
-        logger.exception("Failed to enumerate all users/groups from OMERO admin service")
+        logger.exception(
+            "Failed to enumerate all users/groups from OMERO admin service"
+        )
     return users, groups, group_permissions, groups_by_user, users_by_group
 
 
@@ -479,6 +499,109 @@ def internal_log_labels(request, conn=None, url=None, **kwargs):
     return JsonResponse({"service": service, "labels": labels})
 
 
+def _load_compose_service_names(compose_file: str = "docker-compose.yml") -> List[str]:
+    """Return declared Docker Compose service names from the local compose file."""
+    compose_path = os.path.join(os.getcwd(), compose_file)
+    if not os.path.exists(compose_path):
+        logger.warning("Compose file not found at %s", compose_path)
+        return []
+
+    service_names: List[str] = []
+    in_services = False
+    service_pattern = re.compile(r"^  ([a-zA-Z0-9_-]+):\s*$")
+
+    with open(compose_path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            if line.startswith("services:"):
+                in_services = True
+                continue
+            if in_services and line and not line.startswith(" "):
+                break
+            if not in_services:
+                continue
+            match = service_pattern.match(line)
+            if match:
+                service_names.append(match.group(1))
+
+    return service_names
+
+
+def _prometheus_instant_query(prometheus_base_url: str, expr: str) -> Optional[float]:
+    """Execute a Prometheus instant query and return the first numeric value."""
+    query = urlencode({"query": expr})
+    query_url = f"{prometheus_base_url.rstrip('/')}/api/v1/query?{query}"
+    with urllib.request.urlopen(query_url, timeout=5.0) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    results = payload.get("data", {}).get("result", [])
+    if not results:
+        return None
+    value = results[0].get("value", [])
+    if len(value) < 2:
+        return None
+    return float(value[1])
+
+
+def _collect_system_metrics(prometheus_base_url: str) -> Dict[str, Optional[float]]:
+    """Collect a compact set of host-level metrics for admin overview cards."""
+    metrics: Dict[str, Optional[float]] = {
+        "cpu_usage_percent": None,
+        "memory_usage_percent": None,
+        "disk_usage_percent": None,
+        "network_receive_bps": None,
+        "network_transmit_bps": None,
+    }
+    expressions = {
+        "cpu_usage_percent": '100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))',
+        "memory_usage_percent": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+        "disk_usage_percent": '100 * (1 - (node_filesystem_avail_bytes{fstype!="tmpfs",mountpoint="/"} / node_filesystem_size_bytes{fstype!="tmpfs",mountpoint="/"}))',
+        "network_receive_bps": 'sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))',
+        "network_transmit_bps": 'sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))',
+    }
+    for metric_name, expr in expressions.items():
+        try:
+            metrics[metric_name] = _prometheus_instant_query(prometheus_base_url, expr)
+        except Exception:
+            logger.exception("Failed to fetch Prometheus metric %s", metric_name)
+    return metrics
+
+
+def _build_target_service_status(
+    active_targets: List[Dict[str, object]], expected_services: List[str]
+) -> List[Dict[str, str]]:
+    """Map expected compose services to their Prometheus target health."""
+    status_by_service: Dict[str, str] = {
+        service: "unknown" for service in expected_services
+    }
+
+    for target in active_targets:
+        labels = target.get("labels", {}) or {}
+        discovered_labels = target.get("discoveredLabels", {}) or {}
+        candidates = [
+            str(labels.get("container_label_com_docker_compose_service", "")).strip(),
+            str(
+                discovered_labels.get(
+                    "__meta_docker_container_label_com_docker_compose_service", ""
+                )
+            ).strip(),
+            str(labels.get("job", "")).strip(),
+        ]
+        health = str(target.get("health", "unknown")).lower()
+        for candidate in candidates:
+            if not candidate or candidate not in status_by_service:
+                continue
+            current = status_by_service[candidate]
+            if health == "up":
+                status_by_service[candidate] = "up"
+            elif current != "up" and health in {"down", "unknown"}:
+                status_by_service[candidate] = health
+
+    return [
+        {"service": service, "health": status_by_service.get(service, "unknown")}
+        for service in expected_services
+    ]
+
+
 @login_required()
 def resource_monitoring_view(request, conn=None, url=None, **kwargs):
     """Render resource monitoring dashboard."""
@@ -519,6 +642,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         prometheus_public_url = _replace_host(prometheus_base_url, request_host)
     if "prometheus" in prometheus_public_url or "localhost" in prometheus_public_url:
         prometheus_public_url = prometheus_default_public
+
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
     )
@@ -550,11 +674,16 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     grafana_probe = _probe_http_url(f"{grafana_base_url.rstrip('/')}/api/health")
     prometheus_probe = _probe_http_url(f"{prometheus_base_url.rstrip('/')}/-/ready")
 
+    expected_services = _load_compose_service_names()
+    system_metrics = _collect_system_metrics(prometheus_base_url)
+
     targets_overview = {
         "active": 0,
         "up": 0,
         "down": 0,
+        "unknown": 0,
         "containers": [],
+        "services": [],
     }
     try:
         targets_api = f"{prometheus_base_url.rstrip('/')}/api/v1/targets"
@@ -563,25 +692,42 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         active_targets = payload.get("data", {}).get("activeTargets", [])
         targets_overview["active"] = len(active_targets)
         targets_overview["up"] = sum(
-            1 for target in active_targets if str(target.get("health", "")).lower() == "up"
+            1
+            for target in active_targets
+            if str(target.get("health", "")).lower() == "up"
         )
-        targets_overview["down"] = targets_overview["active"] - targets_overview["up"]
+        targets_overview["down"] = sum(
+            1
+            for target in active_targets
+            if str(target.get("health", "")).lower() == "down"
+        )
+        targets_overview["unknown"] = (
+            targets_overview["active"]
+            - targets_overview["up"]
+            - targets_overview["down"]
+        )
+
         labels_api = (
             f"{prometheus_base_url.rstrip('/')}/api/v1/label/"
             "container_label_com_docker_compose_service/values"
         )
-        container_names: List[str] = []
         with urllib.request.urlopen(labels_api, timeout=5.0) as label_response:
             labels_payload = json.loads(label_response.read().decode("utf-8"))
+        discovered_services = []
         if labels_payload.get("status") == "success":
-            container_names = sorted(
+            discovered_services = sorted(
                 {
                     str(name)
                     for name in labels_payload.get("data", [])
                     if str(name).strip() and str(name).strip() != "<unknown>"
                 }
             )
-        targets_overview["containers"] = container_names
+
+        all_services = sorted(set(expected_services) | set(discovered_services))
+        targets_overview["containers"] = all_services
+        targets_overview["services"] = _build_target_service_status(
+            active_targets, all_services
+        )
     except Exception:
         logger.exception("Failed to fetch Prometheus targets overview")
 
@@ -601,6 +747,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "probe": prometheus_probe,
                 "targets_overview": targets_overview,
             },
+            "system_metrics": system_metrics,
         }
     )
 
@@ -612,7 +759,9 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
-    proxy_prefix = request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    proxy_prefix = (
+        request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    )
     return _proxy_http_get(
         grafana_base_url,
         subpath,
@@ -638,7 +787,9 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         forwarded_query = ""
     request_query = request.META.get("QUERY_STRING", "")
     merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
-    proxy_prefix = request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    proxy_prefix = (
+        request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    )
     return _proxy_http_get(
         prometheus_base_url,
         subpath,
@@ -700,7 +851,13 @@ def storage_data(request, conn=None, url=None, **kwargs):
             users_by_group.setdefault(group_name, set()).add(user_name)
             total_size += size_value
 
-        all_users, all_groups, group_permissions, all_groups_by_user, all_users_by_group = _list_all_users_and_groups(conn)
+        (
+            all_users,
+            all_groups,
+            group_permissions,
+            all_groups_by_user,
+            all_users_by_group,
+        ) = _list_all_users_and_groups(conn)
         for username, full_name in all_users.items():
             totals_by_user.setdefault(username, 0)
             groups_by_user.setdefault(username, set()).update(
