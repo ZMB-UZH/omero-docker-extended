@@ -31,11 +31,18 @@ Grafana Alloy for file-based log collection.
 OMERO_SERVER_LOG_DIR=/opt/omero/server/OMERO.server/var/log
 OMERO_WEB_LOG_DIR=/opt/omero/web/OMERO.web/var/log
 OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
-GRAFANA_HOST_PORT=3000
+GRAFANA_HOST_PORT=3001
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
+GRAFANA_ANONYMOUS_ENABLED=true
+GRAFANA_ANONYMOUS_ROLE=Viewer
+GRAFANA_DOMAIN=localhost
+GRAFANA_ROOT_URL=http://localhost:3001
 ```
 
-`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
-Set it explicitly in `env/compose.env` (or in the env file you pass to Docker Compose) and change it to a free port (for example `3300`) when `3000` is already in use on the host.
+All Grafana-related compose variables now live in the repository root `.env` file and are mirrored in `env/compose.env`.
+`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`), and `GRAFANA_ROOT_URL`
+should match the externally reachable URL/port.
 
 ## How it works
 
