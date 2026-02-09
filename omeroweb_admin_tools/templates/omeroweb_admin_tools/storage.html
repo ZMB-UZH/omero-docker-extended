@@ -57,6 +57,27 @@ const searchEl = document.getElementById('search');
 const chartCanvas = document.getElementById('storage_chart');
 const chartCaption = document.getElementById('chart_caption');
 const autoRefreshToggle = document.getElementById('storage_autorefresh');
+const storage = (() => {
+    try {
+        const testKey = '__admin_tools_storage_state_test__';
+        window.localStorage.setItem(testKey, '1');
+        window.localStorage.removeItem(testKey);
+        return window.localStorage;
+    } catch (error) {
+        return null;
+    }
+})();
+const storageStateKey = 'omeroweb_admin_tools_storage_state_v1';
+const parseStoredState = (raw) => {
+    if (!raw) {
+        return null;
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        return null;
+    }
+};
 const TABLE_ROW_CAP = 5000;
 const PIE_MAX_ELEMENTS = 15;
 const AUTO_REFRESH_MS = 30000;
@@ -71,6 +92,30 @@ const viewButtons = {
 let rawData = { by_user: [], by_group: [] };
 let currentView = 'users';
 let totalUsedBytes = 0;
+
+function persistState() {
+    if (!storage) {
+        return;
+    }
+    const payload = {
+        currentView,
+        autoRefresh: !!autoRefreshToggle.checked,
+    };
+    storage.setItem(storageStateKey, JSON.stringify(payload));
+}
+
+function applyStoredState() {
+    const storedState = parseStoredState(storage?.getItem(storageStateKey));
+    if (!storedState) {
+        return;
+    }
+    if (Object.prototype.hasOwnProperty.call(storedState, 'autoRefresh')) {
+        autoRefreshToggle.checked = Boolean(storedState.autoRefresh);
+    }
+    if (['users', 'groups', 'top10'].includes(storedState.currentView)) {
+        currentView = storedState.currentView;
+    }
+}
 
 function escapeHtml(value) {
     return String(value)
@@ -127,6 +172,7 @@ function setView(nextView) {
         button.classList.toggle('is-active', isActive);
         button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
+    persistState();
     render();
 }
 
@@ -288,9 +334,11 @@ function clearAutoRefreshTimer() {
 
 function syncAutoRefresh() {
     clearAutoRefreshTimer();
+    persistState();
     if (!autoRefreshToggle.checked) {
         return;
     }
+    loadData().catch(() => {});
     autoRefreshTimer = window.setInterval(() => {
         loadData().catch(() => {});
     }, AUTO_REFRESH_MS);
@@ -304,8 +352,12 @@ viewButtons.groups.addEventListener('click', () => setView('groups'));
 viewButtons.top10.addEventListener('click', () => setView('top10'));
 autoRefreshToggle.addEventListener('change', syncAutoRefresh);
 
-loadData().catch(() => {});
+applyStoredState();
+setView(currentView);
 syncAutoRefresh();
+if (!autoRefreshToggle.checked) {
+    loadData().catch(() => {});
+}
 </script>
 </body>
 </html>
