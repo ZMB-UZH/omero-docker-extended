@@ -774,19 +774,13 @@ body {
 .storage-table td {
     padding: 3px 6px;
 }
-.storage-table th:nth-child(1),
-.storage-table td:nth-child(1) {
-    width: 120px;
-}
 .storage-table th:nth-child(2),
 .storage-table td:nth-child(2) {
-    width: 170px;
     white-space: normal;
     word-break: break-word;
 }
 .storage-table th:nth-child(3),
 .storage-table td:nth-child(3) {
-    width: auto;
     white-space: normal;
     word-break: break-word;
 }
@@ -794,26 +788,10 @@ body {
 .storage-table td:nth-child(4),
 .storage-table th:nth-child(5),
 .storage-table td:nth-child(5) {
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
     white-space: nowrap;
-}
-.storage-table.view-groups th:nth-child(4),
-.storage-table.view-groups td:nth-child(4),
-.storage-table.view-groups th:nth-child(5),
-.storage-table.view-groups td:nth-child(5) {
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
-}
-.storage-table.view-groups th:nth-child(2),
-.storage-table.view-groups td:nth-child(2) {
-    width: 260px;
 }
 .storage-table.view-groups th:nth-child(3),
 .storage-table.view-groups td:nth-child(3) {
-    width: 130px;
     white-space: nowrap;
 }
 
