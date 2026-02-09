@@ -65,18 +65,21 @@
                         <option value="fatal">Fatal</option>
                     </select>
                 </div>
-                <div class="log-toolbar-group log-toolbar-toggle">
+                <div class="log-toolbar-group log-toolbar-toggle log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
                     <label class="log-checkbox">
                         <input id="log_autorefresh" type="checkbox" checked>
                         Auto refresh
                     </label>
                 </div>
-                <div class="log-toolbar-group">
+                <div class="log-toolbar-group log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
                     <button type="button" id="log_refresh_btn" class="admin-tools-button log-refresh-button">
                         Refresh now
                     </button>
                 </div>
-                <div class="log-toolbar-group">
+                <div class="log-toolbar-group log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
                     <button type="button" id="log_download_btn" class="admin-tools-button log-refresh-button log-download-button">
                         Download log entries
                     </button>
@@ -97,10 +100,6 @@
             </div>
             <div class="log-sources">
                 <span class="log-sources-label">Internal logs</span>
-                <div class="log-inline-select-actions">
-                    <button type="button" class="log-internal-select-action" data-internal-action="all">All</button>
-                    <button type="button" class="log-internal-select-action" data-internal-action="none">None</button>
-                </div>
                 <div class="log-internal-group" data-service="omeroserver_internal">
                     <button type="button"
                             class="log-internal-trigger"
@@ -140,6 +139,10 @@
                         </div>
                         <div class="log-internal-panel-list"></div>
                     </div>
+                </div>
+                <div class="log-inline-select-actions">
+                    <button type="button" class="log-internal-select-action" data-internal-action="all">All</button>
+                    <button type="button" class="log-internal-select-action" data-internal-action="none">None</button>
                 </div>
             </div>
             <div class="log-status" id="log_status">Ready.</div>
