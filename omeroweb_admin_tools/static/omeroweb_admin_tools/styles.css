@@ -918,6 +918,13 @@ body {
     color: #991b1b;
 }
 
+
+.monitoring-pill--starting {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+}
+
 .monitoring-pill--unknown {
     border-color: #cbd5e1;
     background: #f1f5f9;

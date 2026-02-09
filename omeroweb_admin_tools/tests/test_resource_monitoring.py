@@ -447,3 +447,39 @@ def test_build_target_service_status_uses_runtime_health_when_config_unavailable
             "healthcheck": "unhealthy",
         },
     ]
+
+
+def test_build_target_service_status_reports_starting_healthcheck_state() -> None:
+    statuses = _build_target_service_status(
+        active_targets=[{"labels": {"job": "db"}, "health": "up"}],
+        expected_services=["db"],
+        service_healthcheck_config={"db": True},
+        runtime_health_by_service={"db": {"state": "running", "health": "starting"}},
+    )
+
+    assert statuses == [
+        {
+            "service": "db",
+            "health": "starting",
+            "state": "running",
+            "healthcheck": "starting",
+        }
+    ]
+
+
+def test_build_target_service_status_preserves_running_up_without_runtime_health() -> None:
+    statuses = _build_target_service_status(
+        active_targets=[{"labels": {"job": "db"}, "health": "up"}],
+        expected_services=["db"],
+        service_healthcheck_config={"db": True},
+        runtime_health_by_service={"db": {"state": "running", "health": ""}},
+    )
+
+    assert statuses == [
+        {
+            "service": "db",
+            "health": "up",
+            "state": "running",
+            "healthcheck": "",
+        }
+    ]
