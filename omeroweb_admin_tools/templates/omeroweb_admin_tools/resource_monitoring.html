@@ -195,8 +195,7 @@ async function loadData() {
             throw new Error('Monitoring endpoints are not configured.');
         }
 
-        const dashboardProxyUrl = payload?.grafana?.dashboard_proxy_url || dashboardUrl;
-        openGrafanaBtn.onclick = () => { window.open(dashboardProxyUrl, '_blank', 'noopener,noreferrer'); };
+        openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
         grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});

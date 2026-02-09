@@ -579,8 +579,37 @@ def _collect_system_metrics(prometheus_base_url: str) -> Dict[str, Optional[floa
     return metrics
 
 
+def _collect_recently_seen_services(prometheus_base_url: str) -> List[str]:
+    """Return compose services that have emitted cAdvisor samples recently."""
+    expr = (
+        "count by (container_label_com_docker_compose_service) "
+        "(max_over_time(container_last_seen"
+        '{container_label_com_docker_compose_service!="",image!=""}[5m]))'
+    )
+    query = urlencode({"query": expr})
+    query_url = f"{prometheus_base_url.rstrip('/')}/api/v1/query?{query}"
+    with urllib.request.urlopen(query_url, timeout=5.0) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    if payload.get("status") != "success":
+        return []
+
+    results = payload.get("data", {}).get("result", [])
+    discovered = set()
+    for sample in results:
+        metric = sample.get("metric", {}) or {}
+        service_name = str(
+            metric.get("container_label_com_docker_compose_service", "")
+        ).strip()
+        if service_name:
+            discovered.add(service_name)
+    return sorted(discovered)
+
+
 def _build_target_service_status(
-    active_targets: List[Dict[str, object]], expected_services: List[str]
+    active_targets: List[Dict[str, object]],
+    expected_services: List[str],
+    recently_seen_services: Optional[List[str]] = None,
 ) -> List[Dict[str, str]]:
     """Map expected compose services to their Prometheus target health."""
     expected_lookup = {service.lower(): service for service in expected_services}
@@ -650,6 +679,14 @@ def _build_target_service_status(
             elif current != "up" and health in {"down", "unknown"}:
                 status_by_service[service_name] = health
 
+    recently_seen = {
+        str(service).strip().lower() for service in (recently_seen_services or [])
+    }
+
+    for service, health in list(status_by_service.items()):
+        if health == "unknown" and service.lower() in recently_seen:
+            status_by_service[service] = "up"
+
     return [
         {"service": service, "health": status_by_service.get(service, "unknown")}
         for service in expected_services
@@ -707,9 +744,10 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     dashboard_query = urlencode(
         {
             "orgId": "1",
+            "from": "now-6h",
+            "to": "now",
+            "timezone": "browser",
             "refresh": "10s",
-            "kiosk": "tv",
-            "theme": "light",
         }
     )
     dashboard_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
@@ -777,10 +815,22 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 }
             )
 
-        all_services = sorted(set(expected_services) | set(discovered_services))
+        recently_seen_services: List[str] = []
+        try:
+            recently_seen_services = _collect_recently_seen_services(prometheus_base_url)
+        except Exception:
+            logger.exception("Failed to fetch recently seen cAdvisor services")
+
+        all_services = sorted(
+            set(expected_services)
+            | set(discovered_services)
+            | set(recently_seen_services)
+        )
         targets_overview["containers"] = all_services
         targets_overview["services"] = _build_target_service_status(
-            active_targets, all_services
+            active_targets,
+            all_services,
+            recently_seen_services=recently_seen_services,
         )
     except Exception:
         logger.exception("Failed to fetch Prometheus targets overview")
