@@ -143,6 +143,43 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     }
 
 
+def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
+    class DummyResponse:
+        status = 302
+        headers = {"Content-Type": "text/plain", "Location": "/d/omero-infrastructure"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"redirect"
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda request, timeout=10.0: DummyResponse()
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "d/omero-infrastructure",
+        proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert response.status_code == 302
+    assert (
+        response["Location"]
+        == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure"
+    )
+
+
 def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
     assert _is_internal_hostname("grafana") is True
     assert _is_internal_hostname("localhost") is True
