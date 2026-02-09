@@ -100,7 +100,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
         "CRITICAL": "fatal",
         "FATAL": "fatal",
         "PANIC": "fatal",
-        "LOG": "info",        # Postgres uses "LOG"
+        "LOG": "info",  # Postgres uses "LOG"
     }
 
     # Pattern 1: level keyword in square brackets or after a timestamp, e.g.
@@ -110,7 +110,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     # We look for a standalone level token surrounded by whitespace, brackets,
     # or start/end of string.
     m = re.search(
-        r'(?:^|[\s\[\(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\]\):]|$)',
+        r"(?:^|[\s\[\(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\]\):]|$)",
         message[:500],  # limit search to first 500 chars for performance
     )
     if m:
@@ -142,7 +142,9 @@ def _execute_loki_query(
     url = f"{config.loki_url}/loki/api/v1/query_range?{params}"
     request = urllib.request.Request(url, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+        with urllib.request.urlopen(
+            request, timeout=config.timeout_seconds
+        ) as response:
             raw = response.read()
             try:
                 return json.loads(raw.decode("utf-8", errors="replace"))
@@ -175,7 +177,9 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
         # Treat Loki/Alloy-detected_level if present (some Loki versions
         # auto-detect it).
         if not stream_level or stream_level == "info":
-            stream_level = stream_labels.get("detected_level", "").strip().lower() or stream_level
+            stream_level = (
+                stream_labels.get("detected_level", "").strip().lower() or stream_level
+            )
         container = stream_labels.get("container", "unknown")
         compose_service = stream_labels.get("compose_service")
         log_type = stream_labels.get("log_type", "")
@@ -189,11 +193,17 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
         # silently hidden.
         # Detection: check for log_type="internal" OR compose_service ending with "_internal"
         # to support both old and new Alloy configurations.
-        is_internal = (log_type == "internal") or (compose_service and compose_service.endswith("_internal"))
+        is_internal = (log_type == "internal") or (
+            compose_service and compose_service.endswith("_internal")
+        )
         if is_internal:
             # For the UI, we need the container name to include "_internal" suffix
             # so the JS filtering logic can identify internal log entries.
-            service_base = _normalize_internal_service(compose_service) if compose_service else "unknown"
+            service_base = (
+                _normalize_internal_service(compose_service)
+                if compose_service
+                else "unknown"
+            )
             display_container = f"{service_base}_internal/{filename or 'unknown'}"
         for value in stream.get("values", []):
             timestamp_ns, message = value
@@ -238,7 +248,10 @@ def fetch_loki_logs(
 
     logger.debug(
         "fetch_loki_logs called: docker=%s, internal=%s, lookback=%d, max=%d",
-        docker_containers, internal_services, lookback_seconds, max_entries
+        docker_containers,
+        internal_services,
+        lookback_seconds,
+        max_entries,
     )
 
     all_entries: List[LogEntry] = []
@@ -249,7 +262,7 @@ def fetch_loki_logs(
     # Docker logs have container_id set, internal file logs do not.
     # For other containers (database, redis), we query normally.
     containers_with_internal_logs = {"omeroserver", "omeroweb"}
-    
+
     for container in docker_containers:
         if container in containers_with_internal_logs:
             # Use container_id=~".+" to match only Docker logs (which have container_id)
@@ -257,14 +270,11 @@ def fetch_loki_logs(
             query = f'{{compose_service="{container}", container_id=~".+"}}'
         else:
             query = f'{{compose_service="{container}"}}'
-        
+
         try:
             payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
             entries = _parse_entries_from_payload(payload)
-            logger.debug(
-                "Docker query for %s: got %d entries",
-                container, len(entries)
-            )
+            logger.debug("Docker query for %s: got %d entries", container, len(entries))
             all_entries.extend(entries)
         except RuntimeError as exc:
             logger.warning("Docker log query failed for %s: %s", container, exc)
@@ -291,16 +301,20 @@ def fetch_loki_logs(
                 entries = filtered_entries
             logger.debug(
                 "Internal query for %s (normalized=%s): got %d entries",
-                service, normalized, len(entries)
+                service,
+                normalized,
+                len(entries),
             )
             all_entries.extend(entries)
         except RuntimeError as exc:
             logger.warning("Internal log query failed for %s: %s", service, exc)
 
     result = _cap_entries_per_container(all_entries, max_entries)
-    # Apply global cap to ensure total entries don't exceed max_entries
-    result = _apply_global_cap(result, max_entries)
-    logger.debug("fetch_loki_logs returning %d entries (from %d total)", len(result), len(all_entries))
+    logger.debug(
+        "fetch_loki_logs returning %d entries (from %d total)",
+        len(result),
+        len(all_entries),
+    )
     return result
 
 
@@ -337,7 +351,9 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     return None
 
 
-def _build_internal_file_query(service: str, filename: str, label_key: str = "filepath") -> str:
+def _build_internal_file_query(
+    service: str, filename: str, label_key: str = "filepath"
+) -> str:
     """Build a Loki query for a specific internal log file."""
     normalized = _normalize_internal_service(service)
     escaped = re.escape(filename)
@@ -406,7 +422,9 @@ def fetch_internal_log_labels(
     logger.debug("fetch_internal_log_labels: querying %s", url)
     request = urllib.request.Request(url, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+        with urllib.request.urlopen(
+            request, timeout=config.timeout_seconds
+        ) as response:
             raw = response.read()
             try:
                 payload = json.loads(raw.decode("utf-8", errors="replace"))
@@ -440,7 +458,9 @@ def fetch_internal_log_labels(
     result = sorted(filenames)
     logger.debug(
         "fetch_internal_log_labels: found %d files for %s: %s",
-        len(result), compose_service, result[:5]  # Log first 5 filenames
+        len(result),
+        compose_service,
+        result[:5],  # Log first 5 filenames
     )
     return result, label_key
 
