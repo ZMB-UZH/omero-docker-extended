@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+from http.client import HTTPMessage
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 from urllib.parse import urlencode
@@ -13,7 +14,9 @@ import urllib.error
 import urllib.request
 
 from django.http import JsonResponse
+from django.http import HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from omeroweb.decorators import login_required
 
 from ..config import optional_log_config
@@ -49,6 +52,35 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
         return {"ok": False, "status": int(exc.code), "error": f"HTTP {exc.code}"}
     except urllib.error.URLError as exc:
         return {"ok": False, "status": 0, "error": str(exc.reason)}
+
+
+def _proxy_http_get(base_url: str, path: str, query: str = "") -> HttpResponse:
+    """Proxy a GET request to a configured backend URL and return the response body."""
+    target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    if query:
+        target_url = f"{target_url}?{query}"
+
+    request = urllib.request.Request(target_url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=10.0) as response:
+            payload = response.read()
+            headers: HTTPMessage = response.headers
+            content_type = headers.get("Content-Type", "application/octet-stream")
+            proxied = HttpResponse(payload, status=response.status, content_type=content_type)
+            for header_name in ("Cache-Control", "ETag", "Last-Modified"):
+                header_value = headers.get(header_name)
+                if header_value:
+                    proxied[header_name] = header_value
+            return proxied
+    except urllib.error.HTTPError as exc:
+        body = exc.read()
+        content_type = exc.headers.get("Content-Type", "text/plain; charset=utf-8")
+        return HttpResponse(body, status=int(exc.code), content_type=content_type)
+    except urllib.error.URLError as exc:
+        return JsonResponse(
+            {"error": f"Backend unreachable for {target_url}: {exc.reason}"},
+            status=502,
+        )
 
 
 def _replace_host(url: str, hostname: str) -> str:
@@ -297,6 +329,16 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
     dashboard_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
     prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
+    dashboard_proxy_path = reverse(
+        "omeroweb_admin_tools_grafana_proxy",
+        kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
+    )
+    dashboard_proxy_url = request.build_absolute_uri(
+        f"{dashboard_proxy_path}?{dashboard_query}"
+    )
+    prometheus_targets_proxy_url = request.build_absolute_uri(
+        reverse("omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"})
+    )
 
     grafana_probe = _probe_http_url(f"{grafana_base_url.rstrip('/')}/api/health")
     prometheus_probe = _probe_http_url(f"{prometheus_base_url.rstrip('/')}/-/ready")
@@ -307,14 +349,42 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "grafana": {
                 "base_url": grafana_base_url,
                 "dashboard_url": dashboard_url,
+                "dashboard_proxy_url": dashboard_proxy_url,
                 "probe": grafana_probe,
             },
             "prometheus": {
                 "base_url": prometheus_base_url,
                 "targets_url": prometheus_targets_url,
+                "targets_proxy_url": prometheus_targets_proxy_url,
                 "probe": prometheus_probe,
             },
         }
+    )
+
+
+@login_required()
+def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
+    """Proxy read-only Grafana HTTP responses through OMERO.web."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+    grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    return _proxy_http_get(grafana_base_url, subpath, request.META.get("QUERY_STRING", ""))
+
+
+@login_required()
+def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
+    """Proxy read-only Prometheus HTTP responses through OMERO.web."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+    prometheus_base_url = os.environ.get(
+        "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
+    )
+    return _proxy_http_get(
+        prometheus_base_url,
+        subpath,
+        request.META.get("QUERY_STRING", ""),
     )
 
 
@@ -340,7 +410,9 @@ def storage_data(request, conn=None, url=None, **kwargs):
     """
     per_user_group = []
     totals_by_user: Dict[str, int] = {}
+    groups_by_user: Dict[str, set] = {}
     totals_by_group: Dict[str, int] = {}
+    users_by_group: Dict[str, set] = {}
     total_size = 0
 
     try:
@@ -358,9 +430,11 @@ def storage_data(request, conn=None, url=None, **kwargs):
                 }
             )
             totals_by_user[user_name] = totals_by_user.get(user_name, 0) + size_value
+            groups_by_user.setdefault(user_name, set()).add(group_name)
             totals_by_group[group_name] = (
                 totals_by_group.get(group_name, 0) + size_value
             )
+            users_by_group.setdefault(group_name, set()).add(user_name)
             total_size += size_value
     except Exception as exc:
         logger.exception("Failed to compute storage distribution")
@@ -383,13 +457,21 @@ def storage_data(request, conn=None, url=None, **kwargs):
                 "data_root_free_bytes": data_free,
             },
             "by_user": [
-                {"username": username, "bytes": size}
+                {
+                    "username": username,
+                    "groups": sorted(groups_by_user.get(username, set())),
+                    "bytes": size,
+                }
                 for username, size in sorted(
                     totals_by_user.items(), key=lambda item: item[1], reverse=True
                 )
             ],
             "by_group": [
-                {"group": groupname, "bytes": size}
+                {
+                    "group": groupname,
+                    "users": sorted(users_by_group.get(groupname, set())),
+                    "bytes": size,
+                }
                 for groupname, size in sorted(
                     totals_by_group.items(), key=lambda item: item[1], reverse=True
                 )

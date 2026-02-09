@@ -21,13 +21,11 @@
         </div>
         <div id="status" class="log-status">Loading resource dashboard...</div>
         <div id="monitoring_details" class="log-status"></div>
-        <iframe id="grafana_iframe" class="admin-tools-monitoring-frame" title="Grafana resource dashboard"></iframe>
     </div>
 </div>
 <script defer>
 const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" %}', window.location.href);
 const statusEl = document.getElementById('status');
-const grafanaIframe = document.getElementById('grafana_iframe');
 const openGrafanaBtn = document.getElementById('open_grafana_btn');
 const openPrometheusBtn = document.getElementById('open_prometheus_btn');
 const detailsEl = document.getElementById('monitoring_details');
@@ -53,27 +51,15 @@ async function loadData() {
         if (!response.ok) {
             throw new Error(payload.error || `Request failed with status ${response.status}`);
         }
-        const dashboardUrl = payload?.grafana?.dashboard_url || '';
-        const targetsUrl = payload?.prometheus?.targets_url || '';
-        if (!dashboardUrl || !targetsUrl) {
+        const dashboardProxyUrl = payload?.grafana?.dashboard_proxy_url || payload?.grafana?.dashboard_url || '';
+        const targetsProxyUrl = payload?.prometheus?.targets_proxy_url || payload?.prometheus?.targets_url || '';
+        if (!dashboardProxyUrl || !targetsProxyUrl) {
             throw new Error('Monitoring endpoints are not configured.');
         }
-        openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
-        openPrometheusBtn.onclick = () => { window.open(targetsUrl, '_blank', 'noopener,noreferrer'); };
+        openGrafanaBtn.onclick = () => { window.open(dashboardProxyUrl, '_blank', 'noopener,noreferrer'); };
+        openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
         updateDetails(payload);
-
-        let iframeLoaded = false;
-        const timeoutHandle = window.setTimeout(() => {
-            if (!iframeLoaded) {
-                statusEl.textContent = `Grafana embed blocked by browser policy. Use "Open Grafana" button. Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
-            }
-        }, 4000);
-        grafanaIframe.onload = () => {
-            iframeLoaded = true;
-            window.clearTimeout(timeoutHandle);
-            statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
-        };
-        grafanaIframe.src = dashboardUrl;
+        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}. Use "Open Grafana" to view the dashboard.`;
     } catch (error) {
         statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
     }
