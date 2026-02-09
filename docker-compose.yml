@@ -115,7 +115,7 @@ services:
       start_period: 10s
 
   grafana:
-    image: "grafana/grafana:12.4.0"
+    image: "grafana/grafana:12.4.0-21611641766"
     restart: unless-stopped
     user: "472:472"
     networks:
