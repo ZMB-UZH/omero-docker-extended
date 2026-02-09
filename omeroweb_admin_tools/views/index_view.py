@@ -139,7 +139,14 @@ def _build_public_service_url(
     parsed = urlparse(internal_url)
     scheme = parsed.scheme or request_scheme
     base_path = parsed.path.rstrip("/")
-    public_base = f"{scheme}://{request_host}:{public_port}"
+    host_only = str(request_host or "").strip()
+    if host_only.startswith("[") and "]" in host_only:
+        normalized_host = host_only
+    elif ":" in host_only:
+        normalized_host = f"[{host_only}]"
+    else:
+        normalized_host = host_only
+    public_base = f"{scheme}://{normalized_host}:{public_port}"
     if base_path:
         return f"{public_base}{base_path}"
     return public_base
@@ -773,7 +780,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "refresh": "10s",
         }
     )
-    dashboard_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+    dashboard_external_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
     prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
     dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
@@ -782,6 +789,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     dashboard_proxy_url = request.build_absolute_uri(
         f"{dashboard_proxy_path}?{dashboard_query}"
     )
+    dashboard_url = dashboard_proxy_url
     prometheus_targets_proxy_url = request.build_absolute_uri(
         reverse("omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"})
     )
@@ -864,6 +872,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "grafana": {
                 "base_url": grafana_base_url,
                 "dashboard_url": dashboard_url,
+                "dashboard_external_url": dashboard_external_url,
                 "dashboard_proxy_url": dashboard_proxy_url,
                 "probe": grafana_probe,
             },
