@@ -210,8 +210,37 @@ RUN set -euo pipefail; \
     chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
+# ---------------------------------------------------------------------------
+# FIX: The base image's /startup/99-run.sh executes
+#   "omero web start --foreground"
+# which blocks forever. The base image entrypoint loops over /startup/* and
+# never reaches exec "$@", so our CMD (supervisord) never runs.
+#
+# Solution:
+#  1. Delete 99-run.sh — supervisord manages gunicorn instead.
+#  2. Replace entrypoint with one that exec's "$@" after startup scripts.
+# ---------------------------------------------------------------------------
+RUN rm -f /startup/99-run.sh
+
+RUN set -euo pipefail; \
+    printf '%s\n' \
+        '#!/usr/local/bin/dumb-init /bin/bash' \
+        'set -e' \
+        'source /opt/omero/web/venv3/bin/activate' \
+        'for f in /startup/*; do' \
+        '    if [ -f "$f" ] && [ -x "$f" ]; then' \
+        '        echo "Running $f $@"' \
+        '        "$f" "$@"' \
+        '    fi' \
+        'done' \
+        'echo "Startup scripts complete. Launching: $@"' \
+        'exec "$@"' \
+        > /usr/local/bin/entrypoint-supervisord.sh; \
+    chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
+
 # Drop privileges for runtime
 # ---------------------------
 USER omero-web
 
+ENTRYPOINT ["/usr/local/bin/entrypoint-supervisord.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
