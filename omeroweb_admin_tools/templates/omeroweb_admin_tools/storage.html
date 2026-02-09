@@ -40,11 +40,13 @@
                 <div id="chart_caption" class="storage-chart-caption"></div>
             </div>
             <div class="storage-table-card">
-                <table class="log-table storage-table">
-                    <colgroup id="storage_table_cols"></colgroup>
-                    <thead><tr id="storage_table_head"></tr></thead>
-                    <tbody id="storage_table"></tbody>
-                </table>
+                <div id="storage_table_scroll" class="storage-table-scroll" aria-label="Storage distribution table">
+                    <table class="log-table storage-table">
+                        <colgroup id="storage_table_cols"></colgroup>
+                        <thead><tr id="storage_table_head"></tr></thead>
+                        <tbody id="storage_table"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -54,10 +56,12 @@ const dataUrl = new URL('{% url "omeroweb_admin_tools_storage_data" %}', window.
 const table = document.getElementById('storage_table');
 const tableHead = document.getElementById('storage_table_head');
 const tableCols = document.getElementById('storage_table_cols');
+const tableScroll = document.getElementById('storage_table_scroll');
 const statusEl = document.getElementById('status');
 const searchEl = document.getElementById('search');
 const chartCanvas = document.getElementById('storage_chart');
 const chartCaption = document.getElementById('chart_caption');
+const chartCard = document.querySelector('.storage-chart-card');
 const autoRefreshToggle = document.getElementById('storage_autorefresh');
 const storage = (() => {
     try {
@@ -143,9 +147,16 @@ function bytes(v) {
 
 function getColumnLayoutForView() {
     if (currentView === 'groups') {
-        return ['14%', '35%', '18%', '160px', '160px'];
+        return ['15%', '38%', 'calc(47% - 250px)', '104px', '146px'];
     }
-    return ['14%', '15%', 'calc(56% - 320px)', '160px', '160px'];
+    return ['15%', '16%', 'calc(69% - 250px)', '104px', '146px'];
+}
+
+function syncStorageTableHeight() {
+    if (!tableScroll || !chartCard) {
+        return;
+    }
+    tableScroll.style.maxHeight = `${chartCard.clientHeight}px`;
 }
 
 function getRowsForView() {
@@ -312,8 +323,9 @@ function render() {
     }
 
     const viewLabel = currentView === 'groups' ? 'Group view' : currentView === 'top10' ? 'Top-10 users' : 'User view';
-    statusEl.textContent = `Loaded ${allRows.length} rows for ${viewLabel}. Showing ${shownRows.length} row(s).`;
+    statusEl.textContent = `Loaded ${allRows.length} rows for ${viewLabel}.`;
     drawPieChart(filteredRows, viewLabel);
+    syncStorageTableHeight();
 }
 
 function exportCsv() {
@@ -384,6 +396,7 @@ viewButtons.users.addEventListener('click', () => setView('users'));
 viewButtons.groups.addEventListener('click', () => setView('groups'));
 viewButtons.top10.addEventListener('click', () => setView('top10'));
 autoRefreshToggle.addEventListener('change', syncAutoRefresh);
+window.addEventListener('resize', syncStorageTableHeight);
 
 applyStoredState();
 setView(currentView);
