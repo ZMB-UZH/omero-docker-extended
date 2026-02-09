@@ -843,7 +843,7 @@ body {
 
 .monitoring-summary-grid {
     display: grid;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 10px;
     margin-top: 12px;
 }
@@ -897,4 +897,29 @@ body {
     font-size: 12px;
     font-weight: 600;
     padding: 4px 8px;
+}
+
+
+.monitoring-pill--healthy {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.monitoring-pill--unhealthy {
+    border-color: #fcd34d;
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.monitoring-pill--down {
+    border-color: #fca5a5;
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.monitoring-pill--unknown {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+    color: #334155;
 }
