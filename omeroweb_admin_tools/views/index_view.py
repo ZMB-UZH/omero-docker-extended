@@ -492,7 +492,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
     try:
         service_opts = conn.SERVICE_OPTS
         if hasattr(service_opts, "setOmeroGroup"):
-            service_opts.setOmeroGroup("-1")
+            service_opts.setOmeroGroup(-1)
         rows = conn.getQueryService().projection(query, None, service_opts)
         for row in rows:
             user_name = str(_unwrap_rtype_value(row[1], "unknown") or "unknown")

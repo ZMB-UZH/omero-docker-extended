@@ -142,6 +142,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ROLE}
       GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN}
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
+      GF_METRICS_ENABLED: "true"
     depends_on:
       prometheus:
         condition: service_healthy
