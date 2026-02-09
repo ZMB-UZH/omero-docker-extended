@@ -22,7 +22,7 @@ ADMIN_TOOLS_LOG_MAX_ENTRIES=5000
 ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 ```
 
-## Optional environment variables (compose)
+## Optional environment variables (compose env file)
 
 Configure where the OMERO containers write internal log files. These are mounted into
 Grafana Alloy for file-based log collection.
@@ -35,7 +35,7 @@ GRAFANA_HOST_PORT=3000
 ```
 
 `GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
-Set it to a free port (for example `3300`) when `3000` is already in use on the host.
+Set it explicitly in `env/compose.env` (or in the env file you pass to Docker Compose) and change it to a free port (for example `3300`) when `3000` is already in use on the host.
 
 ## How it works
 
