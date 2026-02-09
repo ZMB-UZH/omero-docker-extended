@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from omeroweb_admin_tools.views.index_view import (
+    _build_public_service_url,
     _build_target_service_status,
+    _is_internal_hostname,
     _load_compose_service_names,
     _proxy_http_request,
 )
@@ -133,3 +135,33 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
         "data": b'{"query":"up"}',
         "timeout": 10.0,
     }
+
+
+def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
+    assert _is_internal_hostname("grafana") is True
+    assert _is_internal_hostname("localhost") is True
+    assert _is_internal_hostname("127.0.0.1") is True
+    assert _is_internal_hostname("prometheus") is True
+    assert _is_internal_hostname("192.168.1.189") is False
+
+
+def test_build_public_service_url_uses_request_host_and_public_port() -> None:
+    built = _build_public_service_url(
+        "http://grafana:3000",
+        "http",
+        "192.168.1.189",
+        3001,
+    )
+
+    assert built == "http://192.168.1.189:3001"
+
+
+def test_build_public_service_url_preserves_base_path() -> None:
+    built = _build_public_service_url(
+        "https://grafana:3000/grafana",
+        "https",
+        "example.org",
+        4430,
+    )
+
+    assert built == "https://example.org:4430/grafana"
