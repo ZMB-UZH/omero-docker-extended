@@ -169,6 +169,9 @@ function normalizeServiceHealth(rawHealth) {
     if (normalized.startsWith('up')) {
         return 'up';
     }
+    if (normalized.startsWith('starting')) {
+        return 'starting';
+    }
     if (normalized.startsWith('down')) {
         return 'down';
     }
@@ -184,6 +187,9 @@ function serviceHealthClass(health) {
     }
     if (health === 'down') {
         return 'monitoring-pill--down';
+    }
+    if (health === 'starting') {
+        return 'monitoring-pill--starting';
     }
     return 'monitoring-pill--unknown';
 }
