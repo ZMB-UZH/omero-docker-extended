@@ -684,3 +684,11 @@ body {
         @keyframes log-internal-spin {
             to { transform: rotate(360deg); }
         }
+
+.admin-tools-monitoring-frame {
+    width: 100%;
+    min-height: 760px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+}

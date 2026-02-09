@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -19,6 +20,17 @@ from ..services.log_query import (
 from .utils import current_username
 
 logger = logging.getLogger(__name__)
+
+
+def _unwrap_rtype_value(value, default=None):
+    """Extract primitive values from OMERO rtypes and similar wrappers."""
+    if value is None:
+        return default
+    if hasattr(value, "val"):
+        return value.val
+    if hasattr(value, "getValue"):
+        return value.getValue()
+    return value
 
 
 def _require_root_user(request, conn):
@@ -187,43 +199,45 @@ def resource_monitoring_view(request, conn=None, url=None, **kwargs):
 
 @login_required()
 def resource_monitoring_data(request, conn=None, url=None, **kwargs):
-    """Return host-level CPU, memory and mounted storage usage."""
+    """Return monitoring endpoint URLs for Grafana and Prometheus dashboards."""
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
 
-    total, used, free = shutil.disk_usage("/")
-    mem_total_kib = 0
-    mem_available_kib = 0
-    with open("/proc/meminfo", "r", encoding="utf-8") as handle:
-        for line in handle:
-            if line.startswith("MemTotal:"):
-                mem_total_kib = int(line.split()[1])
-            elif line.startswith("MemAvailable:"):
-                mem_available_kib = int(line.split()[1])
+    grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    prometheus_base_url = os.environ.get(
+        "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
+    )
+    dashboard_uid = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    )
+    dashboard_slug = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "omero-infrastructure"
+    )
 
-    load1, load5, load15 = os.getloadavg()
-    cpu_count = os.cpu_count() or 1
+    dashboard_query = urlencode(
+        {
+            "orgId": "1",
+            "refresh": "10s",
+            "kiosk": "tv",
+            "theme": "light",
+        }
+    )
+    dashboard_url = (
+        f"{grafana_base_url}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+    )
+    prometheus_targets_url = f"{prometheus_base_url}/targets"
 
     return JsonResponse(
         {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "cpu": {
-                "load_1m": load1,
-                "load_5m": load5,
-                "load_15m": load15,
-                "cpu_count": cpu_count,
-                "load_percent_1m": min(100.0, (load1 / cpu_count) * 100.0),
+            "grafana": {
+                "base_url": grafana_base_url,
+                "dashboard_url": dashboard_url,
             },
-            "memory": {
-                "total_bytes": mem_total_kib * 1024,
-                "available_bytes": mem_available_kib * 1024,
-                "used_bytes": max(0, (mem_total_kib - mem_available_kib) * 1024),
-            },
-            "filesystem_root": {
-                "total_bytes": total,
-                "used_bytes": used,
-                "free_bytes": free,
+            "prometheus": {
+                "base_url": prometheus_base_url,
+                "targets_url": prometheus_targets_url,
             },
         }
     )
@@ -257,9 +271,10 @@ def storage_data(request, conn=None, url=None, **kwargs):
     try:
         rows = conn.getQueryService().projection(query, None, conn.SERVICE_OPTS)
         for row in rows:
-            user_name = row[1].val if row[1] else "unknown"
-            group_name = row[3].val if row[3] else "unknown"
-            size_value = int(row[4].val or 0)
+            user_name = str(_unwrap_rtype_value(row[1], "unknown") or "unknown")
+            group_name = str(_unwrap_rtype_value(row[3], "unknown") or "unknown")
+            size_raw = _unwrap_rtype_value(row[4], 0)
+            size_value = int(size_raw or 0)
             per_user_group.append(
                 {
                     "username": user_name,
