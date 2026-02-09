@@ -17,8 +17,8 @@
     <div class="admin-tools-card admin-tools-card--wide">
         <div class="log-toolbar">
             <input id="search" class="log-input" type="text" placeholder="Search by user or group">
-            <button type="button" id="refresh_btn" class="admin-tools-button">Refresh now</button>
-            <button type="button" id="export_btn" class="admin-tools-button">Export CSV</button>
+            <button type="button" id="refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
+            <button type="button" id="export_btn" class="admin-tools-button log-refresh-button">Export CSV</button>
         </div>
         <div id="status" class="log-status">Ready.</div>
         <table class="log-table">
@@ -45,7 +45,9 @@ function bytes(v) {
 function render() {
     const needle = searchEl.value.trim().toLowerCase();
     const rows = data.filter((row) => {
-        if (!needle) return true;
+        if (!needle) {
+            return true;
+        }
         return row.username.toLowerCase().includes(needle) || row.group.toLowerCase().includes(needle);
     });
     table.innerHTML = rows.map((row) => (`<tr><td>${row.username}</td><td>${row.group}</td><td>${bytes(row.bytes)}</td></tr>`)).join('') || '<tr><td colspan="3" class="log-empty">No rows.</td></tr>';
@@ -64,15 +66,20 @@ function exportCsv() {
 
 async function loadData() {
     statusEl.textContent = 'Loading storage distribution...';
-    const response = await fetch(dataUrl, { credentials: 'same-origin' });
-    const payload = response.ok ? await response.json() : null;
-    if (!payload) {
-        statusEl.textContent = 'Failed to load storage distribution.';
-        return;
+    try {
+        const response = await fetch(dataUrl, { credentials: 'same-origin' });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || `Request failed with status ${response.status}`);
+        }
+        data = payload.by_user_group || [];
+        render();
+        statusEl.textContent = `Loaded ${data.length} rows. OMERO binaries total: ${bytes(payload.totals.omero_binary_bytes)}.`;
+    } catch (error) {
+        data = [];
+        render();
+        statusEl.textContent = `Failed to load storage distribution: ${error.message}`;
     }
-    data = payload.by_user_group || [];
-    render();
-    statusEl.textContent = `Loaded ${data.length} rows. OMERO binaries total: ${bytes(payload.totals.omero_binary_bytes)}.`;
 }
 
 document.getElementById('refresh_btn').addEventListener('click', () => { loadData().catch(() => {}); });

@@ -16,72 +16,43 @@
     </div>
     <div class="admin-tools-card admin-tools-card--wide">
         <div class="log-toolbar">
-            <button type="button" id="refresh_btn" class="admin-tools-button">Refresh now</button>
-            <label class="log-checkbox"><input id="auto_refresh" type="checkbox" checked>Auto refresh</label>
+            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Open Grafana</button>
+            <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Open Prometheus targets</button>
         </div>
-        <div id="status" class="log-status">Ready.</div>
-        <table class="log-table">
-            <tbody id="resource_table"></tbody>
-        </table>
+        <div id="status" class="log-status">Loading resource dashboard...</div>
+        <iframe id="grafana_iframe" class="admin-tools-monitoring-frame" title="Grafana resource dashboard"></iframe>
     </div>
 </div>
 <script defer>
 const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" %}', window.location.href);
-const table = document.getElementById('resource_table');
 const statusEl = document.getElementById('status');
-const autoRefresh = document.getElementById('auto_refresh');
-let timer = null;
-
-function bytes(v) {
-    if (v === null || v === undefined) return 'n/a';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = Number(v);
-    let idx = 0;
-    while (value >= 1024 && idx < units.length - 1) { value /= 1024; idx += 1; }
-    return `${value.toFixed(2)} ${units[idx]}`;
-}
-
-function render(payload) {
-    table.innerHTML = `
-        <tr><th>Metric</th><th>Value</th></tr>
-        <tr><td>CPU cores</td><td>${payload.cpu.cpu_count}</td></tr>
-        <tr><td>CPU load (1m/5m/15m)</td><td>${payload.cpu.load_1m.toFixed(2)} / ${payload.cpu.load_5m.toFixed(2)} / ${payload.cpu.load_15m.toFixed(2)}</td></tr>
-        <tr><td>CPU load % (1m)</td><td>${payload.cpu.load_percent_1m.toFixed(1)}%</td></tr>
-        <tr><td>Memory total</td><td>${bytes(payload.memory.total_bytes)}</td></tr>
-        <tr><td>Memory used</td><td>${bytes(payload.memory.used_bytes)}</td></tr>
-        <tr><td>Memory available</td><td>${bytes(payload.memory.available_bytes)}</td></tr>
-        <tr><td>Filesystem / total</td><td>${bytes(payload.filesystem_root.total_bytes)}</td></tr>
-        <tr><td>Filesystem / used</td><td>${bytes(payload.filesystem_root.used_bytes)}</td></tr>
-        <tr><td>Filesystem / free</td><td>${bytes(payload.filesystem_root.free_bytes)}</td></tr>
-    `;
-}
+const grafanaIframe = document.getElementById('grafana_iframe');
+const openGrafanaBtn = document.getElementById('open_grafana_btn');
+const openPrometheusBtn = document.getElementById('open_prometheus_btn');
 
 async function loadData() {
-    statusEl.textContent = 'Loading resource metrics...';
-    const response = await fetch(dataUrl, { credentials: 'same-origin' });
-    const payload = response.ok ? await response.json() : null;
-    if (!payload) {
-        statusEl.textContent = 'Failed to load resource metrics.';
-        return;
+    statusEl.textContent = 'Loading resource dashboard...';
+    try {
+        const response = await fetch(dataUrl, { credentials: 'same-origin' });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || `Request failed with status ${response.status}`);
+        }
+        const dashboardUrl = payload?.grafana?.dashboard_url || '';
+        const targetsUrl = payload?.prometheus?.targets_url || '';
+        if (!dashboardUrl || !targetsUrl) {
+            throw new Error('Monitoring endpoints are not configured.');
+        }
+        grafanaIframe.src = dashboardUrl;
+        openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
+        openPrometheusBtn.onclick = () => { window.open(targetsUrl, '_blank', 'noopener,noreferrer'); };
+        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
+    } catch (error) {
+        statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
     }
-    render(payload);
-    statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
 }
 
-function schedule() {
-    if (timer) {
-        clearInterval(timer);
-        timer = null;
-    }
-    if (autoRefresh.checked) {
-        timer = setInterval(() => { loadData().catch(() => {}); }, 10000);
-    }
-}
-
-document.getElementById('refresh_btn').addEventListener('click', () => { loadData().catch(() => {}); });
-autoRefresh.addEventListener('change', schedule);
 loadData().catch(() => {});
-schedule();
 </script>
 </body>
 </html>
