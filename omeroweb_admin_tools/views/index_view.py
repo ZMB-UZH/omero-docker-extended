@@ -123,23 +123,26 @@ def _proxy_http_request(
         )
 
 
-def _replace_host(url: str, hostname: str) -> str:
-    """Return URL with host replaced while preserving scheme, port, and path."""
-    parsed = urlparse(url)
-    if not parsed.scheme:
-        return url
-    port = parsed.port
-    netloc = f"{hostname}:{port}" if port else hostname
-    return urlunparse(
-        (
-            parsed.scheme,
-            netloc,
-            parsed.path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment,
-        )
-    )
+def _is_internal_hostname(hostname: str) -> bool:
+    """Return whether hostname points to a local/container-only endpoint."""
+    lowered = str(hostname or "").strip().lower()
+    return lowered in {"", "localhost", "127.0.0.1", "::1", "grafana", "prometheus"}
+
+
+def _build_public_service_url(
+    internal_url: str,
+    request_scheme: str,
+    request_host: str,
+    public_port: int,
+) -> str:
+    """Build externally reachable service URL from request host and configured public port."""
+    parsed = urlparse(internal_url)
+    scheme = parsed.scheme or request_scheme
+    base_path = parsed.path.rstrip("/")
+    public_base = f"{scheme}://{request_host}:{public_port}"
+    if base_path:
+        return f"{public_base}{base_path}"
+    return public_base
 
 
 def _unwrap_rtype_value(value, default=None):
@@ -714,10 +717,6 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     request_host = request.get_host().split(":", 1)[0]
     grafana_public_port = _to_int_env("ADMIN_TOOLS_GRAFANA_PUBLIC_PORT", 3001)
     prometheus_public_port = _to_int_env("ADMIN_TOOLS_PROMETHEUS_PUBLIC_PORT", 9090)
-    grafana_default_public = f"{request.scheme}://{request_host}:{grafana_public_port}"
-    prometheus_default_public = (
-        f"{request.scheme}://{request_host}:{prometheus_public_port}"
-    )
 
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "").strip()
     prometheus_public_url = os.environ.get(
@@ -725,14 +724,38 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     ).strip()
 
     if not grafana_public_url:
-        grafana_public_url = _replace_host(grafana_base_url, request_host)
-    if "grafana" in grafana_public_url or "localhost" in grafana_public_url:
-        grafana_public_url = grafana_default_public
+        grafana_public_url = _build_public_service_url(
+            grafana_base_url,
+            request.scheme,
+            request_host,
+            grafana_public_port,
+        )
+    else:
+        grafana_parsed = urlparse(grafana_public_url)
+        if _is_internal_hostname(grafana_parsed.hostname or ""):
+            grafana_public_url = _build_public_service_url(
+                grafana_base_url,
+                request.scheme,
+                request_host,
+                grafana_public_port,
+            )
 
     if not prometheus_public_url:
-        prometheus_public_url = _replace_host(prometheus_base_url, request_host)
-    if "prometheus" in prometheus_public_url or "localhost" in prometheus_public_url:
-        prometheus_public_url = prometheus_default_public
+        prometheus_public_url = _build_public_service_url(
+            prometheus_base_url,
+            request.scheme,
+            request_host,
+            prometheus_public_port,
+        )
+    else:
+        prometheus_parsed = urlparse(prometheus_public_url)
+        if _is_internal_hostname(prometheus_parsed.hostname or ""):
+            prometheus_public_url = _build_public_service_url(
+                prometheus_base_url,
+                request.scheme,
+                request_host,
+                prometheus_public_port,
+            )
 
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
