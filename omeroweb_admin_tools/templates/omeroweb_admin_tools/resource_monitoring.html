@@ -20,6 +20,7 @@
             <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Open Prometheus targets</button>
         </div>
         <div id="status" class="log-status">Loading resource dashboard...</div>
+        <div id="monitoring_details" class="log-status"></div>
         <iframe id="grafana_iframe" class="admin-tools-monitoring-frame" title="Grafana resource dashboard"></iframe>
     </div>
 </div>
@@ -29,9 +30,23 @@ const statusEl = document.getElementById('status');
 const grafanaIframe = document.getElementById('grafana_iframe');
 const openGrafanaBtn = document.getElementById('open_grafana_btn');
 const openPrometheusBtn = document.getElementById('open_prometheus_btn');
+const detailsEl = document.getElementById('monitoring_details');
+
+function updateDetails(payload) {
+    const grafanaProbe = payload?.grafana?.probe || {};
+    const prometheusProbe = payload?.prometheus?.probe || {};
+    const grafanaStatus = grafanaProbe.ok
+        ? `Grafana backend reachable (status ${grafanaProbe.status}).`
+        : `Grafana backend not reachable (${grafanaProbe.error || 'unknown error'}).`;
+    const prometheusStatus = prometheusProbe.ok
+        ? `Prometheus backend reachable (status ${prometheusProbe.status}).`
+        : `Prometheus backend not reachable (${prometheusProbe.error || 'unknown error'}).`;
+    detailsEl.textContent = `${grafanaStatus} ${prometheusStatus}`;
+}
 
 async function loadData() {
     statusEl.textContent = 'Loading resource dashboard...';
+    detailsEl.textContent = '';
     try {
         const response = await fetch(dataUrl, { credentials: 'same-origin' });
         const payload = await response.json();
@@ -43,10 +58,22 @@ async function loadData() {
         if (!dashboardUrl || !targetsUrl) {
             throw new Error('Monitoring endpoints are not configured.');
         }
-        grafanaIframe.src = dashboardUrl;
         openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsUrl, '_blank', 'noopener,noreferrer'); };
-        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
+        updateDetails(payload);
+
+        let iframeLoaded = false;
+        const timeoutHandle = window.setTimeout(() => {
+            if (!iframeLoaded) {
+                statusEl.textContent = `Grafana embed blocked by browser policy. Use "Open Grafana" button. Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
+            }
+        }, 4000);
+        grafanaIframe.onload = () => {
+            iframeLoaded = true;
+            window.clearTimeout(timeoutHandle);
+            statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
+        };
+        grafanaIframe.src = dashboardUrl;
     } catch (error) {
         statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
     }

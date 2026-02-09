@@ -33,6 +33,23 @@ const table = document.getElementById('storage_table');
 const statusEl = document.getElementById('status');
 const searchEl = document.getElementById('search');
 let data = [];
+let renderToken = 0;
+const TABLE_ROW_CAP = 5000;
+const RENDER_CHUNK_SIZE = 250;
+
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function cancelRender() {
+    renderToken += 1;
+}
 
 function bytes(v) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -44,13 +61,43 @@ function bytes(v) {
 
 function render() {
     const needle = searchEl.value.trim().toLowerCase();
-    const rows = data.filter((row) => {
+    const filteredRows = data.filter((row) => {
         if (!needle) {
             return true;
         }
         return row.username.toLowerCase().includes(needle) || row.group.toLowerCase().includes(needle);
     });
-    table.innerHTML = rows.map((row) => (`<tr><td>${row.username}</td><td>${row.group}</td><td>${bytes(row.bytes)}</td></tr>`)).join('') || '<tr><td colspan="3" class="log-empty">No rows.</td></tr>';
+    const shownRows = filteredRows.slice(0, TABLE_ROW_CAP);
+    cancelRender();
+    const token = renderToken;
+    if (!shownRows.length) {
+        table.innerHTML = '<tr><td colspan="3" class="log-empty">No rows.</td></tr>';
+    } else {
+        table.innerHTML = '';
+        let index = 0;
+        const appendChunk = () => {
+            if (token !== renderToken) {
+                return;
+            }
+            const end = Math.min(index + RENDER_CHUNK_SIZE, shownRows.length);
+            let html = '';
+            for (; index < end; index += 1) {
+                const row = shownRows[index];
+                html += `<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.group)}</td><td>${bytes(row.bytes)}</td></tr>`;
+            }
+            table.insertAdjacentHTML('beforeend', html);
+            if (index < shownRows.length) {
+                window.requestAnimationFrame(appendChunk);
+            }
+        };
+        window.requestAnimationFrame(appendChunk);
+    }
+
+    const total = data.length;
+    const suffix = filteredRows.length > TABLE_ROW_CAP
+        ? ` Filter matched ${filteredRows.length} rows; showing first ${shownRows.length} (table cap: ${TABLE_ROW_CAP}).`
+        : ` Showing ${shownRows.length} rows.`;
+    statusEl.textContent = `Loaded ${total} rows.${suffix}`;
 }
 
 function exportCsv() {
@@ -73,8 +120,8 @@ async function loadData() {
             throw new Error(payload.error || `Request failed with status ${response.status}`);
         }
         data = payload.by_user_group || [];
-        render();
         statusEl.textContent = `Loaded ${data.length} rows. OMERO binaries total: ${bytes(payload.totals.omero_binary_bytes)}.`;
+        render();
     } catch (error) {
         data = [];
         render();
