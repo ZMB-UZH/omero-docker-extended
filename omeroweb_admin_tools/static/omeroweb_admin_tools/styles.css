@@ -292,6 +292,15 @@ body {
             justify-content: center;
             align-self: flex-end;
         }
+
+.log-toolbar-group--controls {
+    align-self: flex-end;
+}
+
+.log-toolbar-spacer-label {
+    visibility: hidden;
+}
+
         .log-label {
             font-size: 12px;
             font-weight: 600;
@@ -740,8 +749,8 @@ body {
 }
 .storage-visual-layout {
     display: grid;
-    grid-template-columns: 430px minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: 500px minmax(0, 1fr);
+    gap: 12px;
     align-items: start;
 }
 .storage-chart-card,
@@ -749,7 +758,7 @@ body {
     border: 1px solid #dbe5f3;
     border-radius: 12px;
     background: #ffffff;
-    padding: 8px;
+    padding: 4px;
 }
 .storage-chart-card {
     display: flex;
@@ -786,6 +795,15 @@ body {
 .storage-table th:nth-child(5),
 .storage-table td:nth-child(5) {
     width: 120px;
+    white-space: nowrap;
+}
+.storage-table.view-groups th:nth-child(2),
+.storage-table.view-groups td:nth-child(2) {
+    width: 260px;
+}
+.storage-table.view-groups th:nth-child(3),
+.storage-table.view-groups td:nth-child(3) {
+    width: 130px;
     white-space: nowrap;
 }
 
