@@ -3,13 +3,15 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
+from http.client import HTTPConnection
 from http.client import HTTPMessage
 from urllib.parse import urlparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import urllib.error
 import urllib.request
@@ -647,6 +649,108 @@ def _docker_compose_json(command: List[str]) -> Optional[object]:
         return None
 
 
+class _UnixSocketHTTPConnection(HTTPConnection):
+    """HTTP client connection implementation for Docker Unix sockets."""
+
+    def __init__(self, unix_socket_path: str, timeout: float = 3.0):
+        super().__init__("localhost", timeout=timeout)
+        self.unix_socket_path = unix_socket_path
+
+    def connect(self) -> None:
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.unix_socket_path)
+
+
+def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object]:
+    """Query Docker Engine API over /var/run/docker.sock and return JSON payload."""
+    docker_socket = os.environ.get("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
+    if not os.path.exists(docker_socket):
+        return None
+
+    connection = _UnixSocketHTTPConnection(docker_socket, timeout=timeout_seconds)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        if response.status < 200 or response.status >= 300:
+            logger.debug(
+                "Docker API request failed for %s with status %d", path, response.status
+            )
+            return None
+        payload = response.read().decode("utf-8")
+        if not payload:
+            return None
+        return json.loads(payload)
+    except (ConnectionError, OSError, json.JSONDecodeError):
+        return None
+    finally:
+        connection.close()
+
+
+def _parse_docker_status_health(status: str) -> str:
+    """Parse Docker status text and return health state when present."""
+    match = re.search(r"\((healthy|unhealthy|starting)\)", str(status or "").lower())
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, str]]]:
+    """Return compose healthcheck config and runtime state, preferring Docker API."""
+    containers = _docker_api_json("/containers/json?all=1")
+    if not isinstance(containers, list):
+        return _load_compose_healthcheck_config(), _load_compose_runtime_health()
+
+    healthcheck_config: Dict[str, bool] = {}
+    runtime_health: Dict[str, Dict[str, str]] = {}
+
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        labels = container.get("Labels", {}) or {}
+        if not isinstance(labels, dict):
+            continue
+        service_name = str(labels.get("com.docker.compose.service", "")).strip()
+        container_id = str(container.get("Id", "")).strip()
+        if not service_name or not container_id:
+            continue
+
+        inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
+        inspect_config = inspect_payload if isinstance(inspect_payload, dict) else {}
+
+        config_payload = inspect_config.get("Config", {}) or {}
+        healthcheck_payload = config_payload.get("Healthcheck")
+        has_healthcheck = (
+            isinstance(healthcheck_payload, dict)
+            and bool(healthcheck_payload.get("Test"))
+            and healthcheck_payload.get("Test") != ["NONE"]
+        )
+        if has_healthcheck:
+            healthcheck_config[service_name] = True
+        elif service_name not in healthcheck_config:
+            healthcheck_config[service_name] = False
+
+        state_payload = inspect_config.get("State", {}) or {}
+        state = (
+            str(state_payload.get("Status", container.get("State", ""))).strip().lower()
+        )
+        runtime_health_status = ""
+        state_health = state_payload.get("Health", {}) or {}
+        if isinstance(state_health, dict):
+            runtime_health_status = str(state_health.get("Status", "")).strip().lower()
+        if runtime_health_status not in {"healthy", "unhealthy", "starting"}:
+            runtime_health_status = _parse_docker_status_health(
+                container.get("Status", "")
+            )
+
+        runtime_health[service_name] = {
+            "state": state,
+            "health": runtime_health_status,
+        }
+
+    return healthcheck_config, runtime_health
+
+
 def _load_compose_healthcheck_config() -> Dict[str, bool]:
     """Return whether each compose service defines a Docker healthcheck."""
     payload = _docker_compose_json(["docker", "compose", "config", "--format", "json"])
@@ -833,6 +937,11 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     prometheus_public_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
     ).strip()
+    grafana_host_port = _to_int_env("GRAFANA_HOST_PORT", 3001)
+    prometheus_host_port = _to_int_env("PROMETHEUS_HOST_PORT", 9090)
+
+    request_host = request.get_host().split(":", 1)[0]
+    request_scheme = request.scheme
 
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
@@ -850,19 +959,40 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "refresh": "10s",
         }
     )
+    grafana_public_base_url = grafana_public_url
+    if not grafana_public_base_url and _is_internal_hostname(
+        urlparse(grafana_base_url).hostname or ""
+    ):
+        grafana_public_base_url = _build_public_service_url(
+            grafana_base_url,
+            request_scheme,
+            request_host,
+            grafana_host_port,
+        )
+
+    prometheus_public_base_url = prometheus_public_url
+    if not prometheus_public_base_url and _is_internal_hostname(
+        urlparse(prometheus_base_url).hostname or ""
+    ):
+        prometheus_public_base_url = _build_public_service_url(
+            prometheus_base_url,
+            request_scheme,
+            request_host,
+            prometheus_host_port,
+        )
+
     dashboard_external_url = ""
-    if grafana_public_url:
-        dashboard_external_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+    if grafana_public_base_url:
+        dashboard_external_url = f"{grafana_public_base_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
 
     prometheus_targets_url = ""
-    if prometheus_public_url:
-        prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
+    if prometheus_public_base_url:
+        prometheus_targets_url = f"{prometheus_public_base_url.rstrip('/')}/targets"
 
     dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
         kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
     )
-    dashboard_direct_url = f"/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
     dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
     dashboard_url = dashboard_external_url or dashboard_proxy_url
     prometheus_targets_proxy_url = reverse(
@@ -905,8 +1035,9 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         )
 
         recently_seen_services: List[str] = []
-        service_healthcheck_config = _load_compose_healthcheck_config()
-        runtime_health_by_service = _load_compose_runtime_health()
+        service_healthcheck_config, runtime_health_by_service = (
+            _load_compose_health_data()
+        )
         try:
             recently_seen_services = _collect_recently_seen_services(
                 prometheus_base_url

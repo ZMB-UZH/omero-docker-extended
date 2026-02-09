@@ -345,6 +345,7 @@ services:
       - omero_web_logs:${OMERO_WEB_LOG_DIR:-/opt/omero/web/OMERO.web/var/log}:rw
       - omero_web_supervisor_logs:${OMERO_WEB_SUPERVISOR_LOG_DIR:-/opt/omero/web/logs}:rw
       - omero_server_logs:${OMERO_SERVER_LOG_DIR:-/opt/omero/server/OMERO.server/var/log}:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     tmpfs:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
     healthcheck:
