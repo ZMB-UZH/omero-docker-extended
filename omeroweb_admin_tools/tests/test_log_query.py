@@ -54,9 +54,42 @@ def test_cap_entries_per_container_keeps_most_recent() -> None:
 
 def test_build_internal_file_query_uses_filepath_label() -> None:
     query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log")
-    assert query == '{compose_service="omeroserver_internal", filepath=~"(^|.*/)Blitz\\-0\\.log$"}'
+    assert (
+        query
+        == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)Blitz\\-0\\.log$"}'
+    )
 
 
 def test_build_internal_file_query_handles_filename_label() -> None:
-    query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log", "filename")
-    assert query == '{compose_service="omeroserver_internal", filename=~"(^|.*/)Blitz\\-0\\.log$"}'
+    query = _build_internal_file_query(
+        "omeroserver_internal", "Blitz-0.log", "filename"
+    )
+    assert (
+        query
+        == '{compose_service="omeroserver", log_type="internal", filename=~"(^|.*/)Blitz\\-0\\.log$"}'
+    )
+
+
+def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
+    entries = [
+        LogEntry(
+            timestamp="2026-02-02T14:52:58+00:00",
+            container="a",
+            level="info",
+            message="1",
+        ),
+        LogEntry(
+            timestamp="2026-02-02T14:52:59+00:00",
+            container="a",
+            level="info",
+            message="2",
+        ),
+        LogEntry(
+            timestamp="2026-02-02T14:53:00+00:00",
+            container="b",
+            level="info",
+            message="3",
+        ),
+    ]
+    capped = _cap_entries_per_container(entries, 2)
+    assert len(capped) == 3

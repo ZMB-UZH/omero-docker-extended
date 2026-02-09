@@ -1,0 +1,84 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - Storage distribution</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+<div class="admin-tools-page admin-tools-page--wide">
+    <div class="admin-tools-header">
+        <div class="admin-tools-header-left">
+            <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
+            <h1 class="admin-tools-title">Storage capacity distribution viewer</h1>
+        </div>
+    </div>
+    <div class="admin-tools-card admin-tools-card--wide">
+        <div class="log-toolbar">
+            <input id="search" class="log-input" type="text" placeholder="Search by user or group">
+            <button type="button" id="refresh_btn" class="admin-tools-button">Refresh now</button>
+            <button type="button" id="export_btn" class="admin-tools-button">Export CSV</button>
+        </div>
+        <div id="status" class="log-status">Ready.</div>
+        <table class="log-table">
+            <thead><tr><th>User</th><th>Group</th><th>Bytes</th></tr></thead>
+            <tbody id="storage_table"></tbody>
+        </table>
+    </div>
+</div>
+<script defer>
+const dataUrl = new URL('{% url "omeroweb_admin_tools_storage_data" %}', window.location.href);
+const table = document.getElementById('storage_table');
+const statusEl = document.getElementById('status');
+const searchEl = document.getElementById('search');
+let data = [];
+
+function bytes(v) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Number(v || 0);
+    let idx = 0;
+    while (value >= 1024 && idx < units.length - 1) { value /= 1024; idx += 1; }
+    return `${value.toFixed(2)} ${units[idx]}`;
+}
+
+function render() {
+    const needle = searchEl.value.trim().toLowerCase();
+    const rows = data.filter((row) => {
+        if (!needle) return true;
+        return row.username.toLowerCase().includes(needle) || row.group.toLowerCase().includes(needle);
+    });
+    table.innerHTML = rows.map((row) => (`<tr><td>${row.username}</td><td>${row.group}</td><td>${bytes(row.bytes)}</td></tr>`)).join('') || '<tr><td colspan="3" class="log-empty">No rows.</td></tr>';
+}
+
+function exportCsv() {
+    const header = 'username,group,bytes\n';
+    const body = data.map((row) => `${JSON.stringify(row.username)},${JSON.stringify(row.group)},${row.bytes}`).join('\n');
+    const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'omero-storage-distribution.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+async function loadData() {
+    statusEl.textContent = 'Loading storage distribution...';
+    const response = await fetch(dataUrl, { credentials: 'same-origin' });
+    const payload = response.ok ? await response.json() : null;
+    if (!payload) {
+        statusEl.textContent = 'Failed to load storage distribution.';
+        return;
+    }
+    data = payload.by_user_group || [];
+    render();
+    statusEl.textContent = `Loaded ${data.length} rows. OMERO binaries total: ${bytes(payload.totals.omero_binary_bytes)}.`;
+}
+
+document.getElementById('refresh_btn').addEventListener('click', () => { loadData().catch(() => {}); });
+document.getElementById('export_btn').addEventListener('click', exportCsv);
+searchEl.addEventListener('input', render);
+loadData().catch(() => {});
+</script>
+</body>
+</html>
