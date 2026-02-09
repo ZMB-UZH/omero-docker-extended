@@ -695,6 +695,13 @@ body {
 
 .storage-toolbar {
     justify-content: space-between;
+    align-items: center;
+}
+.storage-toolbar-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 .storage-view-toggle {
     display: inline-flex;
@@ -738,8 +745,20 @@ body {
     font-size: 12px;
     color: #475569;
 }
-.storage-table td:nth-child(2),
-.storage-table th:nth-child(2) {
+.storage-table th:nth-child(1),
+.storage-table td:nth-child(1) {
+    width: 120px;
+}
+.storage-table th:nth-child(2),
+.storage-table td:nth-child(2) {
+    width: auto;
     white-space: normal;
     word-break: break-word;
+}
+.storage-table th:nth-child(3),
+.storage-table td:nth-child(3),
+.storage-table th:nth-child(4),
+.storage-table td:nth-child(4) {
+    width: 120px;
+    white-space: nowrap;
 }
