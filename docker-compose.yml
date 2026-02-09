@@ -164,8 +164,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANONYMOUS_ENABLED}
       GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ROLE}
-      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN}
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
       GF_METRICS_ENABLED: "true"
     depends_on:
       prometheus:
