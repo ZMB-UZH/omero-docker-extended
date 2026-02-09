@@ -73,6 +73,21 @@ def test_build_target_service_status_resolves_container_name_variants() -> None:
     ]
 
 
+def test_build_target_service_status_uses_recent_container_samples() -> None:
+    active_targets = []
+
+    statuses = _build_target_service_status(
+        active_targets,
+        ["database", "redis"],
+        recently_seen_services=["database"],
+    )
+
+    assert statuses == [
+        {"service": "database", "health": "up"},
+        {"service": "redis", "health": "unknown"},
+    ]
+
+
 def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     captured = {}
 
