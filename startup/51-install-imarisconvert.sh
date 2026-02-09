@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+fail() {
+    local message="$1"
+    echo "ERROR: ${message}" >&2
+    exit 1
+}
+
 INSTALL_DIR="/opt/omero/imarisconvert"
 VERSION_FILE="${INSTALL_DIR}/.version"
 TARGET_VERSION="1.0.0"
@@ -30,7 +36,9 @@ rm -rf /tmp/ImarisConvertBioformats /tmp/ImarisWriter
 cd /tmp
 
 # Clone ImarisConvertBioformats
-git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git
+if ! git clone --depth 1 https://github.com/imaris/ImarisConvertBioformats.git; then
+    fail "Failed to clone ImarisConvertBioformats repository"
+fi
 cd ImarisConvertBioformats
 
 # PATCH: Fix missing #include <limits> in bpUtils.cxx
@@ -39,21 +47,26 @@ sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
 
 # Download bioformats jar
 mkdir -p bioformats
-curl -L --fail --retry 5 --retry-delay 3 \
+if ! curl -L --fail --retry 5 --retry-delay 3 --max-time 1800 \
+    --connect-timeout 20 --speed-time 30 --speed-limit 1024 \
     "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar" \
-    -o bioformats/bioformats_package.jar
+    -o bioformats/bioformats_package.jar; then
+    fail "Failed to download bioformats_package.jar"
+fi
 
 # Validate Bio-Formats jar (must be large; real file is ~80–90 MB)
 if [[ ! -s bioformats/bioformats_package.jar ]] || \
    [[ "$(stat -c%s bioformats/bioformats_package.jar)" -lt 10000000 ]]; then
-    echo "ERROR: bioformats_package.jar download failed or is invalid"
-    ls -lh bioformats/bioformats_package.jar || true
-    exit 1
+    echo "ERROR: bioformats_package.jar download failed or is invalid" >&2
+    ls -lh bioformats/bioformats_package.jar >&2 || true
+    fail "Invalid bioformats_package.jar"
 fi
 
 # Clone ImarisWriter
 cd ..
-git clone --depth 1 https://github.com/imaris/ImarisWriter.git
+if ! git clone --depth 1 https://github.com/imaris/ImarisWriter.git; then
+    fail "Failed to clone ImarisWriter repository"
+fi
 mv ImarisWriter ImarisConvertBioformats/
 
 # Build
@@ -64,8 +77,7 @@ cd build
 # Find FreeImage library
 FREEIMAGE_LIB=$(find /usr/lib64 /usr/lib -name "libfreeimage.so*" 2>/dev/null | head -1)
 if [[ -z "${FREEIMAGE_LIB}" ]]; then
-    echo "ERROR: FreeImage library not found!"
-    exit 1
+    fail "FreeImage library not found"
 fi
 echo "Found FreeImage library: ${FREEIMAGE_LIB}"
 
@@ -83,17 +95,24 @@ if command -v ccache >/dev/null 2>&1; then
     )
 fi
 
-cmake .. \
+if ! cmake .. \
     ${NINJA_GENERATOR} \
     -DCMAKE_BUILD_TYPE=Release \
     -DJAVA_HOME=/usr/lib/jvm/java-11-openjdk \
     -DJRE_HOME=/usr/lib/jvm/jre-11-openjdk \
     -DFreeImage_ROOT=/usr \
     -DFreeImage_LIBRARIES="${FREEIMAGE_LIB}" \
-    "${CCACHE_LAUNCHER[@]}"
+    "${CCACHE_LAUNCHER[@]}"; then
+    fail "CMake configuration failed for ImarisConvertBioformats"
+fi
 
-cmake --build . --parallel "${PARALLEL_JOBS}"
-cmake --install .
+if ! cmake --build . --parallel "${PARALLEL_JOBS}"; then
+    fail "Build failed for ImarisConvertBioformats"
+fi
+
+if ! cmake --install .; then
+    fail "Install step failed for ImarisConvertBioformats"
+fi
 
 # Copy binary and ALL shared libraries to install directory
 cp -f ImarisConvertBioformats "${INSTALL_DIR}/"
