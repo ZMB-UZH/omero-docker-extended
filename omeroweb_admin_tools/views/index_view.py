@@ -18,6 +18,7 @@ from django.http import JsonResponse
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 
 from ..config import optional_log_config
@@ -55,19 +56,31 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
         return {"ok": False, "status": 0, "error": str(exc.reason)}
 
 
-def _proxy_http_get(
+def _proxy_http_request(
+    django_request,
     base_url: str,
     path: str,
     query: str = "",
     *,
     proxy_prefix: str = "",
 ) -> HttpResponse:
-    """Proxy a GET request to a configured backend URL and return the response body."""
+    """Proxy an HTTP request to a backend URL and return the response body."""
     target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
     if query:
         target_url = f"{target_url}?{query}"
 
-    request = urllib.request.Request(target_url, method="GET")
+    forwarded_headers = {}
+    for header_name in ("Accept", "Content-Type", "User-Agent"):
+        value = django_request.headers.get(header_name)
+        if value:
+            forwarded_headers[header_name] = value
+
+    request = urllib.request.Request(
+        target_url,
+        data=django_request.body if django_request.method in {"POST", "PUT", "PATCH"} else None,
+        headers=forwarded_headers,
+        method=django_request.method,
+    )
     try:
         with urllib.request.urlopen(request, timeout=10.0) as response:
             payload = response.read()
@@ -570,6 +583,44 @@ def _build_target_service_status(
     active_targets: List[Dict[str, object]], expected_services: List[str]
 ) -> List[Dict[str, str]]:
     """Map expected compose services to their Prometheus target health."""
+    expected_lookup = {service.lower(): service for service in expected_services}
+
+    def _resolve_expected_service_name(raw_candidate: str) -> str:
+        candidate = str(raw_candidate or "").strip().lstrip("/")
+        if not candidate:
+            return ""
+
+        variants = {candidate}
+        variants.add(candidate.lower())
+
+        if "/" in candidate:
+            tail = candidate.rsplit("/", 1)[-1]
+            variants.add(tail)
+            variants.add(tail.lower())
+        if ":" in candidate:
+            head = candidate.split(":", 1)[0]
+            variants.add(head)
+            variants.add(head.lower())
+
+        container_name_match = re.match(r"^[^_]+_([^_]+)_\d+$", candidate)
+        if container_name_match:
+            service_candidate = container_name_match.group(1)
+            variants.add(service_candidate)
+            variants.add(service_candidate.lower())
+
+        normalized_variants = set(variants)
+        normalized_variants.update(value.replace("_", "-") for value in variants)
+        normalized_variants.update(value.replace("-", "_") for value in variants)
+
+        for variant in normalized_variants:
+            direct_match = expected_lookup.get(variant)
+            if direct_match:
+                return direct_match
+            lower_match = expected_lookup.get(variant.lower())
+            if lower_match:
+                return lower_match
+        return ""
+
     status_by_service: Dict[str, str] = {
         service: "unknown" for service in expected_services
     }
@@ -584,17 +635,20 @@ def _build_target_service_status(
                     "__meta_docker_container_label_com_docker_compose_service", ""
                 )
             ).strip(),
+            str(discovered_labels.get("__meta_docker_container_name", "")).strip(),
             str(labels.get("job", "")).strip(),
+            str(target.get("scrapePool", "")).strip(),
         ]
         health = str(target.get("health", "unknown")).lower()
         for candidate in candidates:
-            if not candidate or candidate not in status_by_service:
+            service_name = _resolve_expected_service_name(candidate)
+            if not service_name:
                 continue
-            current = status_by_service[candidate]
+            current = status_by_service[service_name]
             if health == "up":
-                status_by_service[candidate] = "up"
+                status_by_service[service_name] = "up"
             elif current != "up" and health in {"down", "unknown"}:
-                status_by_service[candidate] = health
+                status_by_service[service_name] = health
 
     return [
         {"service": service, "health": status_by_service.get(service, "unknown")}
@@ -752,9 +806,10 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
 
 
+@csrf_exempt
 @login_required()
 def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
-    """Proxy read-only Grafana HTTP responses through OMERO.web."""
+    """Proxy Grafana HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
@@ -762,7 +817,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     proxy_prefix = (
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
-    return _proxy_http_get(
+    return _proxy_http_request(
+        request,
         grafana_base_url,
         subpath,
         request.META.get("QUERY_STRING", ""),
@@ -770,9 +826,10 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     )
 
 
+@csrf_exempt
 @login_required()
 def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
-    """Proxy read-only Prometheus HTTP responses through OMERO.web."""
+    """Proxy Prometheus HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
@@ -790,7 +847,8 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     proxy_prefix = (
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
-    return _proxy_http_get(
+    return _proxy_http_request(
+        request,
         prometheus_base_url,
         subpath,
         merged_query,
