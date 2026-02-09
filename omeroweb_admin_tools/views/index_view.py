@@ -170,12 +170,13 @@ def _safe_group_name(group_obj) -> str:
     return ""
 
 
-def _call_admin_listing(admin_service, method_name):
+def _call_admin_listing(admin_service, method_name, arg_options=None):
     """Call admin-service listing methods with tolerant signatures."""
     if not hasattr(admin_service, method_name):
         return []
     method = getattr(admin_service, method_name)
-    for args in ((), (None,), (False,)):
+    argument_options = arg_options or ((), (None,), (False,))
+    for args in argument_options:
         try:
             result = method(*args)
             return list(result or [])
@@ -184,11 +185,29 @@ def _call_admin_listing(admin_service, method_name):
     return []
 
 
+def _safe_object_id(obj):
+    """Extract numeric ID for OMERO model-like objects."""
+    if obj is None:
+        return None
+    if hasattr(obj, "getId"):
+        value = _unwrap_rtype_value(obj.getId(), None)
+    elif hasattr(obj, "id"):
+        value = _unwrap_rtype_value(obj.id, None)
+    else:
+        value = None
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _list_all_users_and_groups(conn):
     """Collect all OMERO users and groups to keep zero-usage rows visible."""
     users = {}
     groups = set()
     group_permissions = {}
+    groups_by_user = {}
+    users_by_group = {}
     try:
         admin_service = conn.getAdminService()
         experimenters = []
@@ -206,14 +225,55 @@ def _list_all_users_and_groups(conn):
             username = _safe_username(user)
             if username:
                 users[username] = _safe_full_name(user)
+                groups_by_user.setdefault(username, set())
         for group in experimenter_groups:
             group_name = _safe_group_name(group)
             if group_name:
                 groups.add(group_name)
                 group_permissions[group_name] = _safe_group_permission_label(group)
+                users_by_group.setdefault(group_name, set())
+
+        for user in experimenters:
+            user_id = _safe_object_id(user)
+            username = _safe_username(user)
+            if user_id is None or not username:
+                continue
+            user_groups = _call_admin_listing(
+                admin_service,
+                "containedGroups",
+                arg_options=((user_id,), (int(user_id),), (user_id, False), (user_id, None)),
+            )
+            for group in user_groups:
+                group_name = _safe_group_name(group)
+                if not group_name:
+                    continue
+                groups.add(group_name)
+                groups_by_user.setdefault(username, set()).add(group_name)
+                users_by_group.setdefault(group_name, set()).add(username)
+                group_permissions.setdefault(
+                    group_name, _safe_group_permission_label(group)
+                )
+
+        for group in experimenter_groups:
+            group_id = _safe_object_id(group)
+            group_name = _safe_group_name(group)
+            if group_id is None or not group_name:
+                continue
+            group_users = _call_admin_listing(
+                admin_service,
+                "containedExperimenters",
+                arg_options=((group_id,), (int(group_id),), (group_id, False), (group_id, None)),
+            )
+            for user in group_users:
+                username = _safe_username(user)
+                if not username:
+                    continue
+                users.setdefault(username, _safe_full_name(user))
+                groups_by_user.setdefault(username, set()).add(group_name)
+                users_by_group.setdefault(group_name, set()).add(username)
     except Exception:
         logger.exception("Failed to enumerate all users/groups from OMERO admin service")
-    return users, groups, group_permissions
+    return users, groups, group_permissions, groups_by_user, users_by_group
 
 
 def _permission_flag(permission_obj, method_name: str) -> bool:
@@ -640,14 +700,18 @@ def storage_data(request, conn=None, url=None, **kwargs):
             users_by_group.setdefault(group_name, set()).add(user_name)
             total_size += size_value
 
-        all_users, all_groups, group_permissions = _list_all_users_and_groups(conn)
+        all_users, all_groups, group_permissions, all_groups_by_user, all_users_by_group = _list_all_users_and_groups(conn)
         for username, full_name in all_users.items():
             totals_by_user.setdefault(username, 0)
-            groups_by_user.setdefault(username, set())
+            groups_by_user.setdefault(username, set()).update(
+                all_groups_by_user.get(username, set())
+            )
             full_name_by_user[username] = full_name
         for group_name in all_groups:
             totals_by_group.setdefault(group_name, 0)
-            users_by_group.setdefault(group_name, set())
+            users_by_group.setdefault(group_name, set()).update(
+                all_users_by_group.get(group_name, set())
+            )
             group_permissions.setdefault(group_name, "Private")
 
         for username in totals_by_user:
