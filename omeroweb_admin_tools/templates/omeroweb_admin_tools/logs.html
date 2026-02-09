@@ -90,9 +90,17 @@
                     {{ source.label }}
                 </label>
                 {% endfor %}
+                <div class="log-inline-select-actions">
+                    <button type="button" class="log-internal-select-action" data-docker-action="all">All</button>
+                    <button type="button" class="log-internal-select-action" data-docker-action="none">None</button>
+                </div>
             </div>
             <div class="log-sources">
                 <span class="log-sources-label">Internal logs</span>
+                <div class="log-inline-select-actions">
+                    <button type="button" class="log-internal-select-action" data-internal-action="all">All</button>
+                    <button type="button" class="log-internal-select-action" data-internal-action="none">None</button>
+                </div>
                 <div class="log-internal-group" data-service="omeroserver_internal">
                     <button type="button"
                             class="log-internal-trigger"
@@ -874,6 +882,26 @@
             downloadBtn?.addEventListener('click', downloadCurrentEntries);
             document.querySelectorAll('.log-source-pill input').forEach((input) => {
                 input.addEventListener('change', () => {
+                    persistState();
+                    fetchLogs();
+                });
+            });
+            document.querySelectorAll('[data-docker-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const selectAll = button.dataset.dockerAction === 'all';
+                    document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                        input.checked = selectAll;
+                    });
+                    persistState();
+                    fetchLogs();
+                });
+            });
+            document.querySelectorAll('[data-internal-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const selectAll = button.dataset.internalAction === 'all';
+                    Object.keys(internalState).forEach((service) => {
+                        setInternalSelectAll(service, selectAll);
+                    });
                     persistState();
                     fetchLogs();
                 });
