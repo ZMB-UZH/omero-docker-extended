@@ -758,17 +758,39 @@ body {
     border: 1px solid #dbe5f3;
     border-radius: 12px;
     background: #ffffff;
-    padding: 4px;
+    padding: 0;
 }
 .storage-chart-card {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    padding: 4px;
 }
 .storage-chart-caption {
     margin-top: 8px;
     font-size: 12px;
     color: #475569;
+}
+.storage-table-card {
+    overflow: hidden;
+}
+.storage-table-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #93c5fd transparent;
+    border-radius: 12px;
+}
+.storage-table-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+.storage-table-scroll::-webkit-scrollbar-thumb {
+    background: #93c5fd;
+    border-radius: 999px;
+    min-height: 50px;
+}
+.storage-table-scroll::-webkit-scrollbar-track {
+    background: transparent;
 }
 .storage-table th,
 .storage-table td {
@@ -789,6 +811,14 @@ body {
 .storage-table th:nth-child(5),
 .storage-table td:nth-child(5) {
     white-space: nowrap;
+}
+.storage-table th:nth-child(4),
+.storage-table td:nth-child(4) {
+    width: 104px;
+}
+.storage-table th:nth-child(5),
+.storage-table td:nth-child(5) {
+    width: 146px;
 }
 .storage-table.view-groups th:nth-child(3),
 .storage-table.view-groups td:nth-child(3) {
