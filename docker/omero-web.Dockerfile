@@ -220,14 +220,7 @@ RUN set -euo pipefail; \
 #  1. Delete 99-run.sh — supervisord manages gunicorn instead.
 #  2. Replace entrypoint with one that exec's "$@" after startup scripts.
 # ---------------------------------------------------------------------------
-RUN printf '%s\n' \
-        '#!/bin/bash' \
-        'set -e' \
-        'echo "Generating OMERO.web config..."' \
-        'omero web config gunicorn > /tmp/gunicorn.conf.py' \
-        'echo "Config generated, skipping web start (supervisord will handle it)"' \
-        > /startup/99-run.sh && \
-    chmod +x /startup/99-run.sh
+RUN rm -f /startup/99-run.sh
 
 RUN set -euo pipefail; \
     printf '%s\n' \
