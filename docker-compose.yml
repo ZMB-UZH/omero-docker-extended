@@ -90,7 +90,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 30
-      start_period: 20s
+      start_period: 10s
 
   cadvisor:
     image: "gcr.io/cadvisor/cadvisor:v0.49.1"
@@ -112,7 +112,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 30
-      start_period: 20s
+      start_period: 10s
 
   grafana:
     image: "grafana/grafana:11.2.2"
@@ -145,7 +145,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 30
-      start_period: 30s
+      start_period: 10s
 
   database:
     image: "postgres:18.1"
