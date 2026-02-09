@@ -155,24 +155,47 @@ function formatPercent(value) {
     return `${value.toFixed(1)}%`;
 }
 
+function normalizeServiceHealth(rawHealth) {
+    const normalized = String(rawHealth || 'unknown').toLowerCase().trim();
+    if (!normalized) {
+        return 'unknown';
+    }
+    if (normalized.startsWith('healthy')) {
+        return 'healthy';
+    }
+    if (normalized.startsWith('unhealthy')) {
+        return 'unhealthy';
+    }
+    if (normalized.startsWith('up')) {
+        return 'up';
+    }
+    if (normalized.startsWith('down')) {
+        return 'down';
+    }
+    return 'unknown';
+}
+
+function serviceHealthClass(health) {
+    if (health === 'healthy' || health === 'up') {
+        return 'monitoring-pill--healthy';
+    }
+    if (health === 'unhealthy') {
+        return 'monitoring-pill--unhealthy';
+    }
+    if (health === 'down') {
+        return 'monitoring-pill--down';
+    }
+    return 'monitoring-pill--unknown';
+}
+
 function renderServiceHealth(services) {
     if (!services.length) {
         targetsServiceHealthEl.textContent = 'No service health data available.';
         return;
     }
-    targetsServiceHealthEl.innerHTML = services.map(({ service, health, state, healthcheck }) => {
-        const normalized = String(health || 'unknown').toLowerCase();
-        let healthClass = 'monitoring-pill--unknown';
-        if (normalized === 'healthy' || normalized === 'up') {
-            healthClass = 'monitoring-pill--healthy';
-        } else if (normalized === 'unhealthy') {
-            healthClass = 'monitoring-pill--unhealthy';
-        } else if (normalized === 'down') {
-            healthClass = 'monitoring-pill--down';
-        }
-        const detailState = String(state || 'unknown').toLowerCase();
-        const detailHealthcheck = String(healthcheck || 'none').toLowerCase();
-        return `<span class="monitoring-pill ${healthClass}">${service}: ${normalized} (state=${detailState}, healthcheck=${detailHealthcheck})</span>`;
+    targetsServiceHealthEl.innerHTML = services.map(({ service, health }) => {
+        const normalizedHealth = normalizeServiceHealth(health);
+        return `<span class="monitoring-pill ${serviceHealthClass(normalizedHealth)}">${service}: ${normalizedHealth}</span>`;
     }).join('');
 }
 
