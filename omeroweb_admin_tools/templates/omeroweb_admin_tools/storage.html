@@ -18,14 +18,12 @@
         <div class="log-toolbar storage-toolbar">
             <div class="storage-toolbar-left">
                 <input id="search" class="log-input" type="text" placeholder="Search by user or group">
-                <button type="button" id="refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
-                <button type="button" id="export_btn" class="admin-tools-button log-refresh-button">Export CSV</button>
-            </div>
-            <div class="log-toolbar-group log-toolbar-toggle">
-                <label class="log-checkbox">
+                <label class="log-checkbox storage-autorefresh-inline">
                     <input id="storage_autorefresh" type="checkbox" checked>
                     Auto refresh
                 </label>
+                <button type="button" id="refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
+                <button type="button" id="export_btn" class="admin-tools-button log-refresh-button">Export CSV</button>
             </div>
         </div>
         <div class="storage-view-toggle-wrap">
@@ -148,7 +146,7 @@ function drawPieChart(rows, labelName) {
     ctx.clearRect(0, 0, width, height);
 
     const total = rows.reduce((acc, row) => acc + Number(row.bytes || 0), 0);
-    if (!rows.length || total <= 0) {
+    if (total <= 0) {
         ctx.fillStyle = '#64748b';
         ctx.font = '16px Helvetica Neue';
         ctx.textAlign = 'center';

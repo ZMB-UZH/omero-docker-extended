@@ -54,7 +54,13 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
         return {"ok": False, "status": 0, "error": str(exc.reason)}
 
 
-def _proxy_http_get(base_url: str, path: str, query: str = "") -> HttpResponse:
+def _proxy_http_get(
+    base_url: str,
+    path: str,
+    query: str = "",
+    *,
+    proxy_prefix: str = "",
+) -> HttpResponse:
     """Proxy a GET request to a configured backend URL and return the response body."""
     target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
     if query:
@@ -66,11 +72,27 @@ def _proxy_http_get(base_url: str, path: str, query: str = "") -> HttpResponse:
             payload = response.read()
             headers: HTTPMessage = response.headers
             content_type = headers.get("Content-Type", "application/octet-stream")
+            if "text/html" in content_type and proxy_prefix:
+                try:
+                    text = payload.decode("utf-8")
+                except UnicodeDecodeError:
+                    text = payload.decode("latin-1", errors="ignore")
+                text = text.replace('href="/', f'href="{proxy_prefix}/')
+                text = text.replace("href='/", f"href='{proxy_prefix}/")
+                text = text.replace('src="/', f'src="{proxy_prefix}/')
+                text = text.replace("src='/", f"src='{proxy_prefix}/")
+                text = text.replace('action="/', f'action="{proxy_prefix}/')
+                text = text.replace("action='/", f"action='{proxy_prefix}/")
+                text = text.replace(base_url.rstrip("/"), proxy_prefix)
+                payload = text.encode("utf-8")
             proxied = HttpResponse(payload, status=response.status, content_type=content_type)
             for header_name in ("Cache-Control", "ETag", "Last-Modified"):
                 header_value = headers.get(header_name)
                 if header_value:
                     proxied[header_name] = header_value
+            location = headers.get("Location")
+            if location:
+                proxied["Location"] = location.replace(base_url.rstrip("/"), proxy_prefix)
             return proxied
     except urllib.error.HTTPError as exc:
         body = exc.read()
@@ -343,6 +365,41 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     grafana_probe = _probe_http_url(f"{grafana_base_url.rstrip('/')}/api/health")
     prometheus_probe = _probe_http_url(f"{prometheus_base_url.rstrip('/')}/-/ready")
 
+    targets_overview = {
+        "active": 0,
+        "up": 0,
+        "down": 0,
+        "containers": [],
+    }
+    try:
+        targets_api = f"{prometheus_base_url.rstrip('/')}/api/v1/targets"
+        with urllib.request.urlopen(targets_api, timeout=5.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        active_targets = payload.get("data", {}).get("activeTargets", [])
+        targets_overview["active"] = len(active_targets)
+        targets_overview["up"] = sum(
+            1 for target in active_targets if str(target.get("health", "")).lower() == "up"
+        )
+        targets_overview["down"] = targets_overview["active"] - targets_overview["up"]
+        labels_api = (
+            f"{prometheus_base_url.rstrip('/')}/api/v1/label/"
+            "container_label_com_docker_compose_service/values"
+        )
+        container_names: List[str] = []
+        with urllib.request.urlopen(labels_api, timeout=5.0) as label_response:
+            labels_payload = json.loads(label_response.read().decode("utf-8"))
+        if labels_payload.get("status") == "success":
+            container_names = sorted(
+                {
+                    str(name)
+                    for name in labels_payload.get("data", [])
+                    if str(name).strip() and str(name).strip() != "<unknown>"
+                }
+            )
+        targets_overview["containers"] = container_names
+    except Exception:
+        logger.exception("Failed to fetch Prometheus targets overview")
+
     return JsonResponse(
         {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -357,6 +414,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "targets_url": prometheus_targets_url,
                 "targets_proxy_url": prometheus_targets_proxy_url,
                 "probe": prometheus_probe,
+                "targets_overview": targets_overview,
             },
         }
     )
@@ -369,7 +427,13 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
-    return _proxy_http_get(grafana_base_url, subpath, request.META.get("QUERY_STRING", ""))
+    proxy_prefix = request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    return _proxy_http_get(
+        grafana_base_url,
+        subpath,
+        request.META.get("QUERY_STRING", ""),
+        proxy_prefix=proxy_prefix,
+    )
 
 
 @login_required()
@@ -381,10 +445,20 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
     )
+    if subpath.startswith(("http://", "https://")):
+        parsed = urlparse(subpath)
+        subpath = parsed.path.lstrip("/")
+        forwarded_query = parsed.query
+    else:
+        forwarded_query = ""
+    request_query = request.META.get("QUERY_STRING", "")
+    merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
+    proxy_prefix = request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     return _proxy_http_get(
         prometheus_base_url,
         subpath,
-        request.META.get("QUERY_STRING", ""),
+        merged_query,
+        proxy_prefix=proxy_prefix,
     )
 
 
@@ -416,7 +490,10 @@ def storage_data(request, conn=None, url=None, **kwargs):
     total_size = 0
 
     try:
-        rows = conn.getQueryService().projection(query, None, conn.SERVICE_OPTS)
+        service_opts = conn.SERVICE_OPTS
+        if hasattr(service_opts, "setOmeroGroup"):
+            service_opts.setOmeroGroup("-1")
+        rows = conn.getQueryService().projection(query, None, service_opts)
         for row in rows:
             user_name = str(_unwrap_rtype_value(row[1], "unknown") or "unknown")
             group_name = str(_unwrap_rtype_value(row[3], "unknown") or "unknown")

@@ -22,6 +22,8 @@ services:
       retries: 30
       start_period: 30s
 
+    security_opt:
+      - no-new-privileges:true
   alloy:
     image: "grafana/alloy:v1.12.2"
     restart: unless-stopped
@@ -50,6 +52,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
   prometheus:
     image: "prom/prometheus:v2.54.1"
     restart: unless-stopped
@@ -73,6 +77,8 @@ services:
       retries: 30
       start_period: 20s
 
+    security_opt:
+      - no-new-privileges:true
   node-exporter:
     image: "prom/node-exporter:v1.8.2"
     restart: unless-stopped
@@ -92,6 +98,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
   cadvisor:
     image: "gcr.io/cadvisor/cadvisor:v0.55.1"
     restart: unless-stopped
@@ -114,6 +122,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
   grafana:
     image: "grafana/grafana:12.4.0-21611641766"
     restart: unless-stopped
@@ -147,6 +157,8 @@ services:
       retries: 30
       start_period: 30s
 
+    security_opt:
+      - no-new-privileges:true
   database:
     image: "postgres:18.1"
     restart: unless-stopped
@@ -175,6 +187,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
   omeroserver:
     image: omeroserver:custom
     build:
@@ -233,6 +247,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     network_mode: none
 
+    security_opt:
+      - no-new-privileges:true
   redis-sysctl-cleanup:
     image: redis-sysctl-init:custom
     container_name: redis-sysctl-cleanup
@@ -249,6 +265,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     network_mode: none
 
+    security_opt:
+      - no-new-privileges:true
   redis:
     image: "redis:8.4.0-alpine"
     restart: unless-stopped
@@ -272,6 +290,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
   omeroweb:
     image: omeroweb:custom
     build:
@@ -339,6 +359,8 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
 networks:
   omero:
 
