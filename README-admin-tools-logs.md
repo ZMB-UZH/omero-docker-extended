@@ -31,7 +31,11 @@ Grafana Alloy for file-based log collection.
 OMERO_SERVER_LOG_DIR=/opt/omero/server/OMERO.server/var/log
 OMERO_WEB_LOG_DIR=/opt/omero/web/OMERO.web/var/log
 OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
+GRAFANA_HOST_PORT=3000
 ```
+
+`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
+Set it to a free port (for example `3300`) when `3000` is already in use on the host.
 
 ## How it works
 
