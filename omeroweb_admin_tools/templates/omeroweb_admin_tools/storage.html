@@ -148,9 +148,6 @@ function bytes(v) {
 }
 
 function getColumnLayoutForView() {
-    if (currentView === 'groups') {
-        return ['15%', '38%', `calc(47% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
-    }
     return ['15%', '16%', `calc(69% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
 }
 
