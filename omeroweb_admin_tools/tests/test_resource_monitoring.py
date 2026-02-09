@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from django.test import RequestFactory
+
 from omeroweb_admin_tools.views.index_view import (
+    resource_monitoring_data,
     _build_public_service_url,
     _build_target_service_status,
     _is_internal_hostname,
@@ -55,7 +58,9 @@ def test_build_target_service_status_prefers_up() -> None:
 def test_build_target_service_status_resolves_container_name_variants() -> None:
     active_targets = [
         {
-            "discoveredLabels": {"__meta_docker_container_name": "/omero_node-exporter_1"},
+            "discoveredLabels": {
+                "__meta_docker_container_name": "/omero_node-exporter_1"
+            },
             "health": "up",
         },
         {
@@ -113,6 +118,7 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
         return DummyResponse()
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
     class DummyDjangoRequest:
         method = "POST"
         body = b'{"query":"up"}'
@@ -165,3 +171,129 @@ def test_build_public_service_url_preserves_base_path() -> None:
     )
 
     assert built == "https://example.org:4430/grafana"
+
+
+def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> None:
+    request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._probe_http_url",
+        lambda *args, **kwargs: {"ok": True, "status": 200, "error": ""},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._collect_system_metrics",
+        lambda *args, **kwargs: {
+            "cpu_usage_percent": None,
+            "memory_usage_percent": None,
+            "disk_usage_percent": None,
+        },
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_service_names",
+        lambda: [],
+    )
+
+    class DummyResponse:
+        def __init__(self, payload: str):
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return self._payload.encode("utf-8")
+
+    def fake_urlopen(url, timeout=5.0):
+        if "api/v1/targets" in url:
+            return DummyResponse('{"data": {"activeTargets": []}}')
+        if "label/container_label_com_docker_compose_service/values" in url:
+            return DummyResponse('{"status": "success", "data": []}')
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    response = resource_monitoring_data(request, conn=None)
+
+    assert response.status_code == 200
+    import json
+
+    payload = json.loads(response.content.decode("utf-8"))
+    assert payload["grafana"]["dashboard_url"].startswith("/")
+    assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
+    assert payload["prometheus"]["targets_proxy_url"].startswith("/")
+
+
+def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> None:
+    request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._probe_http_url",
+        lambda *args, **kwargs: {"ok": True, "status": 200, "error": ""},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._collect_system_metrics",
+        lambda *args, **kwargs: {
+            "cpu_usage_percent": None,
+            "memory_usage_percent": None,
+            "disk_usage_percent": None,
+        },
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_service_names",
+        lambda: [],
+    )
+
+    class DummyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"status": "success", "data": []}'
+
+    def fake_urlopen(url, timeout=5.0):
+        if "api/v1/targets" in url:
+            return type(
+                "X",
+                (),
+                {
+                    "__enter__": lambda self: self,
+                    "__exit__": lambda self, a, b, c: False,
+                    "read": lambda self: b'{"data": {"activeTargets": []}}',
+                },
+            )()
+        return DummyResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "https://monitor.example.org/grafana"
+    )
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", "https://monitor.example.org/prometheus"
+    )
+
+    response = resource_monitoring_data(request, conn=None)
+    import json
+
+    payload = json.loads(response.content.decode("utf-8"))
+
+    assert payload["grafana"]["dashboard_external_url"].startswith(
+        "https://monitor.example.org/grafana/d/"
+    )
+    assert (
+        payload["prometheus"]["targets_url"]
+        == "https://monitor.example.org/prometheus/targets"
+    )

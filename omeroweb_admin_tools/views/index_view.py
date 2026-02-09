@@ -5,7 +5,6 @@ import re
 import shutil
 from http.client import HTTPMessage
 from urllib.parse import urlparse
-from urllib.parse import urlunparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -77,7 +76,11 @@ def _proxy_http_request(
 
     request = urllib.request.Request(
         target_url,
-        data=django_request.body if django_request.method in {"POST", "PUT", "PATCH"} else None,
+        data=(
+            django_request.body
+            if django_request.method in {"POST", "PUT", "PATCH"}
+            else None
+        ),
         headers=forwarded_headers,
         method=django_request.method,
     )
@@ -721,48 +724,10 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
     )
 
-    request_host = request.get_host().split(":", 1)[0]
-    grafana_public_port = _to_int_env("ADMIN_TOOLS_GRAFANA_PUBLIC_PORT", 3001)
-    prometheus_public_port = _to_int_env("ADMIN_TOOLS_PROMETHEUS_PUBLIC_PORT", 9090)
-
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "").strip()
     prometheus_public_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
     ).strip()
-
-    if not grafana_public_url:
-        grafana_public_url = _build_public_service_url(
-            grafana_base_url,
-            request.scheme,
-            request_host,
-            grafana_public_port,
-        )
-    else:
-        grafana_parsed = urlparse(grafana_public_url)
-        if _is_internal_hostname(grafana_parsed.hostname or ""):
-            grafana_public_url = _build_public_service_url(
-                grafana_base_url,
-                request.scheme,
-                request_host,
-                grafana_public_port,
-            )
-
-    if not prometheus_public_url:
-        prometheus_public_url = _build_public_service_url(
-            prometheus_base_url,
-            request.scheme,
-            request_host,
-            prometheus_public_port,
-        )
-    else:
-        prometheus_parsed = urlparse(prometheus_public_url)
-        if _is_internal_hostname(prometheus_parsed.hostname or ""):
-            prometheus_public_url = _build_public_service_url(
-                prometheus_base_url,
-                request.scheme,
-                request_host,
-                prometheus_public_port,
-            )
 
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
@@ -780,18 +745,22 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "refresh": "10s",
         }
     )
-    dashboard_external_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
-    prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
+    dashboard_external_url = ""
+    if grafana_public_url:
+        dashboard_external_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+
+    prometheus_targets_url = ""
+    if prometheus_public_url:
+        prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
+
     dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
         kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
     )
-    dashboard_proxy_url = request.build_absolute_uri(
-        f"{dashboard_proxy_path}?{dashboard_query}"
-    )
+    dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
     dashboard_url = dashboard_proxy_url
-    prometheus_targets_proxy_url = request.build_absolute_uri(
-        reverse("omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"})
+    prometheus_targets_proxy_url = reverse(
+        "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
 
     grafana_probe = _probe_http_url(f"{grafana_base_url.rstrip('/')}/api/health")
@@ -848,7 +817,9 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
 
         recently_seen_services: List[str] = []
         try:
-            recently_seen_services = _collect_recently_seen_services(prometheus_base_url)
+            recently_seen_services = _collect_recently_seen_services(
+                prometheus_base_url
+            )
         except Exception:
             logger.exception("Failed to fetch recently seen cAdvisor services")
 

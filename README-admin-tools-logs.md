@@ -36,13 +36,18 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=admin
 GRAFANA_ANONYMOUS_ENABLED=true
 GRAFANA_ANONYMOUS_ROLE=Viewer
-GRAFANA_DOMAIN=localhost
-GRAFANA_ROOT_URL=http://localhost:3001
 ```
 
 All Grafana-related compose variables now live in the repository root `.env` file and are mirrored in `env/compose.env`.
-`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`), and `GRAFANA_ROOT_URL`
-should match the externally reachable URL/port.
+`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
+
+For the Admin tools resource monitoring page, proxy links are now host-agnostic by default.
+If you also want to expose direct external links, set these optional variables in `env/omeroweb.env`:
+
+```
+ADMIN_TOOLS_GRAFANA_PUBLIC_URL=https://monitoring.example.org/grafana
+ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL=https://monitoring.example.org/prometheus
+```
 
 ## How it works
 
