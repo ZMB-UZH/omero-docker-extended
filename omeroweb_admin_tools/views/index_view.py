@@ -2,10 +2,15 @@ import json
 import logging
 import os
 import shutil
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 from urllib.parse import urlencode
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Dict, List
+
+import urllib.error
+import urllib.request
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -20,6 +25,49 @@ from ..services.log_query import (
 from .utils import current_username
 
 logger = logging.getLogger(__name__)
+LOG_TABLE_ROW_CAP = 5000
+
+
+def _to_int_env(name: str, default: int) -> int:
+    """Return an integer environment variable using the provided default on errors."""
+    raw_value = os.environ.get(name, str(default)).strip()
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning("Invalid integer for %s=%s; using %d", name, raw_value, default)
+        return default
+
+
+def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]:
+    """Probe an HTTP endpoint and return availability diagnostics."""
+    try:
+        request = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(getattr(response, "status", 0) or 0)
+            return {"ok": 200 <= status_code < 400, "status": status_code, "error": ""}
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "status": int(exc.code), "error": f"HTTP {exc.code}"}
+    except urllib.error.URLError as exc:
+        return {"ok": False, "status": 0, "error": str(exc.reason)}
+
+
+def _replace_host(url: str, hostname: str) -> str:
+    """Return URL with host replaced while preserving scheme, port, and path."""
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        return url
+    port = parsed.port
+    netloc = f"{hostname}:{port}" if port else hostname
+    return urlunparse(
+        (
+            parsed.scheme,
+            netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 def _unwrap_rtype_value(value, default=None):
@@ -93,6 +141,7 @@ def logs_view(request, conn=None, url=None, **kwargs):
         {
             "log_config": json.dumps(asdict(log_config)) if log_config else "null",
             "log_sources": _build_log_sources(),
+            "table_row_cap": LOG_TABLE_ROW_CAP,
         },
     )
 
@@ -208,6 +257,29 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
     )
+
+    request_host = request.get_host().split(":", 1)[0]
+    grafana_public_port = _to_int_env("ADMIN_TOOLS_GRAFANA_PUBLIC_PORT", 3001)
+    prometheus_public_port = _to_int_env("ADMIN_TOOLS_PROMETHEUS_PUBLIC_PORT", 9090)
+    grafana_default_public = f"{request.scheme}://{request_host}:{grafana_public_port}"
+    prometheus_default_public = (
+        f"{request.scheme}://{request_host}:{prometheus_public_port}"
+    )
+
+    grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "").strip()
+    prometheus_public_url = os.environ.get(
+        "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
+    ).strip()
+
+    if not grafana_public_url:
+        grafana_public_url = _replace_host(grafana_base_url, request_host)
+    if "grafana" in grafana_public_url or "localhost" in grafana_public_url:
+        grafana_public_url = grafana_default_public
+
+    if not prometheus_public_url:
+        prometheus_public_url = _replace_host(prometheus_base_url, request_host)
+    if "prometheus" in prometheus_public_url or "localhost" in prometheus_public_url:
+        prometheus_public_url = prometheus_default_public
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
     )
@@ -223,10 +295,11 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "theme": "light",
         }
     )
-    dashboard_url = (
-        f"{grafana_base_url}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
-    )
-    prometheus_targets_url = f"{prometheus_base_url}/targets"
+    dashboard_url = f"{grafana_public_url.rstrip('/')}/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+    prometheus_targets_url = f"{prometheus_public_url.rstrip('/')}/targets"
+
+    grafana_probe = _probe_http_url(f"{grafana_base_url.rstrip('/')}/api/health")
+    prometheus_probe = _probe_http_url(f"{prometheus_base_url.rstrip('/')}/-/ready")
 
     return JsonResponse(
         {
@@ -234,10 +307,12 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             "grafana": {
                 "base_url": grafana_base_url,
                 "dashboard_url": dashboard_url,
+                "probe": grafana_probe,
             },
             "prometheus": {
                 "base_url": prometheus_base_url,
                 "targets_url": prometheus_targets_url,
+                "probe": prometheus_probe,
             },
         }
     )
@@ -257,10 +332,10 @@ def storage_data(request, conn=None, url=None, **kwargs):
         return root_error
 
     query = """
-        select e.id, e.omeName, g.id, g.name, sum(of.size)
-        from OriginalFile of
-        join of.details.owner e
-        join of.details.group g
+        select e.id, e.omeName, g.id, g.name, sum(file.size)
+        from OriginalFile file
+        join file.details.owner e
+        join file.details.group g
         group by e.id, e.omeName, g.id, g.name
     """
     per_user_group = []
