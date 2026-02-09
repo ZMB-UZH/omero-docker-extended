@@ -188,6 +188,7 @@ def _list_all_users_and_groups(conn):
     """Collect all OMERO users and groups to keep zero-usage rows visible."""
     users = {}
     groups = set()
+    group_permissions = {}
     try:
         admin_service = conn.getAdminService()
         experimenters = []
@@ -209,9 +210,54 @@ def _list_all_users_and_groups(conn):
             group_name = _safe_group_name(group)
             if group_name:
                 groups.add(group_name)
+                group_permissions[group_name] = _safe_group_permission_label(group)
     except Exception:
         logger.exception("Failed to enumerate all users/groups from OMERO admin service")
-    return users, groups
+    return users, groups, group_permissions
+
+
+def _permission_flag(permission_obj, method_name: str) -> bool:
+    """Safely read a bool-like permission method from OMERO permissions."""
+    if permission_obj is None:
+        return False
+    method = getattr(permission_obj, method_name, None)
+    if not callable(method):
+        return False
+    try:
+        return bool(method())
+    except Exception:
+        return False
+
+
+def _safe_group_permission_label(group_obj) -> str:
+    """Return a stable group permission name for the storage group view."""
+    permission_obj = None
+    try:
+        details = group_obj.getDetails()
+        permission_obj = details.getPermissions() if details is not None else None
+    except Exception:
+        permission_obj = None
+
+    group_read = _permission_flag(permission_obj, "isGroupRead")
+    group_write = _permission_flag(permission_obj, "isGroupWrite")
+    group_annotate = _permission_flag(permission_obj, "isGroupAnnotate")
+    if group_read and group_write:
+        return "Read-write"
+    if group_read and group_annotate:
+        return "Read-annotate"
+    if group_read:
+        return "Read-only"
+
+    permission_text = str(permission_obj or "").strip().lower()
+    if "read-write" in permission_text or "rwrw" in permission_text:
+        return "Read-write"
+    if "read-annotate" in permission_text or "rwra" in permission_text:
+        return "Read-annotate"
+    if "read-only" in permission_text:
+        return "Read-only"
+    if "private" in permission_text:
+        return "Private"
+    return "Private"
 
 
 def _require_root_user(request, conn):
@@ -594,7 +640,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
             users_by_group.setdefault(group_name, set()).add(user_name)
             total_size += size_value
 
-        all_users, all_groups = _list_all_users_and_groups(conn)
+        all_users, all_groups, group_permissions = _list_all_users_and_groups(conn)
         for username, full_name in all_users.items():
             totals_by_user.setdefault(username, 0)
             groups_by_user.setdefault(username, set())
@@ -602,6 +648,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
         for group_name in all_groups:
             totals_by_group.setdefault(group_name, 0)
             users_by_group.setdefault(group_name, set())
+            group_permissions.setdefault(group_name, "Private")
 
         for username in totals_by_user:
             full_name_by_user.setdefault(username, "")
@@ -640,6 +687,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
                 {
                     "group": groupname,
                     "users": sorted(users_by_group.get(groupname, set())),
+                    "permissions": group_permissions.get(groupname, "Private"),
                     "bytes": size,
                 }
                 for groupname, size in sorted(
