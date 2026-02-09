@@ -12,9 +12,12 @@ if str(REPO_ROOT) not in sys.path:
 from omeroweb_imaris_connector import config
 
 
-def test_use_job_service_session_defaults_true(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_use_job_service_session_requires_explicit_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", raising=False)
-    assert config.use_job_service_session() is True
+    with pytest.raises(RuntimeError):
+        config.use_job_service_session()
 
 
 @pytest.mark.parametrize(
@@ -28,7 +31,6 @@ def test_use_job_service_session_defaults_true(monkeypatch: pytest.MonkeyPatch) 
         ("0", False),
         ("no", False),
         ("off", False),
-        ("unexpected", True),
     ],
 )
 def test_use_job_service_session_parsing(
@@ -36,6 +38,14 @@ def test_use_job_service_session_parsing(
 ) -> None:
     monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", value)
     assert config.use_job_service_session() is expected
+
+
+def test_use_job_service_session_rejects_invalid_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OMERO_IMS_USE_JOB_SERVICE_SESSION", "unexpected")
+    with pytest.raises(ValueError):
+        config.use_job_service_session()
 
 
 def test_get_job_service_credentials_prefers_web_env(
