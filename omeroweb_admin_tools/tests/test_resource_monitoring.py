@@ -262,9 +262,10 @@ def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> No
     import json
 
     payload = json.loads(response.content.decode("utf-8"))
-    assert payload["grafana"]["dashboard_url"].startswith("/")
+    assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload["prometheus"]["targets_proxy_url"].startswith("/")
+    assert "containers" not in payload["prometheus"]["targets_overview"]
 
 
 def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> None:
@@ -328,6 +329,9 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     payload = json.loads(response.content.decode("utf-8"))
 
     assert payload["grafana"]["dashboard_external_url"].startswith(
+        "https://monitor.example.org/grafana/d/"
+    )
+    assert payload["grafana"]["dashboard_url"].startswith(
         "https://monitor.example.org/grafana/d/"
     )
     assert (
