@@ -21,6 +21,14 @@
                 <button type="button" id="refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
                 <button type="button" id="export_btn" class="admin-tools-button log-refresh-button">Export CSV</button>
             </div>
+            <div class="log-toolbar-group log-toolbar-toggle">
+                <label class="log-checkbox">
+                    <input id="storage_autorefresh" type="checkbox" checked>
+                    Auto refresh
+                </label>
+            </div>
+        </div>
+        <div class="storage-view-toggle-wrap">
             <div class="storage-view-toggle" role="tablist" aria-label="Storage view mode">
                 <button type="button" id="view_users_btn" class="admin-tools-button log-refresh-button is-active" role="tab" aria-selected="true">User view</button>
                 <button type="button" id="view_groups_btn" class="admin-tools-button log-refresh-button" role="tab" aria-selected="false">Group view</button>
@@ -30,7 +38,7 @@
         <div id="status" class="log-status">Ready.</div>
         <div class="storage-visual-layout">
             <div class="storage-chart-card">
-                <canvas id="storage_chart" width="420" height="420" aria-label="Storage usage distribution chart"></canvas>
+                <canvas id="storage_chart" width="390" height="420" aria-label="Storage usage distribution chart"></canvas>
                 <div id="chart_caption" class="storage-chart-caption"></div>
             </div>
             <div class="storage-table-card">
@@ -50,7 +58,11 @@ const statusEl = document.getElementById('status');
 const searchEl = document.getElementById('search');
 const chartCanvas = document.getElementById('storage_chart');
 const chartCaption = document.getElementById('chart_caption');
+const autoRefreshToggle = document.getElementById('storage_autorefresh');
 const TABLE_ROW_CAP = 5000;
+const PIE_MAX_ELEMENTS = 15;
+const AUTO_REFRESH_MS = 30000;
+let autoRefreshTimer = null;
 
 const viewButtons = {
     users: document.getElementById('view_users_btn'),
@@ -121,8 +133,12 @@ function setView(nextView) {
 }
 
 function palette(index) {
-    const hue = (index * 37) % 360;
-    return `hsl(${hue} 72% 52%)`;
+    const discretePalette = [
+        '#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed',
+        '#0ea5e9', '#65a30d', '#dc2626', '#0284c7', '#b45309',
+        '#8b5cf6', '#0891b2', '#16a34a', '#be123c', '#4338ca',
+    ];
+    return discretePalette[index % discretePalette.length];
 }
 
 function drawPieChart(rows, labelName) {
@@ -141,7 +157,7 @@ function drawPieChart(rows, labelName) {
         return;
     }
 
-    const maxSlices = 10;
+    const maxSlices = PIE_MAX_ELEMENTS;
     const sorted = [...rows].sort((a, b) => b.bytes - a.bytes);
     const topRows = sorted.slice(0, maxSlices);
     const otherBytes = sorted.slice(maxSlices).reduce((acc, row) => acc + row.bytes, 0);
@@ -149,7 +165,7 @@ function drawPieChart(rows, labelName) {
         topRows.push({ primary: 'Others', bytes: otherBytes, secondary: '' });
     }
 
-    const centerX = 155;
+    const centerX = 135;
     const centerY = height / 2;
     const radius = 130;
     let startAngle = -Math.PI / 2;
@@ -163,9 +179,6 @@ function drawPieChart(rows, labelName) {
         ctx.closePath();
         ctx.fillStyle = row.primary === 'Others' ? '#94a3b8' : palette(index);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
         startAngle = endAngle;
     });
 
@@ -184,7 +197,7 @@ function drawPieChart(rows, labelName) {
     ctx.font = '600 13px Helvetica Neue';
     ctx.fillText(bytes(total), centerX, centerY + 13);
 
-    const legendX = 320;
+    const legendX = 265;
     let legendY = 54;
     ctx.textAlign = 'left';
     topRows.forEach((row, index) => {
@@ -268,14 +281,33 @@ async function loadData() {
     }
 }
 
+function clearAutoRefreshTimer() {
+    if (autoRefreshTimer !== null) {
+        window.clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+function syncAutoRefresh() {
+    clearAutoRefreshTimer();
+    if (!autoRefreshToggle.checked) {
+        return;
+    }
+    autoRefreshTimer = window.setInterval(() => {
+        loadData().catch(() => {});
+    }, AUTO_REFRESH_MS);
+}
+
 document.getElementById('refresh_btn').addEventListener('click', () => { loadData().catch(() => {}); });
 document.getElementById('export_btn').addEventListener('click', exportCsv);
 searchEl.addEventListener('input', render);
 viewButtons.users.addEventListener('click', () => setView('users'));
 viewButtons.groups.addEventListener('click', () => setView('groups'));
 viewButtons.top10.addEventListener('click', () => setView('top10'));
+autoRefreshToggle.addEventListener('change', syncAutoRefresh);
 
 loadData().catch(() => {});
+syncAutoRefresh();
 </script>
 </body>
 </html>
