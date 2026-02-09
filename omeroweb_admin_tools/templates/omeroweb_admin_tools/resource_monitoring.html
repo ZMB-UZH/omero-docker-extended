@@ -12,15 +12,38 @@
         <div class="admin-tools-header-left">
             <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
             <h1 class="admin-tools-title">Resource monitoring</h1>
+            <p class="admin-tools-subtitle">Live monitoring entry points and container scrape health.</p>
         </div>
     </div>
     <div class="admin-tools-card admin-tools-card--wide">
-        <div class="log-toolbar">
-            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Open Grafana</button>
+        <div class="resource-monitoring-toolbar">
+            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Open Grafana dashboard</button>
             <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Open Prometheus targets</button>
+            <button type="button" id="monitoring_refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
         </div>
         <div id="status" class="log-status">Loading resource dashboard...</div>
-        <div id="monitoring_details" class="log-status"></div>
+        <div class="monitoring-summary-grid">
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Grafana</div>
+                <div id="grafana_probe" class="monitoring-summary-value">Checking...</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Prometheus</div>
+                <div id="prometheus_probe" class="monitoring-summary-value">Checking...</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Active scrape targets</div>
+                <div id="targets_count" class="monitoring-summary-value">0</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Healthy targets</div>
+                <div id="targets_up_count" class="monitoring-summary-value">0</div>
+            </div>
+        </div>
+        <div class="monitoring-container-list-card">
+            <h3>Scraped compose services</h3>
+            <div id="targets_container_list" class="monitoring-container-list">No services detected.</div>
+        </div>
     </div>
 </div>
 <script defer>
@@ -28,42 +51,63 @@ const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" 
 const statusEl = document.getElementById('status');
 const openGrafanaBtn = document.getElementById('open_grafana_btn');
 const openPrometheusBtn = document.getElementById('open_prometheus_btn');
-const detailsEl = document.getElementById('monitoring_details');
+const refreshBtn = document.getElementById('monitoring_refresh_btn');
+const grafanaProbeEl = document.getElementById('grafana_probe');
+const prometheusProbeEl = document.getElementById('prometheus_probe');
+const targetsCountEl = document.getElementById('targets_count');
+const targetsUpCountEl = document.getElementById('targets_up_count');
+const targetsContainerListEl = document.getElementById('targets_container_list');
 
-function updateDetails(payload) {
-    const grafanaProbe = payload?.grafana?.probe || {};
-    const prometheusProbe = payload?.prometheus?.probe || {};
-    const grafanaStatus = grafanaProbe.ok
-        ? `Grafana backend reachable (status ${grafanaProbe.status}).`
-        : `Grafana backend not reachable (${grafanaProbe.error || 'unknown error'}).`;
-    const prometheusStatus = prometheusProbe.ok
-        ? `Prometheus backend reachable (status ${prometheusProbe.status}).`
-        : `Prometheus backend not reachable (${prometheusProbe.error || 'unknown error'}).`;
-    detailsEl.textContent = `${grafanaStatus} ${prometheusStatus}`;
+function probeLabel(probe) {
+    if (!probe || !probe.ok) {
+        return `Unreachable${probe && probe.error ? ` (${probe.error})` : ''}`;
+    }
+    return `Reachable (HTTP ${probe.status})`;
+}
+
+function renderContainerList(containers) {
+    if (!containers.length) {
+        targetsContainerListEl.textContent = 'No compose service labels found on current targets. Ensure cadvisor is scraping Docker metadata.';
+        return;
+    }
+    targetsContainerListEl.innerHTML = containers.map((name) => `<span class="monitoring-pill">${name}</span>`).join('');
 }
 
 async function loadData() {
     statusEl.textContent = 'Loading resource dashboard...';
-    detailsEl.textContent = '';
     try {
         const response = await fetch(dataUrl, { credentials: 'same-origin' });
         const payload = await response.json();
         if (!response.ok) {
             throw new Error(payload.error || `Request failed with status ${response.status}`);
         }
-        const dashboardProxyUrl = payload?.grafana?.dashboard_proxy_url || payload?.grafana?.dashboard_url || '';
-        const targetsProxyUrl = payload?.prometheus?.targets_proxy_url || payload?.prometheus?.targets_url || '';
+
+        const dashboardProxyUrl = payload?.grafana?.dashboard_proxy_url || '';
+        const targetsProxyUrl = payload?.prometheus?.targets_proxy_url || '';
         if (!dashboardProxyUrl || !targetsProxyUrl) {
             throw new Error('Monitoring endpoints are not configured.');
         }
+
         openGrafanaBtn.onclick = () => { window.open(dashboardProxyUrl, '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
-        updateDetails(payload);
-        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}. Use "Open Grafana" to view the dashboard.`;
+
+        grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});
+        prometheusProbeEl.textContent = probeLabel(payload?.prometheus?.probe || {});
+
+        const overview = payload?.prometheus?.targets_overview || {};
+        targetsCountEl.textContent = String(overview.active || 0);
+        targetsUpCountEl.textContent = `${overview.up || 0} up / ${overview.down || 0} down`;
+        renderContainerList(Array.isArray(overview.containers) ? overview.containers : []);
+
+        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
     } catch (error) {
         statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
     }
 }
+
+refreshBtn.addEventListener('click', () => {
+    loadData().catch(() => {});
+});
 
 loadData().catch(() => {});
 </script>
