@@ -89,6 +89,8 @@ const PIE_MAX_ELEMENTS = 15;
 const AUTO_REFRESH_MS = 30000;
 const DISK_USAGE_DECIMALS = 4;
 const PERCENT_DECIMALS = 4;
+const DISK_USAGE_COLUMN_WIDTH_PX = 104;
+const DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX = 146;
 let autoRefreshTimer = null;
 
 const viewButtons = {
@@ -147,9 +149,9 @@ function bytes(v) {
 
 function getColumnLayoutForView() {
     if (currentView === 'groups') {
-        return ['15%', '38%', 'calc(47% - 250px)', '104px', '146px'];
+        return ['15%', '38%', `calc(47% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
     }
-    return ['15%', '16%', 'calc(69% - 250px)', '104px', '146px'];
+    return ['15%', '16%', `calc(69% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
 }
 
 function syncStorageTableHeight() {
@@ -292,7 +294,13 @@ function render() {
     document.querySelector('.storage-table')?.classList.toggle('view-groups', isGroupView);
 
     const headers = getHeadersForView();
-    tableCols.innerHTML = getColumnLayoutForView().map((width) => `<col style="width:${width}">`).join('');
+    tableCols.innerHTML = getColumnLayoutForView().map((width) => {
+        const hasPixelWidth = width.endsWith('px');
+        if (hasPixelWidth) {
+            return `<col style="width:${width};min-width:${width};max-width:${width}">`;
+        }
+        return `<col style="width:${width}">`;
+    }).join('');
     tableHead.innerHTML = headers.map((item) => `<th>${escapeHtml(item)}</th>`).join('');
 
     const needle = searchEl.value.trim().toLowerCase();
