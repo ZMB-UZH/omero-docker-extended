@@ -762,8 +762,9 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "omeroweb_admin_tools_grafana_proxy",
         kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
     )
+    dashboard_direct_url = f"/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
     dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
-    dashboard_url = dashboard_proxy_url
+    dashboard_url = dashboard_external_url or dashboard_direct_url
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
@@ -779,7 +780,6 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "up": 0,
         "down": 0,
         "unknown": 0,
-        "containers": [],
         "services": [],
     }
     try:
@@ -804,22 +804,6 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             - targets_overview["down"]
         )
 
-        labels_api = (
-            f"{prometheus_base_url.rstrip('/')}/api/v1/label/"
-            "container_label_com_docker_compose_service/values"
-        )
-        with urllib.request.urlopen(labels_api, timeout=5.0) as label_response:
-            labels_payload = json.loads(label_response.read().decode("utf-8"))
-        discovered_services = []
-        if labels_payload.get("status") == "success":
-            discovered_services = sorted(
-                {
-                    str(name)
-                    for name in labels_payload.get("data", [])
-                    if str(name).strip() and str(name).strip() != "<unknown>"
-                }
-            )
-
         recently_seen_services: List[str] = []
         try:
             recently_seen_services = _collect_recently_seen_services(
@@ -828,12 +812,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         except Exception:
             logger.exception("Failed to fetch recently seen cAdvisor services")
 
-        all_services = sorted(
-            set(expected_services)
-            | set(discovered_services)
-            | set(recently_seen_services)
-        )
-        targets_overview["containers"] = all_services
+        all_services = sorted(set(expected_services) | set(recently_seen_services))
         targets_overview["services"] = _build_target_service_status(
             active_targets,
             all_services,
