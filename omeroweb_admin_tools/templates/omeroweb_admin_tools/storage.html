@@ -105,9 +105,9 @@ function getRowsForView() {
 
 function getHeadersForView() {
     if (currentView === 'groups') {
-        return ['Group', 'User(s)', 'Disk usage', 'Disk usage [%]'];
+        return ['Group', 'User(s)', 'Disk usage', 'Disk usage [% global]'];
     }
-    return ['User', 'Group(s)', 'Disk usage', 'Disk usage [%]'];
+    return ['User', 'Group(s)', 'Disk usage', 'Disk usage [% global]'];
 }
 
 function setView(nextView) {
