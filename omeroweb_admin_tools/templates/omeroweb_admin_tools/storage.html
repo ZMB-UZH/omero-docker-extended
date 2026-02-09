@@ -41,6 +41,7 @@
             </div>
             <div class="storage-table-card">
                 <table class="log-table storage-table">
+                    <colgroup id="storage_table_cols"></colgroup>
                     <thead><tr id="storage_table_head"></tr></thead>
                     <tbody id="storage_table"></tbody>
                 </table>
@@ -52,6 +53,7 @@
 const dataUrl = new URL('{% url "omeroweb_admin_tools_storage_data" %}', window.location.href);
 const table = document.getElementById('storage_table');
 const tableHead = document.getElementById('storage_table_head');
+const tableCols = document.getElementById('storage_table_cols');
 const statusEl = document.getElementById('status');
 const searchEl = document.getElementById('search');
 const chartCanvas = document.getElementById('storage_chart');
@@ -81,6 +83,8 @@ const parseStoredState = (raw) => {
 const TABLE_ROW_CAP = 5000;
 const PIE_MAX_ELEMENTS = 15;
 const AUTO_REFRESH_MS = 30000;
+const DISK_USAGE_DECIMALS = 4;
+const PERCENT_DECIMALS = 4;
 let autoRefreshTimer = null;
 
 const viewButtons = {
@@ -134,7 +138,14 @@ function bytes(v) {
         value /= 1024;
         idx += 1;
     }
-    return `${value.toFixed(2)} ${units[idx]}`;
+    return `${value.toFixed(DISK_USAGE_DECIMALS)} ${units[idx]}`;
+}
+
+function getColumnLayoutForView() {
+    if (currentView === 'groups') {
+        return ['14%', '35%', '18%', '160px', '160px'];
+    }
+    return ['14%', '15%', 'calc(56% - 320px)', '160px', '160px'];
 }
 
 function getRowsForView() {
@@ -256,7 +267,7 @@ function drawPieChart(rows, labelName) {
         ctx.fillRect(legendX, legendY - 9, 11, 11);
         ctx.fillStyle = '#1f2937';
         ctx.font = '12px Helvetica Neue';
-        const pct = ((row.bytes / total) * 100).toFixed(1);
+        const pct = ((row.bytes / total) * 100).toFixed(PERCENT_DECIMALS);
         const legendLabel = `${row.chartLabel} (${pct}%)`;
         ctx.fillText(legendLabel.slice(0, 24), legendX + 15, legendY);
         legendY += 22;
@@ -270,6 +281,7 @@ function render() {
     document.querySelector('.storage-table')?.classList.toggle('view-groups', isGroupView);
 
     const headers = getHeadersForView();
+    tableCols.innerHTML = getColumnLayoutForView().map((width) => `<col style="width:${width}">`).join('');
     tableHead.innerHTML = headers.map((item) => `<th>${escapeHtml(item)}</th>`).join('');
 
     const needle = searchEl.value.trim().toLowerCase();
@@ -291,11 +303,11 @@ function render() {
         table.innerHTML = `<tr><td colspan="${headers.length}" class="log-empty">No rows.</td></tr>`;
     } else if (currentView === 'groups') {
         table.innerHTML = shownRows
-            .map((row) => `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(3)}%</td></tr>`)
+            .map((row) => `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(PERCENT_DECIMALS)}%</td></tr>`)
             .join('');
     } else {
         table.innerHTML = shownRows
-            .map((row) => `<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.fullName || '—')}</td><td>${escapeHtml(row.groups || '—')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(3)}%</td></tr>`)
+            .map((row) => `<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.fullName || '—')}</td><td>${escapeHtml(row.groups || '—')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(PERCENT_DECIMALS)}%</td></tr>`)
             .join('');
     }
 
@@ -309,9 +321,9 @@ function exportCsv() {
     const headers = getHeadersForView();
     const body = rows.map((row) => {
         if (currentView === 'groups') {
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(3)}`;
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
         }
-        return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(3)}`;
+        return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
     }).join('\n');
     const blob = new Blob([`${headers.join(',')}\n${body}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
