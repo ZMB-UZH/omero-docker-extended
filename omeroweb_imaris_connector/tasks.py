@@ -9,15 +9,12 @@ from omero.gateway import BlitzGateway
 from .celery_app import app
 from .config import get_job_service_credentials, use_job_service_session
 from .imaris_service import (
-    EXPORT_POLL_INTERVAL,
     EXPORT_TIMEOUT,
     _find_script_id,
-    _infer_finished_from_outputs,
     _normalize_job_state,
     _run_script,
     _serialize_outputs,
     _wait_for_process,
-    _get_job_state_and_outputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -188,66 +185,27 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         def _script_status_callback(status: str, details: dict) -> None:
             _update_task_state(status, details)
 
-        job_handle = _run_script(
+        proc = _run_script(
             conn,
             script_id,
             image_id,
             wait_secs=0,
             status_callback=_script_status_callback,
         )
-        if not job_handle:
+        if not proc:
             raise RuntimeError("Failed to start IMS export job.")
 
-        outputs = None
-        last_state = None
-
-        # Poll for script completion
-        if isinstance(job_handle, int):
-            # Job handle is a job ID - poll via OMERO API
-            deadline = time.time() + EXPORT_TIMEOUT
-            poll_count = 0
-            while time.time() < deadline:
-                poll_count += 1
-                state, outs = _get_job_state_and_outputs(conn, job_handle)
-                last_state = _normalize_job_state(state)
-                if outs:
-                    outputs = outs
-                if not last_state and _infer_finished_from_outputs(outputs):
-                    last_state = "FINISHED"
-
-                logger.debug(
-                    "IMS export job poll #%d image_id=%s job_id=%s state=%s outputs=%s",
-                    poll_count,
-                    image_id,
-                    job_handle,
-                    last_state,
-                    _serialize_outputs(outputs),
-                )
-
-                # Update task state with progress
-                _update_task_state(
-                    "polling",
-                    {
-                        "job_state": last_state,
-                        "poll_count": poll_count,
-                    },
-                )
-
-                if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-                    break
-                if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-                    raise RuntimeError(f"IMS export job failed with state: {last_state}")
-                time.sleep(EXPORT_POLL_INTERVAL)
-        else:
-            # Job handle is a process handle - wait for completion
-            logger.debug("IMS export using process handle for image_id=%s", image_id)
-            last_state, outputs = _wait_for_process(job_handle, EXPORT_TIMEOUT)
-            logger.debug(
-                "IMS export process handle completed image_id=%s state=%s outputs=%s",
-                image_id,
-                last_state,
-                _serialize_outputs(outputs),
-            )
+        # _run_script always returns a ScriptProcess handle.
+        # Poll via proc.poll(), collect via proc.getResults(),
+        # _wait_for_process detaches in its finally block (frees Processor slot).
+        logger.debug("IMS export polling process handle for image_id=%s", image_id)
+        last_state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
+        logger.debug(
+            "IMS export process completed image_id=%s state=%s outputs=%s",
+            image_id,
+            last_state,
+            _serialize_outputs(outputs),
+        )
 
         if not last_state:
             raise RuntimeError("Could not determine IMS export job status.")

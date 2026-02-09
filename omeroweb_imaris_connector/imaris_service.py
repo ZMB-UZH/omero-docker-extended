@@ -488,25 +488,15 @@ def _run_script(
             if proc is None:
                 raise RuntimeError("IMS export script returned no process handle")
 
-            # Try to extract the Job id, then detach so the script continues server-side
-            job_id = None
-            try:
-                job = proc.getJob()
-                if job is not None and hasattr(job, "id") and hasattr(job.id, "val"):
-                    job_id = int(job.id.val)
-            except Exception:
-                job_id = None
-
-            if job_id is not None:
-                # Detach: script continues even if client session later closes.
-                # This also releases the processor slot reservation on the server side.
-                _detach_script_process(proc, reason="job started")
-                logger.debug("IMS export script started job_id=%s (detached)", job_id)
-                return job_id
-
-            # Fallback: if job id is not available, return the process handle
-            # (callers will wait on it and detach afterward)
-            logger.debug("IMS export script started (no job id available)")
+            # Return the ScriptProcess handle directly.
+            # Caller polls via proc.poll() and collects via proc.getResults(),
+            # then detaches in _wait_for_process() finally block.
+            #
+            # Do NOT detach here — OMERO 5.6 has no getJobStatus/getJobOutputs
+            # API, so a detached handle cannot be polled. The handle stays on
+            # the Processor forever, leaking a slot (causing NoProcessorAvailable
+            # for all subsequent runs).
+            logger.debug("IMS export script started, returning process handle")
             return proc
 
         except Exception as exc:
