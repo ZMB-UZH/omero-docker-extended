@@ -164,6 +164,7 @@
     </div>
     <script defer>
         const logConfig = {{ log_config|safe }};
+        const tableRowCap = {{ table_row_cap|default:5000 }};
         const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
         const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
         const internalLabelsUrl = new URL('{% url "omeroweb_admin_tools_internal_labels" %}', window.location.href);
@@ -234,12 +235,15 @@
         let activeEntries = [];
         let currentViewEntries = [];
         let loadedEntriesCount = 0;
+        let shownEntriesCount = 0;
+        let renderToken = 0;
         let requestCounter = 0;
         let latestRequestId = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
         const internalLabelRefreshMs = 30000;
+        const renderChunkSize = 250;
         let internalLabelTimer = null;
 
         function setStatus(text) {
@@ -253,7 +257,11 @@
                 setStatus('Loaded 0 log entries.');
                 return;
             }
-            setStatus(`Loaded ${loadedEntriesCount} log entries.`);
+            if (loadedEntriesCount > shownEntriesCount) {
+                setStatus(`Loaded ${loadedEntriesCount} log entries. Showing ${shownEntriesCount} (table cap: ${tableRowCap}).`);
+                return;
+            }
+            setStatus(`Loaded ${loadedEntriesCount} log entries. Showing ${shownEntriesCount}.`);
         }
 
         function setLoading(isLoading) {
@@ -611,30 +619,59 @@
             return name;
         }
 
+        function cancelRender() {
+            renderToken += 1;
+        }
+
+        function buildRowHtml(entry) {
+            return `
+                <tr>
+                    <td>${escapeHtml(formatTimestamp(entry.timestamp))}</td>
+                    <td>${escapeHtml(displayContainerName(entry.container))}</td>
+                    <td class="log-level log-level-${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</td>
+                    <td class="log-message">${escapeHtml(entry.message)}</td>
+                </tr>
+            `;
+        }
+
         function renderTable(entries) {
             if (!tableBody) {
                 return;
             }
+            cancelRender();
+            const token = renderToken;
             if (!entries.length) {
                 tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
                 return;
             }
-            tableBody.innerHTML = entries
-                .map((entry) => `
-                    <tr>
-                        <td>${escapeHtml(formatTimestamp(entry.timestamp))}</td>
-                        <td>${escapeHtml(displayContainerName(entry.container))}</td>
-                        <td class="log-level log-level-${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</td>
-                        <td class="log-message">${escapeHtml(entry.message)}</td>
-                    </tr>
-                `)
-                .join('');
+            tableBody.innerHTML = '';
+            const batch = Math.max(50, renderChunkSize);
+            let index = 0;
+
+            const appendChunk = () => {
+                if (token !== renderToken) {
+                    return;
+                }
+                const end = Math.min(index + batch, entries.length);
+                let html = '';
+                for (; index < end; index += 1) {
+                    html += buildRowHtml(entries[index]);
+                }
+                tableBody.insertAdjacentHTML('beforeend', html);
+                if (index < entries.length) {
+                    window.requestAnimationFrame(appendChunk);
+                }
+            };
+
+            window.requestAnimationFrame(appendChunk);
         }
 
         function applyFilters() {
             currentViewEntries = activeEntries;
             loadedEntriesCount = currentViewEntries.length;
-            renderTable(currentViewEntries);
+            const shownEntries = currentViewEntries.slice(0, tableRowCap);
+            shownEntriesCount = shownEntries.length;
+            renderTable(shownEntries);
             updateLoadedStatus();
             updateDownloadState();
         }
