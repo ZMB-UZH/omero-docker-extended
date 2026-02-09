@@ -111,9 +111,14 @@ def _proxy_http_request(
                     proxied[header_name] = header_value
             location = headers.get("Location")
             if location:
-                proxied["Location"] = location.replace(
-                    base_url.rstrip("/"), proxy_prefix
-                )
+                if location.startswith(base_url.rstrip("/")):
+                    proxied["Location"] = location.replace(
+                        base_url.rstrip("/"), proxy_prefix, 1
+                    )
+                elif location.startswith("/") and proxy_prefix:
+                    proxied["Location"] = f"{proxy_prefix}{location}"
+                else:
+                    proxied["Location"] = location
             return proxied
     except urllib.error.HTTPError as exc:
         body = exc.read()
