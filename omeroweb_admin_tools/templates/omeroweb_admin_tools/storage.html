@@ -17,7 +17,7 @@
     <div class="admin-tools-card admin-tools-card--wide">
         <div class="log-toolbar storage-toolbar">
             <div class="storage-toolbar-left">
-                <input id="search" class="log-input" type="text" placeholder="Search by user or group">
+                <input id="search" class="log-input" type="text" placeholder="Filter by username, name or group">
                 <label class="log-checkbox storage-autorefresh-inline">
                     <input id="storage_autorefresh" type="checkbox" checked>
                     Auto refresh
@@ -142,13 +142,16 @@ function getRowsForView() {
         return (rawData.by_group || []).map((item) => ({
             primary: item.group,
             secondary: (item.users || []).join(', '),
+            chartLabel: item.group,
             bytes: item.bytes,
             percent: totalUsedBytes > 0 ? (Number(item.bytes || 0) / totalUsedBytes) * 100 : 0,
         }));
     }
     const users = (rawData.by_user || []).map((item) => ({
-        primary: item.username,
-        secondary: (item.groups || []).join(', '),
+        username: item.username,
+        fullName: item.full_name || '',
+        groups: (item.groups || []).join(', '),
+        chartLabel: item.username,
         bytes: item.bytes,
         percent: totalUsedBytes > 0 ? (Number(item.bytes || 0) / totalUsedBytes) * 100 : 0,
     }));
@@ -162,7 +165,7 @@ function getHeadersForView() {
     if (currentView === 'groups') {
         return ['Group', 'User(s)', 'Disk usage', 'Disk usage [% global]'];
     }
-    return ['User', 'Group(s)', 'Disk usage', 'Disk usage [% global]'];
+    return ['Username', 'Full name', 'Group(s)', 'Disk usage', 'Disk usage [% global]'];
 }
 
 function setView(nextView) {
@@ -206,7 +209,7 @@ function drawPieChart(rows, labelName) {
     const topRows = sorted.slice(0, maxSlices);
     const otherBytes = sorted.slice(maxSlices).reduce((acc, row) => acc + row.bytes, 0);
     if (otherBytes > 0) {
-        topRows.push({ primary: 'Others', bytes: otherBytes, secondary: '' });
+        topRows.push({ chartLabel: 'Others', bytes: otherBytes });
     }
 
     const centerX = 135;
@@ -221,7 +224,7 @@ function drawPieChart(rows, labelName) {
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, startAngle, endAngle);
         ctx.closePath();
-        ctx.fillStyle = row.primary === 'Others' ? '#94a3b8' : palette(index);
+        ctx.fillStyle = row.chartLabel === 'Others' ? '#94a3b8' : palette(index);
         ctx.fill();
         startAngle = endAngle;
     });
@@ -248,12 +251,12 @@ function drawPieChart(rows, labelName) {
         if (legendY > height - 20) {
             return;
         }
-        ctx.fillStyle = row.primary === 'Others' ? '#94a3b8' : palette(index);
+        ctx.fillStyle = row.chartLabel === 'Others' ? '#94a3b8' : palette(index);
         ctx.fillRect(legendX, legendY - 9, 11, 11);
         ctx.fillStyle = '#1f2937';
         ctx.font = '12px Helvetica Neue';
         const pct = ((row.bytes / total) * 100).toFixed(1);
-        const legendLabel = `${row.primary} (${pct}%)`;
+        const legendLabel = `${row.chartLabel} (${pct}%)`;
         ctx.fillText(legendLabel.slice(0, 24), legendX + 15, legendY);
         legendY += 22;
     });
@@ -271,15 +274,24 @@ function render() {
         if (!needle) {
             return true;
         }
-        return row.primary.toLowerCase().includes(needle) || row.secondary.toLowerCase().includes(needle);
+        if (currentView === 'groups') {
+            return row.primary.toLowerCase().includes(needle) || row.secondary.toLowerCase().includes(needle);
+        }
+        return row.username.toLowerCase().includes(needle)
+            || row.fullName.toLowerCase().includes(needle)
+            || row.groups.toLowerCase().includes(needle);
     });
     const shownRows = filteredRows.slice(0, TABLE_ROW_CAP);
 
     if (!shownRows.length) {
-        table.innerHTML = '<tr><td colspan="4" class="log-empty">No rows.</td></tr>';
-    } else {
+        table.innerHTML = `<tr><td colspan="${headers.length}" class="log-empty">No rows.</td></tr>`;
+    } else if (currentView === 'groups') {
         table.innerHTML = shownRows
             .map((row) => `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(3)}%</td></tr>`)
+            .join('');
+    } else {
+        table.innerHTML = shownRows
+            .map((row) => `<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.fullName || '—')}</td><td>${escapeHtml(row.groups || '—')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(3)}%</td></tr>`)
             .join('');
     }
 
@@ -291,7 +303,12 @@ function render() {
 function exportCsv() {
     const rows = getRowsForView();
     const headers = getHeadersForView();
-    const body = rows.map((row) => `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${row.bytes},${row.percent.toFixed(3)}`).join('\n');
+    const body = rows.map((row) => {
+        if (currentView === 'groups') {
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${row.bytes},${row.percent.toFixed(3)}`;
+        }
+        return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(3)}`;
+    }).join('\n');
     const blob = new Blob([`${headers.join(',')}\n${body}`], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

@@ -135,6 +135,85 @@ def _unwrap_rtype_value(value, default=None):
     return value
 
 
+def _safe_full_name(user_obj) -> str:
+    """Return "First Last" for an OMERO experimenter-like object."""
+    first_name = ""
+    last_name = ""
+    for getter_name, field_name in (("getFirstName", "firstName"), ("getLastName", "lastName")):
+        raw_value = None
+        if hasattr(user_obj, getter_name):
+            raw_value = _unwrap_rtype_value(getattr(user_obj, getter_name)(), "")
+        elif hasattr(user_obj, field_name):
+            raw_value = _unwrap_rtype_value(getattr(user_obj, field_name), "")
+        if getter_name == "getFirstName":
+            first_name = str(raw_value or "").strip()
+        else:
+            last_name = str(raw_value or "").strip()
+    return " ".join(part for part in (first_name, last_name) if part)
+
+
+def _safe_username(user_obj) -> str:
+    """Return username for an OMERO experimenter-like object."""
+    if hasattr(user_obj, "getOmeName"):
+        return str(_unwrap_rtype_value(user_obj.getOmeName(), "") or "").strip()
+    if hasattr(user_obj, "omeName"):
+        return str(_unwrap_rtype_value(user_obj.omeName, "") or "").strip()
+    return ""
+
+
+def _safe_group_name(group_obj) -> str:
+    """Return name for an OMERO group-like object."""
+    if hasattr(group_obj, "getName"):
+        return str(_unwrap_rtype_value(group_obj.getName(), "") or "").strip()
+    if hasattr(group_obj, "name"):
+        return str(_unwrap_rtype_value(group_obj.name, "") or "").strip()
+    return ""
+
+
+def _call_admin_listing(admin_service, method_name):
+    """Call admin-service listing methods with tolerant signatures."""
+    if not hasattr(admin_service, method_name):
+        return []
+    method = getattr(admin_service, method_name)
+    for args in ((), (None,), (False,)):
+        try:
+            result = method(*args)
+            return list(result or [])
+        except TypeError:
+            continue
+    return []
+
+
+def _list_all_users_and_groups(conn):
+    """Collect all OMERO users and groups to keep zero-usage rows visible."""
+    users = {}
+    groups = set()
+    try:
+        admin_service = conn.getAdminService()
+        experimenters = []
+        experimenter_groups = []
+        for method_name in ("lookupExperimenters", "containedExperimenters"):
+            experimenters = _call_admin_listing(admin_service, method_name)
+            if experimenters:
+                break
+        for method_name in ("lookupGroups", "containedGroups"):
+            experimenter_groups = _call_admin_listing(admin_service, method_name)
+            if experimenter_groups:
+                break
+
+        for user in experimenters:
+            username = _safe_username(user)
+            if username:
+                users[username] = _safe_full_name(user)
+        for group in experimenter_groups:
+            group_name = _safe_group_name(group)
+            if group_name:
+                groups.add(group_name)
+    except Exception:
+        logger.exception("Failed to enumerate all users/groups from OMERO admin service")
+    return users, groups
+
+
 def _require_root_user(request, conn):
     username = current_username(request, conn)
     if username != "root":
@@ -484,6 +563,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
     """
     per_user_group = []
     totals_by_user: Dict[str, int] = {}
+    full_name_by_user: Dict[str, str] = {}
     groups_by_user: Dict[str, set] = {}
     totals_by_group: Dict[str, int] = {}
     users_by_group: Dict[str, set] = {}
@@ -513,6 +593,18 @@ def storage_data(request, conn=None, url=None, **kwargs):
             )
             users_by_group.setdefault(group_name, set()).add(user_name)
             total_size += size_value
+
+        all_users, all_groups = _list_all_users_and_groups(conn)
+        for username, full_name in all_users.items():
+            totals_by_user.setdefault(username, 0)
+            groups_by_user.setdefault(username, set())
+            full_name_by_user[username] = full_name
+        for group_name in all_groups:
+            totals_by_group.setdefault(group_name, 0)
+            users_by_group.setdefault(group_name, set())
+
+        for username in totals_by_user:
+            full_name_by_user.setdefault(username, "")
     except Exception as exc:
         logger.exception("Failed to compute storage distribution")
         return JsonResponse({"error": f"Storage query failed: {exc}"}, status=500)
@@ -536,6 +628,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
             "by_user": [
                 {
                     "username": username,
+                    "full_name": full_name_by_user.get(username, ""),
                     "groups": sorted(groups_by_user.get(username, set())),
                     "bytes": size,
                 }
