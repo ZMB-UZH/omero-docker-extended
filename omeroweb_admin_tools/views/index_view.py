@@ -783,6 +783,8 @@ def _build_target_service_status(
         state = str(runtime.get("state", "")).lower()
         healthcheck_state = str(runtime.get("health", "")).lower()
         has_healthcheck = healthcheck_lookup.get(service.lower(), False)
+        if not has_healthcheck and healthcheck_state:
+            has_healthcheck = True
 
         final_health = prometheus_health
         if has_healthcheck:
