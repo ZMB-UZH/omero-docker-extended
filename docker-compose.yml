@@ -31,6 +31,7 @@ services:
     user: "0:0"
     command:
       - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
       - "/etc/alloy/alloy-config.alloy"
     networks:
       omero:
@@ -70,12 +71,35 @@ services:
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus:rw
+    depends_on:
+      blackbox-exporter:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
       start_period: 20s
+
+    security_opt:
+      - no-new-privileges:true
+  blackbox-exporter:
+    image: "prom/blackbox-exporter:v0.26.0"
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/blackbox_exporter/config.yml"
+    networks:
+      omero:
+        aliases:
+          - blackbox-exporter
+    volumes:
+      - ./monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9115/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
 
     security_opt:
       - no-new-privileges:true
