@@ -240,7 +240,9 @@ def test_build_public_service_url_preserves_base_path() -> None:
     assert built == "https://example.org:4430/grafana"
 
 
-def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> None:
+def test_resource_monitoring_data_prefers_public_urls_from_request_host(
+    monkeypatch,
+) -> None:
     request = RequestFactory().get("/admin_tools/resource-monitoring/data/")
 
     monkeypatch.setattr(
@@ -262,6 +264,10 @@ def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> No
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._load_compose_service_names",
         lambda: [],
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_health_data",
+        lambda: ({}, {}),
     )
 
     class DummyResponse:
@@ -285,6 +291,8 @@ def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> No
         raise AssertionError(f"unexpected url: {url}")
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("GRAFANA_HOST_PORT", "3001")
+    monkeypatch.setenv("PROMETHEUS_HOST_PORT", "9090")
 
     response = resource_monitoring_data(request, conn=None)
 
@@ -292,9 +300,8 @@ def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> No
     import json
 
     payload = json.loads(response.content.decode("utf-8"))
-    assert payload["grafana"]["dashboard_url"].startswith(
-        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/"
-    )
+    assert payload["grafana"]["dashboard_url"].startswith("http://testserver:3001/d/")
+    assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload["prometheus"]["targets_proxy_url"].startswith("/")
     assert "containers" not in payload["prometheus"]["targets_overview"]
@@ -322,6 +329,10 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._load_compose_service_names",
         lambda: [],
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_health_data",
+        lambda: ({}, {}),
     )
 
     class DummyResponse:
@@ -409,7 +420,9 @@ def test_build_target_service_status_prefers_docker_healthcheck_status() -> None
     ]
 
 
-def test_build_target_service_status_uses_runtime_health_when_config_unavailable() -> None:
+def test_build_target_service_status_uses_runtime_health_when_config_unavailable() -> (
+    None
+):
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
         expected_services=["db", "api"],
