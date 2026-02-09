@@ -224,7 +224,7 @@ RUN printf '%s\n' \
         '#!/bin/bash' \
         'set -e' \
         'echo "Generating OMERO.web config..."' \
-        'omero web config gunicorn > /opt/omero/web/OMERO.web/gunicorn.conf.py' \
+        'omero web config gunicorn > /tmp/gunicorn.conf.py' \
         'echo "Config generated, skipping web start (supervisord will handle it)"' \
         > /startup/99-run.sh && \
     chmod +x /startup/99-run.sh
