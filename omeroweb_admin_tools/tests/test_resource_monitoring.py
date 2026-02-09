@@ -407,3 +407,30 @@ def test_build_target_service_status_prefers_docker_healthcheck_status() -> None
         {"service": "worker", "health": "down", "state": "exited", "healthcheck": ""},
         {"service": "api", "health": "up", "state": "running", "healthcheck": "none"},
     ]
+
+
+def test_build_target_service_status_uses_runtime_health_when_config_unavailable() -> None:
+    statuses = _build_target_service_status(
+        active_targets=[{"labels": {"job": "db"}, "health": "up"}],
+        expected_services=["db", "api"],
+        service_healthcheck_config={},
+        runtime_health_by_service={
+            "db": {"state": "running", "health": "healthy"},
+            "api": {"state": "running", "health": "unhealthy"},
+        },
+    )
+
+    assert statuses == [
+        {
+            "service": "db",
+            "health": "healthy",
+            "state": "running",
+            "healthcheck": "healthy",
+        },
+        {
+            "service": "api",
+            "health": "unhealthy",
+            "state": "running",
+            "healthcheck": "unhealthy",
+        },
+    ]
