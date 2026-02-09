@@ -49,9 +49,19 @@ def test_build_target_service_status_prefers_up() -> None:
     statuses = _build_target_service_status(active_targets, ["app", "db", "redis"])
 
     assert statuses == [
-        {"service": "app", "health": "up"},
-        {"service": "db", "health": "unknown"},
-        {"service": "redis", "health": "unknown"},
+        {"service": "app", "health": "up", "state": "unknown", "healthcheck": "none"},
+        {
+            "service": "db",
+            "health": "unknown",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
+        {
+            "service": "redis",
+            "health": "unknown",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
     ]
 
 
@@ -75,8 +85,18 @@ def test_build_target_service_status_resolves_container_name_variants() -> None:
     )
 
     assert statuses == [
-        {"service": "node-exporter", "health": "up"},
-        {"service": "prometheus", "health": "down"},
+        {
+            "service": "node-exporter",
+            "health": "up",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
+        {
+            "service": "prometheus",
+            "health": "down",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
     ]
 
 
@@ -90,8 +110,18 @@ def test_build_target_service_status_uses_recent_container_samples() -> None:
     )
 
     assert statuses == [
-        {"service": "database", "health": "up"},
-        {"service": "redis", "health": "unknown"},
+        {
+            "service": "database",
+            "health": "up",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
+        {
+            "service": "redis",
+            "health": "unknown",
+            "state": "unknown",
+            "healthcheck": "none",
+        },
     ]
 
 
@@ -262,7 +292,9 @@ def test_resource_monitoring_data_prefers_proxy_relative_urls(monkeypatch) -> No
     import json
 
     payload = json.loads(response.content.decode("utf-8"))
-    assert payload["grafana"]["dashboard_url"].startswith("/d/")
+    assert payload["grafana"]["dashboard_url"].startswith(
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/"
+    )
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload["prometheus"]["targets_proxy_url"].startswith("/")
     assert "containers" not in payload["prometheus"]["targets_overview"]
@@ -338,3 +370,40 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
         payload["prometheus"]["targets_url"]
         == "https://monitor.example.org/prometheus/targets"
     )
+
+
+def test_build_target_service_status_prefers_docker_healthcheck_status() -> None:
+    active_targets = [
+        {"labels": {"job": "db"}, "health": "up"},
+        {"labels": {"job": "cache"}, "health": "up"},
+        {"labels": {"job": "worker"}, "health": "down"},
+    ]
+
+    statuses = _build_target_service_status(
+        active_targets,
+        ["db", "cache", "worker", "api"],
+        service_healthcheck_config={"db": True, "cache": True, "worker": True},
+        runtime_health_by_service={
+            "db": {"state": "running", "health": "healthy"},
+            "cache": {"state": "running", "health": "unhealthy"},
+            "worker": {"state": "exited", "health": ""},
+            "api": {"state": "running", "health": ""},
+        },
+    )
+
+    assert statuses == [
+        {
+            "service": "db",
+            "health": "healthy",
+            "state": "running",
+            "healthcheck": "healthy",
+        },
+        {
+            "service": "cache",
+            "health": "unhealthy",
+            "state": "running",
+            "healthcheck": "unhealthy",
+        },
+        {"service": "worker", "health": "down", "state": "exited", "healthcheck": ""},
+        {"service": "api", "health": "up", "state": "running", "healthcheck": "none"},
+    ]

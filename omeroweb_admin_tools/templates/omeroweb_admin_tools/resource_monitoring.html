@@ -160,10 +160,19 @@ function renderServiceHealth(services) {
         targetsServiceHealthEl.textContent = 'No service health data available.';
         return;
     }
-    targetsServiceHealthEl.innerHTML = services.map(({ service, health }) => {
+    targetsServiceHealthEl.innerHTML = services.map(({ service, health, state, healthcheck }) => {
         const normalized = String(health || 'unknown').toLowerCase();
-        const icon = normalized === 'up' ? '🟢' : (normalized === 'down' ? '🔴' : '🟡');
-        return `<span class="monitoring-pill">${icon} ${service}: ${normalized}</span>`;
+        let healthClass = 'monitoring-pill--unknown';
+        if (normalized === 'healthy' || normalized === 'up') {
+            healthClass = 'monitoring-pill--healthy';
+        } else if (normalized === 'unhealthy') {
+            healthClass = 'monitoring-pill--unhealthy';
+        } else if (normalized === 'down') {
+            healthClass = 'monitoring-pill--down';
+        }
+        const detailState = String(state || 'unknown').toLowerCase();
+        const detailHealthcheck = String(healthcheck || 'none').toLowerCase();
+        return `<span class="monitoring-pill ${healthClass}">${service}: ${normalized} (state=${detailState}, healthcheck=${detailHealthcheck})</span>`;
     }).join('');
 }
 
