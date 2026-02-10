@@ -89,8 +89,8 @@ const PIE_MAX_ELEMENTS = 15;
 const AUTO_REFRESH_MS = 30000;
 const DISK_USAGE_DECIMALS = 2;
 const PERCENT_DECIMALS = 4;
-const DISK_USAGE_COLUMN_WIDTH_PX = 50;
-const DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX = 60;
+const DISK_USAGE_COLUMN_WIDTH_PX = 25;
+const DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX = 30;
 let autoRefreshTimer = null;
 
 const viewButtons = {
@@ -212,8 +212,16 @@ function palette(index) {
 
 function drawPieChart(rows, labelName) {
     const ctx = chartCanvas.getContext('2d');
-    const width = chartCanvas.width;
-    const height = chartCanvas.height;
+    const cssWidth = Number(chartCanvas.getAttribute('width')) || 460;
+    const cssHeight = Number(chartCanvas.getAttribute('height')) || 420;
+    const pixelRatio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    chartCanvas.style.width = `${cssWidth}px`;
+    chartCanvas.style.height = `${cssHeight}px`;
+    chartCanvas.width = cssWidth * pixelRatio;
+    chartCanvas.height = cssHeight * pixelRatio;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    const width = cssWidth;
+    const height = cssHeight;
     ctx.clearRect(0, 0, width, height);
 
     const total = rows.reduce((acc, row) => acc + Number(row.bytes || 0), 0);
@@ -260,11 +268,9 @@ function drawPieChart(rows, labelName) {
     ctx.stroke();
 
     ctx.fillStyle = '#0f172a';
-    ctx.font = '700 14px Helvetica Neue';
+    ctx.font = '600 14px Helvetica Neue';
     ctx.textAlign = 'center';
-    ctx.fillText('Total', centerX, centerY - 8);
-    ctx.font = '600 13px Helvetica Neue';
-    ctx.fillText(bytes(total), centerX, centerY + 13);
+    ctx.fillText(bytes(total), centerX, centerY + 5);
 
     const legendX = 285;
     let legendY = 54;
