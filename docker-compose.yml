@@ -261,11 +261,8 @@ services:
     restart: "no"
     command: []
     environment:
-      CONTAINER_NAME: redis-sysctl-init
       SYSCTL_KEY: vm.overcommit_memory
       SYSCTL_VALUE: "1"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     network_mode: none
     security_opt:
       - no-new-privileges:true
