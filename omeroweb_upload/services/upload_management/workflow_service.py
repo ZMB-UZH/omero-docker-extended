@@ -22,36 +22,31 @@ _IMPORT_LOCKS_GUARD = threading.Lock()
 def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     """
     Classify OMERO import compatibility check output.
-    
+
     Returns a tuple of (status, details) where status is one of:
     - "compatible": File can be imported
     - "incompatible": File format not supported
     - "error": Check failed due to an error
-    
-    CRITICAL FIX: The -f flag returns:
-    - Exit code 0: ALWAYS (even for incompatible files)
-    - Actual compatibility is determined by checking if import candidates exist in stdout
+
+    CRITICAL: The -f flag ALWAYS returns exit code 0, even for incompatible files.
+    Actual compatibility is determined by checking if import candidates exist in stdout.
+
+    Stdout is checked FIRST because Java/Bio-Formats commonly writes warnings to stderr
+    (log4j, reflection access, class loading) that would cause false "error" results if
+    stderr were checked first.  Only treat stderr as a fatal error when stdout contains
+    no usable information at all.
     """
     details = (stderr or stdout or "").strip()
-    lowered = details.lower()
-    
-    # CRITICAL: Check stderr first for fatal errors (missing file, CLI errors, etc.)
-    if stderr and stderr.strip():
-        stderr_lower = stderr.lower()
-        # These indicate real errors, not just incompatibility
-        error_indicators = [
-            "exception",
-            "error:",
-            "failed to",
-            "cannot access",
-            "no such file",
-            "permission denied",
-            "timeout",
-        ]
-        if any(indicator in stderr_lower for indicator in error_indicators):
-            return "error", stderr.strip()
-    
-    # Check stdout for explicit incompatibility messages
+    lowered = (stdout or "").strip().lower() + " " + (stderr or "").strip().lower()
+
+    # 1. Check stdout for actual import candidates FIRST.
+    #    If Bio-Formats found importable files, the file IS compatible regardless
+    #    of any warnings/errors printed to stderr.
+    has_candidates = _has_import_candidates_in_output(stdout or "")
+    if has_candidates:
+        return "compatible", "File format supported by OMERO"
+
+    # 2. Check for explicit incompatibility messages (in stdout OR stderr).
     incompatible_markers = [
         "unsupported",
         "unknown format",
@@ -62,19 +57,24 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
         "no reader found",
         "failed to determine reader",
     ]
-    
+
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
-    
-    # CRITICAL FIX: Check if stdout contains actual import candidates
-    # The -f flag ALWAYS returns 0, so we MUST parse stdout
-    has_candidates = _has_import_candidates_in_output(stdout or "")
-    
-    if has_candidates:
-        return "compatible", "File format supported by OMERO"
-    else:
-        # No candidates found = file is incompatible
-        return "incompatible", "No importable files detected by Bio-Formats"
+
+    # 3. No candidates found and no clear incompatibility message.
+    #    Check stderr for fatal errors (missing file, CLI crash, etc.).
+    if stderr and stderr.strip():
+        stderr_lower = stderr.lower()
+        fatal_indicators = [
+            "no such file",
+            "permission denied",
+            "timeout",
+        ]
+        if any(indicator in stderr_lower for indicator in fatal_indicators):
+            return "error", stderr.strip()
+
+    # 4. Fallback: no candidates, no clear signal → incompatible.
+    return "incompatible", details or "No importable files detected by Bio-Formats"
 
 
 
