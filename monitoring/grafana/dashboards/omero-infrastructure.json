@@ -13,10 +13,22 @@
       "type": "stat",
       "title": "Host CPU usage",
       "id": 1,
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "percentunit", "min": 0, "max": 100 },
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100
+        },
         "overrides": []
       },
       "targets": [
@@ -30,10 +42,22 @@
       "type": "stat",
       "title": "Host memory usage",
       "id": 2,
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "percentunit", "min": 0, "max": 100 },
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100
+        },
         "overrides": []
       },
       "targets": [
@@ -47,10 +71,22 @@
       "type": "stat",
       "title": "Root disk usage",
       "id": 3,
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "percentunit", "min": 0, "max": 100 },
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100
+        },
         "overrides": []
       },
       "targets": [
@@ -64,52 +100,101 @@
       "type": "stat",
       "title": "Load (5m)",
       "id": 4,
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "none" },
+        "defaults": {
+          "unit": "none"
+        },
         "overrides": []
       },
       "targets": [
-        { "refId": "A", "expr": "node_load5" }
+        {
+          "refId": "A",
+          "expr": "node_load5"
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Active targets",
       "id": 5,
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "none" },
+        "defaults": {
+          "unit": "none"
+        },
         "overrides": []
       },
       "targets": [
-        { "refId": "A", "expr": "count(up)" }
+        {
+          "refId": "A",
+          "expr": "count(up)"
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Healthy targets",
       "id": 6,
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "none" },
+        "defaults": {
+          "unit": "none"
+        },
         "overrides": []
       },
       "targets": [
-        { "refId": "A", "expr": "sum(up)" }
+        {
+          "refId": "A",
+          "expr": "sum(up)"
+        }
       ]
     },
     {
       "type": "timeseries",
       "title": "Host CPU usage",
       "id": 7,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "percentunit" },
+        "defaults": {
+          "unit": "percentunit"
+        },
         "overrides": []
       },
       "targets": [
@@ -123,10 +208,20 @@
       "type": "timeseries",
       "title": "Memory used",
       "id": 8,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "bytes" },
+        "defaults": {
+          "unit": "bytes"
+        },
         "overrides": []
       },
       "targets": [
@@ -140,10 +235,20 @@
       "type": "timeseries",
       "title": "Network throughput",
       "id": 9,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "Bps" },
+        "defaults": {
+          "unit": "Bps"
+        },
         "overrides": []
       },
       "targets": [
@@ -163,8 +268,16 @@
       "type": "timeseries",
       "title": "Disk IOPS",
       "id": 15,
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "iops",
@@ -175,21 +288,35 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": "Write.*" },
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Read.*"
+            },
             "properties": [
-              { "id": "custom.transform", "value": "negative-Y" }
+              {
+                "id": "custom.transform",
+                "value": "negative-Y"
+              }
             ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -208,10 +335,20 @@
       "type": "timeseries",
       "title": "Container CPU by service",
       "id": 10,
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "cores" },
+        "defaults": {
+          "unit": "cores"
+        },
         "overrides": []
       },
       "targets": [
@@ -226,10 +363,20 @@
       "type": "timeseries",
       "title": "Container memory by service",
       "id": 11,
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "bytes" },
+        "defaults": {
+          "unit": "bytes"
+        },
         "overrides": []
       },
       "targets": [
@@ -245,8 +392,16 @@
       "title": "Container restarts",
       "description": "Restart events per container (last 24 h). Y-axis auto-scales.",
       "id": 12,
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -258,14 +413,24 @@
             "lineWidth": 1,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
-          }
+            "stacking": {
+              "mode": "none"
+            },
+            "axisSoftMax": 10
+          },
+          "min": 0
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -279,10 +444,20 @@
       "type": "timeseries",
       "title": "Filesystem free space",
       "id": 13,
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
-        "defaults": { "unit": "bytes" },
+        "defaults": {
+          "unit": "bytes"
+        },
         "overrides": []
       },
       "targets": [
@@ -297,8 +472,16 @@
       "type": "table",
       "title": "Prometheus target health",
       "id": 14,
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "targets": [
         {
           "refId": "A",
@@ -311,66 +494,121 @@
         "showHeader": true,
         "cellHeight": "sm",
         "sortBy": [
-          { "desc": false, "displayName": "Job" }
+          {
+            "desc": false,
+            "displayName": "Job"
+          }
         ],
-        "footer": { "show": false }
+        "footer": {
+          "show": false
+        }
       },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "auto",
-            "cellOptions": { "type": "auto" },
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Value" },
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
             "properties": [
-              { "id": "displayName", "value": "Status" },
+              {
+                "id": "displayName",
+                "value": "Status"
+              },
               {
                 "id": "mappings",
                 "value": [
                   {
                     "type": "value",
                     "options": {
-                      "0": { "text": "DOWN", "color": "red" },
-                      "1": { "text": "UP", "color": "green" }
+                      "0": {
+                        "text": "DOWN",
+                        "color": "red"
+                      },
+                      "1": {
+                        "text": "UP",
+                        "color": "green"
+                      }
                     }
                   }
                 ]
               },
               {
                 "id": "custom.cellOptions",
-                "value": { "type": "color-background", "mode": "basic" }
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
               },
-              { "id": "custom.width", "value": 100 }
+              {
+                "id": "custom.width",
+                "value": 100
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "instance" },
+            "matcher": {
+              "id": "byName",
+              "options": "instance"
+            },
             "properties": [
-              { "id": "displayName", "value": "Instance" },
-              { "id": "custom.width", "value": 250 }
+              {
+                "id": "displayName",
+                "value": "Instance"
+              },
+              {
+                "id": "custom.width",
+                "value": 250
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "job" },
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
             "properties": [
-              { "id": "displayName", "value": "Job" },
-              { "id": "custom.width", "value": 250 }
+              {
+                "id": "displayName",
+                "value": "Job"
+              },
+              {
+                "id": "custom.width",
+                "value": 250
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Time" },
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
             "properties": [
-              { "id": "custom.hidden", "value": true }
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "__name__" },
+            "matcher": {
+              "id": "byName",
+              "options": "__name__"
+            },
             "properties": [
-              { "id": "custom.hidden", "value": true }
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
             ]
           }
         ]
@@ -417,6 +655,6 @@
   "timezone": "browser",
   "title": "OMERO Infrastructure",
   "uid": "omero-infrastructure",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }
