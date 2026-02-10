@@ -282,6 +282,7 @@ services:
     environment:
       ACTION: cleanup
       CONTAINER_NAME: redis-sysctl-init
+      SELF_CONTAINER_NAME: redis-sysctl-cleanup
       WAIT_TIMEOUT_SECONDS: "60"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
