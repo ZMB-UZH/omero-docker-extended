@@ -332,6 +332,9 @@ services:
     env_file:
       - ./env/omeroweb.env
       - ./env/omero-celery.env
+    # Grant access to the Docker socket so admin tools can read container health.
+    group_add:
+      - "${DOCKER_GID:-999}"
     networks:
       omero:
         aliases:
