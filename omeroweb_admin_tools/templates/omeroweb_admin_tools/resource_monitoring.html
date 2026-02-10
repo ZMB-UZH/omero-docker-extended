@@ -242,7 +242,7 @@ function renderDiagnostics(diag, services) {
         lines.push(`The container user must have read access to the socket.`);
         lines.push(`Run on the HOST:`);
         lines.push(`  stat -c '%g' /var/run/docker.sock`);
-        lines.push(`Then set DOCKER_GID in .env to that value and recreate:`);
+        lines.push(`Then update group_add GID in docker-compose.yml to that value and recreate:`);
         lines.push(`  docker compose up -d --force-recreate omeroweb`);
         if (diag.api_error) {
             lines.push(``);
