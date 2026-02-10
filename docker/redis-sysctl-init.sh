@@ -36,7 +36,18 @@ run_init() {
 run_cleanup() {
     if [ -S /var/run/docker.sock ]; then
         wait_for_container_stop
-        docker rm "${CONTAINER_NAME}" >/dev/null
+        docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+        # Self-destruct: spawn a detached --rm container that waits for
+        # this container to stop, removes it, then auto-removes itself.
+        SELF_NAME="${SELF_CONTAINER_NAME:-}"
+        if [ -n "${SELF_NAME}" ]; then
+            docker run --rm -d \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                --name "${SELF_NAME}-gc" \
+                docker:29.2.1-cli \
+                sh -c "docker wait '${SELF_NAME}' >/dev/null 2>&1; docker rm '${SELF_NAME}' >/dev/null 2>&1 || true" \
+                >/dev/null 2>&1 || true
+        fi
     fi
 }
 
