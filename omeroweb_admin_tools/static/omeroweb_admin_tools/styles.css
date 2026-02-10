@@ -814,11 +814,11 @@ body {
 }
 .storage-table th:nth-child(4),
 .storage-table td:nth-child(4) {
-    width: 104px;
+    width: 52px;
 }
 .storage-table th:nth-child(5),
 .storage-table td:nth-child(5) {
-    width: 146px;
+    width: 73px;
 }
 .storage-table.view-groups th:nth-child(3),
 .storage-table.view-groups td:nth-child(3) {

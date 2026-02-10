@@ -1128,9 +1128,15 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
 
     postgres_dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
-        kwargs={"subpath": "d/postgres-metrics/postgresql"},
+        kwargs={"subpath": "d/database-metrics/database"},
     )
-    postgres_dashboard_url = f"{postgres_dashboard_proxy_path}?{dashboard_query}"
+    database_dashboard_url = f"{postgres_dashboard_proxy_path}?{dashboard_query}"
+
+    plugin_database_dashboard_proxy_path = reverse(
+        "omeroweb_admin_tools_grafana_proxy",
+        kwargs={"subpath": "d/plugin-database-metrics/plugin-database"},
+    )
+    plugin_database_dashboard_url = f"{plugin_database_dashboard_proxy_path}?{dashboard_query}"
 
     redis_dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
@@ -1206,7 +1212,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "dashboard_url": dashboard_url,
                 "dashboard_external_url": dashboard_external_url,
                 "dashboard_proxy_url": dashboard_proxy_url,
-                "postgres_dashboard_url": postgres_dashboard_url,
+                "database_dashboard_url": database_dashboard_url,
+                "plugin_database_dashboard_url": plugin_database_dashboard_url,
                 "redis_dashboard_url": redis_dashboard_url,
                 "probe": grafana_probe,
             },
