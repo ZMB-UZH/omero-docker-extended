@@ -696,6 +696,7 @@ def _cleanup_upload_artifacts():
     interval = _get_env_int(
         UPLOAD_CLEANUP_INTERVAL_ENV,
         60,
+        10,
         6 * 60 * 60,
     )
     if not _should_run_cleanup(interval):
@@ -710,10 +711,12 @@ def _cleanup_upload_artifacts():
         max_age = _get_env_int(
             UPLOAD_CLEANUP_MAX_AGE_ENV,
             15 * 60,
+            60,
             14 * 24 * 60 * 60,
         )
         stale_age = _get_env_int(
             UPLOAD_CLEANUP_STALE_AGE_ENV,
+            max_age,
             max_age,
             30 * 24 * 60 * 60,
         )

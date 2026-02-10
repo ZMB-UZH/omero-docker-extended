@@ -6,7 +6,10 @@ from .core_functions import *
 
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
-    _cleanup_upload_artifacts()
+    try:
+        _cleanup_upload_artifacts()
+    except Exception:
+        logger.exception("Upload cleanup failed.")
     username = current_username(request, conn)
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
@@ -57,7 +60,10 @@ def start_upload(request, conn=None, url=None, **kwargs):
 
 
 def _start_upload(request, conn):
-    _cleanup_upload_artifacts()
+    try:
+        _cleanup_upload_artifacts()
+    except Exception:
+        logger.exception("Upload cleanup failed.")
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
 
