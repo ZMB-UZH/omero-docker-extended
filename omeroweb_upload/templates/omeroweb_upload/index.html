@@ -4225,7 +4225,16 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         function updateImportLogFromJobs(jobs) {
             jobs.forEach((job) => {
-                appendImportMessages(job.job_id, job.messages || []);
+                const combined = [...(job.messages || [])];
+                if (job.errors && job.errors.length) {
+                    job.errors.forEach((err) => {
+                        const prefixed = '[ERROR] ' + err;
+                        if (!combined.includes(prefixed) && !combined.includes(err)) {
+                            combined.push(prefixed);
+                        }
+                    });
+                }
+                appendImportMessages(job.job_id, combined);
             });
         }
 
@@ -4241,6 +4250,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const jobs = Array.from(importJobs.values());
             const totalBytes = jobs.reduce((acc, job) => acc + (job.total_bytes || 0), 0);
             const importedBytes = jobs.reduce((acc, job) => acc + (job.imported_bytes || 0), 0);
+            const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
             updateProgress(
                 percent,
@@ -4250,8 +4260,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             );
             updateImportLogFromJobs(jobs);
             if (!hasActiveImport() && totalBytes) {
-                updateProgress(100, 'Import complete.');
-                setStatus('Import complete. Check the log below.', 'success');
+                if (hasErrors) {
+                    const allErrors = jobs.flatMap((job) => job.errors || []);
+                    updateProgress(percent, 'Import failed.');
+                    setStatus(
+                        'Import failed: ' + (allErrors[0] || 'Unknown error. Check the log below.'),
+                        'error'
+                    );
+                } else {
+                    updateProgress(100, 'Import complete.');
+                    setStatus('Import complete. Check the log below.', 'success');
+                }
             }
             updateUploadButtonLabel();
             persistImportState();
