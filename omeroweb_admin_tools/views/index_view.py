@@ -1124,7 +1124,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
     )
     dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
-    dashboard_url = f"/d/{dashboard_uid}/{dashboard_slug}?{dashboard_query}"
+    dashboard_url = dashboard_proxy_url
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
@@ -1217,15 +1217,12 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
-    proxy_prefix = (
-        request.path[: -len(subpath)].rstrip("/") if subpath else request.path
-    )
     return _proxy_http_request(
         request,
         grafana_base_url,
-        subpath,
+        request.path,
         request.META.get("QUERY_STRING", ""),
-        proxy_prefix=proxy_prefix,
+        proxy_prefix="",
     )
 
 
