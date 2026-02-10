@@ -56,7 +56,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v2.54.1"
+    image: "prom/prometheus:v3.5.1"
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -84,7 +84,7 @@ services:
       - no-new-privileges:true
 
   blackbox-exporter:
-    image: "prom/blackbox-exporter:v0.26.0"
+    image: "prom/blackbox-exporter:v0.28.0"
     restart: unless-stopped
     command:
       - "--config.file=/etc/blackbox_exporter/config.yml"
@@ -104,7 +104,7 @@ services:
       - no-new-privileges:true
 
   node-exporter:
-    image: "prom/node-exporter:v1.8.2"
+    image: "prom/node-exporter:v1.10.2"
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
@@ -149,7 +149,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter:
-    image: "prometheuscommunity/postgres-exporter:v0.16.0"
+    image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://omero:ShR3K413CPh0Q2r@database:5432/omero?sslmode=disable"
@@ -170,7 +170,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter-plugin:
-    image: "prometheuscommunity/postgres-exporter:v0.16.0"
+    image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://omp-plugin:VhVFL62ziQFo710@database-plugin:5433/omp-plugin?sslmode=disable"
@@ -191,7 +191,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.66.0"
+    image: "oliver006/redis_exporter:v1.80.2"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
