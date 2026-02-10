@@ -261,29 +261,9 @@ services:
     restart: "no"
     command: []
     environment:
-      ACTION: init
       CONTAINER_NAME: redis-sysctl-init
       SYSCTL_KEY: vm.overcommit_memory
       SYSCTL_VALUE: "1"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    network_mode: none
-    security_opt:
-      - no-new-privileges:true
-
-  redis-sysctl-cleanup:
-    image: redis-sysctl-init:custom
-    container_name: redis-sysctl-cleanup
-    restart: "no"
-    command: []
-    depends_on:
-      redis-sysctl-init:
-        condition: service_completed_successfully
-    environment:
-      ACTION: cleanup
-      CONTAINER_NAME: redis-sysctl-init
-      SELF_CONTAINER_NAME: redis-sysctl-cleanup
-      WAIT_TIMEOUT_SECONDS: "60"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     network_mode: none
@@ -302,7 +282,7 @@ services:
         aliases:
           - redis
     depends_on:
-      redis-sysctl-cleanup:
+      redis-sysctl-init:
         condition: service_completed_successfully
     tmpfs:
       - /data:size=512m
