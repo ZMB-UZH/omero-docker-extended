@@ -1,6 +1,7 @@
 """
 Job storage and management for upload workflows.
 """
+import os
 import json
 import time
 import random
@@ -9,16 +10,12 @@ import re
 import portalocker
 from pathlib import Path
 
-from omero_plugin_common.env_utils import (
-    ENV_FILE_OMEROWEB,
-    get_sanitized_int_env,
-)
-
 logger = logging.getLogger(__name__)
 
 # Constants from original file
 INT_SANITIZER = re.compile(r"[^0-9]")
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
+DEFAULT_UPLOAD_BATCH_FILES = 5
 
 
 def get_job_path(job_id: str, jobs_root: Path) -> Path:
@@ -26,15 +23,19 @@ def get_job_path(job_id: str, jobs_root: Path) -> Path:
     return jobs_root / f"{job_id}.json"
 
 
-def get_env_int(env_key: str, min_value: int, max_value: int) -> int:
-    """Get integer from environment with bounds checking."""
-    return get_sanitized_int_env(
-        env_key,
-        env_file=ENV_FILE_OMEROWEB,
-        sanitizer=lambda value: INT_SANITIZER.sub("", value),
-        min_value=min_value,
-        max_value=max_value,
-    )
+def get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    """Get integer from environment with bounds checking.
+
+    IMPORTANT: env vars must be OPTIONAL. Missing/invalid values should fall back to defaults.
+    """
+    raw = os.environ.get(env_key, "")
+    if raw:
+        raw = INT_SANITIZER.sub("", str(raw))
+    try:
+        value = int(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    return max(min_value, min(max_value, value))
 
 
 def normalize_job_batch_size(value, default: int) -> int:
@@ -50,6 +51,7 @@ def resolve_job_batch_size(job_dict) -> int:
     """Resolve batch size for job from dict or environment."""
     default_batch_size = get_env_int(
         UPLOAD_BATCH_FILES_ENV,
+        DEFAULT_UPLOAD_BATCH_FILES,
         1,
         10,
     )

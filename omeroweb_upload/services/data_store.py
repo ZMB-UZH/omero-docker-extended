@@ -1,8 +1,8 @@
 import logging
+import os
 from contextlib import contextmanager
 
 from ..strings import errors
-from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 
 logger = logging.getLogger(__name__)
 
@@ -57,22 +57,39 @@ def _load_psycopg2_sql():
 
 
 def _db_params():
-    user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
-    password = get_env(ENV_PASS, env_file=ENV_FILE_OMEROWEB)
-    host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
-    dbname = get_env(ENV_DB, env_file=ENV_FILE_OMEROWEB)
+    user = os.environ.get(ENV_USER)
+    password = os.environ.get(ENV_PASS)
+    host = os.environ.get(ENV_HOST, "database_plugin")
+    dbname = os.environ.get(ENV_DB, "omp-plugin")
 
     if not user or not password:
         raise UserSettingsStoreError(errors.missing_db_credentials())
 
-    candidate = get_env(ENV_PORT, env_file=ENV_FILE_OMEROWEB)
-    candidate_str = str(candidate).strip()
-    try:
-        port = int(candidate_str)
-    except ValueError:
-        raise UserSettingsStoreError(f"Invalid database port value: {candidate_str}")
+    port_candidates = []
+    for candidate in (
+        os.environ.get(ENV_PORT),
+        os.environ.get("PGPORT"),
+        "5433",
+        "5432",
+    ):
+        if not candidate:
+            continue
 
-    port_candidates = [port]
+        candidate_str = str(candidate).strip()
+        if not candidate_str:
+            continue
+
+        try:
+            port = int(candidate_str)
+        except ValueError:
+            logger.warning("Ignoring invalid port value '%s' for database.", candidate_str)
+            continue
+
+        if port not in port_candidates:
+            port_candidates.append(port)
+
+    if not port_candidates:
+        port_candidates.append(5432)
 
     base_params = {
         "user": user,
