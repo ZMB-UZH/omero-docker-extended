@@ -38,7 +38,8 @@ GRAFANA_ANONYMOUS_ENABLED=true
 GRAFANA_ANONYMOUS_ROLE=Viewer
 ```
 
-All Grafana-related compose variables live in the repository root `.env` file (read automatically by Docker Compose for `${VAR}` substitution).
+All Grafana-related compose variables live in `env/compose.env`.
+The root `.env` is a symlink to `env/compose.env` so Docker Compose picks them up automatically for `${VAR}` substitution.
 `GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
 
 For the Admin tools resource monitoring page, proxy links are now host-agnostic by default.
