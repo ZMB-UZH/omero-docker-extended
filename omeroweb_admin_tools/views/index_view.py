@@ -1067,7 +1067,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     prometheus_public_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", ""
     ).strip()
-    grafana_host_port = _to_int_env("GRAFANA_HOST_PORT", 3001)
+    grafana_host_port = _to_int_env("GRAFANA_HOST_PORT", 3000)
     prometheus_host_port = _to_int_env("PROMETHEUS_HOST_PORT", 9090)
 
     request_host = request.get_host().split(":", 1)[0]
