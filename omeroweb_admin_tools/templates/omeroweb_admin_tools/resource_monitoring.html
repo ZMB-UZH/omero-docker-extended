@@ -17,7 +17,9 @@
     </div>
     <div class="admin-tools-card admin-tools-card--wide">
         <div class="resource-monitoring-toolbar">
-            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Grafana dashboard</button>
+            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Server Infrastructure dashboard</button>
+            <button type="button" id="open_postgres_btn" class="admin-tools-button log-refresh-button">PostgreSQL dashboard</button>
+            <button type="button" id="open_redis_btn" class="admin-tools-button log-refresh-button">Redis dashboard</button>
             <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Prometheus targets</button>
             <label class="log-checkbox storage-autorefresh-inline">
                 <input id="monitoring_autorefresh" type="checkbox" checked>
@@ -73,6 +75,8 @@
 const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" %}', window.location.href);
 const statusEl = document.getElementById('status');
 const openGrafanaBtn = document.getElementById('open_grafana_btn');
+const openPostgresBtn = document.getElementById('open_postgres_btn');
+const openRedisBtn = document.getElementById('open_redis_btn');
 const openPrometheusBtn = document.getElementById('open_prometheus_btn');
 const refreshBtn = document.getElementById('monitoring_refresh_btn');
 const autoRefreshToggle = document.getElementById('monitoring_autorefresh');
@@ -289,6 +293,8 @@ async function loadData() {
         }
 
         openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
+        openPostgresBtn.onclick = () => { window.open(payload?.grafana?.postgres_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
         grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});
