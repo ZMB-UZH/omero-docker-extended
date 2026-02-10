@@ -686,7 +686,7 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
         logger.warning(
             "Permission denied accessing Docker socket at %s. "
             "Ensure the container user is in the docker group "
-            "(set DOCKER_GID in .env to the output of: "
+            "(check group_add GID in docker-compose.yml matches: "
             "stat -c '%%g' /var/run/docker.sock).",
             docker_socket,
         )
