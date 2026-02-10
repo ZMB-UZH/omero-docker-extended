@@ -85,12 +85,16 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-def _run_omero_cli(cmd):
+IMPORT_TIMEOUT_SECONDS = 600  # 10 minutes per file import
+
+
+def _run_omero_cli(cmd, timeout=None):
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=False,
+        timeout=timeout,
     )
 
 
@@ -108,7 +112,11 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
-    result = _run_omero_cli(cmd)
+    try:
+        result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
+        return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
     return result.returncode == 0, result.stdout, result.stderr
 
 
