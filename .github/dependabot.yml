@@ -10,8 +10,6 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(pip)"
-    labels:
-      - "dependencies"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -23,8 +21,6 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(docker)"
-    labels:
-      - "dependencies"
 
   - package-ecosystem: "docker"
     directory: "/docker"
@@ -36,5 +32,3 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "deps(docker)"
-    labels:
-      - "dependencies"
