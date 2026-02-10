@@ -66,6 +66,8 @@ def _open_session_connection(session_key, host, port, secure=None):
         if not session:
             raise RuntimeError("Failed to join OMERO session")
 
+        session.detachOnDestroy()
+
         # Create BlitzGateway from the client
         conn = BlitzGateway(client_obj=client)
 
