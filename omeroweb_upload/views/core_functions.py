@@ -31,13 +31,6 @@ from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 from typing import Optional
-from omero_plugin_common.env_utils import (
-    ENV_FILE_OMERO_CELERY,
-    ENV_FILE_OMEROWEB,
-    get_bool_env,
-    get_env,
-    get_sanitized_int_env,
-)
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from .utils import current_username, json_error, load_json_body
@@ -195,14 +188,22 @@ _LAST_UPLOAD_CLEANUP_TIME = 0.0
 _CLEANUP_IN_PROGRESS = False
 
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
+DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
+DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
+DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
+DEFAULT_UPLOAD_BATCH_FILES = 5
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
 UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
+DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
 UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
+DEFAULT_UPLOAD_CLEANUP_MAX_AGE = 12 * 60 * 60
 UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
+DEFAULT_UPLOAD_CLEANUP_STALE_AGE = 48 * 60 * 60
 UPLOAD_CLEANUP_MAX_DELETE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_DELETE"
+DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -218,10 +219,23 @@ ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
 # - Background jobs MUST login with a service user to avoid logging the user out.
 # - The service user is created automatically by the OMERO.server startup script.
 # --------------------------------------------------------------------------
+JOB_SERVICE_USERNAME_DEFAULT = "job-service"
+
+# Prefer shared names across ALL plugins/containers.
+# Keep backward-compat: also accept the old OMERO_WEB_* names.
 JOB_SERVICE_USER_ENV = "OMERO_JOB_SERVICE_USERNAME"
+JOB_SERVICE_USER_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_USERNAME"
+
 JOB_SERVICE_PASS_ENV = "OMERO_JOB_SERVICE_PASS"
+JOB_SERVICE_PASS_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
+
 JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
+JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
+
+# Allow forcing secure/insecure Ice connection from environment.
+# Defaults to True (ssl) if unset.
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
+JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 
 # Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
@@ -242,13 +256,13 @@ _DIRS_INITIALIZED = False
 # --------------------------------------------------------------------------
 
 def _resolve_upload_root() -> Path:
-    configured = get_env(UPLOAD_ROOT_ENV, env_file=ENV_FILE_OMEROWEB)
-    return Path(configured)
+    configured = (os.environ.get(UPLOAD_ROOT_ENV) or "").strip()
+    return Path(configured) if configured else Path(DEFAULT_UPLOAD_ROOT)
 
 
 def _resolve_jobs_root() -> Path:
-    configured = get_env(JOBS_DIR_ENV, env_file=ENV_FILE_OMEROWEB)
-    return Path(configured)
+    configured = (os.environ.get(JOBS_DIR_ENV) or "").strip()
+    return Path(configured) if configured else Path(DEFAULT_JOBS_DIR)
 
 
 def _ensure_parent_dir(path: Path) -> bool:
@@ -390,18 +404,31 @@ def _job_path(job_id: str) -> Path:
     return _get_jobs_root() / f"{job_id}.json"
 
 
-def _get_env_int(env_key: str, min_value: int, max_value: int) -> int:
-    return get_sanitized_int_env(
-        env_key,
-        env_file=ENV_FILE_OMEROWEB,
-        sanitizer=lambda value: INT_SANITIZER.sub("", value),
-        min_value=min_value,
-        max_value=max_value,
+def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    raw = os.environ.get(env_key, "")
+    if raw:
+        raw = INT_SANITIZER.sub("", str(raw))
+    try:
+        value = int(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    return max(min_value, min(max_value, value))
+
+
+def _get_env_bool(env_key: str, default: bool = False) -> bool:
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_import_timeout_seconds() -> int:
+    return _get_env_int(
+        IMPORT_TIMEOUT_SECONDS_ENV,
+        IMPORT_TIMEOUT_SECONDS_DEFAULT,
+        60,
+        24 * 60 * 60,
     )
-
-
-def _get_env_bool(env_key: str) -> bool:
-    return get_bool_env(env_key, env_file=ENV_FILE_OMEROWEB)
 
 
 def _special_methods_enabled() -> bool:
@@ -428,7 +455,7 @@ def _normalize_sem_edx_settings(raw_settings):
 
 
 def _resolve_job_batch_size(job_dict) -> int:
-    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, 1, 10)
+    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
     return _normalize_job_batch_size(job_dict.get("job_batch_size"), default_batch_size)
 
 
@@ -1001,7 +1028,8 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-IMPORT_TIMEOUT_SECONDS = 600  # 10 minutes per file import
+IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microscopy files can be slow)
+IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 
 
 def _run_omero_cli(cmd, timeout=None):
@@ -1032,10 +1060,10 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
     logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
     import_start = time.time()
     try:
-        result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
+        result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
     except subprocess.TimeoutExpired:
-        logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
-        return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
+        logger.error("Import CLI timed out after %ds for %s", _get_import_timeout_seconds(), path)
+        return False, "", f"Import timed out after {_get_import_timeout_seconds()} seconds"
     elapsed = time.time() - import_start
     success = result.returncode == 0
     logger.info(
@@ -1090,8 +1118,7 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     
     try:
         client = omero.client(host=host, port=port)
-        sf = client.joinSession(session_key)
-        sf.detachOnDestroy()
+        client.joinSession(session_key)
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup("-1")
 
@@ -1123,8 +1150,7 @@ def _open_session_connection(session_key: str, host: str, port: int):
         BlitzGateway connection
     """
     client = omero.client(host=host, port=port)
-    sf = client.joinSession(session_key)
-    sf.detachOnDestroy()
+    client.joinSession(session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     return conn
@@ -1261,20 +1287,26 @@ def _get_job_service_credentials():
     This is intentionally NOT taken from the end-user's OMERO.web session.
     Using the user's session for background work can invalidate their login.
     """
-    user = get_env(JOB_SERVICE_USER_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+    user = (os.environ.get(JOB_SERVICE_USER_ENV) or "").strip()
+    if not user:
+        user = (os.environ.get(JOB_SERVICE_USER_ENV_FALLBACK) or "").strip()
+    if not user:
+        user = JOB_SERVICE_USERNAME_DEFAULT
 
-    passwd = get_env(JOB_SERVICE_PASS_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+    passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
+    if not passwd:
+        passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
-    group_override = get_env(
-        JOB_SERVICE_GROUP_ENV,
-        env_file=ENV_FILE_OMERO_CELERY,
-        allow_empty=True,
-    ).strip()
+    group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
+    if not group_override:
+        group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
 
     # Optional: allow forcing secure/insecure connection
-    secure_raw = get_env(JOB_SERVICE_SECURE_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+    secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV) or "").strip()
+    if not secure_raw:
+        secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
 
     secure = True
     if secure_raw:
@@ -1282,6 +1314,9 @@ def _get_job_service_credentials():
             secure = False
 
     return user, passwd, group_override, secure
+
+
+
 
 
 def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
@@ -1620,6 +1655,7 @@ def _cleanup_upload_artifacts():
         )
         max_delete = _get_env_int(
             UPLOAD_CLEANUP_MAX_DELETE_ENV,
+            DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
             1,
             500,
         )
@@ -2363,13 +2399,10 @@ def _process_import_job(job_id: str):
                         )
                         for entry in batch
                     ]
-                    for future in as_completed(futures, timeout=IMPORT_TIMEOUT_SECONDS + 60):
+                    for future in as_completed(futures):
                         try:
-                            result = future.result(timeout=IMPORT_TIMEOUT_SECONDS + 30)
-                        except TimeoutError:
-                            logger.error("Import future timed out for batch starting at %d", start)
-                            continue
-                        except Exception as exc:
+                            result = future.result()
+                        except Exception:
                             logger.exception("Import future raised unexpected error")
                             continue
                         if not result or result.get("skip"):
