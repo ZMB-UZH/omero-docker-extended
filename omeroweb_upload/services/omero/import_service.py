@@ -14,12 +14,6 @@ from typing import Optional
 import omero
 import portalocker
 from omero.gateway import BlitzGateway
-from omero_plugin_common.env_utils import (
-    ENV_FILE_OMERO_CELERY,
-    ENV_FILE_OMEROWEB,
-    get_env,
-    get_sanitized_int_env,
-)
 from ...constants import OMERO_CLI
 from ...utils.omero_helpers import get_id
 
@@ -30,16 +24,27 @@ INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 _CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
 
+JOB_SERVICE_USERNAME_DEFAULT = "job-service"
 JOB_SERVICE_USER_ENV = "OMERO_JOB_SERVICE_USERNAME"
+JOB_SERVICE_USER_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_USERNAME"
 JOB_SERVICE_PASS_ENV = "OMERO_JOB_SERVICE_PASS"
+JOB_SERVICE_PASS_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
 JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
+JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
+JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
+DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
+DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
+DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
 UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
+DEFAULT_UPLOAD_CLEANUP_MAX_AGE = 12 * 60 * 60
 UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
+DEFAULT_UPLOAD_CLEANUP_STALE_AGE = 48 * 60 * 60
 UPLOAD_CLEANUP_MAX_DELETE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_DELETE"
+DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 
 _UPLOAD_ROOT_CACHE = None
 _JOBS_ROOT_CACHE = None
@@ -50,27 +55,28 @@ _LAST_UPLOAD_CLEANUP_TIME = 0.0
 _CLEANUP_IN_PROGRESS = False
 
 
-def _get_env_int(env_key: str, min_value: int, max_value: int) -> int:
-    return get_sanitized_int_env(
-        env_key,
-        env_file=ENV_FILE_OMEROWEB,
-        sanitizer=lambda value: INT_SANITIZER.sub("", value),
-        min_value=min_value,
-        max_value=max_value,
-    )
+def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
+    raw = os.environ.get(env_key, "")
+    if raw:
+        raw = INT_SANITIZER.sub("", str(raw))
+    try:
+        value = int(raw) if raw else default
+    except (TypeError, ValueError):
+        value = default
+    return max(min_value, min(max_value, value))
 
 
 def _get_upload_root() -> Path:
     global _UPLOAD_ROOT_CACHE
     if _UPLOAD_ROOT_CACHE is None:
-        _UPLOAD_ROOT_CACHE = Path(get_env(UPLOAD_ROOT_ENV, env_file=ENV_FILE_OMEROWEB))
+        _UPLOAD_ROOT_CACHE = None
     return _UPLOAD_ROOT_CACHE
 
 
 def _get_jobs_root() -> Path:
     global _JOBS_ROOT_CACHE
     if _JOBS_ROOT_CACHE is None:
-        _JOBS_ROOT_CACHE = Path(get_env(JOBS_DIR_ENV, env_file=ENV_FILE_OMEROWEB))
+        _JOBS_ROOT_CACHE = None
     return _JOBS_ROOT_CACHE
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
@@ -345,20 +351,30 @@ def _get_job_service_credentials():
     This is intentionally NOT taken from the end-user's OMERO.web session.
     Using the user's session for background work can invalidate their login.
     """
-    user = get_env(JOB_SERVICE_USER_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+    user = (os.environ.get(JOB_SERVICE_USER_ENV) or "").strip()
+    if not user:
+        user = (os.environ.get(JOB_SERVICE_USER_ENV_FALLBACK) or "").strip()
+    if not user:
+        user = JOB_SERVICE_USERNAME_DEFAULT
 
-    passwd = get_env(JOB_SERVICE_PASS_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+
+    passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
+    if not passwd:
+        passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
+
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
-    group_override = get_env(
-        JOB_SERVICE_GROUP_ENV,
-        env_file=ENV_FILE_OMERO_CELERY,
-        allow_empty=True,
-    ).strip()
+    group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV) or "").strip()
+    if not group_override:
+        group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
+
 
     # Optional: allow forcing secure/insecure connection
-    secure_raw = get_env(JOB_SERVICE_SECURE_ENV, env_file=ENV_FILE_OMERO_CELERY).strip()
+    secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV) or "").strip()
+    if not secure_raw:
+        secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
+
 
     secure = True
     if secure_raw:
@@ -703,6 +719,7 @@ def _cleanup_upload_artifacts():
         )
         max_delete = _get_env_int(
             UPLOAD_CLEANUP_MAX_DELETE_ENV,
+            DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
             1,
             500,
         )
