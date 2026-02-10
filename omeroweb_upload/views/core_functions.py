@@ -500,12 +500,11 @@ def _refresh_job_status(job_dict):
         job_dict["status"] = "uploading"
         return job_dict
 
-    # SEM-EDX: if nothing requires compatibility (e.g. only .txt files, or all skipped),
-    # do NOT get stuck in "checking". Mark as compatible once uploads are complete.
-    if job_dict.get("special_upload") == "sem_edx_spectra":
-        pending_entries = _compatibility_pending_entries(job_dict)
-        if not pending_entries and job_dict.get("compatibility_status") not in ("compatible", "incompatible", "error"):
-            job_dict["compatibility_status"] = "compatible"
+    # If nothing requires compatibility (all files skipped or already decided),
+    # do NOT get stuck in "checking" once uploads are complete.
+    pending_entries = _compatibility_pending_entries(job_dict)
+    if not pending_entries and job_dict.get("compatibility_status") not in ("compatible", "incompatible", "error"):
+        job_dict["compatibility_status"] = "compatible"
 
     compatibility_status = job_dict.get("compatibility_status")
     if compatibility_status == "incompatible":
@@ -2320,42 +2319,9 @@ def _process_import_job(job_id: str):
                 _save_job(job)
                 return
 
-            # Validate OMERO session before starting import
-            logger.info(
-                "Import thread: validating OMERO session for job %s (host=%s, port=%s)",
-                job_id, host, port,
-            )
-            try:
-                session_conn = _open_session_connection(session_key, host, port)
-                if session_conn:
-                    try:
-                        session_conn.close()
-                    except Exception:
-                        pass
-                    logger.info("Import thread: session validated OK for job %s", job_id)
-                else:
-                    logger.error("Import thread: session invalid for job %s", job_id)
-                    job["status"] = "error"
-                    _append_job_error(
-                        job,
-                        "OMERO session expired before import could start. "
-                        "Please log in again and re-upload.",
-                    )
-                    _save_job(job)
-                    return
-            except Exception as exc:
-                logger.error(
-                    "Import thread: session validation failed for job %s: %s",
-                    job_id, exc,
-                )
-                job["status"] = "error"
-                _append_job_error(
-                    job,
-                    "OMERO session expired or server unreachable. "
-                    "Please log in again and re-upload.",
-                )
-                _save_job(job)
-                return
+            # IMPORTANT: never join/close the user's active OMERO.web session here.
+            # Doing so can terminate their login. We validate session indirectly by
+            # executing the import command and handling any authentication failure.
 
             upload_root = _get_upload_root() / job_id
             if not upload_root.exists():
