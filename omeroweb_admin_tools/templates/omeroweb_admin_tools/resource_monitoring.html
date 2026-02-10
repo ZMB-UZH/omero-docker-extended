@@ -61,6 +61,12 @@
             <h3>Docker compose services health</h3>
             <div id="targets_service_health" class="monitoring-container-list">No service health data available.</div>
         </div>
+
+        <div id="diagnostics_card" class="monitoring-container-list-card" style="display:none; margin-top: 12px;">
+            <h3>⚠ Docker health diagnostics</h3>
+            <p id="diagnostics_summary" style="margin: 4px 0 8px; font-size: 13px; color: #92400e;"></p>
+            <pre id="diagnostics_detail" style="background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px;"></pre>
+        </div>
     </div>
 </div>
 <script defer>
@@ -78,6 +84,9 @@ const targetsServiceHealthEl = document.getElementById('targets_service_health')
 const hostCpuEl = document.getElementById('host_cpu');
 const hostMemoryEl = document.getElementById('host_memory');
 const hostDiskEl = document.getElementById('host_disk');
+const diagnosticsCard = document.getElementById('diagnostics_card');
+const diagnosticsSummary = document.getElementById('diagnostics_summary');
+const diagnosticsDetail = document.getElementById('diagnostics_detail');
 const storage = (() => {
     try {
         const testKey = '__admin_tools_resource_monitoring_state_test__';
@@ -205,6 +214,64 @@ function renderServiceHealth(services) {
     }).join('');
 }
 
+function renderDiagnostics(diag, services) {
+    if (!diag) {
+        diagnosticsCard.style.display = 'none';
+        return;
+    }
+    const allJustUp = services.length > 0 && services.every(s => normalizeServiceHealth(s.health) === 'up');
+    const noHealthData = !diag.api_reachable || diag.containers_with_health === 0;
+
+    if (!allJustUp && !noHealthData) {
+        diagnosticsCard.style.display = 'none';
+        return;
+    }
+
+    diagnosticsCard.style.display = '';
+
+    const lines = [];
+    if (!diag.socket_exists) {
+        lines.push(`Docker socket not found at ${diag.socket_path}.`);
+        lines.push(`The socket must be mounted into the omeroweb container:`);
+        lines.push(`  volumes: - /var/run/docker.sock:/var/run/docker.sock:ro`);
+    } else if (!diag.api_reachable) {
+        lines.push(`Docker socket exists but API call failed.`);
+        lines.push(`Socket: ${diag.socket_stat}`);
+        lines.push(`Current process: ${diag.current_user} (uid=${diag.current_uid}, gids=${JSON.stringify(diag.current_gids)})`);
+        lines.push(``);
+        lines.push(`The container user must have read access to the socket.`);
+        lines.push(`Run on the HOST:`);
+        lines.push(`  stat -c '%g' /var/run/docker.sock`);
+        lines.push(`Then set DOCKER_GID in .env to that value and recreate:`);
+        lines.push(`  docker compose up -d --force-recreate omeroweb`);
+        if (diag.api_error) {
+            lines.push(``);
+            lines.push(`Error: ${diag.api_error}`);
+        }
+    } else if (diag.containers_with_health === 0) {
+        lines.push(`Docker API is reachable (${diag.container_count} containers found).`);
+        lines.push(`But NONE of the containers report health status in their Status field.`);
+        lines.push(`This might mean healthchecks are still in start_period, or the`);
+        lines.push(`Docker daemon version does not include health in the Status string.`);
+        lines.push(``);
+        lines.push(`Container status samples:`);
+        for (const s of diag.sample_statuses || []) {
+            lines.push(`  ${s.service}: state=${s.state}, status="${s.status}", parsed=${s.parsed_health}`);
+        }
+    } else {
+        lines.push(`Docker API is reachable. ${diag.containers_with_health}/${diag.container_count} containers report health.`);
+        lines.push(`But services still show "up" — there may be a service name mismatch.`);
+        lines.push(``);
+        lines.push(`Container status samples:`);
+        for (const s of diag.sample_statuses || []) {
+            lines.push(`  ${s.service}: state=${s.state}, status="${s.status}", parsed=${s.parsed_health}`);
+        }
+    }
+
+    diagnosticsSummary.textContent = lines[0] || '';
+    diagnosticsDetail.textContent = lines.join('\n');
+}
+
 
 async function loadData() {
     statusEl.textContent = 'Loading resource dashboard...';
@@ -235,6 +302,7 @@ async function loadData() {
         targetsCountEl.textContent = String(overview.active || 0);
         targetsUpCountEl.textContent = `${overview.up || 0} up / ${overview.down || 0} down`;
         renderServiceHealth(Array.isArray(overview.services) ? overview.services : []);
+        renderDiagnostics(payload.docker_diagnostics || null, Array.isArray(overview.services) ? overview.services : []);
 
         statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
     } catch (error) {
