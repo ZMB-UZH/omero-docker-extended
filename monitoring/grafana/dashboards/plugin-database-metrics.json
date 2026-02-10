@@ -12,7 +12,7 @@
     {
       "type": "stat",
       "title": "Active connections",
-      "description": "Total active backend connections across both databases (excluding template DBs).",
+      "description": "Total active backend connections for the selected database.",
       "id": 1,
       "gridPos": {
         "h": 4,
@@ -34,13 +34,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_numbackends{datname!~\"template.*\"})"
+          "expr": "sum(pg_stat_database_numbackends{datname=\"omp-plugin\"})"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "OMERO DB size",
+      "title": "Database size",
       "id": 2,
       "gridPos": {
         "h": 4,
@@ -61,13 +61,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omero\"}"
+          "expr": "pg_database_size_bytes{datname=\"omp-plugin\"}"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "Plugin DB size",
+      "title": "Database size",
       "id": 3,
       "gridPos": {
         "h": 4,
@@ -95,7 +95,7 @@
     {
       "type": "stat",
       "title": "Cache hit ratio",
-      "description": "Buffer cache hit ratio across all user databases. Higher is better (>99% is typical for a healthy PostgreSQL).",
+      "description": "Buffer cache hit ratio for the selected database. Higher is better (>99% is typically healthy).",
       "id": 4,
       "gridPos": {
         "h": 4,
@@ -115,9 +115,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.90 },
-              { "color": "green", "value": 0.99 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
             ]
           }
         },
@@ -126,14 +135,14 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_blks_hit{datname!~\"template.*\"}) / (sum(pg_stat_database_blks_hit{datname!~\"template.*\"}) + sum(pg_stat_database_blks_read{datname!~\"template.*\"}))"
+          "expr": "sum(pg_stat_database_blks_hit{datname=\"omp-plugin\"}) / (sum(pg_stat_database_blks_hit{datname=\"omp-plugin\"}) + sum(pg_stat_database_blks_read{datname=\"omp-plugin\"}))"
         }
       ]
     },
     {
       "type": "stat",
       "title": "Transactions / sec",
-      "description": "Combined commit + rollback rate across all user databases.",
+      "description": "Combined commit + rollback rate for the selected database.",
       "id": 5,
       "gridPos": {
         "h": 4,
@@ -155,7 +164,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(pg_stat_database_xact_commit{datname!~\"template.*\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{datname!~\"template.*\"}[5m]))"
+          "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"omp-plugin\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{datname=\"omp-plugin\"}[5m]))"
         }
       ]
     },
@@ -179,8 +188,14 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "DOWN", "color": "red" },
-                "1": { "text": "UP", "color": "green" }
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
               }
             }
           ]
@@ -220,19 +235,27 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_numbackends{datname!~\"template.*\"}",
+          "expr": "pg_stat_database_numbackends{datname=\"omp-plugin\"}",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -262,25 +285,33 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_xact_commit{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Commit — {{datname}}"
+          "expr": "rate(pg_stat_database_xact_commit{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Commit \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_xact_rollback{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Rollback — {{datname}}"
+          "expr": "rate(pg_stat_database_xact_rollback{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Rollback \u2014 {{datname}}"
         }
       ]
     },
@@ -311,19 +342,27 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_blks_hit{datname!~\"template.*\"} / (pg_stat_database_blks_hit{datname!~\"template.*\"} + pg_stat_database_blks_read{datname!~\"template.*\"})",
+          "expr": "pg_stat_database_blks_hit{datname=\"omp-plugin\"} / (pg_stat_database_blks_hit{datname=\"omp-plugin\"} + pg_stat_database_blks_read{datname=\"omp-plugin\"})",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -353,30 +392,38 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_tup_inserted{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Insert — {{datname}}"
+          "expr": "rate(pg_stat_database_tup_inserted{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Insert \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_tup_updated{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Update — {{datname}}"
+          "expr": "rate(pg_stat_database_tup_updated{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Update \u2014 {{datname}}"
         },
         {
           "refId": "C",
-          "expr": "rate(pg_stat_database_tup_deleted{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Delete — {{datname}}"
+          "expr": "rate(pg_stat_database_tup_deleted{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Delete \u2014 {{datname}}"
         }
       ]
     },
@@ -404,19 +451,27 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_database_size_bytes{datname!~\"template.*\"}",
+          "expr": "pg_database_size_bytes{datname=\"omp-plugin\"}",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -446,25 +501,33 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_tup_fetched{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Fetched — {{datname}}"
+          "expr": "rate(pg_stat_database_tup_fetched{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Fetched \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_tup_returned{datname!~\"template.*\"}[5m])",
-          "legendFormat": "Returned — {{datname}}"
+          "expr": "rate(pg_stat_database_tup_returned{datname=\"omp-plugin\"}[5m])",
+          "legendFormat": "Returned \u2014 {{datname}}"
         }
       ]
     },
@@ -495,19 +558,27 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_deadlocks{datname!~\"template.*\"}[5m])",
+          "expr": "rate(pg_stat_database_deadlocks{datname=\"omp-plugin\"}[5m])",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -538,19 +609,27 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_temp_bytes{datname!~\"template.*\"}[5m])",
+          "expr": "rate(pg_stat_database_temp_bytes{datname=\"omp-plugin\"}[5m])",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -561,7 +640,6 @@
   "style": "dark",
   "tags": [
     "omero",
-    "postgresql",
     "database"
   ],
   "templating": {
@@ -573,8 +651,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "PostgreSQL",
-  "uid": "postgres-metrics",
+  "title": "Plugin database",
+  "uid": "plugin-database-metrics",
   "version": 1,
   "weekStart": ""
 }
