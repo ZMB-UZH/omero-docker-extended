@@ -698,6 +698,91 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
         connection.close()
 
 
+def _diagnose_docker_health() -> Dict[str, object]:
+    """Return diagnostic info about Docker socket access and health data retrieval.
+
+    This is included in the resource monitoring API response to help debug
+    cases where container health status is not being reported correctly.
+    """
+    docker_socket = os.environ.get("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
+    diag: Dict[str, object] = {
+        "socket_path": docker_socket,
+        "socket_exists": os.path.exists(docker_socket),
+        "socket_readable": os.access(docker_socket, os.R_OK),
+        "socket_writable": os.access(docker_socket, os.W_OK),
+        "current_user": "",
+        "current_uid": -1,
+        "current_gids": [],
+        "socket_stat": "",
+        "api_reachable": False,
+        "api_error": "",
+        "container_count": 0,
+        "containers_with_health": 0,
+        "sample_statuses": [],
+    }
+
+    # Who we are inside the container
+    try:
+        diag["current_uid"] = os.getuid()
+        diag["current_gids"] = list(os.getgroups())
+        import pwd
+
+        try:
+            diag["current_user"] = pwd.getpwuid(os.getuid()).pw_name
+        except KeyError:
+            diag["current_user"] = f"uid={os.getuid()}"
+    except Exception as exc:
+        diag["current_user"] = f"error: {exc}"
+
+    # Socket file ownership
+    if diag["socket_exists"]:
+        try:
+            stat_info = os.stat(docker_socket)
+            diag["socket_stat"] = (
+                f"uid={stat_info.st_uid} gid={stat_info.st_gid} "
+                f"mode={oct(stat_info.st_mode)}"
+            )
+        except Exception as exc:
+            diag["socket_stat"] = f"stat error: {exc}"
+
+    # Try the actual API call
+    try:
+        containers = _docker_api_json("/containers/json?all=1")
+        if containers is None:
+            diag["api_error"] = "API returned None (connection or permission error)"
+        elif not isinstance(containers, list):
+            diag["api_error"] = f"unexpected type: {type(containers).__name__}"
+        else:
+            diag["api_reachable"] = True
+            diag["container_count"] = len(containers)
+            health_count = 0
+            samples = []
+            for container in containers[:15]:
+                if not isinstance(container, dict):
+                    continue
+                labels = container.get("Labels", {}) or {}
+                service = str(labels.get("com.docker.compose.service", "")).strip()
+                status = str(container.get("Status", "")).strip()
+                state = str(container.get("State", "")).strip()
+                parsed_health = _parse_docker_status_health(status)
+                if parsed_health:
+                    health_count += 1
+                samples.append(
+                    {
+                        "service": service or "(no label)",
+                        "state": state,
+                        "status": status,
+                        "parsed_health": parsed_health or "(none)",
+                    }
+                )
+            diag["containers_with_health"] = health_count
+            diag["sample_statuses"] = samples
+    except Exception as exc:
+        diag["api_error"] = f"{type(exc).__name__}: {exc}"
+
+    return diag
+
+
 def _parse_docker_status_health(status: str) -> str:
     """Parse Docker status text and return health state when present."""
     match = re.search(r"\((healthy|unhealthy|starting)\)", str(status or "").lower())
@@ -1119,6 +1204,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "targets_overview": targets_overview,
             },
             "system_metrics": system_metrics,
+            "docker_diagnostics": _diagnose_docker_health(),
         }
     )
 
