@@ -1124,8 +1124,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         kwargs={"subpath": f"d/{dashboard_uid}/{dashboard_slug}"},
     )
     dashboard_proxy_url = f"{dashboard_proxy_path}?{dashboard_query}"
-    # Point directly to Grafana on its public port (not through Django proxy).
-    dashboard_url = dashboard_external_url or dashboard_proxy_url
+    dashboard_url = dashboard_proxy_url
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
