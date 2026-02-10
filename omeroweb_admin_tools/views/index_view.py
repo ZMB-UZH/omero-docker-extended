@@ -666,6 +666,7 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
     """Query Docker Engine API over /var/run/docker.sock and return JSON payload."""
     docker_socket = os.environ.get("ADMIN_TOOLS_DOCKER_SOCKET", "/var/run/docker.sock")
     if not os.path.exists(docker_socket):
+        logger.debug("Docker socket not found at %s", docker_socket)
         return None
 
     connection = _UnixSocketHTTPConnection(docker_socket, timeout=timeout_seconds)
@@ -681,7 +682,17 @@ def _docker_api_json(path: str, timeout_seconds: float = 3.0) -> Optional[object
         if not payload:
             return None
         return json.loads(payload)
-    except (ConnectionError, OSError, json.JSONDecodeError):
+    except PermissionError:
+        logger.warning(
+            "Permission denied accessing Docker socket at %s. "
+            "Ensure the container user is in the docker group "
+            "(set DOCKER_GID in .env to the output of: "
+            "stat -c '%%g' /var/run/docker.sock).",
+            docker_socket,
+        )
+        return None
+    except (ConnectionError, OSError, json.JSONDecodeError) as exc:
+        logger.warning("Docker API request failed for %s: %s", path, exc)
         return None
     finally:
         connection.close()
@@ -696,13 +707,30 @@ def _parse_docker_status_health(status: str) -> str:
 
 
 def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, str]]]:
-    """Return compose healthcheck config and runtime state, preferring Docker API."""
+    """Return compose healthcheck config and runtime state, preferring Docker API.
+
+    Uses the /containers/json list endpoint directly.  The human-readable
+    ``Status`` field already contains healthcheck indicators such as
+    ``(healthy)``, ``(unhealthy)`` or ``(starting)`` — so individual
+    ``/containers/{id}/json`` inspect calls are only made for running
+    containers whose Status string does *not* contain a health parenthetical
+    (to detect healthchecks that haven't produced a result yet).
+    """
     containers = _docker_api_json("/containers/json?all=1")
     if not isinstance(containers, list):
+        logger.warning(
+            "Docker API container list unavailable; "
+            "falling back to CLI for compose health data"
+        )
         return _load_compose_healthcheck_config(), _load_compose_runtime_health()
 
     healthcheck_config: Dict[str, bool] = {}
     runtime_health: Dict[str, Dict[str, str]] = {}
+
+    # Containers that are running but whose Status field has no health
+    # parenthetical — we need to inspect these to detect healthchecks
+    # that haven't produced a result yet (e.g. still in start_period).
+    needs_inspect: List[Tuple[str, str]] = []  # (service_name, container_id)
 
     for container in containers:
         if not isinstance(container, dict):
@@ -711,14 +739,40 @@ def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, st
         if not isinstance(labels, dict):
             continue
         service_name = str(labels.get("com.docker.compose.service", "")).strip()
-        container_id = str(container.get("Id", "")).strip()
-        if not service_name or not container_id:
+        if not service_name:
             continue
 
-        inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
-        inspect_config = inspect_payload if isinstance(inspect_payload, dict) else {}
+        state = str(container.get("State", "")).strip().lower()
+        status_text = str(container.get("Status", "")).strip()
+        health_from_status = _parse_docker_status_health(status_text)
 
-        config_payload = inspect_config.get("Config", {}) or {}
+        if health_from_status:
+            # Status field has a health indicator → container has a healthcheck.
+            healthcheck_config[service_name] = True
+            runtime_health[service_name] = {
+                "state": state,
+                "health": health_from_status,
+            }
+        else:
+            # No health indicator in Status.  Store what we know so far and
+            # queue an inspect for running containers (they might have a
+            # healthcheck in start_period or without a status yet).
+            if service_name not in healthcheck_config:
+                healthcheck_config[service_name] = False
+            runtime_health[service_name] = {"state": state, "health": ""}
+            if state == "running":
+                container_id = str(container.get("Id", "")).strip()
+                if container_id:
+                    needs_inspect.append((service_name, container_id))
+
+    # Inspect only the small set of running containers that lacked a health
+    # parenthetical — typically services without a healthcheck at all.
+    for service_name, container_id in needs_inspect:
+        inspect_payload = _docker_api_json(f"/containers/{container_id}/json")
+        if not isinstance(inspect_payload, dict):
+            continue
+
+        config_payload = inspect_payload.get("Config", {}) or {}
         healthcheck_payload = config_payload.get("Healthcheck")
         has_healthcheck = (
             isinstance(healthcheck_payload, dict)
@@ -727,26 +781,15 @@ def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, st
         )
         if has_healthcheck:
             healthcheck_config[service_name] = True
-        elif service_name not in healthcheck_config:
-            healthcheck_config[service_name] = False
-
-        state_payload = inspect_config.get("State", {}) or {}
-        state = (
-            str(state_payload.get("Status", container.get("State", ""))).strip().lower()
-        )
-        runtime_health_status = ""
-        state_health = state_payload.get("Health", {}) or {}
-        if isinstance(state_health, dict):
-            runtime_health_status = str(state_health.get("Status", "")).strip().lower()
-        if runtime_health_status not in {"healthy", "unhealthy", "starting"}:
-            runtime_health_status = _parse_docker_status_health(
-                container.get("Status", "")
-            )
-
-        runtime_health[service_name] = {
-            "state": state,
-            "health": runtime_health_status,
-        }
+            # Try to read Health.Status from inspect State
+            state_payload = inspect_payload.get("State", {}) or {}
+            state_health = state_payload.get("Health", {}) or {}
+            if isinstance(state_health, dict):
+                inspected_health = (
+                    str(state_health.get("Status", "")).strip().lower()
+                )
+                if inspected_health in {"healthy", "unhealthy", "starting"}:
+                    runtime_health[service_name]["health"] = inspected_health
 
     return healthcheck_config, runtime_health
 
