@@ -1077,7 +1077,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
     )
     dashboard_slug = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "omero-infrastructure"
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
     )
 
     dashboard_query = urlencode(
