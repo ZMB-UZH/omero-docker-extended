@@ -95,6 +95,7 @@ def _run_omero_cli(cmd, timeout=None):
         text=True,
         check=False,
         timeout=timeout,
+        stdin=subprocess.DEVNULL,
     )
 
 
@@ -112,12 +113,28 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
+    logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
+    import_start = time.time()
     try:
         result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
         return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
-    return result.returncode == 0, result.stdout, result.stderr
+    elapsed = time.time() - import_start
+    success = result.returncode == 0
+    logger.info(
+        "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
+        "stdout_lines=%d, stderr_lines=%d)",
+        path.name, elapsed, success, result.returncode,
+        len((result.stdout or "").splitlines()),
+        len((result.stderr or "").splitlines()),
+    )
+    if not success:
+        logger.warning(
+            "Import CLI stderr for %s: %s",
+            path.name, (result.stderr or "").strip()[:500],
+        )
+    return success, result.stdout, result.stderr
 
 
 def _validate_session(conn):
@@ -1009,6 +1026,7 @@ def _check_import_compatibility(
             check=False,
             timeout=45,  # Increased timeout for large files
             env=env,
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         return {
