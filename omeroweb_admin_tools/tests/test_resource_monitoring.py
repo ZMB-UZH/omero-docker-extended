@@ -223,10 +223,10 @@ def test_build_public_service_url_uses_request_host_and_public_port() -> None:
         "http://grafana:3000",
         "http",
         "192.168.1.189",
-        3001,
+        3000,
     )
 
-    assert built == "http://192.168.1.189:3001"
+    assert built == "http://192.168.1.189:3000"
 
 
 def test_build_public_service_url_preserves_base_path() -> None:
@@ -291,7 +291,7 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
         raise AssertionError(f"unexpected url: {url}")
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    monkeypatch.setenv("GRAFANA_HOST_PORT", "3001")
+    monkeypatch.setenv("GRAFANA_HOST_PORT", "3000")
     monkeypatch.setenv("PROMETHEUS_HOST_PORT", "9090")
 
     response = resource_monitoring_data(request, conn=None)
