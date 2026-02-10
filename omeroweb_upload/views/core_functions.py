@@ -993,12 +993,16 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-def _run_omero_cli(cmd):
+IMPORT_TIMEOUT_SECONDS = 600  # 10 minutes per file import
+
+
+def _run_omero_cli(cmd, timeout=None):
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         check=False,
+        timeout=timeout,
     )
 
 
@@ -1016,7 +1020,11 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
-    result = _run_omero_cli(cmd)
+    try:
+        result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
+        return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
     return result.returncode == 0, result.stdout, result.stderr
 
 
@@ -2197,7 +2205,21 @@ def _process_import_job(job_id: str):
         username = job.get("username") or ""
         lock = _get_import_lock(username)
 
-        with lock:
+        LOCK_TIMEOUT = 900  # 15 minutes max wait for another import to finish
+        acquired = lock.acquire(timeout=LOCK_TIMEOUT)
+        if not acquired:
+            logger.error(
+                "Import lock timeout for user %s after %ds - a previous import may be stuck. "
+                "Restart the OMERO-web container to clear stale locks.",
+                username, LOCK_TIMEOUT,
+            )
+            job = _load_job(job_id) or {"job_id": job_id}
+            _append_job_error(job, "Import could not start: another import is stuck. Please restart OMERO-web.")
+            job["status"] = "error"
+            _save_job(job)
+            return
+
+        try:
             job = _load_job(job_id)
             if not job:
                 return
@@ -2263,8 +2285,15 @@ def _process_import_job(job_id: str):
                         )
                         for entry in batch
                     ]
-                    for future in as_completed(futures):
-                        result = future.result()
+                    for future in as_completed(futures, timeout=IMPORT_TIMEOUT_SECONDS + 60):
+                        try:
+                            result = future.result(timeout=IMPORT_TIMEOUT_SECONDS + 30)
+                        except TimeoutError:
+                            logger.error("Import future timed out for batch starting at %d", start)
+                            continue
+                        except Exception as exc:
+                            logger.exception("Import future raised unexpected error")
+                            continue
                         if not result or result.get("skip"):
                             continue
                         entry_index = result.get("index")
@@ -2603,6 +2632,8 @@ def _process_import_job(job_id: str):
             else:
                 job["status"] = "done"
             _save_job(job)
+        finally:
+            lock.release()
     except Exception as exc:
         logger.exception("Import job %s failed unexpectedly.", job_id)
         job = _load_job(job_id) or {"job_id": job_id}
