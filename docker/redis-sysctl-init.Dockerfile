@@ -1,4 +1,4 @@
-FROM docker:27.4.0-cli
+FROM docker:29.2.1-cli
 
 USER root
 
