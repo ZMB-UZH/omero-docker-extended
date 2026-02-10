@@ -1003,6 +1003,7 @@ def _run_omero_cli(cmd, timeout=None):
         text=True,
         check=False,
         timeout=timeout,
+        stdin=subprocess.DEVNULL,
     )
 
 
@@ -1020,12 +1021,28 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
+    logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
+    import_start = time.time()
     try:
         result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
         return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
-    return result.returncode == 0, result.stdout, result.stderr
+    elapsed = time.time() - import_start
+    success = result.returncode == 0
+    logger.info(
+        "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
+        "stdout_lines=%d, stderr_lines=%d)",
+        path.name, elapsed, success, result.returncode,
+        len((result.stdout or "").splitlines()),
+        len((result.stderr or "").splitlines()),
+    )
+    if not success:
+        logger.warning(
+            "Import CLI stderr for %s: %s",
+            path.name, (result.stderr or "").strip()[:500],
+        )
+    return success, result.stdout, result.stderr
 
 
 def _validate_session(conn):
@@ -1918,6 +1935,7 @@ def _check_import_compatibility(
             check=False,
             timeout=45,  # Increased timeout for large files
             env=env,
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
         return {
@@ -2197,8 +2215,10 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
 
 
 def _process_import_job(job_id: str):
+    logger.info("Import thread started for job %s", job_id)
     job = _load_job(job_id)
     if not job:
+        logger.error("Import thread: job %s not found, aborting", job_id)
         return
 
     try:
@@ -2206,6 +2226,7 @@ def _process_import_job(job_id: str):
         lock = _get_import_lock(username)
 
         LOCK_TIMEOUT = 900  # 15 minutes max wait for another import to finish
+        logger.info("Import thread: acquiring lock for user %s (job %s)", username, job_id)
         acquired = lock.acquire(timeout=LOCK_TIMEOUT)
         if not acquired:
             logger.error(
@@ -2219,6 +2240,7 @@ def _process_import_job(job_id: str):
             _save_job(job)
             return
 
+        logger.info("Import thread: lock acquired for user %s (job %s)", username, job_id)
         try:
             job = _load_job(job_id)
             if not job:
@@ -2238,6 +2260,43 @@ def _process_import_job(job_id: str):
             if not session_key or not host or not port:
                 job["status"] = "error"
                 job["errors"].append(errors.missing_omero_connection_details())
+                _save_job(job)
+                return
+
+            # Validate OMERO session before starting import
+            logger.info(
+                "Import thread: validating OMERO session for job %s (host=%s, port=%s)",
+                job_id, host, port,
+            )
+            try:
+                session_conn = _open_session_connection(session_key, host, port)
+                if session_conn:
+                    try:
+                        session_conn.close()
+                    except Exception:
+                        pass
+                    logger.info("Import thread: session validated OK for job %s", job_id)
+                else:
+                    logger.error("Import thread: session invalid for job %s", job_id)
+                    job["status"] = "error"
+                    _append_job_error(
+                        job,
+                        "OMERO session expired before import could start. "
+                        "Please log in again and re-upload.",
+                    )
+                    _save_job(job)
+                    return
+            except Exception as exc:
+                logger.error(
+                    "Import thread: session validation failed for job %s: %s",
+                    job_id, exc,
+                )
+                job["status"] = "error"
+                _append_job_error(
+                    job,
+                    "OMERO session expired or server unreachable. "
+                    "Please log in again and re-upload.",
+                )
                 _save_job(job)
                 return
 
@@ -2267,10 +2326,19 @@ def _process_import_job(job_id: str):
                     }
                 )
 
+            logger.info(
+                "Import thread: %d entries to import for job %s (batch_size=%d)",
+                len(entries_to_import), job_id, batch_size,
+            )
+
             for start in range(0, len(entries_to_import), batch_size):
                 batch = entries_to_import[start:start + batch_size]
                 if not batch:
                     continue
+                logger.info(
+                    "Import thread: processing batch %d-%d of %d for job %s",
+                    start, start + len(batch), len(entries_to_import), job_id,
+                )
                 with ThreadPoolExecutor(max_workers=min(batch_size, len(batch))) as executor:
                     futures = [
                         executor.submit(
@@ -2629,11 +2697,24 @@ def _process_import_job(job_id: str):
             job = _load_job(job_id) or job
             if job.get("errors"):
                 job["status"] = "error"
+                logger.warning(
+                    "Import thread: job %s finished with errors (%d errors, %d messages)",
+                    job_id, len(job.get("errors", [])), len(job.get("messages", [])),
+                )
             else:
                 job["status"] = "done"
+                logger.info(
+                    "Import thread: job %s completed successfully "
+                    "(imported_bytes=%s, total_bytes=%s, messages=%d)",
+                    job_id,
+                    job.get("imported_bytes", 0),
+                    job.get("total_bytes", 0),
+                    len(job.get("messages", [])),
+                )
             _save_job(job)
         finally:
             lock.release()
+            logger.info("Import thread: lock released for job %s", job_id)
     except Exception as exc:
         logger.exception("Import job %s failed unexpectedly.", job_id)
         job = _load_job(job_id) or {"job_id": job_id}
