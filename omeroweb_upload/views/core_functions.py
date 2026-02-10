@@ -1082,10 +1082,11 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     
     try:
         client = omero.client(host=host, port=port)
-        client.joinSession(session_key)
+        sf = client.joinSession(session_key)
+        sf.detachOnDestroy()
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup("-1")
-        
+
         # Validate the new connection
         if not _validate_session(conn):
             logger.error("Newly created session is invalid")
@@ -1094,7 +1095,7 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             except Exception:
                 pass
             return None
-            
+
         return conn
     except Exception as exc:
         logger.error("Failed to reconnect session: %s", exc)
@@ -1104,17 +1105,18 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
 def _open_session_connection(session_key: str, host: str, port: int):
     """
     Open a BlitzGateway connection using a session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
-    
+
     Returns:
         BlitzGateway connection
     """
     client = omero.client(host=host, port=port)
-    client.joinSession(session_key)
+    sf = client.joinSession(session_key)
+    sf.detachOnDestroy()
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     return conn
