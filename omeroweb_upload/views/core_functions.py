@@ -472,6 +472,8 @@ def _has_pending_uploads(job_dict) -> bool:
 
 
 def _compatibility_pending_entries(job_dict):
+    if not job_dict.get("compatibility_enabled", True):
+        return []
     return [
         entry
         for entry in job_dict.get("files", [])
