@@ -38,9 +38,8 @@ GRAFANA_ANONYMOUS_ENABLED=true
 GRAFANA_ANONYMOUS_ROLE=Viewer
 ```
 
-All Grafana-related compose variables live in `env/compose.env`.
-The root `.env` is a symlink to `env/compose.env` so Docker Compose picks them up automatically for `${VAR}` substitution.
-`GRAFANA_HOST_PORT` controls the host-side port mapping for Grafana (`HOST:3000`).
+Grafana container settings live in `env/compose.env` (loaded via `env_file` in the grafana service).
+The host port mapping (`3001:3000`) and the Docker socket GID (`group_add`) are set directly in `docker-compose.yml`.
 
 For the Admin tools resource monitoring page, proxy links are now host-agnostic by default.
 If you also want to expose direct external links, set these optional variables in `env/omeroweb.env`:
