@@ -101,6 +101,11 @@ def _start_upload(request, conn):
         logger.info("Upload start request missing files payload.")
         return json_error(errors.no_files_provided())
     special_upload = (payload.get("special_upload") or "").strip()
+    compatibility_enabled = payload.get("compatibility_enabled")
+    if compatibility_enabled is None:
+        compatibility_enabled = True
+    else:
+        compatibility_enabled = bool(compatibility_enabled)
     raw_sem_edx_associations = payload.get("sem_edx_associations") or {}
     raw_sem_edx_settings = payload.get("sem_edx_settings") or {}
     if not _special_methods_enabled():
@@ -240,6 +245,7 @@ def _start_upload(request, conn):
         "import_thread_started": False,
         "job_batch_size": batch_size,
         "compatibility_status": "pending",
+        "compatibility_enabled": compatibility_enabled,
         "incompatible_files": [],
         "compatibility_thread_active": False,
         "compatibility_confirmed": False,
@@ -530,6 +536,7 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
             "compatibility_status": job.get("compatibility_status"),
+            "compatibility_enabled": bool(job.get("compatibility_enabled", True)),
             "compatibility_checked": sum(
                 1 for f in job.get("files", []) if f.get("compatibility")
             ),

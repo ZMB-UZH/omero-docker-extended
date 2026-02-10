@@ -812,6 +812,10 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             const job = Array.from(importJobs.values())[0];
             if (!job) return;
+            if (job.compatibility_enabled === false) {
+                uploadOverlay.textContent = 'PREPARING IMPORT...';
+                return;
+            }
             
             const total = job.compatibility_total || 0;
             if (total === 0) return;
@@ -3913,6 +3917,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     files: metadata,
                     project_id: projectId,
                     project_name: projectName,
+                    compatibility_enabled: isCompatibilityEnabled(),
                     special_upload: specialUploadValue,
                     sem_edx_associations: semEdxAssociations,
                     sem_edx_settings: semEdxSettings,
@@ -4134,6 +4139,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     job_id: job.job_id,
                     status_url: job.status_url,
                     confirm_url: job.confirm_url || null,
+                    compatibility_enabled: job.compatibility_enabled !== false,
                     total_bytes: job.total_bytes,
                     status: job.status,
                     created: job.created || index,
@@ -4171,6 +4177,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                                 status_url: job.status_url,
                                 confirm_url: job.confirm_url || null,
                                 status: job.status || 'pending',
+                                compatibility_enabled: job.compatibility_enabled !== false,
                                 imported_bytes: 0,
                                 total_bytes: job.total_bytes || 0,
                                 messages: [],
@@ -4254,12 +4261,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const importedBytes = jobs.reduce((acc, job) => acc + (job.imported_bytes || 0), 0);
             const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
-            const anyChecking = jobs.some((job) => job.status === 'checking');
             const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
             let progressLabel;
-            if (anyChecking) {
-                progressLabel = 'Checking compatibility...';
-            } else if (anyAwaiting) {
+            if (anyAwaiting) {
                 progressLabel = 'Preparing import...';
             } else if (totalBytes) {
                 progressLabel = `Importing ${formatBytes(importedBytes)} of ${formatBytes(totalBytes)}...`;
@@ -4323,6 +4327,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                             importJobs.set(job.job_id, {
                                 ...job,
                                 status: data.status || job.status,
+                                compatibility_enabled: data.compatibility_enabled !== false,
                                 uploaded_bytes: data.uploaded_bytes,
                                 imported_bytes: data.imported_bytes,
                                 total_bytes: data.total_bytes,
@@ -4357,6 +4362,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 status_url: job.status_url,
                 confirm_url: job.confirm_url || null,
                 status: 'ready',
+                compatibility_enabled: job.compatibility_enabled !== false,
                 imported_bytes: 0,
                 total_bytes: job.totalBytes,
                 messages: [],
@@ -4430,7 +4436,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 const existingEntries = pendingFiles.filter((entry) => originalPaths.has(getEntryPath(entry)));
                 const newEntries = pendingFiles.filter((entry) => !originalPaths.has(getEntryPath(entry)));
                 let shouldContinue = true;
-                setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
+                setUploadingState(true, isCompatibilityEnabled() ? 'UPLOADED. CHECKING COMPATIBILITY...' : 'UPLOADED. PREPARING IMPORT...');
                 try {
                     if (existingEntries.length) {
                         await pruneUploadJob(job, existingEntries.map((entry) => getEntryPath(entry)));
@@ -4525,7 +4531,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             
             if (job) {
-                setUploadingState(true, 'UPLOADED. CHECKING COMPATIBILITY...');
+                setUploadingState(true, isCompatibilityEnabled() ? 'UPLOADED. CHECKING COMPATIBILITY...' : 'UPLOADED. PREPARING IMPORT...');
                 try {
                     const compatibilityResult = await ensureCompatibilityBeforeImport(job, uploadedFiles);
                     if (compatibilityResult.proceed) {
