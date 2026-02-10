@@ -18,7 +18,8 @@
     <div class="admin-tools-card admin-tools-card--wide">
         <div class="resource-monitoring-toolbar">
             <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Server Infrastructure dashboard</button>
-            <button type="button" id="open_postgres_btn" class="admin-tools-button log-refresh-button">PostgreSQL dashboard</button>
+            <button type="button" id="open_database_btn" class="admin-tools-button log-refresh-button">Database dashboard</button>
+            <button type="button" id="open_plugin_database_btn" class="admin-tools-button log-refresh-button">Plugin database dashboard</button>
             <button type="button" id="open_redis_btn" class="admin-tools-button log-refresh-button">Redis dashboard</button>
             <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Prometheus targets</button>
             <label class="log-checkbox storage-autorefresh-inline">
@@ -75,7 +76,8 @@
 const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" %}', window.location.href);
 const statusEl = document.getElementById('status');
 const openGrafanaBtn = document.getElementById('open_grafana_btn');
-const openPostgresBtn = document.getElementById('open_postgres_btn');
+const openDatabaseBtn = document.getElementById('open_database_btn');
+const openPluginDatabaseBtn = document.getElementById('open_plugin_database_btn');
 const openRedisBtn = document.getElementById('open_redis_btn');
 const openPrometheusBtn = document.getElementById('open_prometheus_btn');
 const refreshBtn = document.getElementById('monitoring_refresh_btn');
@@ -218,6 +220,23 @@ function renderServiceHealth(services) {
     }).join('');
 }
 
+
+function formatTimestamp(rawTimestamp) {
+    const ts = new Date(rawTimestamp);
+    if (Number.isNaN(ts.getTime())) {
+        return 'n/a';
+    }
+    const day = String(ts.getDate()).padStart(2, '0');
+    const month = String(ts.getMonth() + 1).padStart(2, '0');
+    const year = String(ts.getFullYear());
+    const hours24 = ts.getHours();
+    const hours12 = String((hours24 % 12) || 12).padStart(2, '0');
+    const minutes = String(ts.getMinutes()).padStart(2, '0');
+    const seconds = String(ts.getSeconds()).padStart(2, '0');
+    const suffix = hours24 >= 12 ? 'PM' : 'AM';
+    return `${day}/${month}/${year}, ${hours12}:${minutes}:${seconds} ${suffix}`;
+}
+
 function renderDiagnostics(diag, services) {
     if (!diag) {
         diagnosticsCard.style.display = 'none';
@@ -293,7 +312,8 @@ async function loadData() {
         }
 
         openGrafanaBtn.onclick = () => { window.open(dashboardUrl, '_blank', 'noopener,noreferrer'); };
-        openPostgresBtn.onclick = () => { window.open(payload?.grafana?.postgres_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
         openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
@@ -310,7 +330,7 @@ async function loadData() {
         renderServiceHealth(Array.isArray(overview.services) ? overview.services : []);
         renderDiagnostics(payload.docker_diagnostics || null, Array.isArray(overview.services) ? overview.services : []);
 
-        statusEl.textContent = `Updated at ${new Date(payload.timestamp).toLocaleString()}.`;
+        statusEl.textContent = `Updated at ${formatTimestamp(payload.timestamp)}.`;
     } catch (error) {
         statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
     }
