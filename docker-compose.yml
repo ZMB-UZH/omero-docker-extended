@@ -148,6 +148,69 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  postgres-exporter:
+    image: "prometheuscommunity/postgres-exporter:v0.16.0"
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://omero:ShR3K413CPh0Q2r@database:5432/omero?sslmode=disable"
+    networks:
+      omero:
+        aliases:
+          - postgres-exporter
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  postgres-exporter-plugin:
+    image: "prometheuscommunity/postgres-exporter:v0.16.0"
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://omp-plugin:VhVFL62ziQFo710@database-plugin:5433/omp-plugin?sslmode=disable"
+    networks:
+      omero:
+        aliases:
+          - postgres-exporter-plugin
+    depends_on:
+      database_plugin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  redis-exporter:
+    image: "oliver006/redis_exporter:v1.66.0"
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    networks:
+      omero:
+        aliases:
+          - redis-exporter
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9121/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
   grafana:
     image: "grafana/grafana:12.4.0-21611641766"
     restart: unless-stopped
