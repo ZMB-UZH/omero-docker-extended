@@ -26,7 +26,7 @@ scrape_configs:
       - targets: ['alloy:12345']
 
   - job_name: grafana
-    metrics_path: /metrics
+    metrics_path: /omeroweb_admin_tools/resource-monitoring/grafana-proxy/metrics
     static_configs:
       - targets: ['grafana:3000']
 
