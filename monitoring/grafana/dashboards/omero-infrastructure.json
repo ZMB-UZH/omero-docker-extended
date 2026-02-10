@@ -642,7 +642,8 @@
   "tags": [
     "omero",
     "infrastructure",
-    "operations"
+    "operations",
+    "server"
   ],
   "templating": {
     "list": []
@@ -653,7 +654,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "OMERO Infrastructure",
+  "title": "Server Infrastructure",
   "uid": "omero-infrastructure",
   "version": 4,
   "weekStart": ""
