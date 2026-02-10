@@ -104,7 +104,13 @@ def refresh_job_status(job_dict):
     if compatibility_status == "incompatible":
         job_dict["status"] = "awaiting_confirmation"
     elif compatibility_status == "error":
-        job_dict["status"] = "awaiting_confirmation"
+        # Compatibility check errors should NOT block the import.
+        # The actual import will surface real errors.
+        logger.warning(
+            "Compatibility check had errors for job %s – proceeding to import anyway",
+            job_dict.get("job_id", "?"),
+        )
+        job_dict["status"] = "ready"
     elif compatibility_status == "compatible":
         job_dict["status"] = "ready"
     else:
