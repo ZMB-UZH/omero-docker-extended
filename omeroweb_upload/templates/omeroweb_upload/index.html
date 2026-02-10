@@ -4133,6 +4133,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 const jobs = Array.from(importJobs.values()).map((job, index) => ({
                     job_id: job.job_id,
                     status_url: job.status_url,
+                    confirm_url: job.confirm_url || null,
                     total_bytes: job.total_bytes,
                     status: job.status,
                     created: job.created || index,
@@ -4168,6 +4169,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                             importJobs.set(job.job_id, {
                                 job_id: job.job_id,
                                 status_url: job.status_url,
+                                confirm_url: job.confirm_url || null,
                                 status: job.status || 'pending',
                                 imported_bytes: 0,
                                 total_bytes: job.total_bytes || 0,
@@ -4252,12 +4254,19 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const importedBytes = jobs.reduce((acc, job) => acc + (job.imported_bytes || 0), 0);
             const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
-            updateProgress(
-                percent,
-                totalBytes
-                    ? `Importing ${formatBytes(importedBytes)} of ${formatBytes(totalBytes)}...`
-                    : 'Importing...'
-            );
+            const anyChecking = jobs.some((job) => job.status === 'checking');
+            const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
+            let progressLabel;
+            if (anyChecking) {
+                progressLabel = 'Checking compatibility...';
+            } else if (anyAwaiting) {
+                progressLabel = 'Preparing import...';
+            } else if (totalBytes) {
+                progressLabel = `Importing ${formatBytes(importedBytes)} of ${formatBytes(totalBytes)}...`;
+            } else {
+                progressLabel = 'Importing...';
+            }
+            updateProgress(percent, progressLabel);
             updateImportLogFromJobs(jobs);
             if (!hasActiveImport() && totalBytes) {
                 if (hasErrors) {
@@ -4284,28 +4293,50 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 updateProgressFromJobs();
                 return;
             }
-            await Promise.all(
-                jobs.map(async (job) => {
-                    const response = await fetch(job.status_url, {
-                        method: 'POST',
-                        headers: setRequestHeaders({}),
-                        credentials: 'same-origin',
-                    });
-                    const data = await parseJsonResponse(response);
-                    if (!response.ok || !data.ok) {
-                        return;
-                    }
-                    importJobs.set(job.job_id, {
-                        ...job,
-                        status: data.status || job.status,
-                        uploaded_bytes: data.uploaded_bytes,
-                        imported_bytes: data.imported_bytes,
-                        total_bytes: data.total_bytes,
-                        messages: data.messages || job.messages,
-                        errors: data.errors || job.errors,
-                    });
-                })
-            );
+            try {
+                await Promise.all(
+                    jobs.map(async (job) => {
+                        try {
+                            const response = await fetch(job.status_url, {
+                                method: 'POST',
+                                headers: setRequestHeaders({}),
+                                credentials: 'same-origin',
+                            });
+                            const data = await parseJsonResponse(response);
+                            if (!response.ok || !data.ok) {
+                                return;
+                            }
+
+                            // If the server reports awaiting_confirmation but we
+                            // already passed the compatibility step, auto-confirm
+                            // so the import can proceed.
+                            if (data.status === 'awaiting_confirmation' && job.confirm_url) {
+                                try {
+                                    await fetch(job.confirm_url, {
+                                        method: 'POST',
+                                        headers: setRequestHeaders({ 'Content-Type': 'application/json' }),
+                                        credentials: 'same-origin',
+                                    });
+                                } catch (_) { /* best-effort */ }
+                            }
+
+                            importJobs.set(job.job_id, {
+                                ...job,
+                                status: data.status || job.status,
+                                uploaded_bytes: data.uploaded_bytes,
+                                imported_bytes: data.imported_bytes,
+                                total_bytes: data.total_bytes,
+                                messages: data.messages || job.messages,
+                                errors: data.errors || job.errors,
+                            });
+                        } catch (err) {
+                            console.warn('Import poll error for job', job.job_id, err);
+                        }
+                    })
+                );
+            } catch (err) {
+                console.warn('Import poll round failed:', err);
+            }
             updateProgressFromJobs();
             if (hasActiveImport()) {
                 importPollTimer = window.setTimeout(pollImportJobs, 4000);
@@ -4324,6 +4355,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             importJobs.set(job.job_id, {
                 job_id: job.job_id,
                 status_url: job.status_url,
+                confirm_url: job.confirm_url || null,
                 status: 'ready',
                 imported_bytes: 0,
                 total_bytes: job.totalBytes,
