@@ -31,7 +31,7 @@ Grafana Alloy for file-based log collection.
 OMERO_SERVER_LOG_DIR=/opt/omero/server/OMERO.server/var/log
 OMERO_WEB_LOG_DIR=/opt/omero/web/OMERO.web/var/log
 OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
-GRAFANA_HOST_PORT=3001
+GRAFANA_HOST_PORT=3000
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=admin
 GRAFANA_ANONYMOUS_ENABLED=true
@@ -39,7 +39,7 @@ GRAFANA_ANONYMOUS_ROLE=Viewer
 ```
 
 Grafana container settings live in `env/compose.env` (loaded via `env_file` in the grafana service).
-The host port mapping (`3001:3000`) and the Docker socket GID (`group_add`) are set directly in `docker-compose.yml`.
+The host port mapping (`3000:3000`) and the Docker socket GID (`group_add`) are set directly in `docker-compose.yml`.
 
 For the Admin tools resource monitoring page, proxy links are now host-agnostic by default.
 If you also want to expose direct external links, set these optional variables in `env/omeroweb.env`:
