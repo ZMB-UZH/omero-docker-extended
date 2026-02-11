@@ -14,20 +14,20 @@ ensure_cert_directory_permissions() {
     if [ "$(id -u)" -ne 0 ]; then
         if [ -d "${CERT_DIR}" ]; then
             if [ ! -w "${CERT_DIR}" ]; then
-                echo "[CERT] ERROR: ${CERT_DIR} exists but is not writable for UID $(id -u)" >&2
-                exit 1
+                echo "[CERT] WARNING: ${CERT_DIR} exists but is not writable for UID $(id -u)" >&2
+                return 1
             fi
-            return
+            return 0
         fi
 
         if [ ! -w "/OMERO" ]; then
-            echo "[CERT] ERROR: /OMERO is not writable for UID $(id -u); cannot create ${CERT_DIR}" >&2
-            exit 1
+            echo "[CERT] WARNING: /OMERO is not writable for UID $(id -u); cannot create ${CERT_DIR}" >&2
+            return 1
         fi
 
         mkdir -p "${CERT_DIR}"
         chmod 0750 "${CERT_DIR}"
-        return
+        return 0
     fi
 
     if ! id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
@@ -59,7 +59,11 @@ fi
 if [ "${NEED_REGEN}" -eq 1 ]; then
     echo "[CERT] Configuring OMERO certificate parameters"
 
-    ensure_cert_directory_permissions
+    if ! ensure_cert_directory_permissions; then
+        echo "[CERT] WARNING: skipping certificate regeneration because ${CERT_DIR} is not writable." >&2
+        echo "[CERT] WARNING: action required: ensure host path mounted at /OMERO is writable by UID $(id -u)." >&2
+        exit 0
+    fi
 
     run_omero config set omero.certificates.commonname localhost
     run_omero config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver"
