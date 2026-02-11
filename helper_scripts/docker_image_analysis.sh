@@ -2,13 +2,25 @@
 # shellcheck disable=SC2317
 
 set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
 
 SCRIPT_NAME="$(basename "$0")"
 VERSION="1.0.0"
 DEFAULT_OUTPUT_DIR="image-inventory-reports"
+DEFAULT_PROBE_TIMEOUT_SECONDS="900"
+DEFAULT_MAX_REPORT_BYTES="$((50 * 1024 * 1024))"
+
+DEBUG_MODE="false"
 
 log_info() {
   printf '[INFO] %s\n' "$*" >&2
+}
+
+log_debug() {
+  if [ "${DEBUG_MODE}" = "true" ]; then
+    printf '[DEBUG] %s\n' "$*" >&2
+  fi
 }
 
 log_warn() {
@@ -38,6 +50,8 @@ Options:
       --skip-pull            Do not pull the image, inspect local cache only
       --no-json              Do not generate JSON report (text-only)
       --debug                Enable verbose debugging output
+      --probe-timeout SEC    Timeout per probe shell attempt (default: $DEFAULT_PROBE_TIMEOUT_SECONDS)
+      --max-report-bytes N   Max bytes to keep for raw probe output (default: $DEFAULT_MAX_REPORT_BYTES)
       --self-test            Run internal parser/unit tests and exit
   -h, --help                 Show this help and exit
 
@@ -45,8 +59,22 @@ Behavior:
 - If --image is not provided and input is interactive, the script prompts for it.
 - Fails fast with actionable errors when Docker is unavailable.
 - Uses multiple shell candidates in target containers (/bin/sh, /bin/bash, /busybox/sh, sh, bash).
+- Validates Docker daemon access before running image operations.
+- Truncates oversized raw probe output defensively to avoid runaway report size.
 EOF
 }
+
+cleanup_files() {
+  if [ "${#TEMP_FILES[@]}" -gt 0 ]; then
+    local f
+    for f in "${TEMP_FILES[@]}"; do
+      rm -f -- "$f" 2>/dev/null || true
+    done
+  fi
+}
+
+TEMP_FILES=()
+trap cleanup_files EXIT
 
 require_command() {
   local cmd="$1"
@@ -62,6 +90,92 @@ iso_utc_timestamp() {
 
 safe_filename_fragment() {
   printf '%s' "$1" | tr '/:@ ' '____' | tr -cd 'A-Za-z0-9._-'
+}
+
+validate_positive_integer() {
+  local value="$1"
+  local name="$2"
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    log_error "$name must be a non-negative integer. Got: $value"
+    return 1
+  fi
+  return 0
+}
+
+validate_image_reference() {
+  local image_ref="$1"
+  if [ -z "$image_ref" ]; then
+    log_error "Image reference cannot be empty."
+    return 1
+  fi
+
+  if printf '%s' "$image_ref" | grep -q '[[:space:]]'; then
+    log_error "Image reference contains whitespace, which is invalid: $image_ref"
+    return 1
+  fi
+
+  if printf '%s' "$image_ref" | grep -q '[[:cntrl:]]'; then
+    log_error "Image reference contains control characters, which is invalid."
+    return 1
+  fi
+
+  return 0
+}
+
+ensure_output_dir_writable() {
+  local output_dir="$1"
+  mkdir -p "$output_dir"
+
+  if [ ! -d "$output_dir" ]; then
+    log_error "Output path exists but is not a directory: $output_dir"
+    return 1
+  fi
+
+  if [ ! -w "$output_dir" ]; then
+    log_error "Output directory is not writable: $output_dir"
+    return 1
+  fi
+
+  return 0
+}
+
+docker_preflight() {
+  require_command docker || return 1
+
+  if ! docker info >/dev/null 2>&1; then
+    log_error "Docker daemon is not reachable. Ensure Docker is running and current user can access it."
+    return 1
+  fi
+
+  return 0
+}
+
+truncate_if_oversized() {
+  local file_path="$1"
+  local max_bytes="$2"
+
+  if [ ! -f "$file_path" ]; then
+    log_error "Cannot truncate missing file: $file_path"
+    return 1
+  fi
+
+  local current_size
+  current_size="$(wc -c <"$file_path")"
+  if [ "$current_size" -le "$max_bytes" ]; then
+    return 0
+  fi
+
+  log_warn "Raw probe output exceeded max size ($current_size > $max_bytes). Truncating report body."
+
+  local tmp
+  tmp="$(mktemp)"
+  TEMP_FILES+=("$tmp")
+  {
+    printf '[TRUNCATED] raw probe output exceeded max bytes (%s).\n' "$max_bytes"
+    printf '[TRUNCATED] original size bytes: %s\n\n' "$current_size"
+    head -c "$max_bytes" "$file_path" || true
+  } >"$tmp"
+  cp "$tmp" "$file_path"
 }
 
 build_probe_script() {
@@ -270,8 +384,18 @@ run_probe_with_shell() {
   local shell_path="$2"
   local probe_script="$3"
   local out_file="$4"
+  local timeout_seconds="$5"
 
-  if docker run --rm --entrypoint "$shell_path" "$image" -c "$probe_script" >"$out_file" 2>"${out_file}.stderr"; then
+  local -a run_cmd
+  run_cmd=(docker run --rm --entrypoint "$shell_path" "$image" -c "$probe_script")
+
+  if command -v timeout >/dev/null 2>&1; then
+    run_cmd=(timeout --signal=KILL "${timeout_seconds}s" "${run_cmd[@]}")
+  else
+    log_warn "timeout command not available; probe shell run has no hard timeout."
+  fi
+
+  if "${run_cmd[@]}" >"$out_file" 2>"${out_file}.stderr"; then
     return 0
   fi
   return 1
@@ -397,6 +521,8 @@ main() {
   local skip_pull="false"
   local generate_json="true"
   local debug="false"
+  local probe_timeout_seconds="$DEFAULT_PROBE_TIMEOUT_SECONDS"
+  local max_report_bytes="$DEFAULT_MAX_REPORT_BYTES"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -430,6 +556,24 @@ main() {
         debug="true"
         shift
         ;;
+      --probe-timeout)
+        if [ "$#" -lt 2 ]; then
+          log_error "Missing value for $1"
+          usage
+          return 2
+        fi
+        probe_timeout_seconds="$2"
+        shift 2
+        ;;
+      --max-report-bytes)
+        if [ "$#" -lt 2 ]; then
+          log_error "Missing value for $1"
+          usage
+          return 2
+        fi
+        max_report_bytes="$2"
+        shift 2
+        ;;
       --self-test)
         run_self_test
         return $?
@@ -449,8 +593,17 @@ main() {
   if [ "$debug" = "true" ]; then
     set -x
   fi
+  DEBUG_MODE="$debug"
 
-  require_command docker || return 1
+  validate_positive_integer "$probe_timeout_seconds" "probe timeout seconds" || return 2
+  validate_positive_integer "$max_report_bytes" "max report bytes" || return 2
+
+  if [ "$probe_timeout_seconds" -eq 0 ]; then
+    log_warn "Probe timeout set to 0 seconds. Container probe commands may fail immediately when timeout is available."
+  fi
+
+  log_debug "Using probe timeout seconds: $probe_timeout_seconds"
+  log_debug "Using max report bytes: $max_report_bytes"
 
   if [ -z "$image_ref" ]; then
     if [ -t 0 ]; then
@@ -466,7 +619,11 @@ main() {
     fi
   fi
 
-  mkdir -p "$output_dir"
+  validate_image_reference "$image_ref" || return 2
+
+  docker_preflight || return 1
+
+  ensure_output_dir_writable "$output_dir" || return 1
 
   if [ "$skip_pull" != "true" ]; then
     log_info "Pulling image: $image_ref"
@@ -494,6 +651,8 @@ main() {
   txt_report="$output_dir/inventory_${safe_image}_${ts}.txt"
   json_report="$output_dir/inventory_${safe_image}_${ts}.json"
 
+  : >"$stderr_file"
+
   log_info "Inspecting image metadata..."
   if ! inspect_image_summary "$image_ref" >"$inspect_file"; then
     log_warn "Image metadata inspection failed. Continuing with probe-only report."
@@ -510,7 +669,7 @@ main() {
   local candidate
   for candidate in /bin/sh /bin/bash /busybox/sh sh bash; do
     log_info "Trying probe shell: $candidate"
-    if run_probe_with_shell "$image_ref" "$candidate" "$probe_script" "$raw_file"; then
+    if run_probe_with_shell "$image_ref" "$candidate" "$probe_script" "$raw_file" "$probe_timeout_seconds"; then
       shell_used="$candidate"
       break
     fi
@@ -530,6 +689,8 @@ main() {
     log_error "Inspect raw probe output: $raw_file"
     return 1
   fi
+
+  truncate_if_oversized "$raw_file" "$max_report_bytes" || return 1
 
   write_text_report "$image_ref" "$shell_used" "$inspect_file" "$raw_file" "$txt_report"
 
