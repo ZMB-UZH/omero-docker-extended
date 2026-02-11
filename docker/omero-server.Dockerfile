@@ -130,6 +130,27 @@ RUN set -euo pipefail; \
             omero-rdf; \
     done
 
+# Ensure packaging tooling exists in every OMERO.server venv and is writable by runtime user
+# ------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
+        exit 1; \
+    fi; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then \
+            echo "ERROR: Invalid OMERO.server virtual environment: ${VENV_DIR}" >&2; \
+            exit 1; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+            pip \
+            "setuptools==${SETUPTOOLS_VERSION}" \
+            wheel; \
+        SITE_PACKAGES="$("${VENV_DIR}/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
+        chown -R omero-server:omero-server "${SITE_PACKAGES}"; \
+    done
+
 # Install runtime diagnostics + git
 # ---------------------------------
 RUN set -euo pipefail; \
