@@ -95,7 +95,7 @@ resolve_script_env_file() {
     )
 
     for candidate_file in "${candidate_files[@]}"; do
-        if [ -f "${candidate_file}"; then
+        if [ -f "${candidate_file}" ]; then
             SCRIPT_ENV_FILE="${candidate_file}"
             return 0
         fi
