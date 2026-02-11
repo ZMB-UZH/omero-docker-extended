@@ -14,6 +14,8 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-4}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
+OMERO_SERVER_UID="${OMERO_SERVER_UID:-1000}"
+OMERO_SERVER_GID="${OMERO_SERVER_GID:-1000}"
 
 set -euo pipefail
 
@@ -165,6 +167,74 @@ validate_retry_config() {
     return 0
 }
 
+validate_numeric_id() {
+    local id_label="$1"
+    local id_value="$2"
+
+    if ! [[ "${id_value}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: ${id_label} must be a numeric ID. Got: ${id_value}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+ensure_container_writable_path() {
+    local path_to_prepare="$1"
+    local path_label="$2"
+
+    if [ -e "${path_to_prepare}" ] && [ ! -d "${path_to_prepare}" ]; then
+        echo "ERROR: ${path_label} exists but is not a directory: ${path_to_prepare}" >&2
+        return 1
+    fi
+
+    if ! install -d -m 0775 "${path_to_prepare}"; then
+        echo "ERROR: Failed to create ${path_label}: ${path_to_prepare}" >&2
+        return 1
+    fi
+
+    if ! chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${path_to_prepare}"; then
+        echo "ERROR: Failed to set ownership for ${path_label} to ${OMERO_SERVER_UID}:${OMERO_SERVER_GID}: ${path_to_prepare}" >&2
+        return 1
+    fi
+
+    if ! chmod 0775 "${path_to_prepare}"; then
+        echo "ERROR: Failed to set permissions for ${path_label}: ${path_to_prepare}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+print_compose_failure_context() {
+    local compose_file="$1"
+
+    echo "ERROR: docker compose up failed. Collecting service health details..." >&2
+    docker compose -f "${compose_file}" ps >&2 || true
+
+    local failed_services
+    failed_services="$(docker compose -f "${compose_file}" ps --services --filter "status=exited" 2>/dev/null || true)"
+
+    if [ -z "${failed_services}" ]; then
+        failed_services="$(docker compose -f "${compose_file}" ps --services --filter "status=restarting" 2>/dev/null || true)"
+    fi
+
+    if [ -z "${failed_services}" ]; then
+        echo "ERROR: Could not identify exited/restarting services. Inspect health status and logs manually." >&2
+        return 0
+    fi
+
+    local service_name
+    while IFS= read -r service_name; do
+        if [ -z "${service_name}" ]; then
+            continue
+        fi
+        echo "----- BEGIN LOGS: ${service_name} -----" >&2
+        docker compose -f "${compose_file}" logs --tail 120 "${service_name}" >&2 || true
+        echo "----- END LOGS: ${service_name} -----" >&2
+    done <<< "${failed_services}"
+}
+
 compose_up_with_retries() {
     local compose_file="$1"
     local attempt=1
@@ -179,8 +249,7 @@ compose_up_with_retries() {
 
         if [ "${attempt}" -ge "${COMPOSE_UP_RETRIES}" ]; then
             echo "ERROR: docker compose up failed after ${COMPOSE_UP_RETRIES} attempt(s)." >&2
-            echo "ERROR: This is often a transient image-pull network failure (connection reset/timeouts)." >&2
-            echo "ERROR: Check internet/firewall/proxy access to registry-1.docker.io and retry." >&2
+            print_compose_failure_context "${compose_file}"
             return 1
         fi
 
@@ -581,6 +650,14 @@ if ! validate_retry_config; then
     exit 1
 fi
 
+if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then
+    exit 1
+fi
+
+if ! validate_numeric_id "OMERO_SERVER_GID" "${OMERO_SERVER_GID}"; then
+    exit 1
+fi
+
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
 require_config_var "OMERO_PLUGIN_DATABASE_PATH"
@@ -626,6 +703,14 @@ if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database direc
 fi
 
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then
     exit 1
 fi
 
