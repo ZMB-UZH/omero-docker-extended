@@ -4,6 +4,9 @@ set -euo pipefail
 echo "[CERT] Ensuring OMERO certificate SAN includes DNS:omeroserver"
 
 OMERO_BIN="/opt/omero/server/OMERO.server/bin/omero"
+
+source /startup/omero-cli-safe.sh
+
 CERT_DIR="/OMERO/certs"
 CERT_PEM="${CERT_DIR}/server.pem"
 
@@ -22,14 +25,14 @@ fi
 if [ "${NEED_REGEN}" -eq 1 ]; then
     echo "[CERT] Configuring OMERO certificate parameters"
 
-    "${OMERO_BIN}" config set omero.certificates.commonname localhost
-    "${OMERO_BIN}" config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver"
+    run_omero config set omero.certificates.commonname localhost
+    run_omero config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver"
 
     echo "[CERT] Removing old certificates"
     rm -f "${CERT_DIR}/server."* || true
 
     echo "[CERT] Generating certificates via 'omero certificates'"
-    "${OMERO_BIN}" certificates
+    run_omero certificates
 
     echo "[CERT] Certificate generation complete"
 else
