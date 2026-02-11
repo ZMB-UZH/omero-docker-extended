@@ -258,26 +258,12 @@ RUN set -euo pipefail; \
     find /opt/omero/server/OMERO.server/lib/scripts -type f -exec chmod 0644 {} \; && \
     rm -rf /tmp/biop-omero-scripts
 
-# Copy the Figure Export to PDF script file
-# -----------------------------------------
-COPY startup/55-install-figure-script.sh /startup/55-install-figure-script.sh
+# Consolidated OMERO.server startup flow
+# --------------------------------------
+COPY startup/10-server-bootstrap.sh /startup/10-server-bootstrap.sh
 RUN set -euo pipefail; \
-    chown root:root /startup/55-install-figure-script.sh; \
-    chmod 0555 /startup/55-install-figure-script.sh
-
-# Check and fix OMERO directory permissions (MUST RUN FIRST)
-# ----------------------------------------------------------
-COPY startup/00-check-and-fix-permissions.sh /startup/00-check-and-fix-permissions.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/00-check-and-fix-permissions.sh; \
-    chmod 0555 /startup/00-check-and-fix-permissions.sh
-
-# Reset OMERO runtime state on every container start (KEEP /OMERO + DB)
-# ---------------------------------------------------------------------
-COPY startup/00-reset-omero-runtime.sh /startup/00-reset-omero-runtime.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/00-reset-omero-runtime.sh; \
-    chmod 0555 /startup/00-reset-omero-runtime.sh
+    chown root:root /startup/10-server-bootstrap.sh; \
+    chmod 0555 /startup/10-server-bootstrap.sh
 
 # Install OMERO downloader
 # ------------------------
@@ -321,44 +307,6 @@ RUN set -euo pipefail; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
     chown -R omero-server:omero-server "${SITE_PACKAGES}/omero_plugin_common"; \
     rm -rf /tmp/omero_plugin_common
-
-# Register official OMERO scripts AFTER OMERO.server startup
-# ----------------------------------------------------------
-COPY startup/99-register-official-scripts.sh /startup/99-register-official-scripts.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/99-register-official-scripts.sh; \
-    chmod 0555 /startup/99-register-official-scripts.sh
-
-# Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
-# secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
-# -------------------------------------------------------------------------
-COPY startup/05-omero-cert-sans.sh /startup/05-omero-cert-sans.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/05-omero-cert-sans.sh; \
-    chmod 0555 /startup/05-omero-cert-sans.sh
-
-# Bootstrap job-service user (auto-create if missing)
-# MUST run AFTER OMERO.server (Glacier2) is up
-# --------------------------------------------
-COPY startup/01-set-script-python.sh /startup/01-set-script-python.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/01-set-script-python.sh; \
-    chmod 0555 /startup/01-set-script-python.sh
-
-COPY startup/02-ensure-python-packaging.sh /startup/02-ensure-python-packaging.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/02-ensure-python-packaging.sh; \
-    chmod 0555 /startup/02-ensure-python-packaging.sh
-
-COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/99-job-service-bootstrap.sh; \
-    chmod 0555 /startup/99-job-service-bootstrap.sh
-
-COPY startup/omero-cli-safe.sh /startup/omero-cli-safe.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/omero-cli-safe.sh; \
-    chmod 0555 /startup/omero-cli-safe.sh
 
 # Ensure OMERO server runtime directories are owned by omero-server
 # so named volumes inherit correct permissions on first run.
