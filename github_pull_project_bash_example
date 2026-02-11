@@ -348,7 +348,7 @@ resolve_path_with_default_prompt() {
 
         if [ -z "${reply}" ] || [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
             while true; do
-                printf '%s: (Default: %s) ' "${path_label}" "${default_path}" > /dev/tty
+                printf '%s: (Current: %s) ' "${path_label}" "${default_path}" > /dev/tty
 
                 if ! IFS= read -r chosen_path < /dev/tty; then
                     printf '%s' "${default_path}"
@@ -364,7 +364,7 @@ resolve_path_with_default_prompt() {
                     return 0
                 fi
 
-                echo "Wrong ${path_label}, try again: (Default: ${default_path})" > /dev/tty
+                echo "Wrong ${path_label}, try again: (Current: ${default_path})" > /dev/tty
             done
         fi
 
