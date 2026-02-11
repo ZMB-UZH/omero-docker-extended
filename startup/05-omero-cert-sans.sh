@@ -60,9 +60,11 @@ if [ "${NEED_REGEN}" -eq 1 ]; then
     echo "[CERT] Configuring OMERO certificate parameters"
 
     if ! ensure_cert_directory_permissions; then
-        echo "[CERT] WARNING: skipping certificate regeneration because ${CERT_DIR} is not writable." >&2
-        echo "[CERT] WARNING: action required: ensure host path mounted at /OMERO is writable by UID $(id -u)." >&2
-        exit 0
+        echo "[CERT] ERROR: Cannot regenerate certificates - ${CERT_DIR} is not writable." >&2
+        echo "[CERT] ERROR: Required action: ensure host path mounted at /OMERO is writable by UID $(id -u)." >&2
+        echo "[CERT] ERROR: This should have been fixed by 00-check-and-fix-permissions.sh" >&2
+        echo "[CERT] ERROR: If you see this error, there is a serious permission problem." >&2
+        exit 1
     fi
 
     run_omero config set omero.certificates.commonname localhost
