@@ -24,34 +24,74 @@ for venv_dir in "${VENV_DIRS[@]}"; do
     fi
 
     echo "Validating Python packaging tooling in ${venv_dir}"
-    if ! "${python_bin}" - <<'PY'
+
+    missing_packages="$(${python_bin} - <<'PY'
 import importlib.metadata as metadata
-import setuptools
+from importlib.metadata import PackageNotFoundError
 
-for package_name in ("pip", "setuptools", "wheel"):
-    print(f"{package_name}={metadata.version(package_name)}")
+required_packages = ("pip", "setuptools", "wheel")
+missing = []
 
-# setuptools is imported explicitly so this check continues to validate
-# the package is importable.
-print(f"setuptools_import={setuptools.__name__}")
+for package_name in required_packages:
+    try:
+        print(f"{package_name}={metadata.version(package_name)}")
+    except PackageNotFoundError:
+        missing.append(package_name)
+
+print(",".join(missing))
 PY
-    then
-        echo "Packaging tools missing in ${venv_dir}; attempting recovery with pip" >&2
-        "${python_bin}" -m pip install --no-cache-dir --upgrade \
-            pip \
-            "setuptools==${SETUPTOOLS_VERSION}" \
-            wheel
+)"
 
-        "${python_bin}" - <<'PY'
+    missing_packages="$(echo "${missing_packages}" | tail -n 1)"
+    if [[ -n "${missing_packages}" ]]; then
+        target_site_packages="$(${python_bin} - <<'PY'
+import sysconfig
+print(sysconfig.get_path("purelib"))
+PY
+)"
+
+        echo "Packaging tools missing in ${venv_dir}: ${missing_packages}" >&2
+        echo "Attempting recovery in ${target_site_packages}" >&2
+
+        if [[ ! -d "${target_site_packages}" || ! -w "${target_site_packages}" ]]; then
+            echo "ERROR: Cannot repair Python tooling in ${venv_dir}. ${target_site_packages} is not writable by user $(id -un)." >&2
+            echo "ERROR: Fix ownership/permissions for ${target_site_packages}, or pre-install missing packages during image build." >&2
+            exit 1
+        fi
+
+        IFS=',' read -r -a missing_array <<< "${missing_packages}"
+        install_args=()
+        for package_name in "${missing_array[@]}"; do
+            if [[ "${package_name}" == "setuptools" ]]; then
+                install_args+=("setuptools==${SETUPTOOLS_VERSION}")
+            else
+                install_args+=("${package_name}")
+            fi
+        done
+
+        "${python_bin}" -m pip install --no-cache-dir --upgrade --target "${target_site_packages}" "${install_args[@]}"
+
+        remaining_missing="$(${python_bin} - <<'PY'
 import importlib.metadata as metadata
-import setuptools
+from importlib.metadata import PackageNotFoundError
 
-for package_name in ("pip", "setuptools", "wheel"):
-    print(f"Recovered {package_name}={metadata.version(package_name)}")
+required_packages = ("pip", "setuptools", "wheel")
+missing = []
 
-# setuptools is imported explicitly so this check continues to validate
-# the package is importable.
-print(f"Recovered setuptools_import={setuptools.__name__}")
+for package_name in required_packages:
+    try:
+        print(f"Recovered {package_name}={metadata.version(package_name)}")
+    except PackageNotFoundError:
+        missing.append(package_name)
+
+print(",".join(missing))
 PY
+)"
+        remaining_missing="$(echo "${remaining_missing}" | tail -n 1)"
+
+        if [[ -n "${remaining_missing}" ]]; then
+            echo "ERROR: Python packaging recovery failed in ${venv_dir}; still missing: ${remaining_missing}" >&2
+            exit 1
+        fi
     fi
 done
