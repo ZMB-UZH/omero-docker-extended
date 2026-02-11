@@ -3,7 +3,9 @@
 
 set -Eeuo pipefail
 IFS=$'\n\t'
-umask 077
+# Generate reports readable by non-root users when script is run via sudo.
+# Individual environments can still tighten permissions externally if required.
+umask 022
 
 SCRIPT_NAME="$(basename "$0")"
 VERSION="1.0.0"
@@ -136,7 +138,20 @@ ensure_output_dir_writable() {
     return 1
   fi
 
+  if ! chmod 755 "$output_dir" 2>/dev/null; then
+    log_warn "Could not set output directory permissions to 755: $output_dir"
+  fi
+
   return 0
+}
+
+set_report_permissions() {
+  local file_path="$1"
+  if [ -f "$file_path" ]; then
+    if ! chmod 644 "$file_path" 2>/dev/null; then
+      log_warn "Could not set report permissions to 644: $file_path"
+    fi
+  fi
 }
 
 docker_preflight() {
@@ -652,6 +667,7 @@ main() {
   json_report="$output_dir/inventory_${safe_image}_${ts}.json"
 
   : >"$stderr_file"
+  set_report_permissions "$stderr_file"
 
   log_info "Inspecting image metadata..."
   if ! inspect_image_summary "$image_ref" >"$inspect_file"; then
@@ -661,6 +677,7 @@ main() {
       echo "image=$image_ref"
     } >"$inspect_file"
   fi
+  set_report_permissions "$inspect_file"
 
   local probe_script
   probe_script="$(build_probe_script)"
@@ -691,11 +708,14 @@ main() {
   fi
 
   truncate_if_oversized "$raw_file" "$max_report_bytes" || return 1
+  set_report_permissions "$raw_file"
 
   write_text_report "$image_ref" "$shell_used" "$inspect_file" "$raw_file" "$txt_report"
+  set_report_permissions "$txt_report"
 
   if [ "$generate_json" = "true" ]; then
     if generate_json_report "$image_ref" "$shell_used" "$inspect_file" "$raw_file" "$json_report"; then
+      set_report_permissions "$json_report"
       log_info "JSON report written: $json_report"
     else
       log_warn "JSON report was not generated."
