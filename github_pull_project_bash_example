@@ -62,6 +62,7 @@ create_default_installation_env_file() {
     local default_installation_path="${SCRIPT_DIR}"
     local default_database_path="${default_installation_path%/}/database"
     local default_plugin_database_path="${default_installation_path%/}/plugin_database"
+    local default_omero_data_path="/opt/omero/omero_data"
 
     if ! install -d -m 0755 "$(dirname "${target_env_file}")"; then
         echo "ERROR: Failed to create directory for default configuration file: ${target_env_file}" >&2
@@ -72,6 +73,7 @@ create_default_installation_env_file() {
 OMERO_INSTALLATION_PATH=${default_installation_path}
 OMERO_DATABASE_PATH=${default_database_path}
 OMERO_PLUGIN_DATABASE_PATH=${default_plugin_database_path}
+OMERO_DATA_PATH=${default_omero_data_path}
 EOF
 
     echo "WARNING: installation_paths.env was missing. Created defaults at ${target_env_file}" >&2
@@ -243,23 +245,37 @@ ensure_data_path() {
     return 0
 }
 
+
+persist_env_var() {
+    local env_file_path="$1"
+    local variable_name="$2"
+    local variable_value="$3"
+
+    if grep -q "^${variable_name}=" "${env_file_path}"; then
+        sed -i "s|^${variable_name}=.*|${variable_name}=${variable_value}|" "${env_file_path}"
+    else
+        printf "%s=%s\n" "${variable_name}" "${variable_value}" >> "${env_file_path}"
+    fi
+}
+
 persist_compose_path_overrides() {
     local env_file_path="${OMERO_INSTALLATION_PATH%/}/.env"
 
     touch "${env_file_path}"
 
-    if grep -q '^OMERO_DATABASE_PATH=' "${env_file_path}"; then
-        sed -i "s|^OMERO_DATABASE_PATH=.*|OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}|" "${env_file_path}"
-    else
-        printf '\nOMERO_DATABASE_PATH=%s\n' "${OMERO_DATABASE_PATH}" >> "${env_file_path}"
-    fi
-
-    if grep -q '^OMERO_PLUGIN_DATABASE_PATH=' "${env_file_path}"; then
-        sed -i "s|^OMERO_PLUGIN_DATABASE_PATH=.*|OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}|" "${env_file_path}"
-    else
-        printf 'OMERO_PLUGIN_DATABASE_PATH=%s\n' "${OMERO_PLUGIN_DATABASE_PATH}" >> "${env_file_path}"
-    fi
+    persist_env_var "${env_file_path}" "OMERO_DATABASE_PATH" "${OMERO_DATABASE_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_PLUGIN_DATABASE_PATH" "${OMERO_PLUGIN_DATABASE_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_DATA_PATH" "${OMERO_DATA_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_USER_DATA_PATH" "${OMERO_USER_DATA_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_UPLOAD_PATH" "${OMERO_UPLOAD_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_SERVER_VAR_PATH" "${OMERO_SERVER_VAR_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_SERVER_LOGS_PATH" "${OMERO_SERVER_LOGS_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_WEB_LOGS_PATH" "${OMERO_WEB_LOGS_PATH}"
+    persist_env_var "${env_file_path}" "OMERO_WEB_SUPERVISOR_LOGS_PATH" "${OMERO_WEB_SUPERVISOR_LOGS_PATH}"
+    persist_env_var "${env_file_path}" "PROMETHEUS_DATA_PATH" "${PROMETHEUS_DATA_PATH}"
+    persist_env_var "${env_file_path}" "GRAFANA_DATA_PATH" "${GRAFANA_DATA_PATH}"
 }
+
 
 copy_repo_files() {
     local clone_path="$1"
@@ -502,14 +518,26 @@ fi
 DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
+DEFAULT_OMERO_DATA_PATH="${OMERO_DATA_PATH}"
 
 OMERO_INSTALLATION_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
 OMERO_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
 OMERO_PLUGIN_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
+OMERO_DATA_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATA_PATH}" "OMERO data installation path")"
+
+OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
+OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
+OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
+OMERO_SERVER_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_server_logs"
+OMERO_WEB_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_logs"
+OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
+PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
+GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
 require_config_var "OMERO_PLUGIN_DATABASE_PATH"
+require_config_var "OMERO_DATA_PATH"
 
 if ! validate_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Invalid OMERO_INSTALLATION_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_INSTALLATION_PATH}" >&2
@@ -526,10 +554,16 @@ if ! validate_installation_path "${OMERO_PLUGIN_DATABASE_PATH}"; then
     exit 1
 fi
 
+if ! validate_installation_path "${OMERO_DATA_PATH}"; then
+    echo "ERROR: Invalid OMERO_DATA_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_DATA_PATH}" >&2
+    exit 1
+fi
+
 echo "Using installation paths from ${SCRIPT_ENV_FILE}"
 echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
+echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
@@ -541,6 +575,10 @@ if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
 fi
 
 if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
+    exit 1
+fi
+
+if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then
     exit 1
 fi
 
@@ -576,20 +614,11 @@ else
     fi
 fi
 
-echo "Removing stale OMERO repository lock files from the OMERO volume..."
-
-PROJECT_NAME="$(basename "${OMERO_INSTALLATION_PATH}")"
-OMERO_VOLUME="${PROJECT_NAME}_omero"
-
-if docker volume inspect "${OMERO_VOLUME}" >/dev/null 2>&1; then
-    CLEANUP_IMAGE="alpine:3.21"
-    docker run --rm \
-        -v "${OMERO_VOLUME}:/OMERO" \
-        "${CLEANUP_IMAGE}" \
-        sh -lc 'find /OMERO -name "*.lock" -delete || true'
-    docker image rm "${CLEANUP_IMAGE}" >/dev/null 2>&1 || true
+echo "Removing stale OMERO repository lock files from OMERO user data path..."
+if [ -d "${OMERO_USER_DATA_PATH}" ]; then
+    find "${OMERO_USER_DATA_PATH}" -name "*.lock" -delete || true
 else
-    echo "WARNING: Volume ${OMERO_VOLUME} not found; skipping lock cleanup."
+    echo "WARNING: OMERO user data path ${OMERO_USER_DATA_PATH} not found; skipping lock cleanup."
 fi
 
 # echo "Removing dangling images..."
