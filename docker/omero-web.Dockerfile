@@ -20,8 +20,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # - Keep disabled by default for deterministic builds.
 # - Enable only for vulnerability testing.
 # - APPLY_DNF_UPDATES is kept as a backward-compatible alias.
-ARG APPLY_OMEROWEB_DNF_UPDATES=1
-ARG APPLY_DNF_UPDATES=1
+ARG APPLY_OMEROWEB_DNF_UPDATES=0
+ARG APPLY_DNF_UPDATES=0
 
 # Basic hardening for pip (no behavior change expected)
 # -----------------------------------------------------
