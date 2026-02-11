@@ -1,10 +1,7 @@
-# ===========================================================================
 # pg-maintenance — lightweight cron sidecar for safe PostgreSQL maintenance
-# ===========================================================================
-# Uses the same postgres:16.11 image as the database containers so the client
-# tools (vacuumdb, reindexdb, pg_isready) match the server version exactly
-# ===========================================================================
 
+# Pull image (needs to match the tag in docker-compose.yml)
+# ---------------------------------------------------------
 FROM postgres:16.11
 
 # Install cron
