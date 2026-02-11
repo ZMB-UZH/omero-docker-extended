@@ -31,7 +31,7 @@ RUN set -euo pipefail; \
     fi
 
 # Ensure stable OMERO.server path points at the versioned installation
-# -------------------------------------------------------------------
+# --------------------------------------------------------------------
 RUN set -euo pipefail; \
     SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${SERVER_DIR}" ]]; then \
