@@ -298,7 +298,7 @@ resolve_delete_images_choice() {
         return 0
     fi
 
-    echo "Do you want to delete all container images? Y/n (Default: n)"
+    echo "Delete all container images? Y/n (Default: n)"
 
     while true; do
         printf '> ' > /dev/tty
@@ -317,6 +317,59 @@ resolve_delete_images_choice() {
 
         if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
             KEEP_IMAGES=0
+            return 0
+        fi
+
+        echo "Wrong choice. Please type Y or n." > /dev/tty
+    done
+}
+
+resolve_path_with_default_prompt() {
+    local default_path="$1"
+    local path_label="$2"
+    local reply=""
+    local chosen_path=""
+
+    if [ ! -r /dev/tty ]; then
+        printf '%s' "${default_path}"
+        return 0
+    fi
+
+    while true; do
+        echo "Do you want to use the default ${path_label} (${default_path})? Y/n (Default: n)" > /dev/tty
+        printf '> ' > /dev/tty
+
+        if ! IFS= read -r reply < /dev/tty; then
+            printf '%s' "${default_path}"
+            return 0
+        fi
+
+        reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
+
+        if [ -z "${reply}" ] || [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
+            while true; do
+                printf '%s: (Default: %s) ' "${path_label}" "${default_path}" > /dev/tty
+
+                if ! IFS= read -r chosen_path < /dev/tty; then
+                    printf '%s' "${default_path}"
+                    return 0
+                fi
+
+                if [ -z "${chosen_path}" ]; then
+                    chosen_path="${default_path}"
+                fi
+
+                if is_valid_linux_path "${chosen_path}"; then
+                    printf '%s' "${chosen_path}"
+                    return 0
+                fi
+
+                echo "Wrong ${path_label}, try again: (Default: ${default_path})" > /dev/tty
+            done
+        fi
+
+        if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
+            printf '%s' "${default_path}"
             return 0
         fi
 
@@ -390,7 +443,7 @@ resolve_cache_build_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Do you want to build using Docker cache? Y/n (Default: y)" "yes")"
+    reply="$(prompt_yes_no "Build using Docker cache? Y/n (Default: Y)" "yes")"
     if [ "${reply}" = "yes" ]; then
         USE_CACHE_BUILD=1
     else
@@ -424,7 +477,7 @@ resolve_start_containers_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Do you want to start containers after build? Y/n (Default: y)" "yes")"
+    reply="$(prompt_yes_no "Start containers after build? Y/n (Default: Y)" "yes")"
     if [ "${reply}" = "yes" ]; then
         START_CONTAINERS=1
     else
@@ -445,6 +498,14 @@ fi
 if ! resolve_start_containers_choice; then
     exit 1
 fi
+
+DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
+DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
+DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
+
+OMERO_INSTALLATION_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
+OMERO_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
+OMERO_PLUGIN_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
 
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
