@@ -280,7 +280,20 @@ run_probe_with_shell() {
 inspect_image_summary() {
   local image="$1"
   docker image inspect "$image" --format \
-    'id={{.Id}}\nrepoTags={{json .RepoTags}}\ncreated={{.Created}}\nos={{.Os}}\narchitecture={{.Architecture}}\nvariant={{with index . "Variant"}}{{.}}{{else}}N/A{{end}}\nentrypoint={{with index . "Config"}}{{with index . "Entrypoint"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}\ncmd={{with index . "Config"}}{{with index . "Cmd"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}'
+    'id={{.Id}}
+repoTags={{json .RepoTags}}
+created={{.Created}}
+os={{.Os}}
+architecture={{.Architecture}}
+variant={{with index . "Variant"}}{{.}}{{else}}N/A{{end}}
+entrypoint={{with index . "Config"}}{{with index . "Entrypoint"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
+cmd={{with index . "Config"}}{{with index . "Cmd"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
+user={{with index . "Config"}}{{with .User}}{{.}}{{else}}null{{end}}{{else}}null{{end}}
+workingDir={{with index . "Config"}}{{with .WorkingDir}}{{.}}{{else}}null{{end}}{{else}}null{{end}}
+exposedPorts={{with index . "Config"}}{{with .ExposedPorts}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
+volumes={{with index . "Config"}}{{with .Volumes}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
+healthcheck={{with index . "Config"}}{{with .Healthcheck}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
+labels={{with index . "Config"}}{{with .Labels}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}'
 }
 
 run_self_test() {
@@ -462,7 +475,7 @@ main() {
   echo
   log_info "Text report written: $txt_report"
   log_info "Raw probe output: $raw_file"
-  log_info "Probe stderr log: ${raw_file}.stderr"
+  log_info "Probe stderr log: $stderr_file"
   log_info "Image inspect summary: $inspect_file"
 }
 
