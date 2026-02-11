@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-# Experimental Docker installation helper for Debian 13.
-# ------------------------------------------------------
+# Experimental Docker installation script for Debian 13
+
 # This script follows Docker's official Debian installation guidance while adding
 # defensive checks around existing Docker packages and duplicate apt repository
 # definitions. It is intentionally verbose and fails fast on errors.
+
+# For the official guide, check: https://docs.docker.com/engine/install/debian/
 
 set -euo pipefail
 
