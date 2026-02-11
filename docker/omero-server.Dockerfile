@@ -79,6 +79,10 @@ RUN set -euo pipefail; \
             wheel \
             "cryptography>=42.0.0" \
             "urllib3>=2.6.3"; \
+        "${VENV_DIR}/bin/python" - <<'PYCHECK' \
+import pkg_resources
+print(f"pkg_resources import check succeeded: {pkg_resources.__file__}")
+PYCHECK
     done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
@@ -306,6 +310,11 @@ COPY startup/01-set-script-python.sh /startup/01-set-script-python.sh
 RUN set -euo pipefail; \
     chown root:root /startup/01-set-script-python.sh; \
     chmod 0555 /startup/01-set-script-python.sh
+
+COPY startup/02-ensure-python-packaging.sh /startup/02-ensure-python-packaging.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/02-ensure-python-packaging.sh; \
+    chmod 0555 /startup/02-ensure-python-packaging.sh
 
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
