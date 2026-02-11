@@ -52,13 +52,59 @@ is_valid_linux_path() {
     return 0
 }
 
+validate_installation_path() {
+    local install_path="$1"
+    local parent_dir=""
+
+    if ! is_valid_linux_path "${install_path}"; then
+        return 1
+    fi
+
+    if [ -e "${install_path}" ] && [ ! -d "${install_path}" ]; then
+        echo "Path exists but is not a directory: ${install_path}" >&2
+        return 1
+    fi
+
+    if [ -d "${install_path}" ] && [ ! -w "${install_path}" ]; then
+        echo "Directory is not writable: ${install_path}" >&2
+        return 1
+    fi
+
+    if [ -d "${install_path}" ]; then
+        return 0
+    fi
+
+    parent_dir="$(dirname "${install_path}")"
+    if [ ! -d "${parent_dir}" ]; then
+        echo "Parent directory does not exist: ${parent_dir}" >&2
+        return 1
+    fi
+
+    if [ ! -w "${parent_dir}" ]; then
+        echo "Parent directory is not writable: ${parent_dir}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 ensure_installation_path() {
     local install_path="$1"
 
     if [ ! -d "${install_path}" ]; then
-        echo "OMERO installation path does not exist. Creating: ${install_path}"
-        install -d -m 0755 "${install_path}"
+        echo "OMERO installation path does not exist. Creating with mode 0755: ${install_path}"
+        if ! install -d -m 0755 "${install_path}"; then
+            echo "ERROR: Failed to create OMERO installation path: ${install_path}" >&2
+            return 1
+        fi
     fi
+
+    if [ ! -w "${install_path}" ]; then
+        echo "ERROR: OMERO installation path is not writable: ${install_path}" >&2
+        return 1
+    fi
+
+    return 0
 }
 
 echo "Do you want to delete all container images? Y/n (Default: n)"
@@ -86,12 +132,13 @@ while true; do
     if [ -z "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "n" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "no" ]; then
         while true; do
             read -r -p "OMERO installation path: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH}) " OMERO_INSTALLATION_PATH_REPLY
+
             if [ -z "${OMERO_INSTALLATION_PATH_REPLY}" ]; then
-                OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
-                break
+                OMERO_INSTALLATION_PATH_REPLY="${DEFAULT_OMERO_INSTALLATION_PATH}"
             fi
 
-            if is_valid_linux_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
+            if validate_installation_path "${OMERO_INSTALLATION_PATH_REPLY}" \
+                && ensure_installation_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
                 OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH_REPLY}"
                 break
             fi
@@ -100,14 +147,22 @@ while true; do
         done
         break
     elif [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
-        OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
-        break
+        if validate_installation_path "${DEFAULT_OMERO_INSTALLATION_PATH}" \
+            && ensure_installation_path "${DEFAULT_OMERO_INSTALLATION_PATH}"; then
+            OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
+            break
+        fi
+
+        echo "Wrong OMERO installation path, try again: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH})"
     else
         echo "Wrong choice. Please type Y or n."
     fi
 done
 
-ensure_installation_path "${OMERO_INSTALLATION_PATH}"
+if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
+    echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
+    exit 1
+fi
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
 # Workflow
@@ -194,4 +249,3 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
-
