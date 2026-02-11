@@ -154,7 +154,6 @@ RUN set -euo pipefail; \
 # Install runtime diagnostics + git
 # ---------------------------------
 RUN set -euo pipefail; \
-# The following 3 lines are NOT SUGGESTED!! Use ONLY for vulnerability testing!!
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
         dnf -y update --security || dnf -y update; \
     fi; \
