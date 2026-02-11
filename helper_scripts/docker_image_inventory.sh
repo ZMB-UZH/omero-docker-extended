@@ -280,7 +280,7 @@ run_probe_with_shell() {
 inspect_image_summary() {
   local image="$1"
   docker image inspect "$image" --format \
-    'id={{.Id}}\nrepoTags={{json .RepoTags}}\ncreated={{.Created}}\nos={{.Os}}\narchitecture={{.Architecture}}\nvariant={{.Variant}}\nentrypoint={{json .Config.Entrypoint}}\ncmd={{json .Config.Cmd}}'
+    'id={{.Id}}\nrepoTags={{json .RepoTags}}\ncreated={{.Created}}\nos={{.Os}}\narchitecture={{.Architecture}}\nvariant={{with index . "Variant"}}{{.}}{{else}}N/A{{end}}\nentrypoint={{json .Config.Entrypoint}}\ncmd={{json .Config.Cmd}}'
 }
 
 run_self_test() {
