@@ -348,6 +348,11 @@ RUN set -euo pipefail; \
     chown root:root /startup/99-job-service-bootstrap.sh; \
     chmod 0555 /startup/99-job-service-bootstrap.sh
 
+COPY startup/omero-cli-safe.sh /startup/omero-cli-safe.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/omero-cli-safe.sh; \
+    chmod 0555 /startup/omero-cli-safe.sh
+
 # Ensure OMERO server runtime directories are owned by omero-server
 # so named volumes inherit correct permissions on first run.
 # ----------------------------------------------------------
