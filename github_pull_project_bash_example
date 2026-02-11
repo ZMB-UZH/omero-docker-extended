@@ -267,22 +267,65 @@ copy_repo_files() {
     find "${clone_path}" -mindepth 1 -maxdepth 1 ! -name "XTOmeroConnector.py" -exec mv {} "${target_path}" \;
 }
 
-echo "Do you want to delete all container images? Y/n (Default: n)"
+resolve_delete_images_choice() {
+    local reply=""
+    local override_choice="${DELETE_IMAGES_CHOICE:-}"
 
-while true; do
-    read -r -p "> " DELETE_IMAGES_REPLY
-    DELETE_IMAGES_REPLY="$(printf '%s' "${DELETE_IMAGES_REPLY}" | tr '[:upper:]' '[:lower:]')"
-
-    if [ -z "${DELETE_IMAGES_REPLY}" ] || [ "${DELETE_IMAGES_REPLY}" = "n" ] || [ "${DELETE_IMAGES_REPLY}" = "no" ]; then
-        KEEP_IMAGES=1
-        break
-    elif [ "${DELETE_IMAGES_REPLY}" = "y" ] || [ "${DELETE_IMAGES_REPLY}" = "yes" ]; then
-        KEEP_IMAGES=0
-        break
-    else
-        echo "Wrong choice. Please type Y or n."
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                KEEP_IMAGES=0
+                echo "DELETE_IMAGES_CHOICE=${override_choice}: removing container images."
+                return 0
+                ;;
+            n|no)
+                KEEP_IMAGES=1
+                echo "DELETE_IMAGES_CHOICE=${override_choice}: keeping container images."
+                return 0
+                ;;
+            *)
+                echo "ERROR: DELETE_IMAGES_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
     fi
-done
+
+    if [ ! -r /dev/tty ]; then
+        KEEP_IMAGES=1
+        echo "WARNING: /dev/tty is not available; defaulting to keep existing images." >&2
+        return 0
+    fi
+
+    echo "Do you want to delete all container images? Y/n (Default: n)"
+
+    while true; do
+        printf '> ' > /dev/tty
+        if ! IFS= read -r reply < /dev/tty; then
+            KEEP_IMAGES=1
+            echo "WARNING: Could not read confirmation input; defaulting to keep existing images." >&2
+            return 0
+        fi
+
+        reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
+
+        if [ -z "${reply}" ] || [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
+            KEEP_IMAGES=1
+            return 0
+        fi
+
+        if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
+            KEEP_IMAGES=0
+            return 0
+        fi
+
+        echo "Wrong choice. Please type Y or n." > /dev/tty
+    done
+}
+
+if ! resolve_delete_images_choice; then
+    exit 1
+fi
 
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
