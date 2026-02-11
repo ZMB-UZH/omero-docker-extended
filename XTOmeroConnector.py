@@ -29,20 +29,11 @@ import urllib.parse
 import urllib.error
 import http.cookiejar
 
-from omero_plugin_common.env_utils import (
-    ENV_FILE_OMERO_CELERY,
-    get_float_env,
-    get_int_env,
-)
-
-EXPORT_TIMEOUT = get_int_env(
-    "OMERO_IMS_EXPORT_TIMEOUT",
-    env_file=ENV_FILE_OMERO_CELERY,
-)
-EXPORT_POLL_INTERVAL = get_float_env(
-    "OMERO_IMS_EXPORT_POLL_INTERVAL",
-    env_file=ENV_FILE_OMERO_CELERY,
-)
+# Default timeout/poll values for client-side export polling.
+# These must NOT depend on server-side packages (omero_plugin_common)
+# because this script runs inside Imaris on the user's machine.
+EXPORT_TIMEOUT = 3600       # seconds
+EXPORT_POLL_INTERVAL = 2.0  # seconds
 _XT_LOG_PATH = None
 
 
