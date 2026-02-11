@@ -4,7 +4,8 @@
 # -------------
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_ENV_FILE="${SCRIPT_DIR}/env/installation_paths.env"
+SCRIPT_ENV_FILE=""
+INSTALLATION_ENV_FILE_OVERRIDE="${INSTALLATION_PATHS_ENV_FILE:-}"
 
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
@@ -13,6 +14,59 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
 set -euo pipefail
 
+create_default_installation_env_file() {
+    local target_env_file="$1"
+    local default_installation_path="${SCRIPT_DIR}"
+    local default_database_path="${default_installation_path%/}/database"
+    local default_plugin_database_path="${default_installation_path%/}/plugin_database"
+
+    if ! install -d -m 0755 "$(dirname "${target_env_file}")"; then
+        echo "ERROR: Failed to create directory for default configuration file: ${target_env_file}" >&2
+        return 1
+    fi
+
+    cat > "${target_env_file}" <<EOF
+OMERO_INSTALLATION_PATH=${default_installation_path}
+OMERO_DATABASE_PATH=${default_database_path}
+OMERO_PLUGIN_DATABASE_PATH=${default_plugin_database_path}
+EOF
+
+    echo "WARNING: installation_paths.env was missing. Created defaults at ${target_env_file}" >&2
+    echo "WARNING: Review and edit ${target_env_file} before running in production." >&2
+
+    SCRIPT_ENV_FILE="${target_env_file}"
+    return 0
+}
+
+resolve_script_env_file() {
+    local -a candidate_files=()
+    local candidate_file=""
+
+    if [ -n "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
+        candidate_files+=("${INSTALLATION_ENV_FILE_OVERRIDE}")
+    fi
+
+    candidate_files+=(
+        "${SCRIPT_DIR}/env/installation_paths.env"
+        "${SCRIPT_DIR}/../env/installation_paths.env"
+        "${PWD}/env/installation_paths.env"
+    )
+
+    for candidate_file in "${candidate_files[@]}"; do
+        if [ -f "${candidate_file}"; then
+            SCRIPT_ENV_FILE="${candidate_file}"
+            return 0
+        fi
+    done
+
+    if [ -n "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
+        echo "ERROR: INSTALLATION_PATHS_ENV_FILE was provided but does not exist: ${INSTALLATION_ENV_FILE_OVERRIDE}" >&2
+        return 1
+    fi
+
+    create_default_installation_env_file "${SCRIPT_DIR}/env/installation_paths.env"
+}
+
 # Bash requirement (warning)
 # --------------------------
 if [ -z "${BASH_VERSION:-}" ]; then
@@ -20,8 +74,7 @@ if [ -z "${BASH_VERSION:-}" ]; then
     exit 1
 fi
 
-if [ ! -f "${SCRIPT_ENV_FILE}" ]; then
-    echo "ERROR: Missing required configuration file: ${SCRIPT_ENV_FILE}" >&2
+if ! resolve_script_env_file; then
     exit 1
 fi
 
