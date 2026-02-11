@@ -4,12 +4,7 @@ set -euo pipefail
 # Ensure the OMERO.web log directory exists before Django configures
 # RotatingFileHandler. This avoids startup failure when LOGDIR points to
 # a writable runtime path (e.g. /tmp/omero-web-logs).
-log_dir="${CONFIG_omero_web_logdir:-}"
-
-if [[ -z "${log_dir}" ]]; then
-    echo "[startup] CONFIG_omero_web_logdir is not set; skipping explicit log directory creation."
-    exit 0
-fi
+log_dir="${CONFIG_omero_web_logdir:-/tmp/omero-web-logs}"
 
 mkdir -p "${log_dir}"
 
@@ -24,3 +19,6 @@ if [[ ! -w "${log_dir}" ]]; then
 fi
 
 echo "[startup] OMERO.web log directory ready: ${log_dir}"
+if [[ -z "${CONFIG_omero_web_logdir:-}" ]]; then
+    echo "[startup] CONFIG_omero_web_logdir not set; using fallback ${log_dir} (must match omero-web.config)."
+fi
