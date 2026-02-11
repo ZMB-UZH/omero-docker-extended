@@ -8,6 +8,8 @@ OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
+OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
+OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
@@ -107,6 +109,31 @@ ensure_installation_path() {
     return 0
 }
 
+ensure_data_path() {
+    local data_path="$1"
+    local path_label="$2"
+
+    if [ -e "${data_path}" ] && [ ! -d "${data_path}" ]; then
+        echo "ERROR: ${path_label} exists but is not a directory: ${data_path}" >&2
+        return 1
+    fi
+
+    if [ ! -d "${data_path}" ]; then
+        echo "${path_label} does not exist. Creating with mode 0755: ${data_path}"
+        if ! install -d -m 0755 "${data_path}"; then
+            echo "ERROR: Failed to create ${path_label}: ${data_path}" >&2
+            return 1
+        fi
+    fi
+
+    if [ ! -w "${data_path}" ]; then
+        echo "ERROR: ${path_label} is not writable: ${data_path}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 echo "Do you want to delete all container images? Y/n (Default: n)"
 
 while true; do
@@ -163,6 +190,18 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
     exit 1
 fi
+
+OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
+OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
+
+if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
+    exit 1
+fi
+
+if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
+    exit 1
+fi
+
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
 # Workflow
