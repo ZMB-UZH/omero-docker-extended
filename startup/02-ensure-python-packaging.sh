@@ -22,9 +22,7 @@ for venv_dir in "${VENV_DIRS[@]}"; do
         exit 1
     fi
 
-    echo "Ensuring setuptools/pkg_resources is available in ${venv_dir}"
-    "${python_bin}" -m pip install --no-cache-dir --upgrade "setuptools>=78.1.1"
-
+    echo "Validating pkg_resources availability in ${venv_dir}"
     "${python_bin}" - <<'PY'
 import pkg_resources
 print(f"pkg_resources import check succeeded: {pkg_resources.__file__}")

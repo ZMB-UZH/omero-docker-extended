@@ -79,6 +79,10 @@ RUN set -euo pipefail; \
             wheel \
             "cryptography>=42.0.0" \
             "urllib3>=2.6.3"; \
+        "${VENV_DIR}/bin/python" - <<'PYCHECK' \
+import pkg_resources
+print(f"pkg_resources import check succeeded: {pkg_resources.__file__}")
+PYCHECK
     done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
