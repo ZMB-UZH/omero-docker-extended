@@ -307,6 +307,11 @@ RUN set -euo pipefail; \
     chown root:root /startup/01-set-script-python.sh; \
     chmod 0555 /startup/01-set-script-python.sh
 
+COPY startup/02-ensure-python-packaging.sh /startup/02-ensure-python-packaging.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/02-ensure-python-packaging.sh; \
+    chmod 0555 /startup/02-ensure-python-packaging.sh
+
 COPY startup/99-job-service-bootstrap.sh /startup/99-job-service-bootstrap.sh
 RUN set -euo pipefail; \
     chown root:root /startup/99-job-service-bootstrap.sh; \
