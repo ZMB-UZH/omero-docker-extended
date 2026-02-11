@@ -4,26 +4,12 @@
 # -------------
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_ENV_FILE="${SCRIPT_DIR}/env/github_pull_project.env"
+SCRIPT_ENV_FILE="${SCRIPT_DIR}/env/installation_paths.env"
 
-DEFAULT_OMERO_INSTALLATION_PATH="/opt/omero/"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
-
-# Load optional configuration values from env/github_pull_project.env.
-if [ -f "${SCRIPT_ENV_FILE}" ]; then
-    # shellcheck disable=SC1090
-    . "${SCRIPT_ENV_FILE}"
-fi
-
-OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH:-${DEFAULT_OMERO_INSTALLATION_PATH}}"
-COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
-DEFAULT_OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
-DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
-OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH:-${DEFAULT_OMERO_DATABASE_PATH}}"
-OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH:-${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}}"
 
 set -euo pipefail
 
@@ -33,6 +19,31 @@ if [ -z "${BASH_VERSION:-}" ]; then
     echo "ERROR: This script MUST be run with bash. Run: sudo bash ./github_pull_project" >&2
     exit 1
 fi
+
+if [ ! -f "${SCRIPT_ENV_FILE}" ]; then
+    echo "ERROR: Missing required configuration file: ${SCRIPT_ENV_FILE}" >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+. "${SCRIPT_ENV_FILE}"
+
+require_config_var() {
+    local variable_name="$1"
+    local variable_value="${!variable_name:-}"
+
+    if [ -z "${variable_value}" ]; then
+        echo "ERROR: Missing required configuration variable ${variable_name} in ${SCRIPT_ENV_FILE}" >&2
+        return 1
+    fi
+
+    if ! is_valid_linux_path "${variable_value}"; then
+        echo "ERROR: ${variable_name} must be a valid absolute Linux path: ${variable_value}" >&2
+        return 1
+    fi
+
+    return 0
+}
 
 # Root-only safety check
 # ----------------------
@@ -172,75 +183,29 @@ while true; do
     fi
 done
 
-echo "Do you want to use the default OMERO installation path (${DEFAULT_OMERO_INSTALLATION_PATH})? Y/n (Default: n)"
-while true; do
-    read -r -p "> " USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY
-    USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY="$(printf '%s' "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" | tr '[:upper:]' '[:lower:]')"
+require_config_var "OMERO_INSTALLATION_PATH"
+require_config_var "OMERO_DATABASE_PATH"
+require_config_var "OMERO_PLUGIN_DATABASE_PATH"
 
-    if [ -z "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "n" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "no" ]; then
-        while true; do
-            read -r -p "OMERO installation path: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH}) " OMERO_INSTALLATION_PATH_REPLY
+if ! validate_installation_path "${OMERO_INSTALLATION_PATH}"; then
+    echo "ERROR: Invalid OMERO_INSTALLATION_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_INSTALLATION_PATH}" >&2
+    exit 1
+fi
 
-            if [ -z "${OMERO_INSTALLATION_PATH_REPLY}" ]; then
-                OMERO_INSTALLATION_PATH_REPLY="${DEFAULT_OMERO_INSTALLATION_PATH}"
-            fi
+if ! validate_installation_path "${OMERO_DATABASE_PATH}"; then
+    echo "ERROR: Invalid OMERO_DATABASE_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_DATABASE_PATH}" >&2
+    exit 1
+fi
 
-            if validate_installation_path "${OMERO_INSTALLATION_PATH_REPLY}" \
-                && ensure_installation_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
-                OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH_REPLY}"
-                break
-            fi
+if ! validate_installation_path "${OMERO_PLUGIN_DATABASE_PATH}"; then
+    echo "ERROR: Invalid OMERO_PLUGIN_DATABASE_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_PLUGIN_DATABASE_PATH}" >&2
+    exit 1
+fi
 
-            echo "Wrong OMERO installation path, try again: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH})"
-        done
-
-        DEFAULT_OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
-        DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
-
-        while true; do
-            read -r -p "OMERO database installation path: (Default: ${DEFAULT_OMERO_DATABASE_PATH}) " OMERO_DATABASE_PATH_REPLY
-
-            if [ -z "${OMERO_DATABASE_PATH_REPLY}" ]; then
-                OMERO_DATABASE_PATH_REPLY="${DEFAULT_OMERO_DATABASE_PATH}"
-            fi
-
-            if validate_installation_path "${OMERO_DATABASE_PATH_REPLY}" \
-                && ensure_data_path "${OMERO_DATABASE_PATH_REPLY}" "OMERO database directory"; then
-                OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH_REPLY}"
-                break
-            fi
-
-            echo "Wrong OMERO database installation path, try again: (Default: ${DEFAULT_OMERO_DATABASE_PATH})"
-        done
-
-        while true; do
-            read -r -p "OMERO plugin database installation path: (Default: ${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}) " OMERO_PLUGIN_DATABASE_PATH_REPLY
-
-            if [ -z "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" ]; then
-                OMERO_PLUGIN_DATABASE_PATH_REPLY="${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}"
-            fi
-
-            if validate_installation_path "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" \
-                && ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" "OMP plugin database directory"; then
-                OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH_REPLY}"
-                break
-            fi
-
-            echo "Wrong OMERO plugin database installation path, try again: (Default: ${DEFAULT_OMERO_PLUGIN_DATABASE_PATH})"
-        done
-        break
-    elif [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
-        if validate_installation_path "${DEFAULT_OMERO_INSTALLATION_PATH}" \
-            && ensure_installation_path "${DEFAULT_OMERO_INSTALLATION_PATH}"; then
-            OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
-            break
-        fi
-
-        echo "Wrong OMERO installation path, try again: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH})"
-    else
-        echo "Wrong choice. Please type Y or n."
-    fi
-done
+echo "Using installation paths from ${SCRIPT_ENV_FILE}"
+echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
+echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
+echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
