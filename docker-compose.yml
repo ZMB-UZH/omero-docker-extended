@@ -294,9 +294,9 @@ services:
     env_file:
       - ./env/omeroserver.env
       - ./env/omero-celery.env
-    # Startup certificate generation needs write access to /OMERO/certs on the
-    # host-mounted OMERO data path.
-    user: "0:0"
+    # Run as the container's non-root OMERO service user. Startup scripts that
+    # call the OMERO CLI must never execute as root.
+    user: "omero-server:omero-server"
     hostname: omeroserver
     networks:
       omero:
