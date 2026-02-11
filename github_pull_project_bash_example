@@ -12,6 +12,8 @@ REPO_BRANCH="test"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
+COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-4}"
+COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
 
 set -euo pipefail
 
@@ -147,6 +149,47 @@ require_config_var() {
     fi
 
     return 0
+}
+
+validate_retry_config() {
+    if ! [[ "${COMPOSE_UP_RETRIES}" =~ ^[0-9]+$ ]] || [ "${COMPOSE_UP_RETRIES}" -lt 1 ]; then
+        echo "ERROR: COMPOSE_UP_RETRIES must be an integer >= 1. Got: ${COMPOSE_UP_RETRIES}" >&2
+        return 1
+    fi
+
+    if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+compose_up_with_retries() {
+    local compose_file="$1"
+    local attempt=1
+
+    while [ "${attempt}" -le "${COMPOSE_UP_RETRIES}" ]; do
+        echo "Starting containers (attempt ${attempt}/${COMPOSE_UP_RETRIES})..."
+
+        if docker compose -f "${compose_file}" up -d; then
+            echo "Containers started successfully."
+            return 0
+        fi
+
+        if [ "${attempt}" -ge "${COMPOSE_UP_RETRIES}" ]; then
+            echo "ERROR: docker compose up failed after ${COMPOSE_UP_RETRIES} attempt(s)." >&2
+            echo "ERROR: This is often a transient image-pull network failure (connection reset/timeouts)." >&2
+            echo "ERROR: Check internet/firewall/proxy access to registry-1.docker.io and retry." >&2
+            return 1
+        fi
+
+        echo "WARNING: docker compose up failed on attempt ${attempt}. Retrying in ${COMPOSE_UP_RETRY_DELAY_SECONDS}s..." >&2
+        sleep "${COMPOSE_UP_RETRY_DELAY_SECONDS}"
+        attempt=$((attempt + 1))
+    done
+
+    return 1
 }
 
 # Root-only safety check
@@ -534,6 +577,10 @@ OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
 PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
 GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 
+if ! validate_retry_config; then
+    exit 1
+fi
+
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
 require_config_var "OMERO_PLUGIN_DATABASE_PATH"
@@ -653,8 +700,7 @@ else
 fi
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
-    echo "Starting containers..."
-    docker compose -f "${COMPOSE_FILE}" up -d
+    compose_up_with_retries "${COMPOSE_FILE}"
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi
