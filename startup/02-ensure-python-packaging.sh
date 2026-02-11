@@ -27,15 +27,13 @@ for venv_dir in "${VENV_DIRS[@]}"; do
     if ! "${python_bin}" - <<'PY'
 import importlib.metadata as metadata
 import setuptools
-import pkg_resources
 
 for package_name in ("pip", "setuptools", "wheel"):
     print(f"{package_name}={metadata.version(package_name)}")
 
 # setuptools is imported explicitly so this check continues to validate
-# the package is importable even if deprecated helper modules are removed.
+# the package is importable.
 print(f"setuptools_import={setuptools.__name__}")
-print(f"pkg_resources_import={pkg_resources.__name__}")
 PY
     then
         echo "Packaging tools missing in ${venv_dir}; attempting recovery with pip" >&2
@@ -47,15 +45,13 @@ PY
         "${python_bin}" - <<'PY'
 import importlib.metadata as metadata
 import setuptools
-import pkg_resources
 
 for package_name in ("pip", "setuptools", "wheel"):
     print(f"Recovered {package_name}={metadata.version(package_name)}")
 
 # setuptools is imported explicitly so this check continues to validate
-# the package is importable even if deprecated helper modules are removed.
+# the package is importable.
 print(f"Recovered setuptools_import={setuptools.__name__}")
-print(f"Recovered pkg_resources_import={pkg_resources.__name__}")
 PY
     fi
 done
