@@ -78,7 +78,7 @@ while true; do
     fi
 done
 
-echo "Do you want to use the default OMERO installation path? Y/n (Default: n)"
+echo "Do you want to use the default OMERO installation path (${DEFAULT_OMERO_INSTALLATION_PATH})? Y/n (Default: n)"
 read -r -p "> " USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY
 USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY="$(printf '%s' "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" | tr '[:upper:]' '[:lower:]')"
 
