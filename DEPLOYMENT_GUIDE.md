@@ -99,9 +99,10 @@ Default credentials (change these!):
 
 2. **OMERO Server**:
    - Waits for init container to complete
-   - Runs `00-check-and-fix-permissions.sh`
-   - Verifies permissions are correct
-   - Generates SSL certificates
+   - Runs `startup/10-server-bootstrap.sh`
+   - Verifies writable runtime paths
+   - Configures script Python + cert SANs
+   - Schedules background bootstrap tasks
    - Starts OMERO.server
    - Becomes healthy ✓
 
