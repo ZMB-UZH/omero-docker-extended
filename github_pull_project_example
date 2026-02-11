@@ -79,27 +79,33 @@ while true; do
 done
 
 echo "Do you want to use the default OMERO installation path (${DEFAULT_OMERO_INSTALLATION_PATH})? Y/n (Default: n)"
-read -r -p "> " USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY
-USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY="$(printf '%s' "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" | tr '[:upper:]' '[:lower:]')"
+while true; do
+    read -r -p "> " USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY
+    USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY="$(printf '%s' "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" | tr '[:upper:]' '[:lower:]')"
 
-if [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
-    OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
-else
-    while true; do
-        read -r -p "OMERO installation path: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH}) " OMERO_INSTALLATION_PATH_REPLY
-        if [ -z "${OMERO_INSTALLATION_PATH_REPLY}" ]; then
-            OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
-            break
-        fi
+    if [ -z "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "n" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "no" ]; then
+        while true; do
+            read -r -p "OMERO installation path: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH}) " OMERO_INSTALLATION_PATH_REPLY
+            if [ -z "${OMERO_INSTALLATION_PATH_REPLY}" ]; then
+                OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
+                break
+            fi
 
-        if is_valid_linux_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
-            OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH_REPLY}"
-            break
-        fi
+            if is_valid_linux_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
+                OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH_REPLY}"
+                break
+            fi
 
-        echo "Wrong installation path, try again:"
-    done
-fi
+            echo "Wrong installation path, try again:"
+        done
+        break
+    elif [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
+        OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
+        break
+    else
+        echo "Wrong choice. Please enter Y or N."
+    fi
+done
 
 ensure_installation_path "${OMERO_INSTALLATION_PATH}"
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
@@ -188,5 +194,4 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
-
 
