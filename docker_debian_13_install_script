@@ -14,6 +14,7 @@ SCRIPT_NAME="$(basename "$0")"
 LOCKFILE="/var/lock/${SCRIPT_NAME}.lock"
 DOCKER_SOURCE_FILE="/etc/apt/sources.list.d/docker.sources"
 DOCKER_REPO_URI="https://download.docker.com/linux/debian"
+BACKUP_ROOT_DIR="/var/backups/${SCRIPT_NAME}"
 DRY_RUN="${DRY_RUN:-0}" # Set DRY_RUN=1 to print commands without changing the system.
 ALLOW_UNSUPPORTED_OS="${ALLOW_UNSUPPORTED_OS:-0}" # Set to 1 to bypass Debian-only guard for test environments.
 
@@ -137,8 +138,11 @@ remove_existing_docker_packages() {
 backup_file_if_exists() {
     local source_file="$1"
     local backup_file="$2"
+    local backup_dir
 
     if [ -f "${source_file}" ]; then
+        backup_dir="$(dirname "${backup_file}")"
+        run_with_sudo install -d -m 0755 "${backup_dir}"
         run_with_sudo cp "${source_file}" "${backup_file}"
         log_info "Backed up ${source_file} to ${backup_file}."
     fi
@@ -149,6 +153,7 @@ remove_duplicate_docker_repository_entries() {
     local timestamp
     local candidate
     local docker_repo_pattern
+    local backup_target
 
     timestamp="$(date +%Y%m%d%H%M%S)"
     docker_repo_pattern='download\.docker\.com/linux/debian'
@@ -156,7 +161,8 @@ remove_duplicate_docker_repository_entries() {
     # Remove dedicated Docker source files to ensure a single canonical file.
     for candidate in /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.sources; do
         if [ -f "${candidate}" ]; then
-            backup_file_if_exists "${candidate}" "${candidate}.bak.${timestamp}"
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
             run_with_sudo rm -f "${candidate}"
             log_info "Removed existing Docker apt source file ${candidate}."
         fi
@@ -165,7 +171,8 @@ remove_duplicate_docker_repository_entries() {
     # Comment out Docker lines in generic list files to avoid duplicate definitions.
     for candidate in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
         if [ -f "${candidate}" ] && grep -Eq "${docker_repo_pattern}" "${candidate}"; then
-            backup_file_if_exists "${candidate}" "${candidate}.bak.${timestamp}"
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
 
             if [ "${DRY_RUN}" = "1" ]; then
                 printf "DRY_RUN> sudo sed -i '/%s/ s/^/# Disabled by %s: /' %s\n" "${docker_repo_pattern}" "${SCRIPT_NAME}" "${candidate}"
@@ -180,7 +187,8 @@ remove_duplicate_docker_repository_entries() {
     # Remove standalone .sources files (except target file) if they reference Docker.
     for candidate in /etc/apt/sources.list.d/*.sources; do
         if [ -f "${candidate}" ] && [ "${candidate}" != "${DOCKER_SOURCE_FILE}" ] && grep -Eq "${docker_repo_pattern}" "${candidate}"; then
-            backup_file_if_exists "${candidate}" "${candidate}.bak.${timestamp}"
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
             run_with_sudo rm -f "${candidate}"
             log_info "Removed duplicate Docker source definition in ${candidate}."
         fi
