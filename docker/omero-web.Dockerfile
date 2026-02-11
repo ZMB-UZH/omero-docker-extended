@@ -229,9 +229,10 @@ RUN set -euo pipefail; \
 # ---------------------------------------------------------------
 COPY supervisord.conf /etc/supervisord.conf
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
+COPY startup/41-prepare-omero-web-logdir.sh /startup/41-prepare-omero-web-logdir.sh
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
-    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh; \
+    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/41-prepare-omero-web-logdir.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
 # FIX: The base image's /startup/99-run.sh executes
