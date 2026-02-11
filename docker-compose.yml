@@ -247,7 +247,7 @@ services:
         aliases:
           - database
     volumes:
-      - ./omero_data/database:/var/lib/postgresql:rw
+      - ${OMERO_DATABASE_PATH:-./omero_data/database}:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
       interval: 10s
@@ -401,7 +401,7 @@ services:
         aliases:
           - database-plugin
     volumes:
-      - ./omero_data/plugin_database:/var/lib/postgresql:rw
+      - ${OMERO_PLUGIN_DATABASE_PATH:-./omero_data/plugin_database}:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 10s
