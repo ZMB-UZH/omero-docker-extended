@@ -12,10 +12,21 @@ CERT_PEM="${CERT_DIR}/server.pem"
 
 ensure_cert_directory_permissions() {
     if [ "$(id -u)" -ne 0 ]; then
-        if [ ! -d "${CERT_DIR}" ] || [ ! -w "${CERT_DIR}" ]; then
-            echo "[CERT] ERROR: ${CERT_DIR} must exist and be writable when startup does not run as root" >&2
+        if [ -d "${CERT_DIR}" ]; then
+            if [ ! -w "${CERT_DIR}" ]; then
+                echo "[CERT] ERROR: ${CERT_DIR} exists but is not writable for UID $(id -u)" >&2
+                exit 1
+            fi
+            return
+        fi
+
+        if [ ! -w "/OMERO" ]; then
+            echo "[CERT] ERROR: /OMERO is not writable for UID $(id -u); cannot create ${CERT_DIR}" >&2
             exit 1
         fi
+
+        mkdir -p "${CERT_DIR}"
+        chmod 0750 "${CERT_DIR}"
         return
     fi
 
