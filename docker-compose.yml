@@ -59,6 +59,9 @@ services:
   prometheus:
     image: "prom/prometheus:v3.5.1"
     restart: unless-stopped
+    # Host bind-mounted TSDB paths can be root-owned; run as root to avoid
+    # startup failures opening /prometheus/queries.active.
+    user: "0:0"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -291,6 +294,9 @@ services:
     env_file:
       - ./env/omeroserver.env
       - ./env/omero-celery.env
+    # Startup certificate generation needs write access to /OMERO/certs on the
+    # host-mounted OMERO data path.
+    user: "0:0"
     hostname: omeroserver
     networks:
       omero:
@@ -484,4 +490,3 @@ services:
 
 networks:
   omero:
-
