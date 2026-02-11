@@ -37,6 +37,8 @@ fi
 
 OMERO_BIN="${OMERO_DIR}/bin/omero"
 
+source /startup/omero-cli-safe.sh
+
 LOG_DIR="${OMERO_DIR}/var/log"
 mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/job-service-bootstrap.log"
@@ -86,7 +88,7 @@ fi
 
 echo "Waiting for OMERO.server (Glacier2) to accept logins..."
 for i in $(seq 1 180); do
-    if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user list >/dev/null 2>&1; then
+    if run_omero -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user list >/dev/null 2>&1; then
         echo "OMERO.server is ready."
         break
     fi
@@ -98,11 +100,11 @@ for i in $(seq 1 180); do
 done
 
 # Create user if missing
-if "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user info --user-name "${JOB_USER}" >/dev/null 2>&1; then
+if run_omero -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" -u root -w "${ROOTPASS}" user info --user-name "${JOB_USER}" >/dev/null 2>&1; then
     echo "User ${JOB_USER} already exists."
 else
     echo "Creating user ${JOB_USER} (non-interactive)..."
-    "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+    run_omero -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
         -u root -w "${ROOTPASS}" \
         user add "${JOB_USER}" Job Service \
         --group-name user \
@@ -131,12 +133,12 @@ fi
 if [[ "${JOIN_ALL_GROUPS}" == "1" ]]; then
     echo "Ensuring ${JOB_USER} is in all groups..."
 
-    GROUP_IDS="$("${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+    GROUP_IDS="$(run_omero -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
         -u root -w "${ROOTPASS}" \
         group list -q | awk '{print $1}' | grep -E '^[0-9]+$' || true)"
 
     for GID in ${GROUP_IDS}; do
-        "${OMERO_BIN}" -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
+        run_omero -s "${OMERO_SERVER_HOST}" -p "${OMERO_SERVER_PORT}" \
             -u root -w "${ROOTPASS}" \
             user joingroup --name "${JOB_USER}" --group-id "${GID}" \
             || true
