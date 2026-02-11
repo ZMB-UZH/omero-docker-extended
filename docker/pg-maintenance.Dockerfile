@@ -1,11 +1,11 @@
 # ============================================================================
 # pg-maintenance — lightweight cron sidecar for safe PostgreSQL maintenance
 # ============================================================================
-# Uses the same postgres:18.1 image as the database containers so the client
+# Uses the same postgres:16.11 image as the database containers so the client
 # tools (vacuumdb, reindexdb, pg_isready) match the server version exactly.
 # ============================================================================
 
-FROM postgres:18.1
+FROM postgres:16.11
 
 # Install cron (available in Debian-based postgres images)
 RUN apt-get update && \

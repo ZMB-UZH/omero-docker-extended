@@ -18,7 +18,7 @@ Lightweight cron-based sidecar that keeps both OMERO databases healthy with
 
 ## How it works
 
-A lightweight Docker container (`pg-maintenance`) runs the same `postgres:18.1`
+A lightweight Docker container (`pg-maintenance`) runs the same `postgres:16.11`
 image as the database containers, giving it the exact matching client tools
 (`vacuumdb`, `reindexdb`, `pg_isready`). A cron daemon inside the container
 triggers the maintenance script on schedule.
@@ -73,7 +73,7 @@ docker compose up -d pg-maintenance
 
 ## References
 
-- [PostgreSQL 18 — Routine Vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html)
-- [PostgreSQL 18 — Routine Reindexing](https://www.postgresql.org/docs/current/routine-reindex.html)
-- [PostgreSQL 18 — VACUUM](https://www.postgresql.org/docs/current/sql-vacuum.html)
-- [PostgreSQL 18 — REINDEX](https://www.postgresql.org/docs/current/sql-reindex.html)
+- [PostgreSQL 16.11 — Routine Vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html)
+- [PostgreSQL 16.11 — Routine Reindexing](https://www.postgresql.org/docs/current/routine-reindex.html)
+- [PostgreSQL 16.11 — VACUUM](https://www.postgresql.org/docs/current/sql-vacuum.html)
+- [PostgreSQL 16.11 — REINDEX](https://www.postgresql.org/docs/current/sql-reindex.html)
