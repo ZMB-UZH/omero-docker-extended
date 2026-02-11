@@ -336,7 +336,7 @@ resolve_path_with_default_prompt() {
     fi
 
     while true; do
-        echo "Do you want to use the default ${path_label} (${default_path})? Y/n (Default: n)" > /dev/tty
+        echo "Use default ${path_label} (${default_path})? Y/n (Default: n)" > /dev/tty
         printf '> ' > /dev/tty
 
         if ! IFS= read -r reply < /dev/tty; then
