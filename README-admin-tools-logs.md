@@ -24,13 +24,9 @@ ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS=10
 
 ## Optional environment variables (compose env file)
 
-Configure where the OMERO containers write internal log files. These are mounted into
-Grafana Alloy for file-based log collection.
+Configure monitoring UI settings.
 
 ```
-OMERO_SERVER_LOG_DIR=/opt/omero/server/OMERO.server/var/log
-OMERO_WEB_LOG_DIR=/opt/omero/web/OMERO.web/var/log
-OMERO_WEB_SUPERVISOR_LOG_DIR=/opt/omero/web/logs
 GRAFANA_HOST_PORT=3000
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=admin
@@ -116,6 +112,4 @@ ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL=https://monitoring.example.org/prometheus
 - If the UI shows no internal log entries, confirm the OMERO server and web containers are
   healthy and expand the time range selector in the UI (the default is the last 15 minutes).
 - Verify that the named volume mount paths in `docker-compose.yml` match the actual
-  directories where OMERO writes its logs. The `omeroserver` service must mount
-  `omero_server_logs` at the real log directory (default:
-  `/opt/omero/server/OMERO.server/var/log`), not at an unrelated path.
+  directories where OMERO writes its logs.
