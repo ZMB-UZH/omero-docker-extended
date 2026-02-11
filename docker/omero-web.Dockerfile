@@ -51,7 +51,7 @@ RUN set -euo pipefail; \
 
 # NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!!
 # Optional: apply OS updates at build time
-# -----------------------------------------
+# ----------------------------------------
 RUN set -euo pipefail; \
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
         dnf -y update --security || dnf -y update; \
@@ -193,7 +193,7 @@ RUN set -euo pipefail; \
 # - Affects OMERO.web Python runtime
 # - Enable only for vulnerability testing
 # - Disable immediately if persistent OMERO.web issues occur
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------
 ARG APPLY_OMEROWEB_VENV_TOOLING_UPDATES=0
 RUN set -euo pipefail; \
     if [[ "${APPLY_OMEROWEB_VENV_TOOLING_UPDATES}" != "1" ]]; then \
