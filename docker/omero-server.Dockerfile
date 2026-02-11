@@ -325,7 +325,7 @@ RUN set -euo pipefail; \
 # Ensure OMERO SSL cert contains SAN DNS:omeroserver (required for
 # secure BlitzGateway from OMERO.web when connecting to host "omeroserver")
 # -------------------------------------------------------------------------
-COPY startup/omero-server.sh /startup/05-omero-cert-sans.sh
+COPY startup/05-omero-cert-sans.sh /startup/05-omero-cert-sans.sh
 RUN set -euo pipefail; \
     chown root:root /startup/05-omero-cert-sans.sh; \
     chmod 0555 /startup/05-omero-cert-sans.sh

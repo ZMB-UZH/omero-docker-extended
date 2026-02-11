@@ -10,6 +10,30 @@ source /startup/omero-cli-safe.sh
 CERT_DIR="/OMERO/certs"
 SERVER_PEM="${CERT_DIR}/server.pem"
 
+ensure_cert_directory_permissions() {
+    if [[ "$(id -u)" -ne 0 ]]; then
+        if [[ ! -d "${CERT_DIR}" || ! -w "${CERT_DIR}" ]]; then
+            echo "[startup] ERROR: ${CERT_DIR} must exist and be writable when startup runs as non-root" >&2
+            echo "[startup] ACTION: ensure host path mounted at /OMERO is writable by UID $(id -u)" >&2
+            exit 1
+        fi
+        return
+    fi
+
+    if ! id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
+        echo "[startup] ERROR: OMERO CLI user '${OMERO_CLI_USER}' does not exist" >&2
+        exit 1
+    fi
+
+    local target_uid target_gid
+    target_uid="$(id -u "${OMERO_CLI_USER}")"
+    target_gid="$(id -g "${OMERO_CLI_USER}")"
+
+    mkdir -p "${CERT_DIR}"
+    chown "${target_uid}:${target_gid}" "${CERT_DIR}"
+    chmod 0750 "${CERT_DIR}"
+}
+
 need_regen=0
 
 CONTAINER_IPV4="$(
@@ -44,6 +68,8 @@ else
 fi
 
 if [[ "${need_regen}" -eq 1 ]]; then
+    ensure_cert_directory_permissions
+
     echo "[startup] Removing old certs..."
     rm -f "${CERT_DIR}/server.key" \
           "${CERT_DIR}/server.pem" \
