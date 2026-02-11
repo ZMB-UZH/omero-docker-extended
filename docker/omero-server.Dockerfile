@@ -62,31 +62,61 @@ RUN set -euo pipefail; \
 # - Uses >= only (no pinning), matching OMERO.web policy
 # ------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
-        pip \
-        setuptools>=78.1.1 \
-        wheel \
-        cryptography>=42.0.0 \
-        urllib3>=2.6.3
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
+        exit 1; \
+    fi; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then \
+            echo "ERROR: Invalid OMERO.server virtual environment: ${VENV_DIR}" >&2; \
+            exit 1; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+            pip \
+            "setuptools>=78.1.1" \
+            wheel \
+            "cryptography>=42.0.0" \
+            "urllib3>=2.6.3"; \
+    done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        reportlab \
-        markdown
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
+        exit 1; \
+    fi; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then \
+            echo "ERROR: Invalid OMERO.server virtual environment: ${VENV_DIR}" >&2; \
+            exit 1; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+            reportlab \
+            markdown; \
+    done
 
 # Install several OMERO CLI plugins (official + unofficial)
 # ---------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* | sort -V | tail -n 1)"; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
-        omero-cli-render \
-        omero-metadata \
-        omero-cli-duplicate \
-        omero-rdf
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
+        echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
+        exit 1; \
+    fi; \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then \
+            echo "ERROR: Invalid OMERO.server virtual environment: ${VENV_DIR}" >&2; \
+            exit 1; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
+            omero-cli-render \
+            omero-metadata \
+            omero-cli-duplicate \
+            omero-rdf; \
+    done
 
 # Install runtime diagnostics + git
 # ---------------------------------
