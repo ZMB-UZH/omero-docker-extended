@@ -2,8 +2,8 @@
 ## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
 # when the OMERO developers update the container
 
-# Pull image (needs to match the tag in docker-compose.yml)
-# ---------------------------------------------------------
+# Pull image
+# ----------
 FROM openmicroscopy/omero-web-standalone@sha256:25c126b9cc555236957b0e59f6690ab892a9a008d407023e7cc739c51ce2a52e
 
 # Run as root (REQUIRED)
