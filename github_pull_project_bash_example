@@ -58,7 +58,6 @@ is_valid_linux_path() {
 
 validate_installation_path() {
     local install_path="$1"
-    local parent_dir=""
 
     if ! is_valid_linux_path "${install_path}"; then
         return 1
@@ -71,21 +70,6 @@ validate_installation_path() {
 
     if [ -d "${install_path}" ] && [ ! -w "${install_path}" ]; then
         echo "Directory is not writable: ${install_path}" >&2
-        return 1
-    fi
-
-    if [ -d "${install_path}" ]; then
-        return 0
-    fi
-
-    parent_dir="$(dirname "${install_path}")"
-    if [ ! -d "${parent_dir}" ]; then
-        echo "Parent directory does not exist: ${parent_dir}" >&2
-        return 1
-    fi
-
-    if [ ! -w "${parent_dir}" ]; then
-        echo "Parent directory is not writable: ${parent_dir}" >&2
         return 1
     fi
 
