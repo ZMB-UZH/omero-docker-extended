@@ -1,96 +1,107 @@
 #!/usr/bin/env bash
 #
 # 00-check-and-fix-permissions.sh
-# Automatically check and fix /OMERO directory permissions
-# This ensures the container can write to /OMERO even if host permissions are wrong
+# Validate and optionally fix writable runtime paths required by OMERO.
 #
 
 set -euo pipefail
 
 echo "========================================="
-echo "[PERMISSIONS] Checking /OMERO directory"
+echo "[PERMISSIONS] Checking OMERO runtime paths"
 echo "========================================="
 echo
 
-OMERO_DIR="/OMERO"
-CERTS_DIR="/OMERO/certs"
+OMERO_DIR="${OMERO_DIR:-/OMERO}"
+CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
+SERVER_VAR_DIR="${SERVER_VAR_DIR:-/opt/omero/server/OMERO.server/var}"
+SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
+
 CURRENT_UID="$(id -u)"
 CURRENT_GID="$(id -g)"
 CURRENT_USER="$(id -un)"
 
-# Check if /OMERO exists
-if [ ! -d "${OMERO_DIR}" ]; then
-    echo "[PERMISSIONS] ERROR: ${OMERO_DIR} directory does not exist!" >&2
-    echo "[PERMISSIONS] ERROR: Volume mount may be missing or incorrect." >&2
+check_writable_dir() {
+    local path="$1"
+    local label="$2"
+    local hint_var="$3"
+    local fix_hint="$4"
+
+    if [[ ! -d "${path}" ]]; then
+        echo "[PERMISSIONS] ERROR: ${label} directory does not exist: ${path}" >&2
+        echo "[PERMISSIONS] ERROR: Verify the bind mount configured by ${hint_var}." >&2
+        exit 1
+    fi
+
+    local owner_uid owner_gid
+    owner_uid="$(stat -c '%u' "${path}" 2>/dev/null || echo "unknown")"
+    owner_gid="$(stat -c '%g' "${path}" 2>/dev/null || echo "unknown")"
+
+    echo "[PERMISSIONS] ${label}: ${path} (owner UID=${owner_uid}, GID=${owner_gid})"
+
+    if touch "${path}/.permission_test" 2>/dev/null; then
+        rm -f "${path}/.permission_test"
+        echo "[PERMISSIONS] ✓ ${label} is writable"
+        return 0
+    fi
+
+    echo "[PERMISSIONS] ✗ ${label} is NOT writable by current user"
+
+    if chown -R "${CURRENT_UID}:${CURRENT_GID}" "${path}" 2>/dev/null; then
+        echo "[PERMISSIONS] ✓ Changed ownership of ${label} to ${CURRENT_UID}:${CURRENT_GID}"
+    else
+        echo "[PERMISSIONS] ✗ Cannot change ownership for ${label} (likely non-root container user)."
+    fi
+
+    chmod -R u+rwX "${path}" 2>/dev/null || true
+
+    if touch "${path}/.permission_test" 2>/dev/null; then
+        rm -f "${path}/.permission_test"
+        echo "[PERMISSIONS] ✓ ${label} writable after fix attempt"
+        return 0
+    fi
+
+    echo "[PERMISSIONS] ERROR: ${label} remains non-writable: ${path}" >&2
+    echo "[PERMISSIONS] ACTION: ${fix_hint}" >&2
     exit 1
-fi
+}
 
 echo "[PERMISSIONS] Current user: ${CURRENT_USER} (UID=${CURRENT_UID}, GID=${CURRENT_GID})"
-echo "[PERMISSIONS] Checking ${OMERO_DIR}..."
 
-# Check current ownership
-OMERO_OWNER_UID=$(stat -c '%u' "${OMERO_DIR}" 2>/dev/null || echo "unknown")
-OMERO_OWNER_GID=$(stat -c '%g' "${OMERO_DIR}" 2>/dev/null || echo "unknown")
+check_writable_dir \
+    "${OMERO_DIR}" \
+    "OMERO user data" \
+    "OMERO_USER_DATA_PATH" \
+    "Set ownership on host path to ${CURRENT_UID}:${CURRENT_GID} and permissions u+rwX before starting containers."
 
-echo "[PERMISSIONS] Current ownership: UID=${OMERO_OWNER_UID}, GID=${OMERO_OWNER_GID}"
-
-# Test if writable
-if touch "${OMERO_DIR}/.permission_test" 2>/dev/null; then
-    rm -f "${OMERO_DIR}/.permission_test"
-    echo "[PERMISSIONS] ✓ ${OMERO_DIR} is already writable"
-else
-    echo "[PERMISSIONS] ✗ ${OMERO_DIR} is NOT writable by current user"
-    echo "[PERMISSIONS] Attempting to fix permissions..."
-    
-    # Try to fix ownership (this will only work if we have permission)
-    if chown -R "${CURRENT_UID}:${CURRENT_GID}" "${OMERO_DIR}" 2>/dev/null; then
-        echo "[PERMISSIONS] ✓ Successfully changed ownership to ${CURRENT_UID}:${CURRENT_GID}"
-    else
-        echo "[PERMISSIONS] ✗ Cannot change ownership (not running as root or directory is owned by different user)"
-        echo "[PERMISSIONS]"
-        echo "[PERMISSIONS] REQUIRED ACTION ON HOST:"
-        echo "[PERMISSIONS]   sudo chown -R ${CURRENT_UID}:${CURRENT_GID} /opt/omero/omero_data/omero_user_data"
-        echo "[PERMISSIONS]   sudo chmod -R u+rwX /opt/omero/omero_data/omero_user_data"
-        echo "[PERMISSIONS]"
-        echo "[PERMISSIONS] Then restart container: docker-compose down && docker-compose up -d"
-        echo "[PERMISSIONS]"
-        exit 1
-    fi
-    
-    # Try to fix permissions
-    if chmod -R u+rwX "${OMERO_DIR}" 2>/dev/null; then
-        echo "[PERMISSIONS] ✓ Successfully set permissions"
-    else
-        echo "[PERMISSIONS] ⚠ Could not set all permissions, but may still work"
-    fi
-    
-    # Verify fix worked
-    if ! touch "${OMERO_DIR}/.permission_test" 2>/dev/null; then
-        echo "[PERMISSIONS] ERROR: Still cannot write to ${OMERO_DIR} after fix attempt" >&2
-        exit 1
-    fi
-    rm -f "${OMERO_DIR}/.permission_test"
-    echo "[PERMISSIONS] ✓ Write test successful after fix"
-fi
-
-# Ensure certs directory exists with correct permissions
-if [ ! -d "${CERTS_DIR}" ]; then
-    echo "[PERMISSIONS] Creating ${CERTS_DIR}..."
+if [[ ! -d "${CERTS_DIR}" ]]; then
+    echo "[PERMISSIONS] Creating certificate directory: ${CERTS_DIR}"
     mkdir -p "${CERTS_DIR}"
     chmod 0750 "${CERTS_DIR}"
-    echo "[PERMISSIONS] ✓ Created ${CERTS_DIR}"
-else
-    echo "[PERMISSIONS] ✓ ${CERTS_DIR} already exists"
 fi
 
-# Verify certs directory is writable
-if ! touch "${CERTS_DIR}/.permission_test" 2>/dev/null; then
-    echo "[PERMISSIONS] ERROR: ${CERTS_DIR} is not writable" >&2
-    exit 1
-fi
-rm -f "${CERTS_DIR}/.permission_test"
+check_writable_dir \
+    "${CERTS_DIR}" \
+    "OMERO certificates" \
+    "OMERO_USER_DATA_PATH" \
+    "Ensure ${CERTS_DIR} exists and is writable by UID ${CURRENT_UID}."
 
-echo "[PERMISSIONS] ✓ ${CERTS_DIR} is writable"
+check_writable_dir \
+    "${SERVER_VAR_DIR}" \
+    "OMERO server var" \
+    "OMERO_SERVER_VAR_PATH" \
+    "Set ownership on OMERO_SERVER_VAR_PATH to ${CURRENT_UID}:${CURRENT_GID} and restart."
+
+if [[ ! -d "${SERVER_LOG_DIR}" ]]; then
+    echo "[PERMISSIONS] Creating server log directory: ${SERVER_LOG_DIR}"
+    mkdir -p "${SERVER_LOG_DIR}"
+fi
+
+check_writable_dir \
+    "${SERVER_LOG_DIR}" \
+    "OMERO server logs" \
+    "OMERO_SERVER_LOGS_PATH" \
+    "Set ownership on OMERO_SERVER_LOGS_PATH to ${CURRENT_UID}:${CURRENT_GID} and restart."
+
 echo
-echo "[PERMISSIONS] ✓✓✓ All permission checks passed ✓✓✓"
+echo "[PERMISSIONS] ✓✓✓ All runtime permission checks passed ✓✓✓"
 echo "========================================="
