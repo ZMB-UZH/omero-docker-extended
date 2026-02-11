@@ -279,21 +279,82 @@ run_probe_with_shell() {
 
 inspect_image_summary() {
   local image="$1"
-  docker image inspect "$image" --format \
-    'id={{.Id}}
-repoTags={{json .RepoTags}}
-created={{.Created}}
-os={{.Os}}
-architecture={{.Architecture}}
-variant={{with index . "Variant"}}{{.}}{{else}}N/A{{end}}
-entrypoint={{with index . "Config"}}{{with index . "Entrypoint"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
-cmd={{with index . "Config"}}{{with index . "Cmd"}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
-user={{with index . "Config"}}{{with .User}}{{.}}{{else}}null{{end}}{{else}}null{{end}}
-workingDir={{with index . "Config"}}{{with .WorkingDir}}{{.}}{{else}}null{{end}}{{else}}null{{end}}
-exposedPorts={{with index . "Config"}}{{with .ExposedPorts}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
-volumes={{with index . "Config"}}{{with .Volumes}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
-healthcheck={{with index . "Config"}}{{with .Healthcheck}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}
-labels={{with index . "Config"}}{{with .Labels}}{{json .}}{{else}}null{{end}}{{else}}null{{end}}'
+  local inspect_json
+
+  if ! inspect_json="$(docker image inspect "$image" --format '{{json .}}' 2>/dev/null)"; then
+    log_error "Docker inspect failed for image: $image"
+    return 1
+  fi
+
+  if [ -z "$inspect_json" ] || [ "$inspect_json" = "null" ]; then
+    log_error "Docker inspect returned empty metadata for image: $image"
+    return 1
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$inspect_json" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+cfg = data.get("Config") or {}
+
+def emit(name, value):
+    if isinstance(value, (dict, list)):
+        print(f"{name}={json.dumps(value, sort_keys=True)}")
+        return
+    if value is None:
+        print(f"{name}=null")
+        return
+    if value == "":
+        print(f"{name}=null")
+        return
+    print(f"{name}={value}")
+
+emit("id", data.get("Id"))
+emit("repoTags", data.get("RepoTags"))
+emit("created", data.get("Created"))
+emit("os", data.get("Os"))
+emit("architecture", data.get("Architecture"))
+emit("variant", data.get("Variant") or "N/A")
+emit("entrypoint", cfg.get("Entrypoint"))
+emit("cmd", cfg.get("Cmd"))
+emit("user", cfg.get("User"))
+emit("workingDir", cfg.get("WorkingDir"))
+emit("exposedPorts", cfg.get("ExposedPorts"))
+emit("volumes", cfg.get("Volumes"))
+emit("healthcheck", cfg.get("Healthcheck"))
+emit("labels", cfg.get("Labels"))
+PY
+    return $?
+  fi
+
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s\n' "$inspect_json" | jq -r '
+      def j($v):
+        if $v == null or $v == "" then "null"
+        elif ($v | type) == "array" or ($v | type) == "object" then ($v | tojson)
+        else ($v | tostring)
+        end;
+      "id=\(j(.Id))",
+      "repoTags=\(j(.RepoTags))",
+      "created=\(j(.Created))",
+      "os=\(j(.Os))",
+      "architecture=\(j(.Architecture))",
+      "variant=\(if .Variant == null or .Variant == "" then "N/A" else .Variant end)",
+      "entrypoint=\(j(.Config.Entrypoint))",
+      "cmd=\(j(.Config.Cmd))",
+      "user=\(j(.Config.User))",
+      "workingDir=\(j(.Config.WorkingDir))",
+      "exposedPorts=\(j(.Config.ExposedPorts))",
+      "volumes=\(j(.Config.Volumes))",
+      "healthcheck=\(j(.Config.Healthcheck))",
+      "labels=\(j(.Config.Labels))"'
+    return $?
+  fi
+
+  log_warn "Neither python3 nor jq available; writing raw docker inspect JSON."
+  printf '%s\n' "$inspect_json"
 }
 
 run_self_test() {
@@ -409,7 +470,10 @@ main() {
 
   if [ "$skip_pull" != "true" ]; then
     log_info "Pulling image: $image_ref"
-    docker pull "$image_ref"
+    if ! docker pull "$image_ref"; then
+      log_error "Failed to pull image: $image_ref"
+      return 1
+    fi
   else
     log_info "Skipping pull. Using local image cache for: $image_ref"
   fi
@@ -431,7 +495,13 @@ main() {
   json_report="$output_dir/inventory_${safe_image}_${ts}.json"
 
   log_info "Inspecting image metadata..."
-  inspect_image_summary "$image_ref" >"$inspect_file"
+  if ! inspect_image_summary "$image_ref" >"$inspect_file"; then
+    log_warn "Image metadata inspection failed. Continuing with probe-only report."
+    {
+      echo "inspect_error=failed"
+      echo "image=$image_ref"
+    } >"$inspect_file"
+  fi
 
   local probe_script
   probe_script="$(build_probe_script)"
