@@ -93,7 +93,7 @@ run_reindex() {
     log "--- REINDEX (CONCURRENTLY) on $dbname ($host:$port) ---"
     # reindexdb --concurrently rebuilds every index with only a
     # SHARE UPDATE EXCLUSIVE lock — reads and writes continue normally.
-    # Available since PostgreSQL 12. Our stack uses PostgreSQL 18.
+    # Available since PostgreSQL 12. Our stack uses PostgreSQL 16.11.
     if reindexdb --host="$host" --port="$port" --username="$user" \
                  --dbname="$dbname" --concurrently --verbose 2>&1 | \
                  while IFS= read -r line; do log "  $line"; done; then
