@@ -265,6 +265,13 @@ RUN set -euo pipefail; \
     chown root:root /startup/55-install-figure-script.sh; \
     chmod 0555 /startup/55-install-figure-script.sh
 
+# Check and fix OMERO directory permissions (MUST RUN FIRST)
+# ----------------------------------------------------------
+COPY startup/00-check-and-fix-permissions.sh /startup/00-check-and-fix-permissions.sh
+RUN set -euo pipefail; \
+    chown root:root /startup/00-check-and-fix-permissions.sh; \
+    chmod 0555 /startup/00-check-and-fix-permissions.sh
+
 # Reset OMERO runtime state on every container start (KEEP /OMERO + DB)
 # ---------------------------------------------------------------------
 COPY startup/00-reset-omero-runtime.sh /startup/00-reset-omero-runtime.sh

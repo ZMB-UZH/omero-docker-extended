@@ -282,6 +282,49 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # ---------------------------------------------------------------------------
+  # OMERO Data Permission Initialization
+  # ---------------------------------------------------------------------------
+  # Ensures /OMERO directory has correct ownership before omeroserver starts.
+  # This prevents PermissionError during certificate generation.
+  # Runs once at startup, then exits.
+  # ---------------------------------------------------------------------------
+  omero-data-init:
+    image: alpine:latest
+    container_name: omero-data-init
+    restart: "no"
+    command: |
+      sh -c '
+        echo "================================================"
+        echo "OMERO Data Permission Initialization"
+        echo "================================================"
+        echo ""
+        echo "Checking /OMERO directory ownership..."
+        ls -ld /OMERO || true
+        echo ""
+        echo "Setting ownership to UID 1000 (omero-server)..."
+        chown -R 1000:1000 /OMERO 2>/dev/null || echo "Note: Some files may already have correct ownership"
+        echo ""
+        echo "Setting permissions (u+rwX)..."
+        chmod -R u+rwX /OMERO 2>/dev/null || true
+        echo ""
+        echo "Creating /OMERO/certs if missing..."
+        mkdir -p /OMERO/certs
+        chown 1000:1000 /OMERO/certs
+        chmod 0750 /OMERO/certs
+        echo ""
+        echo "Final ownership:"
+        ls -ld /OMERO
+        ls -ld /OMERO/certs 2>/dev/null || true
+        echo ""
+        echo "✓ Permission initialization complete"
+        echo "================================================"
+      '
+    user: "0:0"  # Run as root to fix permissions
+    volumes:
+      - ${OMERO_USER_DATA_PATH}:/OMERO:rw
+    network_mode: none
+
   omeroserver:
     image: omeroserver:custom
     build:
@@ -291,6 +334,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      omero-data-init:
+        condition: service_completed_successfully
     env_file:
       - ./env/omeroserver.env
       - ./env/omero-celery.env
