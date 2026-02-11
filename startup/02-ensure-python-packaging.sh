@@ -22,10 +22,25 @@ for venv_dir in "${VENV_DIRS[@]}"; do
         exit 1
     fi
 
-    echo "Validating pkg_resources availability in ${venv_dir}"
-    "${python_bin}" - <<'PY'
-import pkg_resources
-print(f"pkg_resources import check succeeded: {pkg_resources.__file__}")
-PY
+    echo "Validating Python packaging tooling in ${venv_dir}"
+    if ! "${python_bin}" - <<'PY'
+import importlib.metadata as metadata
 
+for package_name in ("pip", "setuptools", "wheel"):
+    print(f"{package_name}={metadata.version(package_name)}")
+PY
+    then
+        echo "Packaging tools missing in ${venv_dir}; attempting recovery with pip" >&2
+        "${python_bin}" -m pip install --no-cache-dir --upgrade \
+            pip \
+            "setuptools>=78.1.1" \
+            wheel
+
+        "${python_bin}" - <<'PY'
+import importlib.metadata as metadata
+
+for package_name in ("pip", "setuptools", "wheel"):
+    print(f"Recovered {package_name}={metadata.version(package_name)}")
+PY
+    fi
 done
