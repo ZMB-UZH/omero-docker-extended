@@ -582,7 +582,7 @@ PROJECT_NAME="$(basename "${OMERO_INSTALLATION_PATH}")"
 OMERO_VOLUME="${PROJECT_NAME}_omero"
 
 if docker volume inspect "${OMERO_VOLUME}" >/dev/null 2>&1; then
-    CLEANUP_IMAGE="alpine:3.20"
+    CLEANUP_IMAGE="alpine:3.21"
     docker run --rm \
         -v "${OMERO_VOLUME}:/OMERO" \
         "${CLEANUP_IMAGE}" \
