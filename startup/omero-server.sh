@@ -3,6 +3,10 @@ set -euo pipefail
 
 echo "[startup] Ensuring OMERO.server cert SAN includes localhost+omeroserver+IP SANs"
 
+OMERO_BIN="/opt/omero/server/OMERO.server/bin/omero"
+
+source /startup/omero-cli-safe.sh
+
 CERT_DIR="/OMERO/certs"
 SERVER_PEM="${CERT_DIR}/server.pem"
 
@@ -48,9 +52,9 @@ if [[ "${need_regen}" -eq 1 ]]; then
           "${CERT_DIR}/ca.key" || true
 
     echo "[startup] Setting cert commonname + SAN and regenerating..."
-    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.commonname localhost
-    /opt/omero/server/OMERO.server/bin/omero config set omero.certificates.subjectAltName "${SAN_VALUE}"
-    /opt/omero/server/OMERO.server/bin/omero certificates
+    run_omero config set omero.certificates.commonname localhost
+    run_omero config set omero.certificates.subjectAltName "${SAN_VALUE}"
+    run_omero certificates
 
     echo "[startup] New cert SAN:"
     openssl x509 -in "${SERVER_PEM}" -noout -text | awk '/Subject Alternative Name/{print;getline;print}'

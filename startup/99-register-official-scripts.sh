@@ -11,6 +11,9 @@
     fi
 
     OMERO_BIN="/opt/omero/server/OMERO.server/bin/omero"
+
+    source /startup/omero-cli-safe.sh
+
     OMERO_HOST="localhost"
     OMERO_PORT="4064"
     SCRIPTS_DIR="/opt/omero/server/OMERO.server/lib/scripts/omero"
@@ -29,7 +32,7 @@
     echo "[OMERO scripts] OMERO.server JVM detected"
     echo "[OMERO scripts] Waiting for OMERO.server to be fully ready..."
 
-    "${OMERO_BIN}" admin status \
+    run_omero admin status \
         -s "${OMERO_HOST}" \
         -p "${OMERO_PORT}" \
         -u root \
@@ -40,7 +43,7 @@
 
     echo "[OMERO scripts] Waiting for Script service to be available..."
 
-    until "${OMERO_BIN}" script list \
+    until run_omero script list \
         -s "${OMERO_HOST}" \
         -p "${OMERO_PORT}" \
         -u root \
@@ -59,12 +62,13 @@
     export OMERO_HOST
     export OMERO_PORT
     export ROOTPASS
+    export -f run_omero
 
     upload_one() {
         script="$1"
         base="$(basename "${script}" .py)"
 
-        existing_id=$("${OMERO_BIN}" script list \
+        existing_id=$(run_omero script list \
                 -s "${OMERO_HOST}" \
                 -p "${OMERO_PORT}" \
                 -u root \
@@ -83,7 +87,7 @@
         if [ -n "$existing_id" ]; then
             echo "[OMERO scripts] Replacing existing script: ${base} (ID: ${existing_id})"
 
-            if "${OMERO_BIN}" script replace "${existing_id}" "${script}" \
+            if run_omero script replace "${existing_id}" "${script}" \
                     -s "${OMERO_HOST}" \
                     -p "${OMERO_PORT}" \
                     -u root \
@@ -94,7 +98,7 @@
             else
                 echo "[OMERO scripts] Replace failed for ${base}, trying delete+upload"
 
-                "${OMERO_BIN}" script delete "${existing_id}" \
+                run_omero script delete "${existing_id}" \
                     -s "${OMERO_HOST}" \
                     -p "${OMERO_PORT}" \
                     -u root \
@@ -102,7 +106,7 @@
                     --sudo root \
                     </dev/null 2>/dev/null || true
 
-                "${OMERO_BIN}" script upload \
+                run_omero script upload \
                     --official \
                     --sudo root \
                     -s "${OMERO_HOST}" \
@@ -117,7 +121,7 @@
 
         echo "[OMERO scripts] Uploading new: ${base}"
 
-        "${OMERO_BIN}" script upload \
+        run_omero script upload \
             --official \
             --sudo root \
             -s "${OMERO_HOST}" \
