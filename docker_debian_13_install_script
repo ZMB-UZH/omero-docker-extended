@@ -17,6 +17,7 @@ DOCKER_REPO_URI="https://download.docker.com/linux/debian"
 BACKUP_ROOT_DIR="/var/backups/${SCRIPT_NAME}"
 DRY_RUN="${DRY_RUN:-0}" # Set DRY_RUN=1 to print commands without changing the system.
 ALLOW_UNSUPPORTED_OS="${ALLOW_UNSUPPORTED_OS:-0}" # Set to 1 to bypass Debian-only guard for test environments.
+DOCKER_NON_ROOT_USER="${DOCKER_NON_ROOT_USER:-}" # Optional explicit user to grant Docker socket access.
 
 log_info() {
     printf 'INFO: %s\n' "$*"
@@ -258,6 +259,51 @@ run_hello_world_check() {
     run_with_sudo docker run --rm hello-world
 }
 
+resolve_docker_non_root_user() {
+    local resolved_user=""
+
+    if [ -n "${DOCKER_NON_ROOT_USER}" ]; then
+        resolved_user="${DOCKER_NON_ROOT_USER}"
+    elif [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        resolved_user="${SUDO_USER}"
+    fi
+
+    printf '%s' "${resolved_user}"
+}
+
+grant_docker_socket_access() {
+    local target_user
+    local target_group
+
+    target_user="$(resolve_docker_non_root_user)"
+
+    if [ -z "${target_user}" ]; then
+        log_warn "No non-root user detected for Docker group assignment."
+        log_warn "Set DOCKER_NON_ROOT_USER=<username> before running the script if needed."
+        return 0
+    fi
+
+    if ! id "${target_user}" >/dev/null 2>&1; then
+        log_error "Cannot grant Docker access: user '${target_user}' does not exist."
+        exit 1
+    fi
+
+    if ! getent group docker >/dev/null 2>&1; then
+        log_info "Docker group missing; creating docker group."
+        run_with_sudo groupadd docker
+    fi
+
+    target_group="$(id -nG "${target_user}" 2>/dev/null || true)"
+    if printf '%s\n' "${target_group}" | tr ' ' '\n' | grep -Fxq docker; then
+        log_info "User '${target_user}' is already in docker group."
+        return 0
+    fi
+
+    log_info "Adding user '${target_user}' to docker group for non-root Docker CLI access."
+    run_with_sudo usermod -aG docker "${target_user}"
+    log_warn "User '${target_user}' must log out/in (or run 'newgrp docker') for group changes to take effect."
+}
+
 main() {
     require_binary sudo
     require_binary dpkg
@@ -266,6 +312,10 @@ main() {
     require_binary grep
     require_binary sed
     require_binary awk
+    require_binary id
+    require_binary getent
+    require_binary groupadd
+    require_binary usermod
 
     confirm_proceed
     validate_debian
@@ -281,6 +331,7 @@ main() {
     configure_docker_repository
     install_docker
     ensure_docker_service_running
+    grant_docker_socket_access
     run_hello_world_check
 
     log_info "Docker installation flow completed."
