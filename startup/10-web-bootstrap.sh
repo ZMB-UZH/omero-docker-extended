@@ -12,6 +12,20 @@ if [[ ! -d "${log_dir}" || ! -w "${log_dir}" ]]; then
 fi
 
 mkdir -p "$(dirname "${default_log_dir}")"
+
+if [[ -L "${default_log_dir}" ]]; then
+    current_target="$(readlink "${default_log_dir}")"
+    if [[ "${current_target}" == "${log_dir}" ]]; then
+        echo "[web-bootstrap] OMERO.web default log symlink already points to ${log_dir}"
+        exit 0
+    fi
+fi
+
+if mountpoint -q "${default_log_dir}"; then
+    echo "[web-bootstrap] WARNING: ${default_log_dir} is a mounted filesystem; skipping symlink replacement."
+    exit 0
+fi
+
 rm -rf "${default_log_dir}"
 ln -s "${log_dir}" "${default_log_dir}"
 
