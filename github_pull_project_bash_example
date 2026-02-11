@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 
-# Configuration (change SCRIPT_NAME and BASE_DIR according to your preferences)
-# -----------------------------------------------------------------------------
-SCRIPT_NAME="github_pull_project"
+# Configuration
+# -------------
+SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_ENV_FILE="${SCRIPT_DIR}/env/github_pull_project.env"
+
 DEFAULT_OMERO_INSTALLATION_PATH="/opt/omero/"
-OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
+USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
+KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
+
+# Load optional configuration values from env/github_pull_project.env.
+if [ -f "${SCRIPT_ENV_FILE}" ]; then
+    # shellcheck disable=SC1090
+    . "${SCRIPT_ENV_FILE}"
+fi
+
+OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH:-${DEFAULT_OMERO_INSTALLATION_PATH}}"
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
-OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
-OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
-USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
-KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
+OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH:-${DEFAULT_OMERO_DATABASE_PATH}}"
+OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH:-${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}}"
 
 set -euo pipefail
 
@@ -138,6 +148,13 @@ persist_compose_path_overrides() {
     fi
 }
 
+copy_repo_files() {
+    local clone_path="$1"
+    local target_path="$2"
+
+    find "${clone_path}" -mindepth 1 -maxdepth 1 ! -name "XTOmeroConnector.py" -exec mv {} "${target_path}" \;
+}
+
 echo "Do you want to delete all container images? Y/n (Default: n)"
 
 while true; do
@@ -245,12 +262,6 @@ COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 # Workflow
 # --------
 cd "${OMERO_INSTALLATION_PATH}"
-SCRIPT_BACKUP=""
-if [ -f "${SCRIPT_NAME}" ]; then
-    echo "Backing up script..."
-    SCRIPT_BACKUP="/tmp/${SCRIPT_NAME}.backup.$(date +%s)"
-    cp "${SCRIPT_NAME}" "${SCRIPT_BACKUP}"
-fi
 
 echo "Pulling latest docker-compose.yml from GitHub..."
 rm -rf temp_clone
@@ -293,21 +304,19 @@ fi
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
 
 echo "Removing all files except script..."
-find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" ! -name "temp_clone" ! -name "docker-compose.yml.new" ! -name ".env" -exec rm -rf {} +
+find . -mindepth 1 -maxdepth 1 \
+    ! -name "${SCRIPT_NAME}" \
+    ! -name "temp_clone" \
+    ! -name "docker-compose.yml.new" \
+    ! -name ".env" \
+    -exec rm -rf {} +
 
 echo "Moving new files..."
 echo "Fixing line endings in shell scripts..."
 find temp_clone -name "*.sh" -type f -exec sed -i 's/\r$//' {} \;
-shopt -s dotglob
-mv temp_clone/* .
-shopt -u dotglob
+copy_repo_files "temp_clone" "."
 rm -rf temp_clone
 rm -f docker-compose.yml.new
-
-echo "Restoring script..."
-if [ -n "${SCRIPT_BACKUP}" ] && [ -f "${SCRIPT_BACKUP}" ]; then
-    mv "${SCRIPT_BACKUP}" "${SCRIPT_NAME}"
-fi
 
 if [ ! -f "${COMPOSE_FILE}" ]; then
     echo "ERROR: docker-compose.yml still missing after clone. Aborting." >&2
