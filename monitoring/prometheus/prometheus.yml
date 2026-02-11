@@ -34,6 +34,10 @@ scrape_configs:
     static_configs:
       - targets: ['postgres-exporter:9187']
 
+  - job_name: postgres_exporter_plugin
+    static_configs:
+      - targets: ['postgres-exporter-plugin:9187']
+
   - job_name: redis_exporter
     static_configs:
       - targets: ['redis-exporter:9121']
@@ -50,6 +54,7 @@ scrape_configs:
           - http://cadvisor:8080/healthz
           - http://node-exporter:9100/metrics
           - http://postgres-exporter:9187/metrics
+          - http://postgres-exporter-plugin:9187/metrics
           - http://redis-exporter:9121/metrics
           - http://omeroserver:4064
           - http://omeroweb:4090/webgateway/
