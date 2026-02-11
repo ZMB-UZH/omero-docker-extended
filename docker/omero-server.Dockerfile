@@ -22,6 +22,10 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+# Keep setuptools on a pkg_resources-compatible release for omego startup.
+# omego imports pkg_resources directly during DB initialization.
+ARG SETUPTOOLS_VERSION=80.9.0
+
 # Locate OMERO.server venv and fail fast if layout changes
 # --------------------------------------------------------
 RUN set -euo pipefail; \
@@ -75,11 +79,11 @@ RUN set -euo pipefail; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
             pip \
-            "setuptools>=78.1.1" \
+            "setuptools==${SETUPTOOLS_VERSION}" \
             wheel \
             "cryptography>=42.0.0" \
             "urllib3>=2.6.3"; \
-        "${VENV_DIR}/bin/python" -c 'import importlib.metadata as metadata; import pip, wheel, cryptography, urllib3; print("Python packaging import check succeeded (setuptools={})".format(metadata.version("setuptools")))'; \
+        "${VENV_DIR}/bin/python" -c 'import importlib.metadata as metadata; import pip, pkg_resources, wheel, cryptography, urllib3; print("Python packaging import check succeeded (setuptools={}, pkg_resources={})".format(metadata.version("setuptools"), pkg_resources.__name__))'; \
     done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv

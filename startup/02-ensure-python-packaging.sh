@@ -2,6 +2,7 @@
 set -euo pipefail
 
 OMERO_SERVER_ROOT="/opt/omero/server"
+SETUPTOOLS_VERSION="${SETUPTOOLS_VERSION:-80.9.0}"
 
 if [[ ! -d "${OMERO_SERVER_ROOT}" ]]; then
     echo "ERROR: OMERO server root not found at ${OMERO_SERVER_ROOT}" >&2
@@ -26,6 +27,7 @@ for venv_dir in "${VENV_DIRS[@]}"; do
     if ! "${python_bin}" - <<'PY'
 import importlib.metadata as metadata
 import setuptools
+import pkg_resources
 
 for package_name in ("pip", "setuptools", "wheel"):
     print(f"{package_name}={metadata.version(package_name)}")
@@ -33,17 +35,19 @@ for package_name in ("pip", "setuptools", "wheel"):
 # setuptools is imported explicitly so this check continues to validate
 # the package is importable even if deprecated helper modules are removed.
 print(f"setuptools_import={setuptools.__name__}")
+print(f"pkg_resources_import={pkg_resources.__name__}")
 PY
     then
         echo "Packaging tools missing in ${venv_dir}; attempting recovery with pip" >&2
         "${python_bin}" -m pip install --no-cache-dir --upgrade \
             pip \
-            "setuptools>=78.1.1" \
+            "setuptools==${SETUPTOOLS_VERSION}" \
             wheel
 
         "${python_bin}" - <<'PY'
 import importlib.metadata as metadata
 import setuptools
+import pkg_resources
 
 for package_name in ("pip", "setuptools", "wheel"):
     print(f"Recovered {package_name}={metadata.version(package_name)}")
@@ -51,6 +55,7 @@ for package_name in ("pip", "setuptools", "wheel"):
 # setuptools is imported explicitly so this check continues to validate
 # the package is importable even if deprecated helper modules are removed.
 print(f"Recovered setuptools_import={setuptools.__name__}")
+print(f"Recovered pkg_resources_import={pkg_resources.__name__}")
 PY
     fi
 done
