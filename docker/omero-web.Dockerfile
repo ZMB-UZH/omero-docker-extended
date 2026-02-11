@@ -1,20 +1,21 @@
 ## ATTENTION!! Using the tag "latest" might be tempting but is extremely risky in production environments!
-# Needs to match the respective one in docker-compose.yml
 ## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
 # when the OMERO developers update the container
 
+# Pull image (needs to match the tag in docker-compose.yml)
+# ---------------------------------------------------------
 FROM openmicroscopy/omero-web-standalone@sha256:25c126b9cc555236957b0e59f6690ab892a9a008d407023e7cc739c51ce2a52e
 
-# Run as root to avoid permission issues
-# --------------------------------------
+# Run as root (REQUIRED)
+# ----------------------
 USER root
 
 # Use bash with pipefail for safer RUN commands
 # ---------------------------------------------
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Optional: enable OS package security updates at build time.
-# -----------------------------------------------------------
+# Optional: enable OS package security updates at build time
+# ----------------------------------------------------------
 ARG APPLY_DNF_UPDATES=1
 
 # Basic hardening for pip (no behavior change expected)
@@ -33,7 +34,7 @@ RUN set -euo pipefail; \
     fi
 
 # Ensure stable OMERO.web path points at the versioned installation
-# ----------------------------------------------------------------
+# -----------------------------------------------------------------
 RUN set -euo pipefail; \
     WEB_DIR="$(find /opt/omero -maxdepth 4 -type d -name 'OMERO.web*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -n "${WEB_DIR}" ]]; then \
@@ -57,8 +58,8 @@ RUN set -euo pipefail; \
     fi
 
 # Install build dependencies required for installing OMERO Python API (omero-py)
-# NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler.
-# --------------------------------------------------------------------------------------------------
+# NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
+# -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
     dnf -y install \
         gcc \
@@ -210,7 +211,6 @@ RUN set -euo pipefail; \
     chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
-# ---------------------------------------------------------------------------
 # FIX: The base image's /startup/99-run.sh executes
 #   "omero web start --foreground"
 # which blocks forever. The base image entrypoint loops over /startup/* and
@@ -219,7 +219,7 @@ RUN set -euo pipefail; \
 # Solution:
 #  1. Delete 99-run.sh — supervisord manages gunicorn instead.
 #  2. Replace entrypoint with one that exec's "$@" after startup scripts.
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------
 RUN rm -f /startup/99-run.sh
 
 RUN set -euo pipefail; \
