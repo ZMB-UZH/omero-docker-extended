@@ -24,6 +24,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 # Keep setuptools on a pkg_resources-compatible release for omego startup.
 # omego imports pkg_resources directly during DB initialization.
+# --------------------------------------------------------------
 ARG SETUPTOOLS_VERSION=80.9.0
 
 # Locate OMERO.server venv and fail fast if layout changes
@@ -65,7 +66,7 @@ RUN set -euo pipefail; \
 # - Affects OMERO.server Python gateway
 # - Enable only for vulnerability testing
 # - Disable immediately if Blitz / TLS / import issues occur
-# -------------------------------------------------------------------------------
+# ----------------------------------------------------------
 ARG APPLY_OMERO_VENV_TOOLING_UPDATES=0
 RUN set -euo pipefail; \
     if [[ "${APPLY_OMERO_VENV_TOOLING_UPDATES}" != "1" ]]; then \
@@ -90,6 +91,7 @@ RUN set -euo pipefail; \
             "urllib3>=2.6.3"; \
         "${VENV_DIR}/bin/python" -c "import importlib.metadata as metadata; import setuptools, wheel, cryptography, urllib3; print(\"Python packaging import check succeeded (setuptools={})\".format(metadata.version(\"setuptools\")))"; \
     done
+
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
@@ -328,7 +330,7 @@ RUN set -euo pipefail; \
 
 # Ensure OMERO server runtime directories are owned by omero-server
 # so named volumes inherit correct permissions on first run.
-# ----------------------------------------------------------------
+# ----------------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/server/OMERO.server/var/log; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
