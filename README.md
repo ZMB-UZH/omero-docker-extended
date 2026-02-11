@@ -47,8 +47,8 @@ docker-compose ps
 The original container was failing with permission errors. This version includes:
 
 1. **Init Container** - Automatically fixes /OMERO permissions before startup
-2. **Permission Check Script** - Verifies permissions and provides clear errors
-3. **Certificate Script Fix** - Proper error handling (no more silent failures)
+2. **Consolidated Server Bootstrap** - Single startup flow handles permission checks, script Python config, cert SANs, and bootstrap tasks
+3. **Consolidated Web Bootstrap** - Single startup flow prepares writable OMERO.web log path and symlink
 
 **Result**: Container starts reliably every time!
 
@@ -57,9 +57,10 @@ The original container was failing with permission errors. This version includes
 ## ✅ Files Changed
 
 - `docker-compose.yml` - Added omero-data-init service
-- `docker/omero-server.Dockerfile` - Added permission check script
-- `startup/00-check-and-fix-permissions.sh` - NEW automatic permission fixer
-- `startup/05-omero-cert-sans.sh` - Fixed to fail properly on errors
+- `docker/omero-server.Dockerfile` - Simplified to use one consolidated server startup script
+- `docker/omero-web.Dockerfile` - Simplified to use one consolidated web startup script
+- `startup/10-server-bootstrap.sh` - New consolidated startup orchestrator for OMERO.server
+- `startup/10-web-bootstrap.sh` - New consolidated startup script for OMERO.web log path readiness
 
 See **CHANGELOG.md** for complete details.
 
