@@ -10,6 +10,29 @@ source /startup/omero-cli-safe.sh
 CERT_DIR="/OMERO/certs"
 CERT_PEM="${CERT_DIR}/server.pem"
 
+ensure_cert_directory_permissions() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if [ ! -d "${CERT_DIR}" ] || [ ! -w "${CERT_DIR}" ]; then
+            echo "[CERT] ERROR: ${CERT_DIR} must exist and be writable when startup does not run as root" >&2
+            exit 1
+        fi
+        return
+    fi
+
+    if ! id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
+        echo "[CERT] ERROR: OMERO CLI user '${OMERO_CLI_USER}' does not exist" >&2
+        exit 1
+    fi
+
+    local target_uid target_gid
+    target_uid="$(id -u "${OMERO_CLI_USER}")"
+    target_gid="$(id -g "${OMERO_CLI_USER}")"
+
+    mkdir -p "${CERT_DIR}"
+    chown "${target_uid}:${target_gid}" "${CERT_DIR}"
+    chmod 0750 "${CERT_DIR}"
+}
+
 NEED_REGEN=0
 
 if [ ! -f "${CERT_PEM}" ]; then
@@ -24,6 +47,8 @@ fi
 
 if [ "${NEED_REGEN}" -eq 1 ]; then
     echo "[CERT] Configuring OMERO certificate parameters"
+
+    ensure_cert_directory_permissions
 
     run_omero config set omero.certificates.commonname localhost
     run_omero config set omero.certificates.subjectAltName "DNS:localhost,DNS:omeroserver"
