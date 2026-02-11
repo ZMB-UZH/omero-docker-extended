@@ -11,6 +11,7 @@ REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
+START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 
 set -euo pipefail
 
@@ -323,7 +324,125 @@ resolve_delete_images_choice() {
     done
 }
 
+prompt_yes_no() {
+    local prompt_message="$1"
+    local default_choice="$2"
+    local reply=""
+
+    if [ ! -r /dev/tty ]; then
+        printf '%s' "${default_choice}"
+        return 0
+    fi
+
+    while true; do
+        echo "${prompt_message}" > /dev/tty
+        printf '> ' > /dev/tty
+
+        if ! IFS= read -r reply < /dev/tty; then
+            printf '%s' "${default_choice}"
+            return 0
+        fi
+
+        reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
+
+        if [ -z "${reply}" ]; then
+            printf '%s' "${default_choice}"
+            return 0
+        fi
+
+        case "${reply}" in
+            y|yes)
+                printf '%s' "yes"
+                return 0
+                ;;
+            n|no)
+                printf '%s' "no"
+                return 0
+                ;;
+            *)
+                echo "Wrong choice. Please type Y or n." > /dev/tty
+                ;;
+        esac
+    done
+}
+
+resolve_cache_build_choice() {
+    local reply=""
+    local override_choice="${USE_CACHE_BUILD_CHOICE:-}"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                USE_CACHE_BUILD=1
+                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: using build cache."
+                return 0
+                ;;
+            n|no)
+                USE_CACHE_BUILD=0
+                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: building with --no-cache."
+                return 0
+                ;;
+            *)
+                echo "ERROR: USE_CACHE_BUILD_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    reply="$(prompt_yes_no "Do you want to build using Docker cache? Y/n (Default: y)" "yes")"
+    if [ "${reply}" = "yes" ]; then
+        USE_CACHE_BUILD=1
+    else
+        USE_CACHE_BUILD=0
+    fi
+
+    return 0
+}
+
+resolve_start_containers_choice() {
+    local reply=""
+    local override_choice="${START_CONTAINERS_CHOICE:-}"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                START_CONTAINERS=1
+                echo "START_CONTAINERS_CHOICE=${override_choice}: containers will be started."
+                return 0
+                ;;
+            n|no)
+                START_CONTAINERS=0
+                echo "START_CONTAINERS_CHOICE=${override_choice}: skipping container startup."
+                return 0
+                ;;
+            *)
+                echo "ERROR: START_CONTAINERS_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    reply="$(prompt_yes_no "Do you want to start containers after build? Y/n (Default: y)" "yes")"
+    if [ "${reply}" = "yes" ]; then
+        START_CONTAINERS=1
+    else
+        START_CONTAINERS=0
+    fi
+
+    return 0
+}
+
 if ! resolve_delete_images_choice; then
+    exit 1
+fi
+
+if ! resolve_cache_build_choice; then
+    exit 1
+fi
+
+if ! resolve_start_containers_choice; then
     exit 1
 fi
 
@@ -443,7 +562,11 @@ else
     docker compose -f "${COMPOSE_FILE}" build --no-cache
 fi
 
-echo "Starting containers..."
-docker compose -f "${COMPOSE_FILE}" up -d
+if [ "${START_CONTAINERS}" -eq 1 ]; then
+    echo "Starting containers..."
+    docker compose -f "${COMPOSE_FILE}" up -d
+else
+    echo "Skipping container startup (START_CONTAINERS=0)."
+fi
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
