@@ -56,7 +56,7 @@ ensure_installation_path() {
     local install_path="$1"
 
     if [ ! -d "${install_path}" ]; then
-        echo "Installation path does not exist. Creating: ${install_path}"
+        echo "OMERO installation path does not exist. Creating: ${install_path}"
         install -d -m 0755 "${install_path}"
     fi
 }
@@ -74,7 +74,7 @@ while true; do
         KEEP_IMAGES=0
         break
     else
-        echo "Wrong choice. Please enter Y or N."
+        echo "Wrong choice. Please type Y or n."
     fi
 done
 
@@ -96,14 +96,14 @@ while true; do
                 break
             fi
 
-            echo "Wrong installation path, try again:"
+            echo "Wrong OMERO installation path, try again: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH})"
         done
         break
     elif [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
         OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
         break
     else
-        echo "Wrong choice. Please enter Y or N."
+        echo "Wrong choice. Please type Y or n."
     fi
 done
 
