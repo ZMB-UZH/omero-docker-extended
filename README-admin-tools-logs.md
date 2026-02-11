@@ -41,6 +41,37 @@ GRAFANA_ANONYMOUS_ROLE=Viewer
 Grafana container settings live in `env/compose.env` (loaded via `env_file` in the grafana service).
 The host port mapping (`3000:3000`) and the Docker socket GID (`group_add`) are set directly in `docker-compose.yml`.
 
+
+## Legacy `OMERO Infrastructure` folder after upgrades
+
+### Root cause
+
+The folder is persisted in Grafana's SQLite database under the named Docker volume `grafana_data`.
+If you ran an older stack revision that provisioned dashboards into the folder title
+`OMERO Infrastructure`, that folder can remain in persisted state even after newer config changes.
+
+### Definitive fix (reset Grafana persisted state)
+
+> This removes Grafana UI state (folders, stars, local dashboard edits) stored in `grafana_data`.
+> Provisioned datasources/dashboards are recreated automatically on next startup.
+
+```bash
+# Stop Grafana so the volume can be removed safely.
+docker compose stop grafana
+
+# Find the concrete Docker volume name backing `grafana_data`.
+docker volume ls --format '{{.Name}}' | grep '_grafana_data$'
+
+# Remove that volume (replace <project>_grafana_data with your actual name).
+docker volume rm <project>_grafana_data
+
+# Start Grafana again.
+docker compose up -d grafana
+```
+
+If you want to reset all monitoring persisted state in one shot, you can additionally remove
+`prometheus_data` and `loki_data` volumes the same way.
+
 For the Admin tools resource monitoring page, proxy links are now host-agnostic by default.
 If you also want to expose direct external links, set these optional variables in `env/omeroweb.env`:
 
