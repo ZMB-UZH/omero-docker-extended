@@ -205,7 +205,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "up{job=\"postgres_exporter\"}"
+          "expr": "up{job=\"postgres_exporter_plugin\"}"
         }
       ]
     },
