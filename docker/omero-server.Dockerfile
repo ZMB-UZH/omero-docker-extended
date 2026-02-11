@@ -79,7 +79,7 @@ RUN set -euo pipefail; \
             wheel \
             "cryptography>=42.0.0" \
             "urllib3>=2.6.3"; \
-        "${VENV_DIR}/bin/python" -c 'import importlib.metadata as metadata; import pip, wheel, cryptography, urllib3; print(f"Python packaging import check succeeded (setuptools={metadata.version("setuptools")})")'; \
+        "${VENV_DIR}/bin/python" -c 'import importlib.metadata as metadata; import pip, wheel, cryptography, urllib3; print("Python packaging import check succeeded (setuptools={})".format(metadata.version("setuptools")))'; \
     done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
