@@ -8,6 +8,8 @@ OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
+DEFAULT_OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
+DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
 OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
 OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
@@ -134,6 +136,24 @@ ensure_data_path() {
     return 0
 }
 
+persist_compose_path_overrides() {
+    local env_file_path="${OMERO_INSTALLATION_PATH%/}/.env"
+
+    touch "${env_file_path}"
+
+    if grep -q '^OMERO_DATABASE_PATH=' "${env_file_path}"; then
+        sed -i "s|^OMERO_DATABASE_PATH=.*|OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}|" "${env_file_path}"
+    else
+        printf '\nOMERO_DATABASE_PATH=%s\n' "${OMERO_DATABASE_PATH}" >> "${env_file_path}"
+    fi
+
+    if grep -q '^OMERO_PLUGIN_DATABASE_PATH=' "${env_file_path}"; then
+        sed -i "s|^OMERO_PLUGIN_DATABASE_PATH=.*|OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}|" "${env_file_path}"
+    else
+        printf 'OMERO_PLUGIN_DATABASE_PATH=%s\n' "${OMERO_PLUGIN_DATABASE_PATH}" >> "${env_file_path}"
+    fi
+}
+
 echo "Do you want to delete all container images? Y/n (Default: n)"
 
 while true; do
@@ -172,6 +192,41 @@ while true; do
 
             echo "Wrong OMERO installation path, try again: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH})"
         done
+
+        DEFAULT_OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
+        DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
+
+        while true; do
+            read -r -p "OMERO database installation path: (Default: ${DEFAULT_OMERO_DATABASE_PATH}) " OMERO_DATABASE_PATH_REPLY
+
+            if [ -z "${OMERO_DATABASE_PATH_REPLY}" ]; then
+                OMERO_DATABASE_PATH_REPLY="${DEFAULT_OMERO_DATABASE_PATH}"
+            fi
+
+            if validate_installation_path "${OMERO_DATABASE_PATH_REPLY}" \
+                && ensure_data_path "${OMERO_DATABASE_PATH_REPLY}" "OMERO database directory"; then
+                OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH_REPLY}"
+                break
+            fi
+
+            echo "Wrong OMERO database installation path, try again: (Default: ${DEFAULT_OMERO_DATABASE_PATH})"
+        done
+
+        while true; do
+            read -r -p "OMERO plugin database installation path: (Default: ${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}) " OMERO_PLUGIN_DATABASE_PATH_REPLY
+
+            if [ -z "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" ]; then
+                OMERO_PLUGIN_DATABASE_PATH_REPLY="${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}"
+            fi
+
+            if validate_installation_path "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" \
+                && ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH_REPLY}" "OMP plugin database directory"; then
+                OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH_REPLY}"
+                break
+            fi
+
+            echo "Wrong OMERO plugin database installation path, try again: (Default: ${DEFAULT_OMERO_PLUGIN_DATABASE_PATH})"
+        done
         break
     elif [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
         if validate_installation_path "${DEFAULT_OMERO_INSTALLATION_PATH}" \
@@ -191,9 +246,6 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     exit 1
 fi
 
-OMERO_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/database"
-OMERO_PLUGIN_DATABASE_PATH="${OMERO_INSTALLATION_PATH%/}/omero_data/plugin_database"
-
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
     exit 1
 fi
@@ -201,6 +253,8 @@ fi
 if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
     exit 1
 fi
+
+persist_compose_path_overrides
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
@@ -255,7 +309,7 @@ fi
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
 
 echo "Removing all files except script..."
-find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" ! -name "temp_clone" ! -name "docker-compose.yml.new" -exec rm -rf {} +
+find . -mindepth 1 -maxdepth 1 ! -name "${SCRIPT_NAME}" ! -name "temp_clone" ! -name "docker-compose.yml.new" ! -name ".env" -exec rm -rf {} +
 
 echo "Moving new files..."
 echo "Fixing line endings in shell scripts..."
