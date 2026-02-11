@@ -14,7 +14,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------
-ARG APPLY_DNF_UPDATES=1
+ARG APPLY_DNF_UPDATES=0
 
 # Basic hardening for pip (no behavior change expected)
 # -----------------------------------------------------
@@ -60,14 +60,19 @@ RUN set -euo pipefail; \
     ln -sf "${VENV_DIR}/bin/python" "${SERVER_DIR}/bin/python"; \
     echo "Created symlink: ${SERVER_DIR}/bin/python -> ${VENV_DIR}/bin/python"
 
-# NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!! Security hardening: upgrade selected Python tooling inside OMERO.server venv
+# Optional (off by default): vulnerability-testing updates for OMERO.server venv Python tooling
 # WARNING:
 # - Affects OMERO.server Python gateway
-# - Remove immediately if Blitz / TLS / import issues occur
-# - Uses >= only (no pinning), matching OMERO.web policy
-# ------------------------------------------------------
+# - Enable only for vulnerability testing
+# - Disable immediately if Blitz / TLS / import issues occur
+# -------------------------------------------------------------------------------
+ARG APPLY_OMERO_VENV_TOOLING_UPDATES=0
 RUN set -euo pipefail; \
-    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 -type d -name 'venv*' | sort -V); \
+    if [[ "${APPLY_OMERO_VENV_TOOLING_UPDATES}" != "1" ]]; then \
+        echo "Skipping optional OMERO.server venv tooling updates (APPLY_OMERO_VENV_TOOLING_UPDATES=${APPLY_OMERO_VENV_TOOLING_UPDATES})."; \
+        exit 0; \
+    fi; \
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
     if [[ "${#VENV_DIRS[@]}" -eq 0 ]]; then \
         echo "ERROR: No OMERO.server virtual environments found under /opt/omero/server" >&2; \
         exit 1; \
@@ -83,9 +88,8 @@ RUN set -euo pipefail; \
             wheel \
             "cryptography>=42.0.0" \
             "urllib3>=2.6.3"; \
-        "${VENV_DIR}/bin/python" -c 'import importlib.metadata as metadata; import pip, pkg_resources, wheel, cryptography, urllib3; print("Python packaging import check succeeded (setuptools={}, pkg_resources={})".format(metadata.version("setuptools"), pkg_resources.__name__))'; \
+        "${VENV_DIR}/bin/python" -c "import importlib.metadata as metadata; import setuptools, wheel, cryptography, urllib3; print(\"Python packaging import check succeeded (setuptools={})\".format(metadata.version(\"setuptools\")))"; \
     done
-
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \

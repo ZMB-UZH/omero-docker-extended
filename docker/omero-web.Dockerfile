@@ -16,7 +16,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------
-ARG APPLY_DNF_UPDATES=1
+ARG APPLY_DNF_UPDATES=0
 
 # Basic hardening for pip (no behavior change expected)
 # -----------------------------------------------------
@@ -188,13 +188,23 @@ RUN set -euo pipefail; \
         omero web syncmedia \
     "
 
-# Security hardening: upgrade selected Python tooling inside OMERO.web venv
+# Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
 # WARNING:
-# - Remove immediately if you observe persistent issues in OMERO.web
-# - Uses >= only (no pinning)
-# ---------------------------
+# - Affects OMERO.web Python runtime
+# - Enable only for vulnerability testing
+# - Disable immediately if persistent OMERO.web issues occur
+# -----------------------------------------------------------------------------
+ARG APPLY_OMEROWEB_VENV_TOOLING_UPDATES=0
 RUN set -euo pipefail; \
+    if [[ "${APPLY_OMEROWEB_VENV_TOOLING_UPDATES}" != "1" ]]; then \
+        echo "Skipping optional OMERO.web venv tooling updates (APPLY_OMEROWEB_VENV_TOOLING_UPDATES=${APPLY_OMEROWEB_VENV_TOOLING_UPDATES})."; \
+        exit 0; \
+    fi; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO.web venv" >&2; \
+        exit 1; \
+    fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
         pip \
         setuptools>=78.1.1 \
