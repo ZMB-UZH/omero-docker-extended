@@ -306,19 +306,19 @@ services:
           path="$1"
           label="$2"
 
-          echo "Checking ${label} ownership..."
-          ls -ld "${path}" || true
-          echo "Setting ownership to UID:GID ${TARGET_UID}:${TARGET_GID} on ${label}..."
-          chown -R "${TARGET_UID}:${TARGET_GID}" "${path}" 2>/dev/null || echo "Note: Some ${label} files may already have correct ownership"
-          echo "Setting permissions (u+rwX) on ${label}..."
-          chmod -R u+rwX "${path}" 2>/dev/null || true
+          echo "Checking $${label} ownership..."
+          ls -ld "$${path}" || true
+          echo "Setting ownership to UID:GID $${TARGET_UID}:$${TARGET_GID} on $${label}..."
+          chown -R "$${TARGET_UID}:$${TARGET_GID}" "$${path}" 2>/dev/null || echo "Note: Some $${label} files may already have correct ownership"
+          echo "Setting permissions (u+rwX) on $${label}..."
+          chmod -R u+rwX "$${path}" 2>/dev/null || true
           echo ""
         }
 
         fix_path /OMERO "/OMERO"
 
         mkdir -p /OMERO/certs
-        chown "${TARGET_UID}:${TARGET_GID}" /OMERO/certs
+        chown "$${TARGET_UID}:$${TARGET_GID}" /OMERO/certs
         chmod 0750 /OMERO/certs
 
         mkdir -p /opt/omero/server/OMERO.server/var/log
