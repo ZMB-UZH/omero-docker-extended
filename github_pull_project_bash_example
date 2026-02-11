@@ -14,30 +14,30 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
 set -euo pipefail
 
-REFRESH_CLONE_DIR=""
+BOOTSTRAP_CLONE_DIR=""
 
 cleanup_refresh_clone_dir() {
-    if [ -n "${REFRESH_CLONE_DIR}" ] && [ -d "${REFRESH_CLONE_DIR}" ]; then
-        rm -rf "${REFRESH_CLONE_DIR}"
+    if [ -n "${BOOTSTRAP_CLONE_DIR}" ] && [ -d "${BOOTSTRAP_CLONE_DIR}" ]; then
+        rm -rf "${BOOTSTRAP_CLONE_DIR}"
     fi
 }
 
-pull_installation_env_file_first() {
+bootstrap_repo_clone_and_refresh_installation_env() {
     local refreshed_env_file="${SCRIPT_DIR}/env/installation_paths.env"
 
-    REFRESH_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.installation-env-refresh.XXXXXX")"
+    BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.installation-env-refresh.XXXXXX")"
 
-    if [ ! -d "${REFRESH_CLONE_DIR}" ]; then
+    if [ ! -d "${BOOTSTRAP_CLONE_DIR}" ]; then
         echo "ERROR: Failed to create temporary directory for refreshing installation_paths.env." >&2
         return 1
     fi
 
-    if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${REFRESH_CLONE_DIR}" >/dev/null 2>&1; then
+    if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}" >/dev/null 2>&1; then
         echo "ERROR: Failed to pull latest files from ${REPO_URL} (${REPO_BRANCH}). Unable to refresh installation_paths.env." >&2
         return 1
     fi
 
-    if [ ! -f "${REFRESH_CLONE_DIR}/env/installation_paths.env" ]; then
+    if [ ! -f "${BOOTSTRAP_CLONE_DIR}/env/installation_paths.env" ]; then
         echo "ERROR: Pulled repository is missing env/installation_paths.env on branch ${REPO_BRANCH}." >&2
         return 1
     fi
@@ -47,7 +47,7 @@ pull_installation_env_file_first() {
         return 1
     fi
 
-    if ! cp "${REFRESH_CLONE_DIR}/env/installation_paths.env" "${refreshed_env_file}"; then
+    if ! cp "${BOOTSTRAP_CLONE_DIR}/env/installation_paths.env" "${refreshed_env_file}"; then
         echo "ERROR: Failed to copy refreshed installation_paths.env to ${refreshed_env_file}." >&2
         return 1
     fi
@@ -118,7 +118,7 @@ fi
 
 trap cleanup_refresh_clone_dir EXIT
 
-if ! pull_installation_env_file_first; then
+if ! bootstrap_repo_clone_and_refresh_installation_env; then
     exit 1
 fi
 
@@ -329,11 +329,14 @@ COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 # --------
 cd "${OMERO_INSTALLATION_PATH}"
 
-echo "Pulling latest docker-compose.yml from GitHub..."
+echo "Preparing latest docker-compose.yml from bootstrap clone..."
 rm -rf temp_clone
-git clone -b "${REPO_BRANCH}" "${REPO_URL}" temp_clone
+if ! cp -a "${BOOTSTRAP_CLONE_DIR}" temp_clone; then
+    echo "ERROR: Failed to copy bootstrap repository clone to ${OMERO_INSTALLATION_PATH}/temp_clone" >&2
+    exit 1
+fi
 if [ ! -d "temp_clone" ]; then
-    echo "ERROR: Git clone failed"
+    echo "ERROR: Repository staging directory temp_clone is missing"
     exit 1
 fi
 cp temp_clone/docker-compose.yml docker-compose.yml.new
