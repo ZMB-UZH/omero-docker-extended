@@ -16,6 +16,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------
+# NOTE:
+# - Keep disabled by default for deterministic builds.
+# - Enable only for vulnerability testing.
+# - APPLY_DNF_UPDATES is kept as a backward-compatible alias.
+ARG APPLY_OMEROWEB_DNF_UPDATES=0
 ARG APPLY_DNF_UPDATES=0
 
 # Basic hardening for pip (no behavior change expected)
@@ -49,13 +54,21 @@ RUN set -euo pipefail; \
         fi; \
     fi
 
-# NOT SUGGESTED!! USE ONLY FOR VULNERABILITY TESTING!!
-# Optional: apply OS updates at build time
-# ----------------------------------------
+# Optional (off by default): vulnerability-testing updates for OS packages
+# WARNING:
+# - Affects reproducibility and cache stability
+# - Enable only for vulnerability testing
+# ------------------------------------------------------------
 RUN set -euo pipefail; \
+    APPLY_UPDATES="${APPLY_OMEROWEB_DNF_UPDATES}"; \
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
-        dnf -y update --security || dnf -y update; \
-    fi
+        APPLY_UPDATES="1"; \
+    fi; \
+    if [[ "${APPLY_UPDATES}" != "1" ]]; then \
+        echo "Skipping optional OS updates (APPLY_OMEROWEB_DNF_UPDATES=${APPLY_OMEROWEB_DNF_UPDATES}, APPLY_DNF_UPDATES=${APPLY_DNF_UPDATES})."; \
+        exit 0; \
+    fi; \
+    dnf -y update --security || dnf -y update
 
 # Install build dependencies required for installing OMERO Python API (omero-py)
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
