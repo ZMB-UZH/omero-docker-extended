@@ -14,7 +14,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Optional: enable OS package security updates at build time
 # ----------------------------------------------------------
-ARG APPLY_DNF_UPDATES=1
+ARG APPLY_DNF_UPDATES=0
 
 # Basic hardening for pip (no behavior change expected)
 # -----------------------------------------------------
@@ -67,7 +67,7 @@ RUN set -euo pipefail; \
 # - Enable only for vulnerability testing
 # - Disable immediately if Blitz / TLS / import issues occur
 # ----------------------------------------------------------
-ARG APPLY_OMERO_VENV_TOOLING_UPDATES=1
+ARG APPLY_OMERO_VENV_TOOLING_UPDATES=0
 RUN set -euo pipefail; \
     if [[ "${APPLY_OMERO_VENV_TOOLING_UPDATES}" != "1" ]]; then \
         echo "Skipping optional OMERO.server venv tooling updates (APPLY_OMERO_VENV_TOOLING_UPDATES=${APPLY_OMERO_VENV_TOOLING_UPDATES})."; \
