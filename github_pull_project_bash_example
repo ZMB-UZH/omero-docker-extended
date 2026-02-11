@@ -336,7 +336,7 @@ resolve_path_with_default_prompt() {
     fi
 
     while true; do
-        echo "Use default ${path_label} (${default_path})? Y/n (Default: n)" > /dev/tty
+        echo "Use default ${path_label} (${default_path})? Y/n (Default: Y)" > /dev/tty
         printf '> ' > /dev/tty
 
         if ! IFS= read -r reply < /dev/tty; then
@@ -346,7 +346,12 @@ resolve_path_with_default_prompt() {
 
         reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
 
-        if [ -z "${reply}" ] || [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
+        if [ -z "${reply}" ] || [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
+            printf '%s' "${default_path}"
+            return 0
+        fi
+
+        if [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
             while true; do
                 printf '%s: (Current: %s) ' "${path_label}" "${default_path}" > /dev/tty
 
@@ -366,11 +371,6 @@ resolve_path_with_default_prompt() {
 
                 echo "Wrong ${path_label}, try again: (Current: ${default_path})" > /dev/tty
             done
-        fi
-
-        if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
-            printf '%s' "${default_path}"
-            return 0
         fi
 
         echo "Wrong choice. Please type Y or n." > /dev/tty
