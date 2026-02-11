@@ -3,11 +3,11 @@
 # Configuration (change SCRIPT_NAME and BASE_DIR according to your preferences)
 # -----------------------------------------------------------------------------
 SCRIPT_NAME="github_pull_project"
-DEFAULT_BASE_DIR="/opt/omero/"
-BASE_DIR="${DEFAULT_BASE_DIR}"
+DEFAULT_OMERO_INSTALLATION_PATH="/opt/omero/"
+OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
-COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
+COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 
@@ -78,22 +78,22 @@ while true; do
     fi
 done
 
-echo "Do you want to use the default locations? Y/n (Default: n)"
-read -r -p "> " USE_DEFAULT_LOCATIONS_REPLY
-USE_DEFAULT_LOCATIONS_REPLY="$(printf '%s' "${USE_DEFAULT_LOCATIONS_REPLY}" | tr '[:upper:]' '[:lower:]')"
+echo "Do you want to use the default OMERO installation path? Y/n (Default: n)"
+read -r -p "> " USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY
+USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY="$(printf '%s' "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" | tr '[:upper:]' '[:lower:]')"
 
-if [ "${USE_DEFAULT_LOCATIONS_REPLY}" = "y" ] || [ "${USE_DEFAULT_LOCATIONS_REPLY}" = "yes" ]; then
-    BASE_DIR="${DEFAULT_BASE_DIR}"
+if [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "y" ] || [ "${USE_DEFAULT_OMERO_INSTALLATION_PATH_REPLY}" = "yes" ]; then
+    OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
 else
     while true; do
-        read -r -p "OMERO installation path: (Default: ${DEFAULT_BASE_DIR}) " INSTALL_PATH_REPLY
-        if [ -z "${INSTALL_PATH_REPLY}" ]; then
-            BASE_DIR="${DEFAULT_BASE_DIR}"
+        read -r -p "OMERO installation path: (Default: ${DEFAULT_OMERO_INSTALLATION_PATH}) " OMERO_INSTALLATION_PATH_REPLY
+        if [ -z "${OMERO_INSTALLATION_PATH_REPLY}" ]; then
+            OMERO_INSTALLATION_PATH="${DEFAULT_OMERO_INSTALLATION_PATH}"
             break
         fi
 
-        if is_valid_linux_path "${INSTALL_PATH_REPLY}"; then
-            BASE_DIR="${INSTALL_PATH_REPLY}"
+        if is_valid_linux_path "${OMERO_INSTALLATION_PATH_REPLY}"; then
+            OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH_REPLY}"
             break
         fi
 
@@ -101,12 +101,12 @@ else
     done
 fi
 
-ensure_installation_path "${BASE_DIR}"
-COMPOSE_FILE="${BASE_DIR}/docker-compose.yml"
+ensure_installation_path "${OMERO_INSTALLATION_PATH}"
+COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
 # Workflow
 # --------
-cd "${BASE_DIR}"
+cd "${OMERO_INSTALLATION_PATH}"
 SCRIPT_BACKUP=""
 if [ -f "${SCRIPT_NAME}" ]; then
     echo "Backing up script..."
@@ -137,7 +137,7 @@ fi
 
 echo "Removing stale OMERO repository lock files from the OMERO volume..."
 
-PROJECT_NAME="$(basename "${BASE_DIR}")"
+PROJECT_NAME="$(basename "${OMERO_INSTALLATION_PATH}")"
 OMERO_VOLUME="${PROJECT_NAME}_omero"
 
 if docker volume inspect "${OMERO_VOLUME}" >/dev/null 2>&1; then
@@ -188,6 +188,5 @@ echo "Starting containers..."
 docker compose -f "${COMPOSE_FILE}" up -d
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."
-
 
 
