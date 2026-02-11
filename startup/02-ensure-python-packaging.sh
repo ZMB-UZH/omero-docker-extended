@@ -64,7 +64,7 @@ missing = []
 
 for package_name in required_packages:
     try:
-        print(f"{package_name}={metadata.version(package_name)}")
+        metadata.version(package_name)
     except PackageNotFoundError:
         missing.append(package_name)
 
@@ -110,7 +110,7 @@ missing = []
 
 for package_name in required_packages:
     try:
-        print(f"Recovered {package_name}={metadata.version(package_name)}")
+        metadata.version(package_name)
     except PackageNotFoundError:
         missing.append(package_name)
 
