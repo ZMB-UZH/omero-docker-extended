@@ -60,7 +60,7 @@ bootstrap_repo_clone_and_refresh_installation_env() {
 create_default_installation_env_file() {
     local target_env_file="$1"
     local default_installation_path="${SCRIPT_DIR}"
-    local default_database_path="${default_installation_path%/}/database"
+    local default_omero_database_path="${default_installation_path%/}/omero_database"
     local default_plugin_database_path="${default_installation_path%/}/plugin_database"
     local default_omero_data_path="/opt/omero/omero_data"
 
@@ -71,7 +71,7 @@ create_default_installation_env_file() {
 
     cat > "${target_env_file}" <<EOF
 OMERO_INSTALLATION_PATH=${default_installation_path}
-OMERO_DATABASE_PATH=${default_database_path}
+OMERO_DATABASE_PATH=${default_omero_database_path}
 OMERO_PLUGIN_DATABASE_PATH=${default_plugin_database_path}
 OMERO_DATA_PATH=${default_omero_data_path}
 EOF
@@ -523,7 +523,7 @@ DEFAULT_OMERO_DATA_PATH="${OMERO_DATA_PATH}"
 OMERO_INSTALLATION_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
 OMERO_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
 OMERO_PLUGIN_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
-OMERO_DATA_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATA_PATH}" "OMERO data installation path")"
+OMERO_DATA_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
 
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
