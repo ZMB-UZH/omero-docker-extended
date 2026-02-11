@@ -290,7 +290,7 @@ services:
   # Runs once at startup, then exits.
   # ---------------------------------------------------------------------------
   omero-data-init:
-    image: alpine:latest
+    image: "alpine:3.22.1"
     container_name: omero-data-init
     restart: "no"
     command: |
@@ -299,23 +299,36 @@ services:
         echo "OMERO Data Permission Initialization"
         echo "================================================"
         echo ""
-        echo "Checking /OMERO directory ownership..."
-        ls -ld /OMERO || true
-        echo ""
-        echo "Setting ownership to UID 1000 (omero-server)..."
-        chown -R 1000:1000 /OMERO 2>/dev/null || echo "Note: Some files may already have correct ownership"
-        echo ""
-        echo "Setting permissions (u+rwX)..."
-        chmod -R u+rwX /OMERO 2>/dev/null || true
-        echo ""
-        echo "Creating /OMERO/certs if missing..."
+        TARGET_UID=1000
+        TARGET_GID=1000
+
+        fix_path() {
+          path="$1"
+          label="$2"
+
+          echo "Checking ${label} ownership..."
+          ls -ld "${path}" || true
+          echo "Setting ownership to UID:GID ${TARGET_UID}:${TARGET_GID} on ${label}..."
+          chown -R "${TARGET_UID}:${TARGET_GID}" "${path}" 2>/dev/null || echo "Note: Some ${label} files may already have correct ownership"
+          echo "Setting permissions (u+rwX) on ${label}..."
+          chmod -R u+rwX "${path}" 2>/dev/null || true
+          echo ""
+        }
+
+        fix_path /OMERO "/OMERO"
+
         mkdir -p /OMERO/certs
-        chown 1000:1000 /OMERO/certs
+        chown "${TARGET_UID}:${TARGET_GID}" /OMERO/certs
         chmod 0750 /OMERO/certs
-        echo ""
+
+        mkdir -p /opt/omero/server/OMERO.server/var/log
+        fix_path /opt/omero/server/OMERO.server/var "OMERO.server var"
+
         echo "Final ownership:"
         ls -ld /OMERO
         ls -ld /OMERO/certs 2>/dev/null || true
+        ls -ld /opt/omero/server/OMERO.server/var 2>/dev/null || true
+        ls -ld /opt/omero/server/OMERO.server/var/log 2>/dev/null || true
         echo ""
         echo "✓ Permission initialization complete"
         echo "================================================"
@@ -323,6 +336,8 @@ services:
     user: "0:0"  # Run as root to fix permissions
     volumes:
       - ${OMERO_USER_DATA_PATH}:/OMERO:rw
+      - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
+      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
     network_mode: none
 
   omeroserver:
