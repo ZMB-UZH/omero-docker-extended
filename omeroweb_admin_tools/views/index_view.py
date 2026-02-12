@@ -1238,12 +1238,23 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if root_error:
         return root_error
     grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    if subpath.startswith(("http://", "https://")):
+        parsed = urlparse(subpath)
+        subpath = parsed.path.lstrip("/")
+        forwarded_query = parsed.query
+    else:
+        forwarded_query = ""
+    request_query = request.META.get("QUERY_STRING", "")
+    merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
+    proxy_prefix = (
+        request.path[: -len(subpath)].rstrip("/") if subpath else request.path
+    )
     return _proxy_http_request(
         request,
         grafana_base_url,
-        request.path,
-        request.META.get("QUERY_STRING", ""),
-        proxy_prefix="",
+        subpath,
+        merged_query,
+        proxy_prefix=proxy_prefix,
     )
 
 
