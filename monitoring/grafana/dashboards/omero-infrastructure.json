@@ -15,8 +15,8 @@
       "description": "Single-host specification list sourced only from node-exporter metrics.",
       "id": 16,
       "gridPos": {
-        "h": 6,
-        "w": 24,
+        "h": 8,
+        "w": 12,
         "x": 0,
         "y": 0
       },
@@ -31,98 +31,11 @@
             "cellOptions": {
               "type": "auto"
             }
-          }
+          },
+          "unit": "none",
+          "decimals": 2
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #A"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #B"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #C"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #D"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #E"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #F"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "s"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "showHeader": true,
@@ -133,99 +46,38 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "machine_cpu_cores{job=\"node-exporter\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "B",
-          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "C",
-          "expr": "node_memory_SwapTotal_bytes{job=\"node-exporter\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "D",
-          "expr": "node_filesystem_size_bytes{job=\"node-exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "E",
-          "expr": "node_filesystem_avail_bytes{job=\"node-exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "F",
-          "expr": "time() - node_boot_time_seconds{job=\"node-exporter\"}",
-          "format": "table",
-          "instant": true
-        },
-        {
-          "refId": "G",
-          "expr": "node_uname_info{job=\"node-exporter\"}",
+          "expr": "label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU Cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1024^3), \"spec\", \"Memory Total (GiB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1024^3), \"spec\", \"Swap Total (GiB)\", \"__name__\", \".*\") or label_replace((node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1024^3), \"spec\", \"Root Disk Size (GiB)\", \"__name__\", \".*\") or label_replace((node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1024^3), \"spec\", \"Root Disk Free (GiB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (Hours)\", \"__name__\", \".*\")",
           "format": "table",
           "instant": true
         }
       ],
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
-        },
-        {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true,
-              "Time #A": true,
-              "Time #B": true,
-              "Time #C": true,
-              "Time #D": true,
-              "Time #E": true,
-              "Time #F": true,
-              "Time #G": true,
               "__name__": true,
-              "__name__ #A": true,
-              "__name__ #B": true,
-              "__name__ #C": true,
-              "__name__ #D": true,
-              "__name__ #E": true,
-              "__name__ #F": true,
-              "__name__ #G": true,
               "job": true,
-              "job #A": true,
-              "job #B": true,
-              "job #C": true,
-              "job #D": true,
-              "job #E": true,
-              "job #F": true,
-              "job #G": true,
+              "cpu": true,
+              "device": true,
+              "fstype": true,
+              "mode": true,
+              "mountpoint": true,
+              "nodename": true,
               "domainname": true,
-              "boot_id": true,
-              "machine_id": true,
-              "system_uuid": true,
+              "release": true,
+              "sysname": true,
+              "version": true,
+              "machine": true,
               "instance": true
             },
             "renameByName": {
-              "nodename": "Host",
-              "instance": "Host",
-              "machine": "Architecture",
-              "release": "Kernel Release",
-              "sysname": "OS",
-              "version": "Kernel Version",
-              "Value #A": "CPU Cores",
-              "Value #B": "Memory Total",
-              "Value #C": "Swap Total",
-              "Value #D": "Root Disk Size",
-              "Value #E": "Root Disk Free",
-              "Value #F": "Uptime (Seconds)"
+              "spec": "Specification"
+            },
+            "indexByName": {
+              "spec": 0,
+              "Value": 1
             }
           }
         }
@@ -239,7 +91,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -268,7 +120,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -297,7 +149,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -326,7 +178,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -353,7 +205,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -380,7 +232,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 6
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -407,7 +259,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 10
+        "y": 12
       },
       "datasource": {
         "type": "prometheus",
@@ -434,7 +286,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 10
+        "y": 12
       },
       "datasource": {
         "type": "prometheus",
@@ -461,7 +313,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 10
+        "y": 12
       },
       "datasource": {
         "type": "prometheus",
@@ -494,7 +346,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 18
+        "y": 20
       },
       "datasource": {
         "type": "prometheus",
@@ -561,7 +413,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 18
+        "y": 20
       },
       "datasource": {
         "type": "prometheus",
@@ -589,7 +441,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 18
+        "y": 20
       },
       "datasource": {
         "type": "prometheus",
@@ -618,7 +470,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 28
       },
       "datasource": {
         "type": "prometheus",
@@ -670,7 +522,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 28
       },
       "datasource": {
         "type": "prometheus",
@@ -698,7 +550,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 36
       },
       "datasource": {
         "type": "prometheus",
