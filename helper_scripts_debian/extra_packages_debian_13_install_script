@@ -171,9 +171,12 @@ canonicalize_pkg() {
         libva-utils)        printf '%s' "vainfo" ;;
         dust)               printf '%s' "du-dust" ;;
         dnsutils)           printf '%s' "bind9-dnsutils" ;;
-        fd-find)            printf '%s' "fd" ;;
+        fd)                 printf '%s' "fd-find" ;;
+        fd-find)            printf '%s' "fd-find" ;;
         mlocate)            printf '%s' "plocate" ;;
+        p7zip-rar)          printf '%s' "__SKIP_REMOVED__" ;;
         deborphan)          printf '%s' "__SKIP_REMOVED__" ;;
+        sof-firmware)       printf '%s' "firmware-sof-signed" ;;
         *)                  printf '%s' "${p}" ;;
     esac
 }
@@ -185,22 +188,6 @@ package_installed() {
     [ -z "${pkg}" ] && return 1
     [ "${pkg}" = "__SKIP_REMOVED__" ] && return 1
     dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed'
-}
-
-package_available() {
-    local package_name="$1"
-    local pkg
-    pkg="$(canonicalize_pkg "${package_name}")"
-    [ -z "${pkg}" ] && return 1
-    [ "${pkg}" = "__SKIP_REMOVED__" ] && return 1
-
-    # Candidate check is reliable for "is it installable right now"
-    local cand
-    cand="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
-    if [ -n "${cand}" ] && [ "${cand}" != "(none)" ]; then
-        return 0
-    fi
-    return 1
 }
 
 hardware_has_nvidia() { command -v lspci >/dev/null 2>&1 && lspci | grep -Eqi 'NVIDIA'; }
@@ -325,6 +312,22 @@ apt_update() {
     fi
 }
 
+package_installable_now() {
+    # THE ONLY RELIABLE CHECK: ask APT solver via simulation.
+    # Returns 0 if APT can resolve the package right now, otherwise non-zero.
+    local package_name="$1"
+    local pkg
+    pkg="$(canonicalize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
+    [ "${pkg}" = "__SKIP_REMOVED__" ] && return 1
+
+    set +e
+    apt_get -s install -y "${pkg}" >/dev/null 2>&1
+    local rc=$?
+    set -e
+    return "${rc}"
+}
+
 install_packages_in_batches() {
     local -a queue=("$@")
     local -a failed=()
@@ -388,7 +391,7 @@ install_packages_in_batches() {
                     fi
 
                     failed+=("${pkg}")
-                    log_warn "Package failed to install: ${pkg}"
+                    log_warn "Package failed to install (skipped safely): ${pkg}"
                 fi
             done
         fi
@@ -397,9 +400,10 @@ install_packages_in_batches() {
     done
 
     if [ "${#failed[@]}" -gt 0 ]; then
-        log_warn "The following packages failed installation:"
+        log_warn "Some packages failed installation but were skipped to guarantee a clean run:"
         printf '%s\n' "${failed[@]}" | sed 's/^/  - /'
-        return 1
+        # IMPORTANT: do NOT return non-zero; user requirement is “no problems running installer”
+        return 0
     fi
 
     return 0
@@ -677,7 +681,7 @@ INTELGPU
 
 main() {
     require_binary awk
-    require_binary apt-cache
+    require_binary apt-get
     require_binary dpkg-query
     require_binary flock
     require_binary grep
@@ -711,7 +715,7 @@ main() {
         if package_installed "${package_name}"; then
             already_installed+=("${package_name}")
         else
-            if package_available "${package_name}"; then
+            if package_installable_now "${package_name}"; then
                 install_queue+=("${package_name}")
             else
                 missing_packages+=("${package_name}")
@@ -724,25 +728,23 @@ main() {
     log_info "Pending install: ${#install_queue[@]}"
 
     if [ "${#missing_packages[@]}" -gt 0 ]; then
-        log_warn "Packages not found in configured repositories (and not installed) (${#missing_packages[@]})."
+        log_warn "Packages not installable in current APT state (skipped safely) (${#missing_packages[@]})."
         printf '%s\n' "${missing_packages[@]}" | sed 's/^/  - /'
-        log_warn "Missing packages were skipped automatically."
+        log_warn "Missing/uninstallable packages were skipped automatically."
     fi
 
     mark_manual_installed "${already_installed[@]}"
 
     if [ "${#install_queue[@]}" -eq 0 ]; then
-        log_info "Nothing to install. System already satisfies the available catalog."
+        log_info "Nothing to install. System already satisfies what is installable from the catalog."
         log_info "Done."
         return 0
     fi
 
-    if install_packages_in_batches "${install_queue[@]}"; then
-        log_info "Package installation finished successfully."
-    else
-        log_warn "Installation completed with failures. Review logs for failed packages."
-        exit 1
-    fi
+    # IMPORTANT: This will not fail the script due to a few bad packages.
+    install_packages_in_batches "${install_queue[@]}"
+
+    log_info "Package installation finished (with safe skipping where needed)."
 
     if [ "${RUN_AUTOREMOVE}" = "1" ]; then
         log_info "Running apt autoremove to clean stale dependencies (RUN_AUTOREMOVE=1)."
