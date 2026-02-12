@@ -5,6 +5,8 @@ import re
 import shutil
 import socket
 import subprocess
+import traceback
+import uuid
 from http.client import HTTPConnection
 from http.client import HTTPMessage
 from urllib.parse import urlparse
@@ -1438,6 +1440,7 @@ def server_database_testing_view(request, conn=None, url=None, **kwargs):
     )
 
 
+@csrf_exempt
 @login_required()
 def server_database_testing_run(request, conn=None, url=None, **kwargs):
     """Execute selected diagnostics scripts and return a report."""
@@ -1458,5 +1461,43 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
             status=400,
         )
 
-    results = [run_diagnostic_script(str(script_id)) for script_id in script_ids]
-    return JsonResponse({"results": results})
+    normalized_script_ids = [str(script_id).strip() for script_id in script_ids]
+    if any(not script_id for script_id in normalized_script_ids):
+        return JsonResponse(
+            {"error": "Payload contains invalid empty script IDs."},
+            status=400,
+        )
+
+    request_id = str(uuid.uuid4())
+    logger.info(
+        "[%s] Running diagnostics scripts requested by %s: %s",
+        request_id,
+        current_username(request),
+        ", ".join(normalized_script_ids),
+    )
+    try:
+        results = [
+            run_diagnostic_script(script_id) for script_id in normalized_script_ids
+        ]
+    except Exception as exc:
+        logger.error(
+            "[%s] Failed to run diagnostics scripts %s: %s\n%s",
+            request_id,
+            ", ".join(normalized_script_ids),
+            exc,
+            traceback.format_exc(),
+        )
+        return JsonResponse(
+            {
+                "error": "Failed to run diagnostics due to an internal server error.",
+                "request_id": request_id,
+            },
+            status=500,
+        )
+
+    logger.info(
+        "[%s] Diagnostics scripts completed successfully. scripts=%s",
+        request_id,
+        ", ".join(normalized_script_ids),
+    )
+    return JsonResponse({"results": results, "request_id": request_id})
