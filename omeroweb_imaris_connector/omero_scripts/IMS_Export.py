@@ -20,12 +20,17 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
 BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 DEFAULT_TIMEOUT_SECONDS = 600
-EXPORT_ROOT = get_env(
-    "OMERO_IMS_EXPORT_DIR",
-    env_file=ENV_FILE_OMERO_CELERY,
-)
-
-
+try:
+    EXPORT_ROOT = get_env(
+        "OMERO_IMS_EXPORT_DIR",
+        env_file=ENV_FILE_OMERO_CELERY,
+    )
+except RuntimeError as e:
+    # Some OMERO script runners do not propagate all container env vars reliably.
+    # Fall back to the default path under the mounted /OMERO volume.
+    EXPORT_ROOT = "/OMERO/ImarisExports"
+    print(f"WARNING: {e}")
+    print(f"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={EXPORT_ROOT}")
 def _safe_filename(name, fallback="image"):
     """Create a filesystem-safe filename (no path separators, no control chars)."""
     if name is None:
@@ -48,6 +53,9 @@ def _safe_filename(name, fallback="image"):
     if not name:
         name = fallback
     return name
+# Ensure export root exists
+os.makedirs(EXPORT_ROOT, exist_ok=True)
+
 
 
 def _ensure_bioformats_jar(install_dir):
