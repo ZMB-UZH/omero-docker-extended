@@ -988,7 +988,7 @@ resolve_service_image_from_compose_or_die() {
     local compose_file="$1"
     local service_name="$2"
 
-    if [ ! -f "${compose_file}"; then
+    if [ ! -f "${compose_file}" ]; then
         echo "ERROR: Cannot resolve image for service '${service_name}' because compose file is missing: ${compose_file}" >&2
         return 1
     fi
@@ -1004,7 +1004,7 @@ resolve_service_image_from_compose_or_die() {
             line=$0
             sub(/^[[:space:]]{4}image:[[:space:]]*/, "", line)
             gsub(/^"|"$/, "", line)
-            gsub(/^'|'$/, "", line)
+            gsub(/^\047|\047$/, "", line)
             print line
             exit
         }
