@@ -237,7 +237,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:12.4.0"
+    image: "grafana/grafana:12.4.0-21611641766"
     restart: unless-stopped
     networks:
       omero:
