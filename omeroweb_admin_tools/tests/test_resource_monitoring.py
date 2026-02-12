@@ -301,7 +301,7 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     import json
 
     payload = json.loads(response.content.decode("utf-8"))
-    assert payload["grafana"]["dashboard_url"].startswith("/")
+    assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload["prometheus"]["targets_proxy_url"].startswith("/")
@@ -375,7 +375,7 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     assert payload["grafana"]["dashboard_external_url"].startswith(
         "https://monitor.example.org/grafana/d/"
     )
-    assert payload["grafana"]["dashboard_url"].startswith("/")
+    assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert (
         payload["prometheus"]["targets_url"]
