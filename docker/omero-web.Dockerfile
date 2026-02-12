@@ -254,7 +254,11 @@ RUN set -euo pipefail; \
         'for f in /startup/*; do' \
         '    if [ -f "$f" ] && [ -x "$f" ]; then' \
         '        echo "Running $f $@"' \
-        '        "$f" "$@"' \
+        '        if [ "$(basename "$f")" = "10-web-bootstrap.sh" ]; then' \
+        '            "$f" "$@"' \
+        '        else' \
+        '            runuser -u omero-web -- "$f" "$@"' \
+        '        fi' \
         '    fi' \
         'done' \
         'echo "Startup scripts complete. Launching as omero-web: $@"' \
