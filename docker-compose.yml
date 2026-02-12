@@ -5,7 +5,7 @@
 services:
 
   portainer:
-    image: "portainer/portainer-ce:2.25.2-alpine"
+    image: "portainer/portainer-ce:2.38.1-alpine"
     container_name: portainer
     restart: unless-stopped
     networks:
@@ -21,10 +21,10 @@ services:
     command: --http-enabled
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 30
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
 
