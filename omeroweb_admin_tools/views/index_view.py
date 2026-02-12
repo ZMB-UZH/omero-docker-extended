@@ -1258,8 +1258,11 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "dashboard_external_url": dashboard_external_url,
                 "dashboard_proxy_url": dashboard_proxy_url,
                 "database_dashboard_url": database_dashboard_url,
+                "database_dashboard_proxy_url": database_dashboard_proxy_url,
                 "plugin_database_dashboard_url": plugin_database_dashboard_url,
+                "plugin_database_dashboard_proxy_url": plugin_database_dashboard_proxy_url,
                 "redis_dashboard_url": redis_dashboard_url,
+                "redis_dashboard_proxy_url": redis_dashboard_proxy_url,
                 "probe": grafana_probe,
             },
             "prometheus": {
