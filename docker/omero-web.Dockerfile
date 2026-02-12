@@ -257,14 +257,14 @@ RUN set -euo pipefail; \
         '        "$f" "$@"' \
         '    fi' \
         'done' \
-        'echo "Startup scripts complete. Launching: $@"' \
-        'exec "$@"' \
+        'echo "Startup scripts complete. Launching as omero-web: $@"' \
+        'exec runuser -u omero-web -- "$@"' \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
-# Drop privileges for runtime
-# ---------------------------
-USER omero-web
+# Keep root as image user so bootstrap scripts can reconcile runtime permissions
+# before dropping to the application user in the entrypoint.
+USER root
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-supervisord.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
