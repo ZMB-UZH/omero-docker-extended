@@ -9,6 +9,7 @@ from omeroweb_admin_tools.views.index_view import (
     _is_internal_hostname,
     _load_compose_service_names,
     _proxy_http_request,
+    _build_proxy_backend_urls,
 )
 
 
@@ -466,7 +467,9 @@ def test_build_target_service_status_reports_starting_healthcheck_state() -> Non
     ]
 
 
-def test_build_target_service_status_preserves_running_up_without_runtime_health() -> None:
+def test_build_target_service_status_preserves_running_up_without_runtime_health() -> (
+    None
+):
     statuses = _build_target_service_status(
         active_targets=[{"labels": {"job": "db"}, "health": "up"}],
         expected_services=["db"],
@@ -551,3 +554,70 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
             raise ValueError("invalid host header")
 
     assert _safe_request_host(DummyRequest()) == "172.23.208.90"
+
+
+def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
+    assert _build_proxy_backend_urls("http://grafana:3000", "") == [
+        "http://grafana:3000"
+    ]
+    assert _build_proxy_backend_urls("http://grafana:3000/", "http://grafana:3000") == [
+        "http://grafana:3000"
+    ]
+    assert _build_proxy_backend_urls(
+        "http://grafana:3000", "http://130.60.107.205:3000"
+    ) == [
+        "http://grafana:3000",
+        "http://130.60.107.205:3000",
+    ]
+
+
+def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
+    monkeypatch,
+) -> None:
+    request = RequestFactory().get(
+        "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
+        {"refresh": "10s"},
+    )
+
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    attempts = []
+
+    class DummyResponse:
+        def __init__(self, status_code: int):
+            self.status_code = status_code
+            self.content = b"{}"
+
+    def fake_proxy_http_request(
+        django_request,
+        base_url,
+        path,
+        query="",
+        *,
+        proxy_prefix="",
+    ):
+        attempts.append(base_url)
+        if base_url == "http://grafana:3000":
+            return DummyResponse(status_code=502)
+        return DummyResponse(status_code=200)
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        fake_proxy_http_request,
+    )
+
+    from omeroweb_admin_tools.views.index_view import grafana_proxy
+
+    response = grafana_proxy(
+        request,
+        "d/omero-infrastructure/server-infrastructure",
+        conn=None,
+    )
+
+    assert response.status_code == 200
+    assert attempts == ["http://grafana:3000", "http://130.60.107.205:3000"]

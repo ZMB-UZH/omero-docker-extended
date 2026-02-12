@@ -138,6 +138,22 @@ def _proxy_http_request(
         )
 
 
+def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
+    """Return ordered backend URLs used by proxy routes.
+
+    Internal URL is always preferred. If a public URL is configured it is used as
+    a fallback, which allows deployments where internal service DNS is
+    unavailable from the OMERO.web container.
+    """
+    urls: List[str] = []
+    for candidate in (internal_url, public_url):
+        normalized = str(candidate or "").strip().rstrip("/")
+        if not normalized or normalized in urls:
+            continue
+        urls.append(normalized)
+    return urls
+
+
 def _is_internal_hostname(hostname: str) -> bool:
     """Return whether hostname points to a local/container-only endpoint."""
     lowered = str(hostname or "").strip().lower()
@@ -732,6 +748,8 @@ def _diagnose_docker_health() -> Dict[str, object]:
         "current_uid": -1,
         "current_gids": [],
         "socket_stat": "",
+        "socket_gid": -1,
+        "process_in_socket_group": False,
         "api_reachable": False,
         "api_error": "",
         "container_count": 0,
@@ -760,6 +778,10 @@ def _diagnose_docker_health() -> Dict[str, object]:
                 f"uid={stat_info.st_uid} gid={stat_info.st_gid} "
                 f"mode={oct(stat_info.st_mode)}"
             )
+            diag["socket_gid"] = int(stat_info.st_gid)
+            diag["process_in_socket_group"] = int(stat_info.st_gid) in {
+                int(gid) for gid in list(diag.get("current_gids", []))
+            }
         except Exception as exc:
             diag["socket_stat"] = f"stat error: {exc}"
 
@@ -1255,25 +1277,39 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
+
     grafana_base_url = os.environ.get("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "")
+    backend_urls = _build_proxy_backend_urls(grafana_base_url, grafana_public_url)
+
     if subpath.startswith(("http://", "https://")):
         parsed = urlparse(subpath)
         subpath = parsed.path.lstrip("/")
         forwarded_query = parsed.query
     else:
         forwarded_query = ""
+
     request_query = request.META.get("QUERY_STRING", "")
     merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
     proxy_prefix = (
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
-    return _proxy_http_request(
-        request,
-        grafana_base_url,
-        subpath,
-        merged_query,
-        proxy_prefix=proxy_prefix,
-    )
+
+    last_response = None
+    for backend_url in backend_urls:
+        response = _proxy_http_request(
+            request,
+            backend_url,
+            subpath,
+            merged_query,
+            proxy_prefix=proxy_prefix,
+        )
+        last_response = response
+        if getattr(response, "status_code", 502) != 502:
+            return response
+
+    assert last_response is not None
+    return last_response
 
 
 @csrf_exempt
@@ -1283,27 +1319,44 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     root_error = _require_root_user(request, conn)
     if root_error:
         return root_error
+
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL", "http://prometheus:9090"
     )
+    prometheus_public_url = os.environ.get("ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", "")
+    backend_urls = _build_proxy_backend_urls(
+        prometheus_base_url,
+        prometheus_public_url,
+    )
+
     if subpath.startswith(("http://", "https://")):
         parsed = urlparse(subpath)
         subpath = parsed.path.lstrip("/")
         forwarded_query = parsed.query
     else:
         forwarded_query = ""
+
     request_query = request.META.get("QUERY_STRING", "")
     merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
     proxy_prefix = (
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
-    return _proxy_http_request(
-        request,
-        prometheus_base_url,
-        subpath,
-        merged_query,
-        proxy_prefix=proxy_prefix,
-    )
+
+    last_response = None
+    for backend_url in backend_urls:
+        response = _proxy_http_request(
+            request,
+            backend_url,
+            subpath,
+            merged_query,
+            proxy_prefix=proxy_prefix,
+        )
+        last_response = response
+        if getattr(response, "status_code", 502) != 502:
+            return response
+
+    assert last_response is not None
+    return last_response
 
 
 @login_required()
