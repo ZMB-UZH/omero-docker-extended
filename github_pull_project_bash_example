@@ -17,6 +17,8 @@ OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
 OMERO_WEB_GID="${OMERO_WEB_GID:-}"
+PROMETHEUS_UID="${PROMETHEUS_UID:-}"
+PROMETHEUS_GID="${PROMETHEUS_GID:-}"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -693,6 +695,16 @@ if [ -n "${OMERO_WEB_GID}" ]; then
         exit 1
     fi
 fi
+if [ -n "${PROMETHEUS_UID}" ]; then
+    if ! validate_numeric_id "PROMETHEUS_UID" "${PROMETHEUS_UID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${PROMETHEUS_GID}" ]; then
+    if ! validate_numeric_id "PROMETHEUS_GID" "${PROMETHEUS_GID}"; then
+        exit 1
+    fi
+fi
 
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
@@ -893,6 +905,27 @@ discover_uid_gid_or_die() {
     return 0
 }
 
+
+discover_container_default_id_or_die() {
+    local image="$1"
+    local id_flag="$2"  # -u or -g
+
+    local out=""
+
+    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
+        echo "ERROR: Failed to discover default runtime id ${id_flag} from image '${image}'." >&2
+        return 1
+    fi
+
+    if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Discovered non-numeric default runtime id (${id_flag})='${out}' in image '${image}'." >&2
+        return 1
+    fi
+
+    printf '%s' "${out}"
+    return 0
+}
+
 # Resolve actual user names (host-agnostic, image-defined)
 SERVER_USER="$(discover_first_existing_user_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "omero")"
 WEB_USER="$(discover_first_existing_user_or_die "${OMERO_WEB_IMAGE}" "omero-web" "omero")"
@@ -916,8 +949,16 @@ if [ -z "${OMERO_WEB_GID}" ]; then
     OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"
 fi
 
+if [ -z "${PROMETHEUS_UID}" ]; then
+    PROMETHEUS_UID="$(discover_container_default_id_or_die "prom/prometheus:v3.5.1" "-u")"
+fi
+if [ -z "${PROMETHEUS_GID}" ]; then
+    PROMETHEUS_GID="$(discover_container_default_id_or_die "prom/prometheus:v3.5.1" "-g")"
+fi
+
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
+echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=prom/prometheus:v3.5.1)"
 echo ""
 
 echo "================================================"
@@ -969,6 +1010,10 @@ if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor
     exit 1
 fi
 if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
+    exit 1
+fi
+
+if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then
     exit 1
 fi
 
