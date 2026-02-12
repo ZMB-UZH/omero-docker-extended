@@ -10,6 +10,223 @@
   "liveNow": false,
   "panels": [
     {
+      "type": "table",
+      "title": "Server Specifications Overview",
+      "description": "Consolidated inventory of host operating system and hardware specifications.",
+      "id": 16,
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #C"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #D"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #E"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #F"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "machine_cpu_cores",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_MemTotal_bytes",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "expr": "node_memory_SwapTotal_bytes",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "D",
+          "expr": "node_filesystem_size_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "E",
+          "expr": "node_filesystem_avail_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "F",
+          "expr": "time() - node_boot_time_seconds",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "refId": "G",
+          "expr": "node_uname_info",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time #A": true,
+              "Time #B": true,
+              "Time #C": true,
+              "Time #D": true,
+              "Time #E": true,
+              "Time #F": true,
+              "Time #G": true,
+              "__name__": true,
+              "__name__ #A": true,
+              "__name__ #B": true,
+              "__name__ #C": true,
+              "__name__ #D": true,
+              "__name__ #E": true,
+              "__name__ #F": true,
+              "__name__ #G": true,
+              "job": true,
+              "job #A": true,
+              "job #B": true,
+              "job #C": true,
+              "job #D": true,
+              "job #E": true,
+              "job #F": true,
+              "job #G": true,
+              "domainname": true
+            },
+            "renameByName": {
+              "instance": "Host",
+              "machine": "Architecture",
+              "release": "Kernel Release",
+              "sysname": "OS",
+              "version": "Kernel Version",
+              "Value #A": "CPU Cores",
+              "Value #B": "Memory Total",
+              "Value #C": "Swap Total",
+              "Value #D": "Root Disk Size",
+              "Value #E": "Root Disk Free",
+              "Value #F": "Uptime (Seconds)"
+            }
+          }
+        }
+      ]
+    },
+    {
       "type": "stat",
       "title": "Host CPU usage",
       "id": 1,
@@ -17,7 +234,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -46,7 +263,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -75,7 +292,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -104,7 +321,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -131,7 +348,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -158,7 +375,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 0
+        "y": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -185,7 +402,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 4
+        "y": 10
       },
       "datasource": {
         "type": "prometheus",
@@ -212,7 +429,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 4
+        "y": 10
       },
       "datasource": {
         "type": "prometheus",
@@ -239,7 +456,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 4
+        "y": 10
       },
       "datasource": {
         "type": "prometheus",
@@ -272,7 +489,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 12
+        "y": 18
       },
       "datasource": {
         "type": "prometheus",
@@ -339,7 +556,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 12
+        "y": 18
       },
       "datasource": {
         "type": "prometheus",
@@ -367,7 +584,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 12
+        "y": 18
       },
       "datasource": {
         "type": "prometheus",
@@ -396,7 +613,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 20
+        "y": 26
       },
       "datasource": {
         "type": "prometheus",
@@ -448,7 +665,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 20
+        "y": 26
       },
       "datasource": {
         "type": "prometheus",
@@ -476,7 +693,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 28
+        "y": 34
       },
       "datasource": {
         "type": "prometheus",
