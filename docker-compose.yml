@@ -388,7 +388,6 @@ services:
     env_file:
       - ./env/omeroserver.env
       - ./env/omero-celery.env
-    user: "omero-server:omero-server"
     hostname: omeroserver
     networks:
       omero:
@@ -471,8 +470,6 @@ services:
     env_file:
       - ./env/omeroweb.env
       - ./env/omero-celery.env
-    group_add:
-      - "988"
     networks:
       omero:
         aliases:
