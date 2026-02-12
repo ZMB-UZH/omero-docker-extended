@@ -810,6 +810,12 @@ copy_repo_files "temp_clone" "."
 rm -rf temp_clone
 rm -f docker-compose.yml.new
 
+# copy_repo_files removes everything except this script before restoring the repo,
+# which also removes ${OMERO_INSTALLATION_PATH}/.env generated earlier in this run.
+# Re-write path overrides so subsequent docker compose commands always receive
+# explicit mount paths instead of empty defaults.
+persist_compose_path_overrides
+
 if [ ! -f "${COMPOSE_FILE}" ]; then
     echo "ERROR: docker-compose.yml still missing after clone. Aborting." >&2
     exit 1
