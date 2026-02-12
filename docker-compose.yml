@@ -4,6 +4,41 @@
 
 services:
 
+  # ===========================================================================
+  # Portainer - Docker Container Management UI
+  # ===========================================================================
+  # Portainer provides a web-based UI for managing Docker containers, images,
+  # volumes, and networks. It's the first service to start for infrastructure
+  # management and monitoring.
+  #
+  # Access: http://localhost:9000
+  # Initial Setup: Create admin user on first access
+  # Data Persistence: ${PORTAINER_DATA_PATH}
+  # ===========================================================================
+  portainer:
+    image: "portainer/portainer-ce:2.25.2-alpine"
+    container_name: portainer
+    restart: unless-stopped
+    networks:
+      omero:
+        aliases:
+          - portainer
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${PORTAINER_DATA_PATH}:/data:rw
+    command: --http-enabled
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+
   loki:
     image: "grafana/loki:3.2.0"
     restart: unless-stopped
@@ -327,7 +362,7 @@ services:
         mkdir -p /opt/omero/server/OMERO.server/var/log
         fix_path /opt/omero/server/OMERO.server/var "OMERO.server var"
 
-        # Fix OMERO.web log directories (CRITICAL - fixes zarr logging failure)
+        # Fix OMERO.web log directories (CRITICAL - must be writable before zarr imports)
         mkdir -p /opt/omero/web/OMERO.web/var/log
         fix_path /opt/omero/web/OMERO.web/var/log "OMERO.web logs"
 
