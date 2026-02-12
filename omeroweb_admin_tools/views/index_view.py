@@ -1170,6 +1170,12 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
     database_dashboard_proxy_url = f"{postgres_dashboard_proxy_path}?{dashboard_query}"
     database_dashboard_url = f"/d/database-metrics/database?{dashboard_query}"
+    database_dashboard_external_url = ""
+    if grafana_public_base_url:
+        database_dashboard_external_url = (
+            f"{grafana_public_base_url.rstrip('/')}/d/database-metrics/database?"
+            f"{dashboard_query}"
+        )
 
     plugin_database_dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
@@ -1181,6 +1187,12 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     plugin_database_dashboard_url = (
         f"/d/plugin-database-metrics/plugin-database?{dashboard_query}"
     )
+    plugin_database_dashboard_external_url = ""
+    if grafana_public_base_url:
+        plugin_database_dashboard_external_url = (
+            f"{grafana_public_base_url.rstrip('/')}/d/plugin-database-metrics/"
+            f"plugin-database?{dashboard_query}"
+        )
 
     redis_dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
@@ -1188,6 +1200,12 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     )
     redis_dashboard_proxy_url = f"{redis_dashboard_proxy_path}?{dashboard_query}"
     redis_dashboard_url = f"/d/redis-metrics/redis?{dashboard_query}"
+    redis_dashboard_external_url = ""
+    if grafana_public_base_url:
+        redis_dashboard_external_url = (
+            f"{grafana_public_base_url.rstrip('/')}/d/redis-metrics/redis?"
+            f"{dashboard_query}"
+        )
     prometheus_targets_proxy_url = reverse(
         "omeroweb_admin_tools_prometheus_proxy", kwargs={"subpath": "targets"}
     )
@@ -1258,10 +1276,13 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
                 "dashboard_external_url": dashboard_external_url,
                 "dashboard_proxy_url": dashboard_proxy_url,
                 "database_dashboard_url": database_dashboard_url,
+                "database_dashboard_external_url": database_dashboard_external_url,
                 "database_dashboard_proxy_url": database_dashboard_proxy_url,
                 "plugin_database_dashboard_url": plugin_database_dashboard_url,
+                "plugin_database_dashboard_external_url": plugin_database_dashboard_external_url,
                 "plugin_database_dashboard_proxy_url": plugin_database_dashboard_proxy_url,
                 "redis_dashboard_url": redis_dashboard_url,
+                "redis_dashboard_external_url": redis_dashboard_external_url,
                 "redis_dashboard_proxy_url": redis_dashboard_proxy_url,
                 "probe": grafana_probe,
             },
