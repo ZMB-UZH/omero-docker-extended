@@ -403,6 +403,7 @@ persist_compose_path_overrides() {
     persist_env_var "${env_file_path}" "OMERO_WEB_SUPERVISOR_LOGS_PATH" "${OMERO_WEB_SUPERVISOR_LOGS_PATH}"
     persist_env_var "${env_file_path}" "PROMETHEUS_DATA_PATH" "${PROMETHEUS_DATA_PATH}"
     persist_env_var "${env_file_path}" "GRAFANA_DATA_PATH" "${GRAFANA_DATA_PATH}"
+    persist_env_var "${env_file_path}" "PORTAINER_DATA_PATH" "${PORTAINER_DATA_PATH}"
 }
 
 
@@ -662,6 +663,7 @@ OMERO_WEB_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_logs"
 OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
 PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
 GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
+PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 
 if ! validate_retry_config; then
     exit 1
@@ -728,6 +730,10 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data d
 fi
 
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then
     exit 1
 fi
 
