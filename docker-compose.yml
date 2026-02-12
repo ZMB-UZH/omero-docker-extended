@@ -303,22 +303,29 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  omero-data-init:
-    image: "alpine:3.22.1"
-    container_name: omero-data-init
+  omero-server-data-init:
+    image: omeroserver:custom
+    container_name: omero-server-data-init
     restart: "no"
+    user: "0:0"
     command: |
       sh -c '
+        set -euo pipefail
+
         echo "================================================"
-        echo "OMERO Data Permission Initialization"
+        echo "OMERO.server Data Permission Initialization"
         echo "================================================"
         echo ""
-        TARGET_UID=999
-        TARGET_GID=999
+
+        TARGET_UID="$$(id -u omero-server)"
+        TARGET_GID="$$(id -g omero-server)"
+
+        echo "Detected omero-server UID:GID = $${TARGET_UID}:$${TARGET_GID}"
+        echo ""
 
         fix_path() {
-          path="$1"
-          label="$2"
+          path="$$1"
+          label="$$2"
 
           echo "Checking $${label} ownership..."
           ls -ld "$${path}" || true
@@ -329,10 +336,10 @@ services:
           echo ""
         }
 
-        # Fix OMERO user data directory
+        # Fix OMERO repository directory
         fix_path /OMERO "/OMERO"
 
-        # Create and fix certs directory
+        # Create and fix certs directory (used across the stack)
         mkdir -p /OMERO/certs
         chown "$${TARGET_UID}:$${TARGET_GID}" /OMERO/certs
         chmod 0750 /OMERO/certs
@@ -341,34 +348,74 @@ services:
         mkdir -p /opt/omero/server/OMERO.server/var/log
         fix_path /opt/omero/server/OMERO.server/var "OMERO.server var"
 
-        # Fix OMERO.web log directories (CRITICAL - must be writable before zarr imports)
+        echo "Final ownership verification:"
+        ls -ld /OMERO
+        ls -ld /OMERO/certs 2>/dev/null || true
+        ls -ld /opt/omero/server/OMERO.server/var 2>/dev/null || true
+        ls -ld /opt/omero/server/OMERO.server/var/log 2>/dev/null || true
+        echo ""
+        echo "✓ OMERO.server permission initialization complete"
+        echo "================================================"
+      '
+    volumes:
+      - ${OMERO_USER_DATA_PATH}:/OMERO:rw
+      - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
+      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
+    network_mode: none
+
+  omero-web-data-init:
+    image: omeroweb:custom
+    container_name: omero-web-data-init
+    restart: "no"
+    user: "0:0"
+    command: |
+      sh -c '
+        set -euo pipefail
+
+        echo "================================================"
+        echo "OMERO.web Data Permission Initialization"
+        echo "================================================"
+        echo ""
+
+        TARGET_UID="$$(id -u omero-web)"
+        TARGET_GID="$$(id -g omero-web)"
+
+        echo "Detected omero-web UID:GID = $${TARGET_UID}:$${TARGET_GID}"
+        echo ""
+
+        fix_path() {
+          path="$$1"
+          label="$$2"
+
+          echo "Checking $${label} ownership..."
+          ls -ld "$${path}" || true
+          echo "Setting ownership to UID:GID $${TARGET_UID}:$${TARGET_GID} on $${label}..."
+          chown -R "$${TARGET_UID}:$${TARGET_GID}" "$${path}" 2>/dev/null || echo "Note: Some $${label} files may already have correct ownership"
+          echo "Setting permissions (u+rwX) on $${label}..."
+          chmod -R u+rwX "$${path}" 2>/dev/null || true
+          echo ""
+        }
+
+        # Fix OMERO.web log directories (must be writable before imports)
         mkdir -p /opt/omero/web/OMERO.web/var/log
         fix_path /opt/omero/web/OMERO.web/var/log "OMERO.web logs"
 
         mkdir -p /opt/omero/web/logs
         fix_path /opt/omero/web/logs "OMERO.web supervisor logs"
 
-        # Fix upload directory permissions
+        # Fix upload directory permissions (used by web)
         mkdir -p /opt/tmp
         fix_path /opt/tmp "OMERO upload directory"
 
         echo "Final ownership verification:"
-        ls -ld /OMERO
-        ls -ld /OMERO/certs 2>/dev/null || true
-        ls -ld /opt/omero/server/OMERO.server/var 2>/dev/null || true
-        ls -ld /opt/omero/server/OMERO.server/var/log 2>/dev/null || true
         ls -ld /opt/omero/web/OMERO.web/var/log 2>/dev/null || true
         ls -ld /opt/omero/web/logs 2>/dev/null || true
         ls -ld /opt/tmp 2>/dev/null || true
         echo ""
-        echo "✓ Permission initialization complete"
+        echo "✓ OMERO.web permission initialization complete"
         echo "================================================"
       '
-    user: "0:0"
     volumes:
-      - ${OMERO_USER_DATA_PATH}:/OMERO:rw
-      - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
-      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
       - ${OMERO_WEB_LOGS_PATH}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH}:/opt/omero/web/logs:rw
       - ${OMERO_UPLOAD_PATH}:/opt/tmp:rw
@@ -383,7 +430,7 @@ services:
     depends_on:
       database:
         condition: service_healthy
-      omero-data-init:
+      omero-server-data-init:
         condition: service_completed_successfully
     env_file:
       - ./env/omeroserver.env
@@ -463,6 +510,8 @@ services:
       dockerfile: docker/omero-web.Dockerfile
     restart: unless-stopped
     depends_on:
+      omero-web-data-init:
+        condition: service_completed_successfully
       omeroserver:
         condition: service_healthy
       redis:
@@ -559,10 +608,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pgrep -x cron >/dev/null"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 30
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
 
