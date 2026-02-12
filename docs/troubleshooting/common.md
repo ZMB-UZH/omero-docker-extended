@@ -62,9 +62,11 @@ Symptom in Resource Monitoring:
 Fix (host shell, deterministic):
 
 ```bash
-export DOCKER_SOCKET_GID="$(stat -c '%g' /var/run/docker.sock)"
-docker compose up -d --force-recreate omeroweb
+stat -c '%g' /var/run/docker.sock
+id
+# Then rerun your OMERO deployment/update script so it can auto-apply
+# runtime socket permissions for omeroweb.
 ```
 
-`docker-compose.yml` now requires `DOCKER_SOCKET_GID` for the `omeroweb` service `group_add`, so startup fails fast if the value is missing.
+`docker-compose.yml` no longer requires manual `DOCKER_SOCKET_GID` injection.
 
