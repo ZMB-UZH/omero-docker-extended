@@ -11,8 +11,8 @@
   "panels": [
     {
       "type": "table",
-      "title": "Server Specifications Overview",
-      "description": "Consolidated inventory of host operating system and hardware specifications.",
+      "title": "Server Specifications",
+      "description": "Single-host specification list sourced only from node-exporter metrics.",
       "id": 16,
       "gridPos": {
         "h": 6,
@@ -133,43 +133,43 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "machine_cpu_cores",
+          "expr": "machine_cpu_cores{job=\"node-exporter\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "B",
-          "expr": "node_memory_MemTotal_bytes",
+          "expr": "node_memory_MemTotal_bytes{job=\"node-exporter\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "C",
-          "expr": "node_memory_SwapTotal_bytes",
+          "expr": "node_memory_SwapTotal_bytes{job=\"node-exporter\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "D",
-          "expr": "node_filesystem_size_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
+          "expr": "node_filesystem_size_bytes{job=\"node-exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "E",
-          "expr": "node_filesystem_avail_bytes{mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
+          "expr": "node_filesystem_avail_bytes{job=\"node-exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "F",
-          "expr": "time() - node_boot_time_seconds",
+          "expr": "time() - node_boot_time_seconds{job=\"node-exporter\"}",
           "format": "table",
           "instant": true
         },
         {
           "refId": "G",
-          "expr": "node_uname_info",
+          "expr": "node_uname_info{job=\"node-exporter\"}",
           "format": "table",
           "instant": true
         }
@@ -207,9 +207,14 @@
               "job #E": true,
               "job #F": true,
               "job #G": true,
-              "domainname": true
+              "domainname": true,
+              "boot_id": true,
+              "machine_id": true,
+              "system_uuid": true,
+              "instance": true
             },
             "renameByName": {
+              "nodename": "Host",
               "instance": "Host",
               "machine": "Architecture",
               "release": "Kernel Release",
