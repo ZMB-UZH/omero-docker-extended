@@ -4,17 +4,6 @@
 
 services:
 
-  # ===========================================================================
-  # Portainer - Docker Container Management UI
-  # ===========================================================================
-  # Portainer provides a web-based UI for managing Docker containers, images,
-  # volumes, and networks. It's the first service to start for infrastructure
-  # management and monitoring.
-  #
-  # Access: http://localhost:9000
-  # Initial Setup: Create admin user on first access
-  # Data Persistence: ${PORTAINER_DATA_PATH}
-  # ===========================================================================
   portainer:
     image: "portainer/portainer-ce:2.25.2-alpine"
     container_name: portainer
@@ -63,7 +52,6 @@ services:
   alloy:
     image: "grafana/alloy:v1.12.2"
     restart: unless-stopped
-    # Run as root to ensure read access to OMERO log volumes (file-based internal logs).
     user: "0:0"
     command:
       - "run"
@@ -94,8 +82,6 @@ services:
   prometheus:
     image: "prom/prometheus:v3.5.1"
     restart: unless-stopped
-    # Host bind-mounted TSDB paths can be root-owned; run as root to avoid
-    # startup failures opening /prometheus/queries.active.
     user: "0:0"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -317,13 +303,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # ---------------------------------------------------------------------------
-  # OMERO Data Permission Initialization
-  # ---------------------------------------------------------------------------
-  # Ensures /OMERO directory has correct ownership before omeroserver starts.
-  # This prevents PermissionError during certificate generation.
-  # Runs once at startup, then exits.
-  # ---------------------------------------------------------------------------
   omero-data-init:
     image: "alpine:3.22.1"
     container_name: omero-data-init
@@ -385,7 +364,7 @@ services:
         echo "✓ Permission initialization complete"
         echo "================================================"
       '
-    user: "0:0"  # Run as root to fix permissions
+    user: "0:0"
     volumes:
       - ${OMERO_USER_DATA_PATH}:/OMERO:rw
       - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
@@ -409,8 +388,6 @@ services:
     env_file:
       - ./env/omeroserver.env
       - ./env/omero-celery.env
-    # Run as the container's non-root OMERO service user. Startup scripts that
-    # call the OMERO CLI must never execute as root.
     user: "omero-server:omero-server"
     hostname: omeroserver
     networks:
@@ -424,7 +401,6 @@ services:
       - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
       - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
     ulimits:
-    # The following settings prevent the "Too many open file descriptors" error. Adjust for extremely large datasets (high content screening).
       nofile:
         soft: 15000
         hard: 15000
@@ -460,7 +436,6 @@ services:
   redis:
     image: "redis:8.4.0-alpine"
     restart: unless-stopped
-    # Disable persistence for RAM storage only
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
@@ -496,7 +471,6 @@ services:
     env_file:
       - ./env/omeroweb.env
       - ./env/omero-celery.env
-    # GID of the 'docker' group on the host (run: stat -c '%g' /var/run/docker.sock).
     group_add:
       - "988"
     networks:
@@ -555,14 +529,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # ---------------------------------------------------------------------------
-  # PostgreSQL automatic maintenance (safe, non-locking)
-  # ---------------------------------------------------------------------------
-  # Runs VACUUM ANALYZE weekly and REINDEX CONCURRENTLY monthly via cron.
-  # These operations do NOT lock tables and are safe while databases are online.
-  # Manual run:  docker exec pg-maintenance pg-maintenance.sh all
-  # Logs:        docker logs pg-maintenance
-  # ---------------------------------------------------------------------------
   pg-maintenance:
     image: pg-maintenance:custom
     build:
