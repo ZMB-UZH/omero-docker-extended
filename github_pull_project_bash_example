@@ -14,8 +14,14 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-4}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
-OMERO_SERVER_UID="${OMERO_SERVER_UID:-1000}"
-OMERO_SERVER_GID="${OMERO_SERVER_GID:-1000}"
+OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
+OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
+OMERO_WEB_UID="${OMERO_WEB_UID:-}"
+OMERO_WEB_GID="${OMERO_WEB_GID:-}"
+
+# Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
+OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
+OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
 
 set -euo pipefail
 
@@ -210,11 +216,9 @@ ensure_container_writable_path() {
         return 1
     fi
 
-    if ! chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${path_to_prepare}"; then
-        echo "ERROR: Failed to set ownership for ${path_label} to ${OMERO_SERVER_UID}:${OMERO_SERVER_GID}: ${path_to_prepare}" >&2
-        return 1
-    fi
-
+    # IMPORTANT:
+    # Do NOT chown here. UID/GID is discovered AFTER images are built.
+    # We only ensure the directory exists and has reasonable permissions.
     if ! chmod 0775 "${path_to_prepare}"; then
         echo "ERROR: Failed to set permissions for ${path_label}: ${path_to_prepare}" >&2
         return 1
@@ -669,12 +673,27 @@ if ! validate_retry_config; then
     exit 1
 fi
 
-if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then
-    exit 1
+# OMERO_*_UID/GID are optional now (auto-discovered after build).
+# If you override them manually, they must be numeric.
+if [ -n "${OMERO_SERVER_UID}" ]; then
+    if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then
+        exit 1
+    fi
 fi
-
-if ! validate_numeric_id "OMERO_SERVER_GID" "${OMERO_SERVER_GID}"; then
-    exit 1
+if [ -n "${OMERO_SERVER_GID}" ]; then
+    if ! validate_numeric_id "OMERO_SERVER_GID" "${OMERO_SERVER_GID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${OMERO_WEB_UID}" ]; then
+    if ! validate_numeric_id "OMERO_WEB_UID" "${OMERO_WEB_UID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${OMERO_WEB_GID}" ]; then
+    if ! validate_numeric_id "OMERO_WEB_GID" "${OMERO_WEB_GID}"; then
+        exit 1
+    fi
 fi
 
 require_config_var "OMERO_INSTALLATION_PATH"
@@ -806,6 +825,110 @@ else
     echo "Building all OMERO-related containers (no cache)..."
     docker compose -f "${COMPOSE_FILE}" build --no-cache
 fi
+
+echo "================================================"
+echo "Discovering ACTUAL OMERO UID/GID from built images"
+echo "================================================"
+
+discover_uid_gid_or_die() {
+    local image="$1"
+    local user_name="$2"
+    local id_flag="$3"  # -u or -g
+
+    local out=""
+    if ! out="$(docker run --rm "${image}" id "${id_flag}" "${user_name}" 2>/dev/null)"; then
+        echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
+        echo "ERROR: Make sure the image exists and contains that user." >&2
+        return 1
+    fi
+
+    if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for ${user_name} in ${image}" >&2
+        return 1
+    fi
+
+    printf '%s' "${out}"
+    return 0
+}
+
+# Only discover if not manually overridden
+if [ -z "${OMERO_SERVER_UID}" ]; then
+    OMERO_SERVER_UID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "-u")"
+fi
+if [ -z "${OMERO_SERVER_GID}" ]; then
+    OMERO_SERVER_GID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "-g")"
+fi
+
+if [ -z "${OMERO_WEB_UID}" ]; then
+    OMERO_WEB_UID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "omero-web" "-u")"
+fi
+if [ -z "${OMERO_WEB_GID}" ]; then
+    OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "omero-web" "-g")"
+fi
+
+echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
+echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
+echo ""
+
+echo "================================================"
+echo "Fixing host bind-mount ownership based on ACTUAL UID/GID"
+echo "================================================"
+
+chown_tree_or_die() {
+    local path="$1"
+    local label="$2"
+    local uid="$3"
+    local gid="$4"
+
+    if [ -e "${path}" ] && [ ! -d "${path}" ]; then
+        echo "ERROR: ${label} exists but is not a directory: ${path}" >&2
+        return 1
+    fi
+
+    mkdir -p "${path}"
+
+    echo "chown -R ${uid}:${gid} ${path}    (${label})"
+    if ! chown -R "${uid}:${gid}" "${path}"; then
+        echo "ERROR: Failed chown for ${label}: ${path}" >&2
+        return 1
+    fi
+
+    chmod -R u+rwX "${path}" || true
+    return 0
+}
+
+# OMERO.server-owned bind mounts
+if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}" "OMERO user data directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
+    exit 1
+fi
+if ! chown_tree_or_die "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
+    exit 1
+fi
+if ! chown_tree_or_die "${OMERO_SERVER_VAR_PATH}" "OMERO server var directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
+    exit 1
+fi
+if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
+    exit 1
+fi
+
+# OMERO.web-owned bind mounts
+if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
+    exit 1
+fi
+if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
+    exit 1
+fi
+if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
+    exit 1
+fi
+
+# Portainer stays root-owned (or whatever you prefer); do NOT force it to OMERO IDs
+# ensure_container_writable_path already created it earlier.
+
+echo ""
+echo "✔ Host ownership fix complete."
+echo "================================================"
+echo ""
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     compose_up_with_retries "${COMPOSE_FILE}"
