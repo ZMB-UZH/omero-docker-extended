@@ -20,6 +20,7 @@
             <div id="diag_summary" class="diagnostics-summary">Ready to execute diagnostics.</div>
             <button type="button" id="diag_run_btn" class="admin-tools-button log-refresh-button">Run selected scripts</button>
         </div>
+        <div id="diag_request_info" class="diagnostics-summary" style="display:none; margin-top:8px;"></div>
         <div id="diag_scripts" class="diagnostics-script-grid"></div>
         <div id="diag_results" class="diagnostics-results"></div>
     </div>
@@ -28,6 +29,7 @@
 const runUrl = new URL('{% url "omeroweb_admin_tools_server_database_testing_run" %}', window.location.href);
 const scripts = {{ diagnostic_scripts|safe }};
 const summaryEl = document.getElementById('diag_summary');
+const requestInfoEl = document.getElementById('diag_request_info');
 const resultsEl = document.getElementById('diag_results');
 const scriptsEl = document.getElementById('diag_scripts');
 const runBtn = document.getElementById('diag_run_btn');
@@ -45,6 +47,16 @@ function statusBadge(status) {
     const normalized = String(status || 'warn').toLowerCase();
     const label = normalized === 'pass' ? 'PASS' : normalized === 'fail' ? 'FAIL' : 'WARN';
     return `<span class="diag-badge diag-badge--${normalized}">${label}</span>`;
+}
+
+function setRequestInfo(requestId, responseStatus) {
+    if (!requestId) {
+        requestInfoEl.style.display = 'none';
+        requestInfoEl.textContent = '';
+        return;
+    }
+    requestInfoEl.style.display = 'block';
+    requestInfoEl.textContent = `Request ID: ${requestId}${responseStatus ? ` · HTTP ${responseStatus}` : ''}`;
 }
 
 function renderScripts() {
@@ -113,6 +125,18 @@ function renderResults(payload) {
     resultsEl.innerHTML = rendered;
 }
 
+async function parseJsonResponse(response) {
+    const body = await response.text();
+    if (!body) {
+        return {};
+    }
+    try {
+        return JSON.parse(body);
+    } catch (error) {
+        throw new Error(`Expected JSON response but got invalid payload (HTTP ${response.status}).`);
+    }
+}
+
 async function runDiagnostics() {
     const selected = selectedScripts();
     if (!selected.length) {
@@ -120,6 +144,7 @@ async function runDiagnostics() {
         return;
     }
     runBtn.disabled = true;
+    setRequestInfo(null, null);
     summaryEl.textContent = `Running ${selected.length} script(s)...`;
     try {
         const response = await fetch(runUrl.toString(), {
@@ -130,9 +155,11 @@ async function runDiagnostics() {
             },
             body: JSON.stringify({ scripts: selected }),
         });
-        const payload = await response.json();
+        const payload = await parseJsonResponse(response);
+        setRequestInfo(payload.request_id, response.status);
         if (!response.ok) {
-            throw new Error(payload.error || 'Failed to run diagnostics.');
+            const errorMessage = payload.error || `Failed to run diagnostics (HTTP ${response.status}).`;
+            throw new Error(errorMessage);
         }
         renderResults(payload);
         const counters = payload.results.reduce((acc, result) => {
@@ -145,6 +172,9 @@ async function runDiagnostics() {
         summaryEl.innerHTML = `Diagnostics completed — ${statusBadge('pass')} ${counters.pass} ${statusBadge('warn')} ${counters.warn} ${statusBadge('fail')} ${counters.fail}`;
     } catch (error) {
         summaryEl.textContent = `Diagnostics failed: ${error.message}`;
+        if (!resultsEl.innerHTML.trim()) {
+            resultsEl.innerHTML = '<div class="log-empty">No diagnostics results returned. Use the request ID above to inspect OMERO.web logs.</div>';
+        }
     } finally {
         runBtn.disabled = false;
     }
