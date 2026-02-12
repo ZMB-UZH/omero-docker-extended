@@ -830,20 +830,59 @@ echo "================================================"
 echo "Discovering ACTUAL OMERO UID/GID from built images"
 echo "================================================"
 
+discover_first_existing_user_or_die() {
+    local image="$1"
+    shift
+
+    local candidate=""
+    local found=""
+
+    for candidate in "$@"; do
+        if [ -z "${candidate}" ]; then
+            continue
+        fi
+
+        # IMPORTANT: bypass ENTRYPOINT because your OMERO images run a bootstrap entrypoint.
+        if docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
+            found="${candidate}"
+            break
+        fi
+    done
+
+    if [ -z "${found}" ]; then
+        echo "ERROR: Could not find any expected user inside image '${image}'." >&2
+        echo "Tried candidates: $*" >&2
+        echo "" >&2
+        echo "DEBUG: Listing passwd entries containing 'omero' from image '${image}':" >&2
+        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
+        echo "" >&2
+        return 1
+    fi
+
+    printf '%s' "${found}"
+    return 0
+}
+
 discover_uid_gid_or_die() {
     local image="$1"
     local user_name="$2"
     local id_flag="$3"  # -u or -g
 
     local out=""
-    if ! out="$(docker run --rm "${image}" id "${id_flag}" "${user_name}" 2>/dev/null)"; then
+
+    # IMPORTANT: bypass ENTRYPOINT, run a shell, then run id.
+    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
-        echo "ERROR: Make sure the image exists and contains that user." >&2
+        echo "ERROR: This usually means the image ENTRYPOINT hijacks commands OR the user does not exist." >&2
+        echo "" >&2
+        echo "DEBUG: getent passwd '${user_name}' (if available):" >&2
+        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
+        echo "" >&2
         return 1
     fi
 
     if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for ${user_name} in ${image}" >&2
+        echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for user '${user_name}' in image '${image}'" >&2
         return 1
     fi
 
@@ -851,19 +890,27 @@ discover_uid_gid_or_die() {
     return 0
 }
 
+# Resolve actual user names (host-agnostic, image-defined)
+SERVER_USER="$(discover_first_existing_user_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "omero")"
+WEB_USER="$(discover_first_existing_user_or_die "${OMERO_WEB_IMAGE}" "omero-web" "omero")"
+
+echo "Detected OMERO.server image user: ${SERVER_USER}"
+echo "Detected OMERO.web    image user: ${WEB_USER}"
+echo ""
+
 # Only discover if not manually overridden
 if [ -z "${OMERO_SERVER_UID}" ]; then
-    OMERO_SERVER_UID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "-u")"
+    OMERO_SERVER_UID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-u")"
 fi
 if [ -z "${OMERO_SERVER_GID}" ]; then
-    OMERO_SERVER_GID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "-g")"
+    OMERO_SERVER_GID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-g")"
 fi
 
 if [ -z "${OMERO_WEB_UID}" ]; then
-    OMERO_WEB_UID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "omero-web" "-u")"
+    OMERO_WEB_UID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-u")"
 fi
 if [ -z "${OMERO_WEB_GID}" ]; then
-    OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "omero-web" "-g")"
+    OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"
 fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
