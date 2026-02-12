@@ -304,6 +304,15 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
+    assert payload["grafana"]["database_dashboard_external_url"].startswith(
+        "http://testserver:3000/d/database-metrics/database"
+    )
+    assert payload["grafana"]["plugin_database_dashboard_external_url"].startswith(
+        "http://testserver:3000/d/plugin-database-metrics/plugin-database"
+    )
+    assert payload["grafana"]["redis_dashboard_external_url"].startswith(
+        "http://testserver:3000/d/redis-metrics/redis"
+    )
     assert payload["grafana"]["database_dashboard_proxy_url"].startswith("/")
     assert payload["grafana"]["plugin_database_dashboard_proxy_url"].startswith("/")
     assert payload["grafana"]["redis_dashboard_proxy_url"].startswith("/")
@@ -377,6 +386,15 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
 
     assert payload["grafana"]["dashboard_external_url"].startswith(
         "https://monitor.example.org/grafana/d/"
+    )
+    assert payload["grafana"]["database_dashboard_external_url"].startswith(
+        "https://monitor.example.org/grafana/d/database-metrics/database"
+    )
+    assert payload["grafana"]["plugin_database_dashboard_external_url"].startswith(
+        "https://monitor.example.org/grafana/d/plugin-database-metrics/plugin-database"
+    )
+    assert payload["grafana"]["redis_dashboard_external_url"].startswith(
+        "https://monitor.example.org/grafana/d/redis-metrics/redis"
     )
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
