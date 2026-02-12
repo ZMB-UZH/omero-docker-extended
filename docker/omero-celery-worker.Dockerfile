@@ -1,3 +1,42 @@
+################################################################################
+# OMERO Celery Worker Dockerfile (CURRENTLY UNUSED)
+################################################################################
+#
+# PURPOSE:
+#   Builds a dedicated Celery worker container for Imaris export tasks.
+#   NOTE: This Dockerfile exists but is NOT currently used in docker-compose.yml.
+#   The Celery worker currently runs inside the omeroweb container via supervisord.
+#
+# DESIGN INTENT:
+#   This Dockerfile was designed for a separate Celery worker container that:
+#   - Runs independently from OMERO.web
+#   - Uses Python 3.9 from deadsnakes PPA
+#   - Has minimal dependencies (just celery, redis, omero-py)
+#   - Runs as non-root celery user
+#
+# WHY IT'S NOT USED:
+#   The current architecture runs the Celery worker inside omeroweb because:
+#   1. Simplifies deployment (one less container)
+#   2. Shares OMERO.web venv and all plugin code
+#   3. Reduces container orchestration complexity
+#   4. Worker is managed by supervisord alongside OMERO.web
+#
+# TO ENABLE THIS CONTAINER:
+#   1. Uncomment the celery worker service in docker-compose.yml
+#   2. Remove Celery worker from supervisord.conf
+#   3. Remove 40-start-imaris-celery-worker.sh from omeroweb startup
+#   4. Ensure shared volumes for task communication
+#
+# BUILD STRATEGY:
+#   1. Ubuntu 24.04 base (matches OMERO.web environment)
+#   2. Install Python 3.9 from deadsnakes PPA
+#   3. Create isolated venv with pinned packages
+#   4. Install omero-py, celery, redis
+#   5. Copy imaris_connector and omero_plugin_common
+#   6. Run as non-root celery user
+#
+################################################################################
+
 ## Dedicated Celery worker image for OMERO Imaris exports
 # Keeps Celery runtime separate from OMERO.web and OMERO.server images.
 

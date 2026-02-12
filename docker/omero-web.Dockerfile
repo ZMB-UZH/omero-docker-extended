@@ -1,3 +1,39 @@
+################################################################################
+# OMERO.web Custom Dockerfile
+################################################################################
+#
+# PURPOSE:
+#   Builds a custom OMERO.web container with additional plugins and features:
+#   - OMERO Python API (omero-py) for BlitzGateway access
+#   - Custom web plugins: omp_plugin, upload, admin_tools, imaris_connector
+#   - Zarr support for OME-NGFF data access
+#   - Celery for async task processing (Imaris exports)
+#   - Redis for shared caching across workers
+#
+# BUILD STRATEGY:
+#   1. Start from official OMERO.web base image (pinned SHA for reproducibility)
+#   2. Install build dependencies (gcc, etc.) for compiling ZeroC Ice
+#   3. Install omero-py into OMERO.web venv (required for BlitzGateway)
+#   4. Copy and install custom plugins from build context
+#   5. Install additional dependencies (zarr, celery, redis, etc.)
+#   6. Pre-create static file directories with correct ownership
+#   7. Sync Django static files
+#   8. Configure supervisord to run both OMERO.web and Celery worker
+#   9. Replace default entrypoint to exec supervisord after startup scripts
+#
+# RUNTIME FLOW:
+#   1. Entrypoint runs scripts in /startup/ (including 10-web-bootstrap.sh)
+#   2. Bootstrap script ensures log directory is writable and sets up symlinks
+#   3. Supervisord starts both OMERO.web (gunicorn) and Celery worker
+#
+# CRITICAL NOTES:
+#   - The base image's venv path changes with OMERO versions - we detect it
+#   - Log directory MUST be writable BEFORE zarr imports (see omero-data-init)
+#   - The base image's 99-run.sh is removed to allow supervisord to take over
+#   - Build-time security updates are optional (APPLY_OMEROWEB_DNF_UPDATES=1)
+#
+################################################################################
+
 ## ATTENTION!! Using the tag "latest" might be tempting but is extremely risky in production environments!
 ## ATTENTION!! The python venv lines will need to be changed to the correct/latest path
 # when the OMERO developers update the container

@@ -1,3 +1,47 @@
+################################################################################
+# OMERO.server Custom Dockerfile
+################################################################################
+#
+# PURPOSE:
+#   Builds a custom OMERO.server container with:
+#   - OMERO Python API (omero-py) with pinned setuptools for pkg_resources
+#   - OMERO CLI plugins (render, metadata, duplicate, rdf)
+#   - PDF export dependencies for OMERO.Figure (reportlab, markdown)
+#   - Official OMERO scripts from ome/omero-scripts repo
+#   - BIOP Export_CellProfiler_IDs.py script
+#   - Custom IMS export script for Imaris conversion
+#   - Build tools for ImarisConvertBioformats compilation
+#   - Shared plugin utilities (omero_plugin_common)
+#
+# BUILD STRATEGY:
+#   1. Start from official OMERO.server base image (pinned SHA)
+#   2. Locate and validate OMERO.server venv (fails fast if missing)
+#   3. Create stable symlink to versioned OMERO.server directory
+#   4. Install/upgrade Python packaging tools with pinned setuptools
+#   5. Install PDF export and CLI plugin dependencies
+#   6. Clone and install official + BIOP OMERO scripts
+#   7. Install build dependencies (cmake, gcc, Java, etc.)
+#   8. Prepare directories for runtime-installed tools (downloader, imarisconvert)
+#   9. Copy startup scripts and ensure correct permissions
+#
+# RUNTIME FLOW:
+#   1. 10-server-bootstrap.sh runs at startup:
+#      - Checks all required directories are writable
+#      - Configures Python path for scripts
+#      - Ensures SSL certificates have correct SANs
+#      - Schedules async tasks (job service user creation, script registration)
+#   2. 50-install-omero-downloader.sh installs OMERO downloader if needed
+#   3. 51-install-imarisconvert.sh compiles ImarisConvertBioformats if needed
+#   4. Base image entrypoint starts OMERO.server
+#
+# CRITICAL NOTES:
+#   - setuptools version is PINNED to maintain pkg_resources compatibility
+#   - All venv operations dynamically locate the venv to handle version changes
+#   - Runtime directories are pre-owned by omero-server for write access
+#   - Scripts are copied from official repos at build time (not runtime)
+#
+################################################################################
+
 # Custom OMERO.server image with several plugins and OMERO.Figure PDF export dependencies installed
 
 # Pull image
