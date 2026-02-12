@@ -140,6 +140,20 @@ def _is_internal_hostname(hostname: str) -> bool:
     return lowered in {"", "localhost", "127.0.0.1", "::1", "grafana", "prometheus"}
 
 
+def _safe_request_host(request) -> str:
+    """Return request host without port, falling back safely when host validation fails."""
+    try:
+        host_value = request.get_host()
+    except Exception as exc:
+        logger.warning("Unable to resolve request host from get_host(): %s", exc)
+        host_value = (
+            request.META.get("HTTP_HOST", "")
+            or request.META.get("SERVER_NAME", "")
+            or "localhost"
+        )
+    return str(host_value).split(":", 1)[0].strip() or "localhost"
+
+
 def _build_public_service_url(
     internal_url: str,
     request_scheme: str,
@@ -1070,7 +1084,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     grafana_host_port = _to_int_env("GRAFANA_HOST_PORT", 3000)
     prometheus_host_port = _to_int_env("PROMETHEUS_HOST_PORT", 9090)
 
-    request_host = request.get_host().split(":", 1)[0]
+    request_host = _safe_request_host(request)
     request_scheme = request.scheme
 
     dashboard_uid = os.environ.get(
