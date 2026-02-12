@@ -36,6 +36,48 @@ log_dir="${CONFIG_omero_web_logdir:-/opt/omero/web/OMERO.web/var/log}"
 
 echo "[web-bootstrap] Checking OMERO.web log directory: ${log_dir}"
 
+
+configure_docker_socket_access() {
+    local docker_socket="${ADMIN_TOOLS_DOCKER_SOCKET:-/var/run/docker.sock}"
+    local target_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
+
+    if [[ ! -S "${docker_socket}" ]]; then
+        echo "[web-bootstrap] Docker socket not present at ${docker_socket}; skipping socket group bootstrap"
+        return
+    fi
+
+    if [[ "$(id -u)" -ne 0 ]]; then
+        echo "[web-bootstrap] Running unprivileged; cannot adjust docker socket group membership"
+        return
+    fi
+
+    local socket_gid
+    socket_gid="$(stat -c '%g' "${docker_socket}")"
+    if [[ -z "${socket_gid}" ]]; then
+        echo "[web-bootstrap] ERROR: Failed to resolve docker socket gid from ${docker_socket}" >&2
+        exit 1
+    fi
+
+    local socket_group
+    socket_group="$(getent group "${socket_gid}" | cut -d: -f1 || true)"
+    if [[ -z "${socket_group}" ]]; then
+        socket_group="docker-host"
+        if getent group "${socket_group}" >/dev/null 2>&1; then
+            socket_group="docker-host-${socket_gid}"
+        fi
+        groupadd -g "${socket_gid}" "${socket_group}"
+        echo "[web-bootstrap] Created group ${socket_group} with gid ${socket_gid} for docker socket access"
+    fi
+
+    if ! id -nG "${target_user}" | tr ' ' '\012' | grep -qx "${socket_group}"; then
+        usermod -aG "${socket_group}" "${target_user}"
+        echo "[web-bootstrap] Added ${target_user} to group ${socket_group} (gid ${socket_gid})"
+    else
+        echo "[web-bootstrap] ${target_user} already in docker socket group ${socket_group}"
+    fi
+}
+
+
 # Create log directory if it doesn't exist
 mkdir -p "${log_dir}"
 
@@ -69,3 +111,5 @@ else
 fi
 
 echo "[web-bootstrap] ✓ OMERO.web log directory is ready and writable: ${log_dir}"
+
+configure_docker_socket_access
