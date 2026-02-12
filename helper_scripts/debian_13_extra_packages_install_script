@@ -6,11 +6,28 @@ IFS=$'\n\t'
 SCRIPT_NAME="$(basename "$0")"
 LOCK_FILE="/var/lock/${SCRIPT_NAME}.lock"
 LOG_PREFIX="[debian-13-extra-packages]"
+
 DRY_RUN="${DRY_RUN:-0}"
 ALLOW_NON_TRIXIE="${ALLOW_NON_TRIXIE:-0}"
 INSTALL_RECOMMENDS="${INSTALL_RECOMMENDS:-1}"
 INSTALL_PROPRIETARY_DRIVERS="${INSTALL_PROPRIETARY_DRIVERS:-1}"
 BATCH_SIZE="${BATCH_SIZE:-40}"
+
+# Safety toggles (defaults are conservative for servers that already run Docker)
+# -----------------------------------------------------------------------------
+# - This script MUST NOT install Docker or container runtimes that can conflict with Docker CE.
+# - If you have a separate Docker installation script, keep these defaults.
+AVOID_DOCKER_CONFLICTS="${AVOID_DOCKER_CONFLICTS:-1}"    # 1 = filter packages known to conflict with Docker CE
+INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman/container tooling
+INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved
+RUN_AUTOREMOVE="${RUN_AUTOREMOVE:-0}"                    # 1 = run apt-get autoremove/autoclean at the end
+
+# APT robustness
+APT_RETRIES="${APT_RETRIES:-3}"
+APT_TIMEOUT="${APT_TIMEOUT:-30}"
+
+# Logging
+LOGFILE="${LOGFILE:-}"
 
 log_info() {
     printf '%s INFO: %s\n' "${LOG_PREFIX}" "$*"
@@ -37,12 +54,28 @@ run_as_root() {
     if [ "$(id -u)" -eq 0 ]; then
         run_cmd "$@"
     else
-        if ! command -v sudo >/dev/null 2>&1; then
-            log_error "sudo is required when not running as root."
-            exit 1
-        fi
         run_cmd sudo "$@"
     fi
+}
+
+setup_logging() {
+    local ts
+    ts="$(date +%F_%H%M%S)"
+
+    if [ -z "${LOGFILE}" ]; then
+        if [ "$(id -u)" -eq 0 ]; then
+            LOGFILE="/var/log/debian-13-extra-packages_${ts}.log"
+        else
+            LOGFILE="${HOME}/debian-13-extra-packages_${ts}.log"
+        fi
+    fi
+
+    run_as_root mkdir -p "$(dirname "${LOGFILE}")" 2>/dev/null || true
+
+    # Redirect all output to both console and logfile.
+    # shellcheck disable=SC2094
+    exec > >(tee -a "${LOGFILE}") 2>&1
+    log_info "Logging to: ${LOGFILE}"
 }
 
 require_binary() {
@@ -125,64 +158,240 @@ package_installed() {
     dpkg-query -W -f='${Status}' "${package_name}" 2>/dev/null | grep -q 'install ok installed'
 }
 
-get_arch() {
-    dpkg --print-architecture
-}
-
-is_amd64() {
-    [ "$(get_arch)" = "amd64" ]
-}
-
-# Robust GPU detection without requiring lspci/pciutils.
-pci_has_display_vendor() {
-    local want_vendor="$1"
-    local dev
-    local class
-    local vendor
-
-    for dev in /sys/bus/pci/devices/*; do
-        [ -r "${dev}/class" ] || continue
-        [ -r "${dev}/vendor" ] || continue
-
-        class="$(cat "${dev}/class" 2>/dev/null || true)"
-        vendor="$(cat "${dev}/vendor" 2>/dev/null || true)"
-
-        # Display controller classes begin with 0x03 (VGA/3D/Display)
-        case "${class}" in
-            0x03*)
-                if [ "${vendor}" = "${want_vendor}" ]; then
-                    return 0
-                fi
-                ;;
-        esac
-    done
-
-    return 1
-}
-
 hardware_has_nvidia() {
-    pci_has_display_vendor "0x10de"
+    if ! command -v lspci >/dev/null 2>&1; then
+        return 1
+    fi
+
+    lspci | grep -Eqi 'NVIDIA'
 }
 
 hardware_has_intel_gpu() {
-    pci_has_display_vendor "0x8086"
+    if ! command -v lspci >/dev/null 2>&1; then
+        return 1
+    fi
+
+    lspci | grep -Eqi 'VGA|3D|Display' | grep -Eqi 'Intel'
 }
 
 hardware_has_amd_gpu() {
-    pci_has_display_vendor "0x1002"
+    if ! command -v lspci >/dev/null 2>&1; then
+        return 1
+    fi
+
+    lspci | grep -Eqi 'VGA|3D|Display' | grep -Eqi 'AMD|ATI'
 }
 
-sources_seem_to_have_nonfree_components() {
-    # Works for both .list and deb822 .sources formats (best-effort grep).
-    # We only warn; we do NOT mutate sources.
-    if grep -RhsE '(^\s*deb\s+|^\s*Components:\s+).*\<non-free\>|\<non-free-firmware\>|\<contrib\>' \
-        /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | grep -qE 'non-free|non-free-firmware|contrib'; then
-        return 0
-    fi
+apt_get() {
+    # Centralized apt-get wrapper:
+    # - Noninteractive to avoid prompts
+    # - Retries/timeouts for transient network issues
+    run_as_root env \
+        DEBIAN_FRONTEND=noninteractive \
+        APT_LISTCHANGES_FRONTEND=none \
+        NEEDRESTART_MODE=a \
+        apt-get \
+            -o Acquire::Retries="${APT_RETRIES}" \
+            -o Acquire::http::Timeout="${APT_TIMEOUT}" \
+            -o Acquire::https::Timeout="${APT_TIMEOUT}" \
+            -o Dpkg::Use-Pty=0 \
+            "$@"
+}
+
+ensure_dns_ok() {
+    # Best-effort DNS sanity check before heavy apt work.
+    local host="${1:-debian.ethz.ch}"
+    local i
+
+    for i in {1..8}; do
+        if getent hosts "${host}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    log_error "DNS lookup failed for ${host}. Current /etc/resolv.conf:"
+    run_cmd ls -l /etc/resolv.conf || true
+    run_cmd cat /etc/resolv.conf || true
     return 1
 }
 
+protect_docker_packages() {
+    # This script does NOT install Docker.
+    # If Docker is already present, we defensively mark key Docker packages as manual
+    # to avoid them becoming autoremovable due to unrelated dependency changes.
+    local -a candidates=(
+        docker-ce
+        docker-ce-cli
+        docker-buildx-plugin
+        docker-compose-plugin
+        docker-ce-rootless-extras
+        containerd.io
+    )
+
+    local -a present=()
+    local p
+
+    for p in "${candidates[@]}"; do
+        if dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed"; then
+            present+=("${p}")
+        fi
+    done
+
+    if [ "${#present[@]}" -gt 0 ]; then
+        log_info "Protecting Docker packages from autoremove: ${present[*]}"
+        run_as_root apt-mark manual "${present[@]}" >/dev/null 2>&1 || true
+    fi
+}
+
+mark_manual_installed() {
+    # Mark packages as manually installed (so they won't be autoremoved).
+    local -a pkgs=("$@")
+
+    if [ "${#pkgs[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    log_info "Marking ${#pkgs[@]} packages as manually installed (apt-mark manual)."
+    run_as_root apt-mark manual "${pkgs[@]}" >/dev/null 2>&1 || true
+}
+
+filter_package_catalog() {
+    # Reads package names from stdin and filters out entries we do NOT want to install.
+    local -a deny=()
+
+    if [ "${AVOID_DOCKER_CONFLICTS}" = "1" ]; then
+        # Debian's containerd/runc/docker.io can conflict with Docker CE's bundled containerd.io stack.
+        deny+=(containerd runc docker.io podman-docker)
+    fi
+
+    if [ "${INSTALL_CONTAINER_TOOLS}" != "1" ]; then
+        deny+=(podman systemd-container)
+    fi
+
+    if [ "${INSTALL_NETWORK_STACK}" != "1" ]; then
+        # These can rewrite /etc/resolv.conf and cause transient DNS failure until services settle/reboot.
+        deny+=(network-manager network-manager-openvpn systemd-resolved)
+    fi
+
+    if [ "${#deny[@]}" -eq 0 ]; then
+        cat
+        return 0
+    fi
+
+    local regex
+    regex="$(printf "%s|" "${deny[@]}")"
+    regex="${regex%|}"
+
+    awk -v re="^(${regex})$" '$0 !~ re { print }'
+}
+
+apt_update() {
+    log_info "Refreshing apt metadata..."
+
+    # Check DNS against at least one configured mirror host.
+    ensure_dns_ok "debian.ethz.ch" || ensure_dns_ok "deb.debian.org"
+
+    local out
+    local rc
+
+    set +e
+    out="$(apt_get update 2>&1)"
+    rc=$?
+    set -e
+
+    printf '%s\n' "${out}"
+
+    if [ "${rc}" -ne 0 ]; then
+        log_error "apt-get update failed (exit code ${rc})."
+        return "${rc}"
+    fi
+
+    # Treat fetch/DNS errors as fatal even if apt exits 0 (prevents stale/partial indices).
+    if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch|Some index files failed|Connection failed|Hash Sum mismatch'; then
+        log_error "apt-get update reported fetch/DNS errors; refusing to continue."
+        return 1
+    fi
+}
+
+install_packages_in_batches() {
+    local -a queue=("$@")
+    local -a failed=()
+    local total="${#queue[@]}"
+    local start=0
+    local end=0
+    local batch=()
+    local install_flags=("-y")
+
+    if [ "${INSTALL_RECOMMENDS}" = "0" ]; then
+        install_flags+=("--no-install-recommends")
+    fi
+
+    while [ "${start}" -lt "${total}" ]; do
+        end=$((start + BATCH_SIZE))
+        if [ "${end}" -gt "${total}" ]; then
+            end="${total}"
+        fi
+
+        batch=("${queue[@]:start:end-start}")
+        log_info "Installing package batch $((start + 1))-${end} of ${total}."
+
+        local out
+        local rc
+
+        set +e
+        out="$(apt_get install "${install_flags[@]}" "${batch[@]}" 2>&1)"
+        rc=$?
+        set -e
+
+        printf '%s\n' "${out}"
+
+        if [ "${rc}" -ne 0 ]; then
+            if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
+                log_error "Network/DNS failure during apt-get install; aborting early to avoid partial installs."
+                return 2
+            fi
+
+            log_warn "Batch install failed. Retrying packages one-by-one for isolation."
+
+            local pkg
+            for pkg in "${batch[@]}"; do
+                set +e
+                out="$(apt_get install "${install_flags[@]}" "${pkg}" 2>&1)"
+                rc=$?
+                set -e
+
+                printf '%s\n' "${out}"
+
+                if [ "${rc}" -ne 0 ]; then
+                    if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
+                        log_error "Network/DNS failure during apt-get install (package: ${pkg}); aborting."
+                        return 2
+                    fi
+
+                    failed+=("${pkg}")
+                    log_warn "Package failed to install: ${pkg}"
+                fi
+            done
+        fi
+
+        start="${end}"
+    done
+
+    if [ "${#failed[@]}" -gt 0 ]; then
+        log_warn "The following packages failed installation:"
+        printf '%s\n' "${failed[@]}" | sed 's/^/  - /'
+        return 1
+    fi
+
+    return 0
+}
+
 build_package_catalog() {
+    # NOTE:
+    # - This catalog intentionally avoids Docker / container runtime packages by default.
+    # - If you want container tools, set INSTALL_CONTAINER_TOOLS=1 (still avoids Docker conflicts unless overridden).
+
     cat <<'PKGS'
 acl
 acpi
@@ -221,7 +430,6 @@ cmake
 colordiff
 command-not-found
 console-setup
-containerd
 coreutils
 cpio
 cron
@@ -286,12 +494,13 @@ gpgconf
 gpgsm
 grep
 groff-base
+grub-efi-amd64
+grub-pc-bin
 gstreamer1.0-libav
 gstreamer1.0-plugins-bad
 gstreamer1.0-plugins-base
 gstreamer1.0-plugins-good
 gstreamer1.0-plugins-ugly
-gstreamer1.0-tools
 gstreamer1.0-tools
 gvfs-backends
 gzip
@@ -305,6 +514,7 @@ iftop
 iio-sensor-proxy
 imagemagick
 intel-media-va-driver
+intel-microcode
 inxi
 iotop
 iperf3
@@ -336,6 +546,8 @@ libvirt-clients
 libvirt-daemon-system
 libx11-xcb1
 linux-cpupower
+linux-headers-amd64
+linux-image-amd64
 linux-perf
 lm-sensors
 locales
@@ -364,8 +576,6 @@ ncdu
 ncurses-term
 net-tools
 netcat-openbsd
-network-manager
-network-manager-openvpn
 nfs-common
 nftables
 nmap
@@ -389,7 +599,6 @@ pciutils
 pigz
 pkg-config
 plocate
-podman
 policycoreutils
 poppler-utils
 powertop
@@ -401,6 +610,7 @@ python3-pip
 python3-setuptools
 python3-venv
 qemu-guest-agent
+qemu-system-x86
 qemu-utils
 ranger
 rar
@@ -417,6 +627,7 @@ secure-delete
 sed
 sg3-utils
 shellcheck
+shim-signed
 smartmontools
 smbclient
 snmp
@@ -430,8 +641,6 @@ strace
 sudo
 sysfsutils
 sysstat
-systemd-container
-systemd-resolved
 systemd-timesyncd
 tcpdump
 telnet
@@ -477,32 +686,30 @@ zsh
 zstd
 PKGS
 
-    # Arch-specific add-ons that are common failure points if you run on non-amd64.
-    if is_amd64; then
-        cat <<'AMD64ONLY'
-grub-efi-amd64
-grub-pc-bin
-linux-headers-amd64
-linux-image-amd64
-qemu-system-x86
-intel-microcode
-AMD64ONLY
+    if [ "${INSTALL_CONTAINER_TOOLS}" = "1" ]; then
+        cat <<'CONTAINERS'
+podman
+systemd-container
+CONTAINERS
+    fi
+
+    if [ "${INSTALL_NETWORK_STACK}" = "1" ]; then
+        cat <<'NETSTACK'
+network-manager
+network-manager-openvpn
+systemd-resolved
+NETSTACK
     fi
 
     if [ "${INSTALL_PROPRIETARY_DRIVERS}" = "1" ]; then
         cat <<'PROPRIETARY'
+amd64-microcode
 blueman
 bluez
 bluez-firmware
 firmware-sof-signed
 iucode-tool
 PROPRIETARY
-
-        if is_amd64; then
-            cat <<'AMDPROPRIETARY'
-amd64-microcode
-AMDPROPRIETARY
-        fi
 
         if hardware_has_nvidia; then
             cat <<'NVIDIA'
@@ -527,110 +734,34 @@ AMDGPU
     fi
 }
 
-apt_update() {
-    log_info "Refreshing apt metadata..."
-    run_as_root env \
-        DEBIAN_FRONTEND=noninteractive \
-        APT_LISTBUGS_FRONTEND=none \
-        APT_LISTCHANGES_FRONTEND=none \
-        NEEDRESTART_MODE=a \
-        apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
-}
-
-install_packages_in_batches() {
-    local -a queue=("$@")
-    local -a failed=()
-    local total="${#queue[@]}"
-    local start=0
-    local end=0
-    local batch=()
-    local install_flags=("-y" "-o" "Dpkg::Use-Pty=0" "-o" "Acquire::Retries=3" "-o" "Dpkg::Options::=--force-confdef" "-o" "Dpkg::Options::=--force-confold")
-
-    if [ "${INSTALL_RECOMMENDS}" = "0" ]; then
-        install_flags+=("--no-install-recommends")
-    fi
-
-    while [ "${start}" -lt "${total}" ]; do
-        end=$((start + BATCH_SIZE))
-        if [ "${end}" -gt "${total}" ]; then
-            end="${total}"
-        fi
-
-        batch=("${queue[@]:start:end-start}")
-        log_info "Installing package batch $((start + 1))-${end} of ${total}."
-
-        if ! run_as_root env \
-            DEBIAN_FRONTEND=noninteractive \
-            APT_LISTBUGS_FRONTEND=none \
-            APT_LISTCHANGES_FRONTEND=none \
-            NEEDRESTART_MODE=a \
-            apt-get install "${install_flags[@]}" "${batch[@]}"; then
-
-            log_warn "Batch install failed. Retrying packages one-by-one for isolation."
-
-            local pkg
-            for pkg in "${batch[@]}"; do
-                if ! run_as_root env \
-                    DEBIAN_FRONTEND=noninteractive \
-                    APT_LISTBUGS_FRONTEND=none \
-                    APT_LISTCHANGES_FRONTEND=none \
-                    NEEDRESTART_MODE=a \
-                    apt-get install "${install_flags[@]}" "${pkg}"; then
-
-                    failed+=("${pkg}")
-                    log_warn "Package failed to install: ${pkg}"
-                fi
-            done
-        fi
-
-        start="${end}"
-    done
-
-    if [ "${#failed[@]}" -gt 0 ]; then
-        log_warn "The following packages failed installation:"
-        local f
-        for f in "${failed[@]}"; do
-            log_warn "  - ${f}"
-        done
-        return 1
-    fi
-
-    return 0
-}
-
 main() {
     require_binary awk
     require_binary apt-cache
-    require_binary apt-get
-    require_binary dpkg
     require_binary dpkg-query
     require_binary flock
     require_binary grep
+    require_binary sed
     require_binary sort
+    require_binary tee
 
     validate_positive_integer "${BATCH_SIZE}" "BATCH_SIZE"
     validate_platform
-
-    if [ "${INSTALL_PROPRIETARY_DRIVERS}" = "1" ]; then
-        if ! sources_seem_to_have_nonfree_components; then
-            log_warn "INSTALL_PROPRIETARY_DRIVERS=1 but APT sources do not visibly contain contrib/non-free/non-free-firmware."
-            log_warn "Firmware/rar/nvidia-driver/etc may appear as 'missing' and will be skipped."
-        fi
-    fi
-
+    setup_logging
     acquire_lock
+
+    protect_docker_packages
+
     apt_update
 
-    local -a package_catalog=()
+    local package_catalog
     local -a available_packages=()
     local -a missing_packages=()
     local -a already_installed=()
     local -a install_queue=()
 
-    mapfile -t package_catalog < <(build_package_catalog | normalize_package_list)
+    package_catalog="$(build_package_catalog | normalize_package_list | filter_package_catalog)"
 
-    local package_name
-    for package_name in "${package_catalog[@]}"; do
+    while IFS= read -r package_name; do
         [ -z "${package_name}" ] && continue
 
         if package_available "${package_name}"; then
@@ -644,21 +775,21 @@ main() {
         else
             missing_packages+=("${package_name}")
         fi
-    done
+    done <<<"${package_catalog}"
 
-    log_info "Catalog size: ${#package_catalog[@]} packages."
+    log_info "Catalog size: $(printf '%s\n' "${package_catalog}" | wc -l | awk '{print $1}') packages."
     log_info "Available in apt metadata: ${#available_packages[@]}"
     log_info "Already installed: ${#already_installed[@]}"
     log_info "Pending install: ${#install_queue[@]}"
 
     if [ "${#missing_packages[@]}" -gt 0 ]; then
         log_warn "Packages not found in configured repositories (${#missing_packages[@]})."
-        local m
-        for m in "${missing_packages[@]}"; do
-            log_warn "  - ${m}"
-        done
+        printf '%s\n' "${missing_packages[@]}" | sed 's/^/  - /'
         log_warn "Missing packages were skipped automatically."
     fi
+
+    # Ensure packages from the catalog remain installed (prevents autoremove surprises).
+    mark_manual_installed "${already_installed[@]}"
 
     if [ "${#install_queue[@]}" -eq 0 ]; then
         log_info "Nothing to install. System already satisfies the available catalog."
@@ -672,21 +803,16 @@ main() {
         exit 1
     fi
 
-    log_info "Running apt autoremove to clean stale dependencies."
-    run_as_root env \
-        DEBIAN_FRONTEND=noninteractive \
-        APT_LISTBUGS_FRONTEND=none \
-        APT_LISTCHANGES_FRONTEND=none \
-        NEEDRESTART_MODE=a \
-        apt-get -y -o Dpkg::Use-Pty=0 autoremove
+    if [ "${RUN_AUTOREMOVE}" = "1" ]; then
+        log_info "Running apt autoremove to clean stale dependencies (RUN_AUTOREMOVE=1)."
+        apt_get autoremove -y
+        log_info "Running apt autoclean."
+        apt_get autoclean -y
+    else
+        log_info "Skipping apt autoremove/autoclean (RUN_AUTOREMOVE=0)."
+    fi
 
-    log_info "Running apt autoclean."
-    run_as_root env \
-        DEBIAN_FRONTEND=noninteractive \
-        APT_LISTBUGS_FRONTEND=none \
-        APT_LISTCHANGES_FRONTEND=none \
-        NEEDRESTART_MODE=a \
-        apt-get -o Dpkg::Use-Pty=0 autoclean
+    log_info "Done."
 }
 
 main "$@"
