@@ -37,8 +37,25 @@ bootstrap_repo_clone_and_refresh_installation_env() {
         return 1
     fi
 
-    if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}" >/dev/null 2>&1; then
-        echo "ERROR: Failed to pull latest files from ${REPO_URL} (${REPO_BRANCH}). Unable to refresh installation_paths.env." >&2
+    # Configure git to automatically accept GitHub's SSH host key on first connection
+    # This prevents the "authenticity of host" prompt that causes clone to fail
+    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/root/.ssh/known_hosts"
+    
+    # Ensure .ssh directory exists with correct permissions
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    
+    # Try to clone with proper SSH host key handling
+    if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}" 2>&1; then
+        echo "ERROR: Failed to pull latest files from ${REPO_URL} (${REPO_BRANCH})." >&2
+        echo "" >&2
+        echo "Possible reasons:" >&2
+        echo "  1. SSH key not configured: Run 'ssh-keygen' and add public key to GitHub" >&2
+        echo "  2. Repository access denied: Verify SSH key is added to GitHub account" >&2
+        echo "  3. Repository doesn't exist or branch '${REPO_BRANCH}' not found" >&2
+        echo "" >&2
+        echo "To test SSH access: ssh -T git@github.com" >&2
+        echo "To accept GitHub host key manually: ssh-keyscan github.com >> ~/.ssh/known_hosts" >&2
         return 1
     fi
 

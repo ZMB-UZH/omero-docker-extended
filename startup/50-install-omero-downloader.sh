@@ -1,39 +1,4 @@
 #!/bin/bash
-################################################################################
-# OMERO Downloader Installation Script
-################################################################################
-#
-# PURPOSE:
-#   Installs OMERO.downloader CLI tool at container startup if not present
-#   or if version has changed. This enables bulk download of OMERO data.
-#
-# WHAT IT DOES:
-#   1. Validates OMERO_DOWNLOADER_VERSION is set
-#   2. Checks if the correct version is already installed
-#   3. Downloads and extracts OMERO.downloader from GitHub releases
-#   4. Installs to /opt/omero/downloader with correct ownership
-#   5. Creates symlink in /usr/local/bin for easy CLI access
-#   6. Records installed version to avoid redundant installations
-#
-# WHY THIS RUNS AT STARTUP:
-#   - Allows version to be changed without rebuilding container
-#   - Installation requires write access to /opt (available at runtime)
-#   - Download happens only once per version
-#
-# INSTALLATION LOCATION:
-#   - Installation: /opt/omero/downloader/
-#   - Symlink: /usr/local/bin/omero-downloader
-#   - Version tracking: /opt/omero/downloader/.version
-#
-# CONFIGURATION:
-#   - OMERO_DOWNLOADER_VERSION: Required (set in env/omeroserver.env)
-#
-# IDEMPOTENCY:
-#   - Checks version file before downloading
-#   - Skips if correct version already installed
-#   - Safe to run multiple times
-#
-################################################################################
 set -euo pipefail
 
 if [[ -z "${OMERO_DOWNLOADER_VERSION:-}" ]]; then
