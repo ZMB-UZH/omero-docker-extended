@@ -1,156 +1,69 @@
-# OMERO ZMB OMP Plugin - FIXED VERSION
+# OMERO ZMB OMP Platform
 
-## ⚠️ IMPORTANT: This Version Includes Permission Fixes
+OMERO deployment and plugin repository for metadata workflows, upload/import management, monitoring interfaces, and Imaris export integration.
 
-This is the **FIXED** version of the OMERO deployment that automatically handles all permission issues.
+## What this repository contains
 
-**What was fixed**: The container was failing with `PermissionError: [Errno 13] Permission denied: '/OMERO/certs'`
+- Container orchestration for OMERO services and dependencies.
+- Docker build definitions for server, web, worker, and support images.
+- Environment-based configuration files.
+- Startup scripts for deterministic service initialization.
+- OMERO.web plugin packages:
+  - `omeroweb_omp_plugin`
+  - `omeroweb_upload`
+  - `omeroweb_admin_tools`
+  - `omeroweb_imaris_connector`
+- Shared plugin utilities in `omero_plugin_common`.
+- Project documentation in `docs/`.
 
-**How it's fixed**: Automatic permission initialization - no manual intervention required!
+## Repository layout
 
----
+- `docker-compose.yml` — service orchestration.
+- `docker/` — Dockerfiles.
+- `env/` — environment variable files.
+- `startup/` — startup and bootstrap scripts.
+- `monitoring/` — Prometheus, Grafana, Loki, Alloy, dashboards.
+- `maintenance/` — maintenance automation scripts.
+- `omeroweb_omp_plugin/` — filename/metadata plugin.
+- `omeroweb_upload/` — upload/import plugin.
+- `omeroweb_admin_tools/` — admin tools plugin.
+- `omeroweb_imaris_connector/` — Imaris connector plugin.
+- `docs/` — documentation set.
 
-## 🚀 Quick Start
+## Setup flow
 
-```bash
-# 1. Extract and navigate
-cd omero-zmb-omp-plugin-test
-
-# 2. Load environment variables
-source env/installation_paths.env
-
-# 3. Build and start (permissions handled automatically!)
-docker-compose build
-docker-compose up -d
-
-# 4. Verify it's working
-docker-compose ps
-# All services should show (healthy)
-
-# 5. Access OMERO.web
-# Open browser: http://localhost:4090
-```
-
-**That's it!** The permission issues are handled automatically.
-
----
-
-## 📖 Documentation
-
-### Start Here
-- **DEPLOYMENT_GUIDE.md** - Complete deployment and usage guide
-- **FIXES_APPLIED.md** - Detailed explanation of all fixes
-- **CHANGELOG.md** - Complete list of changes
-
-### What's Fixed
-
-The original container was failing with permission errors. This version includes:
-
-1. **Init Container** - Automatically fixes /OMERO permissions before startup
-2. **Consolidated Server Bootstrap** - Single startup flow handles permission checks, script Python config, cert SANs, and bootstrap tasks
-3. **Consolidated Web Bootstrap** - Single startup flow prepares writable OMERO.web log path and symlink
-
-**Result**: Container starts reliably every time!
-
----
-
-## ✅ Files Changed
-
-- `docker-compose.yml` - Added omero-data-init service
-- `docker/omero-server.Dockerfile` - Simplified to use one consolidated server startup script
-- `docker/omero-web.Dockerfile` - Simplified to use one consolidated web startup script
-- `startup/10-server-bootstrap.sh` - New consolidated startup orchestrator for OMERO.server
-- `startup/10-web-bootstrap.sh` - New consolidated startup script for OMERO.web log path readiness
-
-See **CHANGELOG.md** for complete details.
-
----
-
-## 🔧 System Requirements
-
-- Docker Engine 20.10+
-- Docker Compose 1.27.0+
-- Linux-based OS
-- 4GB RAM minimum (8GB recommended)
-- 20GB free disk space
-
-**No manual permission setup required!**
-
----
-
-## 📊 Services Included
-
-- OMERO.server (with custom scripts and plugins)
-- OMERO.web (with Imaris connector, admin tools)
-- PostgreSQL (main + plugin databases)
-- Redis (caching)
-- Grafana + Prometheus + Loki (monitoring)
-- Various exporters and metrics collectors
-
----
-
-## 🐛 Troubleshooting
-
-### Container Not Starting
+1. Review and update configuration in `env/`.
+2. Build images:
 
 ```bash
-# Check logs
-docker-compose logs omero-omeroserver-1
-
-# Look for [PERMISSIONS] and [CERT] messages
+docker compose build
 ```
 
-### Still Have Permission Issues?
+3. Start services:
 
 ```bash
-# This shouldn't be needed, but just in case:
-sudo chown -R 1000:1000 /opt/omero/omero_data/omero_user_data
-docker-compose restart omeroserver
+docker compose up -d
 ```
 
-### More Help
+4. Verify service state:
 
-See **DEPLOYMENT_GUIDE.md** for complete troubleshooting.
+```bash
+docker compose ps
+```
 
----
+## Documentation entry points
 
-## 📝 Configuration
+- `docs/index.md`
+- `docs/architecture/system-overview.md`
+- `docs/deployment/quickstart.md`
+- `docs/deployment/configuration.md`
+- `docs/plugins/`
+- `docs/operations/`
+- `docs/troubleshooting/`
+- `docs/reference/`
 
-Environment files in `env/` directory:
-- `installation_paths.env` - Directory paths
-- `omeroserver.env` - OMERO.server settings (passwords here!)
-- `omeroweb.env` - OMERO.web settings
-- `omero-celery.env` - Celery worker config
-- `compose.env` - Grafana credentials
+## Documentation rules
 
-**CHANGE DEFAULT PASSWORDS IN PRODUCTION!**
-
----
-
-## 🎉 What's Different From Original
-
-**Before** (Original):
-- ❌ Required manual `sudo chown` commands
-- ❌ Cryptic error messages
-- ❌ Container failed to start
-
-**After** (This Version):
-- ✅ Automatic permission handling
-- ✅ Clear error messages
-- ✅ Reliable startup
-- ✅ Production ready
-
----
-
-## 📞 Support
-
-- Check **DEPLOYMENT_GUIDE.md** for usage
-- Check **FIXES_APPLIED.md** for technical details
-- Check **CHANGELOG.md** for all changes
-- View logs: `docker-compose logs -f`
-
----
-
-**Version**: Fixed (2025-02-11)  
-**Status**: Production Ready  
-**Fixes**: Complete automatic permission handling
+- Keep repository-root Markdown limited to `README.md`.
+- Keep all other project documentation under `docs/`.
+- Keep content instructional and implementation-focused.
