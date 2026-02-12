@@ -808,12 +808,76 @@ fi
 # echo "Removing dangling images..."
 # docker image prune -f # this is potentially DANGEROUS and should be avoided
 
-echo "Removing all files except script..."
-find . -mindepth 1 -maxdepth 1 \
-    ! -name "${SCRIPT_NAME}" \
-    ! -name "temp_clone" \
-    ! -name "docker-compose.yml.new" \
-    -exec rm -rf {} +
+collect_protected_installation_subdirs() {
+    local installation_base_path="$1"
+    local env_file_path="$2"
+    local env_key=""
+    local env_value=""
+    local relative_path=""
+    local top_level_dir=""
+    local found=0
+    local -a protected_subdirs=()
+    local -a env_path_keys=()
+
+    while IFS='=' read -r env_key _; do
+        env_key="${env_key%%#*}"
+        env_key="${env_key%${env_key##*[![:space:]]}}"
+        env_key="${env_key#${env_key%%[![:space:]]*}}"
+
+        if [[ "${env_key}" =~ ^[A-Za-z_][A-Za-z0-9_]*_PATH$ ]]; then
+            env_path_keys+=("${env_key}")
+        fi
+    done < "${env_file_path}"
+
+    for env_key in "${env_path_keys[@]+${env_path_keys[@]}}"; do
+        env_value="${!env_key:-}"
+
+        if [ -z "${env_value}" ]; then
+            continue
+        fi
+
+        case "${env_value}" in
+            "${installation_base_path}"/*)
+                relative_path="${env_value#"${installation_base_path}"/}"
+                top_level_dir="${relative_path%%/*}"
+
+                if [ -z "${top_level_dir}" ]; then
+                    continue
+                fi
+
+                found=0
+                for existing_dir in "${protected_subdirs[@]+${protected_subdirs[@]}}"; do
+                    if [ "${existing_dir}" = "${top_level_dir}" ]; then
+                        found=1
+                        break
+                    fi
+                done
+
+                if [ "${found}" -eq 0 ]; then
+                    protected_subdirs+=("${top_level_dir}")
+                fi
+                ;;
+        esac
+    done
+
+    printf '%s\n' "${protected_subdirs[@]+${protected_subdirs[@]}}"
+}
+
+INSTALLATION_BASE_PATH="${OMERO_INSTALLATION_PATH%/}"
+mapfile -t PROTECTED_SUBDIRS < <(collect_protected_installation_subdirs "${INSTALLATION_BASE_PATH}" "${SCRIPT_ENV_FILE}")
+
+find_cleanup_args=(find . -mindepth 1 -maxdepth 1)
+find_cleanup_args+=(! -name "${SCRIPT_NAME}")
+find_cleanup_args+=(! -name "temp_clone")
+find_cleanup_args+=(! -name "docker-compose.yml.new")
+
+for protected_subdir in "${PROTECTED_SUBDIRS[@]+${PROTECTED_SUBDIRS[@]}}"; do
+    find_cleanup_args+=(! -name "${protected_subdir}")
+    echo "  Preserving persistent directory from installation_paths.env: ${protected_subdir}"
+done
+
+echo "Removing all repository files while preserving persistent data directories..."
+"${find_cleanup_args[@]}" -exec rm -rf {} +
 
 echo "Moving new files (including latest env files from GitHub)..."
 echo "Fixing line endings in shell scripts..."
