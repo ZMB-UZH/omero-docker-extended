@@ -237,7 +237,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:12.4.0-21611641766"
+    image: "grafana/grafana:12.4.0"
     restart: unless-stopped
     networks:
       omero:
@@ -251,8 +251,6 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
       GF_METRICS_ENABLED: "true"
-      GF_SERVER_ROOT_URL: "http://localhost:3000/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     depends_on:
       prometheus:
         condition: service_healthy
