@@ -321,10 +321,10 @@ async function loadData() {
             throw new Error('Monitoring endpoints are not configured.');
         }
 
-        openGrafanaBtn.onclick = () => { window.open(payload?.grafana?.dashboard_external_url || dashboardUrl || payload?.grafana?.dashboard_proxy_url || '', '_blank', 'noopener,noreferrer'); };
-        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_external_url || payload?.grafana?.database_dashboard_url || payload?.grafana?.database_dashboard_proxy_url || '', '_blank', 'noopener,noreferrer'); };
-        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_external_url || payload?.grafana?.plugin_database_dashboard_url || payload?.grafana?.plugin_database_dashboard_proxy_url || '', '_blank', 'noopener,noreferrer'); };
-        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_external_url || payload?.grafana?.redis_dashboard_url || payload?.grafana?.redis_dashboard_proxy_url || '', '_blank', 'noopener,noreferrer'); };
+        openGrafanaBtn.onclick = () => { window.open(payload?.grafana?.dashboard_external_url || payload?.grafana?.dashboard_proxy_url || dashboardUrl || '', '_blank', 'noopener,noreferrer'); };
+        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_external_url || payload?.grafana?.database_dashboard_proxy_url || payload?.grafana?.database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_external_url || payload?.grafana?.plugin_database_dashboard_proxy_url || payload?.grafana?.plugin_database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_external_url || payload?.grafana?.redis_dashboard_proxy_url || payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
         openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
 
         grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});
