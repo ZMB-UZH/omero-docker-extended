@@ -265,8 +265,13 @@ function renderDiagnostics(diag, services) {
         lines.push(`The container user must have read access to the socket.`);
         lines.push(`Run on the HOST:`);
         lines.push(`  stat -c '%g' /var/run/docker.sock`);
-        lines.push(`Then update group_add GID in docker-compose.yml to that value and recreate:`);
+        const socketGid = Number.isInteger(diag.socket_gid) && diag.socket_gid >= 0 ? String(diag.socket_gid) : '<docker-socket-gid>';
+        lines.push(`Set DOCKER_SOCKET_GID=${socketGid} for Docker Compose and recreate omeroweb:`);
+        lines.push(`  export DOCKER_SOCKET_GID=${socketGid}`);
         lines.push(`  docker compose up -d --force-recreate omeroweb`);
+        if (diag.process_in_socket_group === false) {
+            lines.push(`Current process is not in the socket group; group_add must include gid ${socketGid}.`);
+        }
         if (diag.api_error) {
             lines.push(``);
             lines.push(`Error: ${diag.api_error}`);

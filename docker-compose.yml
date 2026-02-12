@@ -397,6 +397,8 @@ services:
     env_file:
       - ./env/omeroweb.env
       - ./env/omero-celery.env
+    group_add:
+      - "${DOCKER_SOCKET_GID:?Set DOCKER_SOCKET_GID to the host docker.sock group id (run: stat -c '%g' /var/run/docker.sock)}"
     networks:
       omero:
         aliases:

@@ -8,7 +8,7 @@ This repository uses environment variables as the primary configuration surface.
 - `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
 - `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
 - `env/omero-celery.env`: Celery and Imaris connector processing controls.
-- `env/compose.env`: Grafana and compose-level credentials.
+- `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 
 ## Required Hardening Before Deployment
 

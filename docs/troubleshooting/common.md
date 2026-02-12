@@ -51,3 +51,20 @@ Checks:
 - pg-maintenance container logs,
 - maintenance cron execution timestamps,
 - index bloat and table growth trends in monitoring dashboards.
+
+## 6. Docker health diagnostics reports socket permission error
+
+Symptom in Resource Monitoring:
+
+- `Docker socket exists but API call failed`
+- current process UID/GIDs do not include the docker socket group
+
+Fix (host shell, deterministic):
+
+```bash
+export DOCKER_SOCKET_GID="$(stat -c '%g' /var/run/docker.sock)"
+docker compose up -d --force-recreate omeroweb
+```
+
+`docker-compose.yml` now requires `DOCKER_SOCKET_GID` for the `omeroweb` service `group_add`, so startup fails fast if the value is missing.
+
