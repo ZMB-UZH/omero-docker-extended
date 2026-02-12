@@ -1,4 +1,8 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
+from pathlib import Path
+import textwrap, datetime
+
+script = r"""#!/usr/bin/env bash
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -13,14 +17,15 @@ INSTALL_RECOMMENDS="${INSTALL_RECOMMENDS:-1}"
 INSTALL_PROPRIETARY_DRIVERS="${INSTALL_PROPRIETARY_DRIVERS:-1}"
 BATCH_SIZE="${BATCH_SIZE:-40}"
 
-# Safety toggles (defaults are conservative for servers that already run Docker)
+# Safety toggles (defaults are conservative for servers that already run Docker CE)
 # -----------------------------------------------------------------------------
 # - This script MUST NOT install Docker or container runtimes that can conflict with Docker CE.
 # - If you have a separate Docker installation script, keep these defaults.
 AVOID_DOCKER_CONFLICTS="${AVOID_DOCKER_CONFLICTS:-1}"    # 1 = filter packages known to conflict with Docker CE
-INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman/container tooling
-INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved
-RUN_AUTOREMOVE="${RUN_AUTOREMOVE:-0}"                    # 1 = run apt-get autoremove/autoclean at the end
+INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman/container tooling (default 0)
+INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved (default 0)
+INSTALL_TIME_SYNC="${INSTALL_TIME_SYNC:-0}"              # 1 = allow installing chrony (default 0; avoids time-daemon conflicts)
+RUN_AUTOREMOVE="${RUN_AUTOREMOVE:-0}"                    # 1 = run apt-get autoremove/autoclean at the end (default 0)
 
 # APT robustness
 APT_RETRIES="${APT_RETRIES:-3}"
@@ -142,20 +147,54 @@ validate_platform() {
     fi
 }
 
+sanitize_pkg() {
+    # Remove CRLF artifacts and trim leading/trailing whitespace
+    # (protects against copy/paste or editor line ending issues).
+    local s="$1"
+    s="${s//$'\r'/}"
+    # trim
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "${s}"
+}
+
 normalize_package_list() {
-    awk 'NF {print $1}' | sort -u
+    # Normalize and de-duplicate:
+    # - strip CRLF
+    # - take first token per line
+    # - sort unique
+    sed 's/\r$//' | awk 'NF {print $1}' | sort -u
 }
 
 package_available() {
+    # Robust availability check:
+    # - apt-cache madison gives versions if package is known in current APT metadata
+    # - fallback to apt-cache policy candidate
     local package_name="$1"
+    local pkg
+    pkg="$(sanitize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
 
-    apt-cache show "${package_name}" 2>/dev/null | grep -q '^Package:'
+    if apt-cache madison "${pkg}" 2>/dev/null | awk 'NF {found=1} END{exit(found?0:1)}'; then
+        return 0
+    fi
+
+    local cand
+    cand="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
+    if [ -n "${cand}" ] && [ "${cand}" != "(none)" ]; then
+        return 0
+    fi
+
+    return 1
 }
 
 package_installed() {
     local package_name="$1"
+    local pkg
+    pkg="$(sanitize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
 
-    dpkg-query -W -f='${Status}' "${package_name}" 2>/dev/null | grep -q 'install ok installed'
+    dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed'
 }
 
 hardware_has_nvidia() {
@@ -261,17 +300,24 @@ filter_package_catalog() {
     local -a deny=()
 
     if [ "${AVOID_DOCKER_CONFLICTS}" = "1" ]; then
-        # Debian's containerd/runc/docker.io can conflict with Docker CE's bundled containerd.io stack.
-        deny+=(containerd runc docker.io podman-docker)
+        # Avoid ANY docker/container runtime install from this script.
+        # Docker CE uses containerd.io from Docker repo; installing Debian's containerd/runc/docker.io may conflict.
+        deny+=(docker.io containerd containerd.io runc podman-docker)
     fi
 
     if [ "${INSTALL_CONTAINER_TOOLS}" != "1" ]; then
+        # If you want podman tooling, explicitly opt-in with INSTALL_CONTAINER_TOOLS=1.
         deny+=(podman systemd-container)
     fi
 
     if [ "${INSTALL_NETWORK_STACK}" != "1" ]; then
         # These can rewrite /etc/resolv.conf and cause transient DNS failure until services settle/reboot.
         deny+=(network-manager network-manager-openvpn systemd-resolved)
+    fi
+
+    if [ "${INSTALL_TIME_SYNC}" != "1" ]; then
+        # Avoid time-daemon conflicts by default. (chrony conflicts with systemd-timesyncd via time-daemon)
+        deny+=(chrony ntpsec systemd-timesyncd)
     fi
 
     if [ "${#deny[@]}" -eq 0 ]; then
@@ -391,6 +437,10 @@ build_package_catalog() {
     # NOTE:
     # - This catalog intentionally avoids Docker / container runtime packages by default.
     # - If you want container tools, set INSTALL_CONTAINER_TOOLS=1 (still avoids Docker conflicts unless overridden).
+    # - Time sync packages (chrony/ntpsec) are OFF by default to avoid time-daemon conflicts.
+    #
+    # IMPORTANT: Some entries below are "nice-to-have"; if Debian renames/removes them in a future snapshot,
+    # the script will skip missing packages safely.
 
     cat <<'PKGS'
 acl
@@ -425,7 +475,6 @@ btrfs-progs
 build-essential
 busybox
 ca-certificates
-chrony
 cmake
 colordiff
 command-not-found
@@ -445,7 +494,6 @@ dirmngr
 dkms
 dmidecode
 dns-root-data
-dnsutils
 dos2unix
 dpkg-dev
 du-dust
@@ -465,8 +513,6 @@ firmware-brcm80211
 firmware-iwlwifi
 firmware-libertas
 firmware-linux
-firmware-linux-free
-firmware-linux-nonfree
 firmware-misc-nonfree
 firmware-realtek
 flatpak
@@ -554,7 +600,6 @@ locales
 logrotate
 lrzsz
 lshw
-lslocks
 lsof
 lsscsi
 ltrace
@@ -567,7 +612,6 @@ mdadm
 mediainfo
 mesa-utils
 micro
-mlocate
 mtools
 mtr-tiny
 multipath-tools
@@ -580,10 +624,9 @@ nfs-common
 nftables
 nmap
 ntfs-3g
-ntpsec
 nvme-cli
 open-vm-tools
-openjdk-17-jdk
+default-jdk
 opensc
 openssh-client
 openssh-server
@@ -613,7 +656,6 @@ qemu-guest-agent
 qemu-system-x86
 qemu-utils
 ranger
-rar
 ripgrep
 rsync
 rtkit
@@ -632,7 +674,6 @@ smartmontools
 smbclient
 snmp
 snmpd
-software-properties-common
 sof-firmware
 squashfs-tools
 ssh-import-id
@@ -641,7 +682,6 @@ strace
 sudo
 sysfsutils
 sysstat
-systemd-timesyncd
 tcpdump
 telnet
 tesseract-ocr
@@ -654,7 +694,6 @@ udev
 ufw
 unar
 unattended-upgrades
-unrar
 unzip
 usb-modeswitch
 usbutils
@@ -666,7 +705,6 @@ vnstat
 wavemon
 wget
 whois
-wireguard
 wireguard-tools
 wireless-regdb
 wpasupplicant
@@ -699,6 +737,15 @@ network-manager
 network-manager-openvpn
 systemd-resolved
 NETSTACK
+    fi
+
+    if [ "${INSTALL_TIME_SYNC}" = "1" ]; then
+        # IMPORTANT:
+        # chrony conflicts with systemd-timesyncd via the virtual package "time-daemon".
+        # If you opt in to chrony, you likely also want to disable/remove timesyncd yourself.
+        cat <<'TIMESYNC'
+chrony
+TIMESYNC
     fi
 
     if [ "${INSTALL_PROPRIETARY_DRIVERS}" = "1" ]; then
@@ -746,9 +793,9 @@ main() {
 
     validate_positive_integer "${BATCH_SIZE}" "BATCH_SIZE"
     validate_platform
-    setup_logging
     acquire_lock
 
+    setup_logging
     protect_docker_packages
 
     apt_update
@@ -761,7 +808,9 @@ main() {
 
     package_catalog="$(build_package_catalog | normalize_package_list | filter_package_catalog)"
 
-    while IFS= read -r package_name; do
+    while IFS= read -r raw_pkg; do
+        local package_name
+        package_name="$(sanitize_pkg "${raw_pkg}")"
         [ -z "${package_name}" ] && continue
 
         if package_available "${package_name}"; then
@@ -816,3 +865,8 @@ main() {
 }
 
 main "$@"
+"""
+
+out_path = Path("/mnt/data/debian_13_extra_packages_install_script_FIXED_v2.sh")
+out_path.write_text(script, encoding="utf-8")
+str(out_path)
