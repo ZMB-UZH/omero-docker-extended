@@ -19,10 +19,14 @@ OMERO_WEB_UID="${OMERO_WEB_UID:-}"
 OMERO_WEB_GID="${OMERO_WEB_GID:-}"
 PROMETHEUS_UID="${PROMETHEUS_UID:-}"
 PROMETHEUS_GID="${PROMETHEUS_GID:-}"
+GRAFANA_UID="${GRAFANA_UID:-}"
+GRAFANA_GID="${GRAFANA_GID:-}"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
 OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
+PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
+GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 
 set -euo pipefail
 
@@ -705,6 +709,16 @@ if [ -n "${PROMETHEUS_GID}" ]; then
         exit 1
     fi
 fi
+if [ -n "${GRAFANA_UID}" ]; then
+    if ! validate_numeric_id "GRAFANA_UID" "${GRAFANA_UID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${GRAFANA_GID}" ]; then
+    if ! validate_numeric_id "GRAFANA_GID" "${GRAFANA_GID}"; then
+        exit 1
+    fi
+fi
 
 require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
@@ -970,6 +984,41 @@ discover_uid_gid_or_die() {
 }
 
 
+resolve_service_image_from_compose_or_die() {
+    local compose_file="$1"
+    local service_name="$2"
+
+    if [ ! -f "${compose_file}"; then
+        echo "ERROR: Cannot resolve image for service '${service_name}' because compose file is missing: ${compose_file}" >&2
+        return 1
+    fi
+
+    local image=""
+    image="$(awk -v svc="${service_name}" '
+        BEGIN { in_services=0; in_service=0 }
+        /^services:[[:space:]]*$/ { in_services=1; next }
+        in_services && /^[^[:space:]]/ { in_services=0; in_service=0 }
+        in_services && $0 ~ "^  " svc ":[[:space:]]*$" { in_service=1; next }
+        in_service && /^  [a-zA-Z0-9_.-]+:[[:space:]]*$/ { in_service=0 }
+        in_service && /^[[:space:]]{4}image:[[:space:]]*/ {
+            line=$0
+            sub(/^[[:space:]]{4}image:[[:space:]]*/, "", line)
+            gsub(/^"|"$/, "", line)
+            gsub(/^'|'$/, "", line)
+            print line
+            exit
+        }
+    ' "${compose_file}")"
+
+    if [ -z "${image}" ]; then
+        echo "ERROR: Could not resolve image for service '${service_name}' from compose file: ${compose_file}" >&2
+        return 1
+    fi
+
+    printf '%s' "${image}"
+    return 0
+}
+
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"  # -u or -g
@@ -1013,16 +1062,31 @@ if [ -z "${OMERO_WEB_GID}" ]; then
     OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"
 fi
 
+if [ -z "${PROMETHEUS_IMAGE}" ]; then
+    PROMETHEUS_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "prometheus")"
+fi
+if [ -z "${GRAFANA_IMAGE}" ]; then
+    GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"
+fi
+
 if [ -z "${PROMETHEUS_UID}" ]; then
-    PROMETHEUS_UID="$(discover_container_default_id_or_die "prom/prometheus:v3.5.1" "-u")"
+    PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"
 fi
 if [ -z "${PROMETHEUS_GID}" ]; then
-    PROMETHEUS_GID="$(discover_container_default_id_or_die "prom/prometheus:v3.5.1" "-g")"
+    PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"
+fi
+
+if [ -z "${GRAFANA_UID}" ]; then
+    GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"
+fi
+if [ -z "${GRAFANA_GID}" ]; then
+    GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"
 fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
-echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=prom/prometheus:v3.5.1)"
+echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
+echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAGE})"
 echo ""
 
 echo "================================================"
@@ -1078,6 +1142,10 @@ if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_
 fi
 
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then
+    exit 1
+fi
+
+if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then
     exit 1
 fi
 
