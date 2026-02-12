@@ -12,6 +12,8 @@ from .views.index_view import (
     root_status,
     storage_data,
     storage_view,
+    server_database_testing_view,
+    server_database_testing_run,
 )
 
 urlpatterns = [
@@ -26,4 +28,6 @@ urlpatterns = [
     path("resource-monitoring/prometheus-proxy/<path:subpath>", prometheus_proxy, name="omeroweb_admin_tools_prometheus_proxy"),
     path("storage/", storage_view, name="omeroweb_admin_tools_storage"),
     path("storage/data/", storage_data, name="omeroweb_admin_tools_storage_data"),
+    path("server-database-testing/", server_database_testing_view, name="omeroweb_admin_tools_server_database_testing"),
+    path("server-database-testing/run/", server_database_testing_run, name="omeroweb_admin_tools_server_database_testing_run"),
 ]
