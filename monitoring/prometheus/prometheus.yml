@@ -26,7 +26,6 @@ scrape_configs:
       - targets: ['alloy:12345']
 
   - job_name: grafana
-    metrics_path: /omeroweb_admin_tools/resource-monitoring/grafana-proxy/metrics
     static_configs:
       - targets: ['grafana:3000']
 
@@ -50,7 +49,7 @@ scrape_configs:
       - targets:
           - http://loki:3100/ready
           - http://prometheus:9090/-/ready
-          - http://grafana:3000/omeroweb_admin_tools/resource-monitoring/grafana-proxy/api/health
+          - http://grafana:3000/api/health
           - http://cadvisor:8080/healthz
           - http://node-exporter:9100/metrics
           - http://postgres-exporter:9187/metrics
