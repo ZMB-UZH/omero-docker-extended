@@ -18,7 +18,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${PORTAINER_DATA_PATH:-./data/portainer}:/data:rw
-    command: --http-enabled --http-port 9000 --https-port 9443
+    command: --http-enabled
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
       interval: 10s
