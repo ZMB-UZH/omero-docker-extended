@@ -1,4 +1,51 @@
 #!/usr/bin/env bash
+################################################################################
+# OMERO.server Bootstrap Script
+################################################################################
+#
+# PURPOSE:
+#   Consolidated startup flow for OMERO.server initialization.
+#   Ensures all runtime prerequisites are met before OMERO.server starts.
+#
+# WHAT IT DOES:
+#   1. Validates all required directories exist and are writable:
+#      - /OMERO (user data)
+#      - /OMERO/certs (SSL certificates)
+#      - OMERO.server/var (runtime state)
+#      - OMERO.server/var/log (server logs)
+#   2. Optionally resets IceGrid runtime directory (if RESET_OMERO_RUNTIME=1)
+#   3. Configures omero.scripts.python to point at venv Python
+#   4. Ensures SSL certificates include required SANs (DNS:omeroserver)
+#   5. Schedules background tasks:
+#      - Job service user creation (for plugin/script jobs)
+#      - Official OMERO scripts registration (if REGISTER_OFFICIAL_SCRIPTS=1)
+#
+# WHY THIS IS NEEDED:
+#   - Prevents OMERO.server startup failures due to permission issues
+#   - Ensures scripts can run with correct Python interpreter
+#   - Creates SSL certificates with proper SANs for container networking
+#   - Automates user and script setup without manual intervention
+#
+# WHEN IT RUNS:
+#   - Executed by base image entrypoint before OMERO.server starts
+#   - Can run as root or omero-server user (detects and adapts)
+#   - Background tasks continue after main startup completes
+#
+# CRITICAL BEHAVIORS:
+#   - All OMERO CLI commands use run_omero() wrapper for safe user handling
+#   - Directory permission fixes use chown/chmod (requires write access)
+#   - Background tasks wait for OMERO.server to be ready before proceeding
+#   - Certificate regeneration only happens if SANs are missing
+#
+# ENVIRONMENT VARIABLES:
+#   - ROOTPASS: Required for job service user creation and script registration
+#   - RESET_OMERO_RUNTIME: Set to "1" to clear IceGrid state on startup
+#   - REGISTER_OFFICIAL_SCRIPTS: Set to "1" to auto-register scripts
+#   - OMERO_JOB_SERVICE_USERNAME: Job service user name (default: job-service)
+#   - OMERO_JOB_SERVICE_PASS: Job service user password
+#   - OMERO_CLI_USER: User to run OMERO CLI as (default: omero-server)
+#
+################################################################################
 set -euo pipefail
 
 log() {

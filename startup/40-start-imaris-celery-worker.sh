@@ -1,4 +1,45 @@
 #!/bin/bash
+################################################################################
+# Imaris Celery Worker Startup Script
+################################################################################
+#
+# PURPOSE:
+#   Starts the Celery worker for processing Imaris export tasks.
+#   This worker runs inside the omeroweb container and processes async
+#   conversion jobs from the imaris_export queue.
+#
+# WHAT IT DOES:
+#   1. Checks if Celery is enabled (OMERO_IMS_USE_CELERY env var)
+#   2. Dynamically locates OMERO.web venv (handles version changes)
+#   3. Validates celery binary exists in venv
+#   4. Tests that Celery tasks can be imported
+#   5. Starts Celery worker with configured queue and concurrency
+#
+# WHY THIS IS NEEDED:
+#   - Imaris conversions are CPU/time intensive and must run async
+#   - Celery worker provides reliable task processing with retries
+#   - Running in omeroweb container shares code and dependencies
+#
+# HOW IT WORKS:
+#   - Managed by supervisord (defined in supervisord.conf)
+#   - Connects to Redis broker (OMERO_IMS_CELERY_BROKER_URL)
+#   - Consumes tasks from queue (OMERO_IMS_CELERY_QUEUE)
+#   - Calls ImarisConvertBioformats via OMERO.server scripts
+#
+# CONFIGURATION:
+#   - OMERO_IMS_USE_CELERY: Enable/disable worker (default: true)
+#   - OMERO_IMS_CELERY_BROKER_URL: Redis connection string (required)
+#   - OMERO_IMS_CELERY_QUEUE: Queue name (default: imaris_export)
+#   - OMERO_IMS_CELERY_LOGLEVEL: Logging level (default: info)
+#   - OMERO_IMS_CELERY_WORKER_CONCURRENCY: Parallel tasks (default: 1)
+#
+# IMPORTANT:
+#   - This script is executed by supervisord, not directly
+#   - The venv path is detected dynamically (same method as Dockerfile)
+#   - Task import is tested before starting to fail fast on errors
+#   - Worker hostname includes container hostname for distributed setups
+#
+################################################################################
 
 set -euo pipefail
 
