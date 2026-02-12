@@ -538,3 +538,16 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
     assert captured["path"] == "d/omero-infrastructure/server-infrastructure"
     assert captured["query"] == "refresh=10s"
     assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
+
+
+def test_safe_request_host_falls_back_when_get_host_fails() -> None:
+    from omeroweb_admin_tools.views.index_view import _safe_request_host
+
+    class DummyRequest:
+        META = {"HTTP_HOST": "172.23.208.90:4090"}
+
+        @staticmethod
+        def get_host() -> str:
+            raise ValueError("invalid host header")
+
+    assert _safe_request_host(DummyRequest()) == "172.23.208.90"
