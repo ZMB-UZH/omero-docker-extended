@@ -4,62 +4,68 @@
 ################################################################################
 #
 # PURPOSE:
-#   Prepares the OMERO.web logging environment before OMERO.web starts.
-#   This script is critical for preventing zarr/numcodecs initialization 
-#   failures caused by unwritable log directories.
+#   Ensures OMERO.web log directory is writable before OMERO.web starts.
+#   This prevents zarr/numcodecs logging failures during Python module imports.
+#
+# CRITICAL CHANGE:
+#   CONFIG_omero_web_logdir now points directly to the mounted volume:
+#   /opt/omero/web/OMERO.web/var/log (not /tmp/omero-web-logs)
+#   
+#   This matches the volume mount in docker-compose.yml and ensures logs
+#   persist on the host filesystem.
 #
 # WHAT IT DOES:
-#   1. Checks if log directory (from CONFIG_omero_web_logdir or default) exists
-#   2. Verifies log directory is writable by current user (omero-web)
-#   3. Creates parent directory for default log location if needed
-#   4. Replaces default log directory with symlink to configured log directory
-#      (unless it's already mounted as a filesystem)
+#   1. Verifies log directory (from CONFIG_omero_web_logdir) is writable
+#   2. If directory is a mountpoint, confirms it's accessible
+#   3. If directory doesn't exist, creates it
+#   4. Exits with error if log directory cannot be made writable
 #
-# WHY THIS IS NEEDED:
-#   - The omeroweb container mounts host log directories at specific paths
-#   - If these directories don't have correct permissions, zarr fails on import
-#   - The symlink ensures all OMERO.web logging goes to the mounted volume
-#   - This runs BEFORE Python imports, preventing permission errors
+# WHY THIS IS CRITICAL:
+#   - zarr library logs during import (before OMERO.web is fully initialized)
+#   - If log directory isn't writable, concurrent_log_handler fails
+#   - This causes OMERO.web startup to crash with emit(record) errors
 #
-# WHEN IT RUNS:
-#   - Executed by custom entrypoint before supervisord starts
-#   - Runs as omero-web user (not root)
-#   - Depends on omero-data-init to have already fixed host directory permissions
-#
-# PREREQUISITES:
-#   - omero-data-init service must complete successfully first
-#   - Host directories must be mounted with correct permissions (UID 1000)
-#   - CONFIG_omero_web_logdir environment variable (optional override)
+# DEPENDENCIES:
+#   - omero-data-init must run first to set host directory permissions
+#   - Volume must be mounted at CONFIG_omero_web_logdir path
 #
 ################################################################################
 set -euo pipefail
 
-log_dir="${CONFIG_omero_web_logdir:-/tmp/omero-web-logs}"
-default_log_dir="/opt/omero/web/OMERO.web/var/log"
+log_dir="${CONFIG_omero_web_logdir:-/opt/omero/web/OMERO.web/var/log}"
 
+echo "[web-bootstrap] Checking OMERO.web log directory: ${log_dir}"
+
+# Create log directory if it doesn't exist
 mkdir -p "${log_dir}"
 
-if [[ ! -d "${log_dir}" || ! -w "${log_dir}" ]]; then
-    echo "[web-bootstrap] ERROR: log directory is not writable: ${log_dir}" >&2
+# Verify directory is writable
+if [[ ! -d "${log_dir}" ]]; then
+    echo "[web-bootstrap] ERROR: Log directory does not exist and could not be created: ${log_dir}" >&2
     exit 1
 fi
 
-mkdir -p "$(dirname "${default_log_dir}")"
-
-if [[ -L "${default_log_dir}" ]]; then
-    current_target="$(readlink "${default_log_dir}")"
-    if [[ "${current_target}" == "${log_dir}" ]]; then
-        echo "[web-bootstrap] OMERO.web default log symlink already points to ${log_dir}"
-        exit 0
-    fi
+if [[ ! -w "${log_dir}" ]]; then
+    echo "[web-bootstrap] ERROR: Log directory is not writable: ${log_dir}" >&2
+    echo "[web-bootstrap] This will cause zarr import to fail during OMERO.web startup" >&2
+    echo "[web-bootstrap] Ensure omero-data-init has set correct permissions (UID:GID 1000:1000)" >&2
+    ls -ld "${log_dir}" >&2 || true
+    exit 1
 fi
 
-if mountpoint -q "${default_log_dir}"; then
-    echo "[web-bootstrap] WARNING: ${default_log_dir} is a mounted filesystem; skipping symlink replacement."
-    exit 0
+# Test write access
+if ! touch "${log_dir}/.permission_test" 2>/dev/null; then
+    echo "[web-bootstrap] ERROR: Cannot write to log directory: ${log_dir}" >&2
+    ls -ld "${log_dir}" >&2 || true
+    exit 1
 fi
 
-rm -rf "${default_log_dir}"
-ln -s "${log_dir}" "${default_log_dir}"
+rm -f "${log_dir}/.permission_test"
 
-echo "[web-bootstrap] OMERO.web log directory ready: ${log_dir}"
+if mountpoint -q "${log_dir}"; then
+    echo "[web-bootstrap] Log directory is a mounted filesystem: ${log_dir}"
+else
+    echo "[web-bootstrap] Log directory is local (not mounted): ${log_dir}"
+fi
+
+echo "[web-bootstrap] ✓ OMERO.web log directory is ready and writable: ${log_dir}"
