@@ -83,6 +83,12 @@ local.file_match "omeroweb_internal_logs" {
     { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.log" },
     { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.out" },
     { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.err" },
+    { __path__ = "/opt/omero/web/logs/*.log" },
+    { __path__ = "/opt/omero/web/logs/*.out" },
+    { __path__ = "/opt/omero/web/logs/*.err" },
+    { __path__ = "/opt/omero/web/logs/*/*.log" },
+    { __path__ = "/opt/omero/web/logs/*/*.out" },
+    { __path__ = "/opt/omero/web/logs/*/*.err" },
   ]
   sync_period = "5s"
 }
