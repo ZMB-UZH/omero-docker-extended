@@ -129,6 +129,72 @@ schedule_job_service_bootstrap() {
     log "Scheduled background job-service bootstrap"
 }
 
+
+install_figure_script() {
+    # Ensure OMERO.Figure PDF export script exists under OMERO.server scripts tree so it can be uploaded.
+    # The script is NOT part of the official OMERO scripts bundle.
+    local figure_version="${OMERO_FIGURE_VERSION:-}"
+    if [[ -z "${figure_version}" ]]; then
+        # Default chosen to match env/omeroserver.env, but keep this robust if unset.
+        figure_version="7.3.0"
+    fi
+
+    local script_dir="${SERVER_HOME}/lib/scripts/omero/figure_scripts"
+    local script_path="${script_dir}/Figure_To_Pdf.py"
+    local tmp_dir="/tmp/omero-figure-${figure_version}"
+
+    mkdir -p "${script_dir}"
+
+    # If script exists, keep it if version matches.
+    if [[ -f "${script_path}" ]]; then
+        local current_version="unknown"
+        current_version="$(grep -Eo "__version__\s*=\s*'[^']+'" "${script_path}" 2>/dev/null | head -n 1 | sed -E "s/.*'([^']+)'.*/\1/" || true)"
+        if [[ "${current_version}" == "${figure_version}" ]]; then
+            log "OMERO.Figure script already present (version ${current_version})"
+            return
+        fi
+        log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); reinstalling"
+        rm -f "${script_path}"
+    fi
+
+    rm -rf "${tmp_dir}"
+    mkdir -p "${tmp_dir}"
+
+    log "Installing OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
+    # Use git if available (installed in Dockerfile). Fall back to tarball if needed.
+    if command -v git >/dev/null 2>&1; then
+        git clone --depth 1 --branch "v${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
+            || git clone --depth 1 --branch "${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
+            || true
+    fi
+
+    if [[ -f "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
+        cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+    else
+        # Tarball fallback (works even if git clone is blocked)
+        local url="https://github.com/ome/omero-figure/archive/refs/tags/v${figure_version}.tar.gz"
+        curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz"
+        tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}"
+        local extracted
+        extracted="$(find "${tmp_dir}" -maxdepth 1 -type d -name "omero-figure-*${figure_version}*" | head -n 1 || true)"
+        if [[ -z "${extracted}" || ! -f "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
+            echo "ERROR: Failed to obtain Figure_To_Pdf.py for OMERO.Figure ${figure_version}" >&2
+            exit 1
+        fi
+        cp "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+    fi
+
+    rm -rf "${tmp_dir}"
+
+    # Ensure ownership/permissions suitable for script upload
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown -R "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
+    fi
+    chmod -R a+rX "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
+
+    log "Installed OMERO.Figure script at ${script_path}"
+}
+
 schedule_script_registration() {
     if [[ "${REGISTER_OFFICIAL_SCRIPTS:-0}" != "1" ]]; then
         return
@@ -174,6 +240,7 @@ main() {
     reset_runtime_if_requested
     configure_script_python
     ensure_certificate_sans
+    install_figure_script
     schedule_script_registration
     schedule_job_service_bootstrap
 
