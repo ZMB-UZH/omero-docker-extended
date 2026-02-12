@@ -1,8 +1,22 @@
-#!/usr/bin/env python3
-from pathlib import Path
-import textwrap, datetime
-
-script = r"""#!/usr/bin/env bash
+#!/usr/bin/env bash
+# Debian 13 (Trixie) extra packages installer — safe defaults for Docker CE hosts
+# - Does NOT install Docker or container runtimes by default
+# - Avoids common Docker CE conflicts (containerd/runc/docker.io/podman-docker)
+# - Avoids time-daemon conflicts by default (does not install chrony/ntpsec)
+# - Hard-stops on DNS/fetch errors to avoid partial installs
+# - Writes a complete log file under /var/log/
+#
+# Run:
+#   sudo bash ./debian_13_extra_packages_install_script
+#
+# Optional knobs:
+#   DRY_RUN=1
+#   INSTALL_RECOMMENDS=0
+#   AVOID_DOCKER_CONFLICTS=1 (default)
+#   INSTALL_CONTAINER_TOOLS=1  (opt-in)
+#   INSTALL_NETWORK_STACK=1    (opt-in)
+#   INSTALL_TIME_SYNC=1        (opt-in; installs chrony and may require disabling systemd-timesyncd)
+#   RUN_AUTOREMOVE=1           (opt-in; default 0)
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -19,8 +33,6 @@ BATCH_SIZE="${BATCH_SIZE:-40}"
 
 # Safety toggles (defaults are conservative for servers that already run Docker CE)
 # -----------------------------------------------------------------------------
-# - This script MUST NOT install Docker or container runtimes that can conflict with Docker CE.
-# - If you have a separate Docker installation script, keep these defaults.
 AVOID_DOCKER_CONFLICTS="${AVOID_DOCKER_CONFLICTS:-1}"    # 1 = filter packages known to conflict with Docker CE
 INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman/container tooling (default 0)
 INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved (default 0)
@@ -149,43 +161,15 @@ validate_platform() {
 
 sanitize_pkg() {
     # Remove CRLF artifacts and trim leading/trailing whitespace
-    # (protects against copy/paste or editor line ending issues).
     local s="$1"
     s="${s//$'\r'/}"
-    # trim
     s="${s#"${s%%[![:space:]]*}"}"
     s="${s%"${s##*[![:space:]]}"}"
     printf '%s' "${s}"
 }
 
 normalize_package_list() {
-    # Normalize and de-duplicate:
-    # - strip CRLF
-    # - take first token per line
-    # - sort unique
     sed 's/\r$//' | awk 'NF {print $1}' | sort -u
-}
-
-package_available() {
-    # Robust availability check:
-    # - apt-cache madison gives versions if package is known in current APT metadata
-    # - fallback to apt-cache policy candidate
-    local package_name="$1"
-    local pkg
-    pkg="$(sanitize_pkg "${package_name}")"
-    [ -z "${pkg}" ] && return 1
-
-    if apt-cache madison "${pkg}" 2>/dev/null | awk 'NF {found=1} END{exit(found?0:1)}'; then
-        return 0
-    fi
-
-    local cand
-    cand="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
-    if [ -n "${cand}" ] && [ "${cand}" != "(none)" ]; then
-        return 0
-    fi
-
-    return 1
 }
 
 package_installed() {
@@ -195,6 +179,28 @@ package_installed() {
     [ -z "${pkg}" ] && return 1
 
     dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed'
+}
+
+package_available() {
+    # Check if a non-installed package exists in current APT metadata.
+    local package_name="$1"
+    local pkg
+    pkg="$(sanitize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
+
+    # apt-cache madison prints versions if known (exit status is not reliable)
+    if apt-cache madison "${pkg}" 2>/dev/null | awk 'NF {found=1} END{exit(found?0:1)}'; then
+        return 0
+    fi
+
+    # Fallback: Candidate: <version>
+    local cand
+    cand="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
+    if [ -n "${cand}" ] && [ "${cand}" != "(none)" ]; then
+        return 0
+    fi
+
+    return 1
 }
 
 hardware_has_nvidia() {
@@ -222,9 +228,6 @@ hardware_has_amd_gpu() {
 }
 
 apt_get() {
-    # Centralized apt-get wrapper:
-    # - Noninteractive to avoid prompts
-    # - Retries/timeouts for transient network issues
     run_as_root env \
         DEBIAN_FRONTEND=noninteractive \
         APT_LISTCHANGES_FRONTEND=none \
@@ -238,8 +241,7 @@ apt_get() {
 }
 
 ensure_dns_ok() {
-    # Best-effort DNS sanity check before heavy apt work.
-    local host="${1:-debian.ethz.ch}"
+    local host="${1:-deb.debian.org}"
     local i
 
     for i in {1..8}; do
@@ -256,9 +258,7 @@ ensure_dns_ok() {
 }
 
 protect_docker_packages() {
-    # This script does NOT install Docker.
-    # If Docker is already present, we defensively mark key Docker packages as manual
-    # to avoid them becoming autoremovable due to unrelated dependency changes.
+    # Mark Docker CE packages (if present) as manual to avoid autoremove surprises.
     local -a candidates=(
         docker-ce
         docker-ce-cli
@@ -284,7 +284,6 @@ protect_docker_packages() {
 }
 
 mark_manual_installed() {
-    # Mark packages as manually installed (so they won't be autoremoved).
     local -a pkgs=("$@")
 
     if [ "${#pkgs[@]}" -eq 0 ]; then
@@ -302,22 +301,21 @@ filter_package_catalog() {
     if [ "${AVOID_DOCKER_CONFLICTS}" = "1" ]; then
         # Avoid ANY docker/container runtime install from this script.
         # Docker CE uses containerd.io from Docker repo; installing Debian's containerd/runc/docker.io may conflict.
-        deny+=(docker.io containerd containerd.io runc podman-docker)
+        deny+=(docker docker.io docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras)
+        deny+=(containerd containerd.io runc podman-docker)
     fi
 
     if [ "${INSTALL_CONTAINER_TOOLS}" != "1" ]; then
-        # If you want podman tooling, explicitly opt-in with INSTALL_CONTAINER_TOOLS=1.
         deny+=(podman systemd-container)
     fi
 
     if [ "${INSTALL_NETWORK_STACK}" != "1" ]; then
-        # These can rewrite /etc/resolv.conf and cause transient DNS failure until services settle/reboot.
         deny+=(network-manager network-manager-openvpn systemd-resolved)
     fi
 
     if [ "${INSTALL_TIME_SYNC}" != "1" ]; then
-        # Avoid time-daemon conflicts by default. (chrony conflicts with systemd-timesyncd via time-daemon)
-        deny+=(chrony ntpsec systemd-timesyncd)
+        # Avoid time-daemon conflicts by default.
+        deny+=(chrony ntpsec)
     fi
 
     if [ "${#deny[@]}" -eq 0 ]; then
@@ -335,8 +333,7 @@ filter_package_catalog() {
 apt_update() {
     log_info "Refreshing apt metadata..."
 
-    # Check DNS against at least one configured mirror host.
-    ensure_dns_ok "debian.ethz.ch" || ensure_dns_ok "deb.debian.org"
+    ensure_dns_ok "debian.ethz.ch" || ensure_dns_ok "security.debian.org" || ensure_dns_ok "download.docker.com"
 
     local out
     local rc
@@ -353,7 +350,6 @@ apt_update() {
         return "${rc}"
     fi
 
-    # Treat fetch/DNS errors as fatal even if apt exits 0 (prevents stale/partial indices).
     if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch|Some index files failed|Connection failed|Hash Sum mismatch'; then
         log_error "apt-get update reported fetch/DNS errors; refusing to continue."
         return 1
@@ -434,20 +430,13 @@ install_packages_in_batches() {
 }
 
 build_package_catalog() {
-    # NOTE:
-    # - This catalog intentionally avoids Docker / container runtime packages by default.
-    # - If you want container tools, set INSTALL_CONTAINER_TOOLS=1 (still avoids Docker conflicts unless overridden).
-    # - Time sync packages (chrony/ntpsec) are OFF by default to avoid time-daemon conflicts.
-    #
-    # IMPORTANT: Some entries below are "nice-to-have"; if Debian renames/removes them in a future snapshot,
-    # the script will skip missing packages safely.
-
+    # Big "extras" catalog; missing packages are skipped.
+    # NOTE: chrony/ntpsec are opt-in via INSTALL_TIME_SYNC=1.
     cat <<'PKGS'
 acl
 acpi
 adduser
 alsa-utils
-android-sdk-platform-tools-common
 apache2-utils
 apt-file
 apt-listbugs
@@ -464,11 +453,9 @@ automake
 avahi-daemon
 bash-completion
 bc
-bind9-dnsutils
 binutils
 bmon
 bolt
-bpfcc-tools
 bridge-utils
 btop
 btrfs-progs
@@ -487,16 +474,15 @@ curl
 dash
 debconf-utils
 deborphan
-debootstrap
-deja-dup
 diffutils
 dirmngr
 dkms
 dmidecode
 dns-root-data
+dnsutils
 dos2unix
 dpkg-dev
-du-dust
+dust
 e2fsprogs
 ed
 ethtool
@@ -507,22 +493,6 @@ fd-find
 ffmpeg
 file
 findutils
-firmware-atheros
-firmware-bnx2
-firmware-brcm80211
-firmware-iwlwifi
-firmware-libertas
-firmware-linux
-firmware-misc-nonfree
-firmware-realtek
-flatpak
-fontconfig
-fonts-dejavu
-fonts-firacode
-fonts-liberation
-fonts-noto
-fonts-noto-color-emoji
-fprintd
 fuse3
 gawk
 gcc
@@ -532,35 +502,18 @@ git
 git-lfs
 gnupg
 gnupg2
-gpart
 gparted
 gpg
-gpg-agent
-gpgconf
-gpgsm
 grep
 groff-base
-grub-efi-amd64
-grub-pc-bin
-gstreamer1.0-libav
-gstreamer1.0-plugins-bad
-gstreamer1.0-plugins-base
-gstreamer1.0-plugins-good
-gstreamer1.0-plugins-ugly
-gstreamer1.0-tools
-gvfs-backends
 gzip
 haveged
 hdparm
-hplip
 htop
 hwinfo
 i2c-tools
 iftop
-iio-sensor-proxy
 imagemagick
-intel-media-va-driver
-intel-microcode
 inxi
 iotop
 iperf3
@@ -574,31 +527,19 @@ irqbalance
 iw
 jq
 kexec-tools
-kitty-terminfo
-klibc-utils
 kmod
 less
-libavcodec-extra
-libfuse2t64
-libgl1-mesa-dri
 libnotify-bin
 libnss3-tools
 libpam-u2f
-libspa-0.2-bluetooth
 libu2f-udev
 libva-utils
-libvdpau-va-gl1
-libvirt-clients
-libvirt-daemon-system
-libx11-xcb1
 linux-cpupower
 linux-headers-amd64
 linux-image-amd64
-linux-perf
 lm-sensors
 locales
 logrotate
-lrzsz
 lshw
 lsof
 lsscsi
@@ -610,7 +551,6 @@ manpages
 manpages-dev
 mdadm
 mediainfo
-mesa-utils
 micro
 mtools
 mtr-tiny
@@ -646,22 +586,18 @@ policycoreutils
 poppler-utils
 powertop
 psmisc
-pulseaudio-utils
 python3
 python3-dev
 python3-pip
 python3-setuptools
 python3-venv
 qemu-guest-agent
-qemu-system-x86
 qemu-utils
 ranger
 ripgrep
 rsync
-rtkit
 ruby-full
 safe-rm
-sbctl
 screen
 sdparm
 seahorse
@@ -669,12 +605,10 @@ secure-delete
 sed
 sg3-utils
 shellcheck
-shim-signed
 smartmontools
 smbclient
 snmp
 snmpd
-sof-firmware
 squashfs-tools
 ssh-import-id
 ssl-cert
@@ -690,12 +624,10 @@ tpm2-tools
 traceroute
 tree
 tzdata
-udev
 ufw
 unar
 unattended-upgrades
 unzip
-usb-modeswitch
 usbutils
 util-linux
 v4l-utils
@@ -706,7 +638,6 @@ wavemon
 wget
 whois
 wireguard-tools
-wireless-regdb
 wpasupplicant
 x11-apps
 xauth
@@ -740,9 +671,6 @@ NETSTACK
     fi
 
     if [ "${INSTALL_TIME_SYNC}" = "1" ]; then
-        # IMPORTANT:
-        # chrony conflicts with systemd-timesyncd via the virtual package "time-daemon".
-        # If you opt in to chrony, you likely also want to disable/remove timesyncd yourself.
         cat <<'TIMESYNC'
 chrony
 TIMESYNC
@@ -751,11 +679,8 @@ TIMESYNC
     if [ "${INSTALL_PROPRIETARY_DRIVERS}" = "1" ]; then
         cat <<'PROPRIETARY'
 amd64-microcode
-blueman
-bluez
-bluez-firmware
-firmware-sof-signed
-iucode-tool
+intel-microcode
+sof-firmware
 PROPRIETARY
 
         if hardware_has_nvidia; then
@@ -768,15 +693,8 @@ NVIDIA
 
         if hardware_has_intel_gpu; then
             cat <<'INTELGPU'
-intel-opencl-icd
 intel-gpu-tools
 INTELGPU
-        fi
-
-        if hardware_has_amd_gpu; then
-            cat <<'AMDGPU'
-mesa-opencl-icd
-AMDGPU
         fi
     fi
 }
@@ -801,7 +719,6 @@ main() {
     apt_update
 
     local package_catalog
-    local -a available_packages=()
     local -a missing_packages=()
     local -a already_installed=()
     local -a install_queue=()
@@ -813,35 +730,35 @@ main() {
         package_name="$(sanitize_pkg "${raw_pkg}")"
         [ -z "${package_name}" ] && continue
 
-        if package_available "${package_name}"; then
-            available_packages+=("${package_name}")
-
-            if package_installed "${package_name}"; then
-                already_installed+=("${package_name}")
-            else
-                install_queue+=("${package_name}")
-            fi
+        # IMPORTANT:
+        # - If it's already installed, we accept it and mark manual later (even if not currently in APT metadata).
+        # - Only non-installed packages require APT metadata availability.
+        if package_installed "${package_name}"; then
+            already_installed+=("${package_name}")
         else
-            missing_packages+=("${package_name}")
+            if package_available "${package_name}"; then
+                install_queue+=("${package_name}")
+            else
+                missing_packages+=("${package_name}")
+            fi
         fi
     done <<<"${package_catalog}"
 
     log_info "Catalog size: $(printf '%s\n' "${package_catalog}" | wc -l | awk '{print $1}') packages."
-    log_info "Available in apt metadata: ${#available_packages[@]}"
     log_info "Already installed: ${#already_installed[@]}"
     log_info "Pending install: ${#install_queue[@]}"
 
     if [ "${#missing_packages[@]}" -gt 0 ]; then
-        log_warn "Packages not found in configured repositories (${#missing_packages[@]})."
+        log_warn "Packages not found in configured repositories (and not installed) (${#missing_packages[@]})."
         printf '%s\n' "${missing_packages[@]}" | sed 's/^/  - /'
         log_warn "Missing packages were skipped automatically."
     fi
 
-    # Ensure packages from the catalog remain installed (prevents autoremove surprises).
     mark_manual_installed "${already_installed[@]}"
 
     if [ "${#install_queue[@]}" -eq 0 ]; then
         log_info "Nothing to install. System already satisfies the available catalog."
+        log_info "Done."
         return 0
     fi
 
@@ -865,8 +782,3 @@ main() {
 }
 
 main "$@"
-"""
-
-out_path = Path("/mnt/data/debian_13_extra_packages_install_script_FIXED_v2.sh")
-out_path.write_text(script, encoding="utf-8")
-str(out_path)
