@@ -16,6 +16,7 @@
 #   INSTALL_CONTAINER_TOOLS=1  (opt-in)
 #   INSTALL_NETWORK_STACK=1    (opt-in)
 #   INSTALL_TIME_SYNC=1        (opt-in; installs chrony and may require disabling systemd-timesyncd)
+#   ALLOW_TIME_DAEMON_SWITCH=1 (opt-in; allows disabling systemd-timesyncd if you insist on chrony)
 #   RUN_AUTOREMOVE=1           (opt-in; default 0)
 
 set -Eeuo pipefail
@@ -37,6 +38,7 @@ AVOID_DOCKER_CONFLICTS="${AVOID_DOCKER_CONFLICTS:-1}"    # 1 = filter packages k
 INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman/container tooling (default 0)
 INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved (default 0)
 INSTALL_TIME_SYNC="${INSTALL_TIME_SYNC:-0}"              # 1 = allow installing chrony (default 0; avoids time-daemon conflicts)
+ALLOW_TIME_DAEMON_SWITCH="${ALLOW_TIME_DAEMON_SWITCH:-0}"# 1 = allow disabling timesyncd if installing chrony
 RUN_AUTOREMOVE="${RUN_AUTOREMOVE:-0}"                    # 1 = run apt-get autoremove/autoclean at the end (default 0)
 
 # APT robustness
@@ -181,28 +183,6 @@ package_installed() {
     dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed'
 }
 
-package_available() {
-    # Check if a non-installed package exists in current APT metadata.
-    local package_name="$1"
-    local pkg
-    pkg="$(sanitize_pkg "${package_name}")"
-    [ -z "${pkg}" ] && return 1
-
-    # apt-cache madison prints versions if known (exit status is not reliable)
-    if apt-cache madison "${pkg}" 2>/dev/null | awk 'NF {found=1} END{exit(found?0:1)}'; then
-        return 0
-    fi
-
-    # Fallback: Candidate: <version>
-    local cand
-    cand="$(apt-cache policy "${pkg}" 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
-    if [ -n "${cand}" ] && [ "${cand}" != "(none)" ]; then
-        return 0
-    fi
-
-    return 1
-}
-
 hardware_has_nvidia() {
     if ! command -v lspci >/dev/null 2>&1; then
         return 1
@@ -238,6 +218,25 @@ apt_get() {
             -o Acquire::https::Timeout="${APT_TIMEOUT}" \
             -o Dpkg::Use-Pty=0 \
             "$@"
+}
+
+apt_get_simulate_install() {
+    # Returns 0 only if apt believes the package is installable (and locatable) right now.
+    # This is MUCH more reliable than apt-cache heuristics on Debian testing.
+    local pkg="$1"
+    local -a install_flags=()
+
+    install_flags+=("-y")
+    if [ "${INSTALL_RECOMMENDS}" = "0" ]; then
+        install_flags+=("--no-install-recommends")
+    fi
+
+    # DRY_RUN: treat as installable to show intended actions, but still do not execute.
+    if [ "${DRY_RUN}" = "1" ]; then
+        return 0
+    fi
+
+    apt_get -s install "${install_flags[@]}" "${pkg}" >/dev/null 2>&1
 }
 
 ensure_dns_ok() {
@@ -315,7 +314,7 @@ filter_package_catalog() {
 
     if [ "${INSTALL_TIME_SYNC}" != "1" ]; then
         # Avoid time-daemon conflicts by default.
-        deny+=(chrony ntpsec)
+        deny+=(chrony ntpsec ntp systemd-timesyncd)
     fi
 
     if [ "${#deny[@]}" -eq 0 ]; then
@@ -356,33 +355,59 @@ apt_update() {
     fi
 }
 
-install_packages_in_batches() {
-    local -a queue=("$@")
-    local -a failed=()
-    local total="${#queue[@]}"
-    local start=0
-    local end=0
-    local batch=()
-    local install_flags=("-y")
+handle_time_sync_preflight() {
+    # If the user explicitly asks for INSTALL_TIME_SYNC=1, we still refuse to cause dependency conflicts by default.
+    # chrony conflicts with time-daemon providers; Debian often has systemd-timesyncd installed.
+    if [ "${INSTALL_TIME_SYNC}" != "1" ]; then
+        return 0
+    fi
 
+    if package_installed "systemd-timesyncd"; then
+        if [ "${ALLOW_TIME_DAEMON_SWITCH}" = "1" ]; then
+            log_warn "INSTALL_TIME_SYNC=1 and systemd-timesyncd is installed. ALLOW_TIME_DAEMON_SWITCH=1 => disabling timesyncd before chrony."
+            run_as_root systemctl disable --now systemd-timesyncd.service >/dev/null 2>&1 || true
+        else
+            log_warn "INSTALL_TIME_SYNC=1 requested but systemd-timesyncd is installed."
+            log_warn "To avoid time-daemon conflicts, chrony will be SKIPPED unless you set ALLOW_TIME_DAEMON_SWITCH=1."
+        fi
+    fi
+}
+
+install_packages_one_by_one() {
+    local -a queue=("$@")
+    local -a installed=()
+    local -a skipped=()
+    local total="${#queue[@]}"
+    local n=0
+
+    local -a install_flags=("-y")
     if [ "${INSTALL_RECOMMENDS}" = "0" ]; then
         install_flags+=("--no-install-recommends")
     fi
 
-    while [ "${start}" -lt "${total}" ]; do
-        end=$((start + BATCH_SIZE))
-        if [ "${end}" -gt "${total}" ]; then
-            end="${total}"
+    for pkg in "${queue[@]}"; do
+        n=$((n + 1))
+        log_info "Installing package ${n}/${total}: ${pkg}"
+
+        # Special-case chrony safety: even if it got into the queue, prevent known conflicts unless user allowed switching.
+        if [ "${pkg}" = "chrony" ] && package_installed "systemd-timesyncd" && [ "${ALLOW_TIME_DAEMON_SWITCH}" != "1" ]; then
+            log_warn "Skipping chrony to avoid time-daemon conflict (systemd-timesyncd installed; ALLOW_TIME_DAEMON_SWITCH!=1)."
+            skipped+=("${pkg}")
+            continue
         fi
 
-        batch=("${queue[@]:start:end-start}")
-        log_info "Installing package batch $((start + 1))-${end} of ${total}."
+        # Final guard: simulate right before install so we never emit "Unable to locate" or solver conflicts.
+        if ! apt_get_simulate_install "${pkg}"; then
+            log_warn "Skipping ${pkg} (not locatable or dependency conflict per apt simulation)."
+            skipped+=("${pkg}")
+            continue
+        fi
 
         local out
         local rc
 
         set +e
-        out="$(apt_get install "${install_flags[@]}" "${batch[@]}" 2>&1)"
+        out="$(apt_get install "${install_flags[@]}" "${pkg}" 2>&1)"
         rc=$?
         set -e
 
@@ -390,48 +415,35 @@ install_packages_in_batches() {
 
         if [ "${rc}" -ne 0 ]; then
             if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
-                log_error "Network/DNS failure during apt-get install; aborting early to avoid partial installs."
+                log_error "Network/DNS failure during apt-get install (package: ${pkg}); aborting early to avoid partial installs."
                 return 2
             fi
 
-            log_warn "Batch install failed. Retrying packages one-by-one for isolation."
-
-            local pkg
-            for pkg in "${batch[@]}"; do
-                set +e
-                out="$(apt_get install "${install_flags[@]}" "${pkg}" 2>&1)"
-                rc=$?
-                set -e
-
-                printf '%s\n' "${out}"
-
-                if [ "${rc}" -ne 0 ]; then
-                    if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
-                        log_error "Network/DNS failure during apt-get install (package: ${pkg}); aborting."
-                        return 2
-                    fi
-
-                    failed+=("${pkg}")
-                    log_warn "Package failed to install: ${pkg}"
-                fi
-            done
+            log_warn "Install failed for ${pkg}; marking as skipped to keep installer non-fatal."
+            skipped+=("${pkg}")
+            continue
         fi
 
-        start="${end}"
+        installed+=("${pkg}")
     done
 
-    if [ "${#failed[@]}" -gt 0 ]; then
-        log_warn "The following packages failed installation:"
-        printf '%s\n' "${failed[@]}" | sed 's/^/  - /'
-        return 1
+    if [ "${#installed[@]}" -gt 0 ]; then
+        log_info "Installed packages (${#installed[@]}):"
+        printf '%s\n' "${installed[@]}" | sed 's/^/  - /'
+    fi
+
+    if [ "${#skipped[@]}" -gt 0 ]; then
+        log_warn "Skipped packages (${#skipped[@]}):"
+        printf '%s\n' "${skipped[@]}" | sed 's/^/  - /'
+        log_warn "Skipped entries are normal on Debian testing (renames/removals/conflicts). Installer continues cleanly."
     fi
 
     return 0
 }
 
 build_package_catalog() {
-    # Big "extras" catalog; missing packages are skipped.
-    # NOTE: chrony/ntpsec are opt-in via INSTALL_TIME_SYNC=1.
+    # Big "extras" catalog; missing/renamed/conflicting packages are skipped safely.
+    # NOTE: chrony is opt-in via INSTALL_TIME_SYNC=1, and still conflict-guarded.
     cat <<'PKGS'
 acl
 acpi
@@ -708,6 +720,7 @@ main() {
     require_binary sed
     require_binary sort
     require_binary tee
+    require_binary getent
 
     validate_positive_integer "${BATCH_SIZE}" "BATCH_SIZE"
     validate_platform
@@ -717,11 +730,12 @@ main() {
     protect_docker_packages
 
     apt_update
+    handle_time_sync_preflight
 
     local package_catalog
-    local -a missing_packages=()
     local -a already_installed=()
     local -a install_queue=()
+    local -a skipped_by_availability=()
 
     package_catalog="$(build_package_catalog | normalize_package_list | filter_package_catalog)"
 
@@ -730,43 +744,44 @@ main() {
         package_name="$(sanitize_pkg "${raw_pkg}")"
         [ -z "${package_name}" ] && continue
 
-        # IMPORTANT:
-        # - If it's already installed, we accept it and mark manual later (even if not currently in APT metadata).
-        # - Only non-installed packages require APT metadata availability.
+        # Accept already-installed packages even if not currently in metadata.
         if package_installed "${package_name}"; then
             already_installed+=("${package_name}")
+            continue
+        fi
+
+        # HARD RULE: only queue packages that APT simulation says are installable now.
+        if apt_get_simulate_install "${package_name}"; then
+            install_queue+=("${package_name}")
         else
-            if package_available "${package_name}"; then
-                install_queue+=("${package_name}")
-            else
-                missing_packages+=("${package_name}")
-            fi
+            skipped_by_availability+=("${package_name}")
         fi
     done <<<"${package_catalog}"
 
     log_info "Catalog size: $(printf '%s\n' "${package_catalog}" | wc -l | awk '{print $1}') packages."
     log_info "Already installed: ${#already_installed[@]}"
-    log_info "Pending install: ${#install_queue[@]}"
+    log_info "Pending install (installable now): ${#install_queue[@]}"
 
-    if [ "${#missing_packages[@]}" -gt 0 ]; then
-        log_warn "Packages not found in configured repositories (and not installed) (${#missing_packages[@]})."
-        printf '%s\n' "${missing_packages[@]}" | sed 's/^/  - /'
-        log_warn "Missing packages were skipped automatically."
+    if [ "${#skipped_by_availability[@]}" -gt 0 ]; then
+        log_warn "Skipped (not locatable or dependency conflict per apt simulation) (${#skipped_by_availability[@]})."
+        printf '%s\n' "${skipped_by_availability[@]}" | sed 's/^/  - /'
+        log_warn "These are skipped safely to guarantee zero unmet-dependency errors."
     fi
 
     mark_manual_installed "${already_installed[@]}"
 
     if [ "${#install_queue[@]}" -eq 0 ]; then
-        log_info "Nothing to install. System already satisfies the available catalog."
+        log_info "Nothing installable to add right now. System already satisfies the installable catalog."
         log_info "Done."
         return 0
     fi
 
-    if install_packages_in_batches "${install_queue[@]}"; then
-        log_info "Package installation finished successfully."
+    # Install one-by-one to avoid solver cascades on Debian testing.
+    if install_packages_one_by_one "${install_queue[@]}"; then
+        log_info "Package installation finished cleanly (with safe skips if needed)."
     else
-        log_warn "Installation completed with failures. Review logs for failed packages."
-        exit 1
+        log_error "Installation aborted due to network/DNS failure (by design)."
+        exit 2
     fi
 
     if [ "${RUN_AUTOREMOVE}" = "1" ]; then
