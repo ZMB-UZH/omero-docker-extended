@@ -300,7 +300,14 @@ async function loadData() {
     statusEl.textContent = 'Loading resource dashboard...';
     try {
         const response = await fetch(dataUrl, { credentials: 'same-origin' });
-        const payload = await response.json();
+        const rawBody = await response.text();
+        let payload;
+        try {
+            payload = JSON.parse(rawBody);
+        } catch (parseError) {
+            const bodyPreview = rawBody.slice(0, 160).replace(/\s+/g, ' ').trim();
+            throw new Error(`Expected JSON response but received non-JSON payload (status ${response.status}): ${bodyPreview || 'empty response'}`);
+        }
         if (!response.ok) {
             throw new Error(payload.error || `Request failed with status ${response.status}`);
         }

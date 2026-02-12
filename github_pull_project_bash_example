@@ -6,7 +6,6 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_ENV_FILE=""
 INSTALLATION_ENV_FILE_OVERRIDE="${INSTALLATION_PATHS_ENV_FILE:-}"
-
 REPO_URL="git@github.com:strmt7/omero-zmb-omp-plugin.git"
 REPO_BRANCH="test"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
@@ -410,7 +409,6 @@ persist_compose_path_overrides() {
     persist_env_var "${env_file_path}" "PORTAINER_DATA_PATH" "${PORTAINER_DATA_PATH}"
 }
 
-
 copy_repo_files() {
     local clone_path="$1"
     local target_path="$2"
@@ -803,10 +801,9 @@ find . -mindepth 1 -maxdepth 1 \
     ! -name "${SCRIPT_NAME}" \
     ! -name "temp_clone" \
     ! -name "docker-compose.yml.new" \
-    ! -name ".env" \
     -exec rm -rf {} +
 
-echo "Moving new files..."
+echo "Moving new files (including latest env files from GitHub)..."
 echo "Fixing line endings in shell scripts..."
 find temp_clone -name "*.sh" -type f -exec sed -i 's/\r$//' {} \;
 copy_repo_files "temp_clone" "."
