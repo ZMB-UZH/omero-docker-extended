@@ -249,7 +249,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./env/compose.env
+      - ./env/grafana.env
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
