@@ -334,8 +334,8 @@ services:
         echo "OMERO Data Permission Initialization"
         echo "================================================"
         echo ""
-        TARGET_UID=1000
-        TARGET_GID=1000
+        TARGET_UID=999
+        TARGET_GID=999
 
         fix_path() {
           path="$1"
