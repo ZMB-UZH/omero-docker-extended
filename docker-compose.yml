@@ -52,7 +52,6 @@ services:
   alloy:
     image: "grafana/alloy:v1.12.2"
     restart: unless-stopped
-    user: "0:0"
     command:
       - "run"
       - "--server.http.listen-addr=0.0.0.0:12345"
@@ -82,7 +81,6 @@ services:
   prometheus:
     image: "prom/prometheus:v3.5.1"
     restart: unless-stopped
-    user: "0:0"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -241,7 +239,6 @@ services:
   grafana:
     image: "grafana/grafana:12.4.0-21611641766"
     restart: unless-stopped
-    user: "472:472"
     networks:
       omero:
         aliases:
@@ -265,7 +262,7 @@ services:
       - ./monitoring/grafana/provisioning/dashboards/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/omeroweb_admin_tools/resource-monitoring/grafana-proxy/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -397,8 +394,6 @@ services:
     env_file:
       - ./env/omeroweb.env
       - ./env/omero-celery.env
-    group_add:
-      - "${DOCKER_SOCKET_GID:?Set DOCKER_SOCKET_GID to the host docker.sock group id (run: stat -c '%g' /var/run/docker.sock)}"
     networks:
       omero:
         aliases:
