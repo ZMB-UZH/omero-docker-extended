@@ -482,3 +482,59 @@ def test_build_target_service_status_preserves_running_up_without_runtime_health
             "healthcheck": "",
         }
     ]
+
+
+def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
+    request = RequestFactory().get(
+        "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
+        {"refresh": "10s"},
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    captured = {}
+
+    def fake_proxy_http_request(
+        django_request,
+        base_url,
+        path,
+        query="",
+        *,
+        proxy_prefix="",
+    ):
+        captured.update(
+            {
+                "base_url": base_url,
+                "path": path,
+                "query": query,
+                "proxy_prefix": proxy_prefix,
+            }
+        )
+
+        class DummyResponse:
+            status_code = 200
+            content = b"{}"
+
+        return DummyResponse()
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        fake_proxy_http_request,
+    )
+
+    from omeroweb_admin_tools.views.index_view import grafana_proxy
+
+    response = grafana_proxy(
+        request,
+        "d/omero-infrastructure/server-infrastructure",
+        conn=None,
+    )
+
+    assert response.status_code == 200
+    assert captured["base_url"] == "http://grafana:3000"
+    assert captured["path"] == "d/omero-infrastructure/server-infrastructure"
+    assert captured["query"] == "refresh=10s"
+    assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
