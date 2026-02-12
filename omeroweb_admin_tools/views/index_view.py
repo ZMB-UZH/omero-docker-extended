@@ -29,6 +29,8 @@ from ..services.log_query import (
     fetch_internal_log_labels,
     serialize_entries,
 )
+from ..services.system_diagnostics import run_diagnostic_script
+from ..services.system_diagnostics import serialize_scripts
 from .utils import current_username
 
 logger = logging.getLogger(__name__)
@@ -870,9 +872,7 @@ def _load_compose_health_data() -> Tuple[Dict[str, bool], Dict[str, Dict[str, st
             state_payload = inspect_payload.get("State", {}) or {}
             state_health = state_payload.get("Health", {}) or {}
             if isinstance(state_health, dict):
-                inspected_health = (
-                    str(state_health.get("Status", "")).strip().lower()
-                )
+                inspected_health = str(state_health.get("Status", "")).strip().lower()
                 if inspected_health in {"healthy", "unhealthy", "starting"}:
                     runtime_health[service_name]["health"] = inspected_health
 
@@ -1136,7 +1136,9 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         "omeroweb_admin_tools_grafana_proxy",
         kwargs={"subpath": "d/plugin-database-metrics/plugin-database"},
     )
-    plugin_database_dashboard_url = f"{plugin_database_dashboard_proxy_path}?{dashboard_query}"
+    plugin_database_dashboard_url = (
+        f"{plugin_database_dashboard_proxy_path}?{dashboard_query}"
+    )
 
     redis_dashboard_proxy_path = reverse(
         "omeroweb_admin_tools_grafana_proxy",
@@ -1410,3 +1412,37 @@ def storage_data(request, conn=None, url=None, **kwargs):
             ),
         }
     )
+
+
+@login_required()
+def server_database_testing_view(request, conn=None, url=None, **kwargs):
+    """Render OMERO.server and database diagnostics page."""
+    return render(
+        request,
+        "omeroweb_admin_tools/server_database_testing.html",
+        {"diagnostic_scripts": json.dumps(serialize_scripts())},
+    )
+
+
+@login_required()
+def server_database_testing_run(request, conn=None, url=None, **kwargs):
+    """Execute selected diagnostics scripts and return a report."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+    if request.method != "POST":
+        return JsonResponse({"error": "POST method required."}, status=405)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    script_ids = payload.get("scripts")
+    if not isinstance(script_ids, list) or not script_ids:
+        return JsonResponse(
+            {"error": "Payload must include non-empty 'scripts' list."},
+            status=400,
+        )
+
+    results = [run_diagnostic_script(str(script_id)) for script_id in script_ids]
+    return JsonResponse({"results": results})
