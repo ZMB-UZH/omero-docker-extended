@@ -1,4 +1,58 @@
 #!/usr/bin/env bash
+################################################################################
+# ImarisConvertBioformats Installation Script
+################################################################################
+#
+# PURPOSE:
+#   Compiles and installs ImarisConvertBioformats at container startup.
+#   This tool converts Bio-Formats images to Imaris IMS format for use
+#   with Imaris visualization software.
+#
+# WHAT IT DOES:
+#   1. Checks if correct version is already installed (with valid Bio-Formats jar)
+#   2. Clones ImarisConvertBioformats and ImarisWriter from GitHub
+#   3. Downloads Bio-Formats JAR from OME Maven repository
+#   4. Patches source code to fix C++ compilation issues
+#   5. Compiles using CMake and system compiler
+#   6. Installs binary to /opt/omero/imarisconvert
+#   7. Creates symlink in /usr/local/bin
+#   8. Configures library path via /etc/ld.so.conf.d
+#   9. Records version to avoid redundant installations
+#
+# WHY THIS RUNS AT STARTUP:
+#   - Compilation requires build tools (gcc, cmake, etc.)
+#   - Build dependencies are installed in Dockerfile
+#   - Installation happens once per container lifecycle
+#   - Allows version updates without container rebuild
+#
+# BUILD DEPENDENCIES (from Dockerfile):
+#   - cmake, gcc, g++, make
+#   - Java 11 JDK
+#   - boost-devel, hdf5-devel, zlib-devel, lz4-devel, freeimage-devel
+#
+# COMPILATION PATCHES:
+#   - Adds #include <limits> to bpUtils.cxx (C++17 compatibility)
+#   - Adjusts CMake paths to find ImarisWriter library
+#
+# INSTALLATION LOCATION:
+#   - Binary: /opt/omero/imarisconvert/ImarisConvertBioformats
+#   - Bio-Formats JAR: /opt/omero/imarisconvert/bioformats/bioformats_package.jar
+#   - Symlink: /usr/local/bin/imarisconvert
+#   - Library path: /etc/ld.so.conf.d/imarisconvert.conf
+#   - Version tracking: /opt/omero/imarisconvert/.version
+#
+# VALIDATION:
+#   - Checks binary exists and is executable
+#   - Verifies Bio-Formats JAR is present and >10MB
+#   - Tests library linking with ldd
+#   - Ensures all dependencies are satisfied
+#
+# IDEMPOTENCY:
+#   - Checks version file and binary before compiling
+#   - Skips if correct version already installed
+#   - Safe to run multiple times
+#
+################################################################################
 set -euo pipefail
 
 fail() {

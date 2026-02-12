@@ -315,20 +315,37 @@ services:
           echo ""
         }
 
+        # Fix OMERO user data directory
         fix_path /OMERO "/OMERO"
 
+        # Create and fix certs directory
         mkdir -p /OMERO/certs
         chown "$${TARGET_UID}:$${TARGET_GID}" /OMERO/certs
         chmod 0750 /OMERO/certs
 
+        # Fix OMERO.server var and log directories
         mkdir -p /opt/omero/server/OMERO.server/var/log
         fix_path /opt/omero/server/OMERO.server/var "OMERO.server var"
 
-        echo "Final ownership:"
+        # Fix OMERO.web log directories (CRITICAL - fixes zarr logging failure)
+        mkdir -p /opt/omero/web/OMERO.web/var/log
+        fix_path /opt/omero/web/OMERO.web/var/log "OMERO.web logs"
+
+        mkdir -p /opt/omero/web/logs
+        fix_path /opt/omero/web/logs "OMERO.web supervisor logs"
+
+        # Fix upload directory permissions
+        mkdir -p /opt/tmp
+        fix_path /opt/tmp "OMERO upload directory"
+
+        echo "Final ownership verification:"
         ls -ld /OMERO
         ls -ld /OMERO/certs 2>/dev/null || true
         ls -ld /opt/omero/server/OMERO.server/var 2>/dev/null || true
         ls -ld /opt/omero/server/OMERO.server/var/log 2>/dev/null || true
+        ls -ld /opt/omero/web/OMERO.web/var/log 2>/dev/null || true
+        ls -ld /opt/omero/web/logs 2>/dev/null || true
+        ls -ld /opt/tmp 2>/dev/null || true
         echo ""
         echo "✓ Permission initialization complete"
         echo "================================================"
@@ -338,6 +355,9 @@ services:
       - ${OMERO_USER_DATA_PATH}:/OMERO:rw
       - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
       - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
+      - ${OMERO_WEB_LOGS_PATH}:/opt/omero/web/OMERO.web/var/log:rw
+      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH}:/opt/omero/web/logs:rw
+      - ${OMERO_UPLOAD_PATH}:/opt/tmp:rw
     network_mode: none
 
   omeroserver:
