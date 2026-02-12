@@ -14,7 +14,7 @@ Review and update:
 - `env/omeroserver.env`
 - `env/omeroweb.env`
 - `env/omero-celery.env`
-- `env/compose.env`
+- `env/grafana.env`
 
 Do not deploy with default credentials.
 
