@@ -304,6 +304,9 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
+    assert payload["grafana"]["database_dashboard_proxy_url"].startswith("/")
+    assert payload["grafana"]["plugin_database_dashboard_proxy_url"].startswith("/")
+    assert payload["grafana"]["redis_dashboard_proxy_url"].startswith("/")
     assert payload["prometheus"]["targets_proxy_url"].startswith("/")
     assert "containers" not in payload["prometheus"]["targets_overview"]
 
