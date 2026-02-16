@@ -61,7 +61,9 @@ replace_working_tree_with_clone() {
         ! -name '.project-pull.*' \
         -exec rm -rf {} +
 
-    find "${clone_dir}" -mindepth 1 -maxdepth 1 -exec mv {} "${current_repo_dir}" \;
+    find "${clone_dir}" -mindepth 1 -maxdepth 1 \
+        ! -name '.git' \
+        -exec mv {} "${current_repo_dir}" \;
 }
 
 run_installation_script() {
