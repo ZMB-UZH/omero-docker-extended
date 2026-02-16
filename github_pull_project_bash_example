@@ -59,6 +59,8 @@ replace_working_tree_with_clone() {
     find "${current_repo_dir}" -mindepth 1 -maxdepth 1 \
         ! -name '.git' \
         ! -name '.project-pull.*' \
+        ! -name 'github_pull_project_bash' \
+        ! -name "${SCRIPT_NAME}" \
         -exec rm -rf {} +
 
     find "${clone_dir}" -mindepth 1 -maxdepth 1 \
