@@ -160,6 +160,21 @@ def _is_internal_hostname(hostname: str) -> bool:
     return lowered in {"", "localhost", "127.0.0.1", "::1", "grafana", "prometheus"}
 
 
+def _is_behind_reverse_proxy(request) -> bool:
+    """Return True when the request arrived through a reverse proxy.
+
+    Reverse proxies (nginx, NPM, Caddy, Traefik, etc.) set at least one of these
+    headers.  When detected, auto-generated external URLs that include internal
+    service ports (like :3000 for Grafana) are suppressed because the browser
+    cannot reach those ports — the Django proxy path is used instead.
+    """
+    return bool(
+        (request.META.get("HTTP_X_FORWARDED_PROTO") or "").strip()
+        or (request.META.get("HTTP_X_FORWARDED_HOST") or "").strip()
+        or (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
+    )
+
+
 def _safe_request_host(request) -> str:
     """Return request host without port, falling back safely when host validation fails."""
     try:
@@ -1131,23 +1146,28 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     if not grafana_public_base_url and _is_internal_hostname(
         urlparse(grafana_base_url).hostname or ""
     ):
-        grafana_public_base_url = _build_public_service_url(
-            grafana_base_url,
-            request_scheme,
-            request_host,
-            grafana_host_port,
-        )
+        # Only auto-generate a direct-port URL (e.g. https://host:3000) when the
+        # client is NOT behind a reverse proxy.  Behind a proxy the service port
+        # is unreachable from the browser — the Django proxy path handles it.
+        if not _is_behind_reverse_proxy(request):
+            grafana_public_base_url = _build_public_service_url(
+                grafana_base_url,
+                request_scheme,
+                request_host,
+                grafana_host_port,
+            )
 
     prometheus_public_base_url = prometheus_public_url
     if not prometheus_public_base_url and _is_internal_hostname(
         urlparse(prometheus_base_url).hostname or ""
     ):
-        prometheus_public_base_url = _build_public_service_url(
-            prometheus_base_url,
-            request_scheme,
-            request_host,
-            prometheus_host_port,
-        )
+        if not _is_behind_reverse_proxy(request):
+            prometheus_public_base_url = _build_public_service_url(
+                prometheus_base_url,
+                request_scheme,
+                request_host,
+                prometheus_host_port,
+            )
 
     dashboard_external_url = ""
     if grafana_public_base_url:
