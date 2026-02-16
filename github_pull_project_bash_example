@@ -276,7 +276,10 @@ replace_working_tree_with_clone() {
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
     echo "  - github_pull_project_bash_example"
-    echo "  - ${SCRIPT_NAME}"
+    if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ] && \
+       [ "${SCRIPT_NAME}" != "github_pull_project_bash_example" ]; then
+        echo "  - ${SCRIPT_NAME}"
+    fi
     if [ ${#protected_data_dirs[@]} -gt 0 ]; then
         echo "  Top-level data directories (from installation_paths.env):"
         printf '    - %s\n' "${protected_data_dirs[@]}"
