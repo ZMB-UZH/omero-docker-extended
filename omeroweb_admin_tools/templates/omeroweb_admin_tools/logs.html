@@ -339,12 +339,21 @@
                     input.checked = Boolean(dockerSources[input.value]);
                 }
             });
+            updateDockerSourcePillStyles();
             if (tableContainer && storedState.tableSize) {
                 const height = Math.max(defaultTableHeight, storedState.tableSize.height || 0);
                 if (height) {
                     tableContainer.style.height = `${height}px`;
                 }
             }
+        }
+
+        function updateDockerSourcePillStyles() {
+            document.querySelectorAll('.log-source-pill').forEach((pill) => {
+                const input = pill.querySelector('input');
+                const hasSelection = Boolean(input?.checked);
+                pill.classList.toggle('has-selection', hasSelection);
+            });
         }
 
         /* ── Internal log dropdown state ── */
@@ -885,6 +894,7 @@
             downloadBtn?.addEventListener('click', downloadCurrentEntries);
             document.querySelectorAll('.log-source-pill input').forEach((input) => {
                 input.addEventListener('change', () => {
+                    updateDockerSourcePillStyles();
                     persistState();
                     fetchLogs();
                 });
@@ -895,6 +905,7 @@
                     document.querySelectorAll('.log-source-pill input').forEach((input) => {
                         input.checked = selectAll;
                     });
+                    updateDockerSourcePillStyles();
                     persistState();
                     fetchLogs();
                 });
@@ -963,6 +974,7 @@
         }
 
         applyStoredState();
+        updateDockerSourcePillStyles();
         if (tableContainer && window.ResizeObserver) {
             const observer = new ResizeObserver(() => {
                 persistState();
