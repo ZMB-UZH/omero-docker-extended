@@ -336,20 +336,24 @@ log_path_snapshot() {
     local path_to_check="$1"
     local label="$2"
 
+    # IMPORTANT: metadata-only probe. This does NOT copy, back up, move, or delete any data.
+    # It is intentionally non-recursive so it remains lightweight even for very large datasets.
     if [ ! -d "${path_to_check}" ]; then
-        echo "SNAPSHOT: ${label}: missing path ${path_to_check}"
+        echo "SNAPSHOT(meta-only, non-recursive): ${label}: missing path ${path_to_check}"
         return 0
     fi
 
-    local file_count="0"
-    local dir_count="0"
-    local bytes_used="0"
+    local top_level_entries="0"
+    local dir_owner="unknown"
+    local dir_mode="unknown"
 
-    file_count="$(find "${path_to_check}" -type f 2>/dev/null | wc -l | tr -d '[:space:]')"
-    dir_count="$(find "${path_to_check}" -type d 2>/dev/null | wc -l | tr -d '[:space:]')"
-    bytes_used="$(du -sb "${path_to_check}" 2>/dev/null | awk '{print $1}')"
+    top_level_entries="$(find "${path_to_check}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
+    if stat -c '%U:%G %a' "${path_to_check}" >/dev/null 2>&1; then
+        dir_owner="$(stat -c '%U:%G' "${path_to_check}")"
+        dir_mode="$(stat -c '%a' "${path_to_check}")"
+    fi
 
-    echo "SNAPSHOT: ${label}: files=${file_count} dirs=${dir_count} bytes=${bytes_used} path=${path_to_check}"
+    echo "SNAPSHOT(meta-only, non-recursive): ${label}: top_level_entries=${top_level_entries} owner=${dir_owner} mode=${dir_mode} path=${path_to_check}"
 }
 
 persist_env_var() {
