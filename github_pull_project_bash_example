@@ -40,6 +40,7 @@ cleanup_refresh_clone_dir() {
 
 bootstrap_repo_clone_and_refresh_installation_env() {
     local refreshed_env_file="${SCRIPT_DIR}/env/installation_paths.env"
+    local template_env_file=""
 
     BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.installation-env-refresh.XXXXXX")"
 
@@ -80,12 +81,66 @@ bootstrap_repo_clone_and_refresh_installation_env() {
         return 1
     fi
 
-    if ! cp "${BOOTSTRAP_CLONE_DIR}/env/installation_paths.env" "${refreshed_env_file}"; then
-        echo "ERROR: Failed to copy refreshed installation_paths.env to ${refreshed_env_file}." >&2
+    template_env_file="${BOOTSTRAP_CLONE_DIR}/env/installation_paths.env"
+
+    if [ ! -f "${refreshed_env_file}" ]; then
+        if ! cp "${template_env_file}" "${refreshed_env_file}"; then
+            echo "ERROR: Failed to create installation_paths.env at ${refreshed_env_file}." >&2
+            return 1
+        fi
+
+        echo "Created installation_paths.env from repository template: ${refreshed_env_file}."
+        return 0
+    fi
+
+    # Never overwrite an existing installation_paths.env, because user-defined
+    # mount paths are persistent state and must survive updates.
+    # Instead, append only missing keys from the template.
+    if ! awk -F'=' '
+        BEGIN { changed = 0 }
+        FNR == NR {
+            if ($0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/) {
+                next
+            }
+
+            key = $1
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+            if (key ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+                existing[key] = 1
+            }
+            next
+        }
+        {
+            if ($0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/) {
+                next
+            }
+
+            key = $1
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+            if (!(key ~ /^[A-Za-z_][A-Za-z0-9_]*$/)) {
+                next
+            }
+
+            if (!(key in existing)) {
+                if (changed == 0) {
+                    print "" >> existing_file
+                    print "# Added automatically from repository template during update." >> existing_file
+                }
+                print $0 >> existing_file
+                changed = 1
+            }
+        }
+        END {
+            if (changed == 1) {
+                print "INFO: Added missing installation_paths.env keys from repository template." > "/dev/stderr"
+            }
+        }
+    ' existing_file="${refreshed_env_file}" "${refreshed_env_file}" "${template_env_file}"; then
+        echo "ERROR: Failed to merge missing keys into ${refreshed_env_file}." >&2
         return 1
     fi
 
-    echo "Pulled latest installation_paths.env from ${REPO_URL} (${REPO_BRANCH}) to ${refreshed_env_file}."
+    echo "Preserved existing installation_paths.env values at ${refreshed_env_file}."
     return 0
 }
 
@@ -836,61 +891,105 @@ fi
 
 collect_protected_installation_subdirs() {
     local installation_base_path="$1"
-    local env_file_path="$2"
+    local env_directory_path="$2"
+    local seed_env_file_path="$3"
+    local env_file_path=""
     local env_key=""
     local env_value=""
     local relative_path=""
     local top_level_dir=""
     local found=0
     local -a protected_subdirs=()
-    local -a env_path_keys=()
+    local -a env_variable_keys=()
+    local -a env_files=()
 
-    while IFS='=' read -r env_key _; do
-        env_key="${env_key%%#*}"
-        env_key="${env_key%${env_key##*[![:space:]]}}"
-        env_key="${env_key#${env_key%%[![:space:]]*}}"
+    if [ -f "${seed_env_file_path}" ]; then
+        env_files+=("${seed_env_file_path}")
+    fi
 
-        if [[ "${env_key}" =~ ^[A-Za-z_][A-Za-z0-9_]*_PATH$ ]]; then
-            env_path_keys+=("${env_key}")
-        fi
-    done < "${env_file_path}"
-
-    for env_key in "${env_path_keys[@]+${env_path_keys[@]}}"; do
-        env_value="${!env_key:-}"
-
-        if [ -z "${env_value}" ]; then
-            continue
-        fi
-
-        case "${env_value}" in
-            "${installation_base_path}"/*)
-                relative_path="${env_value#"${installation_base_path}"/}"
-                top_level_dir="${relative_path%%/*}"
-
-                if [ -z "${top_level_dir}" ]; then
-                    continue
+    if [ -d "${env_directory_path}" ]; then
+        while IFS= read -r env_file_path; do
+            found=0
+            for existing_dir in "${env_files[@]+${env_files[@]}}"; do
+                if [ "${existing_dir}" = "${env_file_path}" ]; then
+                    found=1
+                    break
                 fi
+            done
 
+            if [ "${found}" -eq 0 ]; then
+                env_files+=("${env_file_path}")
+            fi
+        done < <(find "${env_directory_path}" -maxdepth 1 -type f -name "*.env" | sort)
+    fi
+
+    for env_file_path in "${env_files[@]+${env_files[@]}}"; do
+        while IFS='=' read -r env_key _; do
+            env_key="${env_key%%#*}"
+            env_key="${env_key%${env_key##*[![:space:]]}}"
+            env_key="${env_key#${env_key%%[![:space:]]*}}"
+
+            if [[ "${env_key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
                 found=0
-                for existing_dir in "${protected_subdirs[@]+${protected_subdirs[@]}}"; do
-                    if [ "${existing_dir}" = "${top_level_dir}" ]; then
+                for existing_dir in "${env_variable_keys[@]+${env_variable_keys[@]}}"; do
+                    if [ "${existing_dir}" = "${env_key}" ]; then
                         found=1
                         break
                     fi
                 done
 
                 if [ "${found}" -eq 0 ]; then
-                    protected_subdirs+=("${top_level_dir}")
+                    env_variable_keys+=("${env_key}")
                 fi
-                ;;
-        esac
+            fi
+        done < "${env_file_path}"
     done
 
-    printf '%s\n' "${protected_subdirs[@]+${protected_subdirs[@]}}"
+    (
+        set -a
+        for env_file_path in "${env_files[@]+${env_files[@]}}"; do
+            # shellcheck disable=SC1090
+            . "${env_file_path}"
+        done
+        set +a
+
+        for env_key in "${env_variable_keys[@]+${env_variable_keys[@]}}"; do
+            env_value="${!env_key:-}"
+
+            if [ -z "${env_value}" ]; then
+                continue
+            fi
+
+            case "${env_value}" in
+                "${installation_base_path}"/*)
+                    relative_path="${env_value#"${installation_base_path}"/}"
+                    top_level_dir="${relative_path%%/*}"
+
+                    if [ -z "${top_level_dir}" ]; then
+                        continue
+                    fi
+
+                    found=0
+                    for existing_dir in "${protected_subdirs[@]+${protected_subdirs[@]}}"; do
+                        if [ "${existing_dir}" = "${top_level_dir}" ]; then
+                            found=1
+                            break
+                        fi
+                    done
+
+                    if [ "${found}" -eq 0 ]; then
+                        protected_subdirs+=("${top_level_dir}")
+                    fi
+                    ;;
+            esac
+        done
+
+        printf '%s\n' "${protected_subdirs[@]+${protected_subdirs[@]}}"
+    )
 }
 
 INSTALLATION_BASE_PATH="${OMERO_INSTALLATION_PATH%/}"
-mapfile -t PROTECTED_SUBDIRS < <(collect_protected_installation_subdirs "${INSTALLATION_BASE_PATH}" "${SCRIPT_ENV_FILE}")
+mapfile -t PROTECTED_SUBDIRS < <(collect_protected_installation_subdirs "${INSTALLATION_BASE_PATH}" "${OMERO_INSTALLATION_PATH%/}/env" "${SCRIPT_ENV_FILE}")
 
 find_cleanup_args=(find . -mindepth 1 -maxdepth 1)
 find_cleanup_args+=(! -name "${SCRIPT_NAME}")
