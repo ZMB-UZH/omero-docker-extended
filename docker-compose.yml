@@ -17,7 +17,7 @@ services:
       - "9443:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${PORTAINER_DATA_PATH:-./data/portainer}:/data:rw
+      - ${PORTAINER_DATA_PATH:?Set PORTAINER_DATA_PATH (use --env-file env/installation_paths.env)}:/data:rw
     command: --http-enabled
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
