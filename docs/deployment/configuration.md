@@ -4,7 +4,7 @@
 
 This repository uses environment variables as the primary configuration surface.
 
-- `env/installation_paths.env`: filesystem path definitions (including reverse-proxy state paths).
+- `env/installation_paths.env`: filesystem path definitions.
 - `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
 - `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
 - `env/omero-celery.env`: Celery and Imaris connector processing controls.
@@ -60,18 +60,14 @@ Queue names and broker URLs must be consistent between job producer and worker.
 4. Run health checks and targeted plugin workflow checks.
 5. Document the change in release notes.
 
-## Reverse Proxy (Nginx Proxy Manager)
+## Reverse Proxy (Managed Externally)
 
-Nginx Proxy Manager is exposed on host ports `80`, `81`, and `443`.
+Reverse proxy and TLS termination are managed outside this repository.
 
-- Admin UI: `http://<host>:81`
-- HTTP proxy entry point: `http://<host>:80`
-- HTTPS proxy entry point: `https://<host>:443`
-
-For OMERO.web forwarding, create a host in Nginx Proxy Manager with:
+For OMERO.web forwarding from your external reverse proxy (for example, nginx managed via Ansible), target:
 
 - Scheme: `http`
 - Forward Hostname / IP: `omeroweb`
 - Forward Port: `4090`
 
-This preserves local/internal HTTP access to OMERO.web while allowing you to add TLS certificates later inside Nginx Proxy Manager.
+This keeps direct internal access to OMERO.web (`http://omeroweb:4090`) available while IT-managed proxy configuration is applied.
