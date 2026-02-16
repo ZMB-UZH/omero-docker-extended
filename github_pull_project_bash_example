@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_URL="${REPO_URL:-git@github.com:strmt7/omero-zmb-omp-plugin.git}"
 REPO_BRANCH="${REPO_BRANCH:-test}"
 INSTALLATION_SCRIPT_RELATIVE_PATH="${INSTALLATION_SCRIPT_RELATIVE_PATH:-installation/installation_script.sh}"
+INSTALLATION_PATHS_ENV_RELATIVE_PATH="${INSTALLATION_PATHS_ENV_RELATIVE_PATH:-env/installation_paths.env}"
 
 # shellcheck disable=SC2034
 BOOTSTRAP_CLONE_DIR=""
@@ -52,16 +53,112 @@ clone_latest_repository_snapshot() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# collect_protected_top_level_names
+#
+# Reads installation_paths.env, resolves every path variable (including
+# variable references like ${OMERO_DATA_PATH}/...), and emits the unique
+# set of first-level directory names that fall *under* the repository root.
+#
+# These names are then excluded from the rm -rf during file replacement,
+# preventing data loss of databases, user files, logs, etc.
+# ---------------------------------------------------------------------------
+collect_protected_top_level_names() {
+    local repo_dir="${1%/}"
+    local env_file="${repo_dir}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
+
+    if [ ! -f "${env_file}" ]; then
+        echo "WARNING: ${env_file} not found; cannot auto-detect data paths to protect." >&2
+        echo "WARNING: Only built-in exclusions will apply during file replacement." >&2
+        return 0
+    fi
+
+    # Source the env file inside a subshell so that variable references
+    # (e.g. ${OMERO_DATA_PATH}/omero_user_data) resolve correctly,
+    # then print every known path variable.
+    local resolved_paths
+    resolved_paths="$(
+        # shellcheck disable=SC1090
+        . "${env_file}" 2>/dev/null || exit 0
+        printf '%s\n' \
+            "${OMERO_INSTALLATION_PATH:-}" \
+            "${OMERO_DATABASE_PATH:-}" \
+            "${OMERO_PLUGIN_DATABASE_PATH:-}" \
+            "${OMERO_DATA_PATH:-}" \
+            "${OMERO_USER_DATA_PATH:-}" \
+            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_SERVER_LOGS_PATH:-}" \
+            "${OMERO_WEB_LOGS_PATH:-}" \
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
+            "${PORTAINER_DATA_PATH:-}" \
+            "${PROMETHEUS_DATA_PATH:-}" \
+            "${GRAFANA_DATA_PATH:-}"
+    )" || true
+
+    # For each resolved path that lives under repo_dir, extract the
+    # first directory component so `find` can skip it.
+    local _path _rel _top
+    while IFS= read -r _path; do
+        [ -z "${_path}" ] && continue
+        _path="${_path%/}"
+        # Skip if it IS the repo dir itself (not a child).
+        [ "${_path}" = "${repo_dir}" ] && continue
+        case "${_path}" in
+            "${repo_dir}/"*)
+                _rel="${_path#"${repo_dir}/"}"
+                _top="${_rel%%/*}"
+                [ -n "${_top}" ] && printf '%s\n' "${_top}"
+                ;;
+        esac
+    done <<< "${resolved_paths}" | sort -u
+}
+
 replace_working_tree_with_clone() {
     local clone_dir="$1"
     local current_repo_dir="$2"
 
-    find "${current_repo_dir}" -mindepth 1 -maxdepth 1 \
-        ! -name '.git' \
-        ! -name '.project-pull.*' \
-        ! -name 'github_pull_project_bash' \
-        ! -name "${SCRIPT_NAME}" \
-        -exec rm -rf {} +
+    # ── Collect data directories that MUST survive the replacement ─────
+    local -a protected_data_dirs=()
+    local _name
+    while IFS= read -r _name; do
+        [ -n "${_name}" ] && protected_data_dirs+=("${_name}")
+    done < <(collect_protected_top_level_names "${current_repo_dir}")
+
+    # ── Build the find exclusion list ─────────────────────────────────
+    local -a find_args=()
+    find_args+=( "${current_repo_dir}" -mindepth 1 -maxdepth 1 )
+
+    # Built-in exclusions (always applied)
+    find_args+=( ! -name '.git' )
+    find_args+=( ! -name '.project-pull.*' )
+    find_args+=( ! -name 'github_pull_project_bash' )
+    find_args+=( ! -name 'github_pull_project_bash_example' )
+    find_args+=( ! -name "${SCRIPT_NAME}" )
+
+    # Data-path exclusions (derived from installation_paths.env)
+    for _name in "${protected_data_dirs[@]}"; do
+        find_args+=( ! -name "${_name}" )
+    done
+
+    # ── Safety summary ────────────────────────────────────────────────
+    echo "Protected (will NOT be removed):"
+    echo "  - .git"
+    echo "  - .project-pull.*"
+    echo "  - github_pull_project_bash"
+    echo "  - github_pull_project_bash_example"
+    echo "  - ${SCRIPT_NAME}"
+    if [ ${#protected_data_dirs[@]} -gt 0 ]; then
+        echo "  Data directories (from installation_paths.env):"
+        printf '    - %s\n' "${protected_data_dirs[@]}"
+    fi
+    echo ""
+
+    echo "Entries that will be replaced with fresh repository files:"
+    find "${find_args[@]}" -printf '  - %f\n' 2>/dev/null || true
+
+    # ── Perform the replacement ───────────────────────────────────────
+    find "${find_args[@]}" -exec rm -rf {} +
 
     find "${clone_dir}" -mindepth 1 -maxdepth 1 \
         ! -name '.git' \
