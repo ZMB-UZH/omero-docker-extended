@@ -277,11 +277,15 @@ ensure_installation_path() {
     local install_path="$1"
 
     if [ ! -d "${install_path}" ]; then
-        echo "OMERO installation path does not exist. Creating with mode 0755: ${install_path}"
+        echo "OMERO installation path does not exist yet. Creating empty directory with mode 0755 (no existing data is removed): ${install_path}"
         if ! install -d -m 0755 "${install_path}"; then
             echo "ERROR: Failed to create OMERO installation path: ${install_path}" >&2
             return 1
         fi
+    else
+        local existing_entries
+        existing_entries="$(find "${install_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
+        echo "OMERO installation path already exists with ${existing_entries} top-level item(s); preserving existing contents: ${install_path}"
     fi
 
     if [ ! -w "${install_path}" ]; then
@@ -302,11 +306,15 @@ ensure_data_path() {
     fi
 
     if [ ! -d "${data_path}" ]; then
-        echo "${path_label} does not exist. Creating with mode 0755: ${data_path}"
+        echo "${path_label} does not exist yet. Creating empty directory with mode 0755 (no existing data is removed): ${data_path}"
         if ! install -d -m 0755 "${data_path}"; then
             echo "ERROR: Failed to create ${path_label}: ${data_path}" >&2
             return 1
         fi
+    else
+        local existing_entries
+        existing_entries="$(find "${data_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
+        echo "${path_label} already exists with ${existing_entries} top-level item(s); preserving existing contents: ${data_path}"
     fi
 
     if [ ! -w "${data_path}" ]; then
