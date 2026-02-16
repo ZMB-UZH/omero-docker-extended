@@ -413,6 +413,8 @@ persist_compose_path_overrides() {
     persist_env_var "${env_file_path}" "PROMETHEUS_DATA_PATH" "${PROMETHEUS_DATA_PATH}"
     persist_env_var "${env_file_path}" "GRAFANA_DATA_PATH" "${GRAFANA_DATA_PATH}"
     persist_env_var "${env_file_path}" "PORTAINER_DATA_PATH" "${PORTAINER_DATA_PATH}"
+    persist_env_var "${env_file_path}" "NGINX_PROXY_MANAGER_DATA_PATH" "${NGINX_PROXY_MANAGER_DATA_PATH}"
+    persist_env_var "${env_file_path}" "NGINX_PROXY_MANAGER_LETSENCRYPT_PATH" "${NGINX_PROXY_MANAGER_LETSENCRYPT_PATH}"
 }
 
 copy_repo_files() {
@@ -672,6 +674,8 @@ OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
 PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
 GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
+NGINX_PROXY_MANAGER_DATA_PATH="${OMERO_DATA_PATH%/}/nginx_proxy_manager_data"
+NGINX_PROXY_MANAGER_LETSENCRYPT_PATH="${OMERO_DATA_PATH%/}/nginx_proxy_manager_letsencrypt"
 
 if ! validate_retry_config; then
     exit 1
@@ -777,6 +781,14 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO cer
 fi
 
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${NGINX_PROXY_MANAGER_DATA_PATH}" "Nginx Proxy Manager data directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${NGINX_PROXY_MANAGER_LETSENCRYPT_PATH}" "Nginx Proxy Manager letsencrypt directory"; then
     exit 1
 fi
 
@@ -1149,8 +1161,8 @@ if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFAN
     exit 1
 fi
 
-# Portainer stays root-owned (or whatever you prefer); do NOT force it to OMERO IDs
-# ensure_container_writable_path already created it earlier.
+# Portainer and Nginx Proxy Manager stay root-owned (or whatever you prefer); do NOT force
+# them to OMERO IDs. ensure_container_writable_path already created their directories earlier.
 
 echo ""
 echo "✔ Host ownership fix complete."
