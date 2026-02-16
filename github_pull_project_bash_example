@@ -218,7 +218,6 @@ replace_working_tree_with_clone() {
     find_args+=( ! -name '.git' )
     find_args+=( ! -name '.project-pull.*' )
     find_args+=( ! -name 'github_pull_project_bash' )
-    find_args+=( ! -name 'github_pull_project_bash_example' )
     find_args+=( ! -name "${SCRIPT_NAME}" )
 
     # Data-path exclusions (derived from installation_paths.env)
@@ -275,9 +274,7 @@ replace_working_tree_with_clone() {
     echo "  - .git"
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
-    echo "  - github_pull_project_bash_example"
-    if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ] && \
-       [ "${SCRIPT_NAME}" != "github_pull_project_bash_example" ]; then
+    if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ]; then
         echo "  - ${SCRIPT_NAME}"
     fi
     if [ ${#protected_data_dirs[@]} -gt 0 ]; then
