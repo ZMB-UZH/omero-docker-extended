@@ -22,19 +22,19 @@ Do not deploy with default credentials.
 ## 2) Build Images
 
 ```bash
-docker compose build
+docker compose --env-file env/installation_paths.env build
 ```
 
 ## 3) Start the Platform
 
 ```bash
-docker compose up -d
+docker compose --env-file env/installation_paths.env up -d
 ```
 
 ## 4) Verify Service Health
 
 ```bash
-docker compose ps
+docker compose --env-file env/installation_paths.env ps
 ```
 
 Verify all required services are `healthy` or `running`.
@@ -58,13 +58,13 @@ Adjust host/port if your deployment maps OMERO.web differently.
 
 ```bash
 # Stop services without removing resources
-docker compose stop
+docker compose --env-file env/installation_paths.env stop
 
 # Stop and remove containers
-docker compose down
+docker compose --env-file env/installation_paths.env down
 
 # Follow logs for a service
-docker compose logs -f omeroweb
+docker compose --env-file env/installation_paths.env logs -f omeroweb
 ```
 
 ## External Reverse Proxy setup (IT-managed)
