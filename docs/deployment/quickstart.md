@@ -19,6 +19,15 @@ Review and update:
 
 Do not deploy with default credentials.
 
+`docker compose` commands run from the repository root automatically load
+`env/installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
+
+If you run compose commands from a different working directory, pass:
+
+```bash
+docker compose --env-file env/installation_paths.env <command>
+```
+
 ## 2) Build Images
 
 ```bash
