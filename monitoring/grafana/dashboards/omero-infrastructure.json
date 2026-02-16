@@ -91,7 +91,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 8
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -120,7 +120,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 8
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -149,7 +149,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 8
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -178,7 +178,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 12
+        "y": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -205,7 +205,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 12
+        "y": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -232,7 +232,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 12
+        "y": 4
       },
       "datasource": {
         "type": "prometheus",
@@ -259,7 +259,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 12
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -280,13 +280,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Memory used",
+      "title": "Memory usage",
       "id": 8,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 12
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -307,46 +307,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Network throughput",
-      "id": 9,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 20
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(node_network_receive_bytes_total{device!=\"lo\"}[5m]))",
-          "legendFormat": "RX"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m]))",
-          "legendFormat": "TX"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
       "title": "Disk IOPS",
       "id": 15,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 20
+        "x": 16,
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -407,13 +374,46 @@
     },
     {
       "type": "timeseries",
-      "title": "Container CPU by service",
+      "title": "Network throughput",
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(node_network_receive_bytes_total{device!=\"lo\"}[5m]))",
+          "legendFormat": "RX"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m]))",
+          "legendFormat": "TX"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container CPU usage",
       "id": 10,
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 20
+        "y": 16
       },
       "datasource": {
         "type": "prometheus",
@@ -435,12 +435,12 @@
     },
     {
       "type": "timeseries",
-      "title": "Container memory by service",
+      "title": "Container memory usage",
       "id": 11,
       "gridPos": {
-        "h": 4,
-        "w": 12,
-        "x": 12,
+        "h": 8,
+        "w": 8,
+        "x": 16,
         "y": 16
       },
       "datasource": {
@@ -463,66 +463,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Container restarts",
-      "description": "Restart events per container (last 24 h). Y-axis auto-scales.",
-      "id": 12,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "custom": {
-            "axisSoftMin": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 50,
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            },
-            "axisSoftMax": 10
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (name) (changes(container_start_time_seconds{name!=\"\"}[24h]))",
-          "legendFormat": "{{name}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
       "title": "Filesystem free space",
       "id": 13,
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 28
+        "x": 0,
+        "y": 24
       },
       "datasource": {
         "type": "prometheus",
@@ -549,8 +496,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 36
+        "x": 12,
+        "y": 24
       },
       "datasource": {
         "type": "prometheus",
