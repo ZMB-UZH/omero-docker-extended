@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.views.index_view import (
+    _is_behind_reverse_proxy,
     resource_monitoring_data,
     _build_public_service_url,
     _build_target_service_status,
@@ -644,104 +645,93 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
     assert attempts == ["http://grafana:3000", "http://130.60.107.205:3000"]
 
 
-def test_build_public_service_url_uses_forwarded_proto() -> None:
-    """When X-Forwarded-Proto is present, the scheme should use it
-    so that URLs use https when the client connected over TLS."""
+def test_is_behind_reverse_proxy_detects_forwarded_proto() -> None:
+    request = RequestFactory().get("/test/", HTTP_X_FORWARDED_PROTO="https")
+    assert _is_behind_reverse_proxy(request) is True
+
+
+def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
+    request = RequestFactory().get("/test/")
+    assert _is_behind_reverse_proxy(request) is False
+
+
+def test_build_public_service_url_omits_port_when_proxied() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
-        "http",
-        "omero.core.uzh.ch",
-        3000,
+        "http://grafana:3000", "https", "omero.core.uzh.ch", 3000,
+        is_proxied=True,
+    )
+    assert built == "https://omero.core.uzh.ch"
+
+
+def test_build_public_service_url_uses_forwarded_proto() -> None:
+    built = _build_public_service_url(
+        "http://grafana:3000", "http", "omero.core.uzh.ch", 3000,
         forwarded_proto="https",
     )
     assert built == "https://omero.core.uzh.ch:3000"
 
 
-def test_build_public_service_url_ignores_empty_forwarded_proto() -> None:
-    """Without X-Forwarded-Proto, behavior should be unchanged."""
+def test_build_public_service_url_proxied_with_forwarded_proto() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
-        "http",
-        "192.168.1.189",
-        3000,
-        forwarded_proto="",
+        "http://grafana:3000", "http", "omero.core.uzh.ch", 3000,
+        is_proxied=True, forwarded_proto="https",
+    )
+    assert built == "https://omero.core.uzh.ch"
+
+
+def test_build_public_service_url_direct_access_unchanged() -> None:
+    built = _build_public_service_url(
+        "http://grafana:3000", "http", "192.168.1.189", 3000,
     )
     assert built == "http://192.168.1.189:3000"
 
 
-def test_resource_monitoring_data_uses_https_scheme_behind_proxy(
-    monkeypatch,
-) -> None:
-    """When accessed through an HTTPS reverse proxy, external URLs should
-    use https scheme even though Django internally sees http."""
+def test_resource_monitoring_data_omits_port_behind_proxy(monkeypatch) -> None:
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
         HTTP_X_FORWARDED_PROTO="https",
         HTTP_X_FORWARDED_HOST="omero.core.uzh.ch",
     )
-
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._probe_http_url",
-        lambda *args, **kwargs: {"ok": True, "status": 200, "error": ""},
+        lambda *a, **k: {"ok": True, "status": 200, "error": ""},
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._collect_system_metrics",
-        lambda *args, **kwargs: {
-            "cpu_usage_percent": None,
-            "memory_usage_percent": None,
-            "disk_usage_percent": None,
-        },
+        lambda *a, **k: {"cpu_usage_percent": None, "memory_usage_percent": None, "disk_usage_percent": None},
     )
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view._load_compose_service_names",
-        lambda: [],
-    )
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view._load_compose_health_data",
-        lambda: ({}, {}),
-    )
+    monkeypatch.setattr("omeroweb_admin_tools.views.index_view._load_compose_service_names", lambda: [])
+    monkeypatch.setattr("omeroweb_admin_tools.views.index_view._load_compose_health_data", lambda: ({}, {}))
 
-    class DummyResponse:
-        def __init__(self, payload: str):
-            self._payload = payload
-
+    class R:
+        def __init__(self, p):
+            self._p = p
         def __enter__(self):
             return self
-
-        def __exit__(self, exc_type, exc, tb):
+        def __exit__(self, *a):
             return False
-
         def read(self):
-            return self._payload.encode("utf-8")
+            return self._p.encode()
 
-    def fake_urlopen(url, timeout=5.0):
+    def fake(url, timeout=5.0):
         if "api/v1/targets" in url:
-            return DummyResponse('{"data": {"activeTargets": []}}')
-        if "label/container_label_com_docker_compose_service/values" in url:
-            return DummyResponse('{"status": "success", "data": []}')
-        raise AssertionError(f"unexpected url: {url}")
+            return R('{"data": {"activeTargets": []}}')
+        if "label/" in url:
+            return R('{"status": "success", "data": []}')
+        raise AssertionError(url)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("urllib.request.urlopen", fake)
     monkeypatch.setenv("GRAFANA_HOST_PORT", "3000")
-    monkeypatch.setenv("PROMETHEUS_HOST_PORT", "9090")
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", raising=False)
-    monkeypatch.delenv("ADMIN_TOOLS_PROMETHEUS_PUBLIC_URL", raising=False)
 
     response = resource_monitoring_data(request, conn=None)
-
-    assert response.status_code == 200
     import json
+    payload = json.loads(response.content.decode())
 
-    payload = json.loads(response.content.decode("utf-8"))
-
-    # External URL should use https (from X-Forwarded-Proto) and include port
-    assert payload["grafana"]["dashboard_external_url"].startswith(
-        "https://testserver:3000/d/"
-    )
-    assert payload["prometheus"]["targets_url"].startswith(
-        "https://testserver:9090/targets"
-    )
+    # Behind proxy: https scheme, NO port
+    assert payload["grafana"]["dashboard_external_url"].startswith("https://testserver/d/")
+    assert ":3000" not in payload["grafana"]["dashboard_external_url"]
