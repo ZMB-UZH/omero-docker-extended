@@ -160,6 +160,19 @@ def _is_internal_hostname(hostname: str) -> bool:
     return lowered in {"", "localhost", "127.0.0.1", "::1", "grafana", "prometheus"}
 
 
+def _is_behind_reverse_proxy(request) -> bool:
+    """Return True when the request arrived through a reverse proxy.
+
+    Reverse proxies (nginx, NPM, Caddy, Traefik, etc.) typically set
+    X-Forwarded-Proto, X-Forwarded-Host, or X-Forwarded-For headers.
+    """
+    return bool(
+        (request.META.get("HTTP_X_FORWARDED_PROTO") or "").strip()
+        or (request.META.get("HTTP_X_FORWARDED_HOST") or "").strip()
+        or (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
+    )
+
+
 def _safe_request_host(request) -> str:
     """Return request host without port, falling back safely when host validation fails."""
     try:
@@ -180,14 +193,17 @@ def _build_public_service_url(
     request_host: str,
     public_port: int,
     *,
+    is_proxied: bool = False,
     forwarded_proto: str = "",
 ) -> str:
     """Build externally reachable service URL from request host and configured public port.
 
-    When *forwarded_proto* is provided (from X-Forwarded-Proto), it takes
-    precedence over the internal URL scheme.  This ensures URLs use ``https``
-    when the client connected over TLS to a reverse proxy, even though Django
-    sees the request as plain ``http`` internally.
+    *is_proxied*: when True the port is omitted — the reverse proxy routes to the
+    correct backend on a standard port (443/80).
+
+    *forwarded_proto*: when non-empty, overrides the scheme so that URLs use
+    ``https`` when the client connected over TLS to a reverse proxy, even though
+    Django sees the request as plain ``http`` internally.
     """
     parsed = urlparse(internal_url)
     scheme = forwarded_proto or parsed.scheme or request_scheme
@@ -199,7 +215,12 @@ def _build_public_service_url(
         normalized_host = f"[{host_only}]"
     else:
         normalized_host = host_only
-    public_base = f"{scheme}://{normalized_host}:{public_port}"
+
+    if is_proxied:
+        public_base = f"{scheme}://{normalized_host}"
+    else:
+        public_base = f"{scheme}://{normalized_host}:{public_port}"
+
     if base_path:
         return f"{public_base}{base_path}"
     return public_base
@@ -1118,7 +1139,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
 
     request_host = _safe_request_host(request)
     request_scheme = request.scheme
-    forwarded_proto = (
+    _proxied = _is_behind_reverse_proxy(request)
+    _fwd_proto = (
         request.META.get("HTTP_X_FORWARDED_PROTO", "").strip().split(",")[0].strip()
     )
 
@@ -1147,7 +1169,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             request_scheme,
             request_host,
             grafana_host_port,
-            forwarded_proto=forwarded_proto,
+            is_proxied=_proxied,
+            forwarded_proto=_fwd_proto,
         )
 
     prometheus_public_base_url = prometheus_public_url
@@ -1159,7 +1182,8 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
             request_scheme,
             request_host,
             prometheus_host_port,
-            forwarded_proto=forwarded_proto,
+            is_proxied=_proxied,
+            forwarded_proto=_fwd_proto,
         )
 
     dashboard_external_url = ""
