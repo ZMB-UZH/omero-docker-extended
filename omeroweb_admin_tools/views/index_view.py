@@ -108,6 +108,49 @@ def _proxy_http_request(
                 text = text.replace('action="/', f'action="{proxy_prefix}/')
                 text = text.replace("action='/", f"action='{proxy_prefix}/")
                 text = text.replace(base_url.rstrip("/"), proxy_prefix)
+
+                # Inject a script that makes Grafana's SPA work through the
+                # proxy.  Grafana's React router inspects window.location to
+                # match routes, and its JavaScript makes API calls to absolute
+                # paths like /api/... .  The script:
+                #  1. Rewrites the browser URL so Grafana sees /d/... instead
+                #     of the full proxy prefix path.
+                #  2. Intercepts fetch() and XMLHttpRequest.open() to prepend
+                #     the proxy prefix to absolute paths so API calls still
+                #     route through the Django proxy.
+                #  3. Patches history.pushState/replaceState so that any SPA
+                #     navigation the Grafana router performs also goes through
+                #     the proxy.
+                _spa_fix = (
+                    f'<script data-grafana-proxy-fix="1">'
+                    f"(function(){{"
+                    f"var P='{proxy_prefix}';"
+                    # Rewrite fetch
+                    f"var _f=window.fetch;"
+                    f"window.fetch=function(u,o){{"
+                    f"if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))u=P+u;"
+                    f"else if(u instanceof Request&&u.url.startsWith(location.origin+'/')){{var nu=u.url.replace(location.origin+'/',location.origin+P+'/');u=new Request(nu,u);}}"
+                    f"return _f.call(this,u,o);"
+                    f"}};"
+                    # Rewrite XMLHttpRequest
+                    f"var _x=XMLHttpRequest.prototype.open;"
+                    f"XMLHttpRequest.prototype.open=function(m,u){{"
+                    f"if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))u=P+u;"
+                    f"return _x.apply(this,[m,u].concat([].slice.call(arguments,2)));"
+                    f"}};"
+                    # Patch pushState/replaceState to keep proxy prefix
+                    f"var _ps=history.pushState,_rs=history.replaceState;"
+                    f"function fixUrl(u){{if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))return P+u;return u;}}"
+                    f"history.pushState=function(s,t,u){{return _ps.call(this,s,t,u?fixUrl(u):u)}};"
+                    f"history.replaceState=function(s,t,u){{return _rs.call(this,s,t,u?fixUrl(u):u)}};"
+                    # Strip proxy prefix from current URL so Grafana's router matches
+                    f"var loc=window.location.pathname;"
+                    f"if(loc.startsWith(P)){{var real=loc.slice(P.length)||'/';"
+                    f"history.replaceState(null,'',real+window.location.search+window.location.hash);}}"
+                    f"}})();</script>"
+                )
+                text = text.replace("<head>", "<head>" + _spa_fix, 1)
+
                 payload = text.encode("utf-8")
             proxied = HttpResponse(
                 payload, status=response.status, content_type=content_type
@@ -161,11 +204,7 @@ def _is_internal_hostname(hostname: str) -> bool:
 
 
 def _is_behind_reverse_proxy(request) -> bool:
-    """Return True when the request arrived through a reverse proxy.
-
-    Reverse proxies (nginx, NPM, Caddy, Traefik, etc.) typically set
-    X-Forwarded-Proto, X-Forwarded-Host, or X-Forwarded-For headers.
-    """
+    """Return True when the request arrived through a reverse proxy."""
     return bool(
         (request.META.get("HTTP_X_FORWARDED_PROTO") or "").strip()
         or (request.META.get("HTTP_X_FORWARDED_HOST") or "").strip()
@@ -198,12 +237,11 @@ def _build_public_service_url(
 ) -> str:
     """Build externally reachable service URL from request host and configured public port.
 
-    *is_proxied*: when True the port is omitted — the reverse proxy routes to the
-    correct backend on a standard port (443/80).
+    *is_proxied*: when True the port is omitted — the reverse proxy routes to
+    the correct backend on a standard port (443/80).
 
-    *forwarded_proto*: when non-empty, overrides the scheme so that URLs use
-    ``https`` when the client connected over TLS to a reverse proxy, even though
-    Django sees the request as plain ``http`` internally.
+    *forwarded_proto*: when non-empty, overrides the scheme so URLs use ``https``
+    when the client connected over TLS to a reverse proxy.
     """
     parsed = urlparse(internal_url)
     scheme = forwarded_proto or parsed.scheme or request_scheme
@@ -1164,27 +1202,34 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     if not grafana_public_base_url and _is_internal_hostname(
         urlparse(grafana_base_url).hostname or ""
     ):
-        grafana_public_base_url = _build_public_service_url(
-            grafana_base_url,
-            request_scheme,
-            request_host,
-            grafana_host_port,
-            is_proxied=_proxied,
-            forwarded_proto=_fwd_proto,
-        )
+        if _proxied:
+            # Behind a reverse proxy without an explicit GRAFANA_PUBLIC_URL:
+            # auto-generated URLs (with or without port) won't reach Grafana
+            # because the proxy routes to OMERO.web, not Grafana.  Leave empty
+            # so the JS falls through to the Django proxy URL which partially
+            # works for dashboard viewing.
+            grafana_public_base_url = ""
+        else:
+            grafana_public_base_url = _build_public_service_url(
+                grafana_base_url,
+                request_scheme,
+                request_host,
+                grafana_host_port,
+            )
 
     prometheus_public_base_url = prometheus_public_url
     if not prometheus_public_base_url and _is_internal_hostname(
         urlparse(prometheus_base_url).hostname or ""
     ):
-        prometheus_public_base_url = _build_public_service_url(
-            prometheus_base_url,
-            request_scheme,
-            request_host,
-            prometheus_host_port,
-            is_proxied=_proxied,
-            forwarded_proto=_fwd_proto,
-        )
+        if _proxied:
+            prometheus_public_base_url = ""
+        else:
+            prometheus_public_base_url = _build_public_service_url(
+                prometheus_base_url,
+                request_scheme,
+                request_host,
+                prometheus_host_port,
+            )
 
     dashboard_external_url = ""
     if grafana_public_base_url:
