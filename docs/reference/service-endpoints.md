@@ -3,8 +3,6 @@
 ## Infrastructure Endpoints (default host mappings)
 
 - OMERO.web: `http://localhost:4090`
-- Nginx Proxy Manager Admin: `http://localhost:81`
-- Nginx Proxy Manager Proxy Entry: `http://localhost` and `https://localhost`
 - Portainer: `https://localhost:9443` (and `http://localhost:9000` when enabled)
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000`
@@ -49,8 +47,8 @@ Key actions:
 - poll export status,
 - download completed result.
 
-## Nginx Proxy Manager forwarding target
+## External reverse proxy forwarding target
 
-For OMERO.web proxying in Nginx Proxy Manager, forward to `http://omeroweb:4090` on the Docker network.
+For OMERO.web proxying from your external reverse proxy (for example, nginx managed via Ansible), forward to `http://omeroweb:4090` on the Docker network.
 
-This keeps local/internal direct OMERO.web access (`http://localhost:4090`) available in parallel while you transition to proxy-based access.
+This keeps local/internal direct OMERO.web access (`http://localhost:4090`) available in parallel with externally managed proxy access.
