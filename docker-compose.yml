@@ -63,9 +63,9 @@ services:
     volumes:
       - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:ro
-      - ${OMERO_WEB_LOGS_PATH}:/opt/omero/web/OMERO.web/var/log:ro
-      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH}:/opt/omero/web/logs:ro
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/server/OMERO.server/var/log:ro
+      - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/web/OMERO.web/var/log:ro
+      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/web/logs:ro
     depends_on:
       loki:
         condition: service_healthy
@@ -93,7 +93,7 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ${PROMETHEUS_DATA_PATH}:/prometheus:rw
+      - ${PROMETHEUS_DATA_PATH:?Set PROMETHEUS_DATA_PATH (use --env-file env/installation_paths.env)}:/prometheus:rw
     depends_on:
       blackbox-exporter:
         condition: service_healthy
@@ -255,7 +255,7 @@ services:
       prometheus:
         condition: service_healthy
     volumes:
-      - ${GRAFANA_DATA_PATH}:/var/lib/grafana:rw
+      - ${GRAFANA_DATA_PATH:?Set GRAFANA_DATA_PATH (use --env-file env/installation_paths.env)}:/var/lib/grafana:rw
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/provisioning/dashboards/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
@@ -288,7 +288,7 @@ services:
         aliases:
           - database
     volumes:
-      - ${OMERO_DATABASE_PATH}:/var/lib/postgresql:rw
+      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (use --env-file env/installation_paths.env)}:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
       interval: 10s
@@ -318,9 +318,9 @@ services:
     ports:
       - "4064:4064"
     volumes:
-      - ${OMERO_USER_DATA_PATH}:/OMERO:rw
-      - ${OMERO_SERVER_VAR_PATH}:/opt/omero/server/OMERO.server/var:rw
-      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:rw
+      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (use --env-file env/installation_paths.env)}:/OMERO:rw
+      - ${OMERO_SERVER_VAR_PATH:?Set OMERO_SERVER_VAR_PATH (use --env-file env/installation_paths.env)}:/opt/omero/server/OMERO.server/var:rw
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/server/OMERO.server/var/log:rw
     ulimits:
       nofile:
         soft: 15000
@@ -399,12 +399,12 @@ services:
     ports:
       - "4090:4090"
     volumes:
-      - ${OMERO_USER_DATA_PATH}:/OMERO:rw
+      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (use --env-file env/installation_paths.env)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - ${OMERO_UPLOAD_PATH}:/opt/tmp:rw
-      - ${OMERO_WEB_LOGS_PATH}:/opt/omero/web/OMERO.web/var/log:rw
-      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH}:/opt/omero/web/logs:rw
-      - ${OMERO_SERVER_LOGS_PATH}:/opt/omero/server/OMERO.server/var/log:ro
+      - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (use --env-file env/installation_paths.env)}:/opt/tmp:rw
+      - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/web/OMERO.web/var/log:rw
+      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/web/logs:rw
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (use --env-file env/installation_paths.env)}:/opt/omero/server/OMERO.server/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     tmpfs:
       - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
@@ -438,7 +438,7 @@ services:
         aliases:
           - database-plugin
     volumes:
-      - ${OMERO_PLUGIN_DATABASE_PATH}:/var/lib/postgresql:rw
+      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (use --env-file env/installation_paths.env)}:/var/lib/postgresql:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 10s

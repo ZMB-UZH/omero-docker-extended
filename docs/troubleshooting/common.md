@@ -70,3 +70,22 @@ id
 
 `docker-compose.yml` no longer requires manual `DOCKER_SOCKET_GID` injection.
 
+## 7. `docker compose down` fails with `invalid spec ... empty section between colons`
+
+Symptom:
+
+- warnings like `The "OMERO_SERVER_LOGS_PATH" variable is not set`;
+- compose exits with an `invalid spec` error for a bind mount.
+
+Cause:
+
+- the path variables from `env/installation_paths.env` were not loaded.
+
+Fix:
+
+```bash
+docker compose --env-file env/installation_paths.env down
+```
+
+If you run compose commands manually, always include the same `--env-file` value for
+`build`, `up`, `down`, `ps`, and `logs`.
