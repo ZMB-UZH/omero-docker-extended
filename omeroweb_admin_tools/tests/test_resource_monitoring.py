@@ -3,11 +3,11 @@ from __future__ import annotations
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.views.index_view import (
-    _is_behind_reverse_proxy,
     resource_monitoring_data,
     _build_public_service_url,
     _build_target_service_status,
     _is_internal_hostname,
+    _is_behind_reverse_proxy,
     _load_compose_service_names,
     _proxy_http_request,
     _build_proxy_backend_urls,
@@ -671,14 +671,6 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
     assert built == "https://omero.core.uzh.ch:3000"
 
 
-def test_build_public_service_url_proxied_with_forwarded_proto() -> None:
-    built = _build_public_service_url(
-        "http://grafana:3000", "http", "omero.core.uzh.ch", 3000,
-        is_proxied=True, forwarded_proto="https",
-    )
-    assert built == "https://omero.core.uzh.ch"
-
-
 def test_build_public_service_url_direct_access_unchanged() -> None:
     built = _build_public_service_url(
         "http://grafana:3000", "http", "192.168.1.189", 3000,
@@ -686,7 +678,47 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
     assert built == "http://192.168.1.189:3000"
 
 
-def test_resource_monitoring_data_omits_port_behind_proxy(monkeypatch) -> None:
+def test_proxy_injects_spa_fix_script(monkeypatch) -> None:
+    """The proxy should inject a script to fix Grafana SPA routing."""
+
+    class DummyResponse:
+        status = 200
+        headers = {"Content-Type": "text/html; charset=utf-8"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b'<html><head><title>Grafana</title></head><body></body></html>'
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "d/omero-infrastructure/server-infrastructure",
+        proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'data-grafana-proxy-fix="1"' in content
+    assert "window.fetch=function" in content
+    assert "XMLHttpRequest.prototype.open" in content
+    assert "history.replaceState" in content
+
+
+def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
         HTTP_X_FORWARDED_PROTO="https",
@@ -708,20 +740,14 @@ def test_resource_monitoring_data_omits_port_behind_proxy(monkeypatch) -> None:
     monkeypatch.setattr("omeroweb_admin_tools.views.index_view._load_compose_health_data", lambda: ({}, {}))
 
     class R:
-        def __init__(self, p):
-            self._p = p
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            return False
-        def read(self):
-            return self._p.encode()
+        def __init__(self, p): self._p = p
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return self._p.encode()
 
     def fake(url, timeout=5.0):
-        if "api/v1/targets" in url:
-            return R('{"data": {"activeTargets": []}}')
-        if "label/" in url:
-            return R('{"status": "success", "data": []}')
+        if "api/v1/targets" in url: return R('{"data": {"activeTargets": []}}')
+        if "label/" in url: return R('{"status": "success", "data": []}')
         raise AssertionError(url)
 
     monkeypatch.setattr("urllib.request.urlopen", fake)
@@ -732,6 +758,6 @@ def test_resource_monitoring_data_omits_port_behind_proxy(monkeypatch) -> None:
     import json
     payload = json.loads(response.content.decode())
 
-    # Behind proxy: https scheme, NO port
-    assert payload["grafana"]["dashboard_external_url"].startswith("https://testserver/d/")
-    assert ":3000" not in payload["grafana"]["dashboard_external_url"]
+    # Behind proxy: external URLs suppressed, proxy URLs work
+    assert payload["grafana"]["dashboard_external_url"] == ""
+    assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
