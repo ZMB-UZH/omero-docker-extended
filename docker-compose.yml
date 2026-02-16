@@ -28,33 +28,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  nginx-proxy-manager:
-    image: "jc21/nginx-proxy-manager:2.13.7"
-    container_name: nginx-proxy-manager
-    restart: unless-stopped
-    networks:
-      omero:
-        aliases:
-          - nginx-proxy-manager
-    ports:
-      - "80:80"
-      - "81:81"
-      - "443:443"
-    volumes:
-      - ${NGINX_PROXY_MANAGER_DATA_PATH}:/data:rw
-      - ${NGINX_PROXY_MANAGER_LETSENCRYPT_PATH}:/etc/letsencrypt:rw
-    depends_on:
-      omeroweb:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "/usr/bin/check-health"]
-      interval: 10s
-      timeout: 10s
-      retries: 30
-      start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-
   loki:
     image: "grafana/loki:3.2.0"
     restart: unless-stopped
