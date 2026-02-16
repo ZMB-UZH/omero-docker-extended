@@ -285,7 +285,9 @@ ensure_installation_path() {
     else
         local existing_entries
         existing_entries="$(find "${install_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
-        echo "OMERO installation path already exists with ${existing_entries} top-level item(s); preserving existing contents: ${install_path}"
+        echo "OMERO installation path already exists with ${existing_entries} top-level item(s) (directory validated): ${install_path}"
+        echo "  Code/project files within this path are replaced by the pull/update process."
+        echo "  Only data subdirectories (per installation_paths.env and sentinel detection) are preserved."
     fi
 
     if [ ! -w "${install_path}" ]; then
@@ -314,7 +316,7 @@ ensure_data_path() {
     else
         local existing_entries
         existing_entries="$(find "${data_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
-        echo "${path_label} already exists with ${existing_entries} top-level item(s); preserving existing contents: ${data_path}"
+        echo "${path_label} already exists with ${existing_entries} top-level item(s); preserving existing data: ${data_path}"
     fi
 
     if [ ! -w "${data_path}" ]; then
