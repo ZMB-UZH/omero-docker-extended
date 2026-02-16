@@ -29,59 +29,25 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 
 set -euo pipefail
 
-create_default_installation_env_file() {
-    local target_env_file="$1"
-    local default_installation_path="${REPO_ROOT_DIR}"
-    local default_omero_database_path="${default_installation_path%/}/omero_database"
-    local default_plugin_database_path="${default_installation_path%/}/plugin_database"
-    local default_omero_data_path="/opt/omero/omero_data"
-
-    if ! install -d -m 0755 "$(dirname "${target_env_file}")"; then
-        echo "ERROR: Failed to create directory for default configuration file: ${target_env_file}" >&2
-        return 1
-    fi
-
-    cat > "${target_env_file}" <<EOF
-OMERO_INSTALLATION_PATH=${default_installation_path}
-OMERO_DATABASE_PATH=${default_omero_database_path}
-OMERO_PLUGIN_DATABASE_PATH=${default_plugin_database_path}
-OMERO_DATA_PATH=${default_omero_data_path}
-EOF
-
-    echo "WARNING: installation_paths.env was missing. Created defaults at ${target_env_file}" >&2
-    echo "WARNING: Review and edit ${target_env_file} before running in production." >&2
-
-    SCRIPT_ENV_FILE="${target_env_file}"
-    return 0
-}
-
 resolve_script_env_file() {
-    local -a candidate_files=()
-    local candidate_file=""
+    local default_env_file="${REPO_ROOT_DIR}/env/installation_paths.env"
 
     if [ -n "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
-        candidate_files+=("${INSTALLATION_ENV_FILE_OVERRIDE}")
+        if [ ! -f "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
+            echo "ERROR: INSTALLATION_PATHS_ENV_FILE was provided but does not exist: ${INSTALLATION_ENV_FILE_OVERRIDE}" >&2
+            return 1
+        fi
+        SCRIPT_ENV_FILE="${INSTALLATION_ENV_FILE_OVERRIDE}"
+        return 0
     fi
 
-    candidate_files+=(
-        "${REPO_ROOT_DIR}/env/installation_paths.env"
-        "${REPO_ROOT_DIR}/../env/installation_paths.env"
-        "${PWD}/env/installation_paths.env"
-    )
-
-    for candidate_file in "${candidate_files[@]}"; do
-        if [ -f "${candidate_file}" ]; then
-            SCRIPT_ENV_FILE="${candidate_file}"
-            return 0
-        fi
-    done
-
-    if [ -n "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
-        echo "ERROR: INSTALLATION_PATHS_ENV_FILE was provided but does not exist: ${INSTALLATION_ENV_FILE_OVERRIDE}" >&2
+    if [ ! -f "${default_env_file}" ]; then
+        echo "ERROR: Missing required installation paths file: ${default_env_file}" >&2
+        echo "ERROR: Refusing to auto-generate defaults to avoid accidentally switching database/data directories." >&2
         return 1
     fi
 
-    create_default_installation_env_file "${REPO_ROOT_DIR}/env/installation_paths.env"
+    SCRIPT_ENV_FILE="${default_env_file}"
 }
 
 # Bash requirement (warning)
@@ -129,6 +95,19 @@ validate_retry_config() {
     return 0
 }
 
+compose_with_installation_env() {
+    local compose_file="$1"
+    shift
+
+    docker compose --env-file "${SCRIPT_ENV_FILE}" -f "${compose_file}" "$@"
+}
+
+compose_images_with_installation_env() {
+    local compose_file="$1"
+
+    compose_with_installation_env "${compose_file}" config --images 2>/dev/null || true
+}
+
 validate_numeric_id() {
     local id_label="$1"
     local id_value="$2"
@@ -170,13 +149,13 @@ print_compose_failure_context() {
     local compose_file="$1"
 
     echo "ERROR: docker compose up failed. Collecting service health details..." >&2
-    docker compose -f "${compose_file}" ps >&2 || true
+    compose_with_installation_env "${compose_file}" ps >&2 || true
 
     local failed_services
-    failed_services="$(docker compose -f "${compose_file}" ps --services --filter "status=exited" 2>/dev/null || true)"
+    failed_services="$(compose_with_installation_env "${compose_file}" ps --services --filter "status=exited" 2>/dev/null || true)"
 
     if [ -z "${failed_services}" ]; then
-        failed_services="$(docker compose -f "${compose_file}" ps --services --filter "status=restarting" 2>/dev/null || true)"
+        failed_services="$(compose_with_installation_env "${compose_file}" ps --services --filter "status=restarting" 2>/dev/null || true)"
     fi
 
     if [ -z "${failed_services}" ]; then
@@ -190,7 +169,7 @@ print_compose_failure_context() {
             continue
         fi
         echo "----- BEGIN LOGS: ${service_name} -----" >&2
-        docker compose -f "${compose_file}" logs --tail 120 "${service_name}" >&2 || true
+        compose_with_installation_env "${compose_file}" logs --tail 120 "${service_name}" >&2 || true
         echo "----- END LOGS: ${service_name} -----" >&2
     done <<< "${failed_services}"
 }
@@ -202,7 +181,7 @@ compose_up_with_retries() {
     while [ "${attempt}" -le "${COMPOSE_UP_RETRIES}" ]; do
         echo "Starting containers (attempt ${attempt}/${COMPOSE_UP_RETRIES})..."
 
-        if docker compose -f "${compose_file}" up -d; then
+        if compose_with_installation_env "${compose_file}" up -d; then
             echo "Containers started successfully."
             return 0
         fi
@@ -350,37 +329,6 @@ log_path_snapshot() {
     fi
 
     echo "SNAPSHOT(meta-only, non-recursive): ${label}: top_level_entries=${top_level_entries} owner=${dir_owner} mode=${dir_mode} path=${path_to_check}"
-}
-
-persist_env_var() {
-    local env_file_path="$1"
-    local variable_name="$2"
-    local variable_value="$3"
-
-    if grep -q "^${variable_name}=" "${env_file_path}"; then
-        sed -i "s|^${variable_name}=.*|${variable_name}=${variable_value}|" "${env_file_path}"
-    else
-        printf "%s=%s\n" "${variable_name}" "${variable_value}" >> "${env_file_path}"
-    fi
-}
-
-persist_compose_path_overrides() {
-    local env_file_path="${OMERO_INSTALLATION_PATH%/}/.env"
-
-    touch "${env_file_path}"
-
-    persist_env_var "${env_file_path}" "OMERO_DATABASE_PATH" "${OMERO_DATABASE_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_PLUGIN_DATABASE_PATH" "${OMERO_PLUGIN_DATABASE_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_DATA_PATH" "${OMERO_DATA_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_USER_DATA_PATH" "${OMERO_USER_DATA_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_UPLOAD_PATH" "${OMERO_UPLOAD_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_SERVER_VAR_PATH" "${OMERO_SERVER_VAR_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_SERVER_LOGS_PATH" "${OMERO_SERVER_LOGS_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_WEB_LOGS_PATH" "${OMERO_WEB_LOGS_PATH}"
-    persist_env_var "${env_file_path}" "OMERO_WEB_SUPERVISOR_LOGS_PATH" "${OMERO_WEB_SUPERVISOR_LOGS_PATH}"
-    persist_env_var "${env_file_path}" "PROMETHEUS_DATA_PATH" "${PROMETHEUS_DATA_PATH}"
-    persist_env_var "${env_file_path}" "GRAFANA_DATA_PATH" "${GRAFANA_DATA_PATH}"
-    persist_env_var "${env_file_path}" "PORTAINER_DATA_PATH" "${PORTAINER_DATA_PATH}"
 }
 
 resolve_delete_images_choice() {
@@ -707,6 +655,7 @@ if ! validate_installation_path "${OMERO_DATA_PATH}"; then
 fi
 
 echo "Using installation paths from ${SCRIPT_ENV_FILE}"
+echo "Using docker compose env file: ${SCRIPT_ENV_FILE}"
 echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
@@ -741,8 +690,6 @@ if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data dir
     exit 1
 fi
 
-persist_compose_path_overrides
-
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
 # Workflow
@@ -761,11 +708,11 @@ log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker comp
 
 echo "Stopping existing containers..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
-    docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
+    compose_with_installation_env "${COMPOSE_FILE}" down --remove-orphans || true
 else
-    docker compose -f "${COMPOSE_FILE}" down --remove-orphans --rmi all || true
+    compose_with_installation_env "${COMPOSE_FILE}" down --remove-orphans --rmi all || true
     echo "Removing ALL images referenced by docker-compose.yml..."
-    COMPOSE_IMAGES="$(docker compose -f "${COMPOSE_FILE}" config --images 2>/dev/null || true)"
+    COMPOSE_IMAGES="$(compose_images_with_installation_env "${COMPOSE_FILE}")"
     if [ -n "${COMPOSE_IMAGES}" ]; then
         echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
     fi
@@ -785,10 +732,10 @@ fi
 
 if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
     echo "Building all OMERO-related containers (cache enabled)..."
-    docker compose -f "${COMPOSE_FILE}" build
+    compose_with_installation_env "${COMPOSE_FILE}" build
 else
     echo "Building all OMERO-related containers (no cache)..."
-    docker compose -f "${COMPOSE_FILE}" build --no-cache
+    compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
 fi
 
 echo "================================================"
