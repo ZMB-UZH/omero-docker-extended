@@ -678,8 +678,8 @@ def test_build_public_service_url_direct_access_unchanged() -> None:
     assert built == "http://192.168.1.189:3000"
 
 
-def test_proxy_injects_spa_fix_script(monkeypatch) -> None:
-    """The proxy should inject a script to fix Grafana SPA routing."""
+def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
+    """The proxy should rewrite Grafana appSubUrl to the proxy prefix."""
 
     class DummyResponse:
         status = 200
@@ -692,7 +692,11 @@ def test_proxy_injects_spa_fix_script(monkeypatch) -> None:
             return False
 
         def read(self):
-            return b'<html><head><title>Grafana</title></head><body></body></html>'
+            return (
+                b'<html><head><script>'
+                b'window.grafanaBootData={"settings":{"appSubUrl":""}};'
+                b'</script></head><body></body></html>'
+            )
 
     monkeypatch.setattr(
         "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
@@ -712,10 +716,7 @@ def test_proxy_injects_spa_fix_script(monkeypatch) -> None:
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert 'data-grafana-proxy-fix="1"' in content
-    assert "window.fetch=function" in content
-    assert "XMLHttpRequest.prototype.open" in content
-    assert "history.replaceState" in content
+    assert '"appSubUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy"' in content
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
