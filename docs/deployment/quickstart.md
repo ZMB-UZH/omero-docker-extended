@@ -16,6 +16,8 @@ Review and update:
 - `env/omero-celery.env`
 - `env/grafana.env`
 
+If you use Nginx Proxy Manager, also verify `NGINX_PROXY_MANAGER_DATA_PATH` and `NGINX_PROXY_MANAGER_LETSENCRYPT_PATH` in `env/installation_paths.env`.
+
 Do not deploy with default credentials.
 
 ## 2) Build Images
@@ -65,3 +67,10 @@ docker compose down
 # Follow logs for a service
 docker compose logs -f omeroweb
 ```
+
+## Optional Nginx Proxy Manager setup
+
+1. Open `http://localhost:81` and complete the initial admin setup.
+2. Add a Proxy Host for OMERO.web targeting `http://omeroweb:4090`.
+3. Keep direct local HTTP access available at `http://localhost:4090` during migration.
+4. Add TLS certificates in Nginx Proxy Manager when ready.
