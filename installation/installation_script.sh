@@ -12,7 +12,6 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
-ALLOW_IMAGE_PRUNE="${ALLOW_IMAGE_PRUNE:-0}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
@@ -124,11 +123,6 @@ validate_retry_config() {
 
     if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
-        return 1
-    fi
-
-    if ! [[ "${ALLOW_IMAGE_PRUNE}" =~ ^[01]$ ]]; then
-        echo "ERROR: ALLOW_IMAGE_PRUNE must be 0 or 1. Got: ${ALLOW_IMAGE_PRUNE}" >&2
         return 1
     fi
 
@@ -395,13 +389,8 @@ resolve_delete_images_choice() {
         reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
         case "${reply}" in
             y|yes)
-                if [ "${ALLOW_IMAGE_PRUNE}" -ne 1 ]; then
-                    echo "ERROR: DELETE_IMAGES_CHOICE=${override_choice} requested image removal, but ALLOW_IMAGE_PRUNE=0." >&2
-                    echo "ERROR: Set ALLOW_IMAGE_PRUNE=1 only if you intentionally want image removal." >&2
-                    return 1
-                fi
                 KEEP_IMAGES=0
-                echo "DELETE_IMAGES_CHOICE=${override_choice}: removing container images (ALLOW_IMAGE_PRUNE=1)."
+                echo "DELETE_IMAGES_CHOICE=${override_choice}: removing container images."
                 return 0
                 ;;
             n|no)
@@ -422,7 +411,7 @@ resolve_delete_images_choice() {
         return 0
     fi
 
-    echo "Delete all container images? Y/n (Default: n, requires ALLOW_IMAGE_PRUNE=1)"
+    echo "Delete all container images? Y/n (Default: n)"
 
     while true; do
         printf '> ' > /dev/tty
@@ -440,10 +429,6 @@ resolve_delete_images_choice() {
         fi
 
         if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
-            if [ "${ALLOW_IMAGE_PRUNE}" -ne 1 ]; then
-                echo "Refusing image removal because ALLOW_IMAGE_PRUNE=0. Set ALLOW_IMAGE_PRUNE=1 to enable." > /dev/tty
-                continue
-            fi
             KEEP_IMAGES=0
             return 0
         fi
@@ -724,7 +709,6 @@ echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
-echo "ALLOW_IMAGE_PRUNE=${ALLOW_IMAGE_PRUNE}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
