@@ -12,6 +12,7 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
+ALLOW_IMAGE_PRUNE="${ALLOW_IMAGE_PRUNE:-0}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
 OMERO_SERVER_GID="${OMERO_SERVER_GID:-}"
 OMERO_WEB_UID="${OMERO_WEB_UID:-}"
@@ -123,6 +124,11 @@ validate_retry_config() {
 
     if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    if ! [[ "${ALLOW_IMAGE_PRUNE}" =~ ^[01]$ ]]; then
+        echo "ERROR: ALLOW_IMAGE_PRUNE must be 0 or 1. Got: ${ALLOW_IMAGE_PRUNE}" >&2
         return 1
     fi
 
@@ -326,6 +332,26 @@ ensure_data_path() {
 }
 
 
+log_path_snapshot() {
+    local path_to_check="$1"
+    local label="$2"
+
+    if [ ! -d "${path_to_check}" ]; then
+        echo "SNAPSHOT: ${label}: missing path ${path_to_check}"
+        return 0
+    fi
+
+    local file_count="0"
+    local dir_count="0"
+    local bytes_used="0"
+
+    file_count="$(find "${path_to_check}" -type f 2>/dev/null | wc -l | tr -d '[:space:]')"
+    dir_count="$(find "${path_to_check}" -type d 2>/dev/null | wc -l | tr -d '[:space:]')"
+    bytes_used="$(du -sb "${path_to_check}" 2>/dev/null | awk '{print $1}')"
+
+    echo "SNAPSHOT: ${label}: files=${file_count} dirs=${dir_count} bytes=${bytes_used} path=${path_to_check}"
+}
+
 persist_env_var() {
     local env_file_path="$1"
     local variable_name="$2"
@@ -365,8 +391,13 @@ resolve_delete_images_choice() {
         reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
         case "${reply}" in
             y|yes)
+                if [ "${ALLOW_IMAGE_PRUNE}" -ne 1 ]; then
+                    echo "ERROR: DELETE_IMAGES_CHOICE=${override_choice} requested image removal, but ALLOW_IMAGE_PRUNE=0." >&2
+                    echo "ERROR: Set ALLOW_IMAGE_PRUNE=1 only if you intentionally want image removal." >&2
+                    return 1
+                fi
                 KEEP_IMAGES=0
-                echo "DELETE_IMAGES_CHOICE=${override_choice}: removing container images."
+                echo "DELETE_IMAGES_CHOICE=${override_choice}: removing container images (ALLOW_IMAGE_PRUNE=1)."
                 return 0
                 ;;
             n|no)
@@ -387,7 +418,7 @@ resolve_delete_images_choice() {
         return 0
     fi
 
-    echo "Delete all container images? Y/n (Default: n)"
+    echo "Delete all container images? Y/n (Default: n, requires ALLOW_IMAGE_PRUNE=1)"
 
     while true; do
         printf '> ' > /dev/tty
@@ -405,6 +436,10 @@ resolve_delete_images_choice() {
         fi
 
         if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
+            if [ "${ALLOW_IMAGE_PRUNE}" -ne 1 ]; then
+                echo "Refusing image removal because ALLOW_IMAGE_PRUNE=0. Set ALLOW_IMAGE_PRUNE=1 to enable." > /dev/tty
+                continue
+            fi
             KEEP_IMAGES=0
             return 0
         fi
@@ -685,6 +720,7 @@ echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
+echo "ALLOW_IMAGE_PRUNE=${ALLOW_IMAGE_PRUNE}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
@@ -728,6 +764,11 @@ if [ ! -f "${COMPOSE_FILE}" ]; then
     exit 1
 fi
 
+echo "Recording pre-stop data path snapshots..."
+log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (before docker compose down)"
+log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker compose down)"
+
 echo "Stopping existing containers..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
     docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
@@ -739,6 +780,11 @@ else
         echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
     fi
 fi
+
+echo "Recording post-stop data path snapshots..."
+log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (after docker compose down)"
+log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
 
 echo "Removing stale OMERO repository lock files from OMERO user data path..."
 if [ -d "${OMERO_USER_DATA_PATH}" ]; then
