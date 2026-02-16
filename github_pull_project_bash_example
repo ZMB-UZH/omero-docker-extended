@@ -63,6 +63,11 @@ clone_latest_repository_snapshot() {
 resolve_all_data_paths() {
     local env_file="$1"
 
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: Required installation paths file is missing or unreadable: ${env_file}" >&2
+        return 1
+    fi
+
     (
         # shellcheck disable=SC1090
         . "${env_file}" 2>/dev/null || exit 0
@@ -80,7 +85,7 @@ resolve_all_data_paths() {
             "${PORTAINER_DATA_PATH:-}" \
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}"
-    ) || true
+    )
 }
 
 # ---------------------------------------------------------------------------
@@ -94,10 +99,10 @@ collect_protected_top_level_names() {
     local repo_dir="${1%/}"
     local env_file="${repo_dir}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
 
-    if [ ! -f "${env_file}" ]; then
-        echo "WARNING: ${env_file} not found; cannot auto-detect data paths to protect." >&2
-        echo "WARNING: Only built-in exclusions will apply during file replacement." >&2
-        return 0
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: ${env_file} is missing or unreadable." >&2
+        echo "ERROR: Refusing to continue because replacement without explicit protected paths can delete OMERO data/database directories." >&2
+        return 1
     fi
 
     local resolved_paths
@@ -137,8 +142,9 @@ collect_sentinel_dir_names() {
     local repo_dir="${1%/}"
     local env_file="${repo_dir}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
 
-    if [ ! -f "${env_file}" ]; then
-        return 0
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: ${env_file} is missing or unreadable." >&2
+        return 1
     fi
 
     (
@@ -204,11 +210,23 @@ replace_working_tree_with_clone() {
         [ -n "${_name}" ] && protected_data_dirs+=("${_name}")
     done < <(collect_protected_top_level_names "${current_repo_dir}")
 
+    if [ ${#protected_data_dirs[@]} -eq 0 ]; then
+        echo "ERROR: No protected data directories were discovered from installation_paths.env." >&2
+        echo "ERROR: Refusing to replace working tree to avoid deleting persisted OMERO data directories by mistake." >&2
+        return 1
+    fi
+
     # ── 2. Collect sentinel directory names for the deep scan ─────────
     local -a sentinel_names=()
     while IFS= read -r _name; do
         [ -n "${_name}" ] && sentinel_names+=("${_name}")
     done < <(collect_sentinel_dir_names "${current_repo_dir}")
+
+    if [ ${#sentinel_names[@]} -eq 0 ]; then
+        echo "ERROR: No sentinel directory names were discovered from installation_paths.env." >&2
+        echo "ERROR: Refusing to replace working tree because deep-scan protection cannot be applied." >&2
+        return 1
+    fi
 
     # ── 3. Build the find exclusion list ──────────────────────────────
     local -a find_args=()
@@ -335,6 +353,13 @@ main() {
     fi
 
     trap cleanup_bootstrap_clone_dir EXIT
+
+    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
+    if [ ! -r "${installation_paths_env_path}" ]; then
+        echo "ERROR: Required file is missing or unreadable before update: ${installation_paths_env_path}" >&2
+        echo "ERROR: This update script is intentionally refusing to run without installation_paths.env to prevent accidental deletion of persistent OMERO paths." >&2
+        exit 1
+    fi
 
     configure_github_ssh
     clone_latest_repository_snapshot
