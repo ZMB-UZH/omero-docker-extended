@@ -109,47 +109,12 @@ def _proxy_http_request(
                 text = text.replace("action='/", f"action='{proxy_prefix}/")
                 text = text.replace(base_url.rstrip("/"), proxy_prefix)
 
-                # Inject a script that makes Grafana's SPA work through the
-                # proxy.  Grafana's React router inspects window.location to
-                # match routes, and its JavaScript makes API calls to absolute
-                # paths like /api/... .  The script:
-                #  1. Rewrites the browser URL so Grafana sees /d/... instead
-                #     of the full proxy prefix path.
-                #  2. Intercepts fetch() and XMLHttpRequest.open() to prepend
-                #     the proxy prefix to absolute paths so API calls still
-                #     route through the Django proxy.
-                #  3. Patches history.pushState/replaceState so that any SPA
-                #     navigation the Grafana router performs also goes through
-                #     the proxy.
-                _spa_fix = (
-                    f'<script data-grafana-proxy-fix="1">'
-                    f"(function(){{"
-                    f"var P='{proxy_prefix}';"
-                    # Rewrite fetch
-                    f"var _f=window.fetch;"
-                    f"window.fetch=function(u,o){{"
-                    f"if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))u=P+u;"
-                    f"else if(u instanceof Request&&u.url.startsWith(location.origin+'/')){{var nu=u.url.replace(location.origin+'/',location.origin+P+'/');u=new Request(nu,u);}}"
-                    f"return _f.call(this,u,o);"
-                    f"}};"
-                    # Rewrite XMLHttpRequest
-                    f"var _x=XMLHttpRequest.prototype.open;"
-                    f"XMLHttpRequest.prototype.open=function(m,u){{"
-                    f"if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))u=P+u;"
-                    f"return _x.apply(this,[m,u].concat([].slice.call(arguments,2)));"
-                    f"}};"
-                    # Patch pushState/replaceState to keep proxy prefix
-                    f"var _ps=history.pushState,_rs=history.replaceState;"
-                    f"function fixUrl(u){{if(typeof u==='string'&&u.startsWith('/')&&!u.startsWith(P))return P+u;return u;}}"
-                    f"history.pushState=function(s,t,u){{return _ps.call(this,s,t,u?fixUrl(u):u)}};"
-                    f"history.replaceState=function(s,t,u){{return _rs.call(this,s,t,u?fixUrl(u):u)}};"
-                    # Strip proxy prefix from current URL so Grafana's router matches
-                    f"var loc=window.location.pathname;"
-                    f"if(loc.startsWith(P)){{var real=loc.slice(P.length)||'/';"
-                    f"history.replaceState(null,'',real+window.location.search+window.location.hash);}}"
-                    f"}})();</script>"
+                escaped_prefix = proxy_prefix.replace('"', r'\"')
+                text = re.sub(
+                    r'"appSubUrl"\s*:\s*"[^"]*"',
+                    f'"appSubUrl":"{escaped_prefix}"',
+                    text,
                 )
-                text = text.replace("<head>", "<head>" + _spa_fix, 1)
 
                 payload = text.encode("utf-8")
             proxied = HttpResponse(
