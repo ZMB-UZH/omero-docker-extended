@@ -5,9 +5,9 @@
 Checks:
 
 ```bash
-docker compose ps
-docker compose logs --since=10m omeroserver
-docker compose logs --since=10m omeroweb
+docker compose --env-file env/installation_paths.env ps
+docker compose --env-file env/installation_paths.env logs --since=10m omeroserver
+docker compose --env-file env/installation_paths.env logs --since=10m omeroweb
 ```
 
 Focus on:
@@ -22,8 +22,8 @@ Focus on:
 Checks:
 
 ```bash
-docker compose exec omeroweb env | rg CONFIG_omero_web_apps
-docker compose logs --since=10m omeroweb
+docker compose --env-file env/installation_paths.env exec omeroweb env | rg CONFIG_omero_web_apps
+docker compose --env-file env/installation_paths.env logs --since=10m omeroweb
 ```
 
 Ensure the plugin app name exists in `CONFIG_omero_web_apps` and OMERO.web was restarted after config change.
@@ -70,12 +70,13 @@ id
 
 `docker-compose.yml` no longer requires manual `DOCKER_SOCKET_GID` injection.
 
-## 7. `docker compose down` fails with `invalid spec ... empty section between colons`
+## 7. `docker compose down` fails with a missing required variable
 
 Symptom:
 
-- warnings like `The "OMERO_SERVER_LOGS_PATH" variable is not set`;
-- compose exits with an `invalid spec` error for a bind mount.
+- compose exits with an interpolation error such as:
+  - `required variable OMERO_USER_DATA_PATH is missing a value`
+  - `Set OMERO_USER_DATA_PATH (use --env-file env/installation_paths.env)`
 
 Cause:
 
