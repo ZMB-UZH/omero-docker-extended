@@ -36,19 +36,19 @@ OMERO deployment and plugin repository for metadata workflows, upload/import man
 2. Build images:
 
 ```bash
-docker compose --env-file env/installation_paths.env build
+docker compose --env-file installation_paths.env build
 ```
 
 3. Start services:
 
 ```bash
-docker compose --env-file env/installation_paths.env up -d
+docker compose --env-file installation_paths.env up -d
 ```
 
 4. Verify service state:
 
 ```bash
-docker compose --env-file env/installation_paths.env ps
+docker compose --env-file installation_paths.env ps
 ```
 
 ## Documentation entry points
