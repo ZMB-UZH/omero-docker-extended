@@ -29,6 +29,25 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 
 set -euo pipefail
 
+bootstrap_env_files_from_examples() {
+    local env_dir="${REPO_ROOT_DIR}/env"
+    local example_file actual_file
+
+    if [ ! -d "${env_dir}" ]; then
+        return 0
+    fi
+
+    for example_file in "${env_dir}"/*_example.env; do
+        [ -f "${example_file}" ] || continue
+        # Derive the actual filename: foo_example.env → foo.env
+        actual_file="${example_file%_example.env}.env"
+        if [ ! -f "${actual_file}" ]; then
+            echo "First-time setup: creating ${actual_file} from $(basename "${example_file}")"
+            cp "${example_file}" "${actual_file}"
+        fi
+    done
+}
+
 resolve_script_env_file() {
     local default_env_file="${REPO_ROOT_DIR}/env/installation_paths.env"
 
@@ -40,6 +59,11 @@ resolve_script_env_file() {
         SCRIPT_ENV_FILE="${INSTALLATION_ENV_FILE_OVERRIDE}"
         return 0
     fi
+
+    # On first install the env/ directory contains only *_example.env files.
+    # Bootstrap actual .env files from their _example counterparts so the
+    # script can proceed.
+    bootstrap_env_files_from_examples
 
     if [ ! -f "${default_env_file}" ]; then
         echo "ERROR: Missing required installation paths file: ${default_env_file}" >&2

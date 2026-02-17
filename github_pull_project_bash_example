@@ -338,6 +338,19 @@ replace_working_tree_with_clone() {
         ! -name '.env' \
         ! -name 'env' \
         -exec mv {} "${current_repo_dir}" \;
+
+    # ── 7. Refresh *_example.env files inside the protected env/ dir ───
+    #
+    # The env/ directory is never deleted (user credentials + paths live
+    # there), but the *_example.env templates must stay up-to-date with
+    # the repository so users can compare them against their local copies.
+    if [ -d "${clone_dir}/env" ]; then
+        # Remove stale example files, then copy fresh ones from the clone.
+        find "${current_repo_dir}/env" -maxdepth 1 -name '*_example.env' -delete 2>/dev/null || true
+        find "${clone_dir}/env" -maxdepth 1 -name '*_example.env' \
+            -exec cp {} "${current_repo_dir}/env/" \;
+        echo "Refreshed *_example.env files in env/."
+    fi
 }
 
 run_installation_script() {
