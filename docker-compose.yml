@@ -281,7 +281,7 @@ services:
       POSTGRES_USER: omero
       POSTGRES_DB: omero
       POSTGRES_PASSWORD: ShR3K413CPh0Q2r
-      PGDATA: /var/lib/postgresql/data
+      PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
     networks:
@@ -289,7 +289,7 @@ services:
         aliases:
           - database
     volumes:
-      # IMPORTANT: mount the exact PGDATA directory, not only its parent path.
+      # IMPORTANT: we intentionally use a pgdata subdirectory to avoid ext4 lost+found issues.
       # postgres images define VOLUME /var/lib/postgresql/data; mounting only
       # /var/lib/postgresql can lead to an anonymous nested volume for /data,
       # which makes data appear lost after container recreation.
@@ -435,7 +435,7 @@ services:
       POSTGRES_USER: omp-plugin
       POSTGRES_DB: omp-plugin
       POSTGRES_PASSWORD: VhVFL62ziQFo710
-      PGDATA: /var/lib/postgresql/data
+      PGDATA: /var/lib/postgresql/data/pgdata
       PGPORT: 5433
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
