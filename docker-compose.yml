@@ -178,7 +178,7 @@ services:
     image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
     environment:
-      DATA_SOURCE_NAME: "postgresql://omero:ShR3K413CPh0Q2r@database:5432/omero?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://omero:${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_sercets.env}@database:5432/omero?sslmode=disable"
     networks:
       omero:
         aliases:
@@ -201,7 +201,7 @@ services:
     image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
     environment:
-      DATA_SOURCE_NAME: "postgresql://omp-plugin:VhVFL62ziQFo710@database-plugin:5433/omp-plugin?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://omp-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_sercets.env}@database-plugin:5433/omp-plugin?sslmode=disable"
     networks:
       omero:
         aliases:
@@ -250,6 +250,7 @@ services:
       - "3000:3000"
     env_file:
       - ./env/grafana.env
+      - ./env/omero_sercets.env
     environment:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
@@ -274,6 +275,8 @@ services:
   database:
     image: "postgres:16.11"
     restart: unless-stopped
+    env_file:
+      - ./env/omero_sercets.env
     command:
       - "postgres"
       - "-c"
@@ -283,7 +286,7 @@ services:
     environment:
       POSTGRES_USER: omero
       POSTGRES_DB: omero
-      POSTGRES_PASSWORD: ShR3K413CPh0Q2r
+      POSTGRES_PASSWORD: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_sercets.env}"
       PGDATA: /var/lib/postgresql/data/pgdata
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
@@ -317,6 +320,7 @@ services:
         condition: service_healthy
     env_file:
       - ./env/omeroserver.env
+      - ./env/omero_sercets.env
       - ./env/omero-celery.env
     hostname: omeroserver
     networks:
@@ -399,6 +403,7 @@ services:
         condition: service_healthy
     env_file:
       - ./env/omeroweb.env
+      - ./env/omero_sercets.env
       - ./env/omero-celery.env
     networks:
       omero:
@@ -428,6 +433,8 @@ services:
   database_plugin:
     image: "postgres:16.11"
     restart: unless-stopped
+    env_file:
+      - ./env/omero_sercets.env
     command:
       - "postgres"
       - "-c"
@@ -437,7 +444,7 @@ services:
     environment:
       POSTGRES_USER: omp-plugin
       POSTGRES_DB: omp-plugin
-      POSTGRES_PASSWORD: VhVFL62ziQFo710
+      POSTGRES_PASSWORD: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_sercets.env}"
       PGDATA: /var/lib/postgresql/data/pgdata
       PGPORT: 5433
       TZ: Europe/Zurich
@@ -464,6 +471,8 @@ services:
       dockerfile: docker/pg-maintenance.Dockerfile
     container_name: pg-maintenance
     restart: unless-stopped
+    env_file:
+      - ./env/omero_sercets.env
     environment:
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
@@ -475,13 +484,13 @@ services:
       OMERO_DB_PORT: 5432
       OMERO_DB_NAME: omero
       OMERO_DB_USER: omero
-      OMERO_DB_PASS: ShR3K413CPh0Q2r
+      OMERO_DB_PASS: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_sercets.env}"
       # OMP plugin database
       PLUGIN_DB_HOST: database-plugin
       PLUGIN_DB_PORT: 5433
       PLUGIN_DB_NAME: omp-plugin
       PLUGIN_DB_USER: omp-plugin
-      PLUGIN_DB_PASS: VhVFL62ziQFo710
+      PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_sercets.env}"
     volumes:
       # postgres-derived images declare VOLUME /var/lib/postgresql/data.
       # Binding that exact path to prevent anonymous volumes.
