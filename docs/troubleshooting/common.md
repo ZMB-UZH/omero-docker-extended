@@ -84,9 +84,46 @@ Cause:
 
 Fix:
 
+Security rationale:
+
+- Do **not** bind host `/dev/disk` into cAdvisor unless you explicitly require device symlink metadata.
+- Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
+
 ```bash
 docker compose --env-file installation_paths.env down
 ```
 
 If you run compose commands manually, always include the same `--env-file` value for
 `build`, `up`, `down`, `ps`, and `logs`.
+
+## 8. Anonymous Docker volume appears after monitoring stack startup
+
+Symptom:
+
+- `docker volume ls` shows a random hash-like volume name.
+- `docker volume inspect <name>` includes `"com.docker.volume.anonymous"`.
+
+Cause:
+
+- cAdvisor may trigger an anonymous volume when its image-defined `/dev/disk` mount is not explicitly overridden.
+
+Fix:
+
+Security rationale:
+
+- Do **not** bind host `/dev/disk` into cAdvisor unless you explicitly require device symlink metadata.
+- Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
+
+```bash
+docker compose --env-file installation_paths.env down
+docker compose --env-file installation_paths.env up -d
+
+docker volume ls
+# If a leftover anonymous volume still exists and is unused:
+docker volume rm <anonymous-volume-name>
+```
+
+Expected compose configuration:
+
+- `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
+
