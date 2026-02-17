@@ -34,12 +34,12 @@ OMERO deployment and plugin repository for metadata workflows, upload/import man
 
 1. Review and update configuration in `env/`.
 
-IMPORTANT: Credentials are centralized in `env/omero_sercets.env` (YOU create it manually from `env/omero_sercets_example.env` and keep it only on the server; it is never auto-created).
+IMPORTANT: Credentials are centralized in `env/omero_secrets.env` (YOU create it manually from `env/omero_secrets_example.env` and keep it only on the server; it is never auto-created).
 Before running `docker compose` manually, export secrets so compose can resolve required variables:
 
 ```bash
 set -a
-source env/omero_sercets.env
+source env/omero_secrets.env
 set +a
 ```
 
