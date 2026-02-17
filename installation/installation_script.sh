@@ -19,12 +19,15 @@ PROMETHEUS_UID="${PROMETHEUS_UID:-}"
 PROMETHEUS_GID="${PROMETHEUS_GID:-}"
 GRAFANA_UID="${GRAFANA_UID:-}"
 GRAFANA_GID="${GRAFANA_GID:-}"
+LOKI_UID="${LOKI_UID:-}"
+LOKI_GID="${LOKI_GID:-}"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
 OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
 PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
 GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
+LOKI_IMAGE="${LOKI_IMAGE:-}"
 
 set -euo pipefail
 
@@ -343,6 +346,8 @@ OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
 PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
 PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
+LOKI_DATA_PATH=${LOKI_DATA_PATH}
+PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
 DOTENV
 
     echo "Generated docker compose .env file: ${dot_env_path}"
@@ -374,6 +379,8 @@ write_installation_paths_env() {
 #   PROMETHEUS_DATA_PATH
 #   GRAFANA_DATA_PATH
 #   PORTAINER_DATA_PATH
+#   LOKI_DATA_PATH
+#   PG_MAINTENANCE_DATA_PATH
 
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
@@ -388,6 +395,8 @@ OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
 PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
+LOKI_DATA_PATH=${LOKI_DATA_PATH}
+PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
 ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
@@ -697,6 +706,8 @@ OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
 PROMETHEUS_DATA_PATH="${OMERO_DATA_PATH%/}/prometheus_data"
 GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
+LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
+PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
 
 if ! validate_retry_config; then
     exit 1
@@ -741,6 +752,16 @@ if [ -n "${GRAFANA_UID}" ]; then
 fi
 if [ -n "${GRAFANA_GID}" ]; then
     if ! validate_numeric_id "GRAFANA_GID" "${GRAFANA_GID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${LOKI_UID}" ]; then
+    if ! validate_numeric_id "LOKI_UID" "${LOKI_UID}"; then
+        exit 1
+    fi
+fi
+if [ -n "${LOKI_GID}" ]; then
+    if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then
         exit 1
     fi
 fi
@@ -803,6 +824,14 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO cer
 fi
 
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then
+    exit 1
+fi
+
+if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then
+    exit 1
+fi
+
+if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then
     exit 1
 fi
 
@@ -1008,6 +1037,9 @@ fi
 if [ -z "${GRAFANA_IMAGE}" ]; then
     GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"
 fi
+if [ -z "${LOKI_IMAGE}" ]; then
+    LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"
+fi
 
 if [ -z "${PROMETHEUS_UID}" ]; then
     PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"
@@ -1022,11 +1054,18 @@ fi
 if [ -z "${GRAFANA_GID}" ]; then
     GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"
 fi
+if [ -z "${LOKI_UID}" ]; then
+    LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u")"
+fi
+if [ -z "${LOKI_GID}" ]; then
+    LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"
+fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
 echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
 echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAGE})"
+echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo ""
 
 echo "================================================"
@@ -1086,6 +1125,10 @@ if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${
 fi
 
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then
+    exit 1
+fi
+
+if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then
     exit 1
 fi
 
