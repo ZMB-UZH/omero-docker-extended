@@ -10,7 +10,7 @@
 
 Review and update:
 
-- `env/installation_paths.env`
+- `installation_paths.env`
 - `env/omeroserver.env`
 - `env/omeroweb.env`
 - `env/omero-celery.env`
@@ -20,30 +20,30 @@ Review and update:
 Do not deploy with default credentials.
 
 `docker compose` commands run from the repository root automatically load
-`env/installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
+`installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
 
 If you run compose commands from a different working directory, pass:
 
 ```bash
-docker compose --env-file env/installation_paths.env <command>
+docker compose --env-file installation_paths.env <command>
 ```
 
 ## 2) Build Images
 
 ```bash
-docker compose --env-file env/installation_paths.env build
+docker compose --env-file installation_paths.env build
 ```
 
 ## 3) Start the Platform
 
 ```bash
-docker compose --env-file env/installation_paths.env up -d
+docker compose --env-file installation_paths.env up -d
 ```
 
 ## 4) Verify Service Health
 
 ```bash
-docker compose --env-file env/installation_paths.env ps
+docker compose --env-file installation_paths.env ps
 ```
 
 Verify all required services are `healthy` or `running`.
@@ -67,13 +67,13 @@ Adjust host/port if your deployment maps OMERO.web differently.
 
 ```bash
 # Stop services without removing resources
-docker compose --env-file env/installation_paths.env stop
+docker compose --env-file installation_paths.env stop
 
 # Stop and remove containers
-docker compose --env-file env/installation_paths.env down
+docker compose --env-file installation_paths.env down
 
 # Follow logs for a service
-docker compose --env-file env/installation_paths.env logs -f omeroweb
+docker compose --env-file installation_paths.env logs -f omeroweb
 ```
 
 ## External Reverse Proxy setup (IT-managed)
