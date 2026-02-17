@@ -1,6 +1,6 @@
 # Docker compose file of a minimal OMERO installation based on the official documentation, modified with many custom packages and plugins for enhanced functionality.
 # Using the tag :latest for OMERO and databases might be tempting but is extremely risky! Have a backup plan!
-# Always check compatibility in the following link or in the official OMERO documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html
+# Always check compatibility in the following link or in the official OMERO documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html.
 
 services:
 
@@ -163,8 +163,6 @@ services:
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
-    # Override image-declared /dev/disk with standard compose tmpfs syntax:
-    # prevents anonymous volume creation without binding host block devices.
     tmpfs:
       - /dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555
     healthcheck:
@@ -294,7 +292,7 @@ services:
         aliases:
           - database
     volumes:
-      # IMPORTANT: we intentionally use a pgdata subdirectory to avoid ext4 lost+found issues.
+      # IMPORTANT: Intentionally using a pgdata subdirectory to avoid ext4 lost+found issues.
       # postgres images define VOLUME /var/lib/postgresql/data; mounting only
       # /var/lib/postgresql can lead to an anonymous nested volume for /data,
       # which makes data appear lost after container recreation.
@@ -486,7 +484,7 @@ services:
       PLUGIN_DB_PASS: VhVFL62ziQFo710
     volumes:
       # postgres-derived images declare VOLUME /var/lib/postgresql/data.
-      # We bind that exact path to prevent anonymous volumes.
+      # Binding that exact path to prevent anonymous volumes.
       # PGDATA then selects a dedicated subdirectory for sidecar-owned files.
       - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     networks:
