@@ -254,6 +254,7 @@ replace_working_tree_with_clone() {
     find_args+=( ! -name 'github_pull_project_bash' )
     find_args+=( ! -name "${SCRIPT_NAME}" )
     find_args+=( ! -name 'installation_paths.env' )
+    find_args+=( ! -name '.env' )
     find_args+=( ! -name 'env' )
 
     # Data-path exclusions (derived from installation_paths.env)
@@ -309,6 +310,7 @@ replace_working_tree_with_clone() {
     echo "Protected (will NOT be removed):"
     echo "  - .git"
     echo "  - installation_paths.env (local installation paths source of truth)"
+    echo "  - .env (docker compose runtime paths)"
     echo "  - env/ (credential and service env files)"
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
