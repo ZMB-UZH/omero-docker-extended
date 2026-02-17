@@ -15,7 +15,7 @@ Review and update:
 - `env/omeroweb.env`
 - `env/omero-celery.env`
 - `env/grafana.env`
-- `env/omero_sercets.env`  (ALL credentials live here; YOU create it manually from `env/omero_sercets_example.env` and keep it only on the server)
+- `env/omero_secrets.env`  (ALL credentials live here; YOU create it manually from `env/omero_secrets_example.env` and keep it only on the server)
 
 
 Do not deploy with default credentials.
@@ -23,12 +23,12 @@ Do not deploy with default credentials.
 `docker compose` commands run from the repository root automatically load
 `installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
 
-IMPORTANT: This stack uses additional variables from `env/omero_sercets.env` (credentials; never auto-created).
+IMPORTANT: This stack uses additional variables from `env/omero_secrets.env` (credentials; never auto-created).
 If you run `docker compose` manually (outside the installation script), export those variables first:
 
 ```bash
 set -a
-source env/omero_sercets.env
+source env/omero_secrets.env
 set +a
 ```
 
