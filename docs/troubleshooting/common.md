@@ -5,9 +5,9 @@
 Checks:
 
 ```bash
-docker compose --env-file env/installation_paths.env ps
-docker compose --env-file env/installation_paths.env logs --since=10m omeroserver
-docker compose --env-file env/installation_paths.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env ps
+docker compose --env-file installation_paths.env logs --since=10m omeroserver
+docker compose --env-file installation_paths.env logs --since=10m omeroweb
 ```
 
 Focus on:
@@ -22,8 +22,8 @@ Focus on:
 Checks:
 
 ```bash
-docker compose --env-file env/installation_paths.env exec omeroweb env | rg CONFIG_omero_web_apps
-docker compose --env-file env/installation_paths.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env exec omeroweb env | rg CONFIG_omero_web_apps
+docker compose --env-file installation_paths.env logs --since=10m omeroweb
 ```
 
 Ensure the plugin app name exists in `CONFIG_omero_web_apps` and OMERO.web was restarted after config change.
@@ -76,16 +76,16 @@ Symptom:
 
 - compose exits with an interpolation error such as:
   - `required variable OMERO_USER_DATA_PATH is missing a value`
-  - `Set OMERO_USER_DATA_PATH (use --env-file env/installation_paths.env)`
+  - `Set OMERO_USER_DATA_PATH (use --env-file installation_paths.env)`
 
 Cause:
 
-- the path variables from `env/installation_paths.env` were not loaded.
+- the path variables from `installation_paths.env` were not loaded.
 
 Fix:
 
 ```bash
-docker compose --env-file env/installation_paths.env down
+docker compose --env-file installation_paths.env down
 ```
 
 If you run compose commands manually, always include the same `--env-file` value for
