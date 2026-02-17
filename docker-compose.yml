@@ -163,6 +163,10 @@ services:
       - /var/run:/var/run:rw
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
+    # Override image-declared /dev/disk with standard compose tmpfs syntax:
+    # prevents anonymous volume creation without binding host block devices.
+    tmpfs:
+      - /dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/metrics || exit 1"]
       interval: 10s
