@@ -424,14 +424,14 @@ count_top_level_entries() {
     find "${target_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]'
 }
 
-ensure_directory_empty_or_fail() {
+warn_directory_not_empty() {
     local target_path="$1"
     local target_label="$2"
     local existing_entries="0"
 
     if [ -e "${target_path}" ] && [ ! -d "${target_path}" ]; then
-        echo "ERROR: ${target_label} exists but is not a directory: ${target_path}" >&2
-        return 1
+        echo "WARNING: ${target_label} exists but is not a directory: ${target_path}" >&2
+        return 0
     fi
 
     if [ ! -d "${target_path}" ]; then
@@ -440,8 +440,8 @@ ensure_directory_empty_or_fail() {
 
     existing_entries="$(count_top_level_entries "${target_path}")"
     if [ "${existing_entries}" -gt 0 ]; then
-        echo "ERROR: ${target_label} must be empty before installation. Found ${existing_entries} top-level item(s): ${target_path}" >&2
-        return 1
+        echo "WARNING: ${target_label} is not empty (found ${existing_entries} top-level item(s)): ${target_path}" >&2
+        echo "         Existing data will be reused. If you need a clean installation, remove the contents manually first." >&2
     fi
 
     return 0
@@ -592,9 +592,7 @@ bootstrap_installation_checkout_if_missing() {
         return 1
     fi
 
-    if ! ensure_directory_empty_or_fail "${install_path}" "OMERO installation path"; then
-        return 1
-    fi
+    warn_directory_not_empty "${install_path}" "OMERO installation path"
 
     install_realpath="$(realpath -m "${install_path}")"
     repo_realpath="$(realpath -m "${REPO_ROOT_DIR}")"
@@ -1357,17 +1355,9 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     exit 1
 fi
 
-if ! ensure_directory_empty_or_fail "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
-    exit 1
-fi
-
-if ! ensure_directory_empty_or_fail "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
-    exit 1
-fi
-
-if ! ensure_directory_empty_or_fail "${OMERO_DATA_PATH}" "OMERO data directory"; then
-    exit 1
-fi
+warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
+warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
+warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
 
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
     exit 1
