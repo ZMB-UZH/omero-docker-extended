@@ -448,6 +448,80 @@ ensure_directory_empty_or_fail() {
 }
 
 # ---------------------------------------------------------------------------
+# collect_bootstrap_sentinel_names
+#
+# Reads the installation paths env file (SCRIPT_ENV_FILE) and extracts unique
+# directory-name components from each data path (relative to
+# OMERO_INSTALLATION_PATH).  These names identify data/database directories
+# regardless of where they live on disk.
+#
+# Used by bootstrap_installation_checkout_if_missing() to deep-scan candidate
+# directories before copying them into a new installation path, preventing
+# stale data directories from an old installation from being copied.
+# ---------------------------------------------------------------------------
+collect_bootstrap_sentinel_names() {
+    if [ -z "${SCRIPT_ENV_FILE}" ] || [ ! -r "${SCRIPT_ENV_FILE}" ]; then
+        return 0
+    fi
+
+    (
+        local env_line
+        while IFS= read -r env_line || [ -n "${env_line}" ]; do
+            case "${env_line}" in
+                ''|'#'*) continue ;;
+                [A-Za-z_]*=*) eval "${env_line}" ;;
+            esac
+        done < "${SCRIPT_ENV_FILE}"
+
+        local _install_root="${OMERO_INSTALLATION_PATH:-}"
+        _install_root="${_install_root%/}"
+
+        local _path
+        for _path in \
+            "${OMERO_DATABASE_PATH:-}" \
+            "${OMERO_PLUGIN_DATABASE_PATH:-}" \
+            "${OMERO_DATA_PATH:-}" \
+            "${OMERO_USER_DATA_PATH:-}" \
+            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_SERVER_LOGS_PATH:-}" \
+            "${OMERO_WEB_LOGS_PATH:-}" \
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
+            "${PORTAINER_DATA_PATH:-}" \
+            "${PROMETHEUS_DATA_PATH:-}" \
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+
+            [ -z "${_path}" ] && continue
+            _path="${_path%/}"
+
+            local _rel=""
+            if [ -n "${_install_root}" ] && [ "${_path}" != "${_install_root}" ]; then
+                case "${_path}" in
+                    "${_install_root}/"*)
+                        _rel="${_path#"${_install_root}/"}"
+                        ;;
+                    *)
+                        _rel="$(basename "${_path}")"
+                        ;;
+                esac
+            else
+                _rel="$(basename "${_path}")"
+            fi
+
+            local _saved_IFS="${IFS}"
+            IFS='/'
+            # shellcheck disable=SC2086
+            for _component in ${_rel}; do
+                [ -n "${_component}" ] && printf '%s\n' "${_component}"
+            done
+            IFS="${_saved_IFS}"
+        done
+    ) | sort -u
+}
+
+# ---------------------------------------------------------------------------
 # collect_repo_data_dir_names
 #
 # Sources the installation paths env file (SCRIPT_ENV_FILE) in a subshell
@@ -552,10 +626,47 @@ bootstrap_installation_checkout_if_missing() {
                 [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
             done < <(collect_repo_data_dir_names)
 
+            # Collect sentinel directory names for deep scanning.
+            # When the installation path changed, old data directories may
+            # still exist at the repo root under their original names.
+            # Name-based exclusions above won't catch them because the
+            # configured paths now point elsewhere.  A deep scan detects
+            # these stale data trees and prevents them from being copied.
+            local -a _sentinel_names=()
+            local _sname
+            while IFS= read -r _sname; do
+                [ -n "${_sname}" ] && _sentinel_names+=("${_sname}")
+            done < <(collect_bootstrap_sentinel_names)
+
+            local -a _sentinel_find_expr=()
+            if [ ${#_sentinel_names[@]} -gt 0 ]; then
+                _sentinel_find_expr+=( \( )
+                local _first=true
+                for _sname in "${_sentinel_names[@]}"; do
+                    if [ "${_first}" = true ]; then
+                        _first=false
+                    else
+                        _sentinel_find_expr+=( -o )
+                    fi
+                    _sentinel_find_expr+=( -name "${_sname}" )
+                done
+                _sentinel_find_expr+=( \) )
+            fi
+
             local _copy_failed=false
             local _item
             while IFS= read -r _item; do
                 [ -z "${_item}" ] && continue
+
+                # Deep scan: skip directories containing sentinel data
+                # subdirectories (stale data from a previous installation).
+                if [ -d "${_item}" ] && [ ${#_sentinel_find_expr[@]} -gt 0 ]; then
+                    if find "${_item}" -type d "${_sentinel_find_expr[@]}" -print -quit 2>/dev/null | grep -q .; then
+                        echo "NOTE: Skipping '$(basename "${_item}")' (contains data/database subdirectories from previous installation)."
+                        continue
+                    fi
+                fi
+
                 if ! cp -a "${_item}" "${install_path}/"; then
                     _copy_failed=true
                     break
@@ -587,10 +698,42 @@ bootstrap_installation_checkout_if_missing() {
         [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
     done < <(collect_repo_data_dir_names)
 
+    # Sentinel deep scan (same as the inside-repo branch above).
+    local -a _sentinel_names=()
+    local _sname
+    while IFS= read -r _sname; do
+        [ -n "${_sname}" ] && _sentinel_names+=("${_sname}")
+    done < <(collect_bootstrap_sentinel_names)
+
+    local -a _sentinel_find_expr=()
+    if [ ${#_sentinel_names[@]} -gt 0 ]; then
+        _sentinel_find_expr+=( \( )
+        local _first=true
+        for _sname in "${_sentinel_names[@]}"; do
+            if [ "${_first}" = true ]; then
+                _first=false
+            else
+                _sentinel_find_expr+=( -o )
+            fi
+            _sentinel_find_expr+=( -name "${_sname}" )
+        done
+        _sentinel_find_expr+=( \) )
+    fi
+
     local _copy_failed=false
     local _item
     while IFS= read -r _item; do
         [ -z "${_item}" ] && continue
+
+        # Deep scan: skip directories containing sentinel data
+        # subdirectories (stale data from a previous installation).
+        if [ -d "${_item}" ] && [ ${#_sentinel_find_expr[@]} -gt 0 ]; then
+            if find "${_item}" -type d "${_sentinel_find_expr[@]}" -print -quit 2>/dev/null | grep -q .; then
+                echo "NOTE: Skipping '$(basename "${_item}")' (contains data/database subdirectories from previous installation)."
+                continue
+            fi
+        fi
+
         if ! cp -a "${_item}" "${install_path}/"; then
             _copy_failed=true
             break
