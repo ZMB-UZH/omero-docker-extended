@@ -281,6 +281,7 @@ services:
       POSTGRES_USER: omero
       POSTGRES_DB: omero
       POSTGRES_PASSWORD: ShR3K413CPh0Q2r
+      PGDATA: /var/lib/postgresql/data
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
     networks:
@@ -288,7 +289,11 @@ services:
         aliases:
           - database
     volumes:
-      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql:rw
+      # IMPORTANT: mount the exact PGDATA directory, not only its parent path.
+      # postgres images define VOLUME /var/lib/postgresql/data; mounting only
+      # /var/lib/postgresql can lead to an anonymous nested volume for /data,
+      # which makes data appear lost after container recreation.
+      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
       interval: 10s
@@ -430,6 +435,7 @@ services:
       POSTGRES_USER: omp-plugin
       POSTGRES_DB: omp-plugin
       POSTGRES_PASSWORD: VhVFL62ziQFo710
+      PGDATA: /var/lib/postgresql/data
       PGPORT: 5433
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
@@ -438,7 +444,7 @@ services:
         aliases:
           - database-plugin
     volumes:
-      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql:rw
+      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
       interval: 10s
