@@ -179,7 +179,7 @@ RUN set -euo pipefail; \
 # -----------------------------------------------------
 RUN set -euo pipefail; \
     touch /tmp/logo.png.dummy
-COPY logo.png* /tmp/
+COPY logo/logo.png* /tmp/
 RUN set -euo pipefail; \
     rm -f /tmp/logo.png.dummy; \
     if [[ -f /tmp/logo.png ]]; then \
