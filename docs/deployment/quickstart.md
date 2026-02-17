@@ -21,10 +21,14 @@ Review and update:
 Do not deploy with default credentials.
 
 `docker compose` commands run from the repository root automatically load
-`installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
+both `installation_paths.env` and `env/omero_secrets.env` via `.env` (`COMPOSE_ENV_FILES`).
 
 IMPORTANT: This stack uses additional variables from `env/omero_secrets.env` (credentials; never auto-created).
-If you run `docker compose` manually (outside the installation script), export those variables first:
+After `installation/installation_script.sh` runs, generated `.env` includes
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env`, so manual
+`docker compose` commands resolve required variables automatically.
+
+If `.env` is missing (for example before first installation), export secrets first:
 
 ```bash
 set -a
