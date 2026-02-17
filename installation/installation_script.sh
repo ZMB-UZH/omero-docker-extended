@@ -136,12 +136,25 @@ if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
 fi
 
-require_config_var() {
+require_nonempty_config_var() {
     local variable_name="$1"
+    local variable_source="$2"
     local variable_value="${!variable_name:-}"
 
     if [ -z "${variable_value}" ]; then
-        echo "ERROR: Missing required configuration variable ${variable_name} in ${SCRIPT_ENV_FILE}" >&2
+        echo "ERROR: Missing required configuration variable ${variable_name} in ${variable_source}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+require_path_config_var() {
+    local variable_name="$1"
+    local variable_source="$2"
+    local variable_value="${!variable_name:-}"
+
+    if ! require_nonempty_config_var "${variable_name}" "${variable_source}"; then
         return 1
     fi
 
@@ -1362,12 +1375,12 @@ if [ -n "${LOKI_GID}" ]; then
     fi
 fi
 
-require_config_var "OMERO_INSTALLATION_PATH"
-require_config_var "OMERO_DATABASE_PATH"
-require_config_var "OMERO_PLUGIN_DATABASE_PATH"
-require_config_var "OMERO_DATA_PATH"
-require_config_var "OMERO_DB_PASS"
-require_config_var "OMP_PLUGIN_DB_PASS"
+require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_PLUGIN_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_DATA_PATH" "${SCRIPT_ENV_FILE}"
+require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
+require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
 
 if ! validate_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Invalid OMERO_INSTALLATION_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_INSTALLATION_PATH}" >&2
