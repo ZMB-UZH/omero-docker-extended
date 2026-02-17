@@ -40,6 +40,7 @@ services:
       - "3100:3100"
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
       interval: 10s
@@ -464,6 +465,9 @@ services:
     environment:
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
+      # Keep maintenance sidecar layout aligned with postgres services:
+      # use a dedicated PGDATA subdirectory inside the mounted data root.
+      PGDATA: /var/lib/postgresql/data/pgmaintenance
       # OMERO main database
       OMERO_DB_HOST: database
       OMERO_DB_PORT: 5432
@@ -476,6 +480,11 @@ services:
       PLUGIN_DB_NAME: omp-plugin
       PLUGIN_DB_USER: omp-plugin
       PLUGIN_DB_PASS: VhVFL62ziQFo710
+    volumes:
+      # postgres-derived images declare VOLUME /var/lib/postgresql/data.
+      # We bind that exact path to prevent anonymous volumes.
+      # PGDATA then selects a dedicated subdirectory for sidecar-owned files.
+      - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     networks:
       omero:
         aliases:

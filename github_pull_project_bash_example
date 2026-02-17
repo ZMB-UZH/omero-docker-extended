@@ -96,7 +96,9 @@ resolve_all_data_paths() {
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
             "${PORTAINER_DATA_PATH:-}" \
             "${PROMETHEUS_DATA_PATH:-}" \
-            "${GRAFANA_DATA_PATH:-}"
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"
     )
 }
 
@@ -178,7 +180,9 @@ collect_sentinel_dir_names() {
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
             "${PORTAINER_DATA_PATH:-}" \
             "${PROMETHEUS_DATA_PATH:-}" \
-            "${GRAFANA_DATA_PATH:-}"; do
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
