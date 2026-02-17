@@ -1,0 +1,3 @@
+Design reference notes for agent workflows:
+- Keep interfaces explicit.
+- Keep docs cross-linked and version controlled.
