@@ -55,6 +55,24 @@ load_installation_paths_env() {
     done < "${env_file_path}"
 }
 
+load_secrets_env() {
+    local secrets_env_file="${1:?BUG: load_secrets_env requires a path}"
+
+    if [ ! -r "${secrets_env_file}" ]; then
+        echo "ERROR: Secrets env file is missing or unreadable: ${secrets_env_file}" >&2
+        echo "ERROR: Create it from env/omero_sercets_example.env (copy → env/omero_sercets.env) and set real values." >&2
+        return 1
+    fi
+
+    # Export variables for docker compose interpolation AND container runtime env_file usage.
+    # We intentionally support only simple KEY=VALUE lines (comments/blank lines ignored),
+    # matching the behavior of load_installation_paths_env, but with automatic exporting.
+    set -a
+    load_installation_paths_env "${secrets_env_file}"
+    set +a
+}
+
+
 bootstrap_env_files_from_examples() {
     local env_dir="${REPO_ROOT_DIR}/env"
     local example_file actual_file
@@ -65,6 +83,14 @@ bootstrap_env_files_from_examples() {
 
     for example_file in "${env_dir}"/*_example.env; do
         [ -f "${example_file}" ] || continue
+
+        # IMPORTANT:
+        # Secrets MUST NEVER be auto-created by automation.
+        # The user is the sole creator of env/omero_sercets.env.
+        if [ "$(basename "${example_file}")" = "omero_sercets_example.env" ]; then
+            continue
+        fi
+
         # Derive the actual filename: foo_example.env → foo.env
         actual_file="${example_file%_example.env}.env"
         if [ ! -f "${actual_file}" ]; then
@@ -101,6 +127,12 @@ if ! resolve_script_env_file; then
 fi
 
 if ! load_installation_paths_env "${SCRIPT_ENV_FILE}"; then
+    exit 1
+fi
+
+
+SECRETS_ENV_FILE="${REPO_ROOT_DIR}/env/omero_sercets.env"
+if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
 fi
 
