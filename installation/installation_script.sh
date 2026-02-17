@@ -136,7 +136,75 @@ compose_with_installation_env() {
     local compose_file="$1"
     shift
 
-    docker compose --env-file "${SCRIPT_ENV_FILE}" -f "${compose_file}" "$@"
+    ensure_resolved_env_file_or_die
+
+    docker compose --env-file "${RESOLVED_ENV_FILE}" -f "${compose_file}" "$@"
+}
+
+ensure_resolved_env_file_or_die() {
+    if [ -n "${RESOLVED_ENV_FILE}" ] && [ -f "${RESOLVED_ENV_FILE}" ]; then
+        return 0
+    fi
+
+    require_non_empty_absolute_path_var_or_die "OMERO_INSTALLATION_PATH" "${OMERO_INSTALLATION_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_DATABASE_PATH" "${OMERO_DATABASE_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_PLUGIN_DATABASE_PATH" "${OMERO_PLUGIN_DATABASE_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_DATA_PATH" "${OMERO_DATA_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_USER_DATA_PATH" "${OMERO_USER_DATA_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_UPLOAD_PATH" "${OMERO_UPLOAD_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_SERVER_VAR_PATH" "${OMERO_SERVER_VAR_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_SERVER_LOGS_PATH" "${OMERO_SERVER_LOGS_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_WEB_LOGS_PATH" "${OMERO_WEB_LOGS_PATH}"
+    require_non_empty_absolute_path_var_or_die "OMERO_WEB_SUPERVISOR_LOGS_PATH" "${OMERO_WEB_SUPERVISOR_LOGS_PATH}"
+    require_non_empty_absolute_path_var_or_die "PORTAINER_DATA_PATH" "${PORTAINER_DATA_PATH}"
+    require_non_empty_absolute_path_var_or_die "PROMETHEUS_DATA_PATH" "${PROMETHEUS_DATA_PATH}"
+    require_non_empty_absolute_path_var_or_die "GRAFANA_DATA_PATH" "${GRAFANA_DATA_PATH}"
+
+    RESOLVED_ENV_FILE="$(mktemp -p "${REPO_ROOT_DIR}" ".resolved_installation_paths.XXXXXX.env")"
+
+    cat > "${RESOLVED_ENV_FILE}" <<EOF
+OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
+OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
+OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
+OMERO_DATA_PATH=${OMERO_DATA_PATH}
+OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
+OMERO_UPLOAD_PATH=${OMERO_UPLOAD_PATH}
+OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
+OMERO_SERVER_LOGS_PATH=${OMERO_SERVER_LOGS_PATH}
+OMERO_WEB_LOGS_PATH=${OMERO_WEB_LOGS_PATH}
+OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
+PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
+PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
+GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
+EOF
+
+    if grep -qE '\$\{|^\w+=\$' "${RESOLVED_ENV_FILE}"; then
+        echo "ERROR: Resolved env file still contains unexpanded variables: ${RESOLVED_ENV_FILE}" >&2
+        echo "ERROR: Refusing to run docker compose with potentially non-persistent paths." >&2
+        return 1
+    fi
+
+    return 0
+}
+
+require_non_empty_absolute_path_var_or_die() {
+    local var_name="$1"
+    local var_value="$2"
+
+    if [ -z "${var_value}" ]; then
+        echo "ERROR: ${var_name} is empty." >&2
+        return 1
+    fi
+
+    case "${var_value}" in
+        /*) ;;
+        *)
+            echo "ERROR: ${var_name} must be an absolute path (starts with '/'). Got: '${var_value}'" >&2
+            return 1
+            ;;
+    esac
+
+    return 0
 }
 
 compose_images_with_installation_env() {
