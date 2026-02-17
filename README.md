@@ -35,7 +35,9 @@ OMERO deployment and plugin repository for metadata workflows, upload/import man
 1. Review and update configuration in `env/`.
 
 IMPORTANT: Credentials are centralized in `env/omero_secrets.env` (YOU create it manually from `env/omero_secrets_example.env` and keep it only on the server; it is never auto-created).
-Before running `docker compose` manually, export secrets so compose can resolve required variables:
+After you run `installation/installation_script.sh`, generated `.env` config sets `COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env`, so manual `docker compose` commands resolve both path and secret variables automatically.
+
+If `.env` is missing (for example in a fresh clone that has not run the installation script), export secrets manually before running `docker compose`:
 
 ```bash
 set -a
