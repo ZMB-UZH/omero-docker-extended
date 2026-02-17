@@ -385,8 +385,37 @@ bootstrap_installation_checkout_if_missing() {
 
     case "${install_realpath}" in
         "${repo_realpath}"/*)
-            echo "ERROR: OMERO installation path cannot be a nested path inside repository checkout: ${install_realpath}" >&2
-            return 1
+            # Installation path is inside the repository checkout.  A plain
+            # `cp -a repo/. install/` would recurse into itself, so we copy
+            # top-level items individually, skipping the first path component
+            # that leads to the install directory.
+            local _rel_to_repo="${install_realpath#"${repo_realpath}/"}"
+            local _exclude_top="${_rel_to_repo%%/*}"
+
+            echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
+            echo "NOTE: Installation path is inside repository root. Excluding '${_exclude_top}' from bootstrap copy to avoid recursion."
+
+            local _copy_failed=false
+            local _item
+            while IFS= read -r _item; do
+                [ -z "${_item}" ] && continue
+                if ! cp -a "${_item}" "${install_path}/"; then
+                    _copy_failed=true
+                    break
+                fi
+            done < <(find "${REPO_ROOT_DIR}" -mindepth 1 -maxdepth 1 ! -name "${_exclude_top}")
+
+            if [ "${_copy_failed}" = true ]; then
+                echo "ERROR: Failed to copy project checkout from ${REPO_ROOT_DIR} to ${install_path}" >&2
+                return 1
+            fi
+
+            if [ ! -f "${compose_file_path}" ]; then
+                echo "ERROR: Bootstrap copy completed but docker-compose.yml is still missing: ${compose_file_path}" >&2
+                return 1
+            fi
+
+            return 0
             ;;
     esac
 
@@ -467,17 +496,17 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
-OMERO_USER_DATA_PATH=${OMERO_DATA_PATH}/omero_user_data
-OMERO_UPLOAD_PATH=${OMERO_DATA_PATH}/omero_upload
-OMERO_SERVER_VAR_PATH=${OMERO_DATA_PATH}/omero_server_var
-OMERO_SERVER_LOGS_PATH=${OMERO_DATA_PATH}/omero_server_logs
-OMERO_WEB_LOGS_PATH=${OMERO_DATA_PATH}/omero_web_logs
-OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_DATA_PATH}/omero_web_supervisor_logs
-PROMETHEUS_DATA_PATH=${OMERO_DATA_PATH}/prometheus_data
-GRAFANA_DATA_PATH=${OMERO_DATA_PATH}/grafana_data
-PORTAINER_DATA_PATH=${OMERO_DATA_PATH}/portainer_data
-LOKI_DATA_PATH=${OMERO_DATA_PATH}/loki_data
-PG_MAINTENANCE_DATA_PATH=${OMERO_DATA_PATH}/pg_maintenance_data
+OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
+OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
+OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
+OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
+OMERO_WEB_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_logs
+OMERO_WEB_SUPERVISOR_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_supervisor_logs
+PROMETHEUS_DATA_PATH=\${OMERO_DATA_PATH}/prometheus_data
+GRAFANA_DATA_PATH=\${OMERO_DATA_PATH}/grafana_data
+PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
+LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
+PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
 ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
