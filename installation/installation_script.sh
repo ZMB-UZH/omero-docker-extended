@@ -402,6 +402,118 @@ ENVFILE
     echo "Generated installation paths env file: ${env_file_path}"
 }
 
+verify_installation_paths_env_content() {
+    local env_file_path="${1:?BUG: verify_installation_paths_env_content requires a path}"
+
+    if [ ! -r "${env_file_path}" ]; then
+        echo "ERROR: installation paths env file is missing or unreadable after write: ${env_file_path}" >&2
+        return 1
+    fi
+
+    local expected_var expected_value actual_value
+    local required_vars=(
+        OMERO_INSTALLATION_PATH
+        OMERO_DATABASE_PATH
+        OMERO_PLUGIN_DATABASE_PATH
+        OMERO_DATA_PATH
+        OMERO_USER_DATA_PATH
+        OMERO_UPLOAD_PATH
+        OMERO_SERVER_VAR_PATH
+        OMERO_SERVER_LOGS_PATH
+        OMERO_WEB_LOGS_PATH
+        OMERO_WEB_SUPERVISOR_LOGS_PATH
+        PROMETHEUS_DATA_PATH
+        GRAFANA_DATA_PATH
+        PORTAINER_DATA_PATH
+        LOKI_DATA_PATH
+        PG_MAINTENANCE_DATA_PATH
+    )
+
+    for expected_var in "${required_vars[@]}"; do
+        expected_value="${!expected_var:-}"
+        actual_value="$(sed -n "s#^${expected_var}=##p" "${env_file_path}" | head -n 1)"
+
+        if [ -z "${actual_value}" ]; then
+            echo "ERROR: ${expected_var} was not written to ${env_file_path}." >&2
+            return 1
+        fi
+
+        if [ "${actual_value}" != "${expected_value}" ]; then
+            echo "ERROR: ${expected_var} value mismatch in ${env_file_path}." >&2
+            echo "ERROR: Expected: ${expected_value}" >&2
+            echo "ERROR: Actual:   ${actual_value}" >&2
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+validate_path_is_preparable() {
+    local path_to_check="$1"
+    local path_label="$2"
+    local probe_dir=""
+
+    if ! is_valid_linux_path "${path_to_check}"; then
+        echo "ERROR: ${path_label} must be a valid absolute Linux path: ${path_to_check}" >&2
+        return 1
+    fi
+
+    if [ -e "${path_to_check}" ] && [ ! -d "${path_to_check}" ]; then
+        echo "ERROR: ${path_label} exists but is not a directory: ${path_to_check}" >&2
+        return 1
+    fi
+
+    if [ -d "${path_to_check}" ]; then
+        if [ ! -w "${path_to_check}" ] || [ ! -x "${path_to_check}" ]; then
+            echo "ERROR: ${path_label} is not writable: ${path_to_check}" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    probe_dir="${path_to_check%/}"
+    while [ -n "${probe_dir}" ] && [ "${probe_dir}" != "/" ] && [ ! -e "${probe_dir}" ]; do
+        probe_dir="$(dirname "${probe_dir}")"
+    done
+
+    if [ -z "${probe_dir}" ]; then
+        probe_dir="/"
+    fi
+
+    if [ ! -d "${probe_dir}" ]; then
+        echo "ERROR: ${path_label} parent path does not resolve to a directory: ${probe_dir}" >&2
+        return 1
+    fi
+
+    if [ ! -w "${probe_dir}" ] || [ ! -x "${probe_dir}" ]; then
+        echo "ERROR: ${path_label} cannot be created because parent directory is not writable: ${probe_dir}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+prompt_for_preparable_path() {
+    local default_path="$1"
+    local path_label="$2"
+    local selected_path=""
+
+    while true; do
+        selected_path="$(resolve_path_with_default_prompt "${default_path}" "${path_label}")"
+        if validate_path_is_preparable "${selected_path}" "${path_label}"; then
+            printf '%s' "${selected_path}"
+            return 0
+        fi
+
+        if [ -r /dev/tty ]; then
+            echo "Please choose a different ${path_label}." > /dev/tty
+        else
+            return 1
+        fi
+    done
+}
+
 ensure_data_path() {
     local data_path="$1"
     local path_label="$2"
@@ -692,10 +804,10 @@ DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
 DEFAULT_OMERO_DATA_PATH="${OMERO_DATA_PATH}"
 
-OMERO_INSTALLATION_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
-OMERO_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
-OMERO_PLUGIN_DATABASE_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
-OMERO_DATA_PATH="$(resolve_path_with_default_prompt "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
+OMERO_INSTALLATION_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
+OMERO_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
+OMERO_PLUGIN_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
+OMERO_DATA_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
 
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
@@ -839,6 +951,16 @@ fi
 # manual docker compose commands work without --env-file.
 write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
 write_installation_paths_env "${OMERO_INSTALLATION_PATH%/}/installation_paths.env"
+if ! verify_installation_paths_env_content "${OMERO_INSTALLATION_PATH%/}/installation_paths.env"; then
+    echo "ERROR: Refusing to continue because installation paths were not persisted correctly to the installation directory." >&2
+    exit 1
+fi
+
+write_installation_paths_env "${SCRIPT_ENV_FILE}"
+if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
+    echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
+    exit 1
+fi
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
