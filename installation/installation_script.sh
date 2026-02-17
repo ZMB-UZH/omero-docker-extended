@@ -246,6 +246,97 @@ compose_up_with_retries() {
     return 1
 }
 
+# ---------------------------------------------------------------------------
+# stop_old_installation_containers
+#
+# When the installation path has changed, the current `docker compose down`
+# (which targets the NEW --project-directory) cannot find or stop containers
+# that were created under the OLD project directory because Docker Compose
+# derives the project name from the directory name.
+#
+# This function performs a targeted cleanup of the old installation's
+# containers before the main workflow proceeds.
+#
+# Additionally, services with hardcoded container_name values (portainer,
+# redis-sysctl-init, pg-maintenance) are globally unique.  If the old
+# project's `docker compose down` fails or is skipped, we force-remove
+# these containers as a safety net to prevent name conflicts.
+# ---------------------------------------------------------------------------
+stop_old_installation_containers() {
+    local old_install_path="${1%/}"
+    local old_database_path="$2"
+    local old_plugin_database_path="$3"
+    local old_data_path="${4%/}"
+    local keep_images="$5"
+    local old_compose_file="${old_install_path}/docker-compose.yml"
+    local old_dot_env="${old_install_path}/.env"
+    local created_temp_dot_env=false
+
+    echo ""
+    echo "Installation path changed: ${old_install_path}/ -> ${OMERO_INSTALLATION_PATH}"
+    echo "Stopping containers from previous installation path..."
+
+    # --- Attempt compose down from the old project directory ---------------
+    if [ -f "${old_compose_file}" ]; then
+        # Generate a temporary .env at the old path if one is missing,
+        # so docker compose can parse the YAML without variable errors.
+        if [ ! -f "${old_dot_env}" ]; then
+            cat > "${old_dot_env}" <<OLD_DOTENV
+# Temporary .env generated for old-path container cleanup.
+OMERO_INSTALLATION_PATH=${old_install_path}/
+OMERO_DATABASE_PATH=${old_database_path}
+OMERO_PLUGIN_DATABASE_PATH=${old_plugin_database_path}
+OMERO_DATA_PATH=${old_data_path}
+OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
+OMERO_UPLOAD_PATH=${old_data_path}/omero_upload
+OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
+OMERO_SERVER_LOGS_PATH=${old_data_path}/omero_server_logs
+OMERO_WEB_LOGS_PATH=${old_data_path}/omero_web_logs
+OMERO_WEB_SUPERVISOR_LOGS_PATH=${old_data_path}/omero_web_supervisor_logs
+PORTAINER_DATA_PATH=${old_data_path}/portainer_data
+PROMETHEUS_DATA_PATH=${old_data_path}/prometheus_data
+GRAFANA_DATA_PATH=${old_data_path}/grafana_data
+LOKI_DATA_PATH=${old_data_path}/loki_data
+PG_MAINTENANCE_DATA_PATH=${old_data_path}/pg_maintenance_data
+OLD_DOTENV
+            created_temp_dot_env=true
+        fi
+
+        echo "Running docker compose down from old installation path: ${old_install_path}/"
+        if [ "${keep_images}" -eq 1 ]; then
+            docker compose \
+                --project-directory "${old_install_path}" \
+                -f "${old_compose_file}" \
+                down --remove-orphans 2>&1 || true
+        else
+            docker compose \
+                --project-directory "${old_install_path}" \
+                -f "${old_compose_file}" \
+                down --remove-orphans --rmi all 2>&1 || true
+        fi
+
+        if [ "${created_temp_dot_env}" = true ] && [ -f "${old_dot_env}" ]; then
+            rm -f "${old_dot_env}"
+        fi
+    else
+        echo "No docker-compose.yml at old installation path; skipping compose down."
+    fi
+
+    # --- Safety net: force-remove containers with hardcoded names ----------
+    # These container_name values are global (not project-scoped), so they
+    # will conflict even if the old compose down succeeded partially.
+    local fixed_name
+    for fixed_name in portainer redis-sysctl-init pg-maintenance; do
+        if docker container inspect "${fixed_name}" >/dev/null 2>&1; then
+            echo "Force-removing leftover container with fixed name: ${fixed_name}"
+            docker rm -f "${fixed_name}" 2>/dev/null || true
+        fi
+    done
+
+    echo "Old installation container cleanup complete."
+    echo ""
+}
+
 # Root-only safety check
 # ----------------------
 if [ "$(id -u)" -ne 0 ]; then
@@ -1182,6 +1273,18 @@ write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
 # Workflow
 # --------
 cd "${OMERO_INSTALLATION_PATH}"
+
+# If the installation path changed, stop containers from the old path first.
+# The old containers belong to a different Docker Compose project (derived from
+# the old directory name), so the normal compose down below would not find them.
+if [ "${DEFAULT_OMERO_INSTALLATION_PATH%/}" != "${OMERO_INSTALLATION_PATH%/}" ]; then
+    stop_old_installation_containers \
+        "${DEFAULT_OMERO_INSTALLATION_PATH}" \
+        "${DEFAULT_OMERO_DATABASE_PATH}" \
+        "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" \
+        "${DEFAULT_OMERO_DATA_PATH}" \
+        "${KEEP_IMAGES}"
+fi
 
 echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
