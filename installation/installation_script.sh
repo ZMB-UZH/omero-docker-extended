@@ -21,6 +21,10 @@ GRAFANA_UID="${GRAFANA_UID:-}"
 GRAFANA_GID="${GRAFANA_GID:-}"
 LOKI_UID="${LOKI_UID:-}"
 LOKI_GID="${LOKI_GID:-}"
+DATABASE_UID="${DATABASE_UID:-}"
+DATABASE_GID="${DATABASE_GID:-}"
+DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
+DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -28,6 +32,8 @@ OMERO_WEB_IMAGE="${OMERO_WEB_IMAGE:-omeroweb:custom}"
 PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE:-}"
 GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
+DATABASE_IMAGE="${DATABASE_IMAGE:-}"
+DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
 
 set -euo pipefail
 
@@ -834,6 +840,20 @@ OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 DOTENV
 
     chmod 0600 "${dot_env_path}"
+
+    # If the script runs via sudo, keep the generated .env readable by the
+    # original invoking user so manual docker compose commands work without sudo.
+    if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+        if ! [[ "${SUDO_UID}" =~ ^[0-9]+$ ]] || ! [[ "${SUDO_GID}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: SUDO_UID/SUDO_GID must be numeric when provided. Got SUDO_UID=${SUDO_UID:-unset}, SUDO_GID=${SUDO_GID:-unset}" >&2
+            return 1
+        fi
+
+        if ! chown "${SUDO_UID}:${SUDO_GID}" "${dot_env_path}"; then
+            echo "ERROR: Failed to assign generated docker compose .env ownership to invoking sudo user (${SUDO_UID}:${SUDO_GID}): ${dot_env_path}" >&2
+            return 1
+        fi
+    fi
 
     echo "Generated docker compose .env file: ${dot_env_path}"
 }
@@ -1667,6 +1687,12 @@ fi
 if [ -z "${LOKI_IMAGE}" ]; then
     LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"
 fi
+if [ -z "${DATABASE_IMAGE}" ]; then
+    DATABASE_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database")"
+fi
+if [ -z "${DATABASE_PLUGIN_IMAGE}" ]; then
+    DATABASE_PLUGIN_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database_plugin")"
+fi
 
 if [ -z "${PROMETHEUS_UID}" ]; then
     PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"
@@ -1687,12 +1713,26 @@ fi
 if [ -z "${LOKI_GID}" ]; then
     LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"
 fi
+if [ -z "${DATABASE_UID}" ]; then
+    DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"
+fi
+if [ -z "${DATABASE_GID}" ]; then
+    DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"
+fi
+if [ -z "${DATABASE_PLUGIN_UID}" ]; then
+    DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"
+fi
+if [ -z "${DATABASE_PLUGIN_GID}" ]; then
+    DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"
+fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
 echo "Prometheus   UID:GID = ${PROMETHEUS_UID}:${PROMETHEUS_GID} (image=${PROMETHEUS_IMAGE})"
 echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAGE})"
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
+echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
+echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
 echo ""
 
 echo "================================================"
@@ -1744,6 +1784,14 @@ if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor
     exit 1
 fi
 if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
+    exit 1
+fi
+
+if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then
+    exit 1
+fi
+
+if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then
     exit 1
 fi
 
