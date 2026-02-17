@@ -60,7 +60,7 @@ load_secrets_env() {
 
     if [ ! -r "${secrets_env_file}" ]; then
         echo "ERROR: Secrets env file is missing or unreadable: ${secrets_env_file}" >&2
-        echo "ERROR: Create it from env/omero_sercets_example.env (copy → env/omero_sercets.env) and set real values." >&2
+        echo "ERROR: Create it from env/omero_secrets_example.env (copy → env/omero_secrets.env) and set real values." >&2
         return 1
     fi
 
@@ -86,8 +86,8 @@ bootstrap_env_files_from_examples() {
 
         # IMPORTANT:
         # Secrets MUST NEVER be auto-created by automation.
-        # The user is the sole creator of env/omero_sercets.env.
-        if [ "$(basename "${example_file}")" = "omero_sercets_example.env" ]; then
+        # The user is the sole creator of env/omero_secrets.env.
+        if [ "$(basename "${example_file}")" = "omero_secrets_example.env" ]; then
             continue
         fi
 
@@ -131,7 +131,7 @@ if ! load_installation_paths_env "${SCRIPT_ENV_FILE}"; then
 fi
 
 
-SECRETS_ENV_FILE="${REPO_ROOT_DIR}/env/omero_sercets.env"
+SECRETS_ENV_FILE="${REPO_ROOT_DIR}/env/omero_secrets.env"
 if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
 fi
