@@ -76,11 +76,13 @@ Symptom:
 
 - compose exits with an interpolation error such as:
   - `required variable OMERO_USER_DATA_PATH is missing a value`
+  - `required variable OMP_PLUGIN_DB_PASS is missing a value`
   - `Set OMERO_USER_DATA_PATH (use --env-file installation_paths.env)`
+  - `Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env`
 
 Cause:
 
-- the path variables from `installation_paths.env` were not loaded.
+- one or both env files were not loaded (`installation_paths.env` for paths, `env/omero_secrets.env` for credentials).
 
 Fix:
 
@@ -90,11 +92,15 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
 ```
 
 If you run compose commands manually, always include the same `--env-file` value for
 `build`, `up`, `down`, `ps`, and `logs`.
+
+If you installed with `installation/installation_script.sh`, generated `.env` already sets
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env`, so plain
+`docker compose <command>` works from the installation root.
 
 ## 8. Anonymous Docker volume appears after monitoring stack startup
 
