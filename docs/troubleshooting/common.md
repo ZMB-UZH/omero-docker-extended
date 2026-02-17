@@ -103,7 +103,31 @@ If you installed with `installation/installation_script.sh`, generated `.env` al
 `OMERO_DB_PASS` plus `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
 `docker compose <command>` works from the installation root.
 
-## 8. Anonymous Docker volume appears after monitoring stack startup
+If you run the installer with `sudo`, the script now assigns `.env` ownership to
+the invoking sudo user (from `SUDO_UID:SUDO_GID`) while keeping mode `0600`, so
+non-root compose commands from that same account continue to work.
+
+## 8. `docker compose down` fails with `.env: permission denied`
+
+Symptom:
+
+- `open /opt/omero/.env: permission denied`
+
+Cause:
+
+- `.env` is present but owned by `root` from a previous installer run.
+
+Fix:
+
+```bash
+sudo chown "$(id -u):$(id -g)" .env
+chmod 600 .env
+```
+
+Then rerun `installation/installation_script.sh` once so future runs keep `.env`
+owned by the invoking user automatically.
+
+## 9. Anonymous Docker volume appears after monitoring stack startup
 
 Symptom:
 
@@ -133,4 +157,3 @@ docker volume rm <anonymous-volume-name>
 Expected compose configuration:
 
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
-
