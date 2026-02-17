@@ -306,20 +306,98 @@ ensure_installation_path() {
         return 1
     fi
 
-    if [ ! -e "${install_path}" ]; then
-        echo "WARNING: OMERO installation path does not exist yet: ${install_path}" >&2
-        echo "WARNING: Skipping install-path directory checks until a project checkout with docker-compose.yml is present." >&2
+    if [ ! -d "${install_path}" ]; then
+        echo "OMERO installation path does not exist yet. Creating empty directory with mode 0755: ${install_path}"
+        if ! install -d -m 0755 "${install_path}"; then
+            echo "ERROR: Failed to create OMERO installation path: ${install_path}" >&2
+            return 1
+        fi
+    fi
+
+    if [ ! -w "${install_path}" ] || [ ! -x "${install_path}" ]; then
+        echo "ERROR: OMERO installation path is not writable: ${install_path}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+count_top_level_entries() {
+    local target_path="$1"
+
+    if [ ! -d "${target_path}" ]; then
+        printf '0'
         return 0
     fi
 
-    local existing_entries
-    existing_entries="$(find "${install_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
-    echo "OMERO installation path already exists with ${existing_entries} top-level item(s) (directory validated): ${install_path}"
-    echo "  Code/project files within this path are replaced by the pull/update process."
-    echo "  Only data subdirectories (per installation_paths.env and sentinel detection) are preserved."
+    find "${target_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]'
+}
 
-    if [ ! -w "${install_path}" ]; then
-        echo "ERROR: OMERO installation path is not writable: ${install_path}" >&2
+ensure_directory_empty_or_fail() {
+    local target_path="$1"
+    local target_label="$2"
+    local existing_entries="0"
+
+    if [ -e "${target_path}" ] && [ ! -d "${target_path}" ]; then
+        echo "ERROR: ${target_label} exists but is not a directory: ${target_path}" >&2
+        return 1
+    fi
+
+    if [ ! -d "${target_path}" ]; then
+        return 0
+    fi
+
+    existing_entries="$(count_top_level_entries "${target_path}")"
+    if [ "${existing_entries}" -gt 0 ]; then
+        echo "ERROR: ${target_label} must be empty before installation. Found ${existing_entries} top-level item(s): ${target_path}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+bootstrap_installation_checkout_if_missing() {
+    local install_path="$1"
+    local compose_file_path="${install_path%/}/docker-compose.yml"
+    local install_realpath=""
+    local repo_realpath=""
+
+    if [ -f "${compose_file_path}" ]; then
+        return 0
+    fi
+
+    if ! ensure_installation_path "${install_path}"; then
+        return 1
+    fi
+
+    if ! ensure_directory_empty_or_fail "${install_path}" "OMERO installation path"; then
+        return 1
+    fi
+
+    install_realpath="$(realpath -m "${install_path}")"
+    repo_realpath="$(realpath -m "${REPO_ROOT_DIR}")"
+
+    if [ "${install_realpath}" = "${repo_realpath}" ]; then
+        echo "ERROR: docker-compose.yml is missing from OMERO installation path: ${compose_file_path}" >&2
+        echo "ERROR: Repository checkout appears incomplete. Re-run github_pull_project_bash to restore project files." >&2
+        return 1
+    fi
+
+    case "${install_realpath}" in
+        "${repo_realpath}"/*)
+            echo "ERROR: OMERO installation path cannot be a nested path inside repository checkout: ${install_realpath}" >&2
+            return 1
+            ;;
+    esac
+
+    echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
+    if ! cp -a "${REPO_ROOT_DIR}/." "${install_path}/"; then
+        echo "ERROR: Failed to copy project checkout from ${REPO_ROOT_DIR} to ${install_path}" >&2
+        return 1
+    fi
+
+    if [ ! -f "${compose_file_path}" ]; then
+        echo "ERROR: Bootstrap copy completed but docker-compose.yml is still missing: ${compose_file_path}" >&2
         return 1
     fi
 
@@ -818,6 +896,12 @@ OMERO_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATABASE_PATH
 OMERO_PLUGIN_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
 OMERO_DATA_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
 
+if ! bootstrap_installation_checkout_if_missing "${OMERO_INSTALLATION_PATH}"; then
+    exit 1
+fi
+
+COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
+
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
@@ -924,6 +1008,18 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     exit 1
 fi
 
+if ! ensure_directory_empty_or_fail "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
+    exit 1
+fi
+
+if ! ensure_directory_empty_or_fail "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
+    exit 1
+fi
+
+if ! ensure_directory_empty_or_fail "${OMERO_DATA_PATH}" "OMERO data directory"; then
+    exit 1
+fi
+
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
     exit 1
 fi
@@ -962,15 +1058,6 @@ fi
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
     echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
-    exit 1
-fi
-
-COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
-
-if [ ! -f "${COMPOSE_FILE}" ]; then
-    echo "ERROR: docker-compose.yml not found in installation path: ${COMPOSE_FILE}" >&2
-    echo "ERROR: OMERO_INSTALLATION_PATH must point at a directory containing the project checkout." >&2
-    echo "ERROR: If you only want to change data storage locations, keep OMERO_INSTALLATION_PATH at the repository path and adjust OMERO_*_PATH data variables instead." >&2
     exit 1
 fi
 
