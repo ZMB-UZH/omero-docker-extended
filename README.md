@@ -1,4 +1,4 @@
-# OMERO ZMB OMP Platform
+# OMERO Docker Extended
 
 OMERO deployment and plugin repository for metadata workflows, upload/import management, monitoring interfaces, and Imaris export integration.
 
