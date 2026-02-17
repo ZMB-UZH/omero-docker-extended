@@ -797,6 +797,10 @@ COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
 # This file contains fully-resolved paths so that docker compose
 # commands (up, down, ps, logs, ...) work out of the box without
 # requiring --env-file or COMPOSE_ENV_FILES support.
+#
+# NOTE: OMERO_DB_PASS and OMP_PLUGIN_DB_PASS are intentionally mirrored here
+# because docker compose interpolation happens before service-level env_file
+# loading. This guarantees manual commands like `docker compose down` work.
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
@@ -812,7 +816,11 @@ PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 LOKI_DATA_PATH=${LOKI_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
+OMERO_DB_PASS=${OMERO_DB_PASS}
+OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 DOTENV
+
+    chmod 0600 "${dot_env_path}"
 
     echo "Generated docker compose .env file: ${dot_env_path}"
 }
@@ -1358,6 +1366,8 @@ require_config_var "OMERO_INSTALLATION_PATH"
 require_config_var "OMERO_DATABASE_PATH"
 require_config_var "OMERO_PLUGIN_DATABASE_PATH"
 require_config_var "OMERO_DATA_PATH"
+require_config_var "OMERO_DB_PASS"
+require_config_var "OMP_PLUGIN_DB_PASS"
 
 if ! validate_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Invalid OMERO_INSTALLATION_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_INSTALLATION_PATH}" >&2

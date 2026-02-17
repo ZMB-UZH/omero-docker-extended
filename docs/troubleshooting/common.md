@@ -99,7 +99,8 @@ If you run compose commands manually, always include the same `--env-file` value
 `build`, `up`, `down`, `ps`, and `logs`.
 
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
-`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env`, so plain
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors
+`OMERO_DB_PASS` plus `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
 `docker compose <command>` works from the installation root.
 
 ## 8. Anonymous Docker volume appears after monitoring stack startup
