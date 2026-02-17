@@ -4,7 +4,7 @@
 
 This repository uses environment variables as the primary configuration surface.
 
-- `env/installation_paths.env`: filesystem path definitions.
+- `installation_paths.env`: filesystem path definitions.
 - `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
 - `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
 - `env/omero-celery.env`: Celery and Imaris connector processing controls.
@@ -31,7 +31,7 @@ When adding or removing a plugin:
 
 ## Data and Logs
 
-Paths declared in `env/installation_paths.env` map host storage into containers for:
+Paths declared in `installation_paths.env` map host storage into containers for:
 
 - OMERO data,
 - databases,
