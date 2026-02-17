@@ -301,19 +301,22 @@ validate_installation_path() {
 ensure_installation_path() {
     local install_path="$1"
 
-    if [ ! -d "${install_path}" ]; then
-        echo "OMERO installation path does not exist yet. Creating empty directory with mode 0755 (no existing data is removed): ${install_path}"
-        if ! install -d -m 0755 "${install_path}"; then
-            echo "ERROR: Failed to create OMERO installation path: ${install_path}" >&2
-            return 1
-        fi
-    else
-        local existing_entries
-        existing_entries="$(find "${install_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
-        echo "OMERO installation path already exists with ${existing_entries} top-level item(s) (directory validated): ${install_path}"
-        echo "  Code/project files within this path are replaced by the pull/update process."
-        echo "  Only data subdirectories (per installation_paths.env and sentinel detection) are preserved."
+    if [ -e "${install_path}" ] && [ ! -d "${install_path}" ]; then
+        echo "ERROR: OMERO installation path exists but is not a directory: ${install_path}" >&2
+        return 1
     fi
+
+    if [ ! -e "${install_path}" ]; then
+        echo "WARNING: OMERO installation path does not exist yet: ${install_path}" >&2
+        echo "WARNING: Skipping install-path directory checks until a project checkout with docker-compose.yml is present." >&2
+        return 0
+    fi
+
+    local existing_entries
+    existing_entries="$(find "${install_path}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d '[:space:]')"
+    echo "OMERO installation path already exists with ${existing_entries} top-level item(s) (directory validated): ${install_path}"
+    echo "  Code/project files within this path are replaced by the pull/update process."
+    echo "  Only data subdirectories (per installation_paths.env and sentinel detection) are preserved."
 
     if [ ! -w "${install_path}" ]; then
         echo "ERROR: OMERO installation path is not writable: ${install_path}" >&2
@@ -386,17 +389,17 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
-OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
-OMERO_UPLOAD_PATH=${OMERO_UPLOAD_PATH}
-OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
-OMERO_SERVER_LOGS_PATH=${OMERO_SERVER_LOGS_PATH}
-OMERO_WEB_LOGS_PATH=${OMERO_WEB_LOGS_PATH}
-OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
-PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
-GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
-PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
-LOKI_DATA_PATH=${LOKI_DATA_PATH}
-PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
+OMERO_USER_DATA_PATH=${OMERO_DATA_PATH}/omero_user_data
+OMERO_UPLOAD_PATH=${OMERO_DATA_PATH}/omero_upload
+OMERO_SERVER_VAR_PATH=${OMERO_DATA_PATH}/omero_server_var
+OMERO_SERVER_LOGS_PATH=${OMERO_DATA_PATH}/omero_server_logs
+OMERO_WEB_LOGS_PATH=${OMERO_DATA_PATH}/omero_web_logs
+OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_DATA_PATH}/omero_web_supervisor_logs
+PROMETHEUS_DATA_PATH=${OMERO_DATA_PATH}/prometheus_data
+GRAFANA_DATA_PATH=${OMERO_DATA_PATH}/grafana_data
+PORTAINER_DATA_PATH=${OMERO_DATA_PATH}/portainer_data
+LOKI_DATA_PATH=${OMERO_DATA_PATH}/loki_data
+PG_MAINTENANCE_DATA_PATH=${OMERO_DATA_PATH}/pg_maintenance_data
 ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
@@ -431,7 +434,13 @@ verify_installation_paths_env_content() {
 
     for expected_var in "${required_vars[@]}"; do
         expected_value="${!expected_var:-}"
-        actual_value="$(sed -n "s#^${expected_var}=##p" "${env_file_path}" | head -n 1)"
+        actual_value="$(
+            (
+                # shellcheck disable=SC1090
+                . "${env_file_path}" 2>/dev/null || exit 1
+                printf '%s' "${!expected_var:-}"
+            )
+        )"
 
         if [ -z "${actual_value}" ]; then
             echo "ERROR: ${expected_var} was not written to ${env_file_path}." >&2
@@ -947,15 +956,9 @@ if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directo
     exit 1
 fi
 
-# Persist the resolved paths so they survive future updates and so that
-# manual docker compose commands work without --env-file.
-write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
-write_installation_paths_env "${OMERO_INSTALLATION_PATH%/}/installation_paths.env"
-if ! verify_installation_paths_env_content "${OMERO_INSTALLATION_PATH%/}/installation_paths.env"; then
-    echo "ERROR: Refusing to continue because installation paths were not persisted correctly to the installation directory." >&2
-    exit 1
-fi
-
+# Persist the resolved paths so they survive future updates.
+# installation_paths.env remains in the repository root only, so the update
+# script has a single stable source of truth regardless of custom paths.
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
     echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
@@ -964,14 +967,19 @@ fi
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 
+if [ ! -f "${COMPOSE_FILE}" ]; then
+    echo "ERROR: docker-compose.yml not found in installation path: ${COMPOSE_FILE}" >&2
+    echo "ERROR: OMERO_INSTALLATION_PATH must point at a directory containing the project checkout." >&2
+    echo "ERROR: If you only want to change data storage locations, keep OMERO_INSTALLATION_PATH at the repository path and adjust OMERO_*_PATH data variables instead." >&2
+    exit 1
+fi
+
+# Keep docker compose runtime paths colocated with the active checkout.
+write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
+
 # Workflow
 # --------
 cd "${OMERO_INSTALLATION_PATH}"
-
-if [ ! -f "${COMPOSE_FILE}" ]; then
-    echo "ERROR: docker-compose.yml not found in installation path: ${COMPOSE_FILE}" >&2
-    exit 1
-fi
 
 echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
