@@ -356,6 +356,63 @@ ensure_directory_empty_or_fail() {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# collect_repo_data_dir_names
+#
+# Sources the installation paths env file (SCRIPT_ENV_FILE) in a subshell
+# and prints the unique set of top-level directory names under REPO_ROOT_DIR
+# that correspond to configured data paths.  These directories belong to the
+# current (old) installation and must NOT be copied when bootstrapping a new
+# installation path from the repository root.
+# ---------------------------------------------------------------------------
+collect_repo_data_dir_names() {
+    local repo_root="${REPO_ROOT_DIR%/}"
+
+    if [ -z "${SCRIPT_ENV_FILE}" ] || [ ! -r "${SCRIPT_ENV_FILE}" ]; then
+        return 0
+    fi
+
+    (
+        local env_line
+        while IFS= read -r env_line || [ -n "${env_line}" ]; do
+            case "${env_line}" in
+                ''|'#'*) continue ;;
+                [A-Za-z_]*=*) eval "${env_line}" ;;
+            esac
+        done < "${SCRIPT_ENV_FILE}"
+
+        local _path
+        for _path in \
+            "${OMERO_DATABASE_PATH:-}" \
+            "${OMERO_PLUGIN_DATABASE_PATH:-}" \
+            "${OMERO_DATA_PATH:-}" \
+            "${OMERO_USER_DATA_PATH:-}" \
+            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_SERVER_LOGS_PATH:-}" \
+            "${OMERO_WEB_LOGS_PATH:-}" \
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
+            "${PORTAINER_DATA_PATH:-}" \
+            "${PROMETHEUS_DATA_PATH:-}" \
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+
+            [ -z "${_path}" ] && continue
+            _path="${_path%/}"
+            [ "${_path}" = "${repo_root}" ] && continue
+
+            case "${_path}" in
+                "${repo_root}/"*)
+                    local _rel="${_path#"${repo_root}/"}"
+                    local _top="${_rel%%/*}"
+                    [ -n "${_top}" ] && printf '%s\n' "${_top}"
+                    ;;
+            esac
+        done
+    ) | sort -u
+}
+
 bootstrap_installation_checkout_if_missing() {
     local install_path="$1"
     local compose_file_path="${install_path%/}/docker-compose.yml"
@@ -395,6 +452,15 @@ bootstrap_installation_checkout_if_missing() {
             echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
             echo "NOTE: Installation path is inside repository root. Excluding '${_exclude_top}' from bootstrap copy to avoid recursion."
 
+            # Build find exclusion args: exclude the install dir itself
+            # and any top-level data directories from the old installation
+            # (they belong to the current install, not the new one).
+            local -a _find_excludes=( ! -name "${_exclude_top}" )
+            local _data_dir_name
+            while IFS= read -r _data_dir_name; do
+                [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
+            done < <(collect_repo_data_dir_names)
+
             local _copy_failed=false
             local _item
             while IFS= read -r _item; do
@@ -403,7 +469,7 @@ bootstrap_installation_checkout_if_missing() {
                     _copy_failed=true
                     break
                 fi
-            done < <(find "${REPO_ROOT_DIR}" -mindepth 1 -maxdepth 1 ! -name "${_exclude_top}")
+            done < <(find "${REPO_ROOT_DIR}" -mindepth 1 -maxdepth 1 "${_find_excludes[@]}")
 
             if [ "${_copy_failed}" = true ]; then
                 echo "ERROR: Failed to copy project checkout from ${REPO_ROOT_DIR} to ${install_path}" >&2
@@ -420,7 +486,27 @@ bootstrap_installation_checkout_if_missing() {
     esac
 
     echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
-    if ! cp -a "${REPO_ROOT_DIR}/." "${install_path}/"; then
+
+    # Copy top-level items individually, excluding data directories
+    # from the old installation (they belong to the current install,
+    # not the new one).
+    local -a _find_excludes=()
+    local _data_dir_name
+    while IFS= read -r _data_dir_name; do
+        [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
+    done < <(collect_repo_data_dir_names)
+
+    local _copy_failed=false
+    local _item
+    while IFS= read -r _item; do
+        [ -z "${_item}" ] && continue
+        if ! cp -a "${_item}" "${install_path}/"; then
+            _copy_failed=true
+            break
+        fi
+    done < <(find "${REPO_ROOT_DIR}" -mindepth 1 -maxdepth 1 "${_find_excludes[@]}")
+
+    if [ "${_copy_failed}" = true ]; then
         echo "ERROR: Failed to copy project checkout from ${REPO_ROOT_DIR} to ${install_path}" >&2
         return 1
     fi
