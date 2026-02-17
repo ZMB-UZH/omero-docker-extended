@@ -6,7 +6,6 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
-INSTALLATION_ENV_FILE_OVERRIDE="${INSTALLATION_PATHS_ENV_FILE:-}"
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
@@ -29,6 +28,30 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 
 set -euo pipefail
 
+
+load_installation_paths_env() {
+    local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
+    local env_line
+
+    if [ ! -r "${env_file_path}" ]; then
+        echo "ERROR: Installation paths file is missing or unreadable: ${env_file_path}" >&2
+        return 1
+    fi
+
+    while IFS= read -r env_line || [ -n "${env_line}" ]; do
+        case "${env_line}" in
+            ''|'#'*)
+                continue
+                ;;
+            [A-Za-z_]*=*)
+                eval "${env_line}"
+                ;;
+            *)
+                ;;
+        esac
+    done < "${env_file_path}"
+}
+
 bootstrap_env_files_from_examples() {
     local env_dir="${REPO_ROOT_DIR}/env"
     local example_file actual_file
@@ -49,30 +72,19 @@ bootstrap_env_files_from_examples() {
 }
 
 resolve_script_env_file() {
-    local default_env_file="${REPO_ROOT_DIR}/env/installation_paths.env"
+    local default_env_file="${REPO_ROOT_DIR}/installation_paths.env"
 
-    if [ -n "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
-        if [ ! -f "${INSTALLATION_ENV_FILE_OVERRIDE}" ]; then
-            echo "ERROR: INSTALLATION_PATHS_ENV_FILE was provided but does not exist: ${INSTALLATION_ENV_FILE_OVERRIDE}" >&2
-            return 1
-        fi
-        SCRIPT_ENV_FILE="${INSTALLATION_ENV_FILE_OVERRIDE}"
-        return 0
-    fi
-
-    # On first install the env/ directory contains only *_example.env files.
-    # Bootstrap actual .env files from their _example counterparts so the
-    # script can proceed.
     bootstrap_env_files_from_examples
 
     if [ ! -f "${default_env_file}" ]; then
         echo "ERROR: Missing required installation paths file: ${default_env_file}" >&2
-        echo "ERROR: Refusing to auto-generate defaults to avoid accidentally switching database/data directories." >&2
+        echo "ERROR: Create it manually from installation_paths_example.env and set your own paths before rerunning." >&2
         return 1
     fi
 
     SCRIPT_ENV_FILE="${default_env_file}"
 }
+
 
 # Bash requirement (warning)
 # --------------------------
@@ -85,8 +97,9 @@ if ! resolve_script_env_file; then
     exit 1
 fi
 
-# shellcheck disable=SC1090
-. "${SCRIPT_ENV_FILE}"
+if ! load_installation_paths_env "${SCRIPT_ENV_FILE}"; then
+    exit 1
+fi
 
 require_config_var() {
     local variable_name="$1"
@@ -790,7 +803,7 @@ fi
 # Persist the resolved paths so they survive future updates and so that
 # manual docker compose commands work without --env-file.
 write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
-write_installation_paths_env "${OMERO_INSTALLATION_PATH%/}/env/installation_paths.env"
+write_installation_paths_env "${OMERO_INSTALLATION_PATH%/}/installation_paths.env"
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH}/docker-compose.yml"
 

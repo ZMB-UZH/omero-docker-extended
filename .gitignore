@@ -125,11 +125,12 @@ celerybeat.pid
 
 # Environments
 .env
-!.env
+installation_paths.env
 .venv
 env/
 !env/
 !env/*_example.env
+!installation_paths_example.env
 venv/
 ENV/
 env.bak/
