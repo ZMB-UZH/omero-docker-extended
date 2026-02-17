@@ -64,6 +64,6 @@ docker compose --env-file installation_paths.env ps
 
 ## Documentation rules
 
-- Keep repository-root Markdown limited to `README.md`.
+- Keep core navigation documents `README.md`, `AGENTS.md`, and `ARCHITECTURE.md` at repository root.
 - Keep all other project documentation under `docs/`.
 - Keep content instructional and implementation-focused.
