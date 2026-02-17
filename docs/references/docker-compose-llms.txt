@@ -1,0 +1,3 @@
+Docker Compose reference notes:
+- Document service dependency expectations.
+- Keep env-file inputs explicit and validated at startup.
