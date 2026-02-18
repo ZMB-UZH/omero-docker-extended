@@ -334,7 +334,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127\\..*|172\\..*|10\\..*\", device!~\"lo|docker.*|br-.*|veth.*\"})",
+          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*|172[.].*|10[.].*\", device!~\"lo|docker.*|br-.*|veth.*\"})",
           "legendFormat": "{{address}}"
         }
       ],
