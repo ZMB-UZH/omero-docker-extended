@@ -323,8 +323,6 @@ services:
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
     environment:
-      # OMERO.server expects CONFIG_omero_db_pass, while project secrets are stored
-      # as OMERO_DB_PASS in env/omero_secrets.env. Map explicitly to avoid auth loops.
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
     hostname: omeroserver
     networks:
