@@ -34,7 +34,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_numbackends{datname=\"omp-plugin\"})"
+          "expr": "sum(pg_stat_database_numbackends{datname=\"omero-plugin\"})"
         }
       ]
     },
@@ -61,7 +61,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omp-plugin\"}"
+          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}"
         }
       ]
     },
@@ -88,7 +88,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omp-plugin\"}"
+          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}"
         }
       ]
     },
@@ -135,7 +135,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(pg_stat_database_blks_hit{datname=\"omp-plugin\"}) / (sum(pg_stat_database_blks_hit{datname=\"omp-plugin\"}) + sum(pg_stat_database_blks_read{datname=\"omp-plugin\"}))"
+          "expr": "sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) / (sum(pg_stat_database_blks_hit{datname=\"omero-plugin\"}) + sum(pg_stat_database_blks_read{datname=\"omero-plugin\"}))"
         }
       ]
     },
@@ -164,7 +164,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"omp-plugin\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{datname=\"omp-plugin\"}[5m]))"
+          "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"omero-plugin\"}[5m])) + sum(rate(pg_stat_database_xact_rollback{datname=\"omero-plugin\"}[5m]))"
         }
       ]
     },
@@ -255,7 +255,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_numbackends{datname=\"omp-plugin\"}",
+          "expr": "pg_stat_database_numbackends{datname=\"omero-plugin\"}",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -305,12 +305,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_xact_commit{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Commit \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_xact_rollback{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Rollback \u2014 {{datname}}"
         }
       ]
@@ -362,7 +362,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_stat_database_blks_hit{datname=\"omp-plugin\"} / (pg_stat_database_blks_hit{datname=\"omp-plugin\"} + pg_stat_database_blks_read{datname=\"omp-plugin\"})",
+          "expr": "pg_stat_database_blks_hit{datname=\"omero-plugin\"} / (pg_stat_database_blks_hit{datname=\"omero-plugin\"} + pg_stat_database_blks_read{datname=\"omero-plugin\"})",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -412,17 +412,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_tup_inserted{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_inserted{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Insert \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_tup_updated{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_updated{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Update \u2014 {{datname}}"
         },
         {
           "refId": "C",
-          "expr": "rate(pg_stat_database_tup_deleted{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_deleted{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Delete \u2014 {{datname}}"
         }
       ]
@@ -471,7 +471,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omp-plugin\"}",
+          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -521,12 +521,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_tup_fetched{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_fetched{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Fetched \u2014 {{datname}}"
         },
         {
           "refId": "B",
-          "expr": "rate(pg_stat_database_tup_returned{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_tup_returned{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Returned \u2014 {{datname}}"
         }
       ]
@@ -578,7 +578,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_deadlocks{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_deadlocks{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
@@ -629,7 +629,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_temp_bytes{datname=\"omp-plugin\"}[5m])",
+          "expr": "rate(pg_stat_database_temp_bytes{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "{{datname}} ({{server}})"
         }
       ]
