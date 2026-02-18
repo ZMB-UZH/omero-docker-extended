@@ -565,6 +565,111 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
     assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
 
 
+
+
+def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
+    request = RequestFactory().get(
+        "/admin_tools/resource-monitoring/grafana-proxy/",
+        {"refresh": "10s"},
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    captured = {}
+
+    def fake_proxy_http_request(
+        django_request,
+        base_url,
+        path,
+        query="",
+        *,
+        proxy_prefix="",
+    ):
+        captured.update(
+            {
+                "base_url": base_url,
+                "path": path,
+                "query": query,
+                "proxy_prefix": proxy_prefix,
+            }
+        )
+
+        class DummyResponse:
+            status_code = 200
+            content = b"{}"
+
+        return DummyResponse()
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        fake_proxy_http_request,
+    )
+
+    from omeroweb_admin_tools.views.index_view import grafana_proxy
+
+    response = grafana_proxy(request, "", conn=None)
+
+    assert response.status_code == 200
+    assert captured["base_url"] == "http://grafana:3000"
+    assert captured["path"] == ""
+    assert captured["query"] == "refresh=10s"
+    assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
+
+
+def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
+    request = RequestFactory().get(
+        "/admin_tools/resource-monitoring/prometheus-proxy/",
+        {"query": "up"},
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    captured = {}
+
+    def fake_proxy_http_request(
+        django_request,
+        base_url,
+        path,
+        query="",
+        *,
+        proxy_prefix="",
+    ):
+        captured.update(
+            {
+                "base_url": base_url,
+                "path": path,
+                "query": query,
+                "proxy_prefix": proxy_prefix,
+            }
+        )
+
+        class DummyResponse:
+            status_code = 200
+            content = b"{}"
+
+        return DummyResponse()
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        fake_proxy_http_request,
+    )
+
+    from omeroweb_admin_tools.views.index_view import prometheus_proxy
+
+    response = prometheus_proxy(request, "", conn=None)
+
+    assert response.status_code == 200
+    assert captured["base_url"] == "http://prometheus:9090"
+    assert captured["path"] == ""
+    assert captured["query"] == "query=up"
+    assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/prometheus-proxy"
+
 def test_safe_request_host_falls_back_when_get_host_fails() -> None:
     from omeroweb_admin_tools.views.index_view import _safe_request_host
 
