@@ -1,4 +1,4 @@
-"""Tests for helper_scripts_debian/docker_buildx_compressed_push.sh."""
+"""Tests for installation/docker_buildx_compressed_push.sh."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.script_path = (
-            cls.repo_root / "helper_scripts_debian" / "docker_buildx_compressed_push.sh"
+            cls.repo_root / "installation" / "docker_buildx_compressed_push.sh"
         )
 
     def _create_fake_docker(self, bin_dir: Path, log_path: Path) -> None:
@@ -48,7 +48,7 @@ exit 0
         )
         fake_docker_path.chmod(fake_docker_path.stat().st_mode | stat.S_IXUSR)
 
-    def test_script_defaults_registry_prefix_and_disables_push_when_missing(self) -> None:
+    def test_script_fails_when_registry_prefix_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -78,20 +78,10 @@ exit 0
                 check=False,
             )
 
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            self.assertIn("defaulting to deterministic prefix", result.stderr)
-            self.assertIn("forcing DOCKER_BUILD_PUSH_IMAGES=0", result.stderr)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
 
-            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
-            bake_lines = [line for line in log_lines if line.startswith("buildx bake")]
-            self.assertTrue(bake_lines, msg="Expected buildx bake invocation in fake docker log")
-            bake_line = bake_lines[-1]
-            self.assertIn(
-                "omeroserver.output=type=image,name=local/omero/omeroserver:local,push=false",
-                bake_line,
-            )
-
-    def test_script_uses_configurable_default_registry_prefix(self) -> None:
+    def test_script_requires_registry_prefix_even_with_default_override(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -122,14 +112,8 @@ exit 0
                 check=False,
             )
 
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            self.assertIn("sandbox/omero", result.stderr)
-
-            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
-            bake_lines = [line for line in log_lines if line.startswith("buildx bake")]
-            self.assertTrue(bake_lines, msg="Expected buildx bake invocation in fake docker log")
-            bake_line = bake_lines[-1]
-            self.assertIn("sandbox/omero/omeroserver:dev", bake_line)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -153,7 +137,6 @@ exit 0
                     "DOCKER_BUILD_PUSH_IMAGES": "1",
                     "DOCKER_BUILD_USE_OCI_MEDIATYPES": "1",
                     "DOCKER_BUILD_INLINE_CACHE": "1",
-                    "DOCKER_BUILD_PLATFORMS": "linux/amd64,linux/arm64",
                 }
             )
 
@@ -176,10 +159,6 @@ exit 0
 
             self.assertIn("omeroserver", bake_line)
             self.assertIn("omeroweb", bake_line)
-            self.assertIn(
-                "omeroserver.platforms=linux/amd64,linux/arm64",
-                bake_line,
-            )
             self.assertIn(
                 "omeroserver.output=type=image,name=registry.example.com/omero/omeroserver:2026.02.1,push=true,compression=estargz,compression-level=9,force-compression=true,oci-mediatypes=true",
                 bake_line,

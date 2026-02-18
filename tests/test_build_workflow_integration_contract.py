@@ -27,8 +27,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn("exec env", script_text)
         self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD}"', script_text)
-        self.assertIn('DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX}"', script_text)
-        self.assertIn('DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG}"', script_text)
+        self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
 
 
 if __name__ == "__main__":
