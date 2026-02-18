@@ -58,7 +58,7 @@ RUN set -euo pipefail; \
 # WARNING:
 # - Affects reproducibility and cache stability
 # - Enable only for vulnerability testing
-# ------------------------------------------------------------
+# ---------------------------------------
 RUN set -euo pipefail; \
     APPLY_UPDATES="${APPLY_OMEROWEB_DNF_UPDATES}"; \
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
@@ -84,8 +84,8 @@ RUN set -euo pipefail; \
     rm -rf /var/cache/dnf /var/tmp/*
 
 # Install OMERO Python API into OMERO.web venv (needed for BlitzGateway + TXT attachments)
-# IMPORTANT: Pin omero-py to match server stack (OMERO.server 5.6.x -> omero-py 5.21.2)
-# -------------------------------------------------------------------------------------
+# IMPORTANT: Pin omero-py to match OMERO.server stack
+# ---------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
@@ -93,7 +93,7 @@ RUN set -euo pipefail; \
         exit 1; \
     fi; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade pip setuptools wheel; \
-    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.21.2"
+    "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "omero-py==5.22.0"
 
 ## Optional: remove build dependencies again to keep image smaller
 ## ---------------------------------------------------------------
