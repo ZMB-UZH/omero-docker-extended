@@ -4,7 +4,7 @@
 
 # Pull image
 # ----------
-FROM openmicroscopy/omero-web-standalone@sha256:25c126b9cc555236957b0e59f6690ab892a9a008d407023e7cc739c51ce2a52e
+FROM openmicroscopy/omero-web-standalone:5.31.0
 
 # Run as root (REQUIRED)
 # ----------------------
@@ -250,7 +250,18 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         '#!/usr/local/bin/dumb-init /bin/bash' \
         'set -e' \
-        'source /opt/omero/web/venv3/bin/activate' \
+        'VENV_DIR="${OMERO_WEB_VENV:-}"' \
+        'if [ -n "${VENV_DIR}" ]; then' \
+        '    VENV_DIR="/opt/omero/web/${VENV_DIR}"' \
+        'else' \
+        '    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"' \
+        'fi' \
+        'if [ -z "${VENV_DIR}" ] || [ ! -f "${VENV_DIR}/bin/activate" ]; then' \
+        '    echo "ERROR: Could not find OMERO.web venv under /opt/omero/web (OMERO_WEB_VENV=${OMERO_WEB_VENV:-unset})" >&2' \
+        '    ls -la /opt/omero/web >&2 || true' \
+        '    exit 1' \
+        'fi' \
+        'source "${VENV_DIR}/bin/activate"' \
         'for f in /startup/*; do' \
         '    if [ -f "$f" ] && [ -x "$f" ]; then' \
         '        echo "Running $f $@"' \
@@ -265,6 +276,7 @@ RUN set -euo pipefail; \
         'exec runuser -u omero-web -- "$@"' \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
+
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in the entrypoint.
