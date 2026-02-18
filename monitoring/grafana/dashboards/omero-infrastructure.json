@@ -334,7 +334,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"} * on(instance, device) group_left() (node_network_route_info{job=~\"node-exporter|node_exporter\", destination=\"0.0.0.0\", prefixlen=\"0\"} == 1)) or max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"}) or label_replace(up{job=~\"node-exporter|node_exporter\", instance=~\"[0-9.]+:[0-9]+\"}, \"address\", \"$1\", \"instance\", \"^([0-9.]+):.*$\")",
+          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"} * on(instance, device) group_left() (node_network_route_info{job=~\"node-exporter|node_exporter\", destination=\"0.0.0.0\", prefixlen=\"0\"} == 1)) or max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"}) or label_replace(up{job=~\"node-exporter|node_exporter\", instance=~\"[0-9.]+:[0-9]+\"}, \"address\", \"$1\", \"instance\", \"^([0-9.]+):.*$\") or label_replace(up{job=~\"node-exporter|node_exporter\"}, \"address\", \"$1\", \"instance\", \"^([^:]+):.*$\")",
           "legendFormat": "{{address}}"
         }
       ],
@@ -426,7 +426,16 @@
           "unit": "percentunit",
           "min": 0,
           "custom": {
-            "axisSoftMax": 1
+            "axisSoftMax": 1,
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
@@ -441,6 +450,10 @@
       "options": {
         "legend": {
           "displayMode": "hidden"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
         }
       }
     },
@@ -460,7 +473,18 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "decbytes"
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
         },
         "overrides": [
           {
@@ -510,6 +534,10 @@
       "options": {
         "legend": {
           "displayMode": "hidden"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
         }
       }
     },
