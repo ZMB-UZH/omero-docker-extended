@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU Cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1024^3), \"spec\", \"Memory Total (GiB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1024^3), \"spec\", \"Swap Total (GiB)\", \"__name__\", \".*\") or label_replace((node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1024^3), \"spec\", \"Root Disk Size (GiB)\", \"__name__\", \".*\") or label_replace((node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1024^3), \"spec\", \"Root Disk Free (GiB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (Hours)\", \"__name__\", \".*\")",
+          "expr": "label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU Cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Memory Total (GB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Swap Total (GB)\", \"__name__\", \".*\") or label_replace((node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1000^3), \"spec\", \"Root Disk Size (GB)\", \"__name__\", \".*\") or label_replace((node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1000^3), \"spec\", \"Root Disk Free (GB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (Hours)\", \"__name__\", \".*\")",
           "format": "table",
           "instant": true
         }
@@ -110,7 +110,10 @@
           "refId": "A",
           "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "stat",
@@ -139,7 +142,10 @@
           "refId": "A",
           "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "stat",
@@ -168,7 +174,10 @@
           "refId": "A",
           "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"}))"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "stat",
@@ -195,7 +204,10 @@
           "refId": "A",
           "expr": "node_load5"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "stat",
@@ -222,7 +234,10 @@
           "refId": "A",
           "expr": "count(up)"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "stat",
@@ -249,7 +264,10 @@
           "refId": "A",
           "expr": "sum(up)"
         }
-      ]
+      ],
+      "options": {
+        "graphMode": "none"
+      }
     },
     {
       "type": "timeseries",
@@ -267,7 +285,11 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "axisSoftMax": 100
+          }
         },
         "overrides": []
       },
@@ -280,7 +302,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Memory usage",
+      "title": "Host memory usage",
       "id": 8,
       "gridPos": {
         "h": 8,
@@ -294,7 +316,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -332,7 +354,8 @@
             "stacking": {
               "mode": "none"
             }
-          }
+          },
+          "min": 0
         },
         "overrides": [
           {
@@ -362,12 +385,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "irate(node_disk_reads_completed_total{device!~\"loop.*|dm-.*\"}[5m])",
+          "expr": "clamp_min(irate(node_disk_reads_completed_total{device!~\"loop.*|dm-.*\"}[5m]), 0)",
           "legendFormat": "Read {{device}}"
         },
         {
           "refId": "B",
-          "expr": "irate(node_disk_writes_completed_total{device!~\"loop.*|dm-.*\"}[5m])",
+          "expr": "clamp_min(irate(node_disk_writes_completed_total{device!~\"loop.*|dm-.*\"}[5m]), 0)",
           "legendFormat": "Write {{device}}"
         }
       ]
@@ -449,7 +472,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -477,7 +500,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -495,7 +518,7 @@
       "id": 14,
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 8,
         "y": 24
       },
