@@ -70,6 +70,7 @@ def _proxy_http_request(
     query: str = "",
     *,
     proxy_prefix: str = "",
+    rewrite_origin_headers: bool = False,
 ) -> HttpResponse:
     """Proxy an HTTP request to a backend URL and return the response body."""
     target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
@@ -89,6 +90,14 @@ def _proxy_http_request(
         value = django_request.headers.get(header_name)
         if value:
             forwarded_headers[header_name] = value
+
+    if rewrite_origin_headers:
+        backend_origin = _origin_from_url(base_url)
+        if backend_origin:
+            if forwarded_headers.get("Origin"):
+                forwarded_headers["Origin"] = backend_origin
+            if forwarded_headers.get("Referer"):
+                forwarded_headers["Referer"] = f"{backend_origin}/"
 
     request = urllib.request.Request(
         target_url,
@@ -168,6 +177,14 @@ def _cookie_path_for_proxy(original_path: str, proxy_prefix: str) -> str:
     if normalized_path.startswith("/"):
         return f"{normalized_prefix}{normalized_path}"
     return normalized_path
+
+
+def _origin_from_url(url: str) -> str:
+    """Return normalized origin (scheme://host[:port]) for a URL string."""
+    parsed = urlparse(str(url or "").strip())
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _copy_set_cookie_headers(
@@ -1435,6 +1452,7 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             subpath,
             merged_query,
             proxy_prefix=proxy_prefix,
+            rewrite_origin_headers=True,
         )
         last_response = response
         if getattr(response, "status_code", 502) != 502:
