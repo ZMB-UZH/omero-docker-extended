@@ -47,7 +47,7 @@ RUN set -euo pipefail; \
     "$VENV/bin/python" -m pip install \
         "celery==5.3.6" \
         "redis==5.0.8" \
-        "omero-py==5.21.2"
+        "omero-py==5.22.0"
 
 # Non-root runtime user
 RUN set -euo pipefail; \
