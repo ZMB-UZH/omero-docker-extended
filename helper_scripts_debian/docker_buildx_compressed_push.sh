@@ -9,9 +9,7 @@ REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT_DIR}/docker-compose.yml}"
 DOCKER_BUILD_TARGETS="${DOCKER_BUILD_TARGETS:-omeroserver omeroweb redis-sysctl-init pg-maintenance}"
 DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX:-}"
-DOCKER_REGISTRY_PREFIX_DEFAULT="${DOCKER_REGISTRY_PREFIX_DEFAULT:-local/omero}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-}"
-DOCKER_BUILD_PLATFORMS="${DOCKER_BUILD_PLATFORMS:-linux/amd64}"
 DOCKER_BUILD_COMPRESSION_TYPE="${DOCKER_BUILD_COMPRESSION_TYPE:-zstd}"
 DOCKER_BUILD_COMPRESSION_LEVEL="${DOCKER_BUILD_COMPRESSION_LEVEL:-15}"
 DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
@@ -164,7 +162,6 @@ build_target_overrides() {
         target_image_name="$(compose_target_image_name "${target}")"
 
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
-        printf -- '--set\n%s.platforms=%s\n' "${target}" "${DOCKER_BUILD_PLATFORMS}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
         printf -- '--set\n%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
             "${target}" \
@@ -181,6 +178,7 @@ main() {
     local oci_mediatypes_bool=""
 
     require_non_empty "DOCKER_IMAGE_TAG" "${DOCKER_IMAGE_TAG}"
+    require_non_empty "DOCKER_REGISTRY_PREFIX" "${DOCKER_REGISTRY_PREFIX}"
 
     validate_compose_file
     validate_build_targets
@@ -189,16 +187,6 @@ main() {
     validate_toggle "DOCKER_BUILD_USE_OCI_MEDIATYPES" "${DOCKER_BUILD_USE_OCI_MEDIATYPES}"
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
-
-    if [ -z "${DOCKER_REGISTRY_PREFIX}" ]; then
-        DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX_DEFAULT}"
-        echo "WARNING (${SCRIPT_NAME}): DOCKER_REGISTRY_PREFIX is unset; defaulting to deterministic prefix: ${DOCKER_REGISTRY_PREFIX}." >&2
-
-        if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
-            DOCKER_BUILD_PUSH_IMAGES="0"
-            echo "WARNING (${SCRIPT_NAME}): Using fallback registry prefix; forcing DOCKER_BUILD_PUSH_IMAGES=0 to avoid unintended remote pushes." >&2
-        fi
-    fi
 
     require_binary docker
 
@@ -228,7 +216,6 @@ main() {
     echo "  Build targets        : ${DOCKER_BUILD_TARGETS}"
     echo "  Registry prefix      : ${DOCKER_REGISTRY_PREFIX}"
     echo "  Image tag            : ${DOCKER_IMAGE_TAG}"
-    echo "  Platforms            : ${DOCKER_BUILD_PLATFORMS}"
     echo "  Compression type     : ${DOCKER_BUILD_COMPRESSION_TYPE}"
     echo "  Compression level    : ${DOCKER_BUILD_COMPRESSION_LEVEL}"
     echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
