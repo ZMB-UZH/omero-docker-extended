@@ -76,7 +76,15 @@ def _proxy_http_request(
         target_url = f"{target_url}?{query}"
 
     forwarded_headers = {}
-    for header_name in ("Accept", "Content-Type", "User-Agent"):
+    for header_name in (
+        "Accept",
+        "Content-Type",
+        "User-Agent",
+        "Authorization",
+        "Cookie",
+        "Origin",
+        "Referer",
+    ):
         value = django_request.headers.get(header_name)
         if value:
             forwarded_headers[header_name] = value
@@ -124,6 +132,9 @@ def _proxy_http_request(
                 header_value = headers.get(header_name)
                 if header_value:
                     proxied[header_name] = header_value
+            set_cookie_header = headers.get("Set-Cookie")
+            if set_cookie_header:
+                proxied["Set-Cookie"] = set_cookie_header
             location = headers.get("Location")
             if location:
                 if location.startswith(base_url.rstrip("/")):
