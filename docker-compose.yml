@@ -350,7 +350,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\" >/dev/null 2>&1"
+          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\""
         ]
       interval: 10s
       timeout: 10s
