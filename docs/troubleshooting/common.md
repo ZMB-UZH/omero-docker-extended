@@ -76,17 +76,84 @@ Symptom:
 
 - compose exits with an interpolation error such as:
   - `required variable OMERO_USER_DATA_PATH is missing a value`
+  - `required variable OMP_PLUGIN_DB_PASS is missing a value`
   - `Set OMERO_USER_DATA_PATH (use --env-file installation_paths.env)`
+  - `Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env`
 
 Cause:
 
-- the path variables from `installation_paths.env` were not loaded.
+- one or both env files were not loaded (`installation_paths.env` for paths, `env/omero_secrets.env` for credentials).
 
 Fix:
 
+Security rationale:
+
+- Do **not** bind host `/dev/disk` into cAdvisor unless you explicitly require device symlink metadata.
+- Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
+
 ```bash
-docker compose --env-file installation_paths.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
 ```
 
 If you run compose commands manually, always include the same `--env-file` value for
 `build`, `up`, `down`, `ps`, and `logs`.
+
+If you installed with `installation/installation_script.sh`, generated `.env` already sets
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors
+`OMERO_DB_PASS` plus `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
+`docker compose <command>` works from the installation root.
+
+If you run the installer with `sudo`, the script now assigns `.env` ownership to
+the invoking sudo user (from `SUDO_UID:SUDO_GID`) while keeping mode `0600`, so
+non-root compose commands from that same account continue to work.
+
+## 8. `docker compose down` fails with `.env: permission denied`
+
+Symptom:
+
+- `open /opt/omero/.env: permission denied`
+
+Cause:
+
+- `.env` is present but owned by `root` from a previous installer run.
+
+Fix:
+
+```bash
+sudo chown "$(id -u):$(id -g)" .env
+chmod 600 .env
+```
+
+Then rerun `installation/installation_script.sh` once so future runs keep `.env`
+owned by the invoking user automatically.
+
+## 9. Anonymous Docker volume appears after monitoring stack startup
+
+Symptom:
+
+- `docker volume ls` shows a random hash-like volume name.
+- `docker volume inspect <name>` includes `"com.docker.volume.anonymous"`.
+
+Cause:
+
+- cAdvisor may trigger an anonymous volume when its image-defined `/dev/disk` mount is not explicitly overridden.
+
+Fix:
+
+Security rationale:
+
+- Do **not** bind host `/dev/disk` into cAdvisor unless you explicitly require device symlink metadata.
+- Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
+
+```bash
+docker compose --env-file installation_paths.env down
+docker compose --env-file installation_paths.env up -d
+
+docker volume ls
+# If a leftover anonymous volume still exists and is unused:
+docker volume rm <anonymous-volume-name>
+```
+
+Expected compose configuration:
+
+- `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
