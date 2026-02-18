@@ -21,7 +21,7 @@ Security practices and controls for this deployment.
 ## Image pinning
 
 - All Docker images in `docker-compose.yml` use explicit version tags (e.g., `postgres:16.11`, `redis:8.4.0-alpine`).
-- Dockerfiles pin base images and key package versions (e.g., `omero-py==5.21.2`, `celery==5.3.6`).
+- Dockerfiles pin base images and key package versions (e.g., `omero-py==5.22.0`, `celery==5.3.6`).
 - Dependabot monitors pip and Docker dependencies weekly and opens PRs for updates.
 
 ## Input validation
