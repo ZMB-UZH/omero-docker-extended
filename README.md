@@ -222,7 +222,7 @@ docker compose --env-file installation_paths.env up -d omeroweb
 
 ### Reverse proxy
 
-Reverse proxy and TLS termination are managed externally (e.g., nginx via Ansible). Forward traffic to `http://omeroweb:4090` on the Docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
+Reverse proxy and TLS termination are managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the Docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
 
 ## Monitoring
 
