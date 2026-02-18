@@ -19,7 +19,7 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `redis-sysctl-init` | Alpine 3.21 | One-shot sidecar: sets `vm.overcommit_memory=1` | none |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer-ce:2.38.1 | Container management UI | 9000, 9443 |
+| `portainer` | portainer-ce:2.38.1 | Docker container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
 | `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
 | `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |
