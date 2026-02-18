@@ -12,6 +12,9 @@ It is intentionally short. Deep context lives in the files it points to.
 - Run `python3 tools/lint_docs_structure.py` before proposing changes.
 - Pin image tags and dependency versions. Never use `:latest`.
 - Treat plugin input as untrusted; validate at system boundaries.
+- Treat every `*_example*` file in this repository as the canonical reference for expected configuration and helper scripts.
+- Assume the system administrator has provisioned the corresponding non-example runtime file(s) on the target host, and that those files match their tracked `*_example*` counterparts unless explicitly documented otherwise.
+- The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
 
 ## Where to look first
 

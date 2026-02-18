@@ -23,6 +23,8 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 
 ### Configuration
 - All configuration is environment-driven via `env/*.env` files.
+- Treat repository-tracked `*_example*` files as canonical templates for expected runtime shape and keys.
+- Assume corresponding non-example files are provisioned by the sysadmin and match template structure unless explicitly documented otherwise.
 - Use `omero_plugin_common.env_utils` for typed env var access in Python code.
 - Never hard-code paths, credentials, hostnames, or ports.
 - Reference the correct `env_file` constant (`ENV_FILE_OMEROWEB`, `ENV_FILE_OMERO_CELERY`, etc.) in error messages.

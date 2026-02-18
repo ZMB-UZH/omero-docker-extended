@@ -171,6 +171,11 @@ cp env/omero-celery_example.env env/omero-celery.env
 cp env/grafana_example.env env/grafana.env
 # IMPORTANT: rotate ALL default credentials before deployment
 
+# Repository rule for operators and AI agents:
+# `*_example*` files are the canonical templates in git.
+# Runtime non-example files are expected to exist on the deployment host
+# and to mirror these templates unless the sysadmin intentionally customizes values.
+
 # 4. Run the installation script (creates paths, sets ownership, builds, starts)
 bash installation/installation_script.sh
 
@@ -191,6 +196,12 @@ docker compose --env-file installation_paths.env ps
 | `env/omeroweb.env` | Web: app registration, plugin config, admin tool endpoints, upload settings |
 | `env/omero-celery.env` | Celery: broker URL, queue name, timeouts, worker concurrency |
 | `env/grafana.env` | Grafana: admin credentials, anonymous access |
+
+### Example templates and runtime files
+
+- All `*_example*` files in this repository are the source-of-truth templates for configuration and operational helper scripts.
+- For AI-assisted analysis and maintenance, assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
+- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
 
 ### Lifecycle commands
 
