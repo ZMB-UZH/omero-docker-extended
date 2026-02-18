@@ -33,7 +33,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 
 ### PostgreSQL databases
 
-Two isolated PostgreSQL 16.11 instances:
+Two isolated PostgreSQL 16.12 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
 - **`database_plugin`** (port 5433): plugin-specific storage. User `omp-plugin`, database `omp-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for the OMP and Upload plugins.
@@ -63,7 +63,7 @@ Cache backend and Celery message broker:
 
 ### Maintenance sidecar (`pg-maintenance`)
 
-Custom image based on postgres:16.11 with cron:
+Custom image based on postgres:16.12 with cron:
 - VACUUM ANALYZE: weekly (Sunday 03:00).
 - REINDEX CONCURRENTLY: monthly (first Sunday 04:00).
 - Targets both OMERO and plugin databases.
