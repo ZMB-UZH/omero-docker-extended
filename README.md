@@ -14,11 +14,11 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 |---|---|---|---|
 | `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
 | `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery worker (supervisord) | 4090 |
-| `database` | postgres:16.11 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.11 | Plugin-specific PostgreSQL database | 5433 (internal) |
+| `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
+| `database_plugin` | postgres:16.12 | Plugin-specific PostgreSQL database | 5433 (internal) |
 | `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
 | `redis-sysctl-init` | Alpine 3.21 | One-shot sidecar: sets `vm.overcommit_memory=1` | none |
-| `pg-maintenance` | Custom (postgres:16.11) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
+| `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer-ce:2.38.1 | Container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
 | `grafana` | grafana/grafana:12.4.0 | Dashboards and visualization | 3000 |
