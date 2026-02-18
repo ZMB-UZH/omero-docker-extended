@@ -10,8 +10,8 @@ Service topology (docker-compose.yml):
 Core services:
 - omeroserver (port 4064): OMERO.server, custom Dockerfile, depends on database.
 - omeroweb (port 4090): OMERO.web + plugins + Celery worker via supervisord, depends on omeroserver + redis.
-- database (port 5432): PostgreSQL 16.11, OMERO core database.
-- database_plugin (port 5433): PostgreSQL 16.11, plugin-specific database.
+- database (port 5432): PostgreSQL 16.12, OMERO core database.
+- database_plugin (port 5433): PostgreSQL 16.12, plugin-specific database.
 - redis (port 6379): Redis 8.4.0-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
 
 Supporting services:
