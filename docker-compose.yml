@@ -177,6 +177,7 @@ services:
   postgres-exporter:
     image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
+    command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
     environment:
       DATA_SOURCE_NAME: "postgresql://omero:${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}@database:5432/omero?sslmode=disable"
     networks:
@@ -188,6 +189,8 @@ services:
         condition: service_healthy
       database_plugin:
         condition: service_healthy
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
       interval: 10s
@@ -200,6 +203,7 @@ services:
   postgres-exporter-plugin:
     image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
+    command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
     environment:
       DATA_SOURCE_NAME: "postgresql://omero-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}@database-plugin:5433/omero-plugin?sslmode=disable"
     networks:
@@ -209,6 +213,8 @@ services:
     depends_on:
       database_plugin:
         condition: service_healthy
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
       interval: 10s
