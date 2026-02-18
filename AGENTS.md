@@ -40,7 +40,7 @@ It is intentionally short. Deep context lives in the files it points to.
 
 ### Databases
 - `database` (port 5432): primary OMERO database (`omero` user, `omero` db)
-- `database_plugin` (port 5433): plugin-specific storage (`omp-plugin` user, `omp-plugin` db) -- used by OMP and Upload plugins for user settings, variable sets, AI credentials
+- `database_plugin` (port 5433): plugin-specific storage (`omero-plugin` user, `omero-plugin` db) -- used by OMP and Upload plugins for user settings, variable sets, AI credentials
 
 ### Monitoring and observability
 - Stack: Prometheus, Grafana (4 dashboards), Loki, Alloy, blackbox-exporter, node-exporter, cadvisor, postgres-exporter (x2), redis-exporter

@@ -201,7 +201,7 @@ services:
     image: "prometheuscommunity/postgres-exporter:v0.19.0"
     restart: unless-stopped
     environment:
-      DATA_SOURCE_NAME: "postgresql://omp-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}@database-plugin:5433/omp-plugin?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://omero-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}@database-plugin:5433/omero-plugin?sslmode=disable"
     networks:
       omero:
         aliases:
@@ -444,8 +444,8 @@ services:
       - "-c"
       - "log_timezone=Europe/Zurich"
     environment:
-      POSTGRES_USER: omp-plugin
-      POSTGRES_DB: omp-plugin
+      POSTGRES_USER: omero-plugin
+      POSTGRES_DB: omero-plugin
       POSTGRES_PASSWORD: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
       PGDATA: /var/lib/postgresql/data/pgdata
       PGPORT: 5433
@@ -490,8 +490,8 @@ services:
       # OMP plugin database
       PLUGIN_DB_HOST: database-plugin
       PLUGIN_DB_PORT: 5433
-      PLUGIN_DB_NAME: omp-plugin
-      PLUGIN_DB_USER: omp-plugin
+      PLUGIN_DB_NAME: omero-plugin
+      PLUGIN_DB_USER: omero-plugin
       PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
     volumes:
       # postgres-derived images declare VOLUME /var/lib/postgresql/data.
