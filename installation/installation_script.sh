@@ -205,6 +205,40 @@ compose_images_with_installation_env() {
     compose_with_installation_env "${compose_file}" config --images 2>/dev/null || true
 }
 
+export_compose_interpolation_env() {
+    local env_var_name=""
+    local required_compose_env_vars=(
+        OMERO_INSTALLATION_PATH
+        OMERO_DATABASE_PATH
+        OMERO_PLUGIN_DATABASE_PATH
+        OMERO_DATA_PATH
+        OMERO_USER_DATA_PATH
+        OMERO_UPLOAD_PATH
+        OMERO_SERVER_VAR_PATH
+        OMERO_SERVER_LOGS_PATH
+        OMERO_WEB_LOGS_PATH
+        OMERO_WEB_SUPERVISOR_LOGS_PATH
+        PORTAINER_DATA_PATH
+        PROMETHEUS_DATA_PATH
+        GRAFANA_DATA_PATH
+        LOKI_DATA_PATH
+        PG_MAINTENANCE_DATA_PATH
+        OMERO_DB_PASS
+        OMP_PLUGIN_DB_PASS
+    )
+
+    for env_var_name in "${required_compose_env_vars[@]}"; do
+        if [ -z "${!env_var_name:-}" ]; then
+            echo "ERROR: Missing required docker compose interpolation variable: ${env_var_name}" >&2
+            return 1
+        fi
+
+        export "${env_var_name}=${!env_var_name}"
+    done
+
+    return 0
+}
+
 validate_numeric_id() {
     local id_label="$1"
     local id_value="$2"
@@ -1337,6 +1371,10 @@ GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
+
+if ! export_compose_interpolation_env; then
+    exit 1
+fi
 
 if ! validate_retry_config; then
     exit 1
