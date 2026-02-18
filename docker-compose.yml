@@ -331,6 +331,7 @@ services:
     environment:
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
     hostname: omeroserver
+    working_dir: /opt/omero/server/OMERO.server
     networks:
       omero:
         aliases:
