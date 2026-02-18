@@ -157,3 +157,31 @@ docker volume rm <anonymous-volume-name>
 Expected compose configuration:
 
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
+
+## 10. Postgres keeps rejecting `omero` after startup
+
+Symptom:
+
+- `database` logs repeatedly show:
+  - `FATAL: password authentication failed for user "omero"`
+  - `Connection matched ... pg_hba.conf ... scram-sha-256`
+
+Cause:
+
+- `database` initialization uses `OMERO_DB_PASS` from `env/omero_secrets.env`.
+- OMERO.server expects the variable name `CONFIG_omero_db_pass`.
+- If `CONFIG_omero_db_pass` is not explicitly mapped from `OMERO_DB_PASS`, OMERO.server can continuously retry with the wrong credential and generate auth-failure loops.
+
+Fix:
+
+- Ensure compose maps `CONFIG_omero_db_pass` from `OMERO_DB_PASS` for the `omeroserver` service.
+- Restart and inspect logs:
+
+```bash
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d database omeroserver omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=5m database omeroserver
+```
+
+Expected result:
+
+- `database` no longer logs repeated auth failures for user `omero`.
