@@ -10,7 +10,8 @@ USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 1 to build/push with buildx compression helper
-BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-helper_scripts_debian/docker_buildx_compressed_push.sh}"
+BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
+INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
@@ -217,7 +218,7 @@ run_image_build() {
     if [ "${USE_BUILDX_COMPRESSED_BUILD}" -eq 1 ]; then
         if [ ! -x "${buildx_helper_path}" ]; then
             echo "ERROR: Buildx compression helper is missing or not executable: ${buildx_helper_path}" >&2
-            echo "ERROR: Re-run github_pull_project_bash and ensure helper_scripts_debian/docker_buildx_compressed_push.sh exists." >&2
+            echo "ERROR: Re-run github_pull_project_bash and ensure installation/docker_buildx_compressed_push.sh exists." >&2
             return 1
         fi
 
@@ -1207,6 +1208,12 @@ resolve_delete_images_choice() {
         esac
     fi
 
+    if [ "${INSTALLATION_AUTOMATION_MODE}" = "1" ]; then
+        KEEP_IMAGES=1
+        echo "INSTALLATION_AUTOMATION_MODE=1: defaulting to keep existing images."
+        return 0
+    fi
+
     if [ ! -r /dev/tty ]; then
         KEEP_IMAGES=1
         echo "WARNING: /dev/tty is not available; defaulting to keep existing images." >&2
@@ -1245,7 +1252,7 @@ resolve_path_with_default_prompt() {
     local reply=""
     local chosen_path=""
 
-    if [ ! -r /dev/tty ]; then
+    if [ "${INSTALLATION_AUTOMATION_MODE}" = "1" ] || [ ! -r /dev/tty ]; then
         printf '%s' "${default_path}"
         return 0
     fi
@@ -1297,7 +1304,7 @@ prompt_yes_no() {
     local default_choice="$2"
     local reply=""
 
-    if [ ! -r /dev/tty ]; then
+    if [ "${INSTALLATION_AUTOMATION_MODE}" = "1" ] || [ ! -r /dev/tty ]; then
         printf '%s' "${default_choice}"
         return 0
     fi
@@ -1415,6 +1422,10 @@ if ! resolve_start_containers_choice; then
 fi
 
 if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
+    exit 1
+fi
+
+if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOMATION_MODE}"; then
     exit 1
 fi
 
