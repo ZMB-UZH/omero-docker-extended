@@ -11,7 +11,7 @@
   "panels": [
     {
       "type": "table",
-      "title": "Server Specifications",
+      "title": "Server information",
       "description": "Single-host specification list sourced only from node-exporter metrics.",
       "id": 16,
       "gridPos": {
@@ -38,7 +38,7 @@
         "overrides": []
       },
       "options": {
-        "showHeader": true,
+        "showHeader": false,
         "footer": {
           "show": false
         }
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU Cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Memory Total (GB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Swap Total (GB)\", \"__name__\", \".*\") or label_replace((node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1000^3), \"spec\", \"Root Disk Size (GB)\", \"__name__\", \".*\") or label_replace((node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!~\"tmpfs|overlay\"} / 1000^3), \"spec\", \"Root Disk Free (GB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (Hours)\", \"__name__\", \".*\")",
+          "expr": "label_replace(node_os_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Operating system\", \"__name__\", \".*\") or label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Kernel version\", \"__name__\", \".*\") or label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Architecture\", \"__name__\", \".*\") or label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Memory total (GB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Swap total (GB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (hours)\", \"__name__\", \".*\")",
           "format": "table",
           "instant": true
         }
@@ -66,18 +66,29 @@
               "mountpoint": true,
               "nodename": true,
               "domainname": true,
-              "release": true,
+              "release": false,
               "sysname": true,
               "version": true,
-              "machine": true,
-              "instance": true
+              "machine": false,
+              "instance": true,
+              "id": true,
+              "pretty_name": false,
+              "name": true,
+              "version_id": true
             },
             "renameByName": {
-              "spec": "Specification"
+              "spec": "Information",
+              "pretty_name": "Operating system",
+              "release": "Kernel version",
+              "machine": "Architecture",
+              "Value": "Value"
             },
             "indexByName": {
               "spec": 0,
-              "Value": 1
+              "pretty_name": 1,
+              "release": 2,
+              "machine": 3,
+              "Value": 4
             }
           }
         }
@@ -288,7 +299,7 @@
           "unit": "percentunit",
           "min": 0,
           "custom": {
-            "axisSoftMax": 100
+            "axisSoftMax": 1
           }
         },
         "overrides": []
@@ -296,7 +307,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+          "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "legendFormat": "CPU usage"
         }
       ]
     },
@@ -323,7 +335,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes"
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "Memory used"
         }
       ]
     },
@@ -435,7 +448,7 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 8,
+        "x": 16,
         "y": 16
       },
       "datasource": {
@@ -463,8 +476,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 16,
-        "y": 16
+        "x": 0,
+        "y": 24
       },
       "datasource": {
         "type": "prometheus",
@@ -491,8 +504,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 24
+        "x": 8,
+        "y": 16
       },
       "datasource": {
         "type": "prometheus",
