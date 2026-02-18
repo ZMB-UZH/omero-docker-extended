@@ -225,7 +225,7 @@ services:
       - no-new-privileges:true
 
   redis-exporter:
-    image: "oliver006/redis_exporter:v1.80.2-alpine"
+    image: "oliver006/redis_exporter:v1.81.0-alpine"
     restart: unless-stopped
     environment:
       REDIS_ADDR: "redis://redis:6379"
