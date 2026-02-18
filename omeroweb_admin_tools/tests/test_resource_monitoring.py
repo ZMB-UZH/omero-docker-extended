@@ -175,6 +175,59 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
     }
 
 
+def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> None:
+    captured = {}
+
+    class DummyResponse:
+        status = 200
+        headers = {
+            "Content-Type": "application/json",
+            "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",
+        }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"status":"ok"}'
+
+    def fake_urlopen(request, timeout=10.0):
+        captured["headers"] = dict(request.header_items())
+        return DummyResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {
+            "Accept": "application/json",
+            "Authorization": "Bearer test-token",
+            "Cookie": "grafana_session=existing",
+            "Origin": "https://omero.example.org",
+            "Referer": "https://omero.example.org/omeroweb_admin_tools/resource-monitoring/",
+        }
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "api/user",
+    )
+
+    assert response.status_code == 200
+    assert response["Set-Cookie"] == "grafana_session=abc123; Path=/; HttpOnly"
+    assert captured["headers"]["Authorization"] == "Bearer test-token"
+    assert captured["headers"]["Cookie"] == "grafana_session=existing"
+    assert captured["headers"]["Origin"] == "https://omero.example.org"
+    assert (
+        captured["headers"]["Referer"]
+        == "https://omero.example.org/omeroweb_admin_tools/resource-monitoring/"
+    )
+
+
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
     class DummyResponse:
         status = 302
