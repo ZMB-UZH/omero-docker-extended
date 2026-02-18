@@ -1772,6 +1772,13 @@ fi
 if ! chown_tree_or_die "${OMERO_SERVER_VAR_PATH}" "OMERO server var directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
     exit 1
 fi
+
+# Ensure OMERO.server temp directory exists for runtime temp/cache files when OMERO.server/var is bind-mounted
+# (Prevents startup/runtime failures when software resolves temp paths under var/tmp)
+mkdir -p "${OMERO_SERVER_VAR_PATH%/}/tmp"
+chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
+chmod 1777 "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
+
 if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
     exit 1
 fi
