@@ -195,7 +195,7 @@ docker compose --env-file installation_paths.env ps
 | `env/omeroserver.env` | Server: database, Java heap, script processors, security |
 | `env/omeroweb.env` | Web: app registration, plugin config, admin tool endpoints, upload settings |
 | `env/omero-celery.env` | Celery: broker URL, queue name, timeouts, worker concurrency |
-| `env/grafana.env` | Grafana: admin credentials, anonymous access |
+| `env/grafana.env` | Grafana: admin credentials and authentication settings |
 
 ### Example templates and runtime files
 
