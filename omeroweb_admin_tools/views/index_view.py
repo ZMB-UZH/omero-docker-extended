@@ -7,6 +7,7 @@ import socket
 import subprocess
 import traceback
 import uuid
+from http.cookies import SimpleCookie
 from http.client import HTTPConnection
 from http.client import HTTPMessage
 from urllib.parse import urlparse
@@ -117,7 +118,7 @@ def _proxy_http_request(
                 text = text.replace("action='/", f"action='{proxy_prefix}/")
                 text = text.replace(base_url.rstrip("/"), proxy_prefix)
 
-                escaped_prefix = proxy_prefix.replace('"', r'\"')
+                escaped_prefix = proxy_prefix.replace('"', r"\"")
                 text = re.sub(
                     r'"appSubUrl"\s*:\s*"[^"]*"',
                     f'"appSubUrl":"{escaped_prefix}"',
@@ -132,9 +133,7 @@ def _proxy_http_request(
                 header_value = headers.get(header_name)
                 if header_value:
                     proxied[header_name] = header_value
-            set_cookie_header = headers.get("Set-Cookie")
-            if set_cookie_header:
-                proxied["Set-Cookie"] = set_cookie_header
+            _copy_set_cookie_headers(headers, proxied, proxy_prefix)
             location = headers.get("Location")
             if location:
                 if location.startswith(base_url.rstrip("/")):
@@ -155,6 +154,52 @@ def _proxy_http_request(
             {"error": f"Backend unreachable for {target_url}: {exc.reason}"},
             status=502,
         )
+
+
+def _cookie_path_for_proxy(original_path: str, proxy_prefix: str) -> str:
+    """Return cookie path rewritten to stay within the Django proxy route."""
+    normalized_prefix = str(proxy_prefix or "").rstrip("/")
+    normalized_path = str(original_path or "/")
+
+    if not normalized_prefix:
+        return normalized_path
+    if normalized_path == "/":
+        return f"{normalized_prefix}/"
+    if normalized_path.startswith("/"):
+        return f"{normalized_prefix}{normalized_path}"
+    return normalized_path
+
+
+def _copy_set_cookie_headers(
+    backend_headers: HTTPMessage,
+    response: HttpResponse,
+    proxy_prefix: str,
+) -> None:
+    """Copy backend Set-Cookie headers and rewrite path for proxied requests."""
+    raw_set_cookie_headers = backend_headers.get_all("Set-Cookie", [])
+    for raw_cookie in raw_set_cookie_headers:
+        parsed_cookie = SimpleCookie()
+        parsed_cookie.load(raw_cookie)
+        for morsel in parsed_cookie.values():
+            max_age: Optional[int] = None
+            if morsel["max-age"]:
+                try:
+                    max_age = int(morsel["max-age"])
+                except ValueError:
+                    logger.warning(
+                        "Skipping invalid cookie max-age: %s", morsel["max-age"]
+                    )
+            response.set_cookie(
+                morsel.key,
+                morsel.value,
+                max_age=max_age,
+                expires=morsel["expires"] or None,
+                path=_cookie_path_for_proxy(morsel["path"] or "/", proxy_prefix),
+                domain=morsel["domain"] or None,
+                secure=bool(morsel["secure"]),
+                httponly=bool(morsel["httponly"]),
+                samesite=morsel["samesite"] or None,
+            )
 
 
 def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
