@@ -72,19 +72,24 @@ Notes:
 - Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
 - `DOCKER_BUILD_PUSH_IMAGES=1` (default) pushes images to your registry.
 - Override `DOCKER_BUILD_TARGETS` to limit builds to a subset of services.
-- To integrate with the normal installation workflow, run:
+- The installation workflow enables this compressed Buildx mode by default. Run:
 
 ```bash
-USE_BUILDX_COMPRESSED_BUILD=1 \
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
 DOCKER_IMAGE_TAG=2026.02.0 \
+bash installation/installation_script.sh
+```
+
+- To opt out and use standard local `docker compose build`, run:
+
+```bash
+USE_BUILDX_COMPRESSED_BUILD=0 \
 bash installation/installation_script.sh
 ```
 
 - To integrate with the pull/update workflow, run:
 
 ```bash
-USE_BUILDX_COMPRESSED_BUILD=1 \
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
 DOCKER_IMAGE_TAG=2026.02.0 \
 bash github_pull_project_bash
