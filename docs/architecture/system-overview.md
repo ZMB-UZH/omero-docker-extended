@@ -52,7 +52,7 @@ Cache backend and Celery message broker:
 ### Monitoring stack
 
 - **Prometheus** (v3.5.1): scrapes 9 metric sources plus blackbox HTTP probes for 12 endpoints and TCP probes for 4 ports.
-- **Grafana** (12.4.0): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
+- **Grafana** (12.3.3): 4 auto-provisioned dashboards (OMERO infrastructure, database metrics, plugin database metrics, Redis metrics).
 - **Loki** (3.2.0): log aggregation backend with TSDB storage and 5000 max entries per query.
 - **Alloy** (v1.12.2): collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Blackbox exporter** (v0.28.0): HTTP 2xx and TCP connect probes.

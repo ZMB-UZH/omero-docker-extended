@@ -21,7 +21,7 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
 | `portainer` | portainer-ce:2.38.1 | Container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
-| `grafana` | grafana/grafana:12.4.0 | Dashboards and visualization | 3000 |
+| `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
 | `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |
 | `alloy` | grafana/alloy:v1.12.2 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
 | `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
