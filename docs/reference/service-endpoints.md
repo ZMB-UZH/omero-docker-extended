@@ -87,7 +87,7 @@ Base: `/omeroweb_admin_tools/`
 | `omeroserver` | OMERO CLI admin login |
 | `omeroweb` | `curl http://127.0.0.1:4090/webgateway/` |
 | `database` | `pg_isready -U omero -d omero -p 5432` |
-| `database_plugin` | `pg_isready -U omp-plugin -d omp-plugin -p 5433` |
+| `database_plugin` | `pg_isready -U omero-plugin -d omero-plugin -p 5433` |
 | `redis` | `redis-cli ping` |
 | `pg-maintenance` | `pgrep -x cron` |
 | `prometheus` | `wget http://localhost:9090/-/ready` |
