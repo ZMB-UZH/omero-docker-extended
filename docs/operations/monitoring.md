@@ -26,6 +26,7 @@
 | `monitoring/grafana/provisioning/dashboards/dashboard-provider.yml` | Dashboard auto-provisioning |
 | `monitoring/grafana/dashboards/*.json` | Dashboard definitions |
 | `monitoring/blackbox/config.yml` | HTTP and TCP probe modules |
+| `monitoring/postgres-exporter/postgres_exporter.yml` | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
 
 ## Prometheus scrape targets
 
