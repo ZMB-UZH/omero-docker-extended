@@ -52,6 +52,44 @@ docker compose --env-file installation_paths.env <command>
 docker compose --env-file installation_paths.env build
 ```
 
+### Optional: Build + push compressed images with Buildx
+
+For registry-oriented deployments, use BuildKit/Buildx compression to reduce
+image transfer size and improve pull speed. The repository includes an example
+helper script that wraps `docker buildx bake` and validates required inputs:
+
+```bash
+DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
+DOCKER_IMAGE_TAG=2026.02.0 \
+DOCKER_BUILD_COMPRESSION_TYPE=zstd \
+DOCKER_BUILD_COMPRESSION_LEVEL=15 \
+./helper_scripts_debian/docker_buildx_compressed_push.sh
+```
+
+Notes:
+
+- `DOCKER_REGISTRY_PREFIX` and `DOCKER_IMAGE_TAG` are required.
+- Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
+- `DOCKER_BUILD_PUSH_IMAGES=1` (default) pushes images to your registry.
+- Override `DOCKER_BUILD_TARGETS` to limit builds to a subset of services.
+- To integrate with the normal installation workflow, run:
+
+```bash
+USE_BUILDX_COMPRESSED_BUILD=1 \
+DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
+DOCKER_IMAGE_TAG=2026.02.0 \
+bash installation/installation_script.sh
+```
+
+- To integrate with the pull/update workflow, run:
+
+```bash
+USE_BUILDX_COMPRESSED_BUILD=1 \
+DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
+DOCKER_IMAGE_TAG=2026.02.0 \
+bash github_pull_project_bash
+```
+
 ## 3) Start the Platform
 
 ```bash
