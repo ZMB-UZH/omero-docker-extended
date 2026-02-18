@@ -13,7 +13,7 @@
 | cAdvisor | v0.55.1 | Container resource metrics | `http://cadvisor:8080` |
 | Postgres exporter | v0.19.0 | OMERO database metrics | `http://postgres-exporter:9187` |
 | Postgres exporter (plugin) | v0.19.0 | Plugin database metrics | `http://postgres-exporter-plugin:9187` |
-| Redis exporter | v1.80.2 | Redis metrics | `http://redis-exporter:9121` |
+| Redis exporter | v1.81.0 | Redis metrics | `http://redis-exporter:9121` |
 
 ## Configuration sources
 
