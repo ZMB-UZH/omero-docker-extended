@@ -21,6 +21,7 @@ import urllib.request
 
 from django.http import JsonResponse
 from django.http import HttpResponse
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -113,62 +114,83 @@ def _proxy_http_request(
         with urllib.request.urlopen(request, timeout=10.0) as response:
             payload = response.read()
             headers: HTTPMessage = response.headers
-            content_type = headers.get("Content-Type", "application/octet-stream")
-            if "text/html" in content_type and proxy_prefix:
-                try:
-                    text = payload.decode("utf-8")
-                except UnicodeDecodeError:
-                    text = payload.decode("latin-1", errors="ignore")
-                text = text.replace('href="/', f'href="{proxy_prefix}/')
-                text = text.replace("href='/", f"href='{proxy_prefix}/")
-                text = text.replace('src="/', f'src="{proxy_prefix}/')
-                text = text.replace("src='/", f"src='{proxy_prefix}/")
-                text = text.replace('action="/', f'action="{proxy_prefix}/')
-                text = text.replace("action='/", f"action='{proxy_prefix}/")
-                text = text.replace(base_url.rstrip("/"), proxy_prefix)
-
-                escaped_prefix = proxy_prefix.replace('"', r"\"")
-                escaped_app_url = f"{escaped_prefix}/" if escaped_prefix else "/"
-                text = re.sub(
-                    r'"appSubUrl"\s*:\s*"[^"]*"',
-                    f'"appSubUrl":"{escaped_prefix}"',
-                    text,
-                )
-                text = re.sub(
-                    r'"appUrl"\s*:\s*"[^"]*"',
-                    f'"appUrl":"{escaped_app_url}"',
-                    text,
-                )
-
-                payload = text.encode("utf-8")
-            proxied = HttpResponse(
-                payload, status=response.status, content_type=content_type
+            return _build_proxied_response(
+                payload,
+                status_code=int(response.status),
+                headers=headers,
+                base_url=base_url,
+                proxy_prefix=proxy_prefix,
             )
-            for header_name in ("Cache-Control", "ETag", "Last-Modified"):
-                header_value = headers.get(header_name)
-                if header_value:
-                    proxied[header_name] = header_value
-            _copy_set_cookie_headers(headers, proxied, proxy_prefix)
-            location = headers.get("Location")
-            if location:
-                if location.startswith(base_url.rstrip("/")):
-                    proxied["Location"] = location.replace(
-                        base_url.rstrip("/"), proxy_prefix, 1
-                    )
-                elif location.startswith("/") and proxy_prefix:
-                    proxied["Location"] = f"{proxy_prefix}{location}"
-                else:
-                    proxied["Location"] = location
-            return proxied
     except urllib.error.HTTPError as exc:
         body = exc.read()
-        content_type = exc.headers.get("Content-Type", "text/plain; charset=utf-8")
-        return HttpResponse(body, status=int(exc.code), content_type=content_type)
+        return _build_proxied_response(
+            body,
+            status_code=int(exc.code),
+            headers=exc.headers,
+            base_url=base_url,
+            proxy_prefix=proxy_prefix,
+        )
     except urllib.error.URLError as exc:
         return JsonResponse(
             {"error": f"Backend unreachable for {target_url}: {exc.reason}"},
             status=502,
         )
+
+
+def _build_proxied_response(
+    payload: bytes,
+    *,
+    status_code: int,
+    headers: HTTPMessage,
+    base_url: str,
+    proxy_prefix: str,
+) -> HttpResponse:
+    """Build a Django response from backend payload and headers."""
+    content_type = headers.get("Content-Type", "application/octet-stream")
+    if "text/html" in content_type and proxy_prefix:
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            text = payload.decode("latin-1", errors="ignore")
+        text = text.replace('href="/', f'href="{proxy_prefix}/')
+        text = text.replace("href='/", f"href='{proxy_prefix}/")
+        text = text.replace('src="/', f'src="{proxy_prefix}/')
+        text = text.replace("src='/", f"src='{proxy_prefix}/")
+        text = text.replace('action="/', f'action="{proxy_prefix}/')
+        text = text.replace("action='/", f"action='{proxy_prefix}/")
+        text = text.replace(base_url.rstrip("/"), proxy_prefix)
+
+        escaped_prefix = proxy_prefix.replace('"', r"\"")
+        escaped_app_url = f"{escaped_prefix}/" if escaped_prefix else "/"
+        text = re.sub(
+            r'"appSubUrl"\s*:\s*"[^"]*"',
+            f'"appSubUrl":"{escaped_prefix}"',
+            text,
+        )
+        text = re.sub(
+            r'"appUrl"\s*:\s*"[^"]*"',
+            f'"appUrl":"{escaped_app_url}"',
+            text,
+        )
+
+        payload = text.encode("utf-8")
+    proxied = HttpResponse(payload, status=status_code, content_type=content_type)
+    for header_name in ("Cache-Control", "ETag", "Last-Modified"):
+        header_value = headers.get(header_name)
+        if header_value:
+            proxied[header_name] = header_value
+    _copy_set_cookie_headers(headers, proxied, proxy_prefix)
+    location = headers.get("Location")
+    if location:
+        if location.startswith(base_url.rstrip("/")):
+            proxied["Location"] = location.replace(
+                base_url.rstrip("/"), proxy_prefix, 1
+            )
+        elif location.startswith("/") and proxy_prefix:
+            proxied["Location"] = f"{proxy_prefix}{location}"
+        else:
+            proxied["Location"] = location
+    return proxied
 
 
 def _cookie_path_for_proxy(original_path: str, proxy_prefix: str) -> str:
@@ -242,7 +264,7 @@ def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
 
 
 def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
-    """Return operator guidance when Grafana root path resolves to a not-found page."""
+    """Redirect Grafana root requests to the configured default dashboard."""
     normalized_prefix = str(proxy_prefix or "").rstrip("/")
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
@@ -252,15 +274,7 @@ def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     ).strip()
     dashboard_path = f"{normalized_prefix}/d/{dashboard_uid}/{dashboard_slug}"
 
-    body = (
-        "<html><head><title>Grafana Home</title></head><body>"
-        "<h1>Grafana home route is unavailable.</h1>"
-        "<p>Please open <strong>Dashboards -&gt; OMERO</strong> or use the default "
-        "OMERO dashboard link below.</p>"
-        f"<p><a href=\"{dashboard_path}\">Open OMERO dashboard</a></p>"
-        "</body></html>"
-    )
-    return HttpResponse(body, status=200, content_type="text/html; charset=utf-8")
+    return HttpResponseRedirect(dashboard_path)
 
 
 def _is_internal_hostname(hostname: str) -> bool:
@@ -1472,6 +1486,9 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
 
+    if not subpath:
+        return _grafana_proxy_home_fallback_response(proxy_prefix)
+
     last_response = None
     for backend_url in backend_urls:
         response = _proxy_http_request(
@@ -1482,8 +1499,6 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             proxy_prefix=proxy_prefix,
             rewrite_origin_headers=True,
         )
-        if not subpath and getattr(response, "status_code", 0) == 404:
-            return _grafana_proxy_home_fallback_response(proxy_prefix)
         last_response = response
         if getattr(response, "status_code", 502) != 502:
             return response
@@ -1521,6 +1536,9 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     proxy_prefix = (
         request.path[: -len(subpath)].rstrip("/") if subpath else request.path
     )
+
+    if not subpath:
+        return _grafana_proxy_home_fallback_response(proxy_prefix)
 
     last_response = None
     for backend_url in backend_urls:
