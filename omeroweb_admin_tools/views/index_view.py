@@ -158,6 +158,8 @@ def _build_proxied_response(
         text = text.replace("src='/", f"src='{proxy_prefix}/")
         text = text.replace('action="/', f'action="{proxy_prefix}/')
         text = text.replace("action='/", f"action='{proxy_prefix}/")
+        text = text.replace('href="login"', f'href="{proxy_prefix}/login"')
+        text = text.replace("href='login'", f"href='{proxy_prefix}/login'")
         text = text.replace(base_url.rstrip("/"), proxy_prefix)
 
         escaped_prefix = proxy_prefix.replace('"', r"\"")
@@ -188,6 +190,8 @@ def _build_proxied_response(
             )
         elif location.startswith("/") and proxy_prefix:
             proxied["Location"] = f"{proxy_prefix}{location}"
+        elif not urlparse(location).scheme and proxy_prefix:
+            proxied["Location"] = f"{proxy_prefix}/{location.lstrip('/')}"
         else:
             proxied["Location"] = location
     return proxied
