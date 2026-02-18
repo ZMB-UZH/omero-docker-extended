@@ -977,36 +977,38 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
     assert response.status_code == 200
     content = response.content.decode("utf-8")
     assert (
-        '"appUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"'
-        in content
+        '"appUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"' in content
     )
 
 
-def test_grafana_proxy_root_404_returns_operator_guidance(monkeypatch) -> None:
-    from django.http import HttpResponse
+def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     from omeroweb_admin_tools.views.index_view import grafana_proxy
 
-    request = RequestFactory().get("/omeroweb_admin_tools/resource-monitoring/grafana-proxy/")
+    request = RequestFactory().get(
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
+    )
 
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
-    monkeypatch.setattr(
-        "omeroweb_admin_tools.views.index_view._build_proxy_backend_urls",
-        lambda internal, public: ["http://grafana:3000"],
-    )
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError(
+            "_proxy_http_request should not be called for Grafana root"
+        )
+
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._proxy_http_request",
-        lambda *a, **k: HttpResponse("not found", status=404),
+        fail_if_called,
     )
 
     response = grafana_proxy(request, subpath="")
-    content = response.content.decode("utf-8")
 
-    assert response.status_code == 200
-    assert "Dashboards -&gt; OMERO" in content
-    assert "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/" in content
+    assert response.status_code == 302
+    assert response["Location"].startswith(
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/"
+    )
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
