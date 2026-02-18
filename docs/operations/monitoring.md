@@ -5,7 +5,7 @@
 | Service | Version | Purpose | Internal endpoint |
 |---|---|---|---|
 | Prometheus | v3.5.1 | Metrics scraping and storage | `http://prometheus:9090` |
-| Grafana | 12.4.0 | Dashboards and visualization | `http://grafana:3000` |
+| Grafana | 12.3.3 | Dashboards and visualization | `http://grafana:3000` |
 | Loki | 3.2.0 | Log aggregation backend | `http://loki:3100` |
 | Alloy | v1.12.2 | Log collection pipeline (Docker + files) | `http://alloy:12345` |
 | Blackbox exporter | v0.28.0 | HTTP/TCP endpoint probing | `http://blackbox-exporter:9115` |
