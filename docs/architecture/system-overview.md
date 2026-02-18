@@ -59,7 +59,7 @@ Cache backend and Celery message broker:
 - **Node exporter** (v1.10.2): host-level metrics.
 - **cAdvisor** (v0.55.1): container resource metrics.
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
-- **Redis exporter** (v1.80.2): Redis metrics.
+- **Redis exporter** (v1.81.0): Redis metrics.
 
 ### Maintenance sidecar (`pg-maintenance`)
 
