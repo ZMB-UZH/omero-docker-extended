@@ -68,11 +68,11 @@ DOCKER_BUILD_COMPRESSION_LEVEL=15 \
 
 Notes:
 
-- `DOCKER_IMAGE_TAG` is required; if unset, installation defaults to deterministic local tag `local`.
+- `DOCKER_IMAGE_TAG` is required.
 - Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
 - `DOCKER_BUILD_PUSH_IMAGES=1` (default) pushes images to your registry.
 - Override `DOCKER_BUILD_TARGETS` to limit builds to a subset of services.
-- If `DOCKER_REGISTRY_PREFIX` is unset, installation defaults it to `local/omero` (override with `DOCKER_REGISTRY_PREFIX_DEFAULT`) and forces `DOCKER_BUILD_PUSH_IMAGES=0` to avoid unintended remote pushes.
+- `DOCKER_REGISTRY_PREFIX` is required.
 - The installation workflow enables this compressed Buildx mode by default. Run:
 
 ```bash
