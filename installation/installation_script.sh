@@ -9,6 +9,8 @@ SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
 KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
+USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 1 to build/push with buildx compression helper
+BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-helper_scripts_debian/docker_buildx_compressed_push.sh}"
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
@@ -181,6 +183,72 @@ validate_retry_config() {
     if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
         return 1
+    fi
+
+    return 0
+}
+
+validate_toggle_config() {
+    local variable_name="${1:?BUG: validate_toggle_config requires variable name}"
+    local variable_value="${2:-}"
+
+    if [ "${variable_value}" != "0" ] && [ "${variable_value}" != "1" ]; then
+        echo "ERROR: ${variable_name} must be 0 or 1. Got: ${variable_value}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+resolve_buildx_inline_cache_setting() {
+    if [ -n "${DOCKER_BUILD_INLINE_CACHE:-}" ]; then
+        printf '%s' "${DOCKER_BUILD_INLINE_CACHE}"
+        return 0
+    fi
+
+    printf '%s' "${USE_CACHE_BUILD}"
+    return 0
+}
+
+run_image_build() {
+    local inline_cache_setting=""
+    local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
+
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" -eq 1 ]; then
+        if [ ! -x "${buildx_helper_path}" ]; then
+            echo "ERROR: Buildx compression helper is missing or not executable: ${buildx_helper_path}" >&2
+            echo "ERROR: Re-run github_pull_project_bash and ensure helper_scripts_debian/docker_buildx_compressed_push.sh exists." >&2
+            return 1
+        fi
+
+        if [ -z "${DOCKER_REGISTRY_PREFIX:-}" ]; then
+            echo "ERROR: USE_BUILDX_COMPRESSED_BUILD=1 requires DOCKER_REGISTRY_PREFIX." >&2
+            return 1
+        fi
+
+        if [ -z "${DOCKER_IMAGE_TAG:-}" ]; then
+            echo "ERROR: USE_BUILDX_COMPRESSED_BUILD=1 requires DOCKER_IMAGE_TAG." >&2
+            return 1
+        fi
+
+        inline_cache_setting="$(resolve_buildx_inline_cache_setting)"
+
+        echo "Building OMERO images via Buildx compressed workflow..."
+        echo "  Helper script         : ${buildx_helper_path}"
+        echo "  Registry prefix       : ${DOCKER_REGISTRY_PREFIX}"
+        echo "  Image tag             : ${DOCKER_IMAGE_TAG}"
+        echo "  Inline cache          : ${inline_cache_setting}"
+
+        COMPOSE_FILE="${COMPOSE_FILE}" DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" "${buildx_helper_path}"
+        return 0
+    fi
+
+    if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
+        echo "Building all OMERO-related containers (cache enabled)..."
+        compose_with_installation_env "${COMPOSE_FILE}" build
+    else
+        echo "Building all OMERO-related containers (no cache)..."
+        compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
     fi
 
     return 0
@@ -1344,6 +1412,10 @@ if ! resolve_start_containers_choice; then
     exit 1
 fi
 
+if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
+    exit 1
+fi
+
 DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
@@ -1565,12 +1637,8 @@ else
     echo "WARNING: OMERO user data path ${OMERO_USER_DATA_PATH} not found; skipping lock cleanup."
 fi
 
-if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
-    echo "Building all OMERO-related containers (cache enabled)..."
-    compose_with_installation_env "${COMPOSE_FILE}" build
-else
-    echo "Building all OMERO-related containers (no cache)..."
-    compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
+if ! run_image_build; then
+    exit 1
 fi
 
 echo "================================================"
