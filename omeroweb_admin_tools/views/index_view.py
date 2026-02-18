@@ -128,9 +128,15 @@ def _proxy_http_request(
                 text = text.replace(base_url.rstrip("/"), proxy_prefix)
 
                 escaped_prefix = proxy_prefix.replace('"', r"\"")
+                escaped_app_url = f"{escaped_prefix}/" if escaped_prefix else "/"
                 text = re.sub(
                     r'"appSubUrl"\s*:\s*"[^"]*"',
                     f'"appSubUrl":"{escaped_prefix}"',
+                    text,
+                )
+                text = re.sub(
+                    r'"appUrl"\s*:\s*"[^"]*"',
+                    f'"appUrl":"{escaped_app_url}"',
                     text,
                 )
 
@@ -233,6 +239,28 @@ def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
             continue
         urls.append(normalized)
     return urls
+
+
+def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
+    """Return operator guidance when Grafana root path resolves to a not-found page."""
+    normalized_prefix = str(proxy_prefix or "").rstrip("/")
+    dashboard_uid = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    ).strip()
+    dashboard_slug = os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+    ).strip()
+    dashboard_path = f"{normalized_prefix}/d/{dashboard_uid}/{dashboard_slug}"
+
+    body = (
+        "<html><head><title>Grafana Home</title></head><body>"
+        "<h1>Grafana home route is unavailable.</h1>"
+        "<p>Please open <strong>Dashboards -&gt; OMERO</strong> or use the default "
+        "OMERO dashboard link below.</p>"
+        f"<p><a href=\"{dashboard_path}\">Open OMERO dashboard</a></p>"
+        "</body></html>"
+    )
+    return HttpResponse(body, status=200, content_type="text/html; charset=utf-8")
 
 
 def _is_internal_hostname(hostname: str) -> bool:
@@ -1454,6 +1482,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             proxy_prefix=proxy_prefix,
             rewrite_origin_headers=True,
         )
+        if not subpath and getattr(response, "status_code", 0) == 404:
+            return _grafana_proxy_home_fallback_response(proxy_prefix)
         last_response = response
         if getattr(response, "status_code", 502) != 502:
             return response

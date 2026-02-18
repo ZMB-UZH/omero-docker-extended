@@ -940,6 +940,75 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
     )
 
 
+def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
+    class DummyResponse:
+        status = 200
+        headers = {"Content-Type": "text/html; charset=utf-8"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return (
+                b"<html><head><script>"
+                b'window.grafanaBootData={"settings":{"appUrl":"http://grafana:3000/"}};'
+                b"</script></head><body></body></html>"
+            )
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "d/omero-infrastructure/server-infrastructure",
+        proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert (
+        '"appUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"'
+        in content
+    )
+
+
+def test_grafana_proxy_root_404_returns_operator_guidance(monkeypatch) -> None:
+    from django.http import HttpResponse
+    from omeroweb_admin_tools.views.index_view import grafana_proxy
+
+    request = RequestFactory().get("/omeroweb_admin_tools/resource-monitoring/grafana-proxy/")
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._build_proxy_backend_urls",
+        lambda internal, public: ["http://grafana:3000"],
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        lambda *a, **k: HttpResponse("not found", status=404),
+    )
+
+    response = grafana_proxy(request, subpath="")
+    content = response.content.decode("utf-8")
+
+    assert response.status_code == 200
+    assert "Dashboards -&gt; OMERO" in content
+    assert "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/" in content
+
+
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/data/",
