@@ -11,6 +11,7 @@ from omeroweb_admin_tools.views.index_view import (
     _load_compose_service_names,
     _proxy_http_request,
     _build_proxy_backend_urls,
+    _cookie_path_for_proxy,
 )
 
 
@@ -618,8 +619,6 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
     assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
 
 
-
-
 def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
     request = RequestFactory().get(
         "/admin_tools/resource-monitoring/grafana-proxy/",
@@ -721,7 +720,10 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
     assert captured["base_url"] == "http://prometheus:9090"
     assert captured["path"] == ""
     assert captured["query"] == "query=up"
-    assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/prometheus-proxy"
+    assert (
+        captured["proxy_prefix"] == "/admin_tools/resource-monitoring/prometheus-proxy"
+    )
+
 
 def test_safe_request_host_falls_back_when_get_host_fails() -> None:
     from omeroweb_admin_tools.views.index_view import _safe_request_host
@@ -815,7 +817,10 @@ def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
 
 def test_build_public_service_url_omits_port_when_proxied() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000", "https", "omero.core.uzh.ch", 3000,
+        "http://grafana:3000",
+        "https",
+        "omero.core.uzh.ch",
+        3000,
         is_proxied=True,
     )
     assert built == "https://omero.core.uzh.ch"
@@ -823,7 +828,10 @@ def test_build_public_service_url_omits_port_when_proxied() -> None:
 
 def test_build_public_service_url_uses_forwarded_proto() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000", "http", "omero.core.uzh.ch", 3000,
+        "http://grafana:3000",
+        "http",
+        "omero.core.uzh.ch",
+        3000,
         forwarded_proto="https",
     )
     assert built == "https://omero.core.uzh.ch:3000"
@@ -831,7 +839,10 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
 
 def test_build_public_service_url_direct_access_unchanged() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000", "http", "192.168.1.189", 3000,
+        "http://grafana:3000",
+        "http",
+        "192.168.1.189",
+        3000,
     )
     assert built == "http://192.168.1.189:3000"
 
@@ -851,9 +862,9 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
         def read(self):
             return (
-                b'<html><head><script>'
+                b"<html><head><script>"
                 b'window.grafanaBootData={"settings":{"appSubUrl":""}};'
-                b'</script></head><body></body></html>'
+                b"</script></head><body></body></html>"
             )
 
     monkeypatch.setattr(
@@ -874,7 +885,10 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    assert '"appSubUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy"' in content
+    assert (
+        '"appSubUrl":"/omeroweb_admin_tools/resource-monitoring/grafana-proxy"'
+        in content
+    )
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
@@ -893,20 +907,38 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._collect_system_metrics",
-        lambda *a, **k: {"cpu_usage_percent": None, "memory_usage_percent": None, "disk_usage_percent": None},
+        lambda *a, **k: {
+            "cpu_usage_percent": None,
+            "memory_usage_percent": None,
+            "disk_usage_percent": None,
+        },
     )
-    monkeypatch.setattr("omeroweb_admin_tools.views.index_view._load_compose_service_names", lambda: [])
-    monkeypatch.setattr("omeroweb_admin_tools.views.index_view._load_compose_health_data", lambda: ({}, {}))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_service_names", lambda: []
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._load_compose_health_data",
+        lambda: ({}, {}),
+    )
 
     class R:
-        def __init__(self, p): self._p = p
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def read(self): return self._p.encode()
+        def __init__(self, p):
+            self._p = p
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return self._p.encode()
 
     def fake(url, timeout=5.0):
-        if "api/v1/targets" in url: return R('{"data": {"activeTargets": []}}')
-        if "label/" in url: return R('{"status": "success", "data": []}')
+        if "api/v1/targets" in url:
+            return R('{"data": {"activeTargets": []}}')
+        if "label/" in url:
+            return R('{"status": "success", "data": []}')
         raise AssertionError(url)
 
     monkeypatch.setattr("urllib.request.urlopen", fake)
@@ -915,8 +947,59 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
 
     response = resource_monitoring_data(request, conn=None)
     import json
+
     payload = json.loads(response.content.decode())
 
     # Behind proxy: external URLs suppressed, proxy URLs work
     assert payload["grafana"]["dashboard_external_url"] == ""
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
+
+
+def test_cookie_path_for_proxy_rewrites_root_to_proxy_prefix() -> None:
+    assert (
+        _cookie_path_for_proxy("/", "/admin_tools/resource-monitoring/grafana-proxy")
+        == "/admin_tools/resource-monitoring/grafana-proxy/"
+    )
+
+
+def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
+    class DummyResponse:
+        status = 200
+
+        def __init__(self) -> None:
+            self.headers = {
+                "Content-Type": "text/html; charset=utf-8",
+                "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"<html><body>ok</body></html>"
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen", lambda req, timeout=10.0: DummyResponse()
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "d/omero-infrastructure/server-infrastructure",
+        proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert response.status_code == 200
+    assert "grafana_session" in response.cookies
+    assert (
+        response.cookies["grafana_session"]["path"]
+        == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
+    )
