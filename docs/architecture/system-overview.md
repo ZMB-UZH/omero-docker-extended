@@ -36,7 +36,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 Two isolated PostgreSQL 16.12 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
-- **`database_plugin`** (port 5433): plugin-specific storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for the OMP and Upload plugins.
+- **`database_plugin`** (port 5433): OMERO plugin storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for OMERO.web plugins, including OMP and Upload.
 
 Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` issues. Timezone set to `Europe/Zurich`.
 
@@ -86,7 +86,7 @@ Filename parsing and metadata annotation workflow:
 - Background job execution with tmpfs job files and portalocker concurrency.
 - REMBI-aligned default variables, scientific nomenclature-aware hyphen protection.
 - Rate limiting: 6 major actions per 60 seconds per user.
-- Database: stores variable sets, AI credentials, user settings in `database_plugin` via psycopg2.
+- Database: stores variable sets, AI credentials, user settings in the OMERO plugin database (`database_plugin`) via psycopg2.
 
 ### Upload Plugin (`omeroweb_upload`)
 
@@ -95,7 +95,7 @@ Staged file upload and OMERO import:
 - SEM-EDX EMSA spectrum parsing with matplotlib visualization and genetic algorithm label placement.
 - File attachment support (link related files to imported OMERO images).
 - Configurable: concurrency, batch size, cleanup intervals, temp directory locations.
-- Database: stores user settings and special method configurations in `database_plugin`.
+- Database: stores user settings and special method configurations in the OMERO plugin database (`database_plugin`).
 
 ### Admin Tools Plugin (`omeroweb_admin_tools`)
 
