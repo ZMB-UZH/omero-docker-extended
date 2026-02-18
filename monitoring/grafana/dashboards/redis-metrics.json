@@ -53,7 +53,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -87,9 +87,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 0.80 },
-              { "color": "red", "value": 0.95 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
             ]
           }
         },
@@ -202,7 +211,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "decbytes",
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
@@ -210,22 +219,45 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "maxmemory" },
+            "matcher": {
+              "id": "byName",
+              "options": "maxmemory"
+            },
             "properties": [
-              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
-              { "id": "custom.fillOpacity", "value": 0 }
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
             ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -269,14 +301,22 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -311,14 +351,22 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -360,14 +408,22 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -403,14 +459,22 @@
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "stacking": {
+              "mode": "none"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
