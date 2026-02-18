@@ -48,26 +48,88 @@ exit 0
         )
         fake_docker_path.chmod(fake_docker_path.stat().st_mode | stat.S_IXUSR)
 
-    def test_script_fails_for_missing_required_registry_prefix(self) -> None:
-        env = os.environ.copy()
-        env.update(
-            {
-                "DOCKER_IMAGE_TAG": "2026.02.1",
-            }
-        )
-        env.pop("DOCKER_REGISTRY_PREFIX", None)
+    def test_script_defaults_registry_prefix_and_disables_push_when_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
 
-        result = subprocess.run(
-            [str(self.script_path)],
-            cwd=self.repo_root,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "DOCKER_IMAGE_TAG": "local",
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "1",
+                }
+            )
+            env.pop("DOCKER_REGISTRY_PREFIX", None)
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("defaulting to deterministic prefix", result.stderr)
+            self.assertIn("forcing DOCKER_BUILD_PUSH_IMAGES=0", result.stderr)
+
+            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
+            bake_lines = [line for line in log_lines if line.startswith("buildx bake")]
+            self.assertTrue(bake_lines, msg="Expected buildx bake invocation in fake docker log")
+            bake_line = bake_lines[-1]
+            self.assertIn(
+                "omeroserver.output=type=image,name=local/omero/omeroserver:local,push=false",
+                bake_line,
+            )
+
+    def test_script_uses_configurable_default_registry_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "DOCKER_IMAGE_TAG": "dev",
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_REGISTRY_PREFIX_DEFAULT": "sandbox/omero",
+                }
+            )
+            env.pop("DOCKER_REGISTRY_PREFIX", None)
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("sandbox/omero", result.stderr)
+
+            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
+            bake_lines = [line for line in log_lines if line.startswith("buildx bake")]
+            self.assertTrue(bake_lines, msg="Expected buildx bake invocation in fake docker log")
+            bake_line = bake_lines[-1]
+            self.assertIn("sandbox/omero/omeroserver:dev", bake_line)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
