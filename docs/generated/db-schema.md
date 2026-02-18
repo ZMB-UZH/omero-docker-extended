@@ -4,7 +4,7 @@ This directory is reserved for generated reference artifacts.
 
 ## Plugin database (`database_plugin`)
 
-The plugin database (`omp-plugin` on port 5433) stores per-user data for the OMP and Upload plugins. Tables are created on first use via psycopg2 in the plugin `data_store.py` modules.
+The plugin database (`omero-plugin` on port 5433) stores per-user data for the OMP and Upload plugins. Tables are created on first use via psycopg2 in the plugin `data_store.py` modules.
 
 ### Known table patterns
 

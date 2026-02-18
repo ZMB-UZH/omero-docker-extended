@@ -61,7 +61,7 @@ Four dashboards auto-provisioned in the `OMERO` folder:
 
 1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
-3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- plugin database: same metrics for the omp-plugin database.
+3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
 
 ## Alloy log collection

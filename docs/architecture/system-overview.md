@@ -36,7 +36,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 Two isolated PostgreSQL 16.12 instances:
 
 - **`database`** (port 5432): primary OMERO database. User `omero`, database `omero`.
-- **`database_plugin`** (port 5433): plugin-specific storage. User `omp-plugin`, database `omp-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for the OMP and Upload plugins.
+- **`database_plugin`** (port 5433): plugin-specific storage. User `omero-plugin`, database `omero-plugin`. Stores variable sets, AI credentials, user settings, and special method configurations for the OMP and Upload plugins.
 
 Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` issues. Timezone set to `Europe/Zurich`.
 
