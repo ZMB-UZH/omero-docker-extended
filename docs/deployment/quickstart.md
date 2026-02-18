@@ -63,7 +63,7 @@ DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
 DOCKER_IMAGE_TAG=2026.02.0 \
 DOCKER_BUILD_COMPRESSION_TYPE=zstd \
 DOCKER_BUILD_COMPRESSION_LEVEL=15 \
-./helper_scripts_debian/docker_buildx_compressed_push.sh
+./installation/docker_buildx_compressed_push.sh
 ```
 
 Notes:
@@ -87,6 +87,8 @@ bash installation/installation_script.sh
 USE_BUILDX_COMPRESSED_BUILD=0 \
 bash installation/installation_script.sh
 ```
+
+- `github_pull_project_bash` now runs installation in non-interactive mode by default (`INSTALLATION_AUTOMATION_MODE=1`) to avoid any manual prompts during automated pull/update workflows.
 
 - To integrate with the pull/update workflow, run:
 

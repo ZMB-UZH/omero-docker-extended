@@ -129,7 +129,8 @@ Common utilities shared across all plugins:
 │   ├── pg-maintenance-entrypoint.sh   #   Cron environment setup
 │   └── pg-maintenance-cron            #   Weekly/monthly schedule
 ├── installation/                      # Deployment automation
-│   └── installation_script.sh         #   Full orchestration: env, builds, ownership
+│   ├── installation_script.sh         #   Full orchestration: env, builds, ownership
+│   └── docker_buildx_compressed_push.sh # Buildx compressed image build/push helper
 ├── helper_scripts_debian/             # Host provisioning helpers
 │   ├── docker_debian_13_install_script
 │   ├── extra_packages_debian_13_install_script
