@@ -1,10 +1,10 @@
 # OMERO Docker Extended
 
-Production-grade, containerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, Imaris export integration, administrative observability, and a full monitoring stack.
+Production-grade, containerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrative tools, and a full server monitoring stack.
 
 ## What this repository delivers
 
-This repository packages the complete runtime for an OMERO imaging platform and extends it with four purpose-built OMERO.web plugins, a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in Docker with explicit health checks, pinned image versions, and environment-driven configuration.
+This repository packages the complete runtime for an OMERO microscopy data platform and extends it with four purpose-built OMERO.web plugins, a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in Docker with explicit health checks, pinned image versions, and environment variable driven configuration.
 
 ## Service topology
 
