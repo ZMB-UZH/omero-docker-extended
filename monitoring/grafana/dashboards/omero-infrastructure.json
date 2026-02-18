@@ -334,7 +334,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"} * on(instance, device) group_left() (node_network_route_info{job=~\"node-exporter|node_exporter\", destination=\"0.0.0.0\", prefixlen=\"0\"} == 1)) or max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*\", device!~\"lo|docker.*|br-.*|veth.*|cali.*|flannel.*|tun.*\"}) or label_replace(up{job=~\"node-exporter|node_exporter\", instance=~\"[0-9.]+:[0-9]+\"}, \"address\", \"$1\", \"instance\", \"^([0-9.]+):.*$\") or label_replace(up{job=~\"node-exporter|node_exporter\"}, \"address\", \"$1\", \"instance\", \"^([^:]+):.*$\")",
+          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127\\..*|172\\..*|10\\..*\", device!~\"lo|docker.*|br-.*|veth.*\"})",
           "legendFormat": "{{address}}"
         }
       ],
@@ -424,7 +424,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "min": 0,
           "custom": {
             "axisSoftMax": 1,
             "drawStyle": "line",
@@ -435,7 +434,8 @@
             "showPoints": "never",
             "stacking": {
               "mode": "none"
-            }
+            },
+            "axisSoftMin": 0
           }
         },
         "overrides": []
@@ -484,51 +484,31 @@
             "stacking": {
               "mode": "none"
             }
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory used <= 75% RAM"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Memory used > 75% RAM"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} - node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) and on(instance) ((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} - node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) <= (0.75 * node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
-          "legendFormat": "Memory used <= 75% RAM"
-        },
-        {
-          "refId": "B",
-          "expr": "(node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} - node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) and on(instance) ((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} - node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) > (0.75 * node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
-          "legendFormat": "Memory used > 75% RAM"
+          "expr": "node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} - node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}",
+          "legendFormat": "Memory used"
         }
       ],
       "options": {
