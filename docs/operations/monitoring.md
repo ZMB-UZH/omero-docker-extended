@@ -82,6 +82,65 @@ All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 4. All four dashboards load with recent data.
 5. Exporters respond on expected internal endpoints (verify via blackbox probe status).
 
+## Manual troubleshooting commands
+
+Use these host-side commands when Grafana panels are blank or proxy navigation fails.
+
+### 1) Validate scrape jobs and node exporter target labels
+
+```bash
+curl -s http://127.0.0.1:9090/api/v1/label/job/values
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=up{job=~"node-exporter|node_exporter"}'
+curl -s http://127.0.0.1:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="node_exporter" or .labels.job=="node-exporter") | {health:.health,instance:.labels.instance,lastError:.lastError,scrapeUrl:.scrapeUrl}'
+```
+
+### 2) Validate Host CPU / Host memory panel queries directly in Prometheus
+
+```bash
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))'
+curl -sG http://127.0.0.1:9090/api/v1/query_range --data-urlencode 'query=(1 - avg(rate(node_cpu_seconds_total{job=~"node-exporter|node_exporter", mode="idle"}[5m])))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))'
+curl -sG http://127.0.0.1:9090/api/v1/query_range --data-urlencode 'query=(1 - (node_memory_MemAvailable_bytes{job=~"node-exporter|node_exporter"} / node_memory_MemTotal_bytes{job=~"node-exporter|node_exporter"}))' --data-urlencode 'start='"$(date -u -d '30 minutes ago' +%s)" --data-urlencode 'end='"$(date -u +%s)" --data-urlencode 'step=30s'
+```
+
+### 3) Diagnose Local IP panel data availability
+
+```bash
+curl -s http://127.0.0.1:9100/metrics | grep -E 'node_network_address_info|node_network_route_info' | head -n 50
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=max by (address) (node_network_address_info{job=~"node-exporter|node_exporter", family="inet", scope="global"})'
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([0-9.]+):.*$")'
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=label_replace(up{job=~"node-exporter|node_exporter"}, "address", "$1", "instance", "^([^:]+):.*$")'
+```
+
+If `node_network_address_info` is absent from `/metrics`, node-exporter is not exposing interface-address metrics in the current runtime; the dashboard then falls back to `instance` label parsing.
+
+### 4) Diagnose Grafana sign-in routing through OMERO proxy
+
+```bash
+curl -sI http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/
+curl -sI http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login
+curl -s http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login | rg 'appSubUrl|appUrl|href="/|href="login"' | head -n 20
+```
+
+`/resource-monitoring/grafana-proxy/*` is protected by OMERO.web authentication. An unauthenticated `curl` request correctly receives `302` to `/webclient/login/...`; this does not indicate a Grafana proxy failure.
+
+### 5) Check Grafana runtime version and datasource API auth behavior
+
+```bash
+docker compose exec grafana grafana-server -v
+docker compose images grafana
+curl -s http://127.0.0.1:3000/api/health
+curl -s http://127.0.0.1:3000/api/datasources
+curl -s -u "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" http://127.0.0.1:3000/api/datasources | jq '.[].name'
+```
+
+If runtime Grafana version does not match the tag pinned in `docker-compose.yml`, refresh only the Grafana service image and container:
+
+```bash
+docker compose pull grafana
+docker compose up -d grafana
+```
+
 ## Recommended alerts (minimum)
 
 - OMERO.server unavailable (blackbox HTTP/TCP probe failure).
