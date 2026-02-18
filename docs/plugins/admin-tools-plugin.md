@@ -66,7 +66,7 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
 
-Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization`, `Cookie`, `Origin`, and `Referer` request headers and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
+Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
 
 ## Typical admin workflow
 
