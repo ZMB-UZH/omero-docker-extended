@@ -11,6 +11,7 @@ KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 1 to build/push with buildx compression helper
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-helper_scripts_debian/docker_buildx_compressed_push.sh}"
+DOCKER_REGISTRY_PREFIX_DEFAULT="${DOCKER_REGISTRY_PREFIX_DEFAULT:-local/omero}" # deterministic fallback prefix for local compressed builds
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
 COMPOSE_UP_RETRY_DELAY_SECONDS="${COMPOSE_UP_RETRY_DELAY_SECONDS:-5}"
 OMERO_SERVER_UID="${OMERO_SERVER_UID:-}"
@@ -221,14 +222,19 @@ run_image_build() {
             return 1
         fi
 
-        if [ -z "${DOCKER_REGISTRY_PREFIX:-}" ]; then
-            echo "ERROR: USE_BUILDX_COMPRESSED_BUILD=1 requires DOCKER_REGISTRY_PREFIX." >&2
-            return 1
+        if [ -z "${DOCKER_IMAGE_TAG:-}" ]; then
+            DOCKER_IMAGE_TAG="local"
+            echo "WARNING: DOCKER_IMAGE_TAG is unset; defaulting to deterministic local tag: ${DOCKER_IMAGE_TAG}" >&2
         fi
 
-        if [ -z "${DOCKER_IMAGE_TAG:-}" ]; then
-            echo "ERROR: USE_BUILDX_COMPRESSED_BUILD=1 requires DOCKER_IMAGE_TAG." >&2
-            return 1
+        if [ -z "${DOCKER_REGISTRY_PREFIX:-}" ]; then
+            DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX_DEFAULT}"
+            echo "WARNING: DOCKER_REGISTRY_PREFIX is unset; defaulting to deterministic prefix: ${DOCKER_REGISTRY_PREFIX}" >&2
+
+            if [ -z "${DOCKER_BUILD_PUSH_IMAGES:-}" ] || [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+                DOCKER_BUILD_PUSH_IMAGES="0"
+                echo "WARNING: Using fallback registry prefix; forcing DOCKER_BUILD_PUSH_IMAGES=0 to avoid unintended remote pushes." >&2
+            fi
         fi
 
         inline_cache_setting="$(resolve_buildx_inline_cache_setting)"

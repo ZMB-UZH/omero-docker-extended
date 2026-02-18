@@ -9,6 +9,7 @@ REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT_DIR}/docker-compose.yml}"
 DOCKER_BUILD_TARGETS="${DOCKER_BUILD_TARGETS:-omeroserver omeroweb redis-sysctl-init pg-maintenance}"
 DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX:-}"
+DOCKER_REGISTRY_PREFIX_DEFAULT="${DOCKER_REGISTRY_PREFIX_DEFAULT:-local/omero}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-}"
 DOCKER_BUILD_PLATFORMS="${DOCKER_BUILD_PLATFORMS:-linux/amd64}"
 DOCKER_BUILD_COMPRESSION_TYPE="${DOCKER_BUILD_COMPRESSION_TYPE:-zstd}"
@@ -124,6 +125,18 @@ validate_build_targets() {
     return 0
 }
 
+compose_target_image_name() {
+    local target="${1:?BUG: compose_target_image_name requires a target}"
+
+    if [ -n "${DOCKER_REGISTRY_PREFIX}" ]; then
+        printf '%s/%s:%s' "${DOCKER_REGISTRY_PREFIX}" "${target}" "${DOCKER_IMAGE_TAG}"
+        return 0
+    fi
+
+    printf '%s:%s' "${target}" "${DOCKER_IMAGE_TAG}"
+    return 0
+}
+
 ensure_builder() {
     if ! docker buildx inspect "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1; then
         docker buildx create \
@@ -148,7 +161,7 @@ build_target_overrides() {
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
 
     for target in ${DOCKER_BUILD_TARGETS}; do
-        target_image_name="${DOCKER_REGISTRY_PREFIX}/${target}:${DOCKER_IMAGE_TAG}"
+        target_image_name="$(compose_target_image_name "${target}")"
 
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.platforms=%s\n' "${target}" "${DOCKER_BUILD_PLATFORMS}"
@@ -167,7 +180,6 @@ main() {
     local push_bool=""
     local oci_mediatypes_bool=""
 
-    require_non_empty "DOCKER_REGISTRY_PREFIX" "${DOCKER_REGISTRY_PREFIX}"
     require_non_empty "DOCKER_IMAGE_TAG" "${DOCKER_IMAGE_TAG}"
 
     validate_compose_file
@@ -177,6 +189,16 @@ main() {
     validate_toggle "DOCKER_BUILD_USE_OCI_MEDIATYPES" "${DOCKER_BUILD_USE_OCI_MEDIATYPES}"
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
+
+    if [ -z "${DOCKER_REGISTRY_PREFIX}" ]; then
+        DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX_DEFAULT}"
+        echo "WARNING (${SCRIPT_NAME}): DOCKER_REGISTRY_PREFIX is unset; defaulting to deterministic prefix: ${DOCKER_REGISTRY_PREFIX}." >&2
+
+        if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+            DOCKER_BUILD_PUSH_IMAGES="0"
+            echo "WARNING (${SCRIPT_NAME}): Using fallback registry prefix; forcing DOCKER_BUILD_PUSH_IMAGES=0 to avoid unintended remote pushes." >&2
+        fi
+    fi
 
     require_binary docker
 
