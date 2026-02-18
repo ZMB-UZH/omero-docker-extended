@@ -59,10 +59,10 @@ def _load_psycopg2_sql():
 def _db_params():
     user = os.environ.get(ENV_USER)
     password = os.environ.get(ENV_PASS)
-    host = os.environ.get(ENV_HOST, "database_plugin")
-    dbname = os.environ.get(ENV_DB, "omp-plugin")
+    host = os.environ.get(ENV_HOST)
+    dbname = os.environ.get(ENV_DB)
 
-    if not user or not password:
+    if not user or not password or not host or not dbname:
         raise UserSettingsStoreError(errors.missing_db_credentials())
 
     port_candidates = []
