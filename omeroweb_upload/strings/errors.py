@@ -126,7 +126,7 @@ def psycopg2_missing():
 def missing_db_credentials():
     return (
         "Database credentials (docker compose environment variables) are missing "
-        "(OMP_DATA_USER/OMP_DATA_PASS)."
+        "(OMP_DATA_USER/OMP_DATA_PASS/OMP_DATA_HOST/OMP_DATA_DB)."
     )
 
 
