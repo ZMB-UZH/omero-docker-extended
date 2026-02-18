@@ -15,12 +15,30 @@ Review and update:
 - `env/omeroweb.env`
 - `env/omero-celery.env`
 - `env/grafana.env`
+- `env/omero_secrets.env`  (ALL credentials live here; YOU create it manually from `env/omero_secrets_example.env` and keep it only on the server)
 
 
 Do not deploy with default credentials.
 
 `docker compose` commands run from the repository root automatically load
-`installation_paths.env` via `.env` (`COMPOSE_ENV_FILES`).
+both `installation_paths.env` and `env/omero_secrets.env` via `.env` (`COMPOSE_ENV_FILES`).
+
+IMPORTANT: This stack uses additional variables from `env/omero_secrets.env` (credentials; never auto-created).
+After `installation/installation_script.sh` runs, generated `.env` includes
+`COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors the
+compose-interpolated secret variables (`OMERO_DB_PASS`, `OMP_PLUGIN_DB_PASS`) so
+manual `docker compose` commands resolve required variables automatically.
+
+If `.env` is missing (for example before first installation), export secrets first:
+
+```bash
+set -a
+source env/omero_secrets.env
+set +a
+```
+
+Then run your `docker compose ...` commands as usual.
+
 
 If you run compose commands from a different working directory, pass:
 
