@@ -29,7 +29,7 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `cadvisor` | gcr.io/cadvisor/cadvisor:v0.55.1 | Container resource metrics | 8080 (internal) |
 | `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | redis_exporter:v1.80.2 | Redis metrics | 9121 (internal) |
+| `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
 
 ## OMERO.web plugins
 
