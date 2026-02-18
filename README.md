@@ -180,8 +180,8 @@ cp env/grafana_example.env env/grafana.env
 # NOTE: Buildx compressed build is enabled by default.
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 bash installation/installation_script.sh
 
-# Optional: Build compressed images without pushing (uses fallback prefix local/omero if registry prefix is unset)
-DOCKER_BUILD_PUSH_IMAGES=0 bash installation/installation_script.sh
+# Optional: Build compressed images without pushing (explicit registry/tag required)
+DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 DOCKER_BUILD_PUSH_IMAGES=0 bash installation/installation_script.sh
 
 # Optional: same compressed build mode through the pull/update workflow
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 bash github_pull_project_bash
