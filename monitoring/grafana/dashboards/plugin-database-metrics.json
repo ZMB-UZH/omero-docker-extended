@@ -640,7 +640,8 @@
   "style": "dark",
   "tags": [
     "omero",
-    "database"
+    "database",
+    "plugin"
   ],
   "templating": {
     "list": []
