@@ -1,0 +1,4 @@
+# Postgres exporter configuration file.
+# Kept explicit to avoid implicit working-directory defaults and startup warnings.
+# Extend auth_modules here if TLS/client-cert database access is introduced.
+auth_modules: {}
