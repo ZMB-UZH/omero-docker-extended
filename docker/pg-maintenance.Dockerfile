@@ -2,7 +2,7 @@
 
 # Pull image (needs to match the tag in docker-compose.yml)
 # ---------------------------------------------------------
-FROM postgres:16.11
+FROM postgres:16.12
 
 # Install cron
 # ------------
