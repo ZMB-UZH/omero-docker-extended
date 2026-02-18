@@ -16,7 +16,7 @@
       "id": 16,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 0
       },
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "label_replace(node_os_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Operating system\", \"__name__\", \".*\") or label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Kernel version\", \"__name__\", \".*\") or label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Architecture\", \"__name__\", \".*\") or label_replace(machine_cpu_cores{job=~\"node-exporter|node_exporter\"}, \"spec\", \"CPU cores\", \"__name__\", \".*\") or label_replace((node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Memory total (GB)\", \"__name__\", \".*\") or label_replace((node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3), \"spec\", \"Swap total (GB)\", \"__name__\", \".*\") or label_replace(((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600), \"spec\", \"Uptime (hours)\", \"__name__\", \".*\")",
+          "expr": "label_replace(label_replace(node_os_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Operating system\", \"__name__\", \".*\"), \"value\", \"$1\", \"pretty_name\", \"(.*)\") or label_replace(label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Kernel version\", \"__name__\", \".*\"), \"value\", \"$1\", \"release\", \"(.*)\") or label_replace(label_replace(node_uname_info{job=~\"node-exporter|node_exporter\"}, \"spec\", \"Architecture\", \"__name__\", \".*\"), \"value\", \"$1\", \"machine\", \"(.*)\") or label_replace(count_values(\"value\", count by (instance) (node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"})), \"spec\", \"CPU cores\", \"__name__\", \".*\") or label_replace(count_values(\"value\", (node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3)), \"spec\", \"Memory total (GB)\", \"__name__\", \".*\") or label_replace(count_values(\"value\", (node_memory_SwapTotal_bytes{job=~\"node-exporter|node_exporter\"} / 1000^3)), \"spec\", \"Swap total (GB)\", \"__name__\", \".*\") or label_replace(count_values(\"value\", ((time() - node_boot_time_seconds{job=~\"node-exporter|node_exporter\"}) / 3600)), \"spec\", \"Uptime (hours)\", \"__name__\", \".*\")",
           "format": "table",
           "instant": true
         }
@@ -57,38 +57,18 @@
           "options": {
             "excludeByName": {
               "Time": true,
+              "Value": true,
               "__name__": true,
-              "job": true,
-              "cpu": true,
-              "device": true,
-              "fstype": true,
-              "mode": true,
-              "mountpoint": true,
-              "nodename": true,
-              "domainname": true,
-              "release": false,
-              "sysname": true,
-              "version": true,
-              "machine": false,
               "instance": true,
-              "id": true,
-              "pretty_name": false,
-              "name": true,
-              "version_id": true
+              "job": true
             },
             "renameByName": {
               "spec": "Information",
-              "pretty_name": "Operating system",
-              "release": "Kernel version",
-              "machine": "Architecture",
-              "Value": "Value"
+              "value": "Value"
             },
             "indexByName": {
               "spec": 0,
-              "pretty_name": 1,
-              "release": 2,
-              "machine": 3,
-              "Value": 4
+              "value": 1
             }
           }
         }
@@ -101,7 +81,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 12,
+        "x": 8,
         "y": 0
       },
       "datasource": {
@@ -120,6 +100,36 @@
         {
           "refId": "A",
           "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))"
+        }
+      ],
+      "options": {
+        "graphMode": "none"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Load (5m)",
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_load5"
         }
       ],
       "options": {
@@ -192,8 +202,40 @@
     },
     {
       "type": "stat",
-      "title": "Load (5m)",
-      "id": 4,
+      "title": "Swap usage",
+      "id": 17,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / clamp_min(node_memory_SwapTotal_bytes, 1))"
+        }
+      ],
+      "options": {
+        "graphMode": "none"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "IP address",
+      "id": 18,
       "gridPos": {
         "h": 4,
         "w": 4,
@@ -206,18 +248,25 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "decimals": 0
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "node_load5"
+          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127\\..*\"}) or label_replace(up{job=~\"node-exporter|node_exporter\", instance=~\"([0-9]{1,3}\\.){3}[0-9]{1,3}(:.*)?\"}, \"address\", \"$1\", \"instance\", \"(([0-9]{1,3}\\.){3}[0-9]{1,3}).*\")",
+          "legendFormat": "{{address}}"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "none",
+        "textMode": "name",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 20
+        }
       }
     },
     {
