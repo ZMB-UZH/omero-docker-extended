@@ -35,7 +35,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 Defines the complete service topology: 17 containers on a single `omero` bridge network. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
 
 Key design decisions:
-- Two PostgreSQL instances: `database` (OMERO core, port 5432) and `database_plugin` (plugin data, port 5433) for isolation.
+- Two PostgreSQL instances: `database` (OMERO core, port 5432) and `database_plugin` (OMERO plugin data, port 5433) for isolation.
 - Redis as pure cache (no persistence: `--save "" --appendonly no`, tmpfs-backed, 512MB LRU).
 - `redis-sysctl-init` one-shot sidecar sets `vm.overcommit_memory=1` before Redis starts.
 - All container data paths bind-mount from host paths defined in `installation_paths.env`.
@@ -78,8 +78,8 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 
 **Plugin data flow patterns:**
 
-- **OMP Plugin**: user selects project/dataset -> filenames fetched from OMERO -> regex/AI parsing -> preview -> background job writes MapAnnotations with hash-based ownership tracking. Per-user data (variable sets, AI credentials, settings) persisted in `database_plugin` via psycopg2.
-- **Upload Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in `database_plugin`.
+- **OMP Plugin**: user selects project/dataset -> filenames fetched from OMERO -> regex/AI parsing -> preview -> background job writes MapAnnotations with hash-based ownership tracking. Per-user data (variable sets, AI credentials, settings) persisted in the OMERO plugin database (`database_plugin`) via psycopg2.
+- **Upload Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in the OMERO plugin database (`database_plugin`).
 - **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 
