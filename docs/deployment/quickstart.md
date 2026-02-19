@@ -75,7 +75,7 @@ Notes:
 - By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
-- The installation workflow enables this compressed Buildx mode by default with no required parameters. Run:
+- The installation workflow enables this compressed Buildx mode by default, and prompts whether to keep Buildx enabled during each interactive run (question 2). If you disable it, the script falls back to `docker compose build`. Run:
 
 ```bash
 bash installation/installation_script.sh

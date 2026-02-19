@@ -386,6 +386,7 @@ run_installation_script() {
     echo "Executing installation script: ${installation_script_path}"
     exec env \
         INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}" \
+        USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" \
         bash "${installation_script_path}"
 }
 
