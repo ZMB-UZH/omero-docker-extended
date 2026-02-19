@@ -139,7 +139,8 @@ Common utilities shared across all plugins:
 ├── supervisord.conf                   # Process manager: OMERO.web + Celery worker
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── installation_paths_example.env     # Template: all filesystem path definitions
-├── github_pull_project_bash_example   # Safe self-updating pull script with data protection
+├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
+├── github_pull_private_project_bash_example # Legacy private-upstream pull script template
 ├── docs/                              # Full documentation set (see docs/index.md)
 ├── tools/                             # Development tooling (docs linter)
 ├── tests/                             # Test suite
@@ -162,6 +163,7 @@ Common utilities shared across all plugins:
   - RAM: minimum 16 GB (32 GB recommended)
 - Docker Engine and Docker Compose plugin installed on the host.
 - Host storage paths prepared with correct filesystem permissions.
+- Network access to GitHub configured if using the pull-based update workflow (`github_pull_project_bash_example`).
 
 ### Host-first installation flow (recommended)
 
@@ -226,7 +228,7 @@ Log in to OMERO.web using the root credentials configured in `env/omero_secrets.
 
 ```bash
 # 1. Clone the repository
-git clone git@github.com:strmt7/omero-docker-extended.git
+git clone https://github.com/ZMB-UZH/omero-docker-extended.git
 cd omero-docker-extended
 
 # 2. Create installation_paths.env from the template
