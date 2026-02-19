@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
+USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 0 to use plain docker compose build
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -217,6 +218,19 @@ resolve_buildx_inline_cache_setting() {
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
+
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "0" ]; then
+        echo "Building OMERO images via docker compose build workflow..."
+        echo "  Compose file   : ${COMPOSE_FILE}"
+        echo "  Cache enabled  : ${USE_CACHE_BUILD}"
+
+        if [ "${USE_CACHE_BUILD}" = "0" ]; then
+            compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
+        else
+            compose_with_installation_env "${COMPOSE_FILE}" build
+        fi
+        return 0
+    fi
 
     if [ ! -x "${buildx_helper_path}" ]; then
         echo "ERROR: Buildx compression helper is missing or not executable: ${buildx_helper_path}" >&2
@@ -1256,6 +1270,7 @@ prompt_yes_no() {
 resolve_cache_build_choice() {
     local reply=""
     local override_choice="${USE_CACHE_BUILD_CHOICE:-}"
+    local prompt_message=""
 
     if [ -n "${override_choice}" ]; then
         reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
@@ -1277,11 +1292,51 @@ resolve_cache_build_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Use build cache? (controls both docker layer cache and buildx inline cache) Y/n (Default: Y)" "yes")"
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "1" ]; then
+        prompt_message="Use build cache? (controls both docker layer cache and buildx inline cache) Y/n (Default: Y)"
+    else
+        prompt_message="Use build cache? (controls docker layer cache only; Buildx compressed build is disabled) Y/n (Default: Y)"
+    fi
+
+    reply="$(prompt_yes_no "${prompt_message}" "yes")"
     if [ "${reply}" = "yes" ]; then
         USE_CACHE_BUILD=1
     else
         USE_CACHE_BUILD=0
+    fi
+
+    return 0
+}
+
+resolve_buildx_compressed_build_choice() {
+    local reply=""
+    local override_choice="${USE_BUILDX_CHOICE:-}"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                USE_BUILDX_COMPRESSED_BUILD=1
+                echo "USE_BUILDX_CHOICE=${override_choice}: Buildx compressed build enabled."
+                return 0
+                ;;
+            n|no)
+                USE_BUILDX_COMPRESSED_BUILD=0
+                echo "USE_BUILDX_CHOICE=${override_choice}: using docker compose build (Buildx compressed build disabled)."
+                return 0
+                ;;
+            *)
+                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? Y/n (Default: Y)" "yes")"
+    if [ "${reply}" = "yes" ]; then
+        USE_BUILDX_COMPRESSED_BUILD=1
+    else
+        USE_BUILDX_COMPRESSED_BUILD=0
     fi
 
     return 0
@@ -1325,6 +1380,10 @@ if ! resolve_delete_images_choice; then
     exit 1
 fi
 
+if ! resolve_buildx_compressed_build_choice; then
+    exit 1
+fi
+
 if ! resolve_cache_build_choice; then
     exit 1
 fi
@@ -1334,6 +1393,10 @@ if ! resolve_start_containers_choice; then
 fi
 
 if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOMATION_MODE}"; then
+    exit 1
+fi
+
+if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
     exit 1
 fi
 
@@ -1490,7 +1553,22 @@ else
     echo "Removing ALL images referenced by docker-compose.yml..."
     COMPOSE_IMAGES="$(compose_images_with_installation_env "${COMPOSE_FILE}")"
     if [ -n "${COMPOSE_IMAGES}" ]; then
-        echo "${COMPOSE_IMAGES}" | xargs -r docker rmi -f || true
+        missing_compose_images=0
+        removed_compose_images=0
+        while IFS= read -r compose_image; do
+            [ -z "${compose_image}" ] && continue
+            if docker image inspect "${compose_image}" >/dev/null 2>&1; then
+                docker rmi -f "${compose_image}" || true
+                removed_compose_images=$((removed_compose_images + 1))
+            else
+                missing_compose_images=$((missing_compose_images + 1))
+            fi
+        done <<< "${COMPOSE_IMAGES}"
+
+        if [ "${missing_compose_images}" -gt 0 ]; then
+            echo "Skipped ${missing_compose_images} compose image reference(s) that were not present locally."
+        fi
+        echo "Attempted removal for ${removed_compose_images} compose image(s) present locally."
     fi
 fi
 
