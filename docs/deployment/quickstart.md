@@ -8,15 +8,14 @@
 
 ## 1) Configure Environment Files
 
-Review and update:
+Create deployment-local runtime files from the tracked templates, then review and update:
 
-- `installation_paths.env`
-- `env/omeroserver.env`
-- `env/omeroweb.env`
-- `env/omero-celery.env`
-- `env/grafana.env`
-- `env/omero_secrets.env`  (ALL credentials live here; YOU create it manually from `env/omero_secrets_example.env` and keep it only on the server)
-
+- `installation_paths_example.env` -> `installation_paths.env`
+- `env/omeroserver_example.env` -> `env/omeroserver.env`
+- `env/omeroweb_example.env` -> `env/omeroweb.env`
+- `env/omero-celery_example.env` -> `env/omero-celery.env`
+- `env/grafana_example.env` -> `env/grafana.env`
+- `env/omero_secrets_example.env` -> `env/omero_secrets.env` (ALL credentials live here; keep runtime secret files only on the server)
 
 Do not deploy with default credentials.
 
