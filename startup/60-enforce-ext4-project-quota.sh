@@ -75,8 +75,11 @@ project_id=""
 if grep -Eq "^${group_name}:" "$projid_file"; then
   project_id="$(sed -n "s/^${group_name}:\([0-9][0-9]*\)$/\1/p" "$projid_file" | tail -n1)"
 fi
-if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${resolved_group_path}$" "$projects_file"; then
-  project_id="$(sed -n "s/^\([0-9][0-9]*\):${resolved_group_path//\//\/}$/\1/p" "$projects_file" | tail -n1)"
+escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
+escaped_group_path_sed="$(printf '%s' "$resolved_group_path" | sed 's/[\\/&]/\\\\&/g')"
+
+if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${escaped_group_path_regex}$" "$projects_file"; then
+  project_id="$(sed -n "s/^\([0-9][0-9]*\):${escaped_group_path_sed}$/\1/p" "$projects_file" | tail -n1)"
 fi
 
 if [[ -z "$project_id" ]]; then
@@ -90,8 +93,17 @@ if [[ -z "$project_id" ]]; then
   fi
 fi
 
-if ! grep -Eq "^${project_id}:${resolved_group_path}$" "$projects_file"; then
-  sed -i "/:${resolved_group_path//\//\/}$/d" "$projects_file"
+if ! grep -Eq "^${project_id}:${escaped_group_path_regex}$" "$projects_file"; then
+  awk -F: -v path="$resolved_group_path" '
+    {
+      separator_index = index($0, ":")
+      current_path = (separator_index > 0) ? substr($0, separator_index + 1) : ""
+      if (current_path != path) {
+        print $0
+      }
+    }
+  ' "$projects_file" > "${projects_file}.tmp"
+  mv "${projects_file}.tmp" "$projects_file"
   printf '%s:%s\n' "$project_id" "$resolved_group_path" >> "$projects_file"
 fi
 
