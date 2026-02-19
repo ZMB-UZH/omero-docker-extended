@@ -50,71 +50,21 @@ def quota_state_path() -> Path:
     ).expanduser()
 
 
+MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
+
+
 def managed_group_root() -> Path:
-    """Return auto-detected OMERO managed repository root for group directories."""
-    root, _ = resolve_managed_group_root(known_groups=[])
-    return root
+    """Return the fixed OMERO managed repository group root."""
+    return MANAGED_GROUP_ROOT
 
-
-def _default_managed_group_root() -> Path:
-    return Path("/OMERO")
-
-
-def _candidate_managed_group_roots() -> List[Path]:
-    """Return ordered candidate roots for managed repository group directories."""
-    return [
-        Path("/OMERO"),
-        Path("/OMERO/ManagedRepository"),
-        Path("/OMERO/omero_user_data/ManagedRepository"),
-    ]
-
-
-def _count_matching_group_directories(root: Path, group_hints: Sequence[str]) -> int:
-    count = 0
-    for group_name in group_hints:
-        if not group_name:
-            continue
-        candidate = root / group_name
-        if candidate.exists() and candidate.is_dir():
-            count += 1
-    return count
-
-
-def _collect_group_hints(
-    known_groups: Sequence[str], quota_groups: Sequence[str]
-) -> List[str]:
-    hints = {str(value).strip() for value in [*known_groups, *quota_groups]}
-    hints.discard("")
-    return sorted(hints)
 
 
 def resolve_managed_group_root(known_groups: Sequence[str]) -> Tuple[Path, str]:
-    """Auto-detect managed repository root using known OMERO group names."""
-    candidates = [
-        candidate
-        for candidate in _candidate_managed_group_roots()
-        if candidate.exists() and candidate.is_dir()
-    ]
-    if not candidates:
-        fallback = _default_managed_group_root()
-        return fallback, "no existing managed repository candidates found"
-
-    if not known_groups:
-        return candidates[0], "selected first existing candidate"
-
-    scored: List[Tuple[int, int, Path]] = []
-    for candidate in candidates:
-        score = _count_matching_group_directories(candidate, known_groups)
-        scored.append((score, len(candidate.parts), candidate))
-
-    best_score, _, best_path = max(scored, key=lambda item: (item[0], -item[1]))
-    if best_score > 0:
-        return best_path, f"matched {best_score} known group directories"
-
-    return (
-        candidates[0],
-        "no candidate matched known groups; using first existing candidate",
-    )
+    """Return the fixed managed repository root without fallback resolution."""
+    del known_groups
+    if MANAGED_GROUP_ROOT.exists() and MANAGED_GROUP_ROOT.is_dir():
+        return MANAGED_GROUP_ROOT, "using fixed managed repository root"
+    return MANAGED_GROUP_ROOT, "fixed managed repository root does not exist"
 
 
 def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
@@ -427,8 +377,7 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         quotas = state.setdefault("quotas_gb", {})
         assert isinstance(quotas, dict)
 
-        group_hints = _collect_group_hints(known_groups, quotas.keys())
-        group_root, root_reason = resolve_managed_group_root(group_hints)
+        group_root, root_reason = resolve_managed_group_root(known_groups)
         root_is_safe, root_safety_reason = _is_safe_managed_repository_root(group_root)
         available_groups = (
             set(list_group_directories(group_root)) if root_is_safe else set()
