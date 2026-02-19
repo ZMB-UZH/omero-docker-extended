@@ -270,7 +270,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
 - This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
-- The pull/update workflow also preserves `logo/logo.png` by excluding it from replacement.
+- The pull/update workflow preserves only `logo/logo.png` by backing it up and restoring it after replacement; `logo/logo_example.png` continues to be refreshed from upstream templates.
 
 ### Lifecycle commands
 
