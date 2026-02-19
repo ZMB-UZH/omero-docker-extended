@@ -71,15 +71,15 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
 | `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas. If unset on ext4, a built-in project-quota enforcer script is used. | ` /opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
 | `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop | `60` |
-| `ADMIN_TOOLS_QUOTA_PROJECTS_FILE` | ext4 project-quota mapping file updated by the enforcer | `/etc/projects` |
-| `ADMIN_TOOLS_QUOTA_PROJID_FILE` | ext4 project-name mapping file updated by the enforcer | `/etc/projid` |
+| `ADMIN_TOOLS_QUOTA_PROJECTS_FILE` | ext4 project-quota mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projects` |
+| `ADMIN_TOOLS_QUOTA_PROJID_FILE` | ext4 project-name mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projid` |
 | `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN` | Minimum project ID used when assigning new group IDs | `200000` |
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
 
 The quota compatibility check reads `CONFIG_omero_fs_repo_path` from the shared OMERO.server environment (`env/omeroserver.env`), which is also loaded into the `omeroweb` service in `docker-compose.yml` to keep a single source of truth for the repository template.
 
-ManagedRepository root discovery is automatic. The reconciler inspects known in-container candidates (`/OMERO`, `/OMERO/ManagedRepository`, `/OMERO/omero_user_data/ManagedRepository`) and selects the best match using known OMERO group names.
+ManagedRepository quota enforcement uses a fixed in-container group root: `/OMERO/ManagedRepository` (no fallback paths are used).
 
 To prevent quotas from affecting unrelated directories, enforcement is blocked unless the resolved root is an existing directory under `/OMERO`; when this validation fails, quotas stay pending and an explicit error is recorded in quota logs (including detection reason metadata).
 
@@ -116,7 +116,7 @@ The enforcer performs the following for each group directory with a configured q
 
 1. Validates that the target directory exists and is inside the detected mount point.
 2. Resolves or assigns a stable project ID for the group.
-3. Updates both mapping files (`/etc/projects` and `/etc/projid` by default).
+3. Updates both mapping files (`/tmp/omero-admin-tools/quota/projects` and `/tmp/omero-admin-tools/quota/projid` by default).
 4. Applies project ID to the group directory via `chattr -p`.
 5. Enables project inheritance on the group directory via `chattr +P`.
 6. Sets hard block quota with `setquota -P` on the filesystem mount point.

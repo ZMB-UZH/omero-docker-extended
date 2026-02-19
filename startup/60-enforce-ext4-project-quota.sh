@@ -11,8 +11,8 @@ group_name=""
 group_path=""
 quota_gb=""
 mount_point=""
-projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-/etc/projects}"
-projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-/etc/projid}"
+projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-/tmp/omero-admin-tools/quota/projects}"
+projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-/tmp/omero-admin-tools/quota/projid}"
 project_id_min="${ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN:-200000}"
 lock_path="${ADMIN_TOOLS_QUOTA_LOCK_PATH:-/tmp/omero-ext4-quota.lock}"
 
@@ -64,6 +64,8 @@ case "$resolved_group_path" in
 esac
 
 mkdir -p "$(dirname "$lock_path")"
+mkdir -p "$(dirname "$projects_file")"
+mkdir -p "$(dirname "$projid_file")"
 exec 9>"$lock_path"
 flock -x 9
 
