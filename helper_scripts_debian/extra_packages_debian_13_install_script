@@ -573,6 +573,7 @@ python3-setuptools
 python3-venv
 qemu-guest-agent
 qemu-utils
+quota
 ranger
 ripgrep
 rsync
