@@ -1,0 +1,25 @@
+name: docs-knowledge-base
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  docs-validation:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate docs structure
+        run: python3 tools/lint_docs_structure.py
+
+      - name: Run docs lint tests
+        run: python3 -m unittest -v tests/test_lint_docs_structure.py
