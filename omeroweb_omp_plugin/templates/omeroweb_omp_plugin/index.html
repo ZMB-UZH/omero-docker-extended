@@ -1,0 +1,3947 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Filename &amp; metadata manager</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_omp_plugin/styles.css' %}">
+</head>
+<body>
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning error-message" role="alert">
+        PLEASE LOGIN AS REGULAR USER<br>
+        TO USE THIS PLUGIN
+    </div>
+
+<div class="omp-page omp-page--narrow">
+<div class="omeroweb-omp-plugin"
+     id="filename_metadata_container"
+     style='padding:15px 15px 15px 15px; width:660px; min-width:660px; max-width:660px; margin:0 auto; --base-font-size:13px; font-size:var(--base-font-size);'>
+    <div class="omp-header-row">
+        <h1 style='color:#007bff; margin:0;'>Filename & metadata manager</h1>
+    </div>
+    <div class="upload-utilities">
+        <div class="upload-utilities__center">
+            <div class="upload-utilities__collaboration">
+                <input type="checkbox" id="collaboration_toggle">
+                <label for="collaboration_toggle">Collaboration</label>
+            </div>
+        </div>
+        <div class="upload-utilities__actions">
+            <button type="button"
+                    id="settings_menu_btn"
+                    class="gear-btn"
+                    title="Settings"
+                    aria-label="Settings">
+                ⚙
+            </button>
+            <a href="/omeroweb_omp_plugin/help/"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="Help"
+               aria-label="Help"
+               class="help-btn">
+                ?
+            </a>
+            <div id="settings_menu"
+                 class="settings-menu"
+                 style="display:none;">
+                <button type="button"
+                        id="user_settings_btn"
+                        class="settings-menu-item">
+                    User settings
+                </button>
+                <button type="button"
+                        id="ai_credentials_btn"
+                        class="settings-menu-item">
+                    AI API credentials
+                </button>
+                <div class="settings-menu-item settings-menu-item--submenu"
+                     id="delete_user_data_menu"
+                     role="button"
+                     tabindex="0"
+                     aria-haspopup="true"
+                     aria-expanded="false">
+                    <span>Delete plugin user data</span>
+                    <span class="submenu-arrow" aria-hidden="true">→</span>
+                    <div class="settings-submenu" role="menu">
+                        <button type="button"
+                                id="delete_api_keys_btn"
+                                class="settings-submenu-item">
+                            API keys
+                        </button>
+                        <button type="button"
+                                id="delete_variable_sets_btn"
+                                class="settings-submenu-item">
+                            Variable sets
+                        </button>
+                        <button type="button"
+                                id="delete_all_user_data_btn"
+                                class="settings-submenu-item settings-submenu-item--danger">
+                            ALL USER DATA
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method='POST'
+          id="preview_form"
+          style='background:#f8f9fa;padding:30px;border-radius:10px;border:2px solid #007bff;'>
+        <div style='margin-bottom:20px;'>
+            <label><strong>Project:</strong></label><br>
+            <div style='display:flex; align-items:flex-start; gap:14px;'>
+                <div class="project-select-controls">
+                    <div id="project_select_wrapper" class="project-select-wrapper">
+                        <input type="document"
+                               id="project_select_input"
+                               class="project-select-input"
+                               placeholder="Select project…"
+                               autocomplete="off">
+                        <div id="project_select_display" class="project-select-display" aria-hidden="true"></div>
+                        <span class="project-select-arrow" aria-hidden="true">▾</span>
+                        <input type="hidden" name="project" id="project_select" value="">
+                        <div id="project_select_dropdown"
+                             class="project-select-dropdown"
+                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                                    background:#fff; border:1px solid #007bff; border-top:none;
+                                    z-index:1000; border-radius:0 0 6px 6px;">
+                        </div>
+                        {{ projects|json_script:"project-data" }}
+                    </div>
+                    <button type="button"
+                            id="project_refresh_btn"
+                            class="project-refresh-btn"
+                            title="Refresh projects"
+                            aria-label="Refresh projects">
+                        ⟳
+                    </button>
+                </div>
+                <button type='button'
+                        id='dataset_selection_btn'
+                        style='padding:12px 16px;font-size:14px;background:#007bff;color:white;border:none;border-radius:8px; flex:0 0 auto; white-space:nowrap;'>
+                    Dataset selection
+                </button>
+                <button type="button"
+                        id="dataset_clear_btn"
+                        style="padding:12px 16px; font-size:14px; border:none;border-radius:8px; flex:0 0 auto; white-space:nowrap;">
+                    Clear all
+                </button>
+            </div>
+        </div>
+
+        <div style='margin-bottom:20px;'>
+            <label style="display:block; margin-bottom:-26px;">
+              <strong>Input for filename parsing:</strong>
+            </label>
+
+            <input type='hidden'
+                   name='separator_mode'
+                   id='separator_mode'
+                   value='chars'>
+
+            <div style='display:flex; align-items:center; gap:14px;'>
+                <input type='document'
+                       id='separator_input'
+                       name='separator'
+                       value='_-.'
+                       style='width:346px; flex:0 0 346px; min-width:320px; max-width:320px; padding:12px;border-radius:6px;border:1px solid #007bff;'>
+
+                <div style='display:flex; flex-direction:column; gap:6px;'>
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_chars'
+                               checked
+                               onclick='setSeparatorMode("chars")'>
+                        <span class="separator-option-text">Characters</span>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_regex'
+                               onclick='setSeparatorMode("regex")'>
+                        <span class="separator-option-text">Regex expression</span>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_ai_regex'
+                               onclick='setSeparatorMode("ai")'>
+                        <span class="separator-option-text ai-option-text" id="ai_regex_text">AI-assisted Regex expression</span>
+                        <button type="button"
+                                id="ai_regex_btn"
+                                class="ai-option-btn"
+                                style="display:none;">
+                            AI-assisted Regex expression
+                        </button>
+                    </label>
+
+                    <label style='display:flex; align-items:center; gap:8px; font-weight:600;'>
+                        <input type='checkbox'
+                               id='sep_mode_ai_parse'
+                               onclick='setSeparatorMode("ai_parse")'>
+                        <span class="separator-option-text ai-option-text" id="ai_parse_text">AI-assisted filename parsing</span>
+                        <button type="button"
+                                id="ai_parse_btn"
+                                class="ai-option-btn"
+                                style="display:none;">
+                            AI-assisted filename parsing
+                        </button>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <input type='hidden' name='selected_datasets' id='selected_datasets' value=''>
+        <input type='hidden' name='dataset_selection_opened' id='dataset_selection_opened' value='0'>
+        <input type='hidden' name='ai_parsed_json' id='ai_parsed_json' value=''>
+
+        <button type='submit'
+                style='width:100%;padding:18px;font-size:14px;background:#007bff;color:white;
+                       border:none;border-radius:8px; display:block; margin:0;'>
+            Load images & Preview
+        </button>
+    </form>
+</div>
+</div>
+
+<div class="dataset-table-wrapper">
+    <div id='dataset_table_container'
+         class="dataset-table-container">
+        <div class="dataset-table-scroll">
+            <table border='1'
+                   class="dataset-table"
+                   style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+                <thead>
+                <tr style='background:#007bff; color:white;'>
+                    <td class="col-check" style='padding:3px; width:20px; text-align:center;'>
+                        <input type='checkbox' id='datasets_select_all' checked>
+                    </td>
+                    <td class="col-dataset sortable-header" data-sort-key="name" data-sort-type="text" style='padding:3px; width:500px;'>
+                        Dataset
+                        <span class="sort-indicator" aria-hidden="true">
+                            <span class="sort-arrow sort-arrow--up"></span>
+                            <span class="sort-arrow sort-arrow--down"></span>
+                        </span>
+                    </td>
+                    <td class="col-id sortable-header" data-sort-key="id" data-sort-type="number" style='padding:3px; width:65px;'>
+                        ID
+                        <span class="sort-indicator" aria-hidden="true">
+                            <span class="sort-arrow sort-arrow--up"></span>
+                            <span class="sort-arrow sort-arrow--down"></span>
+                        </span>
+                    </td>
+                    <td class="col-images sortable-header" data-sort-key="image_count" data-sort-type="number" style='padding:3px; width:65px;'>
+                        Nr. img.
+                        <span class="sort-indicator" aria-hidden="true">
+                            <span class="sort-arrow sort-arrow--up"></span>
+                            <span class="sort-arrow sort-arrow--down"></span>
+                        </span>
+                    </td>
+                    <!-- <td class="col-formats" style='padding:3px;'>Formats</td> -->
+                </tr>
+                </thead>
+                <tbody id='dataset_table_body'></tbody>
+            </table>
+        </div>
+        <div id='dataset_table_message'
+             class="dataset-table-message error-message"
+             aria-live="polite"></div>
+    </div>
+</div>
+
+<div id="project_dropdown_backdrop"
+     style="display:none; position:fixed; inset:0; z-index:900;"></div>
+
+    <!-- NON-BLOCKING MODAL -->
+<div id="nb-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:11000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:300px; max-width:500px;">
+        <div id="nb-modal-message"
+             class="error-message"
+             style="margin-bottom:16px;">
+        </div>
+        <div style="text-align:right;">
+            <button id="nb-modal-ok"
+                    onclick="hideNonBlockingModal()"
+                    style="padding:6px 14px; font-size:12px;">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="ai-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:520px; max-width:520px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>AI-assisted Regex expression</strong>
+            <button type="button" id="ai_modal_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div style="margin-bottom:10px; color:#4b5563;">
+            Select a provider, process the filenames, then transfer the suggested Regex.
+        </div>
+        <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; justify-content:flex-start;">
+            <div style="flex:0 0 auto;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+                <select id="ai_provider_select" class="ai-modal-select placeholder" style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="" disabled selected hidden>Select AI...</option>
+                </select>
+            </div>
+            <div id="ai_model_wrapper" style="flex:0 0 auto; display:none;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
+                <select id="ai_model_select" class="ai-modal-select placeholder" style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+            </div>
+        </div>
+        <div id="ai_modal_status" class="error-message" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested Regex</label>
+            <textarea id="ai_regex_output"
+                      style="width:100%; min-height:80px; max-height:220px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                      placeholder='Click "Process" to generate a Regex expression.'></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="ai_process_btn">Process</button>
+            <button type="button" id="ai_transfer_btn" disabled>Transfer</button>
+        </div>
+    </div>
+</div>
+
+<div id="ai-parse-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:520px; max-width:520px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>AI-assisted filename parsing</strong>
+            <button type="button" id="ai_parse_modal_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div style="margin-bottom:10px; color:#4b5563;">
+            Select a provider, process the filenames, then transfer the results to the plugin.
+        </div>
+        <div style="margin-bottom:10px; display:flex; gap:12px; align-items:flex-start; justify-content:flex-start;">
+            <div style="flex:0 0 auto;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+                <select id="ai_parse_provider_select" class="ai-modal-select placeholder" style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                    <option value="" disabled selected hidden>Select AI...</option>
+                </select>
+            </div>
+            <div id="ai_parse_model_wrapper" style="flex:0 0 auto; display:none;">
+                <label style="display:block; font-weight:600; margin-bottom:0px;">Model</label>
+                <select id="ai_parse_model_select" class="ai-modal-select placeholder" style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;"></select>
+            </div>
+        </div>
+        <div id="ai_parse_modal_status" class="error-message" style="margin-bottom:10px; color:#1f2937;"></div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">Suggested parsing</label>
+            <textarea id="ai_parse_output"
+                      style="width:100%; min-height:110px; max-height:260px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                      placeholder='Click "Process" to generate a set of suggested parsed values.'></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="ai_parse_process_btn">Process</button>
+            <button type="button" id="ai_parse_transfer_btn" disabled>Transfer</button>
+        </div>
+    </div>
+</div>
+
+<div id="user-settings-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; width:800px; min-width:800px; max-width:800px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>User settings</strong>
+            <button type="button" id="user_settings_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div class="user-settings-grid">
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_job_batch">Job batch size</label>
+                    <input type="text"
+                           id="user_setting_job_batch"
+                           inputmode="numeric"
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[1-100]</span>
+                    <span>Set higher for very large datasets at the expense of progress bar update frequency.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label>Show all projects?</label>
+                    <div class="user-setting-toggle" role="group" aria-label="Show all projects">
+                        <input type="radio" id="user_setting_show_all_no" name="user_setting_show_all_projects" value="no">
+                        <label for="user_setting_show_all_no">No</label>
+                        <input type="radio" id="user_setting_show_all_yes" name="user_setting_show_all_projects" value="yes">
+                        <label for="user_setting_show_all_yes">Yes</label>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>Toggle "Yes" to show all projects in the expanded project selection dropdown menu.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_default_vars">Default variable names</label>
+                    <textarea id="user_setting_default_vars"
+                              rows="5"
+                              style="width:85%; padding:8px; border-radius:6px; border:1px solid #007bff; resize:vertical; min-height:110px; max-height:260px;"></textarea>
+                </div>
+                <div class="user-setting-description">
+                    <span>List of default names (inside double quotes " ") for the parsed variables.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label>Remove "Clear all" button?</label>
+                    <div class="user-setting-toggle" role="group" aria-label="Remove Clear all button">
+                        <input type="radio" id="user_setting_remove_clear_all_no" name="user_setting_remove_clear_all" value="no">
+                        <label for="user_setting_remove_clear_all_no">No</label>
+                        <input type="radio" id="user_setting_remove_clear_all_yes" name="user_setting_remove_clear_all" value="yes">
+                        <label for="user_setting_remove_clear_all_yes">Yes</label>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <span>Toggle "Yes" to remove the button from the interface in case of accidental clicks.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_max_parsed">Max nr. of parsed variables</label>
+                    <input type="text"
+                           id="user_setting_max_parsed"
+                           inputmode="numeric"
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[3-15]</span>
+                    <span>Increase if needed for very long or complex filenames.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="user_setting_max_sets">Max nr. of variable sets in database</label>
+                    <input type="text"
+                           id="user_setting_max_sets"
+                           inputmode="numeric"
+                           style="width:50px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                </div>
+                <div class="user-setting-description">
+                    <span class="user-setting-limit">[5-30]</span>
+                    <span>Increase if you run out of variable set storage slots.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="ai_regex_default_provider_select">Defaults for AI-assisted Regex expression</label>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <select id="ai_regex_default_provider_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected hidden>Select AI...</option>
+                            </select>
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
+                                <input type="checkbox" id="ai_regex_default_toggle">
+                                <span style="color:#000;">*</span>
+                            </label>
+                        </div>
+                        <div id="ai_regex_default_model_group" style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_regex_default_model_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected hidden>Select model...</option>
+                            </select>
+                            <button type="button" id="ai_regex_default_apply_btn">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <div style="font-weight:700; color:#000;">Settings applied independently</div>
+                    <span>*Click to immediately set as default AI provider.<br>The Apply button (when enabled) saves only the selected AI provider - model pair.</span>
+                </div>
+            </div>
+            <div class="user-setting-row">
+                <div class="user-setting-input">
+                    <label for="ai_parse_default_provider_select">Defaults for AI-assisted filename parsing</label>
+                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <select id="ai_parse_default_provider_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected hidden>Select AI...</option>
+                            </select>
+                            <label class="ai-default-toggle" style="display:flex; align-items:center; gap:0; font-weight:600; margin:0;">
+                                <input type="checkbox" id="ai_parse_default_toggle">
+                                <span style="color:#000;">*</span>
+                            </label>
+                        </div>
+                        <div id="ai_parse_default_model_group" style="display:flex; align-items:center; gap:6px;">
+                            <select id="ai_parse_default_model_select"
+                                    class="ai-provider-option-select placeholder"
+                                    style="width:160px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+                                <option value="" disabled selected hidden>Select model...</option>
+                            </select>
+                            <button type="button" id="ai_parse_default_apply_btn">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-setting-description">
+                    <div style="font-weight:700; color:#000;">Settings applied independently</div>
+                    <span>*Click to immediately set as default AI provider.<br>The Apply button (when enabled) saves only the selected AI provider - model pair.</span>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="user_settings_save">Save settings</button>
+            <button type="button" id="user_settings_restore">Restore defaults</button>
+        </div>
+    </div>
+</div>
+
+<div id="ai-credentials-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:520px; max-width:520px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <strong>AI API credentials</strong>
+            <button type="button" id="ai_credentials_close" class="ai-option-btn ai-option-btn--modal">Close</button>
+        </div>
+        <div style="margin-bottom:10px; color:#4b5563;">
+            Save API keys for external AI providers. For instructions on how to create an API key see help.
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">AI provider</label>
+            <select id="ai_credentials_provider" style="width:120px; padding:8px; border-radius:6px; border:1px solid #007bff;">
+            </select>
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="display:block; font-weight:600; margin-bottom:0px;">API key</label>
+            <div class="ai-key-wrapper">
+                <input type="password"
+                       id="ai_credentials_key"
+                       placeholder="Enter API key"
+                       autocomplete="off"
+                       spellcheck="false"
+                       style="width:100%; padding:8px 36px 8px 8px; border-radius:6px; border:1px solid #007bff;">
+                <button type="button"
+                        id="ai_credentials_key_toggle"
+                        class="ai-key-toggle"
+                        aria-label="Show API key"
+                        aria-pressed="false">
+                    <svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div id="ai_credentials_status" class="ai-credentials-status error-message"></div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="ai_credentials_test">Test connection</button>
+            <button type="button" id="ai_credentials_save">Save key</button>
+        </div>
+    </div>
+</div>
+
+<script defer>
+const previewForm = document.getElementById('preview_form');
+    const rootStatusUrl = new URL('{% url "omeroweb_omp_plugin_root_status" %}', window.location.href);
+    const applyRootUserState = (isRootUser) => {
+        if (!isRootUser) {
+            return;
+        }
+        document.documentElement.classList.add('root-user-blocked');
+        if (document.body) {
+            document.body.classList.add('root-user-blocked');
+        }
+    };
+    fetch(rootStatusUrl, { credentials: 'same-origin' })
+        .then((resp) => (resp.ok ? resp.json() : null))
+        .then((data) => {
+            if (data && data.is_root_user === true) {
+                applyRootUserState(true);
+            }
+        })
+        .catch(() => {
+            // Ignore root user lookup failures.
+        });
+    const messages = {{ messages_json|safe }};
+    const allowedClipboardSelectors = [
+        'input[type="text"]',
+        'input[type="document"]',
+        'input[type="search"]',
+        'input[type="password"]',
+        'input[type="email"]',
+        'input[type="number"]',
+        'input[type="url"]',
+        'textarea',
+        'table',
+        '.error-message',
+    ];
+    const isClipboardAllowed = (target) => {
+        if (!(target instanceof Element)) {
+            return false;
+        }
+        return Boolean(target.closest(allowedClipboardSelectors.join(',')));
+    };
+    ['copy', 'cut', 'paste', 'contextmenu', 'selectstart'].forEach((eventName) => {
+        document.addEventListener(eventName, (event) => {
+            if (!isClipboardAllowed(event.target)) {
+                event.preventDefault();
+            }
+        }, true);
+    });
+    const formatMessage = (template, values = {}) => {
+        const source = String(template || '');
+        return source.replace(/\{(\w+)\}/g, (match, key) => (
+            Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+        ));
+    };
+    function normalizeSeparatorMode(mode) {
+        if (mode === 'ai' || mode === 'ai_regex') {
+            return 'ai_regex';
+        }
+        return mode || 'chars';
+    }
+
+    function isAiParseMessage(value) {
+        return value === aiParseNoInputMessage || value === aiParseRequiredMessage;
+    }
+
+    function storeSeparatorValue(mode, value) {
+        if (!mode || mode === 'ai_parse') return;
+        if (mode === 'ai_regex' && value === aiRegexRequiredMessage) return;
+        if (isAiParseMessage(value)) return;
+        separatorValues[mode] = value ?? '';
+    }
+
+    function setSeparatorMode(mode, options = {}) {
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        const aiRegex = document.getElementById('sep_mode_ai_regex');
+        const aiParse = document.getElementById('sep_mode_ai_parse');
+        const hidden = document.getElementById('separator_mode');
+        const normalizedMode = normalizeSeparatorMode(mode);
+        const previousMode = normalizeSeparatorMode(hidden?.value || 'chars');
+
+        if (!options.skipStore && separatorInput) {
+            storeSeparatorValue(previousMode, separatorInput.value);
+        }
+
+        if (normalizedMode === 'regex') {
+            if (regex) regex.checked = true;
+            if (chars) chars.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (aiParse) aiParse.checked = false;
+            if (hidden) hidden.value = 'regex';
+        } else if (normalizedMode === 'ai_regex') {
+            if (aiRegex) aiRegex.checked = true;
+            if (chars) chars.checked = false;
+            if (regex) regex.checked = false;
+            if (aiParse) aiParse.checked = false;
+            if (hidden) hidden.value = 'ai_regex';
+        } else if (normalizedMode === 'ai_parse') {
+            if (aiParse) aiParse.checked = true;
+            if (chars) chars.checked = false;
+            if (regex) regex.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (hidden) hidden.value = 'ai_parse';
+        } else {
+            if (chars) chars.checked = true;
+            if (regex) regex.checked = false;
+            if (aiRegex) aiRegex.checked = false;
+            if (aiParse) aiParse.checked = false;
+            if (hidden) hidden.value = 'chars';
+        }
+
+        updateAiRegexOption();
+        updateAiParseOption();
+
+        if (separatorInput) {
+            const isAiParse = (hidden?.value === 'ai_parse');
+            const isAiRegex = (hidden?.value === 'ai_regex');
+            if (isAiParse) {
+                const hasAiParseResults = Boolean(aiParsedJsonInput?.value?.trim());
+                const message = hasAiParseResults ? aiParseNoInputMessage : aiParseRequiredMessage;
+                if (options.forceAiParseMessage || separatorInput.value !== message) {
+                    separatorInput.value = message;
+                }
+            } else if (isAiRegex) {
+                const message = hasAiRegexResults()
+                    ? (separatorValues.ai_regex ?? '')
+                    : aiRegexRequiredMessage;
+                if (separatorInput.value !== message) {
+                    separatorInput.value = message;
+                }
+            } else if (options.preserveInputValue) {
+                storeSeparatorValue(normalizedMode, separatorInput.value);
+            } else {
+                separatorInput.value = separatorValues[normalizedMode] ?? '';
+            }
+            const disableSeparatorInput = isAiParse || (isAiRegex && !hasAiRegexResults());
+            separatorInput.disabled = disableSeparatorInput;
+            separatorInput.style.background = disableSeparatorInput ? '#f3f4f6' : '';
+            separatorInput.style.color = disableSeparatorInput ? '#6b7280' : '';
+        }
+        if (!options.skipPersist) {
+            persistSeparatorModeState();
+        }
+    }
+
+    const datasetButton = document.getElementById('dataset_selection_btn');
+    const projectSelect = document.getElementById('project_select');
+    const projectSelectInput = document.getElementById('project_select_input');
+    const projectSelectDisplay = document.getElementById('project_select_display');
+    const projectSelectDropdown = document.getElementById('project_select_dropdown');
+    const projectSelectWrapper = document.getElementById('project_select_wrapper');
+    const projectSelectArrow = document.querySelector('#project_select_wrapper .project-select-arrow');
+    const collaborationToggle = document.getElementById('collaboration_toggle');
+    const collaborationSection = document.querySelector('.upload-utilities__collaboration');
+    const datasetTableContainer = document.getElementById('dataset_table_container');
+    const datasetTableBody = document.getElementById('dataset_table_body');
+    const datasetTableMessage = document.getElementById('dataset_table_message');
+    const datasetSelectAll = document.getElementById('datasets_select_all');
+    const selectedDatasetsInput = document.getElementById('selected_datasets');
+    const separatorInput = document.getElementById('separator_input');
+    const filenameMetadataContainer = document.getElementById('filename_metadata_container');
+    const datasetSelectionOpenedInput = document.getElementById('dataset_selection_opened');
+    const projectDataScript = document.getElementById('project-data');
+    const projectDropdownBackdrop = document.getElementById('project_dropdown_backdrop');
+    const projectListUrl = new URL('{{ project_list_url }}', window.location.href);
+    const projectRefreshBtn = document.getElementById('project_refresh_btn');
+    const datasetClearBtn = document.getElementById('dataset_clear_btn');
+    const userSettingRemoveClearAllNo = document.getElementById('user_setting_remove_clear_all_no');
+    const userSettingRemoveClearAllYes = document.getElementById('user_setting_remove_clear_all_yes');
+    const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
+    const aiRegexButton = document.getElementById('ai_regex_btn');
+    const aiRegexText = document.getElementById('ai_regex_text');
+    const settingsMenuBtn = document.getElementById('settings_menu_btn');
+    const settingsMenu = document.getElementById('settings_menu');
+    const aiModalOverlay = document.getElementById('ai-modal-overlay');
+    const aiModalClose = document.getElementById('ai_modal_close');
+    const aiProviderSelect = document.getElementById('ai_provider_select');
+    const aiModelWrapper = document.getElementById('ai_model_wrapper');
+    const aiModelSelect = document.getElementById('ai_model_select');
+    const aiProcessBtn = document.getElementById('ai_process_btn');
+    const aiTransferBtn = document.getElementById('ai_transfer_btn');
+    const aiRegexOutput = document.getElementById('ai_regex_output');
+    const aiModalStatus = document.getElementById('ai_modal_status');
+    const aiParseModalOverlay = document.getElementById('ai-parse-modal-overlay');
+    const aiParseModalClose = document.getElementById('ai_parse_modal_close');
+    const aiParseProviderSelect = document.getElementById('ai_parse_provider_select');
+    const aiParseModelWrapper = document.getElementById('ai_parse_model_wrapper');
+    const aiParseModelSelect = document.getElementById('ai_parse_model_select');
+    const aiParseProcessBtn = document.getElementById('ai_parse_process_btn');
+    const aiParseTransferBtn = document.getElementById('ai_parse_transfer_btn');
+    const aiParseOutput = document.getElementById('ai_parse_output');
+    const aiParseModalStatus = document.getElementById('ai_parse_modal_status');
+    const aiParsedJsonInput = document.getElementById('ai_parsed_json');
+    const userSettingsOverlay = document.getElementById('user-settings-overlay');
+    const userSettingsBtn = document.getElementById('user_settings_btn');
+    const userSettingsClose = document.getElementById('user_settings_close');
+    const userSettingsSave = document.getElementById('user_settings_save');
+    const userSettingsRestore = document.getElementById('user_settings_restore');
+    const userSettingJobBatchInput = document.getElementById('user_setting_job_batch');
+    const userSettingDefaultVarsInput = document.getElementById('user_setting_default_vars');
+    const userSettingMaxParsedInput = document.getElementById('user_setting_max_parsed');
+    const userSettingMaxSetsInput = document.getElementById('user_setting_max_sets');
+    const userSettingShowAllNo = document.getElementById('user_setting_show_all_no');
+    const userSettingShowAllYes = document.getElementById('user_setting_show_all_yes');
+    const aiRegexDefaultProviderSelect = document.getElementById('ai_regex_default_provider_select');
+    const aiRegexDefaultModelSelect = document.getElementById('ai_regex_default_model_select');
+    const aiRegexDefaultToggle = document.getElementById('ai_regex_default_toggle');
+    const aiRegexDefaultApplyBtn = document.getElementById('ai_regex_default_apply_btn');
+    const aiRegexDefaultModelGroup = document.getElementById('ai_regex_default_model_group');
+    const aiParseDefaultProviderSelect = document.getElementById('ai_parse_default_provider_select');
+    const aiParseDefaultModelSelect = document.getElementById('ai_parse_default_model_select');
+    const aiParseDefaultToggle = document.getElementById('ai_parse_default_toggle');
+    const aiParseDefaultApplyBtn = document.getElementById('ai_parse_default_apply_btn');
+    const aiParseDefaultModelGroup = document.getElementById('ai_parse_default_model_group');
+    const aiCredentialsOverlay = document.getElementById('ai-credentials-overlay');
+    const aiCredentialsBtn = document.getElementById('ai_credentials_btn');
+    const deleteUserDataMenu = document.getElementById('delete_user_data_menu');
+    const deleteApiKeysBtn = document.getElementById('delete_api_keys_btn');
+    const deleteVariableSetsBtn = document.getElementById('delete_variable_sets_btn');
+    const deleteAllUserDataBtn = document.getElementById('delete_all_user_data_btn');
+    const aiCredentialsClose = document.getElementById('ai_credentials_close');
+    const aiCredentialsProvider = document.getElementById('ai_credentials_provider');
+    const aiCredentialsKey = document.getElementById('ai_credentials_key');
+    const aiCredentialsKeyToggle = document.getElementById('ai_credentials_key_toggle');
+    const aiCredentialsTest = document.getElementById('ai_credentials_test');
+    const aiCredentialsSave = document.getElementById('ai_credentials_save');
+    const aiCredentialsStatus = document.getElementById('ai_credentials_status');
+    let isProjectRefreshInFlight = false;
+    let projectData = projectDataScript ? JSON.parse(projectDataScript.textContent) : [];
+    const MAX_USER_PROJECT_RESULTS = 15;
+    const MAX_PROJECT_RESULTS = 15;
+    const MAX_PROJECT_RESULTS_WITH_COLLAB = 20;
+    let projectFilterTimeout = null;
+    let activeProjectIndex = -1;
+    const currentUserId = {{ user_id|default:"null" }};
+    const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+    const makeStorageKey = (baseKey) => `${baseKey}${storageKeySuffix}`;
+    const STATE_STORAGE_KEY = makeStorageKey('omp_preview_state');
+    const SEPARATOR_STORAGE_KEY = makeStorageKey('omp_separator_mode_state');
+    const defaultSeparatorValue = separatorInput ? separatorInput.defaultValue || '' : '';
+    const separatorValues = {
+        chars: separatorInput ? separatorInput.value || '' : '',
+        regex: defaultSeparatorValue,
+        ai_regex: defaultSeparatorValue,
+    };
+    const aiParseNoInputMessage = 'No input required. Ready for next step.';
+    const aiParseRequiredMessage = 'Run the AI-assisted filename parsing method...';
+    const aiRegexRequiredMessage = 'Run the AI-assisted Regex expression method...';
+    const AI_PROVIDER_OPTIONS = {{ ai_provider_options_json|safe }};
+    function populateProviderSelect(select, { includeLocal = false } = {}) {
+        if (!select) return;
+        const placeholder = select.querySelector('option[disabled]');
+        const placeholderClone = placeholder ? placeholder.cloneNode(true) : null;
+        select.innerHTML = '';
+        if (placeholderClone) {
+            select.appendChild(placeholderClone);
+        }
+        const options = AI_PROVIDER_OPTIONS.filter((option) => includeLocal || option.value !== 'local');
+        options.forEach((option) => {
+            const optionNode = document.createElement('option');
+            optionNode.value = option.value;
+            optionNode.textContent = option.label;
+            select.appendChild(optionNode);
+        });
+        if (!placeholderClone && options.length) {
+            select.value = options[0].value;
+        }
+    }
+
+    function getProviderLabel(provider) {
+        const match = AI_PROVIDER_OPTIONS.find((option) => option.value === provider);
+        return match ? match.label : provider;
+    }
+
+    function resolveProviderValue(select, preferred, { fallbackToFirst = false } = {}) {
+        if (!select) return '';
+        if (preferred && hasSelectOption(select, preferred)) {
+            return preferred;
+        }
+        if (fallbackToFirst) {
+            const firstOption = Array.from(select.options).find((option) => !option.disabled && option.value);
+            return firstOption ? firstOption.value : '';
+        }
+        return '';
+    }
+
+    populateProviderSelect(aiProviderSelect, { includeLocal: true });
+    populateProviderSelect(aiParseProviderSelect);
+    populateProviderSelect(aiRegexDefaultProviderSelect, { includeLocal: true });
+    populateProviderSelect(aiParseDefaultProviderSelect);
+    populateProviderSelect(aiCredentialsProvider);
+    let lastDatasetRows = [];
+    let aiRegexTransferred = false;
+    let aiParseTransferred = Boolean(aiParsedJsonInput?.value?.trim());
+    let lastAiParseRows = null;
+    const datasetSortState = { key: null, direction: 'asc', userSet: false };
+    const userSettingsStorageKey = makeStorageKey('omp_user_settings');
+    const collaborationToggleStorageKey = makeStorageKey('omp_collaboration_toggle_v1');
+    const storageKeyPrefix = 'omp_';
+    const isUserStorageKey = (key) => {
+        if (!key.startsWith(storageKeyPrefix)) return false;
+        if (!storageKeySuffix) return true;
+        return key.endsWith(storageKeySuffix);
+    };
+    const userSettingsDefaults = {
+        jobBatchSize: {{ chunk_size }},
+        maxParsedVariables: {{ max_parsed_variables }},
+        maxVariableSets: {{ max_variable_sets }},
+        defaultVariableNames: {{ default_variable_names_json|safe }},
+        showAllProjects: false,
+        removeClearAll: false,
+        aiDefaults: {
+            regex: {
+                defaultProvider: '',
+                modelsByProvider: {},
+            },
+            parse: {
+                defaultProvider: '',
+                modelsByProvider: {},
+            },
+        },
+    };
+    let aiDefaultsState = {
+        regex: { defaultProvider: '', modelsByProvider: {} },
+        parse: { defaultProvider: '', modelsByProvider: {} },
+    };
+    let showAllProjectsEnabled = false;
+
+    function hasCollaborations() {
+        const collab = Array.isArray(projectData?.collab) ? projectData.collab.length : 0;
+        const annotate = Array.isArray(projectData?.collab_annotate) ? projectData.collab_annotate.length : 0;
+        return collab + annotate > 0;
+    }
+
+    function getProjectResultsLimit(includeCollab = false) {
+        if (showAllProjectsEnabled) return Infinity;
+        if (includeCollab && hasCollaborations()) {
+            return MAX_PROJECT_RESULTS_WITH_COLLAB;
+        }
+        return MAX_PROJECT_RESULTS;
+    }
+
+    function applyShowAllProjectsSetting(enabled, { refresh = true } = {}) {
+        showAllProjectsEnabled = !!enabled;
+        if (userSettingShowAllYes && userSettingShowAllNo) {
+            userSettingShowAllYes.checked = showAllProjectsEnabled;
+            userSettingShowAllNo.checked = !showAllProjectsEnabled;
+        }
+        if (refresh && projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
+        }
+    }
+
+    function applyClearAllSetting(enabled) {
+        const removeClearAll = !!enabled;
+        if (userSettingRemoveClearAllYes && userSettingRemoveClearAllNo) {
+            userSettingRemoveClearAllYes.checked = removeClearAll;
+            userSettingRemoveClearAllNo.checked = !removeClearAll;
+        }
+        if (datasetClearBtn) {
+            datasetClearBtn.disabled = removeClearAll;
+            datasetClearBtn.classList.toggle('dataset-clear-btn-hidden', removeClearAll);
+        }
+    }
+
+    // Ensure exactly one mode is selected even if browser restores form state
+    (function initSeparatorMode() {
+        const storedState = parseStoredState(window.sessionStorage.getItem(STATE_STORAGE_KEY))
+            || parseStoredState(window.localStorage?.getItem(STATE_STORAGE_KEY))
+            || loadSeparatorModeState();
+        if (storedState && storedState.separator_mode) {
+            return;
+        }
+        const chars = document.getElementById('sep_mode_chars');
+        const regex = document.getElementById('sep_mode_regex');
+        const aiRegex = document.getElementById('sep_mode_ai_regex');
+        const aiParse = document.getElementById('sep_mode_ai_parse');
+        if (aiParse && aiParse.checked) {
+            setSeparatorMode('ai_parse', { skipPersist: true });
+        } else if (aiRegex && aiRegex.checked) {
+            setSeparatorMode('ai', { skipPersist: true });
+        } else if (regex && regex.checked) {
+            setSeparatorMode('regex', { skipPersist: true });
+        } else if (chars) {
+            setSeparatorMode('chars', { skipPersist: true });
+        }
+    })();
+
+    function hasDuplicateCharacters(value) {
+        const seen = new Set();
+        for (const char of value) {
+            if (seen.has(char)) return true;
+            seen.add(char);
+        }
+        return false;
+    }
+
+    function showNonBlockingModal(message) {
+        const overlay = document.getElementById("nb-modal-overlay");
+        const msg = document.getElementById("nb-modal-message");
+        const okBtn = document.getElementById("nb-modal-ok");
+        if (msg) msg.innerText = message;
+        if (overlay) overlay.style.display = "flex";
+        if (okBtn) {
+            window.requestAnimationFrame(() => {
+                okBtn.focus();
+            });
+        }
+    }
+
+    function hideNonBlockingModal() {
+        const overlay = document.getElementById("nb-modal-overlay");
+        if (overlay) overlay.style.display = "none";
+    }
+
+    function hasAiRegexResults() {
+        if (aiRegexTransferred) return true;
+        const storedValue = separatorValues.ai_regex ?? '';
+        return Boolean(storedValue.trim()) && storedValue.trim() !== defaultSeparatorValue.trim();
+    }
+
+    function updateAiRegexOption() {
+        const aiRegexCheckbox = document.getElementById('sep_mode_ai_regex');
+        const aiRegexButton = document.getElementById('ai_regex_btn');
+        const aiRegexText = document.getElementById('ai_regex_text');
+        if (!aiRegexCheckbox) return;
+        if (aiRegexText) {
+            aiRegexText.textContent = 'AI-assisted Regex expression';
+        }
+        if (aiRegexCheckbox.checked) {
+            if (aiRegexButton) aiRegexButton.style.display = 'inline-flex';
+            if (aiRegexText) aiRegexText.style.display = 'none';
+        } else {
+            if (aiRegexButton) aiRegexButton.style.display = 'none';
+            if (aiRegexText) aiRegexText.style.display = 'inline';
+        }
+    }
+
+    function updateAiParseOption() {
+        const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+        const aiParseButton = document.getElementById('ai_parse_btn');
+        const aiParseText = document.getElementById('ai_parse_text');
+        if (!aiParseCheckbox) return;
+        if (aiParseCheckbox.checked) {
+            if (aiParseButton) aiParseButton.style.display = 'inline-flex';
+            if (aiParseText) aiParseText.style.display = 'none';
+        } else {
+            if (aiParseButton) aiParseButton.style.display = 'none';
+            if (aiParseText) aiParseText.style.display = 'inline';
+        }
+    }
+
+    function setAiKeyVisibility(showKey) {
+        if (!aiCredentialsKey || !aiCredentialsKeyToggle) return;
+        aiCredentialsKey.type = showKey ? 'text' : 'password';
+        aiCredentialsKeyToggle.setAttribute('aria-pressed', showKey ? 'true' : 'false');
+        aiCredentialsKeyToggle.setAttribute('aria-label', showKey ? 'Hide API key' : 'Show API key');
+        aiCredentialsKeyToggle.innerHTML = showKey
+            ? '<svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle><line x1="4" y1="4" x2="20" y2="20"></line></svg>'
+            : '<svg class="ai-key-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    }
+
+    if (separatorInput) {
+        separatorInput.addEventListener('input', () => {
+            aiRegexTransferred = false;
+            if (aiRegexCheckbox && aiRegexCheckbox.checked) {
+                setSeparatorMode('regex', { skipStore: true, preserveInputValue: true });
+                return;
+            }
+            const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
+            storeSeparatorValue(currentMode, separatorInput.value);
+        });
+    }
+
+    function showSettingsMenu(show) {
+        if (!settingsMenu) return;
+        settingsMenu.style.display = show ? 'block' : 'none';
+        if (!show) {
+            closeUserDataSubmenu();
+        }
+    }
+
+    const aiCredentialsListUrl = new URL('ai-credentials/', window.location.href);
+    const aiCredentialsTestUrl = new URL('ai-credentials/test/', window.location.href);
+    const aiCredentialsSaveUrl = new URL('ai-credentials/save/', window.location.href);
+    const userSettingsSaveUrl = new URL('user-settings/save/', window.location.href);
+    const deleteApiKeysUrl = new URL('user-data/delete-api-keys/', window.location.href);
+    const deleteVariableSetsUrl = new URL('user-data/delete-variable-sets/', window.location.href);
+    const deleteAllUserDataUrl = new URL('user-data/delete-all/', window.location.href);
+    const aiModelsUrl = new URL('ai-credentials/models/', window.location.href);
+    let aiCredentialProviders = new Set();
+    let aiCredentialsLastTest = { provider: null, key: null, passed: false };
+    let isUserDataMenuLocked = false;
+    const providerModelsCache = new Map();
+    const providerModelsRequest = new Map();
+    const providerModelSupport = new Map();
+
+    function isLocalProvider(provider) {
+        return (provider || '').toLowerCase() === 'local';
+    }
+
+    function updateAiModalStatus(message, isError = false) {
+        if (!aiModalStatus) return;
+        aiModalStatus.textContent = message || '';
+        aiModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function clearAiRegexSuggestion() {
+        if (aiRegexOutput) {
+            aiRegexOutput.value = '';
+        }
+        if (aiTransferBtn) {
+            aiTransferBtn.disabled = true;
+        }
+    }
+
+    function clearAiParseSuggestion() {
+        if (aiParseOutput) {
+            aiParseOutput.value = '';
+        }
+        if (aiParseTransferBtn) {
+            aiParseTransferBtn.disabled = true;
+        }
+        lastAiParseRows = null;
+    }
+
+    function updateAiCredentialsStatus(message, isError = false) {
+        if (!aiCredentialsStatus) return;
+        aiCredentialsStatus.textContent = message || '';
+        aiCredentialsStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function resetAiCredentialTest() {
+        aiCredentialsLastTest = { provider: null, key: null, passed: false };
+        if (aiCredentialsSave) {
+            aiCredentialsSave.disabled = true;
+        }
+    }
+
+    function setUserDataMenuLockState(locked) {
+        if (!settingsMenu) return;
+        settingsMenu.classList.toggle('menu-locked', locked);
+        const lockTargets = settingsMenu.querySelectorAll('.settings-menu-item:not(#delete_user_data_menu)');
+        lockTargets.forEach((item) => {
+            if (locked) {
+                item.dataset.prevTabindex = item.getAttribute('tabindex') || '';
+                item.setAttribute('tabindex', '-1');
+                item.setAttribute('aria-disabled', 'true');
+                if (item instanceof HTMLButtonElement) {
+                    item.dataset.prevDisabled = item.disabled ? 'true' : 'false';
+                    item.disabled = true;
+                }
+                if (typeof item.blur === 'function') {
+                    item.blur();
+                }
+            } else {
+                if (Object.prototype.hasOwnProperty.call(item.dataset, 'prevTabindex')) {
+                    const previous = item.dataset.prevTabindex;
+                    if (previous) {
+                        item.setAttribute('tabindex', previous);
+                    } else {
+                        item.removeAttribute('tabindex');
+                    }
+                    delete item.dataset.prevTabindex;
+                } else {
+                    item.removeAttribute('tabindex');
+                }
+                item.removeAttribute('aria-disabled');
+                if (item instanceof HTMLButtonElement) {
+                    if (Object.prototype.hasOwnProperty.call(item.dataset, 'prevDisabled')) {
+                        const wasDisabled = item.dataset.prevDisabled === 'true';
+                        item.disabled = wasDisabled;
+                        delete item.dataset.prevDisabled;
+                    } else {
+                        item.disabled = false;
+                    }
+                }
+            }
+        });
+    }
+
+    function closeUserDataSubmenu() {
+        if (!deleteUserDataMenu) return;
+        if (deleteUserDataMenu.contains(document.activeElement)) {
+            document.activeElement.blur();
+        }
+        isUserDataMenuLocked = false;
+        setUserDataMenuLockState(false);
+        deleteUserDataMenu.classList.remove('menu-open');
+        deleteUserDataMenu.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleUserDataSubmenu() {
+        if (!deleteUserDataMenu) return;
+        const willLock = !isUserDataMenuLocked;
+        if (!willLock) {
+            closeUserDataSubmenu();
+            return;
+        }
+        isUserDataMenuLocked = true;
+        setUserDataMenuLockState(true);
+        deleteUserDataMenu.classList.add('menu-open');
+        deleteUserDataMenu.setAttribute('aria-expanded', 'true');
+    }
+
+    function updateAiProcessAvailability() {
+        if (!aiProcessBtn || !aiProviderSelect) return;
+        const provider = aiProviderSelect.value;
+        const isLocal = isLocalProvider(provider);
+        const hasKey = aiCredentialProviders.has(provider);
+        aiProcessBtn.disabled = !isLocal && !hasKey;
+    }
+
+    function updateAiProviderStatus() {
+        if (!aiProviderSelect) return;
+        const provider = aiProviderSelect.value;
+        if (!provider) {
+            updateAiModalStatus(messages.aiModalChooseProvider);
+            setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
+            updateAiModalPlaceholders();
+            return;
+        }
+        if (isLocalProvider(provider)) {
+            updateAiModalStatus(messages.localProviderReady);
+            setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
+            updateAiModalPlaceholders();
+            return;
+        }
+        if (aiCredentialProviders.has(provider)) {
+            updateAiModalStatus(messages.providerKeyReady);
+            ensureAiModels(provider, aiModelSelect, updateAiModalStatus, getAiDefaultModel('regex', provider), { container: aiModelWrapper });
+            updateAiModalPlaceholders();
+            return;
+        }
+        setModelVisibility(false, { select: aiModelSelect, container: aiModelWrapper });
+        updateAiModalStatus(messages.addApiKeySettings, true);
+        updateAiModalPlaceholders();
+    }
+
+    function updateAiParseProviderStatus() {
+        if (!aiParseProviderSelect) return;
+        const provider = aiParseProviderSelect.value;
+        if (!provider) {
+            setModelVisibility(false, { select: aiParseModelSelect, container: aiParseModelWrapper });
+            updateAiParseModalStatus(messages.aiModalChooseProvider);
+            updateAiModalPlaceholders();
+            return;
+        }
+        if (aiCredentialProviders.has(provider)) {
+            updateAiParseModalStatus(messages.providerKeyReady);
+            ensureAiModels(provider, aiParseModelSelect, updateAiParseModalStatus, getAiDefaultModel('parse', provider), { container: aiParseModelWrapper });
+            updateAiModalPlaceholders();
+            return;
+        }
+        setModelVisibility(false, { select: aiParseModelSelect, container: aiParseModelWrapper });
+        updateAiParseModalStatus(messages.addApiKeySettings, true);
+        updateAiModalPlaceholders();
+    }
+
+    function resetModelSelect(select, placeholderHtml = '') {
+        if (!select) return;
+        select.innerHTML = placeholderHtml;
+        updateSelectPlaceholder(select);
+    }
+
+    function setModelVisibility(show, { select, container, display = 'block', applyBtn, placeholderHtml = '' } = {}) {
+        if (container) {
+            container.style.display = show ? display : 'none';
+        }
+        if (applyBtn) {
+            applyBtn.style.display = show ? 'inline-flex' : 'none';
+        }
+        if (select) {
+            select.disabled = !show;
+            if (!show) {
+                select.dataset.requiresModel = 'false';
+            }
+        }
+        if (!show) {
+            resetModelSelect(select, placeholderHtml);
+        }
+    }
+
+    function populateAiModels(select, models, defaultModel) {
+        if (!select) return;
+        const sortedModels = Array.isArray(models)
+            ? [...models].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' }))
+            : [];
+        select.innerHTML = '';
+        sortedModels.forEach((model) => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.id;
+            select.appendChild(option);
+        });
+        if (defaultModel) {
+            select.value = defaultModel;
+        }
+        if (!select.value && select.options.length > 0) {
+            select.value = select.options[0].value;
+        }
+    }
+
+    function fetchAiModels(provider) {
+        if (!provider) {
+            return Promise.reject(new Error(messages.aiModelsLoadFailed));
+        }
+        if (providerModelsCache.has(provider)) {
+            return Promise.resolve(providerModelsCache.get(provider));
+        }
+        if (providerModelsRequest.has(provider)) {
+            return providerModelsRequest.get(provider);
+        }
+        const url = new URL(aiModelsUrl.toString());
+        url.searchParams.set('provider', provider);
+        const request = fetch(url.toString(), { method: 'GET' })
+            .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || data.error) {
+                    throw new Error(data.error || messages.aiModelsLoadFailed);
+                }
+                providerModelsCache.set(provider, data);
+                providerModelsRequest.delete(provider);
+                return data;
+            })
+            .catch((error) => {
+                providerModelsRequest.delete(provider);
+                throw error;
+            });
+        providerModelsRequest.set(provider, request);
+        return request;
+    }
+
+    function getAiDefaultModel(key, provider) {
+        if (!key || !provider) return '';
+        const defaults = aiDefaultsState?.[key];
+        return defaults?.modelsByProvider?.[provider] || '';
+    }
+
+    function ensureAiModels(
+        provider,
+        select,
+        updateStatus,
+        preferredModel,
+        { container, display = 'block', applyBtn, placeholderHtml = '' } = {}
+    ) {
+        if (!provider || !select) return;
+        if (select.dataset.provider !== provider) {
+            select.dataset.provider = provider;
+            resetModelSelect(select, placeholderHtml);
+        }
+        const supportsModels = providerModelSupport.get(provider);
+        const hasSelectableOptions = Array.from(select.options).some((option) => option.value);
+        if (supportsModels === false) {
+            select.dataset.requiresModel = 'false';
+            setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+            if (typeof updateStatus === 'function') {
+                updateStatus(messages.providerKeyReady);
+            }
+            return;
+        }
+        if (hasSelectableOptions) {
+            if (preferredModel) {
+                const hasPreferred = Array.from(select.options).some((option) => option.value === preferredModel);
+                if (hasPreferred) {
+                    select.value = preferredModel;
+                }
+            }
+            if (!select.value && select.options.length > 0) {
+                select.value = select.options[0].value;
+            }
+            updateSelectPlaceholder(select);
+            select.dataset.requiresModel = 'true';
+            providerModelSupport.set(provider, true);
+            setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
+            return;
+        }
+        select.dataset.requiresModel = 'pending';
+        setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+        if (typeof updateStatus === 'function' && supportsModels === true) {
+            updateStatus(formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }));
+        }
+        fetchAiModels(provider)
+            .then((data) => {
+                const models = Array.isArray(data.models) ? data.models : [];
+                if (!data.supports_models || models.length === 0) {
+                    select.dataset.requiresModel = 'false';
+                    providerModelSupport.set(provider, false);
+                    setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+                    if (typeof updateStatus === 'function') {
+                        updateStatus(messages.providerKeyReady);
+                    }
+                    return;
+                }
+                populateAiModels(select, models, preferredModel || data.default_model);
+                updateSelectPlaceholder(select);
+                select.dataset.requiresModel = 'true';
+                providerModelSupport.set(provider, true);
+                setModelVisibility(true, { select, container, display, applyBtn, placeholderHtml });
+                if (typeof updateStatus === 'function') {
+                    updateStatus(messages.providerKeyReady);
+                }
+            })
+            .catch((error) => {
+                select.dataset.requiresModel = 'false';
+                providerModelSupport.set(provider, false);
+                setModelVisibility(false, { select, container, display, applyBtn, placeholderHtml });
+                if (typeof updateStatus === 'function') {
+                    updateStatus(error?.message || messages.aiModelsLoadFailed, true);
+                }
+            });
+    }
+
+    function confirmUserDataDelete(url, successMessage, options = {}) {
+        if (!window.confirm(messages.confirmIrreversible)) {
+            return;
+        }
+
+        fetch(url.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({})
+        })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.error) {
+                showNonBlockingModal(data.error || messages.deleteDataFailed);
+                return;
+            }
+            if (typeof options.onSuccess === 'function') {
+                options.onSuccess(data);
+            }
+            showNonBlockingModal(successMessage);
+        })
+        .catch(err => {
+            showNonBlockingModal(formatMessage(messages.errorWithDetails, { error: err }));
+        });
+    }
+
+    function getSelectedDatasetIds() {
+        return selectedDatasetsInput && selectedDatasetsInput.value ? selectedDatasetsInput.value.split(',').filter(Boolean) : [];
+    }
+
+    function persistPreviewState() {
+        if (separatorInput) {
+            const currentMode = normalizeSeparatorMode(document.getElementById('separator_mode')?.value || 'chars');
+            storeSeparatorValue(currentMode, separatorInput.value);
+        }
+        const state = {
+            project_id: projectSelect?.value || '',
+            project_name: projectSelectInput?.dataset.selectedName || '',
+            separator: separatorInput?.value || '',
+            separator_mode: document.getElementById('separator_mode')?.value || 'chars',
+            separator_values: separatorValues,
+            dataset_selection_opened: datasetSelectionOpenedInput?.value || '0',
+            datasets: Array.isArray(lastDatasetRows) ? lastDatasetRows : [],
+            selected_dataset_ids: getSelectedDatasetIds(),
+            ai_regex_provider: aiProviderSelect?.value || '',
+            ai_regex_model: aiModelSelect?.value || '',
+            ai_parse_provider: aiParseProviderSelect?.value || '',
+            ai_parse_model: aiParseModelSelect?.value || '',
+            ai_regex_completed: aiRegexTransferred,
+            ai_parse_completed: aiParseTransferred,
+            ai_parsed_json: aiParsedJsonInput?.value || '',
+            updated_at: Date.now(),
+        };
+        window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        try {
+            window.localStorage?.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function persistSeparatorModeState() {
+        if (!window.sessionStorage) return;
+        let state = {};
+        try {
+            state = JSON.parse(window.sessionStorage.getItem(STATE_STORAGE_KEY)) || {};
+        } catch (err) {
+            state = {};
+        }
+        state.separator_mode = document.getElementById('separator_mode')?.value || 'chars';
+        if (separatorInput) {
+            state.separator = separatorInput.value || '';
+        }
+        state.separator_values = {
+            ...(state.separator_values || {}),
+            ...separatorValues,
+        };
+        state.ai_regex_completed = aiRegexTransferred;
+        state.ai_parse_completed = aiParseTransferred;
+        state.ai_parsed_json = aiParsedJsonInput?.value || state.ai_parsed_json || '';
+        state.updated_at = Date.now();
+        window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        try {
+            window.localStorage?.setItem(
+                SEPARATOR_STORAGE_KEY,
+                JSON.stringify({
+                    separator_mode: state.separator_mode,
+                    separator: state.separator,
+                    separator_values: state.separator_values,
+                })
+            );
+            window.localStorage?.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function loadSeparatorModeState() {
+        try {
+            const raw = window.localStorage?.getItem(SEPARATOR_STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function parseStoredState(raw) {
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function pickLatestState(sessionState, localState) {
+        if (!sessionState && !localState) return null;
+        if (!sessionState) return localState;
+        if (!localState) return sessionState;
+        const sessionUpdated = Number(sessionState.updated_at || 0);
+        const localUpdated = Number(localState.updated_at || 0);
+        return localUpdated >= sessionUpdated ? localState : sessionState;
+    }
+
+    function restorePreviewState() {
+        const sessionState = parseStoredState(window.sessionStorage.getItem(STATE_STORAGE_KEY));
+        const localState = parseStoredState(window.localStorage?.getItem(STATE_STORAGE_KEY));
+        let state = pickLatestState(sessionState, localState);
+        if (!state && sessionState === null) {
+            window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+        }
+        const separatorFallback = loadSeparatorModeState();
+        if (!state && separatorFallback) {
+            state = { ...separatorFallback };
+        } else if (state && separatorFallback) {
+            if (!state.separator_mode && separatorFallback.separator_mode) {
+                state.separator_mode = separatorFallback.separator_mode;
+            }
+            if (typeof state.separator !== 'string' && typeof separatorFallback.separator === 'string') {
+                state.separator = separatorFallback.separator;
+            }
+            if (!state.separator_values && separatorFallback.separator_values) {
+                state.separator_values = separatorFallback.separator_values;
+            }
+        }
+        if (!state) return;
+        if (state.project_id) {
+            const match = findProjectEntryById(state.project_id, isCollaborationEnabled());
+            if (match) {
+                const label = state.project_name || getProjectEntryLabel(match);
+                setProjectSelection(match.id, label, {
+                    persist: false,
+                    access: getProjectEntryAccess(match),
+                    owner: match?.owner || '',
+                    baseName: getProjectLabel(match?.id, match?.name),
+                });
+            } else {
+                setProjectSelection(state.project_id, state.project_name || state.project_id || '', { persist: false });
+            }
+        }
+        if (separatorInput && typeof state.separator === 'string' && !isAiParseMessage(state.separator)) {
+            separatorInput.value = state.separator;
+        }
+        if (state.separator_values && typeof state.separator_values === 'object') {
+            if (!isAiParseMessage(state.separator_values.chars)) {
+                separatorValues.chars = state.separator_values.chars ?? separatorValues.chars;
+            }
+            if (!isAiParseMessage(state.separator_values.regex)) {
+                separatorValues.regex = state.separator_values.regex ?? separatorValues.regex;
+            }
+            if (!isAiParseMessage(state.separator_values.ai_regex)) {
+                separatorValues.ai_regex = state.separator_values.ai_regex ?? separatorValues.ai_regex;
+            }
+        }
+        if (typeof state.ai_regex_completed === 'boolean') {
+            aiRegexTransferred = state.ai_regex_completed;
+        } else {
+            aiRegexTransferred = hasAiRegexResults();
+        }
+        if (typeof state.ai_parse_completed === 'boolean') {
+            aiParseTransferred = state.ai_parse_completed;
+        }
+        if (aiParsedJsonInput && typeof state.ai_parsed_json === 'string' && state.ai_parsed_json) {
+            aiParsedJsonInput.value = state.ai_parsed_json;
+            try {
+                const parsedRows = JSON.parse(state.ai_parsed_json);
+                if (Array.isArray(parsedRows)) {
+                    lastAiParseRows = parsedRows;
+                }
+            } catch (error) {
+                // ignore parse errors
+            }
+        }
+        if (state.separator_mode) {
+            if (state.separator_mode === 'ai_regex') {
+                setSeparatorMode('ai');
+            } else if (state.separator_mode === 'ai_parse') {
+                setSeparatorMode('ai_parse');
+            } else if (state.separator_mode === 'regex') {
+                setSeparatorMode('regex');
+            } else {
+                setSeparatorMode('chars');
+            }
+        }
+        if (Array.isArray(state.datasets) && state.datasets.length > 0) {
+            lastDatasetRows = state.datasets;
+            renderDatasetRows(state.datasets, { selectedIds: state.selected_dataset_ids || [] });
+        } else if (state.dataset_selection_opened === '0') {
+            resetDatasetSelection();
+        }
+        if (datasetSelectionOpenedInput && state.dataset_selection_opened) {
+            datasetSelectionOpenedInput.value = state.dataset_selection_opened;
+        }
+        restoreAiProviderSelections(state);
+    }
+
+    function restoreAiProviderSelections(state) {
+        if (!state) return;
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = regexDefaults.defaultProvider || state.ai_regex_provider || '';
+        const regexModel = regexDefaults.modelsByProvider?.[regexProvider] || state.ai_regex_model || '';
+        if (aiProviderSelect) {
+            if (regexProvider && hasSelectOption(aiProviderSelect, regexProvider)) {
+                aiProviderSelect.value = regexProvider;
+                updateAiProcessAvailability();
+                ensureAiModels(regexProvider, aiModelSelect, updateAiModalStatus, regexModel, { container: aiModelWrapper });
+                updateAiProviderStatus();
+            } else {
+                aiProviderSelect.value = '';
+            }
+        }
+
+        const parseProvider = parseDefaults.defaultProvider || state.ai_parse_provider || '';
+        const parseModel = parseDefaults.modelsByProvider?.[parseProvider] || state.ai_parse_model || '';
+        if (aiParseProviderSelect) {
+            if (parseProvider && hasSelectOption(aiParseProviderSelect, parseProvider)) {
+                aiParseProviderSelect.value = parseProvider;
+                ensureAiModels(parseProvider, aiParseModelSelect, updateAiParseModalStatus, parseModel, { container: aiParseModelWrapper });
+                updateAiParseProviderStatus();
+            } else {
+                aiParseProviderSelect.value = '';
+            }
+        }
+        applyDefaultAiProviderSelections();
+        updateAiModalPlaceholders();
+    }
+
+    function syncAiDefaultsToSessionStorage({ force = false } = {}) {
+        if (!window.sessionStorage) return;
+        let state = {};
+        try {
+            const raw = window.sessionStorage.getItem(STATE_STORAGE_KEY);
+            if (raw) {
+                state = JSON.parse(raw) || {};
+            }
+        } catch (error) {
+            state = {};
+        }
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = resolveProviderValue(aiProviderSelect, regexDefaults.defaultProvider);
+        const parseProvider = resolveProviderValue(aiParseProviderSelect, parseDefaults.defaultProvider);
+
+        if (force || !state.ai_regex_provider || state.ai_regex_provider === 'local' || !hasSelectOption(aiProviderSelect, state.ai_regex_provider)) {
+            state.ai_regex_provider = regexProvider;
+            state.ai_regex_model = regexDefaults.modelsByProvider?.[regexProvider] || '';
+        }
+        if (force || !state.ai_parse_provider || !hasSelectOption(aiParseProviderSelect, state.ai_parse_provider)) {
+            state.ai_parse_provider = parseProvider;
+            state.ai_parse_model = parseDefaults.modelsByProvider?.[parseProvider] || '';
+        }
+        try {
+            window.sessionStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(state));
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function applyDefaultAiProviderSelections({ force = false } = {}) {
+        const regexDefaults = aiDefaultsState.regex;
+        const parseDefaults = aiDefaultsState.parse;
+        const regexProvider = resolveProviderValue(aiProviderSelect, regexDefaults.defaultProvider);
+        const parseProvider = resolveProviderValue(aiParseProviderSelect, parseDefaults.defaultProvider);
+
+        if (
+            aiProviderSelect
+            && regexProvider
+            && hasSelectOption(aiProviderSelect, regexProvider)
+            && (force || aiProviderSelect.value === 'local' || !aiProviderSelect.value || !hasSelectOption(aiProviderSelect, aiProviderSelect.value))
+        ) {
+            aiProviderSelect.value = regexProvider;
+            ensureAiModels(
+                regexProvider,
+                aiModelSelect,
+                updateAiModalStatus,
+                regexDefaults.modelsByProvider?.[regexProvider],
+                { container: aiModelWrapper }
+            );
+            updateAiProcessAvailability();
+            updateAiProviderStatus();
+        }
+        if (
+            aiParseProviderSelect
+            && parseProvider
+            && hasSelectOption(aiParseProviderSelect, parseProvider)
+            && (force || !aiParseProviderSelect.value || !hasSelectOption(aiParseProviderSelect, aiParseProviderSelect.value))
+        ) {
+            aiParseProviderSelect.value = parseProvider;
+            ensureAiModels(
+                parseProvider,
+                aiParseModelSelect,
+                updateAiParseModalStatus,
+                parseDefaults.modelsByProvider?.[parseProvider],
+                { container: aiParseModelWrapper }
+            );
+            updateAiParseProviderStatus();
+        }
+        updateAiModalPlaceholders();
+        if (force) {
+            syncAiDefaultsToSessionStorage({ force: true });
+        }
+    }
+
+    function openAiModal() {
+        const projectId = projectSelect?.value;
+        if (!projectId) {
+            showNonBlockingModal(messages.selectProject);
+            return;
+        }
+        if (!selectedDatasetsInput?.value) {
+            showNonBlockingModal(messages.selectDatasets);
+            return;
+        }
+        updateAiModalStatus('');
+        refreshAiCredentials();
+        applyDefaultAiProviderSelections();
+        clearAiRegexSuggestion();
+        updateAiProcessAvailability();
+        if (aiModalOverlay) {
+            aiModalOverlay.style.display = 'flex';
+        }
+        updateAiProviderStatus();
+    }
+
+    function closeAiModal() {
+        clearAiRegexSuggestion();
+        if (aiModalOverlay) {
+            aiModalOverlay.style.display = 'none';
+        }
+    }
+
+    function updateAiParseModalStatus(message, isError = false) {
+        if (!aiParseModalStatus) return;
+        aiParseModalStatus.textContent = message || '';
+        aiParseModalStatus.style.color = isError ? '#b91c1c' : '#1f2937';
+    }
+
+    function openAiParseModal() {
+        const projectId = projectSelect?.value;
+        if (!projectId) {
+            showNonBlockingModal(messages.selectProject);
+            return;
+        }
+        if (!selectedDatasetsInput?.value) {
+            showNonBlockingModal(messages.selectDatasets);
+            return;
+        }
+        updateAiParseModalStatus('');
+        refreshAiCredentials();
+        applyDefaultAiProviderSelections();
+        clearAiParseSuggestion();
+        if (aiParseModalOverlay) {
+            aiParseModalOverlay.style.display = 'flex';
+        }
+        updateAiParseProviderStatus();
+    }
+
+    function closeAiParseModal() {
+        clearAiParseSuggestion();
+        if (aiParseModalOverlay) {
+            aiParseModalOverlay.style.display = 'none';
+        }
+    }
+
+    function openCredentialsModal() {
+        if (aiCredentialsOverlay) {
+            aiCredentialsOverlay.style.display = 'flex';
+        }
+        updateAiCredentialsStatus('');
+        if (aiCredentialsKey) {
+            aiCredentialsKey.value = '';
+        }
+        setAiKeyVisibility(false);
+        resetAiCredentialTest();
+        refreshAiCredentials();
+    }
+
+    function closeCredentialsModal() {
+        if (aiCredentialsOverlay) {
+            aiCredentialsOverlay.style.display = 'none';
+        }
+        setAiKeyVisibility(false);
+    }
+
+    function openUserSettingsModal() {
+        if (userSettingsOverlay) {
+            userSettingsOverlay.style.display = 'flex';
+        }
+    }
+
+    function closeUserSettingsModal() {
+        if (userSettingsOverlay) {
+            userSettingsOverlay.style.display = 'none';
+        }
+    }
+
+    function formatDefaultVariableNames(names) {
+        const list = Array.isArray(names) ? names : [];
+        return list.map((name) => `"${name}"`).join('\n');
+    }
+
+    function parseQuotedVariableNames(rawValue) {
+        const trimmed = rawValue.trim();
+        if (!trimmed) return null;
+        const parts = rawValue.split(/\r?\n/);
+        const parsed = [];
+        for (const part of parts) {
+            if (!part.trim()) {
+                continue;
+            }
+            const match = part.match(/^\s*"([^"]+)"\s*$/);
+            if (!match) {
+                return null;
+            }
+            const inner = match[1].trim();
+            if (!inner) {
+                return null;
+            }
+            parsed.push(inner);
+        }
+        return parsed.length > 0 ? parsed : null;
+    }
+
+    function setUserSettingError(input, hasError) {
+        if (!input) return;
+        input.classList.toggle('user-setting-error', hasError);
+    }
+
+    function clearUserSettingErrors() {
+        [userSettingJobBatchInput, userSettingDefaultVarsInput, userSettingMaxParsedInput, userSettingMaxSetsInput]
+            .forEach((input) => setUserSettingError(input, false));
+    }
+
+    function normalizeAiProviderDefaults(raw) {
+        return {
+            defaultProvider: raw?.defaultProvider || '',
+            modelsByProvider: raw?.modelsByProvider || {},
+        };
+    }
+
+    function normalizeAiDefaults(raw) {
+        if (raw && (raw.defaultProvider !== undefined || raw.modelsByProvider !== undefined)) {
+            const normalized = normalizeAiProviderDefaults(raw);
+            return { regex: normalized, parse: { ...normalized } };
+        }
+        return {
+            regex: normalizeAiProviderDefaults(raw?.regex),
+            parse: normalizeAiProviderDefaults(raw?.parse),
+        };
+    }
+
+    function updateSelectPlaceholder(select) {
+        if (!select) return;
+        select.classList.toggle('placeholder', !select.value);
+    }
+
+    function hasSelectOption(select, value) {
+        if (!select || !value) return false;
+        return Array.from(select.options).some((option) => option.value === value);
+    }
+
+    function requiresModelSelection(select) {
+        return select?.dataset.requiresModel === 'true';
+    }
+
+    function isModelSelectionPending(select) {
+        return select?.dataset.requiresModel === 'pending';
+    }
+
+    function updateAiModalPlaceholders() {
+        updateSelectPlaceholder(aiProviderSelect);
+        updateSelectPlaceholder(aiModelSelect);
+        updateSelectPlaceholder(aiParseProviderSelect);
+        updateSelectPlaceholder(aiParseModelSelect);
+    }
+
+    function setAiDefaultsSelectStatus(selects, status) {
+        const targets = selects.filter(Boolean);
+        targets.forEach((select) => {
+            select.classList.remove('user-setting-success', 'user-setting-error');
+            if (status === 'success') {
+                select.classList.add('user-setting-success');
+            } else if (status === 'error') {
+                select.classList.add('user-setting-error');
+            }
+        });
+    }
+
+    function syncAiDefaultToggle(toggle, provider, defaultsState) {
+        if (!toggle) return;
+        toggle.checked = !!provider && provider === defaultsState.defaultProvider;
+    }
+
+    const defaultModelPlaceholder = '<option value="" disabled selected hidden>Select model...</option>';
+
+    function resetAiDefaultsModel(modelSelect) {
+        if (!modelSelect) return;
+        modelSelect.disabled = true;
+        resetModelSelect(modelSelect, defaultModelPlaceholder);
+    }
+
+    function refreshAiDefaultsModel(provider, preferredModel, modelSelect, modelGroup, applyBtn, onErrorStatus) {
+        if (!modelSelect) return;
+        if (!provider) {
+            setModelVisibility(false, {
+                select: modelSelect,
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            });
+            resetAiDefaultsModel(modelSelect);
+            return;
+        }
+        if (isLocalProvider(provider)) {
+            modelSelect.dataset.requiresModel = 'false';
+            setModelVisibility(false, {
+                select: modelSelect,
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            });
+            resetAiDefaultsModel(modelSelect);
+            return;
+        }
+        modelSelect.disabled = false;
+        ensureAiModels(
+            provider,
+            modelSelect,
+            (message, isError) => {
+                if (isError) {
+                    if (typeof onErrorStatus === 'function') {
+                        onErrorStatus();
+                    }
+                    showNonBlockingModal(message || messages.aiModelsLoadFailed);
+                }
+            },
+            preferredModel,
+            {
+                container: modelGroup,
+                display: 'flex',
+                applyBtn,
+                placeholderHtml: defaultModelPlaceholder,
+            }
+        );
+    }
+
+    function applyAiDefaultsToRow(config) {
+        const { defaults, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
+        if (providerSelect) {
+            providerSelect.value = defaults.defaultProvider || '';
+            updateSelectPlaceholder(providerSelect);
+        }
+        const provider = providerSelect?.value || '';
+        syncAiDefaultToggle(toggle, provider, defaults);
+        refreshAiDefaultsModel(provider, defaults.modelsByProvider?.[provider], modelSelect, modelGroup, applyBtn, () => {
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+        });
+        setAiDefaultsSelectStatus(statusTargets, null);
+    }
+
+    function loadUserSettings() {
+        try {
+            const stored = window.localStorage ? window.localStorage.getItem(userSettingsStorageKey) : null;
+            if (!stored) return null;
+            return JSON.parse(stored);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    const initialUserSettings = loadUserSettings();
+    if (initialUserSettings?.aiDefaults || initialUserSettings?.aiProviderDefaults) {
+        aiDefaultsState = normalizeAiDefaults(initialUserSettings.aiDefaults || initialUserSettings.aiProviderDefaults);
+    } else {
+        aiDefaultsState = normalizeAiDefaults(userSettingsDefaults.aiDefaults);
+    }
+    if (typeof initialUserSettings?.showAllProjects === 'boolean') {
+        applyShowAllProjectsSetting(initialUserSettings.showAllProjects, { refresh: false });
+    } else {
+        applyShowAllProjectsSetting(userSettingsDefaults.showAllProjects, { refresh: false });
+    }
+    if (typeof initialUserSettings?.removeClearAll === 'boolean') {
+        applyClearAllSetting(initialUserSettings.removeClearAll);
+    } else {
+        applyClearAllSetting(userSettingsDefaults.removeClearAll);
+    }
+
+    function clearLocalUserData() {
+        try {
+            if (!window.localStorage) return;
+            const keys = Object.keys(window.localStorage);
+            keys.forEach((key) => {
+                if (isUserStorageKey(key)) {
+                    window.localStorage.removeItem(key);
+                }
+            });
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    function applyUserSettingsValues(settings) {
+        if (!settings) return;
+        if (userSettingJobBatchInput) {
+            userSettingJobBatchInput.value = `${settings.jobBatchSize ?? ''}`;
+        }
+        if (userSettingMaxParsedInput) {
+            userSettingMaxParsedInput.value = `${settings.maxParsedVariables ?? ''}`;
+        }
+        if (userSettingMaxSetsInput) {
+            userSettingMaxSetsInput.value = `${settings.maxVariableSets ?? ''}`;
+        }
+        if (userSettingDefaultVarsInput) {
+            const defaultVars = Array.isArray(settings.defaultVariableNames)
+                ? formatDefaultVariableNames(settings.defaultVariableNames)
+                : (settings.defaultVariableNames ?? '');
+            userSettingDefaultVarsInput.value = defaultVars;
+        }
+        applyShowAllProjectsSetting(settings.showAllProjects, { refresh: false });
+        applyClearAllSetting(settings.removeClearAll);
+        const defaults = normalizeAiDefaults(settings.aiDefaults || settings.aiProviderDefaults);
+        aiDefaultsState = defaults;
+        applyAiDefaultsToRow({
+            defaults: defaults.regex,
+            providerSelect: aiRegexDefaultProviderSelect,
+            modelSelect: aiRegexDefaultModelSelect,
+            toggle: aiRegexDefaultToggle,
+            modelGroup: aiRegexDefaultModelGroup,
+            applyBtn: aiRegexDefaultApplyBtn,
+            statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+        });
+        applyAiDefaultsToRow({
+            defaults: defaults.parse,
+            providerSelect: aiParseDefaultProviderSelect,
+            modelSelect: aiParseDefaultModelSelect,
+            toggle: aiParseDefaultToggle,
+            modelGroup: aiParseDefaultModelGroup,
+            applyBtn: aiParseDefaultApplyBtn,
+            statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+        });
+    }
+
+    function resetUserSettingsToDefaults() {
+        applyUserSettingsValues({
+            jobBatchSize: userSettingsDefaults.jobBatchSize,
+            maxParsedVariables: userSettingsDefaults.maxParsedVariables,
+            maxVariableSets: userSettingsDefaults.maxVariableSets,
+            defaultVariableNames: userSettingsDefaults.defaultVariableNames,
+            showAllProjects: userSettingsDefaults.showAllProjects,
+            removeClearAll: userSettingsDefaults.removeClearAll,
+            aiDefaults: userSettingsDefaults.aiDefaults,
+        });
+        clearUserSettingErrors();
+        applyDefaultAiProviderSelections({ force: true });
+    }
+
+    function populateUserSettings() {
+        const stored = loadUserSettings();
+        if (stored) {
+            applyUserSettingsValues(stored);
+            return;
+        }
+        resetUserSettingsToDefaults();
+    }
+
+    function validateUserSettings() {
+        let hasError = false;
+        const jobBatchRaw = userSettingJobBatchInput?.value?.trim() ?? '';
+        const maxParsedRaw = userSettingMaxParsedInput?.value?.trim() ?? '';
+        const maxSetsRaw = userSettingMaxSetsInput?.value?.trim() ?? '';
+        const defaultVarsRaw = userSettingDefaultVarsInput?.value ?? '';
+
+        const numericPattern = /^\d+$/;
+        const jobBatchValue = numericPattern.test(jobBatchRaw) ? parseInt(jobBatchRaw, 10) : NaN;
+        const maxParsedValue = numericPattern.test(maxParsedRaw) ? parseInt(maxParsedRaw, 10) : NaN;
+        const maxSetsValue = numericPattern.test(maxSetsRaw) ? parseInt(maxSetsRaw, 10) : NaN;
+
+        const parsedDefaults = parseQuotedVariableNames(defaultVarsRaw);
+        const showAllProjects = !!userSettingShowAllYes?.checked;
+        const removeClearAll = !!userSettingRemoveClearAllYes?.checked;
+
+        const jobBatchValid = Number.isInteger(jobBatchValue) && jobBatchValue >= 1 && jobBatchValue <= 100;
+        const maxParsedValid = Number.isInteger(maxParsedValue) && maxParsedValue >= 3 && maxParsedValue <= 15;
+        const maxSetsValid = Number.isInteger(maxSetsValue) && maxSetsValue >= 5 && maxSetsValue <= 30;
+        const defaultVarsValid = Array.isArray(parsedDefaults);
+
+        setUserSettingError(userSettingJobBatchInput, !jobBatchValid);
+        setUserSettingError(userSettingMaxParsedInput, !maxParsedValid);
+        setUserSettingError(userSettingMaxSetsInput, !maxSetsValid);
+        setUserSettingError(userSettingDefaultVarsInput, !defaultVarsValid);
+
+        if (!jobBatchValid || !maxParsedValid || !maxSetsValid || !defaultVarsValid) {
+            hasError = true;
+        }
+
+        if (hasError) {
+            showNonBlockingModal(messages.formattingErrors);
+            return null;
+        }
+
+        return {
+            jobBatchSize: jobBatchValue,
+            maxParsedVariables: maxParsedValue,
+            maxVariableSets: maxSetsValue,
+            defaultVariableNames: parsedDefaults,
+            showAllProjects,
+            removeClearAll,
+            aiDefaults: aiDefaultsState,
+        };
+    }
+
+    function saveUserSettingsToDatabase(settings, options = {}) {
+        const { showSuccessMessage = true, applySettings = true, onSuccess, onError } = options;
+        return fetch(userSettingsSaveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ settings }),
+        })
+            .then((resp) => resp.json())
+            .then((data) => {
+                if (data.error) {
+                    showNonBlockingModal(data.error);
+                    if (typeof onError === 'function') {
+                        onError(data.error);
+                    }
+                    return false;
+                }
+
+                if (showSuccessMessage) {
+                    showNonBlockingModal(messages.userSettingsSavedDb);
+                }
+
+                const saveSucceeded =
+                    (data && typeof data.success === 'boolean')
+                        ? data.success === true
+                        : true;
+
+                if (saveSucceeded && data && data.settings && applySettings) {
+                    applyUserSettingsValues(data.settings);
+                }
+
+                if (typeof onSuccess === 'function') {
+                    onSuccess(data);
+                }
+                return true;
+            })
+            .catch((err) => {
+                showNonBlockingModal(formatMessage(messages.userSettingsSaveError, { error: err }));
+                if (typeof onError === 'function') {
+                    onError(err);
+                }
+                return false;
+            });
+    }
+
+    function refreshAiCredentials() {
+        return fetch(aiCredentialsListUrl, { method: 'GET' })
+            .then((resp) => resp.json())
+            .then((data) => {
+                if (data.error) {
+                    updateAiCredentialsStatus(data.error, true);
+                    return;
+                }
+                const providers = Array.isArray(data.providers) ? data.providers : [];
+                aiCredentialProviders = new Set(providers);
+                updateCredentialProviderStatus();
+                updateAiProcessAvailability();
+                updateAiProviderStatus();
+                updateAiParseProviderStatus();
+            })
+            .catch(() => {
+                updateAiCredentialsStatus(messages.unableLoadCredentials, true);
+            });
+    }
+
+    function updateCredentialProviderStatus() {
+        if (!aiCredentialsProvider) return;
+        const provider = aiCredentialsProvider.value;
+        if (aiCredentialProviders.has(provider)) {
+            updateAiCredentialsStatus(messages.aiKeyExists);
+        } else {
+            updateAiCredentialsStatus(messages.aiKeyMissing);
+        }
+    }
+
+    if (previewForm) {
+        previewForm.addEventListener('submit', (event) => {
+            if (!projectSelect.value) {
+                event.preventDefault();
+                showNonBlockingModal(messages.selectProject);
+                return;
+            }
+            if (!selectedDatasetsInput.value) {
+                event.preventDefault();
+                showNonBlockingModal(messages.selectDatasets);
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                event.preventDefault();
+                showNonBlockingModal(messages.noDataToProcess);
+                return;
+            }
+            const separatorMode = document.getElementById('separator_mode')?.value || 'chars';
+
+            if (separatorMode !== 'ai_parse' && !separatorInput.value.trim()) {
+                event.preventDefault();
+                showNonBlockingModal(messages.filenameInputEmpty);
+                return;
+            }
+            if (separatorMode === 'chars' && hasDuplicateCharacters(separatorInput.value)) {
+                event.preventDefault();
+                showNonBlockingModal(messages.filenameInputDuplicate);
+                return;
+            }
+            if (aiRegexCheckbox?.checked && !aiRegexTransferred) {
+                event.preventDefault();
+                showNonBlockingModal(messages.aiRegexUseFirst);
+                return;
+            }
+            const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+            if (aiParseCheckbox?.checked && !aiParseTransferred) {
+                event.preventDefault();
+                showNonBlockingModal(messages.aiParseUseFirst);
+                return;
+            }
+            if (separatorMode === 'ai_parse' && (!aiParsedJsonInput || !aiParsedJsonInput.value.trim())) {
+                event.preventDefault();
+                showNonBlockingModal(messages.aiParseUseFirst);
+                return;
+            }
+            
+            // INJECT USER SETTINGS INTO FORM
+            const userSettings = loadUserSettings();
+            if (userSettings) {
+                ['user_chunk_size', 'user_max_parsed', 'user_max_sets'].forEach(id => {
+                    const old = document.getElementById(id);
+                    if (old) old.remove();
+                });
+                
+                const inputs = [
+                    { id: 'user_chunk_size', name: 'user_chunk_size', value: userSettings.jobBatchSize },
+                    { id: 'user_max_parsed', name: 'user_max_parsed', value: userSettings.maxParsedVariables },
+                    { id: 'user_max_sets', name: 'user_max_sets', value: userSettings.maxVariableSets }
+                ];
+                
+                inputs.forEach(({ id, name, value }) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.id = id;
+                    input.name = name;
+                    input.value = value;
+                    previewForm.appendChild(input);
+                });
+            }
+            
+            persistPreviewState();
+        });
+    }
+
+    {% if error_message %}
+    showNonBlockingModal("{{ error_message|escapejs }}");
+    {% endif %}
+
+    function normalizeProjectEntry(entry) {
+        if (!entry) return null;
+        if (Array.isArray(entry)) {
+            const [projectId, projectName, owner] = entry;
+            return {
+                id: projectId ? String(projectId) : '',
+                name: projectName || '',
+                owner: owner || '',
+                access: '',
+            };
+        }
+        if (typeof entry === 'object') {
+            return {
+                id: entry.id ? String(entry.id) : '',
+                name: entry.name || '',
+                owner: entry.owner || '',
+                access: entry.access || '',
+            };
+        }
+        return null;
+    }
+
+    function normalizeProjectData(raw) {
+        if (Array.isArray(raw)) {
+            return {
+                owned: raw.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+                collab: [],
+                collab_annotate: [],
+                collab_available: false,
+            };
+        }
+        const owned = Array.isArray(raw?.owned) ? raw.owned : [];
+        const collab = Array.isArray(raw?.collab) ? raw.collab : [];
+        const collabAnnotate = Array.isArray(raw?.collab_annotate) ? raw.collab_annotate : [];
+        return {
+            owned: owned.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab: collab.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab_annotate: collabAnnotate.map(normalizeProjectEntry).filter((entry) => entry && entry.id),
+            collab_available: Boolean(raw?.collab_available),
+        };
+    }
+
+    function isCollaborationEnabled() {
+        return !!collaborationToggle?.checked;
+    }
+
+    function updateCollaborationVisibility() {
+        const hasCollaborationAccess = Boolean(projectData?.collab_available);
+        if (!collaborationSection) {
+            return hasCollaborationAccess;
+        }
+        if (hasCollaborationAccess) {
+            collaborationSection.style.display = '';
+        } else {
+            collaborationSection.style.display = 'none';
+            try {
+                window.localStorage?.removeItem(collaborationToggleStorageKey);
+            } catch (error) {
+                // Ignore storage failures.
+            }
+            applyCollaborationState(false, { persist: false, refresh: false });
+        }
+        return hasCollaborationAccess;
+    }
+
+    function getProjectLabel(projectId, projectName) {
+        return String(projectName || projectId || '');
+    }
+
+    function getProjectEntryLabel(entry) {
+        const baseLabel = getProjectLabel(entry?.id, entry?.name);
+        if (entry?.owner) {
+            return `${entry.owner} → ${baseLabel}`;
+        }
+        return baseLabel;
+    }
+
+    function getProjectEntryAccess(entry) {
+        return entry?.access || '';
+    }
+
+    function isCollabEntry(entry) {
+        return getProjectEntryAccess(entry) === 'read_write';
+    }
+
+    function isAnnotateEntry(entry) {
+        return getProjectEntryAccess(entry) === 'read_annotate';
+    }
+
+    function isSharedEntry(entry) {
+        return isCollabEntry(entry) || isAnnotateEntry(entry);
+    }
+
+    function getNumericSortValue(label) {
+        return /^\s*\d+\s*$/.test(label) ? Number(label.trim()) : null;
+    }
+
+    function setDatasetSortIndicator(key, direction) {
+        const headers = datasetTableContainer
+            ? datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]')
+            : [];
+        headers.forEach((header) => {
+            const isActive = header.dataset.sortKey === key;
+            header.classList.toggle('is-sorted', isActive);
+            header.classList.toggle('sort-asc', isActive && direction === 'asc');
+            header.classList.toggle('sort-desc', isActive && direction === 'desc');
+            if (isActive) {
+                header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+            } else {
+                header.removeAttribute('aria-sort');
+            }
+        });
+    }
+
+    function getDatasetSortValue(dataset, key) {
+        if (!dataset) return '';
+        if (key === 'id') return Number(dataset.id);
+        if (key === 'image_count') return Number(dataset.image_count);
+        return String(dataset.name || '').toLowerCase();
+    }
+
+    function compareDatasetValues(a, b, type) {
+        if (type === 'number') {
+            const numA = Number.isFinite(a) ? a : Number.NaN;
+            const numB = Number.isFinite(b) ? b : Number.NaN;
+            if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+            if (Number.isNaN(numA)) return 1;
+            if (Number.isNaN(numB)) return -1;
+            return numA - numB;
+        }
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    }
+
+    function sortDatasets(rows, key, direction) {
+        const header = datasetTableContainer?.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+        const type = header?.dataset.sortType || 'text';
+        const sorted = rows
+            .map((dataset, index) => ({
+                dataset,
+                index,
+                value: getDatasetSortValue(dataset, key)
+            }))
+            .sort((a, b) => {
+                const cmp = compareDatasetValues(a.value, b.value, type);
+                if (cmp !== 0) return direction === 'asc' ? cmp : -cmp;
+                return a.index - b.index;
+            })
+            .map((entry) => entry.dataset);
+        return sorted;
+    }
+
+    function sortOwnedEntries(entries) {
+        return entries.sort((entryA, entryB) => {
+            const labelA = getProjectLabel(entryA?.id, entryA?.name);
+            const labelB = getProjectLabel(entryB?.id, entryB?.name);
+            const numericA = getNumericSortValue(labelA);
+            const numericB = getNumericSortValue(labelB);
+            if (numericA !== null && numericB !== null) {
+                return numericB - numericA;
+            }
+            if (numericA !== null) return -1;
+            if (numericB !== null) return 1;
+            const labelCompare = labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+            if (labelCompare !== 0) return labelCompare;
+            return String(entryA?.id || '').localeCompare(String(entryB?.id || ''), undefined, { numeric: true, sensitivity: 'base' });
+        });
+    }
+
+    function sortCollabEntries(entries) {
+        const byOwner = new Map();
+        entries.forEach((entry) => {
+            const owner = entry.owner || 'Unknown user';
+            if (!byOwner.has(owner)) {
+                byOwner.set(owner, []);
+            }
+            byOwner.get(owner).push(entry);
+        });
+        const owners = Array.from(byOwner.keys()).sort((a, b) => (
+            a.localeCompare(b, undefined, { sensitivity: 'base' })
+        ));
+        const sorted = [];
+        owners.forEach((owner) => {
+            const items = byOwner.get(owner) || [];
+            items.sort((entryA, entryB) => {
+                const labelA = getProjectLabel(entryA?.id, entryA?.name);
+                const labelB = getProjectLabel(entryB?.id, entryB?.name);
+                return labelA.localeCompare(labelB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+            sorted.push(...items);
+        });
+        return sorted;
+    }
+
+    function getOrderedProjectEntries(includeCollab = false) {
+        const owned = sortOwnedEntries([...(projectData?.owned || [])]);
+        if (!includeCollab) {
+            return owned;
+        }
+        const collab = sortCollabEntries([...(projectData?.collab || [])]);
+        const annotate = sortCollabEntries([...(projectData?.collab_annotate || [])]);
+        return [...owned, ...collab, ...annotate];
+    }
+
+    function findProjectEntryById(projectId, includeCollab = false) {
+        if (!projectId) return null;
+        const list = includeCollab
+            ? [
+                ...(projectData?.owned || []),
+                ...(projectData?.collab || []),
+                ...(projectData?.collab_annotate || []),
+            ]
+            : [...(projectData?.owned || [])];
+        return list.find((entry) => String(entry.id) === String(projectId)) || null;
+    }
+
+    projectData = normalizeProjectData(projectData);
+    updateCollaborationVisibility();
+
+    function getProjectOptions() {
+        return projectSelectDropdown
+            ? Array.from(projectSelectDropdown.querySelectorAll('.project-option'))
+            : [];
+    }
+
+    function saveCollaborationState(enabled) {
+        try {
+            window.localStorage?.setItem(collaborationToggleStorageKey, JSON.stringify({ enabled: !!enabled }));
+        } catch (error) {
+            // Ignore storage failures.
+        }
+    }
+
+    function loadCollaborationState() {
+        try {
+            const raw = window.localStorage?.getItem(collaborationToggleStorageKey);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.enabled === 'boolean' ? parsed.enabled : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function updateProjectSelectionDisplay() {
+        if (!projectSelectDisplay || !projectSelectWrapper || !projectSelectInput) return;
+        const selectedName = projectSelectInput.dataset.selectedName || '';
+        const selectedOwner = projectSelectInput.dataset.selectedOwner || '';
+        const selectedBaseName = projectSelectInput.dataset.selectedBaseName || selectedName;
+        const selectedAccess = projectSelectInput.dataset.selectedAccess || '';
+        const isCollab = selectedAccess === 'read_write';
+        const isAnnotate = selectedAccess === 'read_annotate';
+        if (!selectedName) {
+            projectSelectDisplay.innerHTML = '';
+            projectSelectDisplay.style.display = 'none';
+            projectSelectDisplay.classList.remove('is-collab', 'is-collab-annotate');
+            projectSelectWrapper.classList.remove('is-display-active');
+            return;
+        }
+        projectSelectDisplay.innerHTML = '';
+        projectSelectDisplay.style.display = 'flex';
+        projectSelectWrapper.classList.add('is-display-active');
+        projectSelectDisplay.classList.toggle('is-collab', isCollab);
+        projectSelectDisplay.classList.toggle('is-collab-annotate', isAnnotate);
+        if ((isCollab || isAnnotate) && selectedOwner) {
+            const ownerSpan = document.createElement('span');
+            ownerSpan.className = 'project-select-owner';
+            ownerSpan.textContent = selectedOwner;
+            const arrowSpan = document.createElement('span');
+            arrowSpan.textContent = '→';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = selectedBaseName;
+            projectSelectDisplay.append(ownerSpan, arrowSpan, nameSpan);
+        } else {
+            projectSelectDisplay.textContent = selectedName;
+        }
+    }
+
+    function setProjectSelection(projectId, projectName, options = {}) {
+        const { persist = true, access = '', owner = '', baseName = '' } = options;
+        const normalizedId = projectId ? String(projectId) : '';
+        const normalizedName = projectName ? String(projectName) : '';
+        if (projectSelect) {
+            projectSelect.value = normalizedId;
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = normalizedName;
+            projectSelectInput.dataset.selectedName = normalizedName;
+            projectSelectInput.dataset.selectedAccess = access || '';
+            projectSelectInput.dataset.selectedOwner = owner || '';
+            projectSelectInput.dataset.selectedBaseName = baseName || normalizedName;
+            projectSelectInput.classList.toggle('is-collab', access === 'read_write');
+            projectSelectInput.classList.toggle('is-collab-annotate', access === 'read_annotate');
+        }
+        updateProjectSelectionDisplay();
+        if (persist) {
+            persistPreviewState();
+        }
+    }
+
+    function clearProjectSelection({ persist = true } = {}) {
+        if (projectSelect) {
+            projectSelect.value = '';
+        }
+        if (projectSelectInput) {
+            projectSelectInput.value = '';
+            projectSelectInput.dataset.selectedName = '';
+            projectSelectInput.dataset.selectedAccess = '';
+            projectSelectInput.dataset.selectedOwner = '';
+            projectSelectInput.dataset.selectedBaseName = '';
+            projectSelectInput.classList.remove('is-collab', 'is-collab-annotate');
+        }
+        updateProjectSelectionDisplay();
+        if (persist) {
+            persistPreviewState();
+        }
+    }
+
+    function applyCollaborationState(enabled, options = {}) {
+        const { persist = true, refresh = false } = options;
+        if (collaborationToggle) {
+            collaborationToggle.checked = !!enabled;
+        }
+        if (persist) {
+            saveCollaborationState(enabled);
+        }
+        
+        const isDropdownOpen = projectSelectDropdown?.style.display === 'block';
+        
+        // ALWAYS clear selection and search when collaboration toggle changes
+        clearProjectSelection({ persist: true });
+        resetDatasetSelection();
+        
+        if (isDropdownOpen) {
+            // Dropdown is open - clear search and reset active index
+            projectSelectInput.value = '';
+            setActiveProjectIndex(-1);
+            renderProjectOptions('');
+        }
+        
+        if (refresh) {
+            refreshProjectList();
+        }
+    }
+
+    function syncProjectSelectionWithMode() {
+        if (!projectSelect) return;
+        const selectedId = projectSelect.value;
+        if (!selectedId) {
+            updateProjectSelectionDisplay();
+            return;
+        }
+        const match = findProjectEntryById(selectedId, isCollaborationEnabled());
+        if (!match) {
+            clearProjectSelection();
+            resetDatasetSelection();
+            return;
+        }
+        const label = getProjectEntryLabel(match);
+        setProjectSelection(match.id, label, {
+            persist: false,
+            access: getProjectEntryAccess(match),
+            owner: match?.owner || '',
+            baseName: getProjectLabel(match?.id, match?.name),
+        });
+    }
+
+    function setActiveProjectIndex(index, useKeyboard = false) {
+        const options = getProjectOptions();
+        if (options.length === 0) {
+            activeProjectIndex = -1;
+            return;
+        }
+        if (projectSelectDropdown) {
+            if (useKeyboard) {
+                projectSelectDropdown.classList.add('keyboard-active');
+            } else {
+                projectSelectDropdown.classList.remove('keyboard-active');
+            }
+        }
+        if (index < 0) {
+            options.forEach((option) => option.classList.remove('is-active'));
+            activeProjectIndex = -1;
+            return;
+        }
+        const clamped = Math.max(0, Math.min(index, options.length - 1));
+        options.forEach((option, idx) => {
+            if (idx === clamped) {
+                option.classList.add('is-active');
+                option.scrollIntoView({ block: 'nearest' });
+            } else {
+                option.classList.remove('is-active');
+            }
+        });
+        activeProjectIndex = clamped;
+    }
+
+    function selectProjectOption(option) {
+        if (!option) return;
+        const projectId = option.dataset.projectId || '';
+        const projectName = option.dataset.projectName || option.textContent || '';
+        const access = option.dataset.projectAccess || '';
+        const owner = option.dataset.projectOwner || '';
+        const baseName = option.dataset.projectBaseName || '';
+        const previousProjectId = projectSelect?.value || '';
+        setProjectSelection(projectId, projectName, { access, owner, baseName });
+        if (projectId && projectId !== previousProjectId) {
+            resetDatasetSelection();
+        }
+        closeProjectDropdown(false);
+    }
+
+    function updateProjectData(data) {
+        projectData = normalizeProjectData(data);
+        updateCollaborationVisibility();
+        syncProjectSelectionWithMode();
+        const currentId = projectSelect?.value || '';
+        if (currentId) {
+            const match = findProjectEntryById(currentId, isCollaborationEnabled());
+            if (!match) {
+                clearProjectSelection();
+                resetDatasetSelection();
+            } else {
+                const label = getProjectEntryLabel(match);
+                setProjectSelection(match.id, label, {
+                    persist: false,
+                    access: getProjectEntryAccess(match),
+                    owner: match?.owner || '',
+                    baseName: getProjectLabel(match?.id, match?.name),
+                });
+            }
+        }
+        if (projectSelectDropdown?.style.display === 'block') {
+            renderProjectOptions(projectSelectInput?.value || '');
+        }
+    }
+
+    async function refreshProjectList() {
+        if (!projectListUrl) return;
+        if (isProjectRefreshInFlight) return;
+        isProjectRefreshInFlight = true;
+        if (projectRefreshBtn) {
+            projectRefreshBtn.classList.add('is-loading');
+            projectRefreshBtn.setAttribute('aria-busy', 'true');
+        }
+        try {
+            const response = await fetch(projectListUrl.toString(), {
+                method: 'GET',
+                cache: 'no-store',
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                throw new Error(`Request failed: ${response.status}`);
+            }
+            const data = await response.json();
+            updateProjectData(data);
+        } catch (error) {
+            showNonBlockingModal('Unable to refresh project list.');
+        } finally {
+            isProjectRefreshInFlight = false;
+            if (projectRefreshBtn) {
+                projectRefreshBtn.classList.remove('is-loading');
+                projectRefreshBtn.setAttribute('aria-busy', 'false');
+            }
+        }
+    }
+
+    function renderProjectOptions(query) {
+        if (!projectSelectDropdown) return;
+        const normalizedQuery = query.trim().toLowerCase();
+        const matches = [];
+        const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
+        const totalProjects = orderedEntries.length;
+        let totalMatches = 0;
+        let ownedMatches = 0;
+        const maxResults = getProjectResultsLimit(isCollaborationEnabled());
+        const allowAll = !Number.isFinite(maxResults);
+
+        for (let i = 0; i < orderedEntries.length; i += 1) {
+            const entry = orderedEntries[i];
+            const label = getProjectEntryLabel(entry);
+            const id = entry?.id || '';
+            const owner = entry?.owner || '';
+            const isMatch = !normalizedQuery
+                || String(label).toLowerCase().includes(normalizedQuery)
+                || String(id).toLowerCase().includes(normalizedQuery)
+                || String(owner).toLowerCase().includes(normalizedQuery);
+            if (isMatch) {
+                totalMatches += 1;
+                if (allowAll) {
+                    matches.push(entry);
+                } else if (isSharedEntry(entry)) {
+                    if (matches.length < maxResults) {
+                        matches.push(entry);
+                    }
+                } else if (ownedMatches < MAX_USER_PROJECT_RESULTS && matches.length < maxResults) {
+                    ownedMatches += 1;
+                    matches.push(entry);
+                }
+            }
+        }
+
+        projectSelectDropdown.innerHTML = '';
+        const listContainer = document.createElement('div');
+        listContainer.className = 'project-select-dropdown__list';
+        projectSelectDropdown.appendChild(listContainer);
+
+        if (matches.length > 0) {
+            matches.forEach((entry) => {
+                const option = document.createElement('div');
+                option.className = 'project-option';
+                option.dataset.projectId = entry.id;
+                option.dataset.projectName = getProjectEntryLabel(entry);
+                option.dataset.projectBaseName = getProjectLabel(entry?.id, entry?.name);
+                option.dataset.projectAccess = getProjectEntryAccess(entry);
+                option.style.padding = '8px 12px';
+                option.style.cursor = 'pointer';
+                option.style.whiteSpace = 'nowrap';
+                if (isSharedEntry(entry)) {
+                    option.dataset.projectOwner = entry.owner || '';
+                    const ownerSpan = document.createElement('span');
+                    ownerSpan.className = 'project-option-owner';
+                    ownerSpan.textContent = entry.owner || '';
+                    const arrowSpan = document.createElement('span');
+                    arrowSpan.className = 'project-option-arrow';
+                    arrowSpan.textContent = '→';
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = getProjectLabel(entry?.id, entry?.name);
+                    option.append(ownerSpan, arrowSpan, nameSpan);
+                } else {
+                    option.textContent = getProjectEntryLabel(entry);
+                }
+                if (isCollabEntry(entry)) {
+                    option.classList.add('is-collab');
+                } else if (isAnnotateEntry(entry)) {
+                    option.classList.add('is-collab-annotate');
+                }
+                listContainer.appendChild(option);
+            });
+        }
+
+        const statusRow = document.createElement('div');
+        statusRow.className = 'project-select-dropdown__status';
+        if (Number.isFinite(maxResults) && totalMatches > maxResults) {
+            statusRow.textContent = `Showing ${maxResults} of ${totalMatches} projects. Search to narrow down.`;
+        } else if (totalMatches > 0) {
+            statusRow.textContent = `${totalMatches} project${totalMatches === 1 ? '' : 's'} found`;
+        } else {
+            statusRow.textContent = totalProjects > 0 ? 'No matching projects' : 'No projects found';
+        }
+        projectSelectDropdown.appendChild(statusRow);
+        if (matches.length > 0) {
+            setActiveProjectIndex(-1);
+        } else {
+            activeProjectIndex = -1;
+        }
+    }
+
+    function openProjectDropdown() {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'block';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        projectSelectWrapper?.classList.add('is-open');
+        if (projectSelectArrow) {
+            projectSelectArrow.textContent = '▴';
+        }
+        projectSelectWrapper?.classList.remove('is-display-active');
+        if (projectSelectDisplay) {
+            projectSelectDisplay.style.display = 'none';
+        }
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'block';
+        }
+        projectSelectInput.dataset.previousValue = projectSelectInput.value;
+        projectSelectInput.value = '';
+        projectSelectInput.placeholder = 'Search...';
+        renderProjectOptions('');
+    }
+
+    function closeProjectDropdown(restoreSelection = true) {
+        if (!projectSelectDropdown || !projectSelectInput) return;
+        projectSelectDropdown.style.display = 'none';
+        projectSelectDropdown.classList.remove('keyboard-active');
+        projectSelectWrapper?.classList.remove('is-open');
+        if (projectSelectArrow) {
+            projectSelectArrow.textContent = '▾';
+        }
+        if (projectDropdownBackdrop) {
+            projectDropdownBackdrop.style.display = 'none';
+        }
+        if (restoreSelection) {
+            const selectedName = projectSelectInput.dataset.selectedName || '';
+            projectSelectInput.value = selectedName;
+        }
+        projectSelectInput.placeholder = 'Select project…';
+        updateProjectSelectionDisplay();
+    }
+
+    function filterProjectOptions(query) {
+        if (projectFilterTimeout) {
+            window.clearTimeout(projectFilterTimeout);
+        }
+        projectFilterTimeout = window.setTimeout(() => {
+            renderProjectOptions(query);
+        }, 120);
+    }
+
+    if (projectSelectInput) {
+        projectSelectInput.addEventListener('focus', () => {
+            openProjectDropdown();
+        });
+
+        projectSelectInput.addEventListener('click', () => {
+            if (projectSelectDropdown?.style.display !== 'block') {
+                openProjectDropdown();
+            }
+        });
+
+        projectSelectInput.addEventListener('input', (event) => {
+            filterProjectOptions(event.target.value);
+        });
+
+        projectSelectInput.addEventListener('keydown', (event) => {
+            if (projectSelectDropdown?.style.display !== 'block') return;
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const options = getProjectOptions();
+                if (options.length === 0) return;
+                const maxIndex = options.length - 1;
+                if (activeProjectIndex === -1) {
+                    const nextIndex = event.key === 'ArrowDown' ? 0 : maxIndex;
+                    setActiveProjectIndex(nextIndex, true);
+                    return;
+                }
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const nextIndex = Math.max(0, Math.min(activeProjectIndex + delta, maxIndex));
+                setActiveProjectIndex(nextIndex, true);
+            } else if (event.key === 'Enter') {
+                const options = getProjectOptions();
+                if (options.length === 0 || activeProjectIndex === -1) return;
+                event.preventDefault();
+                selectProjectOption(options[activeProjectIndex]);
+            }
+        });
+    }
+
+    if (projectRefreshBtn) {
+        projectRefreshBtn.addEventListener('click', () => {
+            refreshProjectList();
+        });
+    }
+
+    if (collaborationToggle) {
+        collaborationToggle.addEventListener('change', () => {
+            applyCollaborationState(collaborationToggle.checked, { persist: true, refresh: true });
+        });
+    }
+
+    if (projectSelectDropdown) {
+        projectSelectDropdown.addEventListener('click', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            selectProjectOption(option);
+        });
+
+        projectSelectDropdown.addEventListener('mousemove', (event) => {
+            const option = event.target.closest('.project-option');
+            if (!option) return;
+            const options = getProjectOptions();
+            const index = options.indexOf(option);
+            if (index !== -1) {
+                setActiveProjectIndex(index, false);
+            }
+        });
+    }
+
+    if (projectDropdownBackdrop) {
+        projectDropdownBackdrop.addEventListener('click', (event) => {
+            // Don't close if clicking the refresh button or collaboration toggle
+            if ((projectRefreshBtn && (event.target === projectRefreshBtn || projectRefreshBtn.contains(event.target))) ||
+                (collaborationSection && collaborationSection.contains(event.target))) {
+                return;
+            }
+            closeProjectDropdown(true);
+        });
+    }
+
+    if (aiRegexCheckbox) {
+        updateAiRegexOption();
+    }
+
+    const aiParseCheckbox = document.getElementById('sep_mode_ai_parse');
+    if (aiParseCheckbox) {
+        updateAiParseOption();
+    }
+
+    if (aiRegexButton) {
+        aiRegexButton.addEventListener('click', () => {
+            openAiModal();
+        });
+    }
+
+    const aiParseButton = document.getElementById('ai_parse_btn');
+    if (aiParseButton) {
+        aiParseButton.addEventListener('click', () => {
+            openAiParseModal();
+        });
+    }
+
+    if (aiParseModalClose) {
+        aiParseModalClose.addEventListener('click', () => {
+            closeAiParseModal();
+        });
+    }
+
+    if (settingsMenuBtn) {
+        settingsMenuBtn.addEventListener('click', () => {
+            const isOpen = settingsMenu?.style.display === 'block';
+            showSettingsMenu(!isOpen);
+        });
+    }
+
+    if (userSettingsBtn) {
+        userSettingsBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            populateUserSettings();
+            openUserSettingsModal();
+        });
+    }
+
+    if (aiCredentialsBtn) {
+        aiCredentialsBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            openCredentialsModal();
+        });
+    }
+
+    if (deleteUserDataMenu) {
+        deleteUserDataMenu.addEventListener('click', (event) => {
+            if (event.target.closest('.settings-submenu-item')) {
+                return;
+            }
+            toggleUserDataSubmenu();
+        });
+    }
+
+    if (deleteApiKeysBtn) {
+        deleteApiKeysBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteApiKeysUrl, 'API keys deleted from database.');
+        });
+    }
+
+    if (deleteVariableSetsBtn) {
+        deleteVariableSetsBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteVariableSetsUrl, 'Variable sets deleted from database.');
+        });
+    }
+
+    if (deleteAllUserDataBtn) {
+        deleteAllUserDataBtn.addEventListener('click', () => {
+            showSettingsMenu(false);
+            confirmUserDataDelete(deleteAllUserDataUrl, 'All plugin user data deleted.', {
+                onSuccess: () => {
+                    clearLocalUserData();
+                    resetUserSettingsToDefaults();
+                }
+            });
+        });
+    }
+
+    if (aiCredentialsClose) {
+        aiCredentialsClose.addEventListener('click', () => {
+            closeCredentialsModal();
+        });
+    }
+
+    if (aiCredentialsKeyToggle) {
+        aiCredentialsKeyToggle.addEventListener('click', () => {
+            if (!aiCredentialsKey) return;
+            setAiKeyVisibility(aiCredentialsKey.type === 'password');
+        });
+    }
+
+    if (userSettingsClose) {
+        userSettingsClose.addEventListener('click', () => {
+            closeUserSettingsModal();
+        });
+    }
+
+    if (userSettingsRestore) {
+        userSettingsRestore.addEventListener('click', () => {
+            if (!window.confirm(messages.confirmIrreversible)) {
+                return;
+            }
+            try {
+                window.localStorage?.removeItem(userSettingsStorageKey);
+            } catch (error) {
+                // ignore storage errors
+            }
+            resetUserSettingsToDefaults();
+        });
+    }
+
+    if (userSettingsSave) {
+        userSettingsSave.addEventListener('click', () => {
+            clearUserSettingErrors();
+            const validated = validateUserSettings();
+            if (!validated) return;
+
+            closeUserSettingsModal();
+
+            saveUserSettingsToDatabase(validated, {
+                onSuccess: (data) => {
+                    if (data && data.success === true && data.settings) {
+                        applyUserSettingsValues(data.settings);
+
+                        try {
+                            window.localStorage?.setItem(
+                                userSettingsStorageKey,
+                                JSON.stringify(data.settings)
+                            );
+                        } catch (error) {
+                            // ignore storage errors
+                        }
+                    }
+                },
+            });
+        });
+    }
+
+    [userSettingJobBatchInput, userSettingDefaultVarsInput, userSettingMaxParsedInput, userSettingMaxSetsInput]
+        .filter(Boolean)
+        .forEach((input) => {
+            input.addEventListener('input', () => {
+                setUserSettingError(input, false);
+            });
+        });
+
+    if (userSettingDefaultVarsInput && userSettingMaxParsedInput) {
+        userSettingDefaultVarsInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                const maxAllowed = parseInt(userSettingMaxParsedInput.value, 10) || {{ max_parsed_variables }};
+                const lines = userSettingDefaultVarsInput.value.split('\n');
+                if (lines.length >= maxAllowed) {
+                    event.preventDefault();
+                }
+            }
+        });
+    }
+
+    function persistAiDefaults(updatedDefaults, options = {}) {
+        const { onSuccess, onError, applySettings = true } = options;
+        clearUserSettingErrors();
+        const validated = validateUserSettings();
+        if (!validated) {
+            if (typeof onError === 'function') {
+                onError();
+            }
+            return;
+        }
+        const payload = { ...validated, aiDefaults: updatedDefaults };
+        try {
+            window.localStorage?.setItem(userSettingsStorageKey, JSON.stringify(payload));
+        } catch (error) {
+            // ignore storage errors
+        }
+        applyDefaultAiProviderSelections({ force: true });
+        saveUserSettingsToDatabase(payload, {
+            showSuccessMessage: false,
+            applySettings,
+            onSuccess: () => {
+                if (typeof onSuccess === 'function') {
+                    onSuccess();
+                }
+            },
+            onError: () => {
+                if (typeof onError === 'function') {
+                    onError();
+                }
+            },
+        });
+    }
+
+    function handleDefaultsProviderChange(config) {
+        const { key, providerSelect, modelSelect, toggle, modelGroup, applyBtn, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        updateSelectPlaceholder(providerSelect);
+        const provider = providerSelect.value;
+        syncAiDefaultToggle(toggle, provider, aiDefaultsState[key]);
+        const preferredModel = aiDefaultsState[key].modelsByProvider?.[provider];
+        refreshAiDefaultsModel(
+            provider,
+            preferredModel,
+            modelSelect,
+            modelGroup,
+            applyBtn,
+            () => setAiDefaultsSelectStatus(statusTargets, 'error')
+        );
+    }
+
+    function handleDefaultsModelChange(modelSelect, statusTargets) {
+        setAiDefaultsSelectStatus(statusTargets, null);
+        updateSelectPlaceholder(modelSelect);
+    }
+
+    function handleDefaultsToggleChange(config) {
+        const { key, providerSelect, toggle, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        const provider = providerSelect?.value || '';
+        if (!provider) {
+            toggle.checked = false;
+            showNonBlockingModal(messages.chooseProvider);
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        const updatedDefaults = normalizeAiDefaults({
+            ...aiDefaultsState,
+            [key]: {
+                ...aiDefaultsState[key],
+                defaultProvider: toggle.checked ? provider : '',
+            },
+        });
+        aiDefaultsState = updatedDefaults;
+        persistAiDefaults(updatedDefaults, { applySettings: false });
+    }
+
+    function handleDefaultsApply(config) {
+        const { key, providerSelect, modelSelect, statusTargets } = config;
+        setAiDefaultsSelectStatus(statusTargets, null);
+        const provider = providerSelect?.value || '';
+        if (!provider) {
+            showNonBlockingModal(messages.chooseProvider);
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        let selectedModel = '';
+        if (isModelSelectionPending(modelSelect)) {
+            showNonBlockingModal(formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }));
+            setAiDefaultsSelectStatus(statusTargets, 'error');
+            return;
+        }
+        if (requiresModelSelection(modelSelect)) {
+            selectedModel = modelSelect?.value || '';
+            if (!selectedModel) {
+                showNonBlockingModal(messages.aiModelsLoadFailed);
+                setAiDefaultsSelectStatus(statusTargets, 'error');
+                return;
+            }
+        }
+        const updatedDefaults = normalizeAiDefaults({
+            ...aiDefaultsState,
+            [key]: {
+                ...aiDefaultsState[key],
+                modelsByProvider: {
+                    ...(aiDefaultsState[key].modelsByProvider || {}),
+                    [provider]: selectedModel,
+                },
+            },
+        });
+        aiDefaultsState = updatedDefaults;
+        persistAiDefaults(updatedDefaults, {
+            onSuccess: () => setAiDefaultsSelectStatus(statusTargets, 'success'),
+            onError: () => setAiDefaultsSelectStatus(statusTargets, 'error'),
+        });
+    }
+
+    if (aiRegexDefaultProviderSelect) {
+        aiRegexDefaultProviderSelect.addEventListener('change', () => {
+            handleDefaultsProviderChange({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                modelSelect: aiRegexDefaultModelSelect,
+                toggle: aiRegexDefaultToggle,
+                modelGroup: aiRegexDefaultModelGroup,
+                applyBtn: aiRegexDefaultApplyBtn,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiRegexDefaultModelSelect) {
+        aiRegexDefaultModelSelect.addEventListener('change', () => {
+            handleDefaultsModelChange(aiRegexDefaultModelSelect, [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect]);
+        });
+    }
+
+    if (aiRegexDefaultToggle) {
+        aiRegexDefaultToggle.addEventListener('change', () => {
+            handleDefaultsToggleChange({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                toggle: aiRegexDefaultToggle,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiRegexDefaultApplyBtn) {
+        aiRegexDefaultApplyBtn.addEventListener('click', () => {
+            handleDefaultsApply({
+                key: 'regex',
+                providerSelect: aiRegexDefaultProviderSelect,
+                modelSelect: aiRegexDefaultModelSelect,
+                statusTargets: [aiRegexDefaultProviderSelect, aiRegexDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultProviderSelect) {
+        aiParseDefaultProviderSelect.addEventListener('change', () => {
+            handleDefaultsProviderChange({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                modelSelect: aiParseDefaultModelSelect,
+                toggle: aiParseDefaultToggle,
+                modelGroup: aiParseDefaultModelGroup,
+                applyBtn: aiParseDefaultApplyBtn,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultModelSelect) {
+        aiParseDefaultModelSelect.addEventListener('change', () => {
+            handleDefaultsModelChange(aiParseDefaultModelSelect, [aiParseDefaultProviderSelect, aiParseDefaultModelSelect]);
+        });
+    }
+
+    if (aiParseDefaultToggle) {
+        aiParseDefaultToggle.addEventListener('change', () => {
+            handleDefaultsToggleChange({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                toggle: aiParseDefaultToggle,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiParseDefaultApplyBtn) {
+        aiParseDefaultApplyBtn.addEventListener('click', () => {
+            handleDefaultsApply({
+                key: 'parse',
+                providerSelect: aiParseDefaultProviderSelect,
+                modelSelect: aiParseDefaultModelSelect,
+                statusTargets: [aiParseDefaultProviderSelect, aiParseDefaultModelSelect],
+            });
+        });
+    }
+
+    if (aiCredentialsProvider) {
+        aiCredentialsProvider.addEventListener('change', () => {
+            if (aiCredentialsKey) {
+                aiCredentialsKey.value = '';
+            }
+            resetAiCredentialTest();
+            updateCredentialProviderStatus();
+        });
+    }
+
+    if (aiCredentialsKey) {
+        aiCredentialsKey.addEventListener('input', () => {
+            resetAiCredentialTest();
+        });
+    }
+
+    if (aiCredentialsTest) {
+        aiCredentialsTest.addEventListener('click', () => {
+            const provider = aiCredentialsProvider?.value;
+            const key = aiCredentialsKey?.value?.trim();
+            if (!provider) {
+                showNonBlockingModal(messages.chooseProvider);
+                return;
+            }
+            if (!key) {
+                showNonBlockingModal(messages.apiKeyEmpty);
+                return;
+            }
+            updateAiCredentialsStatus(messages.testingConnection);
+            fetch(aiCredentialsTestUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, api_key: key }),
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiCredentialsStatus(data.error, true);
+                        resetAiCredentialTest();
+                        return;
+                    }
+                    aiCredentialsLastTest = { provider, key, passed: true };
+                    if (aiCredentialsSave) {
+                        aiCredentialsSave.disabled = !key;
+                    }
+                    updateAiCredentialsStatus(data.message || messages.connectionTestPassed);
+                })
+                .catch(() => {
+                    updateAiCredentialsStatus(messages.unableTestApiKey, true);
+                    resetAiCredentialTest();
+                });
+        });
+    }
+
+    if (aiCredentialsSave) {
+        aiCredentialsSave.disabled = true;
+        aiCredentialsSave.addEventListener('click', () => {
+            const provider = aiCredentialsProvider?.value;
+            const key = aiCredentialsKey?.value?.trim();
+            if (!provider || !key) {
+                showNonBlockingModal(messages.chooseProviderAndKey);
+                return;
+            }
+            if (
+                !aiCredentialsLastTest.passed
+                || aiCredentialsLastTest.provider !== provider
+                || aiCredentialsLastTest.key !== key
+            ) {
+                showNonBlockingModal(messages.runConnectionTestFirst);
+                return;
+            }
+            updateAiCredentialsStatus(messages.savingKey);
+            fetch(aiCredentialsSaveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider, api_key: key }),
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiCredentialsStatus(data.error, true);
+                        showNonBlockingModal(data.error);
+                        resetAiCredentialTest();
+                        return;
+                    }
+                    aiCredentialProviders.add(provider);
+                    if (aiCredentialsKey) {
+                        aiCredentialsKey.value = '';
+                    }
+                    resetAiCredentialTest();
+                    updateAiCredentialsStatus(messages.apiKeySavedStatus);
+                    showNonBlockingModal(messages.apiKeySavedDb);
+                })
+                .catch(() => {
+                    updateAiCredentialsStatus(messages.unableSaveApiKey, true);
+                    showNonBlockingModal(messages.unableSaveApiKey);
+                    resetAiCredentialTest();
+                });
+        });
+    }
+
+    if (aiModalClose) {
+        aiModalClose.addEventListener('click', () => {
+            closeAiModal();
+        });
+    }
+
+    if (aiProviderSelect) {
+        aiProviderSelect.addEventListener('change', () => {
+            updateAiProcessAvailability();
+            updateAiProviderStatus();
+            updateAiModalPlaceholders();
+            persistPreviewState();
+        });
+    }
+
+    if (aiParseProviderSelect) {
+        aiParseProviderSelect.addEventListener('change', () => {
+            updateAiParseProviderStatus();
+            updateAiModalPlaceholders();
+            persistPreviewState();
+        });
+    }
+
+    if (aiModelSelect) {
+        aiModelSelect.addEventListener('change', () => {
+            updateAiModalPlaceholders();
+            persistPreviewState();
+        });
+    }
+
+    if (aiParseModelSelect) {
+        aiParseModelSelect.addEventListener('change', () => {
+            updateAiModalPlaceholders();
+            persistPreviewState();
+        });
+    }
+
+    if (aiProcessBtn) {
+        aiProcessBtn.addEventListener('click', () => {
+            clearAiRegexSuggestion();
+            const provider = aiProviderSelect ? aiProviderSelect.value : '';
+            if (!provider) {
+                updateAiModalStatus(messages.aiModalChooseProvider, true);
+                return;
+            }
+            if (!isLocalProvider(provider) && !aiCredentialProviders.has(provider)) {
+                updateAiModalStatus(messages.aiModalAddKeySelected, true);
+                return;
+            }
+            const projectId = projectSelect ? projectSelect.value : '';
+            const datasetIds = getSelectedDatasetIds();
+            if (!projectId) {
+                updateAiModalStatus(messages.selectProject, true);
+                return;
+            }
+            if (datasetIds.length === 0) {
+                updateAiModalStatus(messages.selectDatasets, true);
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                updateAiModalStatus(messages.noDataToProcess, true);
+                return;
+            }
+            updateAiModalStatus(messages.aiModalProcessing);
+            const formData = new FormData();
+            formData.append('action', 'ai_regex');
+            formData.append('project', projectId);
+            formData.append('selected_datasets', datasetIds.join(','));
+            formData.append('provider', provider);
+            if (isModelSelectionPending(aiModelSelect)) {
+                updateAiModalStatus(
+                    formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }),
+                    true
+                );
+                return;
+            }
+            if (requiresModelSelection(aiModelSelect)) {
+                const selectedModel = aiModelSelect?.value;
+                if (!selectedModel) {
+                    updateAiModalStatus(messages.aiModelsLoadFailed, true);
+                    return;
+                }
+                formData.append('model', selectedModel);
+            }
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiModalStatus(data.error, true);
+                        return;
+                    }
+                    if (aiRegexOutput) {
+                        aiRegexOutput.value = data.regex || '';
+                    }
+                    if (aiTransferBtn) {
+                        aiTransferBtn.disabled = !(data.regex && data.regex.trim());
+                    }
+                    if (data.source === 'fallback') {
+                        updateAiModalStatus(
+                            messages.aiSuggestionFallback,
+                            true
+                        );
+                    } else if (data.source === 'local') {
+                        updateAiModalStatus(messages.heuristicRegexReady);
+                    } else {
+                        updateAiModalStatus(messages.regexSuggestionReady);
+                    }
+                })
+                .catch(() => {
+                    updateAiModalStatus(messages.aiProcessFailed, true);
+                });
+        });
+    }
+
+    if (aiParseProcessBtn) {
+        aiParseProcessBtn.addEventListener('click', () => {
+            clearAiParseSuggestion();
+            const provider = aiParseProviderSelect ? aiParseProviderSelect.value : '';
+            if (!provider) {
+                updateAiParseModalStatus(messages.aiModalChooseProvider, true);
+                return;
+            }
+            if (provider === 'local') {
+                updateAiParseModalStatus(messages.chooseProvider, true);
+                return;
+            }
+            if (!aiCredentialProviders.has(provider)) {
+                updateAiParseModalStatus(messages.aiModalAddKeySelected, true);
+                return;
+            }
+            const projectId = projectSelect?.value;
+            const datasetIds = getSelectedDatasetIds();
+            if (!projectId) {
+                updateAiParseModalStatus(messages.selectProject, true);
+                return;
+            }
+            if (!datasetIds.length) {
+                updateAiParseModalStatus(messages.selectDatasets, true);
+                return;
+            }
+            const selectedImageCount = getSelectedDatasetImageCount();
+            if (selectedImageCount === 0) {
+                updateAiParseModalStatus(messages.noDataToProcess, true);
+                return;
+            }
+
+            updateAiParseModalStatus(messages.aiModalProcessing);
+            const formData = new FormData();
+            formData.append('action', 'ai_parse');
+            formData.append('project', projectId);
+            formData.append('selected_datasets', datasetIds.join(','));
+            formData.append('provider', provider);
+            if (isModelSelectionPending(aiParseModelSelect)) {
+                updateAiParseModalStatus(
+                    formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }),
+                    true
+                );
+                return;
+            }
+            if (requiresModelSelection(aiParseModelSelect)) {
+                const selectedModel = aiParseModelSelect?.value;
+                if (!selectedModel) {
+                    updateAiParseModalStatus(messages.aiModelsLoadFailed, true);
+                    return;
+                }
+                formData.append('model', selectedModel);
+            }
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        updateAiParseModalStatus(data.error, true);
+                        return;
+                    }
+                    const rows = data.rows || [];
+                    lastAiParseRows = rows;
+                    if (!rows.length) {
+                        updateAiParseModalStatus(messages.unableToProcessFilenames, true);
+                        return;
+                    }
+                    const lines = rows.map((row) => (row.values || []).join(','));
+                    if (aiParseOutput) {
+                        aiParseOutput.value = lines.join('\n');
+                    }
+                    if (aiParseTransferBtn) {
+                        aiParseTransferBtn.disabled = false;
+                    }
+                    updateAiParseModalStatus(messages.aiSuggestionReady);
+                })
+                .catch(() => {
+                    updateAiParseModalStatus(messages.aiProcessFailed, true);
+                });
+        });
+    }
+
+    if (aiTransferBtn) {
+        aiTransferBtn.addEventListener('click', () => {
+            if (!aiRegexOutput || !separatorInput) return;
+            const value = aiRegexOutput.value.trim();
+            if (!value) {
+                updateAiModalStatus(messages.generateRegexFirst, true);
+                return;
+            }
+            separatorInput.value = value;
+            storeSeparatorValue('ai_regex', value);
+            aiRegexTransferred = true;
+            if (typeof setSeparatorMode === 'function') {
+                setSeparatorMode('ai');
+            }
+            persistPreviewState();
+            closeAiModal();
+        });
+    }
+
+    function parseAiParseOutput(rawOutput, expectedRows) {
+        if (!Array.isArray(expectedRows) || expectedRows.length === 0) return null;
+        if (typeof rawOutput !== 'string') return null;
+        const lines = rawOutput.split(/\r?\n/);
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        if (lines.length !== expectedRows.length) {
+            return null;
+        }
+        const parsedRows = [];
+        for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i];
+            if (!line.trim()) {
+                return null;
+            }
+            const parts = line.split(',');
+            if (!parts.length) {
+                return null;
+            }
+            const values = [];
+            for (const part of parts) {
+                if (!part.trim()) {
+                    return null;
+                }
+                if (part !== part.trim()) {
+                    return null;
+                }
+                values.push(part);
+            }
+            if (values.length === 0) {
+                return null;
+            }
+            parsedRows.push({
+                ...expectedRows[i],
+                values,
+            });
+        }
+        return parsedRows;
+    }
+
+    if (aiParseTransferBtn) {
+        aiParseTransferBtn.addEventListener('click', () => {
+            if (!lastAiParseRows || !lastAiParseRows.length) {
+                updateAiParseModalStatus('Click "Process" first.', true);
+                return;
+            }
+            const output = aiParseOutput ? aiParseOutput.value : '';
+            const updatedRows = parseAiParseOutput(output, lastAiParseRows);
+            if (!updatedRows) {
+                showNonBlockingModal(messages.formattingErrors);
+                updateAiParseModalStatus(messages.formattingErrors, true);
+                return;
+            }
+            lastAiParseRows = updatedRows;
+
+            if (aiParsedJsonInput) {
+                aiParsedJsonInput.value = JSON.stringify(updatedRows);
+            }
+
+            if (typeof setSeparatorMode === 'function') {
+                setSeparatorMode('ai_parse', { forceAiParseMessage: true });
+            }
+
+            aiParseTransferred = true;
+            persistPreviewState();
+            closeAiParseModal();
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        if (!settingsMenu || !settingsMenuBtn) return;
+        if (settingsMenu.contains(event.target) || settingsMenuBtn.contains(event.target)) return;
+        showSettingsMenu(false);
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            const overlay = document.getElementById("nb-modal-overlay");
+            if (overlay?.style.display === 'flex') {
+                event.preventDefault();
+                hideNonBlockingModal();
+                return;
+            }
+        }
+        if (event.key !== 'Escape') return;
+        if (projectSelectDropdown?.style.display === 'block') {
+            closeProjectDropdown(true);
+        }
+    });
+
+    function updateSelectedDatasets() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        const ids = Array.from(checked).map((input) => input.dataset.datasetId);
+        selectedDatasetsInput.value = ids.join(',');
+        if (datasetSelectAll) {
+            const allBoxes = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]');
+            datasetSelectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+        }
+        persistPreviewState();
+    }
+
+    function getSelectedDatasetImageCount() {
+        const checked = datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]:checked');
+        return Array.from(checked).reduce((total, input) => {
+            const count = Number.parseInt(input.dataset.imageCount || '0', 10);
+            return total + (Number.isNaN(count) ? 0 : count);
+        }, 0);
+    }
+
+    function getSelectedProjectName() {
+        return projectSelectInput?.dataset.selectedName || '';
+    }
+
+    function resetDatasetSelection() {
+        datasetSelectionOpenedInput.value = '0';
+        selectedDatasetsInput.value = '';
+        lastDatasetRows = [];
+        datasetSortState.key = null;
+        datasetSortState.direction = 'asc';
+        datasetSortState.userSet = false;
+        setDatasetSortIndicator(null, 'asc');
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'none';
+        }
+        if (datasetSelectAll) {
+            datasetSelectAll.checked = false;
+        }
+        if (datasetTableBody) {
+            datasetTableBody.innerHTML = '';
+        }
+        if (datasetTableMessage) {
+            datasetTableMessage.style.visibility = 'hidden';
+            datasetTableMessage.textContent = '';
+        }
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.remove('expanded');
+        }
+    }
+
+    function renderDatasetRows(datasets, options = {}) {
+        datasetTableBody.innerHTML = '';
+        if (!datasets || datasets.length === 0) {
+            const projectName = getSelectedProjectName();
+            showNonBlockingModal(formatMessage(messages.noDatasetsFound, { projectName }));
+            resetDatasetSelection();
+            return;
+        }
+        datasetSelectionOpenedInput.value = '1';
+        if (filenameMetadataContainer) {
+            filenameMetadataContainer.classList.add('expanded');
+        }
+        if (datasetTableContainer) {
+            datasetTableContainer.style.display = 'block';
+        }
+        datasetTableMessage.style.visibility = 'hidden';
+        datasetTableMessage.textContent = '';
+        const selectedIds = new Set(options.selectedIds || []);
+        const useDefaultSelection = selectedIds.size === 0;
+        const normalizedDatasets = Array.isArray(datasets) ? datasets : [];
+        const displayDatasets = datasetSortState.userSet
+            ? normalizedDatasets
+            : sortDatasets([...normalizedDatasets], 'name', 'asc');
+        lastDatasetRows = displayDatasets;
+
+        displayDatasets.forEach((ds) => {
+            const isChecked = useDefaultSelection || selectedIds.has(String(ds.id));
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="col-check" style="padding:2px; text-align:center;">
+                    <input type="checkbox" data-dataset-id="${ds.id}" data-image-count="${ds.image_count}" ${isChecked ? 'checked' : ''}>
+                </td>
+                <td class="col-dataset" style="padding:2px;">${ds.name || ''}</td>
+                <td class="col-id" style="padding:2px;">${ds.id || ''}</td>
+                <td class="col-images" style="padding:2px;">${ds.image_count}</td>
+                <!-- <td class="col-formats" style="padding:2px;">${ds.formats || ''}</td> -->
+            `;
+            datasetTableBody.appendChild(row);
+        });
+
+        datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+            .forEach((input) => input.addEventListener('change', updateSelectedDatasets));
+
+        updateSelectedDatasets();
+
+        if (datasetSortState.userSet) {
+            setDatasetSortIndicator(datasetSortState.key, datasetSortState.direction);
+        } else {
+            setDatasetSortIndicator(null, 'asc');
+        }
+    }
+
+    function applyDatasetSort(key) {
+        if (!key || !Array.isArray(lastDatasetRows) || lastDatasetRows.length === 0) return;
+        const selectedIds = getSelectedDatasetIds();
+        const nextDirection = datasetSortState.key === key && datasetSortState.direction === 'asc' ? 'desc' : 'asc';
+        datasetSortState.key = key;
+        datasetSortState.direction = nextDirection;
+        datasetSortState.userSet = true;
+        const sorted = sortDatasets([...lastDatasetRows], key, nextDirection);
+        renderDatasetRows(sorted, { selectedIds });
+    }
+
+    function initDatasetSorting() {
+        if (!datasetTableContainer) return;
+        const headers = datasetTableContainer.querySelectorAll('.sortable-header[data-sort-key]');
+        headers.forEach((header) => {
+            header.setAttribute('role', 'button');
+            header.setAttribute('tabindex', '0');
+            header.addEventListener('click', () => applyDatasetSort(header.dataset.sortKey));
+            header.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    applyDatasetSort(header.dataset.sortKey);
+                }
+            });
+        });
+    }
+
+    if (datasetSelectAll) {
+        datasetSelectAll.addEventListener('change', () => {
+            const checked = datasetSelectAll.checked;
+            datasetTableBody.querySelectorAll('input[type="checkbox"][data-dataset-id]')
+                .forEach((input) => {
+                    input.checked = checked;
+                });
+            updateSelectedDatasets();
+        });
+    }
+
+    if (datasetButton) {
+        datasetButton.addEventListener('click', () => {
+            const projectId = projectSelect.value;
+            if (!projectId) {
+                showNonBlockingModal(messages.selectProject);
+                return;
+            }
+
+            datasetTableMessage.style.visibility = 'hidden';
+            datasetTableMessage.textContent = '';
+            datasetTableBody.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('action', 'list_datasets');
+            formData.append('project', projectId);
+
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+            })
+                .then((resp) => resp.json())
+                .then((data) => {
+                    if (data.error) {
+                        showNonBlockingModal(data.error);
+                        resetDatasetSelection();
+                        return;
+                    }
+                    renderDatasetRows(data.datasets || []);
+                })
+                .catch(() => {
+                    showNonBlockingModal(messages.unableLoadDatasets);
+                    resetDatasetSelection();
+                });
+        });
+    }
+
+    function resetAllSelections() {
+        clearProjectSelection({ persist: false });
+        if (separatorInput) {
+            separatorInput.value = defaultSeparatorValue;
+        }
+        separatorValues.chars = defaultSeparatorValue;
+        separatorValues.regex = defaultSeparatorValue;
+        separatorValues.ai_regex = defaultSeparatorValue;
+        setSeparatorMode('chars');
+        aiRegexTransferred = false;
+        aiParseTransferred = false;
+        if (aiParsedJsonInput) {
+            aiParsedJsonInput.value = '';
+        }
+        lastAiParseRows = null;
+        clearAiRegexSuggestion();
+        clearAiParseSuggestion();
+        applyDefaultAiProviderSelections({ force: true });
+        resetDatasetSelection();
+        window.sessionStorage.removeItem(STATE_STORAGE_KEY);
+        try {
+            window.localStorage?.removeItem(STATE_STORAGE_KEY);
+            window.localStorage?.removeItem(SEPARATOR_STORAGE_KEY);
+        } catch (error) {
+            // ignore storage errors
+        }
+    }
+
+    if (datasetClearBtn) {
+        datasetClearBtn.addEventListener('click', () => {
+            resetAllSelections();
+        });
+    }
+
+    document.title = 'OMP plugin';
+    initDatasetSorting();
+    const storedCollaborationState = loadCollaborationState();
+    if (storedCollaborationState !== null && updateCollaborationVisibility()) {
+        applyCollaborationState(storedCollaborationState, { persist: false, refresh: false });
+    }
+    restorePreviewState();
+    applyDefaultAiProviderSelections();
+    updateAiModalPlaceholders();
+    </script>
+</body>
+</html>
