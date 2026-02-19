@@ -40,6 +40,18 @@ Paths declared in `installation_paths.env` map host storage into containers for:
 
 Ensure host paths exist and are writable by container runtime users before startup.
 
+### Managed Repository Path Setting
+
+In `env/omeroserver.env`, `CONFIG_omero_fs_repo_path` configures the managed
+repository import parent-directory template.
+
+OMERO expands supported terms automatically when written with surrounding `%`
+characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).
+
+If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
+without trailing `%`), OMERO treats those strings literally and creates
+directories named with `%...` segments.
+
 ## Celery and Imaris Export Configuration
 
 Relevant variables include:
