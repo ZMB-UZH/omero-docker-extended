@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_URL="${REPO_URL:-https://github.com/ZMB-UZH/omero-docker-extended.git}"
+REPO_URL="${REPO_URL:-git@github.com:strmt7/omero-docker-extended.git}"
 REPO_BRANCH="${REPO_BRANCH:-alpha}"
 INSTALLATION_SCRIPT_RELATIVE_PATH="${INSTALLATION_SCRIPT_RELATIVE_PATH:-installation/installation_script.sh}"
 INSTALLATION_PATHS_ENV_RELATIVE_PATH="${INSTALLATION_PATHS_ENV_RELATIVE_PATH:-installation_paths.env}"
@@ -19,6 +19,26 @@ cleanup_bootstrap_clone_dir() {
     fi
 }
 
+configure_github_ssh() {
+    local ssh_dir="${HOME}/.ssh"
+    local known_hosts_file="${ssh_dir}/known_hosts"
+
+    if ! install -d -m 0700 "${ssh_dir}"; then
+        echo "ERROR: Failed to create SSH directory: ${ssh_dir}" >&2
+        return 1
+    fi
+
+    if [ ! -f "${known_hosts_file}" ]; then
+        if ! touch "${known_hosts_file}"; then
+            echo "ERROR: Failed to create known_hosts file: ${known_hosts_file}" >&2
+            return 1
+        fi
+        chmod 0600 "${known_hosts_file}"
+    fi
+
+    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${known_hosts_file}"
+}
+
 clone_latest_repository_snapshot() {
     BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.project-pull.XXXXXX")"
 
@@ -29,7 +49,7 @@ clone_latest_repository_snapshot() {
 
     if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}"; then
         echo "ERROR: Failed to pull latest project files from ${REPO_URL} (${REPO_BRANCH})." >&2
-        echo "INFO: Verify REPO_URL and REPO_BRANCH are correct and reachable." >&2
+        echo "INFO: Ensure SSH access works with: ssh -T git@github.com" >&2
         return 1
     fi
 }
@@ -381,21 +401,13 @@ main() {
     trap cleanup_bootstrap_clone_dir EXIT
 
     local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
-    case "${REPO_URL}" in
-        https://*|http://*)
-            ;;
-        *)
-            echo "ERROR: github_pull_project_bash_example supports only HTTP(S) repository URLs. Set REPO_URL to an https:// or http:// URL." >&2
-            exit 1
-            ;;
-    esac
-
     if [ ! -r "${installation_paths_env_path}" ]; then
         echo "ERROR: Required file is missing or unreadable before update: ${installation_paths_env_path}" >&2
         echo "ERROR: This update script is intentionally refusing to run without installation_paths.env in the repository root to prevent accidental deletion of persistent OMERO paths." >&2
         exit 1
     fi
 
+    configure_github_ssh
     clone_latest_repository_snapshot
     replace_working_tree_with_clone "${BOOTSTRAP_CLONE_DIR}" "${SCRIPT_DIR}"
     run_installation_script
