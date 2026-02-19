@@ -51,13 +51,89 @@ def quota_state_path() -> Path:
 
 
 def managed_group_root() -> Path:
-    """Return the configured OMERO managed repository group root directory."""
-    configured = os.environ.get("ADMIN_TOOLS_MANAGED_GROUP_ROOT", "")
-    if configured.strip():
-        return Path(configured).expanduser()
+    """Return auto-detected OMERO managed repository root for group directories."""
+    root, _ = resolve_managed_group_root(known_groups=[])
+    return root
 
-    omero_data = Path(os.environ.get("OMERO_DATA_DIR", "/OMERO")).expanduser()
-    return omero_data / "omero_user_data" / "ManagedRepository"
+
+def _default_managed_group_root() -> Path:
+    return Path("/OMERO")
+
+
+def _candidate_managed_group_roots() -> List[Path]:
+    """Return ordered candidate roots for managed repository group directories."""
+    return [
+        Path("/OMERO"),
+        Path("/OMERO/ManagedRepository"),
+        Path("/OMERO/omero_user_data/ManagedRepository"),
+    ]
+
+
+def _count_matching_group_directories(root: Path, group_hints: Sequence[str]) -> int:
+    count = 0
+    for group_name in group_hints:
+        if not group_name:
+            continue
+        candidate = root / group_name
+        if candidate.exists() and candidate.is_dir():
+            count += 1
+    return count
+
+
+def _collect_group_hints(
+    known_groups: Sequence[str], quota_groups: Sequence[str]
+) -> List[str]:
+    hints = {str(value).strip() for value in [*known_groups, *quota_groups]}
+    hints.discard("")
+    return sorted(hints)
+
+
+def resolve_managed_group_root(known_groups: Sequence[str]) -> Tuple[Path, str]:
+    """Auto-detect managed repository root using known OMERO group names."""
+    candidates = [
+        candidate
+        for candidate in _candidate_managed_group_roots()
+        if candidate.exists() and candidate.is_dir()
+    ]
+    if not candidates:
+        fallback = _default_managed_group_root()
+        return fallback, "no existing managed repository candidates found"
+
+    if not known_groups:
+        return candidates[0], "selected first existing candidate"
+
+    scored: List[Tuple[int, int, Path]] = []
+    for candidate in candidates:
+        score = _count_matching_group_directories(candidate, known_groups)
+        scored.append((score, len(candidate.parts), candidate))
+
+    best_score, _, best_path = max(scored, key=lambda item: (item[0], -item[1]))
+    if best_score > 0:
+        return best_path, f"matched {best_score} known group directories"
+
+    return (
+        candidates[0],
+        "no candidate matched known groups; using first existing candidate",
+    )
+
+
+def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
+    try:
+        resolved = path.resolve()
+    except FileNotFoundError:
+        resolved = path
+
+    if not path.exists() or not path.is_dir():
+        return False, "path does not exist or is not a directory"
+
+    omero_root = Path("/OMERO").resolve()
+    try:
+        resolved.relative_to(omero_root)
+    except ValueError:
+        if resolved != omero_root:
+            return False, "path must be within /OMERO mount"
+
+    return True, ""
 
 
 def _ensure_parent(path: Path) -> None:
@@ -351,8 +427,12 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         quotas = state.setdefault("quotas_gb", {})
         assert isinstance(quotas, dict)
 
-        group_root = managed_group_root()
-        available_groups = set(list_group_directories(group_root))
+        group_hints = _collect_group_hints(known_groups, quotas.keys())
+        group_root, root_reason = resolve_managed_group_root(group_hints)
+        root_is_safe, root_safety_reason = _is_safe_managed_repository_root(group_root)
+        available_groups = (
+            set(list_group_directories(group_root)) if root_is_safe else set()
+        )
         available_groups.update(set(known_groups))
 
         filesystem = detect_filesystem(group_root)
@@ -366,6 +446,19 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         pending = []
         applied = []
         reconcile_event_keys: List[str] = []
+
+        if not root_is_safe:
+            event_key = "global:managed_group_root_unsafe"
+            reconcile_event_keys.append(event_key)
+            _append_reconcile_event(
+                state,
+                event_key=event_key,
+                level="error",
+                message=(
+                    "ManagedRepository root is unsafe for quota enforcement: "
+                    f"{group_root} ({root_safety_reason}; detection={root_reason})."
+                ),
+            )
 
         if not repository_compatibility["is_compatible"]:
             event_key = "global:repository_incompatible"
@@ -395,6 +488,9 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                 continue
 
             group_path = group_root / group_name
+            if not root_is_safe:
+                pending.append(group_name)
+                continue
             if not repository_compatibility["is_compatible"]:
                 pending.append(group_name)
                 continue
@@ -457,6 +553,7 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                 "source": filesystem.source,
             },
             "managed_group_root": str(group_root),
+            "managed_group_root_reason": root_reason,
             "managed_repository": repository_compatibility,
             "available_groups": sorted(available_groups),
             "applied_groups": sorted(set(applied)),
