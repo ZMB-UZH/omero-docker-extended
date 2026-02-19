@@ -83,11 +83,35 @@ def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
     try:
-        upsert_quotas([("group-a", 0.99)])
+        upsert_quotas([("group-a", 0.09)])
     except QuotaError as exc:
-        assert "at least 1.00 GB" in str(exc)
+        assert "at least 0.10 GB" in str(exc)
     else:
-        raise AssertionError("Expected quota validation error for value below 1.00 GB")
+        raise AssertionError("Expected quota validation error for value below 0.10 GB")
+
+
+def test_upsert_respects_minimum_quota_from_environment(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MIN_QUOTA_GB", "0.10")
+
+    upsert_quotas([("group-a", 0.10)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["quotas_gb"]["group-a"] == 0.1
+
+
+def test_upsert_rejects_invalid_environment_minimum_quota(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MIN_QUOTA_GB", "invalid")
+
+    try:
+        upsert_quotas([("group-a", 1.0)])
+    except QuotaError as exc:
+        assert "Invalid ADMIN_TOOLS_MIN_QUOTA_GB value" in str(exc)
+    else:
+        raise AssertionError("Expected quota validation error for invalid environment minimum")
 
 
 def test_reconcile_marks_pending_when_group_directory_missing(

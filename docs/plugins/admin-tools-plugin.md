@@ -69,6 +69,7 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_LOG_MAX_ENTRIES` | Maximum log entries per query | `5000` |
 | `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
 | `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
+| `ADMIN_TOOLS_MIN_QUOTA_GB` | Minimum accepted quota value (GB) used by UI validation, backend validation, and ext4 enforcer script | `0.10` |
 | `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas. If unset on ext4, a built-in project-quota enforcer script is used. | ` /opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
 | `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop | `60` |
 | `ADMIN_TOOLS_QUOTA_PROJECTS_FILE` | ext4 project-quota mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projects` |
@@ -97,7 +98,7 @@ The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the 
 
 If the configured ManagedRepository template does not start with `%group%/%user%/`, the Quotas tab is intentionally disabled and shows an incompatibility warning to prevent unsafe quota enforcement assumptions.
 
-Quota values are validated with a minimum accepted value of **1.00 GB** in both UI edits and backend processing (including CSV imports).
+Quota values are validated with a minimum accepted value configured by `ADMIN_TOOLS_MIN_QUOTA_GB` (default **0.10 GB**) in UI edits, backend processing (including CSV imports), and ext4 enforcement.
 
 ## Operator checklist
 

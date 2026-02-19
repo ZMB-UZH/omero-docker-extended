@@ -139,6 +139,14 @@ let currentView = 'users';
 let totalUsedBytes = 0;
 let quotasEditMode = false;
 
+function getMinimumQuotaGb() {
+    const configured = Number(rawData?.quotas?.min_quota_gb);
+    if (Number.isFinite(configured) && configured > 0) {
+        return configured;
+    }
+    return 0.10;
+}
+
 function persistState() {
     if (!storage) {
         return;
@@ -463,10 +471,11 @@ function render() {
             .map((row) => `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(PERCENT_DECIMALS)}%</td></tr>`)
             .join('');
     } else if (currentView === 'quotas') {
+        const minimumQuotaGb = getMinimumQuotaGb();
         table.innerHTML = shownRows
             .map((row) => {
                 const quotaCell = quotasEditMode
-                    ? `<input type="number" min="1.00" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${row.quotaGb === null ? '' : Number(row.quotaGb).toFixed(QUOTA_DECIMALS)}">`
+                    ? `<input type="number" min="${minimumQuotaGb.toFixed(QUOTA_DECIMALS)}" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${row.quotaGb === null ? '' : Number(row.quotaGb).toFixed(QUOTA_DECIMALS)}">`
                     : (row.quotaGb === null ? '<span class="storage-quota-not-set">not set</span>' : escapeHtml(gb(row.quotaGb)));
                 const quotaPercentCell = row.quotaPercent === null
                     ? '<span class="storage-quota-not-set">--</span>'
@@ -519,6 +528,7 @@ async function refreshQuotasData() {
         quotas_gb: payload.quotas_gb || payload.reconcile?.quotas_gb || {},
         logs: payload.reconcile?.logs || payload.logs || [],
         managed_repository: payload.reconcile?.managed_repository || {},
+        min_quota_gb: payload.min_quota_gb || payload.reconcile?.min_quota_gb,
     };
 }
 
@@ -527,6 +537,7 @@ function resetQuotasDataForUnavailableServer() {
         quotas_gb: {},
         logs: [],
         managed_repository: null,
+        min_quota_gb: 0.10,
     };
 }
 
@@ -545,6 +556,7 @@ async function loadData() {
                 quotas_gb: payload.quotas?.quotas_gb || {},
                 logs: payload.quotas?.logs || [],
                 managed_repository: payload.quotas?.managed_repository || {},
+                min_quota_gb: payload.quotas?.min_quota_gb,
             },
         };
         totalUsedBytes = Number(payload.totals?.omero_binary_bytes || 0);
