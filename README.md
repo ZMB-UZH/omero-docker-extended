@@ -6,6 +6,30 @@ Production-grade (**DISCLAIMER:** see [LICENSE](LICENSE) for details), ALPHA VER
 
 This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
 
+## Current development state
+
+### ✅ Working great
+
+- All official OMERO software components
+- All base installation and orchestration layers
+- Official and unofficial helper scripts included in this repository
+
+For official OMERO documentation, release notes, and guides, see: <https://www.openmicroscopy.org/omero/>.
+
+### 🛠️ Working partially / under active development
+
+- OMP plugin (`omeroweb_omp_plugin`)
+- Upload plugin (`omeroweb_upload`)
+- Admin tools (`omeroweb_admin_tools`, currently root-user focused)
+
+These components are functional but still evolving, with ongoing improvements to capability depth, edge-case handling, and operator UX.
+
+### 🐢 Not working yet / progressing slowly
+
+- Direct Imaris 11 integration
+
+This path is tracked in the repository but remains incomplete and should be treated as experimental.
+
 ## Service topology
 
 The platform runs **17 containers** on a single Docker bridge network (`omero`):
