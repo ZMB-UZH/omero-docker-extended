@@ -68,7 +68,6 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_LOG_LOOKBACK_SECONDS` | Default log query time range | `3600` |
 | `ADMIN_TOOLS_LOG_MAX_ENTRIES` | Maximum log entries per query | `5000` |
 | `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
-| `ADMIN_TOOLS_MANAGED_GROUP_ROOT` | ManagedRepository root for group directories | `${OMERO_DATA_DIR}/omero_user_data/ManagedRepository` |
 | `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
 | `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas. If unset on ext4, a built-in project-quota enforcer script is used. | ` /opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
 | `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop | `60` |
@@ -79,6 +78,10 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
 
 The quota compatibility check reads `CONFIG_omero_fs_repo_path` from the shared OMERO.server environment (`env/omeroserver.env`), which is also loaded into the `omeroweb` service in `docker-compose.yml` to keep a single source of truth for the repository template.
+
+ManagedRepository root discovery is automatic. The reconciler inspects known in-container candidates (`/OMERO`, `/OMERO/ManagedRepository`, `/OMERO/omero_user_data/ManagedRepository`) and selects the best match using known OMERO group names.
+
+To prevent quotas from affecting unrelated directories, enforcement is blocked unless the resolved root is an existing directory under `/OMERO`; when this validation fails, quotas stay pending and an explicit error is recorded in quota logs (including detection reason metadata).
 
 
 Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
