@@ -886,6 +886,8 @@ body {
 
 .storage-table.view-quotas-edit td {
     height: 30px;
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
 
 .storage-quota-input {
@@ -893,12 +895,14 @@ body {
     min-width: 73px;
     max-width: 73px;
     height: 22px;
-    padding: 1px 8px;
+    margin: 0;
+    padding: 0 8px;
     border: 1px solid #cbd5e1;
     border-radius: 999px;
     font-size: 13px;
-    line-height: 1.1;
+    line-height: 20px;
     box-sizing: border-box;
+    vertical-align: middle;
 }
 
 .storage-quota-logs {
