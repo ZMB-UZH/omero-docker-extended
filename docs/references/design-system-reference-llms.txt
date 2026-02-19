@@ -1,0 +1,33 @@
+Design system reference notes for AI agent workflows.
+
+Repository structure:
+- AGENTS.md is the table of contents (start here). It is intentionally short.
+- ARCHITECTURE.md describes the layer model, dependency rules, and data flow.
+- CLAUDE.md provides Claude Code-specific working instructions.
+- docs/index.md is the full navigation hub with cross-links to every document.
+- docs/ contains all detailed documentation organized by domain.
+
+Agent working principles:
+- Keep interfaces explicit. All configuration is environment-driven via env/*.env files.
+- Keep docs cross-linked and version controlled. Repository-local knowledge is the system of record.
+- Use progressive disclosure: short navigation docs point to deep content. Do not front-load all context.
+- Mechanical checks (tools/lint_docs_structure.py) enforce documentation structure and freshness.
+- Architectural boundaries are explicit: plugins depend on omero_plugin_common, never the reverse.
+
+Plugin structure pattern:
+- Each omeroweb_* plugin follows: apps.py, config.py, urls.py, views/, services/, strings/, templates/, static/, tests/.
+- config.py centralizes all environment variable access for the plugin.
+- strings/errors.py and strings/messages.py contain all user-facing text as functions.
+- services/ contains business logic separated from request handling in views/.
+
+Configuration access pattern:
+- Use omero_plugin_common.env_utils for typed env var access (get_env, get_int_env, get_bool_env, get_float_env).
+- Always specify the env_file parameter so error messages point to the correct configuration file.
+- Never hard-code hostnames, ports, paths, or credentials in Python or shell code.
+
+Key files for understanding the system:
+- docker-compose.yml: 17 services, dependency graph, health checks, volume mounts.
+- docker/omero-web.Dockerfile: how plugins are installed and supervisord is configured.
+- docker/omero-server.Dockerfile: how OMERO.server is extended with CLI plugins and scripts.
+- startup/*.sh: runtime configuration that cannot be done at build time.
+- omero_plugin_common/env_utils.py: the shared configuration access layer.

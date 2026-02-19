@@ -1,0 +1,57 @@
+Docker Compose reference notes for AI agent workflows.
+
+Service topology (docker-compose.yml):
+- 17 services on a single "omero" bridge network.
+- All services have explicit healthcheck: blocks (interval 10s, timeout 10s, retries 30).
+- Service startup ordering via depends_on with condition: service_healthy.
+- All services use security_opt: no-new-privileges:true.
+- All images use pinned version tags. Never use :latest.
+
+Core services:
+- omeroserver (port 4064): OMERO.server, custom Dockerfile, depends on database.
+- omeroweb (port 4090): OMERO.web + plugins + Celery worker via supervisord, depends on omeroserver + redis.
+- database (port 5432): PostgreSQL 16.12, OMERO core database.
+- database_plugin (port 5433): PostgreSQL 16.12, OMERO plugin database.
+- redis (port 6379): Redis 8.4.0-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
+
+Supporting services:
+- redis-sysctl-init: one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately.
+- pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
+- portainer (ports 9000, 9443): container management UI.
+
+Monitoring services:
+- prometheus (port 9090): metrics scraping with 9 scrape targets + blackbox probes.
+- grafana (port 3000): 4 auto-provisioned dashboards.
+- loki (port 3100): log aggregation backend.
+- alloy (port 12345): log collection from Docker containers + OMERO log files.
+- blackbox-exporter: HTTP and TCP probing.
+- node-exporter: host metrics.
+- cadvisor: container metrics.
+- postgres-exporter: OMERO database metrics.
+- postgres-exporter-plugin: plugin database metrics.
+- redis-exporter: Redis metrics.
+
+Environment files:
+- installation_paths.env: 15 host filesystem path variables consumed by volume mounts.
+- env/omeroserver.env: OMERO.server configuration (DB, Java, scripts, security).
+- env/omeroweb.env: OMERO.web configuration (apps, plugins, admin tools endpoints, upload settings).
+- env/omero-celery.env: Celery configuration (broker, queue, timeouts, worker settings).
+- env/grafana.env: Grafana admin credentials and auth settings.
+
+Volume mount patterns:
+- Host paths from installation_paths.env bind-mounted into containers.
+- PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
+- Redis uses tmpfs for /data (512MB).
+- Upload plugin uses tmpfs for /tmp/omp_plugin_filename_metadata_jobs (256MB).
+- Docker socket mounted read-only in omeroweb for admin tools container stats.
+- Monitoring configs mounted read-only from ./monitoring/ directories.
+
+Compose commands (always include --env-file):
+- docker compose --env-file installation_paths.env build
+- docker compose --env-file installation_paths.env up -d
+- docker compose --env-file installation_paths.env ps
+- docker compose --env-file installation_paths.env down
+- docker compose --env-file installation_paths.env logs -f <service>
+
+Network: single "omero" bridge network. All services communicate by service name/alias.
+Only 6 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100).
