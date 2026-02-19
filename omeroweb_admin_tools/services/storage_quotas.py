@@ -85,6 +85,43 @@ def _append_log(state: Dict[str, object], level: str, message: str) -> None:
         del logs[: len(logs) - DEFAULT_LOG_LIMIT]
 
 
+def _reconcile_event_cache(state: Dict[str, object]) -> Dict[str, str]:
+    cache = state.setdefault("_reconcile_event_cache", {})
+    if not isinstance(cache, dict):
+        cache = {}
+        state["_reconcile_event_cache"] = cache
+    normalized: Dict[str, str] = {}
+    for key, value in cache.items():
+        normalized[str(key)] = str(value)
+    state["_reconcile_event_cache"] = normalized
+    return normalized
+
+
+def _append_reconcile_event(
+    state: Dict[str, object],
+    *,
+    event_key: str,
+    level: str,
+    message: str,
+) -> None:
+    cache = _reconcile_event_cache(state)
+    cache_value = f"{level}|{message}"
+    if level != "warning" and cache.get(event_key) == cache_value:
+        return
+    cache[event_key] = cache_value
+    _append_log(state, level, message)
+
+
+def _prune_reconcile_event_cache(
+    state: Dict[str, object], valid_keys: Sequence[str]
+) -> None:
+    cache = _reconcile_event_cache(state)
+    valid = {str(key) for key in valid_keys}
+    stale_keys = [key for key in cache if key not in valid]
+    for key in stale_keys:
+        del cache[key]
+
+
 def _normalize_group(value: str) -> str:
     group_name = value.strip()
     if not group_name:
@@ -303,21 +340,32 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
 
     pending = []
     applied = []
+    reconcile_event_keys: List[str] = []
 
     if not repository_compatibility["is_compatible"]:
-        _append_log(
+        event_key = "global:repository_incompatible"
+        reconcile_event_keys.append(event_key)
+        _append_reconcile_event(
             state,
-            "error",
-            "ManagedRepository template is incompatible with group quota enforcement. "
-            "Required prefix: %group%/%user%/.",
+            event_key=event_key,
+            level="error",
+            message=(
+                "ManagedRepository template is incompatible with group quota enforcement. "
+                "Required prefix: %group%/%user%/."
+            ),
         )
 
     for group_name, raw_quota in sorted(quotas.items()):
+        group_key = f"group:{group_name}"
+        reconcile_event_keys.append(group_key)
         try:
             quota_gb = _normalize_quota_gb(raw_quota)
         except QuotaError as exc:
-            _append_log(
-                state, "error", f"Invalid stored quota for group '{group_name}': {exc}"
+            _append_reconcile_event(
+                state,
+                event_key=group_key,
+                level="error",
+                message=f"Invalid stored quota for group '{group_name}': {exc}",
             )
             continue
 
@@ -329,20 +377,24 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             group_path
         ):
             pending.append(group_name)
-            _append_log(
+            _append_reconcile_event(
                 state,
-                "warning",
-                f"Quota pending for group '{group_name}': directory not present at {group_path}.",
+                event_key=group_key,
+                level="warning",
+                message=f"Quota pending for group '{group_name}': directory not present at {group_path}.",
             )
             continue
 
         if not command_template:
             pending.append(group_name)
-            _append_log(
+            _append_reconcile_event(
                 state,
-                "warning",
-                f"Quota for group '{group_name}' is configured but no apply command is set. "
-                "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level.",
+                event_key=group_key,
+                level="warning",
+                message=(
+                    f"Quota for group '{group_name}' is configured but no apply command is set. "
+                    "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level."
+                ),
             )
             continue
 
@@ -356,17 +408,22 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         )
         if ok:
             applied.append(group_name)
-            _append_log(
-                state, "info", f"Applied quota for group '{group_name}': {message}"
+            _append_reconcile_event(
+                state,
+                event_key=group_key,
+                level="info",
+                message=f"Applied quota for group '{group_name}': {message}",
             )
         else:
             pending.append(group_name)
-            _append_log(
+            _append_reconcile_event(
                 state,
-                "error",
-                f"Failed to apply quota for group '{group_name}': {message}",
+                event_key=group_key,
+                level="error",
+                message=f"Failed to apply quota for group '{group_name}': {message}",
             )
 
+    _prune_reconcile_event_cache(state, reconcile_event_keys)
     _write_state(path, state)
     return {
         "filesystem": {

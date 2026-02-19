@@ -247,7 +247,7 @@ function getRowsForView() {
             const quotaGb = hasQuota ? Number(rawQuotaGb) : null;
             const usageBytes = Number(item.bytes || 0);
             const quotaBytes = quotaGb !== null && quotaGb > 0 ? quotaGb * 1024 * 1024 * 1024 : 0;
-            const quotaPercent = quotaBytes > 0 ? (usageBytes / quotaBytes) * 100 : 0;
+            const quotaPercent = quotaBytes > 0 ? (usageBytes / quotaBytes) * 100 : null;
             return {
                 primary: item.group,
                 secondary: (item.users || []).join(', '),
@@ -404,8 +404,12 @@ function renderQuotaLogs(logs) {
 }
 
 function render() {
+    const storageTable = document.querySelector('.storage-table');
     const isGroupView = currentView === 'groups' || currentView === 'quotas';
-    document.querySelector('.storage-table')?.classList.toggle('view-groups', isGroupView);
+    storageTable?.classList.toggle('view-groups', isGroupView);
+    storageTable?.classList.toggle('view-quotas-edit', currentView === 'quotas' && quotasEditMode);
+    quotaActions.hidden = currentView !== 'quotas';
+    quotaLogsPanel.hidden = currentView !== 'quotas';
 
     const compatibility = managedRepositoryCompatibility();
     if (currentView === 'quotas' && !compatibility.is_compatible) {
@@ -464,7 +468,10 @@ function render() {
                 const quotaCell = quotasEditMode
                     ? `<input type="number" min="1.00" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${row.quotaGb === null ? '' : Number(row.quotaGb).toFixed(QUOTA_DECIMALS)}">`
                     : (row.quotaGb === null ? '<span class="storage-quota-not-set">not set</span>' : escapeHtml(gb(row.quotaGb)));
-                return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%</td><td>${quotaCell}</td></tr>`;
+                const quotaPercentCell = row.quotaPercent === null
+                    ? '<span class="storage-quota-not-set">--</span>'
+                    : `${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%`;
+                return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${quotaPercentCell}</td><td>${quotaCell}</td></tr>`;
             })
             .join('');
     } else {
@@ -489,7 +496,8 @@ function exportCsv() {
         }
         if (currentView === 'quotas') {
             const quotaValue = row.quotaGb === null ? '' : row.quotaGb.toFixed(QUOTA_DECIMALS);
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.quotaPercent.toFixed(PERCENT_DECIMALS)},${JSON.stringify(quotaValue)}`;
+            const quotaPercent = row.quotaPercent === null ? '' : row.quotaPercent.toFixed(PERCENT_DECIMALS);
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${JSON.stringify(quotaPercent)},${JSON.stringify(quotaValue)}`;
         }
         return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
     }).join('\n');
