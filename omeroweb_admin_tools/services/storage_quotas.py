@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
-MIN_QUOTA_GB = 0.10
+DEFAULT_MIN_QUOTA_GB = 0.10
 DEFAULT_EXT4_ENFORCER_COMMAND = (
     "/opt/omero/web/bin/enforce-ext4-project-quota.sh "
     "--group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}"
@@ -48,6 +48,22 @@ def quota_state_path() -> Path:
     return Path(
         os.environ.get("ADMIN_TOOLS_QUOTA_STATE_PATH", DEFAULT_STATE_PATH)
     ).expanduser()
+
+
+def min_quota_gb() -> float:
+    """Return minimum allowed quota in GB from environment."""
+    raw_value = os.environ.get("ADMIN_TOOLS_MIN_QUOTA_GB", "").strip()
+    if not raw_value:
+        return DEFAULT_MIN_QUOTA_GB
+    try:
+        parsed = float(raw_value)
+    except ValueError as exc:
+        raise QuotaError(
+            "Invalid ADMIN_TOOLS_MIN_QUOTA_GB value; expected a numeric value in GB."
+        ) from exc
+    if parsed <= 0:
+        raise QuotaError("ADMIN_TOOLS_MIN_QUOTA_GB must be greater than 0.")
+    return round(parsed, 3)
 
 
 MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
@@ -170,6 +186,7 @@ def _normalize_group(value: str) -> str:
 
 
 def _normalize_quota_gb(value: object) -> Optional[float]:
+    minimum_quota_gb = min_quota_gb()
     if value is None:
         return None
     if isinstance(value, str) and not value.strip():
@@ -178,8 +195,8 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
         number = float(value)
     except (TypeError, ValueError) as exc:
         raise QuotaError(f"Invalid quota value: {value!r}") from exc
-    if number < MIN_QUOTA_GB:
-        raise QuotaError(f"Quota value must be at least {MIN_QUOTA_GB:.2f} GB")
+    if number < minimum_quota_gb:
+        raise QuotaError(f"Quota value must be at least {minimum_quota_gb:.2f} GB")
     return round(number, 3)
 
 
@@ -361,7 +378,7 @@ def get_state() -> Dict[str, object]:
     if not isinstance(logs, list):
         logs = []
 
-    return {"quotas_gb": quotas, "logs": logs}
+    return {"quotas_gb": quotas, "logs": logs, "min_quota_gb": min_quota_gb()}
 
 
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
@@ -509,4 +526,5 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             "pending_groups": sorted(set(pending)),
             "quotas_gb": state.get("quotas_gb", {}),
             "logs": state.get("logs", []),
+            "min_quota_gb": min_quota_gb(),
         }
