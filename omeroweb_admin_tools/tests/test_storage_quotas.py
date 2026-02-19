@@ -39,8 +39,6 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
     assert payload["logs"]
 
 
-
-
 def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> None:
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
@@ -65,6 +63,7 @@ def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
         assert "at least 1.00 GB" in str(exc)
     else:
         raise AssertionError("Expected quota validation error for value below 1.00 GB")
+
 
 def test_reconcile_marks_pending_when_group_directory_missing(
     tmp_path, monkeypatch
@@ -163,12 +162,64 @@ def test_reconcile_marks_all_pending_when_template_incompatible(
     (group_root / "group-a").mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
-    monkeypatch.setenv(
-        "CONFIG_omero_fs_repo_path", "%user%/%group%/%time%"
-    )
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%user%/%group%/%time%")
 
     upsert_quotas([("group-a", 5)])
     result = reconcile_quotas([])
 
     assert "group-a" in result["pending_groups"]
     assert result["managed_repository"]["is_compatible"] is False
+
+
+def test_reconcile_deduplicates_non_warning_logs(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    group_root = tmp_path / "ManagedRepository"
+    (group_root / "group-a").mkdir(parents=True)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
+        "python3 -c \"print(\\'ok\\')\"",
+    )
+
+    upsert_quotas([("group-a", 5)])
+    reconcile_quotas(["group-a"])
+    reconcile_quotas(["group-a"])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    applied_messages = [
+        entry["message"]
+        for entry in payload["logs"]
+        if entry["message"].startswith("Applied quota for group 'group-a'")
+    ]
+    assert len(applied_messages) == 1
+
+
+def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
+    tmp_path, monkeypatch
+) -> None:
+    state_path = tmp_path / "quotas.json"
+    group_root = tmp_path / "ManagedRepository"
+    group_root.mkdir(parents=True)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+
+    upsert_quotas([("group-a", 5)])
+    reconcile_quotas([])
+    reconcile_quotas([])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    warning_messages = [
+        entry["message"]
+        for entry in payload["logs"]
+        if entry["message"].startswith("Quota pending for group 'group-a'")
+    ]
+    assert len(warning_messages) == 2
+
+    upsert_quotas([("group-a", None)])
+    reconcile_quotas([])
+
+    updated_payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert updated_payload["_reconcile_event_cache"] == {}
