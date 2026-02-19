@@ -178,14 +178,17 @@ cp env/grafana_example.env env/grafana.env
 # and to mirror these templates unless the sysadmin intentionally customizes values.
 
 # 4. Run the installation script (creates paths, sets ownership, builds, starts)
-# NOTE: Buildx compressed build is enabled by default.
+# Buildx compressed build is automatic with zero required parameters (all compose services with build blocks).
+bash installation/installation_script.sh
+
+# Optional: push compressed images to a registry
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 bash installation/installation_script.sh
 
-# Optional: Build compressed images without pushing (explicit registry/tag required)
-DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 DOCKER_BUILD_PUSH_IMAGES=0 bash installation/installation_script.sh
+# Optional: same automatic compressed build mode through pull/update workflow (prompts preserved)
+bash github_pull_project_bash
 
-# Optional: same compressed build mode through the pull/update workflow
-DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 bash github_pull_project_bash
+# Optional: unattended pull/update mode
+INSTALLATION_AUTOMATION_MODE=1 bash github_pull_project_bash
 
 # Or manually:
 docker compose --env-file installation_paths.env build
