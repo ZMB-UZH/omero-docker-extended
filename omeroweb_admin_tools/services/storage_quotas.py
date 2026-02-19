@@ -92,7 +92,11 @@ def _normalize_group(value: str) -> str:
     return group_name
 
 
-def _normalize_quota_gb(value: object) -> float:
+def _normalize_quota_gb(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
@@ -206,6 +210,16 @@ def upsert_quotas(
     for raw_group, raw_quota in updates:
         group_name = _normalize_group(raw_group)
         quota_gb = _normalize_quota_gb(raw_quota)
+        if quota_gb is None:
+            if group_name in quotas:
+                del quotas[group_name]
+            _append_log(
+                state,
+                "info",
+                f"Deleted quota for group '{group_name}' (source={source}).",
+            )
+            continue
+
         quotas[group_name] = quota_gb
         _append_log(
             state,
