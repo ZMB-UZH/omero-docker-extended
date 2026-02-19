@@ -20,15 +20,11 @@ For official OMERO documentation, release notes, and guides, see: <https://www.o
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Upload plugin (`omeroweb_upload`)
-- Admin tools (`omeroweb_admin_tools`, currently root-user focused)
-
-These components are functional but still evolving, with ongoing improvements to capability depth, edge-case handling, and operator UX.
+- Admin tools (`omeroweb_admin_tools`, root user only per design)
 
 ### 🐢 Not working yet / progressing slowly
 
 - Direct Imaris 11 integration
-
-This path is tracked in the repository but remains incomplete and should be treated as experimental.
 
 ## Service topology
 
