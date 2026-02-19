@@ -228,9 +228,8 @@ replace_working_tree_with_clone() {
     done < <(collect_protected_top_level_names "${current_repo_dir}")
 
     if [ ${#protected_data_dirs[@]} -eq 0 ]; then
-        echo "ERROR: No protected data directories were discovered from installation_paths.env." >&2
-        echo "ERROR: Refusing to replace working tree to avoid deleting persisted OMERO data directories by mistake." >&2
-        return 1
+        echo "WARNING: No top-level protected data directories were discovered under ${current_repo_dir}." >&2
+        echo "WARNING: Continuing with sentinel deep-scan protection only." >&2
     fi
 
     # ── 2. Collect sentinel directory names for the deep scan ─────────
