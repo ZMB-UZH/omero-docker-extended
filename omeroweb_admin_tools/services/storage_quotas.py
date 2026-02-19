@@ -80,6 +80,14 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
     logs = state.setdefault("logs", [])
     assert isinstance(logs, list)
+    if (
+        level == "info"
+        and logs
+        and isinstance(logs[-1], dict)
+        and logs[-1].get("level") == "info"
+        and logs[-1].get("message") == message
+    ):
+        return
     logs.append({"timestamp": _now_iso(), "level": level, "message": message})
     if len(logs) > DEFAULT_LOG_LIMIT:
         del logs[: len(logs) - DEFAULT_LOG_LIMIT]
@@ -243,6 +251,7 @@ def upsert_quotas(
     state = _load_state(path)
     quotas = state.setdefault("quotas_gb", {})
     assert isinstance(quotas, dict)
+    changed = False
 
     for raw_group, raw_quota in updates:
         group_name = _normalize_group(raw_group)
@@ -250,21 +259,28 @@ def upsert_quotas(
         if quota_gb is None:
             if group_name in quotas:
                 del quotas[group_name]
-            _append_log(
-                state,
-                "info",
-                f"Deleted quota for group '{group_name}' (source={source}).",
-            )
+                changed = True
+                _append_log(
+                    state,
+                    "info",
+                    f"Deleted quota for group '{group_name}' (source={source}).",
+                )
+            continue
+
+        existing_quota = quotas.get(group_name)
+        if existing_quota == quota_gb:
             continue
 
         quotas[group_name] = quota_gb
+        changed = True
         _append_log(
             state,
             "info",
             f"Updated quota for group '{group_name}' to {quota_gb:.3f} GB (source={source}).",
         )
 
-    _write_state(path, state)
+    if changed:
+        _write_state(path, state)
     return state
 
 
