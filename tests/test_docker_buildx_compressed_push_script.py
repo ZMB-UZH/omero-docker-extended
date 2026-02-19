@@ -81,7 +81,7 @@ exit 0
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
 
-    def test_script_requires_registry_prefix_even_with_default_override(self) -> None:
+    def test_script_allows_local_build_without_registry_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             fake_bin_dir = temp_path / "bin"
@@ -112,8 +112,8 @@ exit 0
                 check=False,
             )
 
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Registry prefix      : (not set; building local images only)", result.stdout)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
