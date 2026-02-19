@@ -1295,7 +1295,7 @@ resolve_cache_build_choice() {
     if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "1" ]; then
         prompt_message="Use build cache? (controls both docker layer cache and buildx inline cache) Y/n (Default: Y)"
     else
-        prompt_message="Use build cache? (controls docker layer cache only; Buildx compressed build is disabled) Y/n (Default: Y)"
+        prompt_message="Use build cache? Y/n (Default: Y)"
     fi
 
     reply="$(prompt_yes_no "${prompt_message}" "yes")"
