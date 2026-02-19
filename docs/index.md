@@ -23,6 +23,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `operations/monitoring.md` -- Prometheus, Grafana, Loki, Alloy, exporters, dashboards, alerts
 - `operations/postgres-maintenance.md` -- VACUUM ANALYZE, REINDEX CONCURRENTLY, cron schedule
+- `operations/code-scanning.md` -- GitHub code scanning workflow, SARIF uploads, triage and rollout guidance
 - `RELIABILITY.md` -- startup determinism, health checks, incident classes
 - `SECURITY.md` -- secrets management, image pinning, input validation, access control
 
