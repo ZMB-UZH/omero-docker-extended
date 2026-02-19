@@ -460,9 +460,25 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             if not repository_compatibility["is_compatible"]:
                 pending.append(group_name)
                 continue
-            if group_name not in available_groups or not _is_group_folder_available(
-                group_path
-            ):
+            if not _is_group_folder_available(group_path):
+                try:
+                    group_path.mkdir(parents=False, exist_ok=True)
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="info",
+                        message=f"Created group directory for quota enforcement: {group_path}.",
+                    )
+                except OSError as exc:
+                    pending.append(group_name)
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="warning",
+                        message=f"Quota pending for group '{group_name}': could not create directory {group_path}: {exc}.",
+                    )
+                    continue
+            if not _is_group_folder_available(group_path):
                 pending.append(group_name)
                 _append_reconcile_event(
                     state,
