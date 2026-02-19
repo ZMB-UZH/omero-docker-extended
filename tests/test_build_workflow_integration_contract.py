@@ -26,7 +26,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("exec env", script_text)
-        self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD}"', script_text)
+        self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"', script_text)
         self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
 
 
