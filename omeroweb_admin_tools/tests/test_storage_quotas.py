@@ -97,7 +97,10 @@ def test_reconcile_marks_pending_when_group_directory_missing(
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
 
     upsert_quotas([("new-group", 3)])
     result = reconcile_quotas([])
@@ -186,7 +189,10 @@ def test_reconcile_marks_all_pending_when_template_incompatible(
     group_root = tmp_path / "ManagedRepository"
     (group_root / "group-a").mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%user%/%group%/%time%")
 
     upsert_quotas([("group-a", 5)])
@@ -201,7 +207,10 @@ def test_reconcile_deduplicates_non_warning_logs(tmp_path, monkeypatch) -> None:
     group_root = tmp_path / "ManagedRepository"
     (group_root / "group-a").mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
     monkeypatch.setenv(
         "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
@@ -228,7 +237,10 @@ def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
     group_root = tmp_path / "ManagedRepository"
     group_root.mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
 
     upsert_quotas([("group-a", 5)])
@@ -257,7 +269,10 @@ def test_reconcile_uses_default_ext4_enforcer_when_command_template_unset(
     group_root = tmp_path / "ManagedRepository"
     (group_root / "group-a").mkdir(parents=True)
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
     monkeypatch.delenv("ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", raising=False)
 
@@ -265,13 +280,19 @@ def test_reconcile_uses_default_ext4_enforcer_when_command_template_unset(
 
     seen = {}
 
-    def _fake_run(*, command_template, filesystem, group_name, group_path, quota_bytes, quota_gb):
+    def _fake_run(
+        *, command_template, filesystem, group_name, group_path, quota_bytes, quota_gb
+    ):
         seen["command_template"] = command_template
         return True, "ok"
 
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.detect_filesystem",
-        lambda path: type("Fs", (), {"fs_type": "ext4", "mount_point": "/OMERO", "source": "/dev/demo"})(),
+        lambda path: type(
+            "Fs",
+            (),
+            {"fs_type": "ext4", "mount_point": "/OMERO", "source": "/dev/demo"},
+        )(),
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas._run_quota_apply_command",
