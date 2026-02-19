@@ -199,6 +199,15 @@ collect_sentinel_dir_names() {
 replace_working_tree_with_clone() {
     local clone_dir="$1"
     local current_repo_dir="$2"
+    local preserved_logo_tmp=""
+
+    # Preserve only the site-specific logo asset if it exists locally.
+    # The logo/ directory itself must still be refreshed from the clone so
+    # tracked templates such as logo_example.png are not pinned locally.
+    if [ -f "${current_repo_dir}/logo/logo.png" ]; then
+        preserved_logo_tmp="$(mktemp "${current_repo_dir%/}/.project-logo.XXXXXX")"
+        cp "${current_repo_dir}/logo/logo.png" "${preserved_logo_tmp}"
+    fi
 
     # ── 1. Collect top-level data directories (direct exclusions) ─────
     local -a protected_data_dirs=()
