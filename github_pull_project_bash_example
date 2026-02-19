@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_URL="${REPO_URL:-https://github.com/ZMB-UZH/omero-docker-extended.git}"
-REPO_BRANCH="${REPO_BRANCH:-alpha}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
 INSTALLATION_SCRIPT_RELATIVE_PATH="${INSTALLATION_SCRIPT_RELATIVE_PATH:-installation/installation_script.sh}"
 INSTALLATION_PATHS_ENV_RELATIVE_PATH="${INSTALLATION_PATHS_ENV_RELATIVE_PATH:-installation_paths.env}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}"
