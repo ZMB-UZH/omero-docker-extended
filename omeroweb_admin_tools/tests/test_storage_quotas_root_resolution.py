@@ -9,43 +9,37 @@ from omeroweb_admin_tools.services.storage_quotas import (
 )
 
 
-def test_resolve_managed_group_root_prefers_candidate_with_group_matches(
+def test_resolve_managed_group_root_uses_fixed_path_when_present(
     tmp_path, monkeypatch
 ) -> None:
-    c1 = tmp_path / "candidate-1"
-    c2 = tmp_path / "candidate-2"
-    c1.mkdir(parents=True)
-    c2.mkdir(parents=True)
-    (c2 / "group-a").mkdir()
+    managed_root = tmp_path / "OMERO" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
 
     monkeypatch.setattr(
-        "omeroweb_admin_tools.services.storage_quotas._candidate_managed_group_roots",
-        lambda: [c1, c2],
+        "omeroweb_admin_tools.services.storage_quotas.MANAGED_GROUP_ROOT",
+        managed_root,
     )
 
     root, reason = resolve_managed_group_root(["group-a", "group-b"])
 
-    assert root == c2
-    assert "matched 1" in reason
+    assert root == managed_root
+    assert reason == "using fixed managed repository root"
 
 
-def test_resolve_managed_group_root_falls_back_to_first_existing_candidate(
+def test_resolve_managed_group_root_reports_missing_fixed_path(
     tmp_path, monkeypatch
 ) -> None:
-    c1 = tmp_path / "candidate-1"
-    c2 = tmp_path / "candidate-2"
-    c1.mkdir(parents=True)
-    c2.mkdir(parents=True)
+    missing_root = tmp_path / "OMERO" / "ManagedRepository"
 
     monkeypatch.setattr(
-        "omeroweb_admin_tools.services.storage_quotas._candidate_managed_group_roots",
-        lambda: [c1, c2],
+        "omeroweb_admin_tools.services.storage_quotas.MANAGED_GROUP_ROOT",
+        missing_root,
     )
 
     root, reason = resolve_managed_group_root(["unknown-group"])
 
-    assert root == c1
-    assert "no candidate matched known groups" in reason
+    assert root == missing_root
+    assert reason == "fixed managed repository root does not exist"
 
 
 def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> None:
