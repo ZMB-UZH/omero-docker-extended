@@ -209,11 +209,11 @@ function gb(value) {
 
 
 function managedRepositoryCompatibility() {
-    return rawData.quotas?.managed_repository || {
-        is_compatible: false,
-        template: '',
-        expected_prefix: '%group%/%user%/',
-    };
+    const compatibility = rawData.quotas?.managed_repository;
+    if (!compatibility || typeof compatibility.is_compatible !== 'boolean') {
+        return null;
+    }
+    return compatibility;
 }
 
 function quotaCompatibilityMessage() {
@@ -412,7 +412,7 @@ function render() {
     quotaLogsPanel.hidden = currentView !== 'quotas';
 
     const compatibility = managedRepositoryCompatibility();
-    if (currentView === 'quotas' && !compatibility.is_compatible) {
+    if (currentView === 'quotas' && compatibility && !compatibility.is_compatible) {
         storageVisualLayout.classList.add('storage-visual-layout--hidden');
         quotaActions.hidden = true;
         quotaLogsPanel.hidden = true;
@@ -522,6 +522,14 @@ async function refreshQuotasData() {
     };
 }
 
+function resetQuotasDataForUnavailableServer() {
+    rawData.quotas = {
+        quotas_gb: {},
+        logs: [],
+        managed_repository: null,
+    };
+}
+
 async function loadData() {
     statusEl.textContent = 'Loading storage distribution...';
     try {
@@ -545,7 +553,7 @@ async function loadData() {
         }
         render();
     } catch (error) {
-        rawData = { by_user: [], by_group: [], quotas: { quotas_gb: {}, logs: [], managed_repository: {} } };
+        rawData = { by_user: [], by_group: [], quotas: { quotas_gb: {}, logs: [], managed_repository: null } };
         totalUsedBytes = 0;
         render();
         console.error('Failed to load storage distribution.', error);
@@ -659,7 +667,9 @@ viewButtons.quotas.addEventListener('click', async () => {
         await refreshQuotasData();
         render();
     } catch (error) {
-        statusEl.textContent = `Failed to refresh quota details: ${error.message}`;
+        resetQuotasDataForUnavailableServer();
+        render();
+        console.warn('Failed to refresh quota details. Rendering empty quotas view.', error);
     }
 });
 autoRefreshToggle.addEventListener('change', syncAutoRefresh);
