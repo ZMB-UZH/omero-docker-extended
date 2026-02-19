@@ -218,7 +218,7 @@ def upsert_quotas(
 
 
 def import_quotas_csv(content: str) -> Dict[str, object]:
-    """Import quotas from CSV content containing Group,Quota (GB)."""
+    """Import quotas from CSV content containing Group,Quota [GB]."""
     reader = csv.reader(io.StringIO(content))
     rows = list(reader)
     if not rows:
@@ -240,7 +240,7 @@ def import_quotas_csv(content: str) -> Dict[str, object]:
 
 def quota_csv_template() -> str:
     """Return CSV template text for quota imports."""
-    return "Group,Quota (GB)\n"
+    return "Group,Quota [GB]\n"
 
 
 def list_group_directories(group_root: Path) -> List[str]:
