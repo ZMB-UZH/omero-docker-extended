@@ -179,20 +179,19 @@ RUN set -euo pipefail; \
 
 # Copy branding logo (skip cleanly if it doesn't exist)
 # -----------------------------------------------------
-RUN set -euo pipefail; \
-    touch /tmp/logo.png.dummy
-COPY logo/logo.png* /tmp/
-RUN set -euo pipefail; \
-    rm -f /tmp/logo.png.dummy; \
-    if [[ -f /tmp/logo.png ]]; then \
-        cp /tmp/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
+# NOTE: The source repo may be updated by workflows that temporarily remove
+# the local logo/ directory. Mounting the full build context avoids hard
+# failures from COPY when logo/logo.png is absent.
+RUN --mount=type=bind,source=.,target=/tmp/build-context,readonly \
+    set -euo pipefail; \
+    if [[ -f /tmp/build-context/logo/logo.png ]]; then \
+        cp /tmp/build-context/logo/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chown omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chmod 0444 /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         echo "Logo copied to final static directory"; \
     else \
-        echo "No logo.png found in build context, skipping logo setup"; \
-    fi; \
-    rm -f /tmp/logo.png*
+        echo "No logo/logo.png found in build context, skipping logo setup"; \
+    fi
 
 # Sync OMERO.web static + media files
 # -----------------------------------
