@@ -51,10 +51,6 @@ def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> 
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('should-not-run')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (unsafe_root, "test-unsafe-root"),
@@ -79,10 +75,6 @@ def test_reconcile_includes_detection_reason_in_response(tmp_path, monkeypatch) 
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('ok')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (safe_root, "unit-test-detected"),
@@ -106,10 +98,6 @@ def test_reconcile_creates_missing_group_directory(tmp_path, monkeypatch) -> Non
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('ok')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (safe_root, "test-override"),
@@ -142,10 +130,6 @@ def test_reconcile_creates_directory_without_known_groups(tmp_path, monkeypatch)
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('ok')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (safe_root, "test-override"),
@@ -176,10 +160,6 @@ def test_reconcile_logs_warning_when_directory_creation_fails(
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('ok')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (safe_root, "test-override"),
@@ -267,10 +247,6 @@ def test_reconcile_does_not_recreate_existing_directory(tmp_path, monkeypatch) -
 
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
-    monkeypatch.setenv(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE",
-        "python3 -c \"print('ok')\"",
-    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
         lambda known_groups: (safe_root, "test-override"),
@@ -286,5 +262,37 @@ def test_reconcile_does_not_recreate_existing_directory(tmp_path, monkeypatch) -
     assert "existing-group" in result["applied_groups"]
     assert not any(
         "Created group directory" in entry["message"]
+        for entry in result["logs"]
+    )
+
+
+def test_reconcile_reports_configured_status_for_ready_groups(
+    tmp_path, monkeypatch
+) -> None:
+    """Groups with quota + existing directory are reported as configured (applied)."""
+    state_path = tmp_path / "quotas.json"
+    safe_root = tmp_path / "safe" / "group-root"
+    safe_root.mkdir(parents=True)
+    (safe_root / "group-a").mkdir()
+    (safe_root / "group-b").mkdir()
+
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (safe_root, "test-override"),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._is_safe_managed_repository_root",
+        lambda path: (True, ""),
+    )
+
+    upsert_quotas([("group-a", 5), ("group-b", 10)])
+    result = reconcile_quotas(["group-a", "group-b"])
+
+    assert sorted(result["applied_groups"]) == ["group-a", "group-b"]
+    assert result["pending_groups"] == []
+    assert any(
+        "Host-side enforcer will apply" in entry["message"]
         for entry in result["logs"]
     )
