@@ -808,6 +808,8 @@ body {
 .storage-table th,
 .storage-table td {
     padding: 3px 6px;
+    line-height: 1.2;
+    vertical-align: middle;
 }
 .storage-table th:nth-child(2),
 .storage-table td:nth-child(2) {
@@ -881,12 +883,16 @@ body {
     color: #94a3b8;
 }
 
+.storage-table.view-quotas-edit td {
+    height: 30px;
+}
+
 .storage-quota-input {
-    width: 84px;
-    min-width: 84px;
-    max-width: 84px;
-    height: 24px;
-    padding: 2px 8px;
+    width: 73px;
+    min-width: 73px;
+    max-width: 73px;
+    height: 22px;
+    padding: 1px 8px;
     border: 1px solid #cbd5e1;
     border-radius: 999px;
     font-size: 13px;
