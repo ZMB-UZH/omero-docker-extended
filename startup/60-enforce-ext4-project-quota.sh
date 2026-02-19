@@ -14,6 +14,7 @@ mount_point=""
 projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-/tmp/omero-admin-tools/quota/projects}"
 projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-/tmp/omero-admin-tools/quota/projid}"
 project_id_min="${ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN:-200000}"
+minimum_quota_gb="${ADMIN_TOOLS_MIN_QUOTA_GB:-0.10}"
 lock_path="${ADMIN_TOOLS_QUOTA_LOCK_PATH:-/tmp/omero-ext4-quota.lock}"
 
 while [[ $# -gt 0 ]]; do
@@ -114,8 +115,11 @@ fi
 
 quota_blocks="$(python3 - <<PY
 quota_gb = float(${quota_gb@Q})
-if quota_gb < 1.0:
-    raise SystemExit("quota_gb must be >= 1.0")
+minimum_quota_gb = float(${minimum_quota_gb@Q})
+if minimum_quota_gb <= 0:
+    raise SystemExit("ADMIN_TOOLS_MIN_QUOTA_GB must be > 0")
+if quota_gb < minimum_quota_gb:
+    raise SystemExit(f"quota_gb must be >= {minimum_quota_gb:.2f}")
 print(int(quota_gb * 1024 * 1024))
 PY
 )"
