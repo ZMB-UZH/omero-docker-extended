@@ -10,6 +10,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
     detect_filesystem,
     managed_repository_compatibility,
     import_quotas_csv,
+    QuotaError,
     quota_csv_template,
     reconcile_quotas,
     upsert_quotas,
@@ -37,6 +38,19 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
     assert payload["quotas_gb"]["group-b"] == 22.5
     assert payload["logs"]
 
+
+
+
+def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    try:
+        upsert_quotas([("group-a", 0.99)])
+    except QuotaError as exc:
+        assert "at least 1.00 GB" in str(exc)
+    else:
+        raise AssertionError("Expected quota validation error for value below 1.00 GB")
 
 def test_reconcile_marks_pending_when_group_directory_missing(
     tmp_path, monkeypatch

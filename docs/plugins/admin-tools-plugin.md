@@ -90,6 +90,8 @@ The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the 
 
 If the configured ManagedRepository template does not start with `%group%/%user%/`, the Quotas tab is intentionally disabled and shows an incompatibility warning to prevent unsafe quota enforcement assumptions.
 
+Quota values are validated with a minimum accepted value of **1.00 GB** in both UI edits and backend processing (including CSV imports).
+
 ## Operator checklist
 
 - Validate connectivity to Loki, Prometheus, and Grafana from the omeroweb container.

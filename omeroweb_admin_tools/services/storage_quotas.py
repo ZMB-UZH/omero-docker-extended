@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
+MIN_QUOTA_GB = 1.0
 
 
 @dataclass(frozen=True)
@@ -96,8 +97,8 @@ def _normalize_quota_gb(value: object) -> float:
         number = float(value)
     except (TypeError, ValueError) as exc:
         raise QuotaError(f"Invalid quota value: {value!r}") from exc
-    if number <= 0:
-        raise QuotaError("Quota value must be greater than 0 GB")
+    if number < MIN_QUOTA_GB:
+        raise QuotaError(f"Quota value must be at least {MIN_QUOTA_GB:.2f} GB")
     return round(number, 3)
 
 
