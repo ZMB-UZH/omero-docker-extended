@@ -446,7 +446,7 @@ function render() {
             .join('');
     }
 
-    const viewLabel = currentView === 'groups' ? 'Group view' : currentView === 'top10' ? 'Top-10 users' : currentView === 'quotas' ? 'Quotas view' : 'User view';
+    const viewLabel = currentView === 'groups' ? 'Group view' : currentView === 'top10' ? 'Top-10 users' : currentView === 'quotas' ? 'Quotas' : 'User view';
     statusEl.textContent = `Loaded ${allRows.length} rows for ${viewLabel}.`;
     drawPieChart(filteredRows, viewLabel);
     renderQuotaLogs(rawData.quotas?.logs || []);
