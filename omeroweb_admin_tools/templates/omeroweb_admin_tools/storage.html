@@ -37,15 +37,17 @@
                 <button type="button" id="view_quotas_btn" class="admin-tools-button log-refresh-button" role="tab" aria-selected="false">Quotas</button>
             </div>
         </div>
-        <div id="status" class="log-status">Ready.</div>
-        <div id="quota_compatibility_notice" class="log-empty" hidden></div>
+        <div class="storage-status-row">
+            <div id="status" class="log-status">Ready.</div>
 
-        <div id="quota_actions" class="storage-quota-actions" hidden>
-            <button type="button" id="quota_edit_btn" class="admin-tools-button log-refresh-button">Edit quota(s)</button>
-            <button type="button" id="quota_template_btn" class="admin-tools-button log-refresh-button">Download CSV template</button>
-            <button type="button" id="quota_import_btn" class="admin-tools-button log-refresh-button">Import quota(s) from CSV</button>
-            <input id="quota_import_file" type="file" accept=".csv,text/csv" hidden>
+            <div id="quota_actions" class="storage-quota-actions" hidden>
+                <button type="button" id="quota_edit_btn" class="admin-tools-button log-refresh-button storage-quota-button">Edit quota(s)</button>
+                <button type="button" id="quota_template_btn" class="admin-tools-button log-refresh-button storage-quota-button">Download CSV template</button>
+                <button type="button" id="quota_import_btn" class="admin-tools-button log-refresh-button storage-quota-button">Import quota(s) from CSV</button>
+                <input id="quota_import_file" type="file" accept=".csv,text/csv" hidden>
+            </div>
         </div>
+        <div id="quota_compatibility_notice" class="log-empty" hidden></div>
         <div class="storage-visual-layout">
             <div class="storage-chart-card">
                 <canvas id="storage_chart" width="460" height="420" aria-label="Storage usage distribution chart"></canvas>
@@ -121,6 +123,7 @@ const PERCENT_DECIMALS = 4;
 const DISK_USAGE_COLUMN_WIDTH_PX = 25;
 const DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX = 30;
 const QUOTA_COLUMN_WIDTH_PX = 24;
+const QUOTA_DECIMALS = 2;
 let autoRefreshTimer = null;
 
 const viewButtons = {
@@ -197,7 +200,7 @@ function syncStorageTableHeight() {
 }
 
 function gb(value) {
-    return `${Number(value || 0).toFixed(3)} GB`;
+    return `${Number(value || 0).toFixed(QUOTA_DECIMALS)} GB`;
 }
 
 
@@ -432,7 +435,7 @@ function render() {
         table.innerHTML = shownRows
             .map((row) => {
                 const quotaCell = quotasEditMode
-                    ? `<input type="number" min="0.001" step="0.001" class="log-input storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${Number(row.quotaGb || 0).toFixed(3)}">`
+                    ? `<input type="number" min="0.01" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${Number(row.quotaGb || 0).toFixed(QUOTA_DECIMALS)}">`
                     : escapeHtml(gb(row.quotaGb));
                 return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%</td><td>${quotaCell}</td></tr>`;
             })
@@ -458,7 +461,7 @@ function exportCsv() {
             return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
         }
         if (currentView === 'quotas') {
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.quotaPercent.toFixed(PERCENT_DECIMALS)},${row.quotaGb.toFixed(3)}`;
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.quotaPercent.toFixed(PERCENT_DECIMALS)},${row.quotaGb.toFixed(QUOTA_DECIMALS)}`;
         }
         return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
     }).join('\n');
@@ -517,7 +520,7 @@ async function saveQuotaEdits() {
     const inputs = [...document.querySelectorAll('.storage-quota-input')];
     const updates = inputs.map((input) => ({
         group: input.dataset.group || '',
-        quota_gb: Number(input.value || 0),
+        quota_gb: Number(Number(input.value || 0).toFixed(QUOTA_DECIMALS)),
     }));
     const response = await fetch(quotaUpdateUrl, {
         method: 'POST',
