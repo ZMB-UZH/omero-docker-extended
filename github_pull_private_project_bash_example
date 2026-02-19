@@ -252,6 +252,7 @@ replace_working_tree_with_clone() {
     find_args+=( ! -name '.git' )
     find_args+=( ! -name '.project-pull.*' )
     find_args+=( ! -name 'github_pull_project_bash' )
+    find_args+=( ! -name 'github_pull_private_project_bash' )
     find_args+=( ! -name "${SCRIPT_NAME}" )
     find_args+=( ! -name 'installation_paths.env' )
     find_args+=( ! -name '.env' )
@@ -314,6 +315,7 @@ replace_working_tree_with_clone() {
     echo "  - env/ (credential and service env files)"
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
+    echo "  - github_pull_private_project_bash"
     if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ]; then
         echo "  - ${SCRIPT_NAME}"
     fi
