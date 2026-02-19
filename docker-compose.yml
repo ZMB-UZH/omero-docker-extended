@@ -1,0 +1,528 @@
+# Docker compose file of a minimal OMERO installation based on the official documentation, modified with many custom packages and plugins for enhanced functionality.
+# Using the tag :latest for OMERO and databases might be tempting but is extremely risky! Have a backup plan!
+# Always check compatibility in the following link or in the official OMERO documentation: https://omero.readthedocs.io/en/stable/sysadmins/version-requirements.html.
+
+services:
+
+  portainer:
+    image: "portainer/portainer-ce:2.38.1-alpine"
+    container_name: portainer
+    restart: unless-stopped
+    networks:
+      omero:
+        aliases:
+          - portainer
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${PORTAINER_DATA_PATH:?Set PORTAINER_DATA_PATH (run installation/installation_script.sh)}:/data:rw
+    command: --http-enabled
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  loki:
+    image: "grafana/loki:3.2.0"
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      omero:
+        aliases:
+          - loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  alloy:
+    image: "grafana/alloy:v1.12.2"
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "/etc/alloy/alloy-config.alloy"
+    networks:
+      omero:
+        aliases:
+          - alloy
+    volumes:
+      - ./monitoring/alloy/alloy-config.alloy:/etc/alloy/alloy-config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
+      - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:ro
+      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: "prom/prometheus:v3.5.1"
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    networks:
+      omero:
+        aliases:
+          - prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${PROMETHEUS_DATA_PATH:?Set PROMETHEUS_DATA_PATH (run installation/installation_script.sh)}:/prometheus:rw
+    depends_on:
+      blackbox-exporter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/ready || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  blackbox-exporter:
+    image: "prom/blackbox-exporter:v0.28.0"
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/blackbox_exporter/config.yml"
+    networks:
+      omero:
+        aliases:
+          - blackbox-exporter
+    volumes:
+      - ./monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9115/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  node-exporter:
+    image: "prom/node-exporter:v1.10.2"
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    pid: host
+    networks:
+      omero:
+        aliases:
+          - node-exporter
+    volumes:
+      - /:/host:ro,rslave
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  cadvisor:
+    image: "gcr.io/cadvisor/cadvisor:v0.55.1"
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    networks:
+      omero:
+        aliases:
+          - cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    tmpfs:
+      - /dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  postgres-exporter:
+    image: "prometheuscommunity/postgres-exporter:v0.19.0"
+    restart: unless-stopped
+    command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://omero:${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}@database:5432/omero?sslmode=disable"
+    networks:
+      omero:
+        aliases:
+          - postgres-exporter
+    depends_on:
+      database:
+        condition: service_healthy
+      database_plugin:
+        condition: service_healthy
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  postgres-exporter-plugin:
+    image: "prometheuscommunity/postgres-exporter:v0.19.0"
+    restart: unless-stopped
+    command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://omero-plugin:${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}@database-plugin:5433/omero-plugin?sslmode=disable"
+    networks:
+      omero:
+        aliases:
+          - postgres-exporter-plugin
+    depends_on:
+      database_plugin:
+        condition: service_healthy
+    volumes:
+      - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  redis-exporter:
+    image: "oliver006/redis_exporter:v1.81.0-alpine"
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    networks:
+      omero:
+        aliases:
+          - redis-exporter
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9121/metrics || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: "grafana/grafana:12.3.3"
+    restart: unless-stopped
+    networks:
+      omero:
+        aliases:
+          - grafana
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./env/grafana.env
+      - ./env/omero_secrets.env
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
+      GF_METRICS_ENABLED: "true"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    volumes:
+      - ${GRAFANA_DATA_PATH:?Set GRAFANA_DATA_PATH (run installation/installation_script.sh)}:/var/lib/grafana:rw
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: "postgres:16.12"
+    restart: unless-stopped
+    env_file:
+      - ./env/omero_secrets.env
+    command:
+      - "postgres"
+      - "-c"
+      - "timezone=Europe/Zurich"
+      - "-c"
+      - "log_timezone=Europe/Zurich"
+    environment:
+      POSTGRES_USER: omero
+      POSTGRES_DB: omero
+      POSTGRES_PASSWORD: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Europe/Zurich
+      PGTZ: Europe/Zurich
+    networks:
+      omero:
+        aliases:
+          - database
+    volumes:
+      # IMPORTANT: Intentionally using a pgdata subdirectory to avoid ext4 lost+found issues.
+      # postgres images define VOLUME /var/lib/postgresql/data; mounting only
+      # /var/lib/postgresql can lead to an anonymous nested volume for /data,
+      # which makes data appear lost after container recreation.
+      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  omeroserver:
+    image: omeroserver:custom
+    build:
+      context: .
+      dockerfile: docker/omero-server.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    env_file:
+      - ./env/omeroserver.env
+      - ./env/omero_secrets.env
+      - ./env/omero-celery.env
+    environment:
+      CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
+    hostname: omeroserver
+    working_dir: /opt/omero/server/OMERO.server
+    networks:
+      omero:
+        aliases:
+          - omeroserver
+    ports:
+      - "4064:4064"
+    volumes:
+      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
+      - ${OMERO_SERVER_VAR_PATH:?Set OMERO_SERVER_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var:rw
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:rw
+    ulimits:
+      nofile:
+        soft: 15000
+        hard: 15000
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\""
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+
+  redis-sysctl-init:
+    image: redis-sysctl-init:custom
+    build:
+      context: .
+      dockerfile: docker/redis-sysctl-init.Dockerfile
+    container_name: redis-sysctl-init
+    privileged: true
+    restart: "no"
+    command: []
+    environment:
+      SYSCTL_KEY: vm.overcommit_memory
+      SYSCTL_VALUE: "1"
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: "redis:8.4.0-alpine"
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
+    environment:
+      TZ: Europe/Zurich
+    networks:
+      omero:
+        aliases:
+          - redis
+    depends_on:
+      redis-sysctl-init:
+        condition: service_completed_successfully
+    tmpfs:
+      - /data:size=512m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  omeroweb:
+    image: omeroweb:custom
+    build:
+      context: .
+      dockerfile: docker/omero-web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      omeroserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./env/omeroweb.env
+      - ./env/omeroserver.env
+      - ./env/omero_secrets.env
+      - ./env/omero-celery.env
+    networks:
+      omero:
+        aliases:
+          - omeroweb
+    ports:
+      - "4090:4090"
+    volumes:
+      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
+      - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
+      - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (run installation/installation_script.sh)}:/opt/tmp:rw
+      - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
+      - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
+      - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  database_plugin:
+    image: "postgres:16.12"
+    restart: unless-stopped
+    env_file:
+      - ./env/omero_secrets.env
+    command:
+      - "postgres"
+      - "-c"
+      - "timezone=Europe/Zurich"
+      - "-c"
+      - "log_timezone=Europe/Zurich"
+    environment:
+      POSTGRES_USER: omero-plugin
+      POSTGRES_DB: omero-plugin
+      POSTGRES_PASSWORD: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
+      PGDATA: /var/lib/postgresql/data/pgdata
+      PGPORT: 5433
+      TZ: Europe/Zurich
+      PGTZ: Europe/Zurich
+    networks:
+      omero:
+        aliases:
+          - database-plugin
+    volumes:
+      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  pg-maintenance:
+    image: pg-maintenance:custom
+    build:
+      context: .
+      dockerfile: docker/pg-maintenance.Dockerfile
+    container_name: pg-maintenance
+    restart: unless-stopped
+    env_file:
+      - ./env/omero_secrets.env
+    environment:
+      TZ: Europe/Zurich
+      PGTZ: Europe/Zurich
+      # Keep maintenance sidecar layout aligned with postgres services:
+      # use a dedicated PGDATA subdirectory inside the mounted data root.
+      PGDATA: /var/lib/postgresql/data/pgmaintenance
+      # OMERO main database
+      OMERO_DB_HOST: database
+      OMERO_DB_PORT: 5432
+      OMERO_DB_NAME: omero
+      OMERO_DB_USER: omero
+      OMERO_DB_PASS: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
+      # OMP plugin database
+      PLUGIN_DB_HOST: database-plugin
+      PLUGIN_DB_PORT: 5433
+      PLUGIN_DB_NAME: omero-plugin
+      PLUGIN_DB_USER: omero-plugin
+      PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
+    volumes:
+      # postgres-derived images declare VOLUME /var/lib/postgresql/data.
+      # Binding that exact path to prevent anonymous volumes.
+      # PGDATA then selects a dedicated subdirectory for sidecar-owned files.
+      - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
+    networks:
+      omero:
+        aliases:
+          - pg-maintenance
+    depends_on:
+      database:
+        condition: service_healthy
+      database_plugin:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x cron >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  omero:

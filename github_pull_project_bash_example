@@ -1,0 +1,404 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_URL="${REPO_URL:-https://github.com/ZMB-UZH/omero-docker-extended.git}"
+REPO_BRANCH="${REPO_BRANCH:-alpha}"
+INSTALLATION_SCRIPT_RELATIVE_PATH="${INSTALLATION_SCRIPT_RELATIVE_PATH:-installation/installation_script.sh}"
+INSTALLATION_PATHS_ENV_RELATIVE_PATH="${INSTALLATION_PATHS_ENV_RELATIVE_PATH:-installation_paths.env}"
+INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}"
+
+# shellcheck disable=SC2034
+BOOTSTRAP_CLONE_DIR=""
+
+cleanup_bootstrap_clone_dir() {
+    if [ -n "${BOOTSTRAP_CLONE_DIR}" ] && [ -d "${BOOTSTRAP_CLONE_DIR}" ]; then
+        rm -rf "${BOOTSTRAP_CLONE_DIR}"
+    fi
+}
+
+clone_latest_repository_snapshot() {
+    BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.project-pull.XXXXXX")"
+
+    if [ ! -d "${BOOTSTRAP_CLONE_DIR}" ]; then
+        echo "ERROR: Failed to create temporary clone directory." >&2
+        return 1
+    fi
+
+    if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}"; then
+        echo "ERROR: Failed to pull latest project files from ${REPO_URL} (${REPO_BRANCH})." >&2
+        echo "INFO: Verify REPO_URL and REPO_BRANCH are correct and reachable." >&2
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# resolve_all_data_paths
+#
+# Sources installation_paths.env inside a subshell (so variable references
+# like ${OMERO_DATA_PATH}/... resolve correctly) and prints every known
+# data/installation path, one per line.
+# ---------------------------------------------------------------------------
+resolve_all_data_paths() {
+    local env_file="$1"
+
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: Required installation paths file is missing or unreadable: ${env_file}" >&2
+        return 1
+    fi
+
+    (
+        local env_line
+        while IFS= read -r env_line || [ -n "${env_line}" ]; do
+            case "${env_line}" in
+                ''|'#'*)
+                    continue
+                    ;;
+                [A-Za-z_]*=*)
+                    eval "${env_line}"
+                    ;;
+                *)
+                    ;;
+            esac
+        done < "${env_file}"
+
+        printf '%s\n' \
+            "${OMERO_INSTALLATION_PATH:-}" \
+            "${OMERO_DATABASE_PATH:-}" \
+            "${OMERO_PLUGIN_DATABASE_PATH:-}" \
+            "${OMERO_DATA_PATH:-}" \
+            "${OMERO_USER_DATA_PATH:-}" \
+            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_SERVER_LOGS_PATH:-}" \
+            "${OMERO_WEB_LOGS_PATH:-}" \
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
+            "${PORTAINER_DATA_PATH:-}" \
+            "${PROMETHEUS_DATA_PATH:-}" \
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"
+    )
+}
+
+# ---------------------------------------------------------------------------
+# collect_protected_top_level_names
+#
+# Reads installation_paths.env, resolves every path variable and emits the
+# unique set of first-level directory names that fall *under* the repository
+# root.  These names are excluded from the rm -rf during file replacement.
+# ---------------------------------------------------------------------------
+collect_protected_top_level_names() {
+    local repo_dir="${1%/}"
+    local env_file="${repo_dir}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
+
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: ${env_file} is missing or unreadable." >&2
+        echo "ERROR: Refusing to continue because replacement without explicit protected paths can delete OMERO data/database directories." >&2
+        return 1
+    fi
+
+    local resolved_paths
+    resolved_paths="$(resolve_all_data_paths "${env_file}")"
+
+    local _path _rel _top
+    while IFS= read -r _path; do
+        [ -z "${_path}" ] && continue
+        _path="${_path%/}"
+        [ "${_path}" = "${repo_dir}" ] && continue
+        case "${_path}" in
+            "${repo_dir}/"*)
+                _rel="${_path#"${repo_dir}/"}"
+                _top="${_rel%%/*}"
+                [ -n "${_top}" ] && printf '%s\n' "${_top}"
+                ;;
+        esac
+    done <<< "${resolved_paths}" | sort -u
+}
+
+# ---------------------------------------------------------------------------
+# collect_sentinel_dir_names
+#
+# Extracts every unique directory-name component that is specific to the
+# installation / data paths.  For each resolved path the portion relative to
+# OMERO_INSTALLATION_PATH is split into components.
+#
+# Example: /opt/omero/postgresdb/omero_database  (root=/opt/omero/)
+#          → sentinels: postgresdb, omero_database
+#
+# These sentinel names are used by the deep-scan safety net: before deleting
+# any top-level candidate, we recursively check whether it (or any of its
+# subdirectories at ANY depth) carries a sentinel name.  If it does, the
+# entire candidate is kept intact — no matter where the match occurs.
+# ---------------------------------------------------------------------------
+collect_sentinel_dir_names() {
+    local repo_dir="${1%/}"
+    local env_file="${repo_dir}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
+
+    if [ ! -r "${env_file}" ]; then
+        echo "ERROR: ${env_file} is missing or unreadable." >&2
+        return 1
+    fi
+
+    (
+        # shellcheck disable=SC1090
+        . "${env_file}" 2>/dev/null || exit 0
+
+        local _install_root="${OMERO_INSTALLATION_PATH:-}"
+        _install_root="${_install_root%/}"
+
+        for _path in \
+            "${OMERO_DATABASE_PATH:-}" \
+            "${OMERO_PLUGIN_DATABASE_PATH:-}" \
+            "${OMERO_DATA_PATH:-}" \
+            "${OMERO_USER_DATA_PATH:-}" \
+            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_SERVER_LOGS_PATH:-}" \
+            "${OMERO_WEB_LOGS_PATH:-}" \
+            "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
+            "${PORTAINER_DATA_PATH:-}" \
+            "${PROMETHEUS_DATA_PATH:-}" \
+            "${GRAFANA_DATA_PATH:-}" \
+            "${LOKI_DATA_PATH:-}" \
+            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+
+            [ -z "${_path}" ] && continue
+            _path="${_path%/}"
+
+            # Derive the portion relative to the installation root so we
+            # only collect data-specific names, not generic system dirs.
+            local _rel=""
+            if [ -n "${_install_root}" ] && [ "${_path}" != "${_install_root}" ]; then
+                case "${_path}" in
+                    "${_install_root}/"*)
+                        _rel="${_path#"${_install_root}/"}"
+                        ;;
+                    *)
+                        _rel="$(basename "${_path}")"
+                        ;;
+                esac
+            else
+                _rel="$(basename "${_path}")"
+            fi
+
+            # Split the relative path on '/' and emit every component.
+            local _saved_IFS="${IFS}"
+            IFS='/'
+            # shellcheck disable=SC2086
+            for _component in ${_rel}; do
+                [ -n "${_component}" ] && printf '%s\n' "${_component}"
+            done
+            IFS="${_saved_IFS}"
+        done
+    ) | sort -u
+}
+
+replace_working_tree_with_clone() {
+    local clone_dir="$1"
+    local current_repo_dir="$2"
+
+    # ── 1. Collect top-level data directories (direct exclusions) ─────
+    local -a protected_data_dirs=()
+    local _name
+    while IFS= read -r _name; do
+        [ -n "${_name}" ] && protected_data_dirs+=("${_name}")
+    done < <(collect_protected_top_level_names "${current_repo_dir}")
+
+    if [ ${#protected_data_dirs[@]} -eq 0 ]; then
+        echo "WARNING: No top-level protected data directories were discovered under ${current_repo_dir}." >&2
+        echo "WARNING: Continuing with sentinel deep-scan protection only." >&2
+    fi
+
+    # ── 2. Collect sentinel directory names for the deep scan ─────────
+    local -a sentinel_names=()
+    while IFS= read -r _name; do
+        [ -n "${_name}" ] && sentinel_names+=("${_name}")
+    done < <(collect_sentinel_dir_names "${current_repo_dir}")
+
+    if [ ${#sentinel_names[@]} -eq 0 ]; then
+        echo "ERROR: No sentinel directory names were discovered from installation_paths.env." >&2
+        echo "ERROR: Refusing to replace working tree because deep-scan protection cannot be applied." >&2
+        return 1
+    fi
+
+    # ── 3. Build the find exclusion list ──────────────────────────────
+    local -a find_args=()
+    find_args+=( "${current_repo_dir}" -mindepth 1 -maxdepth 1 )
+
+    # Built-in exclusions (always applied)
+    find_args+=( ! -name '.git' )
+    find_args+=( ! -name '.project-pull.*' )
+    find_args+=( ! -name 'github_pull_project_bash' )
+    find_args+=( ! -name "${SCRIPT_NAME}" )
+    find_args+=( ! -name 'installation_paths.env' )
+    find_args+=( ! -name '.env' )
+    find_args+=( ! -name 'env' )
+    find_args+=( ! -name 'logo' )
+
+    # Data-path exclusions (derived from installation_paths.env)
+    for _name in "${protected_data_dirs[@]}"; do
+        find_args+=( ! -name "${_name}" )
+    done
+
+    # ── 4. Deep-scan each remaining candidate for sentinel names ──────
+    #
+    # For every top-level entry that passed the exclusion filters above,
+    # recursively check whether it (or ANY subdirectory at any depth)
+    # carries a name that matches a known data / database directory.
+    # If it does, the entry is kept intact as a safety measure.
+
+    # Build a combined find-expression for all sentinel names:
+    #   \( -name 'sentinel1' -o -name 'sentinel2' -o ... \)
+    local -a sentinel_find_expr=()
+    if [ ${#sentinel_names[@]} -gt 0 ]; then
+        sentinel_find_expr+=( \( )
+        local _first=true
+        for _name in "${sentinel_names[@]}"; do
+            if [ "${_first}" = true ]; then
+                _first=false
+            else
+                sentinel_find_expr+=( -o )
+            fi
+            sentinel_find_expr+=( -name "${_name}" )
+        done
+        sentinel_find_expr+=( \) )
+    fi
+
+    local -a to_remove=()
+    local -a kept_by_deep_scan=()
+    local _candidate _candidate_name
+
+    while IFS= read -r _candidate; do
+        [ -z "${_candidate}" ] && continue
+        _candidate_name="$(basename "${_candidate}")"
+
+        # Deep scan: if the candidate is a directory and sentinel names
+        # are available, look for ANY matching subdirectory at any depth.
+        if [ -d "${_candidate}" ] && [ ${#sentinel_find_expr[@]} -gt 0 ]; then
+            if find "${_candidate}" -type d "${sentinel_find_expr[@]}" -print -quit 2>/dev/null | grep -q .; then
+                kept_by_deep_scan+=("${_candidate_name}")
+                continue
+            fi
+        fi
+
+        to_remove+=("${_candidate}")
+    done < <(find "${find_args[@]}" 2>/dev/null)
+
+    # ── 5. Safety summary ─────────────────────────────────────────────
+    echo "Protected (will NOT be removed):"
+    echo "  - .git"
+    echo "  - installation_paths.env (local installation paths source of truth)"
+    echo "  - .env (docker compose runtime paths)"
+    echo "  - env/ (credential and service env files)"
+    echo "  - logo/ (preserves logo/logo.png branding asset)"
+    echo "  - .project-pull.*"
+    echo "  - github_pull_project_bash"
+    if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ]; then
+        echo "  - ${SCRIPT_NAME}"
+    fi
+    if [ ${#protected_data_dirs[@]} -gt 0 ]; then
+        echo "  Top-level data directories (from installation_paths.env):"
+        printf '    - %s\n' "${protected_data_dirs[@]}"
+    fi
+    if [ ${#kept_by_deep_scan[@]} -gt 0 ]; then
+        echo "  Kept by deep scan (contain data/database subdirectories):"
+        printf '    - %s\n' "${kept_by_deep_scan[@]}"
+    fi
+    if [ ${#sentinel_names[@]} -gt 0 ]; then
+        echo "  Sentinel directory names used for deep scan:"
+        printf '    - %s\n' "${sentinel_names[@]}"
+    fi
+    echo ""
+
+    if [ ${#to_remove[@]} -eq 0 ]; then
+        echo "No entries to replace."
+    else
+        echo "Entries that will be replaced with fresh repository files:"
+        local _entry
+        for _entry in "${to_remove[@]}"; do
+            printf '  - %s\n' "$(basename "${_entry}")"
+        done
+    fi
+
+    # ── 6. Perform the replacement ────────────────────────────────────
+    for _candidate in "${to_remove[@]}"; do
+        rm -rf "${_candidate}"
+    done
+
+    # Move fresh files from the clone into place, but skip .git,
+    # installation_paths.env, and env/ so we never overwrite preserved
+    # local configuration or credentials.
+    find "${clone_dir}" -mindepth 1 -maxdepth 1 \
+        ! -name '.git' \
+        ! -name 'installation_paths.env' \
+        ! -name 'logo' \
+        ! -name 'env' \
+        -exec mv {} "${current_repo_dir}" \;
+
+    # ── 7. Refresh *_example.env files inside the protected env/ dir ───
+    #
+    # The env/ directory is never deleted (user credentials + paths live
+    # there), but the *_example.env templates must stay up-to-date with
+    # the repository so users can compare them against their local copies.
+    if [ -d "${clone_dir}/env" ]; then
+        # Remove stale example files, then copy fresh ones from the clone.
+        find "${current_repo_dir}/env" -maxdepth 1 -name '*_example.env' -delete 2>/dev/null || true
+        find "${clone_dir}/env" -maxdepth 1 -name '*_example.env' \
+            -exec cp {} "${current_repo_dir}/env/" \;
+        echo "Refreshed *_example.env files in env/."
+    fi
+}
+
+run_installation_script() {
+    local installation_script_path="${SCRIPT_DIR}/${INSTALLATION_SCRIPT_RELATIVE_PATH}"
+
+    if [ ! -f "${installation_script_path}" ]; then
+        echo "ERROR: Installation script not found after pull: ${installation_script_path}" >&2
+        return 1
+    fi
+
+    if ! chmod +x "${installation_script_path}"; then
+        echo "ERROR: Failed to mark installation script executable: ${installation_script_path}" >&2
+        return 1
+    fi
+
+    echo "Executing installation script: ${installation_script_path}"
+    exec env \
+        INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}" \
+        USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" \
+        bash "${installation_script_path}"
+}
+
+main() {
+    if [ -z "${BASH_VERSION:-}" ]; then
+        echo "ERROR: This script must be run with bash." >&2
+        exit 1
+    fi
+
+    trap cleanup_bootstrap_clone_dir EXIT
+
+    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
+    case "${REPO_URL}" in
+        https://*|http://*)
+            ;;
+        *)
+            echo "ERROR: github_pull_project_bash_example supports only HTTP(S) repository URLs. Set REPO_URL to an https:// or http:// URL." >&2
+            exit 1
+            ;;
+    esac
+
+    if [ ! -r "${installation_paths_env_path}" ]; then
+        echo "ERROR: Required file is missing or unreadable before update: ${installation_paths_env_path}" >&2
+        echo "ERROR: This update script is intentionally refusing to run without installation_paths.env in the repository root to prevent accidental deletion of persistent OMERO paths." >&2
+        exit 1
+    fi
+
+    clone_latest_repository_snapshot
+    replace_working_tree_with_clone "${BOOTSTRAP_CLONE_DIR}" "${SCRIPT_DIR}"
+    run_installation_script
+}
+
+main "$@"
