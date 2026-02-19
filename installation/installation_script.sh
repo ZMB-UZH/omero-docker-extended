@@ -6,10 +6,9 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
-USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}" # set to 1 to enable cached builds
-KEEP_IMAGES="${KEEP_IMAGES:-0}"         # set to 1 to keep existing images
-START_CONTAINERS="${START_CONTAINERS:-1}" # set to 0 to skip `docker compose up -d`
-USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 1 to build/push with buildx compression helper
+USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
+KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
+START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-0}" # set to 1 to run fully non-interactive (no /dev/tty prompts)
 COMPOSE_UP_RETRIES="${COMPOSE_UP_RETRIES:-3}"
@@ -73,9 +72,6 @@ load_secrets_env() {
         return 1
     fi
 
-    # Export variables for docker compose interpolation AND container runtime env_file usage.
-    # We intentionally support only simple KEY=VALUE lines (comments/blank lines ignored),
-    # matching the behavior of load_installation_paths_env, but with automatic exporting.
     set -a
     load_installation_paths_env "${secrets_env_file}"
     set +a
@@ -211,49 +207,39 @@ resolve_buildx_inline_cache_setting() {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# run_image_build
+#
+# Buildx compressed build (zstd) is always used - fully automatic.
+# Cache is controlled by USE_CACHE_BUILD (from the "Use cache?" prompt),
+# which applies to both buildx inline cache and docker build cache.
+# ---------------------------------------------------------------------------
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
 
-    if [ "${USE_BUILDX_COMPRESSED_BUILD}" -eq 1 ]; then
-        if [ ! -x "${buildx_helper_path}" ]; then
-            echo "ERROR: Buildx compression helper is missing or not executable: ${buildx_helper_path}" >&2
-            echo "ERROR: Re-run github_pull_project_bash and ensure installation/docker_buildx_compressed_push.sh exists." >&2
-            return 1
-        fi
-
-        if [ -z "${DOCKER_IMAGE_TAG:-}" ]; then
-            echo "ERROR: DOCKER_IMAGE_TAG must be explicitly set when USE_BUILDX_COMPRESSED_BUILD=1." >&2
-            echo "ERROR: Example: DOCKER_IMAGE_TAG=2026.02.0 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero bash installation/installation_script.sh" >&2
-            return 1
-        fi
-
-        if [ -z "${DOCKER_REGISTRY_PREFIX:-}" ]; then
-            echo "ERROR: DOCKER_REGISTRY_PREFIX must be explicitly set when USE_BUILDX_COMPRESSED_BUILD=1." >&2
-            echo "ERROR: Example: DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero DOCKER_IMAGE_TAG=2026.02.0 bash installation/installation_script.sh" >&2
-            return 1
-        fi
-
-        inline_cache_setting="$(resolve_buildx_inline_cache_setting)"
-
-        echo "Building OMERO images via Buildx compressed workflow..."
-        echo "  Helper script         : ${buildx_helper_path}"
-        echo "  Registry prefix       : ${DOCKER_REGISTRY_PREFIX}"
-        echo "  Image tag             : ${DOCKER_IMAGE_TAG}"
-        echo "  Inline cache          : ${inline_cache_setting}"
-
-        COMPOSE_FILE="${COMPOSE_FILE}" DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" "${buildx_helper_path}"
-        return 0
+    if [ ! -x "${buildx_helper_path}" ]; then
+        echo "ERROR: Buildx compression helper is missing or not executable: ${buildx_helper_path}" >&2
+        echo "ERROR: Re-run the pull/update script and ensure installation/docker_buildx_compressed_push.sh exists." >&2
+        return 1
     fi
 
-    if [ "${USE_CACHE_BUILD}" -eq 1 ]; then
-        echo "Building all OMERO-related containers (cache enabled)..."
-        compose_with_installation_env "${COMPOSE_FILE}" build
-    else
-        echo "Building all OMERO-related containers (no cache)..."
-        compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
+    inline_cache_setting="$(resolve_buildx_inline_cache_setting)"
+
+    echo "Building OMERO images via Buildx compressed (zstd) workflow..."
+    echo "  Helper script : ${buildx_helper_path}"
+    echo "  Cache enabled : ${inline_cache_setting}"
+
+    # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
+    local no_cache_setting="0"
+    if [ "${inline_cache_setting}" = "0" ]; then
+        no_cache_setting="1"
     fi
 
+    COMPOSE_FILE="${COMPOSE_FILE}" \
+        DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
+        DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
+        "${buildx_helper_path}"
     return 0
 }
 
@@ -261,13 +247,10 @@ compose_with_installation_env() {
     local compose_file="$1"
     shift
 
-    # IMPORTANT:
-    # We intentionally do NOT use --env-file here.
-    #
-    # The installation script generates ${OMERO_INSTALLATION_PATH%/}/.env with fully-resolved
-    # absolute paths. docker compose will automatically load that .env (and we also pin the
-    # project directory explicitly) so manual `docker compose down/up` behaves identically.
-    docker compose         --project-directory "${OMERO_INSTALLATION_PATH%/}"         -f "${compose_file}"         "$@"
+    docker compose \
+        --project-directory "${OMERO_INSTALLATION_PATH%/}" \
+        -f "${compose_file}" \
+        "$@"
 }
 
 compose_images_with_installation_env() {
@@ -336,9 +319,6 @@ ensure_container_writable_path() {
         return 1
     fi
 
-    # IMPORTANT:
-    # Do NOT chown here. UID/GID is discovered AFTER images are built.
-    # We only ensure the directory exists and has reasonable permissions.
     if ! chmod 0775 "${path_to_prepare}"; then
         echo "ERROR: Failed to set permissions for ${path_label}: ${path_to_prepare}" >&2
         return 1
@@ -402,22 +382,6 @@ compose_up_with_retries() {
     return 1
 }
 
-# ---------------------------------------------------------------------------
-# stop_old_installation_containers
-#
-# When the installation path has changed, the current `docker compose down`
-# (which targets the NEW --project-directory) cannot find or stop containers
-# that were created under the OLD project directory because Docker Compose
-# derives the project name from the directory name.
-#
-# This function performs a targeted cleanup of the old installation's
-# containers before the main workflow proceeds.
-#
-# Additionally, services with hardcoded container_name values (portainer,
-# redis-sysctl-init, pg-maintenance) are globally unique.  If the old
-# project's `docker compose down` fails or is skipped, we force-remove
-# these containers as a safety net to prevent name conflicts.
-# ---------------------------------------------------------------------------
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -432,10 +396,7 @@ stop_old_installation_containers() {
     echo "Installation path changed: ${old_install_path}/ -> ${OMERO_INSTALLATION_PATH}"
     echo "Stopping containers from previous installation path..."
 
-    # --- Attempt compose down from the old project directory ---------------
     if [ -f "${old_compose_file}" ]; then
-        # Generate a temporary .env at the old path if one is missing,
-        # so docker compose can parse the YAML without variable errors.
         if [ ! -f "${old_dot_env}" ]; then
             cat > "${old_dot_env}" <<OLD_DOTENV
 # Temporary .env generated for old-path container cleanup.
@@ -478,9 +439,6 @@ OLD_DOTENV
         echo "No docker-compose.yml at old installation path; skipping compose down."
     fi
 
-    # --- Safety net: force-remove containers with hardcoded names ----------
-    # These container_name values are global (not project-scoped), so they
-    # will conflict even if the old compose down succeeded partially.
     local fixed_name
     for fixed_name in portainer redis-sysctl-init pg-maintenance; do
         if docker container inspect "${fixed_name}" >/dev/null 2>&1; then
@@ -513,7 +471,6 @@ fi
 is_valid_linux_path() {
     local path_input="$1"
 
-    # Require an absolute Linux path and reject control characters.
     if [ -z "${path_input}" ] || [ "${path_input#/}" = "${path_input}" ]; then
         return 1
     fi
@@ -603,18 +560,6 @@ warn_directory_not_empty() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# collect_bootstrap_sentinel_names
-#
-# Reads the installation paths env file (SCRIPT_ENV_FILE) and extracts unique
-# directory-name components from each data path (relative to
-# OMERO_INSTALLATION_PATH).  These names identify data/database directories
-# regardless of where they live on disk.
-#
-# Used by bootstrap_installation_checkout_if_missing() to deep-scan candidate
-# directories before copying them into a new installation path, preventing
-# stale data directories from an old installation from being copied.
-# ---------------------------------------------------------------------------
 collect_bootstrap_sentinel_names() {
     if [ -z "${SCRIPT_ENV_FILE}" ] || [ ! -r "${SCRIPT_ENV_FILE}" ]; then
         return 0
@@ -677,15 +622,6 @@ collect_bootstrap_sentinel_names() {
     ) | sort -u
 }
 
-# ---------------------------------------------------------------------------
-# collect_repo_data_dir_names
-#
-# Sources the installation paths env file (SCRIPT_ENV_FILE) in a subshell
-# and prints the unique set of top-level directory names under REPO_ROOT_DIR
-# that correspond to configured data paths.  These directories belong to the
-# current (old) installation and must NOT be copied when bootstrapping a new
-# installation path from the repository root.
-# ---------------------------------------------------------------------------
 collect_repo_data_dir_names() {
     local repo_root="${REPO_ROOT_DIR%/}"
 
@@ -761,31 +697,18 @@ bootstrap_installation_checkout_if_missing() {
 
     case "${install_realpath}" in
         "${repo_realpath}"/*)
-            # Installation path is inside the repository checkout.  A plain
-            # `cp -a repo/. install/` would recurse into itself, so we copy
-            # top-level items individually, skipping the first path component
-            # that leads to the install directory.
             local _rel_to_repo="${install_realpath#"${repo_realpath}/"}"
             local _exclude_top="${_rel_to_repo%%/*}"
 
             echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
             echo "NOTE: Installation path is inside repository root. Excluding '${_exclude_top}' from bootstrap copy to avoid recursion."
 
-            # Build find exclusion args: exclude the install dir itself
-            # and any top-level data directories from the old installation
-            # (they belong to the current install, not the new one).
             local -a _find_excludes=( ! -name "${_exclude_top}" )
             local _data_dir_name
             while IFS= read -r _data_dir_name; do
                 [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
             done < <(collect_repo_data_dir_names)
 
-            # Collect sentinel directory names for deep scanning.
-            # When the installation path changed, old data directories may
-            # still exist at the repo root under their original names.
-            # Name-based exclusions above won't catch them because the
-            # configured paths now point elsewhere.  A deep scan detects
-            # these stale data trees and prevents them from being copied.
             local -a _sentinel_names=()
             local _sname
             while IFS= read -r _sname; do
@@ -812,8 +735,6 @@ bootstrap_installation_checkout_if_missing() {
             while IFS= read -r _item; do
                 [ -z "${_item}" ] && continue
 
-                # Deep scan: skip directories containing sentinel data
-                # subdirectories (stale data from a previous installation).
                 if [ -d "${_item}" ] && [ ${#_sentinel_find_expr[@]} -gt 0 ]; then
                     if find "${_item}" -type d "${_sentinel_find_expr[@]}" -print -quit 2>/dev/null | grep -q .; then
                         echo "NOTE: Skipping '$(basename "${_item}")' (contains data/database subdirectories from previous installation)."
@@ -843,16 +764,12 @@ bootstrap_installation_checkout_if_missing() {
 
     echo "docker-compose.yml not found in installation path. Bootstrapping project checkout into: ${install_path}"
 
-    # Copy top-level items individually, excluding data directories
-    # from the old installation (they belong to the current install,
-    # not the new one).
     local -a _find_excludes=()
     local _data_dir_name
     while IFS= read -r _data_dir_name; do
         [ -n "${_data_dir_name}" ] && _find_excludes+=( ! -name "${_data_dir_name}" )
     done < <(collect_repo_data_dir_names)
 
-    # Sentinel deep scan (same as the inside-repo branch above).
     local -a _sentinel_names=()
     local _sname
     while IFS= read -r _sname; do
@@ -879,8 +796,6 @@ bootstrap_installation_checkout_if_missing() {
     while IFS= read -r _item; do
         [ -z "${_item}" ] && continue
 
-        # Deep scan: skip directories containing sentinel data
-        # subdirectories (stale data from a previous installation).
         if [ -d "${_item}" ] && [ ${#_sentinel_find_expr[@]} -gt 0 ]; then
             if find "${_item}" -type d "${_sentinel_find_expr[@]}" -print -quit 2>/dev/null | grep -q .; then
                 echo "NOTE: Skipping '$(basename "${_item}")' (contains data/database subdirectories from previous installation)."
@@ -946,8 +861,6 @@ DOTENV
 
     chmod 0600 "${dot_env_path}"
 
-    # If the script runs via sudo, keep the generated .env readable by the
-    # original invoking user so manual docker compose commands work without sudo.
     if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
         if ! [[ "${SUDO_UID}" =~ ^[0-9]+$ ]] || ! [[ "${SUDO_GID}" =~ ^[0-9]+$ ]]; then
             echo "ERROR: SUDO_UID/SUDO_GID must be numeric when provided. Got SUDO_UID=${SUDO_UID:-unset}, SUDO_GID=${SUDO_GID:-unset}" >&2
@@ -996,6 +909,7 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
+#
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
 OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
 OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
@@ -1164,8 +1078,6 @@ log_path_snapshot() {
     local path_to_check="$1"
     local label="$2"
 
-    # IMPORTANT: metadata-only probe. This does NOT copy, back up, move, or delete any data.
-    # It is intentionally non-recursive so it remains lightweight even for very large datasets.
     if [ ! -d "${path_to_check}" ]; then
         echo "SNAPSHOT(meta-only, non-recursive): ${label}: missing path ${path_to_check}"
         return 0
@@ -1350,12 +1262,12 @@ resolve_cache_build_choice() {
         case "${reply}" in
             y|yes)
                 USE_CACHE_BUILD=1
-                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: using build cache."
+                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: build cache enabled (docker layer cache + buildx inline cache)."
                 return 0
                 ;;
             n|no)
                 USE_CACHE_BUILD=0
-                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: building with --no-cache."
+                echo "USE_CACHE_BUILD_CHOICE=${override_choice}: build cache disabled (no docker layer cache, no buildx inline cache)."
                 return 0
                 ;;
             *)
@@ -1365,7 +1277,7 @@ resolve_cache_build_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Build using Docker cache? Y/n (Default: Y)" "yes")"
+    reply="$(prompt_yes_no "Use build cache? (controls both docker layer cache and buildx inline cache) Y/n (Default: Y)" "yes")"
     if [ "${reply}" = "yes" ]; then
         USE_CACHE_BUILD=1
     else
@@ -1421,10 +1333,6 @@ if ! resolve_start_containers_choice; then
     exit 1
 fi
 
-if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
-    exit 1
-fi
-
 if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOMATION_MODE}"; then
     exit 1
 fi
@@ -1465,57 +1373,35 @@ if ! validate_retry_config; then
     exit 1
 fi
 
-# OMERO_*_UID/GID are optional now (auto-discovered after build).
-# If you override them manually, they must be numeric.
 if [ -n "${OMERO_SERVER_UID}" ]; then
-    if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then exit 1; fi
 fi
 if [ -n "${OMERO_SERVER_GID}" ]; then
-    if ! validate_numeric_id "OMERO_SERVER_GID" "${OMERO_SERVER_GID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "OMERO_SERVER_GID" "${OMERO_SERVER_GID}"; then exit 1; fi
 fi
 if [ -n "${OMERO_WEB_UID}" ]; then
-    if ! validate_numeric_id "OMERO_WEB_UID" "${OMERO_WEB_UID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "OMERO_WEB_UID" "${OMERO_WEB_UID}"; then exit 1; fi
 fi
 if [ -n "${OMERO_WEB_GID}" ]; then
-    if ! validate_numeric_id "OMERO_WEB_GID" "${OMERO_WEB_GID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "OMERO_WEB_GID" "${OMERO_WEB_GID}"; then exit 1; fi
 fi
 if [ -n "${PROMETHEUS_UID}" ]; then
-    if ! validate_numeric_id "PROMETHEUS_UID" "${PROMETHEUS_UID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "PROMETHEUS_UID" "${PROMETHEUS_UID}"; then exit 1; fi
 fi
 if [ -n "${PROMETHEUS_GID}" ]; then
-    if ! validate_numeric_id "PROMETHEUS_GID" "${PROMETHEUS_GID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "PROMETHEUS_GID" "${PROMETHEUS_GID}"; then exit 1; fi
 fi
 if [ -n "${GRAFANA_UID}" ]; then
-    if ! validate_numeric_id "GRAFANA_UID" "${GRAFANA_UID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "GRAFANA_UID" "${GRAFANA_UID}"; then exit 1; fi
 fi
 if [ -n "${GRAFANA_GID}" ]; then
-    if ! validate_numeric_id "GRAFANA_GID" "${GRAFANA_GID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "GRAFANA_GID" "${GRAFANA_GID}"; then exit 1; fi
 fi
 if [ -n "${LOKI_UID}" ]; then
-    if ! validate_numeric_id "LOKI_UID" "${LOKI_UID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "LOKI_UID" "${LOKI_UID}"; then exit 1; fi
 fi
 if [ -n "${LOKI_GID}" ]; then
-    if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then
-        exit 1
-    fi
+    if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
 fi
 
 require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
@@ -1561,57 +1447,27 @@ warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
 warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
 
-if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then
-    exit 1
-fi
+if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then exit 1; fi
+if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
+if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
 
-if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then
-    exit 1
-fi
-
-if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then
-    exit 1
-fi
-
-if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then
-    exit 1
-fi
-
-if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then
-    exit 1
-fi
-
-if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then
-    exit 1
-fi
-
-if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then
-    exit 1
-fi
-
-if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then
-    exit 1
-fi
-
-# Persist the resolved paths so they survive future updates.
-# installation_paths.env remains in the repository root only, so the update
-# script has a single stable source of truth regardless of custom paths.
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
     echo "ERROR: Refusing to continue because installation paths were not persisted correctly to ${SCRIPT_ENV_FILE}." >&2
     exit 1
 fi
 
-# Keep docker compose runtime paths colocated with the active checkout.
 write_compose_dot_env "${OMERO_INSTALLATION_PATH%/}/.env"
 
 # Workflow
 # --------
 cd "${OMERO_INSTALLATION_PATH}"
 
-# If the installation path changed, stop containers from the old path first.
-# The old containers belong to a different Docker Compose project (derived from
-# the old directory name), so the normal compose down below would not find them.
 if [ "${DEFAULT_OMERO_INSTALLATION_PATH%/}" != "${OMERO_INSTALLATION_PATH%/}" ]; then
     stop_old_installation_containers \
         "${DEFAULT_OMERO_INSTALLATION_PATH}" \
@@ -1666,11 +1522,7 @@ discover_first_existing_user_or_die() {
     local found=""
 
     for candidate in "$@"; do
-        if [ -z "${candidate}" ]; then
-            continue
-        fi
-
-        # IMPORTANT: bypass ENTRYPOINT because your OMERO images run a bootstrap entrypoint.
+        [ -z "${candidate}" ] && continue
         if docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
             found="${candidate}"
             break
@@ -1694,18 +1546,13 @@ discover_first_existing_user_or_die() {
 discover_uid_gid_or_die() {
     local image="$1"
     local user_name="$2"
-    local id_flag="$3"  # -u or -g
+    local id_flag="$3"
 
     local out=""
 
-    # IMPORTANT: bypass ENTRYPOINT, run a shell, then run id.
     if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
-        echo "ERROR: This usually means the image ENTRYPOINT hijacks commands OR the user does not exist." >&2
-        echo "" >&2
-        echo "DEBUG: getent passwd '${user_name}' (if available):" >&2
         docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
-        echo "" >&2
         return 1
     fi
 
@@ -1756,7 +1603,7 @@ resolve_service_image_from_compose_or_die() {
 
 discover_container_default_id_or_die() {
     local image="$1"
-    local id_flag="$2"  # -u or -g
+    local id_flag="$2"
 
     local out=""
 
@@ -1774,7 +1621,7 @@ discover_container_default_id_or_die() {
     return 0
 }
 
-# Resolve actual user names (host-agnostic, image-defined)
+
 SERVER_USER="$(discover_first_existing_user_or_die "${OMERO_SERVER_IMAGE}" "omero-server" "omero")"
 WEB_USER="$(discover_first_existing_user_or_die "${OMERO_WEB_IMAGE}" "omero-web" "omero")"
 
@@ -1782,68 +1629,27 @@ echo "Detected OMERO.server image user: ${SERVER_USER}"
 echo "Detected OMERO.web    image user: ${WEB_USER}"
 echo ""
 
-# Only discover if not manually overridden
-if [ -z "${OMERO_SERVER_UID}" ]; then
-    OMERO_SERVER_UID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-u")"
-fi
-if [ -z "${OMERO_SERVER_GID}" ]; then
-    OMERO_SERVER_GID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-g")"
-fi
+if [ -z "${OMERO_SERVER_UID}" ]; then OMERO_SERVER_UID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-u")"; fi
+if [ -z "${OMERO_SERVER_GID}" ]; then OMERO_SERVER_GID="$(discover_uid_gid_or_die "${OMERO_SERVER_IMAGE}" "${SERVER_USER}" "-g")"; fi
+if [ -z "${OMERO_WEB_UID}" ]; then OMERO_WEB_UID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-u")"; fi
+if [ -z "${OMERO_WEB_GID}" ]; then OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"; fi
 
-if [ -z "${OMERO_WEB_UID}" ]; then
-    OMERO_WEB_UID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-u")"
-fi
-if [ -z "${OMERO_WEB_GID}" ]; then
-    OMERO_WEB_GID="$(discover_uid_gid_or_die "${OMERO_WEB_IMAGE}" "${WEB_USER}" "-g")"
-fi
+if [ -z "${PROMETHEUS_IMAGE}" ]; then PROMETHEUS_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "prometheus")"; fi
+if [ -z "${GRAFANA_IMAGE}" ]; then GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"; fi
+if [ -z "${LOKI_IMAGE}" ]; then LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"; fi
+if [ -z "${DATABASE_IMAGE}" ]; then DATABASE_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database")"; fi
+if [ -z "${DATABASE_PLUGIN_IMAGE}" ]; then DATABASE_PLUGIN_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database_plugin")"; fi
 
-if [ -z "${PROMETHEUS_IMAGE}" ]; then
-    PROMETHEUS_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "prometheus")"
-fi
-if [ -z "${GRAFANA_IMAGE}" ]; then
-    GRAFANA_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "grafana")"
-fi
-if [ -z "${LOKI_IMAGE}" ]; then
-    LOKI_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "loki")"
-fi
-if [ -z "${DATABASE_IMAGE}" ]; then
-    DATABASE_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database")"
-fi
-if [ -z "${DATABASE_PLUGIN_IMAGE}" ]; then
-    DATABASE_PLUGIN_IMAGE="$(resolve_service_image_from_compose_or_die "${COMPOSE_FILE}" "database_plugin")"
-fi
-
-if [ -z "${PROMETHEUS_UID}" ]; then
-    PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"
-fi
-if [ -z "${PROMETHEUS_GID}" ]; then
-    PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"
-fi
-
-if [ -z "${GRAFANA_UID}" ]; then
-    GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"
-fi
-if [ -z "${GRAFANA_GID}" ]; then
-    GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"
-fi
-if [ -z "${LOKI_UID}" ]; then
-    LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u")"
-fi
-if [ -z "${LOKI_GID}" ]; then
-    LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"
-fi
-if [ -z "${DATABASE_UID}" ]; then
-    DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"
-fi
-if [ -z "${DATABASE_GID}" ]; then
-    DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"
-fi
-if [ -z "${DATABASE_PLUGIN_UID}" ]; then
-    DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"
-fi
-if [ -z "${DATABASE_PLUGIN_GID}" ]; then
-    DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"
-fi
+if [ -z "${PROMETHEUS_UID}" ]; then PROMETHEUS_UID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-u")"; fi
+if [ -z "${PROMETHEUS_GID}" ]; then PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"; fi
+if [ -z "${GRAFANA_UID}" ]; then GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"; fi
+if [ -z "${GRAFANA_GID}" ]; then GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"; fi
+if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u")"; fi
+if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"; fi
+if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"; fi
+if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
+if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
+if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
@@ -1881,60 +1687,23 @@ chown_tree_or_die() {
     return 0
 }
 
-# OMERO.server-owned bind mounts
-if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}" "OMERO user data directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
-    exit 1
-fi
-if ! chown_tree_or_die "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
-    exit 1
-fi
-if ! chown_tree_or_die "${OMERO_SERVER_VAR_PATH}" "OMERO server var directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
-    exit 1
-fi
+if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}" "OMERO user data directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_SERVER_VAR_PATH}" "OMERO server var directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
 
-# Ensure OMERO.server temp directory exists for runtime temp/cache files when OMERO.server/var is bind-mounted
-# (Prevents startup/runtime failures when software resolves temp paths under var/tmp)
 mkdir -p "${OMERO_SERVER_VAR_PATH%/}/tmp"
 chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
 chmod 1777 "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
 
-if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then
-    exit 1
-fi
-
-# OMERO.web-owned bind mounts
-if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
-    exit 1
-fi
-if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
-    exit 1
-fi
-if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then
-    exit 1
-fi
-
-if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then
-    exit 1
-fi
-
-if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then
-    exit 1
-fi
-
-if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then
-    exit 1
-fi
-
-if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then
-    exit 1
-fi
-
-if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then
-    exit 1
-fi
-
-# Portainer data stays root-owned (or whatever you prefer); do NOT force
-# it to OMERO IDs. ensure_container_writable_path already created its directory earlier.
+if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
 
 echo ""
 echo "✔ Host ownership fix complete."
