@@ -199,6 +199,15 @@ collect_sentinel_dir_names() {
 replace_working_tree_with_clone() {
     local clone_dir="$1"
     local current_repo_dir="$2"
+    local preserved_logo_tmp=""
+
+    # Preserve only the site-specific logo asset if it exists locally.
+    # The logo/ directory itself must still be refreshed from the clone so
+    # tracked templates such as logo_example.png are not pinned locally.
+    if [ -f "${current_repo_dir}/logo/logo.png" ]; then
+        preserved_logo_tmp="$(mktemp "${current_repo_dir%/}/.project-logo.XXXXXX")"
+        cp "${current_repo_dir}/logo/logo.png" "${preserved_logo_tmp}"
+    fi
 
     # ── 1. Collect top-level data directories (direct exclusions) ─────
     local -a protected_data_dirs=()
@@ -236,7 +245,6 @@ replace_working_tree_with_clone() {
     find_args+=( ! -name 'installation_paths.env' )
     find_args+=( ! -name '.env' )
     find_args+=( ! -name 'env' )
-    find_args+=( ! -name 'logo' )
 
     # Data-path exclusions (derived from installation_paths.env)
     for _name in "${protected_data_dirs[@]}"; do
@@ -293,7 +301,9 @@ replace_working_tree_with_clone() {
     echo "  - installation_paths.env (local installation paths source of truth)"
     echo "  - .env (docker compose runtime paths)"
     echo "  - env/ (credential and service env files)"
-    echo "  - logo/ (preserves logo/logo.png branding asset)"
+    if [ -n "${preserved_logo_tmp}" ]; then
+        echo "  - logo/logo.png (site-specific branding asset)"
+    fi
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
     if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ]; then
@@ -334,9 +344,15 @@ replace_working_tree_with_clone() {
     find "${clone_dir}" -mindepth 1 -maxdepth 1 \
         ! -name '.git' \
         ! -name 'installation_paths.env' \
-        ! -name 'logo' \
         ! -name 'env' \
         -exec mv {} "${current_repo_dir}" \;
+
+    # Restore only logo/logo.png after the tree refresh.
+    if [ -n "${preserved_logo_tmp}" ]; then
+        mkdir -p "${current_repo_dir}/logo"
+        cp "${preserved_logo_tmp}" "${current_repo_dir}/logo/logo.png"
+        rm -f "${preserved_logo_tmp}"
+    fi
 
     # ── 7. Refresh *_example.env files inside the protected env/ dir ───
     #
