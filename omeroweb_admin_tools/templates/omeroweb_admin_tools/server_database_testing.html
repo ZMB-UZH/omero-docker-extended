@@ -1,0 +1,187 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - OMERO.server and database testing</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+<div class="admin-tools-page admin-tools-page--wide">
+    <div class="admin-tools-header">
+        <div class="admin-tools-header-left">
+            <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
+            <h1 class="admin-tools-title">OMERO.server and database testing</h1>
+            <p class="admin-tools-subtitle">Run on-demand infrastructure diagnostics for OMERO.server and both PostgreSQL databases.</p>
+        </div>
+    </div>
+    <div class="admin-tools-card admin-tools-card--wide diagnostics-card">
+        <div class="diagnostics-top-row">
+            <div id="diag_summary" class="diagnostics-summary">Ready to execute diagnostics.</div>
+            <button type="button" id="diag_run_btn" class="admin-tools-button log-refresh-button">Run selected scripts</button>
+        </div>
+        <div id="diag_request_info" class="diagnostics-summary" style="display:none; margin-top:8px;"></div>
+        <div id="diag_scripts" class="diagnostics-script-grid"></div>
+        <div id="diag_results" class="diagnostics-results"></div>
+    </div>
+</div>
+<script defer>
+const runUrl = new URL('{% url "omeroweb_admin_tools_server_database_testing_run" %}', window.location.href);
+const scripts = {{ diagnostic_scripts|safe }};
+const summaryEl = document.getElementById('diag_summary');
+const requestInfoEl = document.getElementById('diag_request_info');
+const resultsEl = document.getElementById('diag_results');
+const scriptsEl = document.getElementById('diag_scripts');
+const runBtn = document.getElementById('diag_run_btn');
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function statusBadge(status) {
+    const normalized = String(status || 'warn').toLowerCase();
+    const label = normalized === 'pass' ? 'PASS' : normalized === 'fail' ? 'FAIL' : 'WARN';
+    return `<span class="diag-badge diag-badge--${normalized}">${label}</span>`;
+}
+
+function setRequestInfo(requestId, responseStatus) {
+    if (!requestId) {
+        requestInfoEl.style.display = 'none';
+        requestInfoEl.textContent = '';
+        return;
+    }
+    requestInfoEl.style.display = 'block';
+    requestInfoEl.textContent = `Request ID: ${requestId}${responseStatus ? ` · HTTP ${responseStatus}` : ''}`;
+}
+
+function renderScripts() {
+    scriptsEl.innerHTML = scripts.map((script) => `
+        <label class="diag-script-card">
+            <input type="checkbox" class="diag-script-checkbox" value="${escapeHtml(script.script_id)}" ${script.script_id === 'platform_end_to_end' ? 'checked' : ''}>
+            <div class="diag-script-content">
+                <div class="diag-script-header">
+                    <strong>${escapeHtml(script.label)}</strong>
+                    <span class="diag-script-category">${escapeHtml(script.category)}</span>
+                </div>
+                <div class="diag-script-description">${escapeHtml(script.description)}</div>
+            </div>
+        </label>
+    `).join('');
+}
+
+function selectedScripts() {
+    return Array.from(document.querySelectorAll('.diag-script-checkbox:checked')).map((input) => input.value);
+}
+
+function renderResults(payload) {
+    const rendered = payload.results.map((result) => {
+        const summary = result.summary || { pass: 0, warn: 0, fail: 0, total: 0 };
+        const checks = Array.isArray(result.checks) ? result.checks : [];
+        const checksRows = checks.map((check) => `
+            <tr>
+                <td>${escapeHtml(check.label || check.check_id)}</td>
+                <td>${statusBadge(check.status)}</td>
+                <td>${escapeHtml(check.summary || '')}</td>
+                <td>${escapeHtml(check.details || '')}</td>
+                <td>${escapeHtml(`${check.duration_ms || 0} ms`)}</td>
+            </tr>
+        `).join('');
+        return `
+            <section class="diag-result-card">
+                <div class="diag-result-header">
+                    <h3>${escapeHtml(result.script_id)}</h3>
+                    ${statusBadge(result.status)}
+                </div>
+                <div class="diag-counter-row">
+                    <span>${statusBadge('pass')} ${summary.pass}</span>
+                    <span>${statusBadge('warn')} ${summary.warn}</span>
+                    <span>${statusBadge('fail')} ${summary.fail}</span>
+                    <span class="diag-total">Total: ${summary.total}</span>
+                </div>
+                <div class="diag-table-wrap">
+                    <table class="log-table diag-table">
+                        <thead>
+                            <tr>
+                                <th>Check</th>
+                                <th>Status</th>
+                                <th>Summary</th>
+                                <th>Details</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${checksRows || '<tr><td colspan="5" class="log-empty">No checks returned.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        `;
+    }).join('');
+    resultsEl.innerHTML = rendered;
+}
+
+async function parseJsonResponse(response) {
+    const body = await response.text();
+    if (!body) {
+        return {};
+    }
+    try {
+        return JSON.parse(body);
+    } catch (error) {
+        throw new Error(`Expected JSON response but got invalid payload (HTTP ${response.status}).`);
+    }
+}
+
+async function runDiagnostics() {
+    const selected = selectedScripts();
+    if (!selected.length) {
+        summaryEl.textContent = 'Select at least one script before running diagnostics.';
+        return;
+    }
+    runBtn.disabled = true;
+    setRequestInfo(null, null);
+    summaryEl.textContent = `Running ${selected.length} script(s)...`;
+    try {
+        const response = await fetch(runUrl.toString(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ scripts: selected }),
+        });
+        const payload = await parseJsonResponse(response);
+        setRequestInfo(payload.request_id, response.status);
+        if (!response.ok) {
+            const errorMessage = payload.error || `Failed to run diagnostics (HTTP ${response.status}).`;
+            throw new Error(errorMessage);
+        }
+        renderResults(payload);
+        const counters = payload.results.reduce((acc, result) => {
+            const summary = result.summary || {};
+            acc.pass += Number(summary.pass || 0);
+            acc.warn += Number(summary.warn || 0);
+            acc.fail += Number(summary.fail || 0);
+            return acc;
+        }, { pass: 0, warn: 0, fail: 0 });
+        summaryEl.innerHTML = `Diagnostics completed — ${statusBadge('pass')} ${counters.pass} ${statusBadge('warn')} ${counters.warn} ${statusBadge('fail')} ${counters.fail}`;
+    } catch (error) {
+        summaryEl.textContent = `Diagnostics failed: ${error.message}`;
+        if (!resultsEl.innerHTML.trim()) {
+            resultsEl.innerHTML = '<div class="log-empty">No diagnostics results returned. Use the request ID above to inspect OMERO.web logs.</div>';
+        }
+    } finally {
+        runBtn.disabled = false;
+    }
+}
+
+renderScripts();
+runBtn.addEventListener('click', runDiagnostics);
+</script>
+</body>
+</html>

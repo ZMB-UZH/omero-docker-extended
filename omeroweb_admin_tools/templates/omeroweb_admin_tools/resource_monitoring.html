@@ -1,0 +1,361 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - Resource monitoring</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+<div class="admin-tools-page admin-tools-page--wide">
+    <div class="admin-tools-header">
+        <div class="admin-tools-header-left">
+            <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
+            <h1 class="admin-tools-title">Resource monitoring</h1>
+            <p class="admin-tools-subtitle">Live monitoring of container/server metrics, entry points and docker compose services status.<br>ATTENTION: For Grafana login in case of unauthorized / page not found error, click the Home button on the top-left, NOT the Sign in button.</p>
+        </div>
+    </div>
+    <div class="admin-tools-card admin-tools-card--wide">
+        <div class="resource-monitoring-toolbar">
+            <button type="button" id="open_grafana_btn" class="admin-tools-button log-refresh-button">Server Infrastructure dashboard</button>
+            <button type="button" id="open_database_btn" class="admin-tools-button log-refresh-button">Database dashboard</button>
+            <button type="button" id="open_plugin_database_btn" class="admin-tools-button log-refresh-button">Plugin database dashboard</button>
+            <button type="button" id="open_redis_btn" class="admin-tools-button log-refresh-button">Redis dashboard</button>
+            <button type="button" id="open_prometheus_btn" class="admin-tools-button log-refresh-button">Prometheus targets</button>
+            <label class="log-checkbox storage-autorefresh-inline">
+                <input id="monitoring_autorefresh" type="checkbox" checked>
+                Auto refresh
+            </label>
+            <button type="button" id="monitoring_refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
+        </div>
+        <div id="status" class="log-status">Loading resource dashboard...</div>
+        <div class="monitoring-summary-grid">
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Host CPU</div>
+                <div id="host_cpu" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Host memory</div>
+                <div id="host_memory" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Root disk usage</div>
+                <div id="host_disk" class="monitoring-summary-value">n/a</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Grafana</div>
+                <div id="grafana_probe" class="monitoring-summary-value">Checking...</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Prometheus</div>
+                <div id="prometheus_probe" class="monitoring-summary-value">Checking...</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Active scrape targets</div>
+                <div id="targets_count" class="monitoring-summary-value">0</div>
+            </div>
+            <div class="monitoring-summary-card">
+                <div class="monitoring-summary-label">Healthy targets</div>
+                <div id="targets_up_count" class="monitoring-summary-value">0</div>
+            </div>
+        </div>
+
+        <div class="monitoring-container-list-card">
+            <h3>Docker compose services health</h3>
+            <div id="targets_service_health" class="monitoring-container-list">No service health data available.</div>
+        </div>
+
+        <div id="diagnostics_card" class="monitoring-container-list-card" style="display:none; margin-top: 12px;">
+            <h3>⚠ Docker health diagnostics</h3>
+            <p id="diagnostics_summary" style="margin: 4px 0 8px; font-size: 13px; color: #92400e;"></p>
+            <pre id="diagnostics_detail" style="background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; max-height: 400px;"></pre>
+        </div>
+    </div>
+</div>
+<script defer>
+const dataUrl = new URL('{% url "omeroweb_admin_tools_resource_monitoring_data" %}', window.location.href);
+const statusEl = document.getElementById('status');
+const openGrafanaBtn = document.getElementById('open_grafana_btn');
+const openDatabaseBtn = document.getElementById('open_database_btn');
+const openPluginDatabaseBtn = document.getElementById('open_plugin_database_btn');
+const openRedisBtn = document.getElementById('open_redis_btn');
+const openPrometheusBtn = document.getElementById('open_prometheus_btn');
+const refreshBtn = document.getElementById('monitoring_refresh_btn');
+const autoRefreshToggle = document.getElementById('monitoring_autorefresh');
+const grafanaProbeEl = document.getElementById('grafana_probe');
+const prometheusProbeEl = document.getElementById('prometheus_probe');
+const targetsCountEl = document.getElementById('targets_count');
+const targetsUpCountEl = document.getElementById('targets_up_count');
+const targetsServiceHealthEl = document.getElementById('targets_service_health');
+const hostCpuEl = document.getElementById('host_cpu');
+const hostMemoryEl = document.getElementById('host_memory');
+const hostDiskEl = document.getElementById('host_disk');
+const diagnosticsCard = document.getElementById('diagnostics_card');
+const diagnosticsSummary = document.getElementById('diagnostics_summary');
+const diagnosticsDetail = document.getElementById('diagnostics_detail');
+const storage = (() => {
+    try {
+        const testKey = '__admin_tools_resource_monitoring_state_test__';
+        window.localStorage.setItem(testKey, '1');
+        window.localStorage.removeItem(testKey);
+        return window.localStorage;
+    } catch (error) {
+        return null;
+    }
+})();
+const monitoringStateStorageKey = 'omeroweb_admin_tools_resource_monitoring_state_v1';
+const parseStoredState = (raw) => {
+    if (!raw) {
+        return null;
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        return null;
+    }
+};
+let autoRefreshTimer = null;
+
+function persistState() {
+    if (!storage) {
+        return;
+    }
+    storage.setItem(monitoringStateStorageKey, JSON.stringify({
+        autoRefresh: !!autoRefreshToggle?.checked,
+    }));
+}
+
+function applyStoredState() {
+    const storedState = parseStoredState(storage?.getItem(monitoringStateStorageKey));
+    if (!storedState) {
+        return;
+    }
+    if (autoRefreshToggle && Object.prototype.hasOwnProperty.call(storedState, 'autoRefresh')) {
+        autoRefreshToggle.checked = Boolean(storedState.autoRefresh);
+    }
+}
+
+function clearAutoRefreshTimer() {
+    if (autoRefreshTimer !== null) {
+        window.clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+function syncAutoRefresh() {
+    clearAutoRefreshTimer();
+    persistState();
+    if (!autoRefreshToggle?.checked) {
+        return;
+    }
+    loadData().catch(() => {});
+    autoRefreshTimer = window.setInterval(() => {
+        loadData().catch(() => {});
+    }, 30000);
+}
+
+function probeLabel(probe) {
+    if (!probe || !probe.ok) {
+        return `Unreachable${probe && probe.error ? ` (${probe.error})` : ''}`;
+    }
+    return `Reachable (HTTP ${probe.status})`;
+}
+
+
+
+function formatPercent(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return 'n/a';
+    }
+    return `${value.toFixed(1)}%`;
+}
+
+function normalizeServiceHealth(rawHealth) {
+    const normalized = String(rawHealth || 'unknown').toLowerCase().trim();
+    if (!normalized) {
+        return 'unknown';
+    }
+    if (normalized.startsWith('healthy')) {
+        return 'healthy';
+    }
+    if (normalized.startsWith('unhealthy')) {
+        return 'unhealthy';
+    }
+    if (normalized.startsWith('up')) {
+        return 'up';
+    }
+    if (normalized.startsWith('starting')) {
+        return 'starting';
+    }
+    if (normalized.startsWith('down')) {
+        return 'down';
+    }
+    return 'unknown';
+}
+
+function serviceHealthClass(health) {
+    if (health === 'healthy' || health === 'up') {
+        return 'monitoring-pill--healthy';
+    }
+    if (health === 'unhealthy') {
+        return 'monitoring-pill--unhealthy';
+    }
+    if (health === 'down') {
+        return 'monitoring-pill--down';
+    }
+    if (health === 'starting') {
+        return 'monitoring-pill--starting';
+    }
+    return 'monitoring-pill--unknown';
+}
+
+function renderServiceHealth(services) {
+    if (!services.length) {
+        targetsServiceHealthEl.textContent = 'No service health data available.';
+        return;
+    }
+    targetsServiceHealthEl.innerHTML = services.map(({ service, health }) => {
+        const normalizedHealth = normalizeServiceHealth(health);
+        return `<span class="monitoring-pill ${serviceHealthClass(normalizedHealth)}">${service}: ${normalizedHealth}</span>`;
+    }).join('');
+}
+
+
+function formatTimestamp(rawTimestamp) {
+    const ts = new Date(rawTimestamp);
+    if (Number.isNaN(ts.getTime())) {
+        return 'n/a';
+    }
+    const day = String(ts.getDate()).padStart(2, '0');
+    const month = String(ts.getMonth() + 1).padStart(2, '0');
+    const year = String(ts.getFullYear());
+    const hours24 = ts.getHours();
+    const hours12 = String((hours24 % 12) || 12).padStart(2, '0');
+    const minutes = String(ts.getMinutes()).padStart(2, '0');
+    const seconds = String(ts.getSeconds()).padStart(2, '0');
+    const suffix = hours24 >= 12 ? 'PM' : 'AM';
+    return `${day}/${month}/${year}, ${hours12}:${minutes}:${seconds} ${suffix}`;
+}
+
+function renderDiagnostics(diag, services) {
+    if (!diag) {
+        diagnosticsCard.style.display = 'none';
+        return;
+    }
+    const allJustUp = services.length > 0 && services.every(s => normalizeServiceHealth(s.health) === 'up');
+    const noHealthData = !diag.api_reachable || diag.containers_with_health === 0;
+
+    if (!allJustUp && !noHealthData) {
+        diagnosticsCard.style.display = 'none';
+        return;
+    }
+
+    diagnosticsCard.style.display = '';
+
+    const lines = [];
+    if (!diag.socket_exists) {
+        lines.push(`Docker socket not found at ${diag.socket_path}.`);
+        lines.push(`The socket must be mounted into the omeroweb container:`);
+        lines.push(`  volumes: - /var/run/docker.sock:/var/run/docker.sock:ro`);
+    } else if (!diag.api_reachable) {
+        lines.push(`Docker socket exists but API call failed.`);
+        lines.push(`Socket: ${diag.socket_stat}`);
+        lines.push(`Current process: ${diag.current_user} (uid=${diag.current_uid}, gids=${JSON.stringify(diag.current_gids)})`);
+        lines.push(``);
+        lines.push(`The container user must have read access to the socket.`);
+        lines.push(`Run on the HOST:`);
+        lines.push(`  stat -c '%g' /var/run/docker.sock`);
+        lines.push(`  id`);
+        lines.push(`Then rerun your OMERO deployment/update script so it can auto-apply runtime socket permissions.`);
+        if (diag.process_in_socket_group === false) {
+            lines.push(`Current process is not in the socket group; automatic runtime group detection/bootstrap likely did not run.`);
+        }
+        if (diag.api_error) {
+            lines.push(``);
+            lines.push(`Error: ${diag.api_error}`);
+        }
+    } else if (diag.containers_with_health === 0) {
+        lines.push(`Docker API is reachable (${diag.container_count} containers found).`);
+        lines.push(`But NONE of the containers report health status in their Status field.`);
+        lines.push(`This might mean healthchecks are still in start_period, or the`);
+        lines.push(`Docker daemon version does not include health in the Status string.`);
+        lines.push(``);
+        lines.push(`Container status samples:`);
+        for (const s of diag.sample_statuses || []) {
+            lines.push(`  ${s.service}: state=${s.state}, status="${s.status}", parsed=${s.parsed_health}`);
+        }
+    } else {
+        lines.push(`Docker API is reachable. ${diag.containers_with_health}/${diag.container_count} containers report health.`);
+        lines.push(`But services still show "up" — there may be a service name mismatch.`);
+        lines.push(``);
+        lines.push(`Container status samples:`);
+        for (const s of diag.sample_statuses || []) {
+            lines.push(`  ${s.service}: state=${s.state}, status="${s.status}", parsed=${s.parsed_health}`);
+        }
+    }
+
+    diagnosticsSummary.textContent = lines[0] || '';
+    diagnosticsDetail.textContent = lines.join('\n');
+}
+
+
+async function loadData() {
+    statusEl.textContent = 'Loading resource dashboard...';
+    try {
+        const response = await fetch(dataUrl, { credentials: 'same-origin' });
+        const rawBody = await response.text();
+        let payload;
+        try {
+            payload = JSON.parse(rawBody);
+        } catch (parseError) {
+            const bodyPreview = rawBody.slice(0, 160).replace(/\s+/g, ' ').trim();
+            throw new Error(`Expected JSON response but received non-JSON payload (status ${response.status}): ${bodyPreview || 'empty response'}`);
+        }
+        if (!response.ok) {
+            throw new Error(payload.error || `Request failed with status ${response.status}`);
+        }
+
+        const dashboardUrl = payload?.grafana?.dashboard_url || '';
+        const targetsProxyUrl = payload?.prometheus?.targets_proxy_url || '';
+        if (!dashboardUrl || !targetsProxyUrl) {
+            throw new Error('Monitoring endpoints are not configured.');
+        }
+
+        openGrafanaBtn.onclick = () => { window.open(payload?.grafana?.dashboard_external_url || payload?.grafana?.dashboard_proxy_url || dashboardUrl || '', '_blank', 'noopener,noreferrer'); };
+        openDatabaseBtn.onclick = () => { window.open(payload?.grafana?.database_dashboard_external_url || payload?.grafana?.database_dashboard_proxy_url || payload?.grafana?.database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openPluginDatabaseBtn.onclick = () => { window.open(payload?.grafana?.plugin_database_dashboard_external_url || payload?.grafana?.plugin_database_dashboard_proxy_url || payload?.grafana?.plugin_database_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openRedisBtn.onclick = () => { window.open(payload?.grafana?.redis_dashboard_external_url || payload?.grafana?.redis_dashboard_proxy_url || payload?.grafana?.redis_dashboard_url || '', '_blank', 'noopener,noreferrer'); };
+        openPrometheusBtn.onclick = () => { window.open(targetsProxyUrl, '_blank', 'noopener,noreferrer'); };
+
+        grafanaProbeEl.textContent = probeLabel(payload?.grafana?.probe || {});
+        prometheusProbeEl.textContent = probeLabel(payload?.prometheus?.probe || {});
+
+        const overview = payload?.prometheus?.targets_overview || {};
+        const systemMetrics = payload?.system_metrics || {};
+        hostCpuEl.textContent = formatPercent(systemMetrics.cpu_usage_percent);
+        hostMemoryEl.textContent = formatPercent(systemMetrics.memory_usage_percent);
+        hostDiskEl.textContent = formatPercent(systemMetrics.disk_usage_percent);
+        targetsCountEl.textContent = String(overview.active || 0);
+        targetsUpCountEl.textContent = `${overview.up || 0} up / ${overview.down || 0} down`;
+        renderServiceHealth(Array.isArray(overview.services) ? overview.services : []);
+        renderDiagnostics(payload.docker_diagnostics || null, Array.isArray(overview.services) ? overview.services : []);
+
+        statusEl.textContent = `Updated at ${formatTimestamp(payload.timestamp)}.`;
+    } catch (error) {
+        statusEl.textContent = `Failed to load monitoring dashboard: ${error.message}`;
+    }
+}
+
+refreshBtn.addEventListener('click', () => {
+    loadData().catch(() => {});
+});
+autoRefreshToggle?.addEventListener('change', syncAutoRefresh);
+
+applyStoredState();
+syncAutoRefresh();
+if (!autoRefreshToggle?.checked) {
+    loadData().catch(() => {});
+}
+</script>
+</body>
+</html>

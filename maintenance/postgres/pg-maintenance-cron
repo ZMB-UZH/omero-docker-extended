@@ -1,0 +1,20 @@
+# ============================================================================
+# PostgreSQL maintenance cron schedule for OMERO
+# ============================================================================
+#
+# All times are in the container's TZ (set to Europe/Zurich via env).
+#
+# VACUUM ANALYZE — every Sunday at 03:00 (safe, non-locking)
+#   Reclaims dead-tuple space and refreshes query planner statistics.
+#
+# REINDEX CONCURRENTLY — first Sunday of every month at 04:00 (safe, non-locking)
+#   Rebuilds indexes online to reduce index bloat, without blocking reads or writes.
+#
+# ============================================================================
+
+# Weekly: VACUUM ANALYZE on both databases (every Sunday at 03:00)
+0 3 * * 0   /usr/local/bin/pg-maintenance.sh vacuum_analyze >> /var/log/pg-maintenance.log 2>&1
+
+# Monthly: REINDEX CONCURRENTLY on both databases (first Sunday of the month at 04:00)
+# The [ $(date +\%d) -le 7 ] trick ensures it only runs on the first Sunday.
+0 4 * * 0   [ $(date +\%d) -le 7 ] && /usr/local/bin/pg-maintenance.sh reindex >> /var/log/pg-maintenance.log 2>&1

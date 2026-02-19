@@ -1,0 +1,992 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - Logs</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS ROOT USER<br>
+        TO USE THIS PLUGIN
+    </div>
+    <div class="admin-tools-page admin-tools-page--wide">
+        <div class="admin-tools-header">
+            <div class="admin-tools-header-left">
+                <a class="admin-tools-back-link"
+                   href="{% url 'omeroweb_admin_tools_index' %}">
+                    ← Back to admin tools
+                </a>
+                <h1 class="admin-tools-title">Logs</h1>
+                <p class="admin-tools-subtitle">
+                    Aggregated logs from OMERO.server, OMERO.web, databases, and Redis.
+                </p>
+            </div>
+            <div class="admin-tools-header-actions">
+                <button type="button"
+                        id="help_btn"
+                        class="help-btn"
+                        title="Help"
+                        aria-label="Help">
+                    ?
+                </button>
+            </div>
+        </div>
+        <div class="admin-tools-card admin-tools-card--wide">
+            <div class="log-toolbar">
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_filter_input">Search</label>
+                    <input id="log_filter_input"
+                           class="log-input"
+                           type="text"
+                           placeholder="Filter by text, container, or severity">
+                </div>
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_time_range">Time range</label>
+                    <select id="log_time_range" class="log-select">
+                        <option value="300">Last 5 minutes</option>
+                        <option value="900" selected>Last 15 minutes</option>
+                        <option value="3600">Last 1 hour</option>
+                        <option value="21600">Last 6 hours</option>
+                        <option value="86400">Last 24 hours</option>
+                        <option value="604800">Last 7 days</option>
+                    </select>
+                </div>
+                <div class="log-toolbar-group">
+                    <label class="log-label" for="log_level">Severity</label>
+                    <select id="log_level" class="log-select">
+                        <option value="">All</option>
+                        <option value="debug">Debug</option>
+                        <option value="info">Info</option>
+                        <option value="warn">Warn</option>
+                        <option value="error">Error</option>
+                        <option value="fatal">Fatal</option>
+                    </select>
+                </div>
+                <div class="log-toolbar-group log-toolbar-toggle log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
+                    <label class="log-checkbox">
+                        <input id="log_autorefresh" type="checkbox" checked>
+                        Auto refresh
+                    </label>
+                </div>
+                <div class="log-toolbar-group log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
+                    <button type="button" id="log_refresh_btn" class="admin-tools-button log-refresh-button">
+                        Refresh now
+                    </button>
+                </div>
+                <div class="log-toolbar-group log-toolbar-group--controls">
+                    <span class="log-label log-toolbar-spacer-label" aria-hidden="true">Controls</span>
+                    <button type="button" id="log_download_btn" class="admin-tools-button log-refresh-button log-download-button">
+                        Download log entries
+                    </button>
+                </div>
+            </div>
+            <div class="log-sources">
+                <span class="log-sources-label">Docker logs</span>
+                {% for source in log_sources %}
+                <label class="log-source-pill" data-source-key="{{ source.key }}">
+                    <input type="checkbox" checked value="{{ source.container }}">
+                    {{ source.label }}
+                </label>
+                {% endfor %}
+                <div class="log-inline-select-actions">
+                    <button type="button" class="log-internal-select-action" data-docker-action="all">All</button>
+                    <button type="button" class="log-internal-select-action" data-docker-action="none">None</button>
+                </div>
+            </div>
+            <div class="log-sources">
+                <span class="log-sources-label">Internal logs</span>
+                <div class="log-internal-group" data-service="omeroserver_internal">
+                    <button type="button"
+                            class="log-internal-trigger"
+                            aria-haspopup="true"
+                            aria-expanded="false">
+                        <span class="log-internal-trigger-text">OMERO.server</span>
+                        <span class="log-internal-badge badge-zero">0</span>
+                        <span class="log-internal-arrow" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="log-internal-panel" role="listbox" aria-label="OMERO.server internal logs">
+                        <div class="log-internal-panel-header">
+                            <span class="log-internal-panel-title">OMERO.server log files</span>
+                            <div class="log-internal-select-actions">
+                                <button type="button" class="log-internal-select-action" data-action="all">All</button>
+                                <button type="button" class="log-internal-select-action" data-action="none">None</button>
+                            </div>
+                        </div>
+                        <div class="log-internal-panel-list"></div>
+                    </div>
+                </div>
+                <div class="log-internal-group" data-service="omeroweb_internal">
+                    <button type="button"
+                            class="log-internal-trigger"
+                            aria-haspopup="true"
+                            aria-expanded="false">
+                        <span class="log-internal-trigger-text">OMERO.web</span>
+                        <span class="log-internal-badge badge-zero">0</span>
+                        <span class="log-internal-arrow" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="log-internal-panel" role="listbox" aria-label="OMERO.web internal logs">
+                        <div class="log-internal-panel-header">
+                            <span class="log-internal-panel-title">OMERO.web log files</span>
+                            <div class="log-internal-select-actions">
+                                <button type="button" class="log-internal-select-action" data-action="all">All</button>
+                                <button type="button" class="log-internal-select-action" data-action="none">None</button>
+                            </div>
+                        </div>
+                        <div class="log-internal-panel-list"></div>
+                    </div>
+                </div>
+                <div class="log-inline-select-actions">
+                    <button type="button" class="log-internal-select-action" data-internal-action="all">All</button>
+                    <button type="button" class="log-internal-select-action" data-internal-action="none">None</button>
+                </div>
+            </div>
+            <div class="log-status" id="log_status">Ready.</div>
+            <div class="log-table-container">
+                <div class="log-table-header" aria-hidden="true">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Container/File</th>
+                                <th>Severity</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+                <div class="log-table-scroll">
+                    <table class="log-table" aria-label="Log entries">
+                        <tbody id="log_table_body">
+                            <tr>
+                                <td colspan="4" class="log-empty">No logs loaded yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="log-table-resize-handle" aria-hidden="true"></div>
+                <div class="log-table-resize-corner" aria-hidden="true"></div>
+            </div>
+        </div>
+    </div>
+    <script defer>
+        const logConfig = {{ log_config|safe }};
+        const tableRowCap = {{ table_row_cap|default:5000 }};
+        const logsDataUrl = new URL('{% url "omeroweb_admin_tools_logs_data" %}', window.location.href);
+        const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
+        const internalLabelsUrl = new URL('{% url "omeroweb_admin_tools_internal_labels" %}', window.location.href);
+        const storage =
+            (() => {
+                try {
+                    const testKey = '__admin_tools_logs_storage_test__';
+                    window.localStorage.setItem(testKey, '1');
+                    window.localStorage.removeItem(testKey);
+                    return window.localStorage;
+                } catch (error) {
+                    return null;
+                }
+            })();
+        const logStateStorageKey = 'omeroweb_admin_tools_logs_state_v1';
+        const parseStoredState = (raw) => {
+            if (!raw) {
+                return null;
+            }
+            try {
+                return JSON.parse(raw);
+            } catch (error) {
+                return null;
+            }
+        };
+        const storedState = parseStoredState(storage?.getItem(logStateStorageKey));
+
+        const applyRootUserState = (isRootUser) => {
+            if (isRootUser) {
+                return;
+            }
+            document.documentElement.classList.add('root-user-blocked');
+            if (document.body) {
+                document.body.classList.add('root-user-blocked');
+            }
+        };
+
+        fetch(rootStatusUrl, { credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (data && data.is_root_user === false) {
+                    applyRootUserState(false);
+                }
+            })
+            .catch(() => {
+                // Ignore root user lookup failures.
+            });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeAllInternalPanels();
+            }
+        });
+
+        const tableBody = document.getElementById('log_table_body');
+        const statusEl = document.getElementById('log_status');
+        const filterInput = document.getElementById('log_filter_input');
+        const timeRangeSelect = document.getElementById('log_time_range');
+        const levelSelect = document.getElementById('log_level');
+        const autoRefreshToggle = document.getElementById('log_autorefresh');
+        const refreshBtn = document.getElementById('log_refresh_btn');
+        const downloadBtn = document.getElementById('log_download_btn');
+        const tableContainer = document.querySelector('.log-table-container');
+        const tableResizeHandle = document.querySelector('.log-table-resize-handle');
+        const tableResizeCorner = document.querySelector('.log-table-resize-corner');
+        let refreshTimer = null;
+        let filterTimer = null;
+        let activeEntries = [];
+        let currentViewEntries = [];
+        let loadedEntriesCount = 0;
+        let shownEntriesCount = 0;
+        let renderToken = 0;
+        let requestCounter = 0;
+        let latestRequestId = 0;
+        const defaultTableHeight = 600;
+        const minTableHeight = 600;
+        const filterDebounceMs = 300;
+        const internalLabelRefreshMs = 30000;
+        const renderChunkSize = 250;
+        let internalLabelTimer = null;
+
+        function setStatus(text) {
+            if (statusEl) {
+                statusEl.textContent = text;
+            }
+        }
+
+        function updateLoadedStatus() {
+            if (loadedEntriesCount === 0) {
+                setStatus('Loaded 0 log entries.');
+                return;
+            }
+            if (loadedEntriesCount > shownEntriesCount) {
+                setStatus(`Loaded ${loadedEntriesCount} log entries. Showing ${shownEntriesCount}.`);
+                return;
+            }
+            setStatus(`Loaded ${loadedEntriesCount} log entries. Showing ${shownEntriesCount}.`);
+        }
+
+        function setLoading(isLoading) {
+            if (!refreshBtn) {
+                return;
+            }
+            refreshBtn.disabled = isLoading;
+            refreshBtn.textContent = isLoading ? 'Loading…' : 'Refresh now';
+        }
+
+        function updateDownloadState() {
+            if (!downloadBtn) {
+                return;
+            }
+            const hasEntries = currentViewEntries.length > 0;
+            downloadBtn.disabled = !hasEntries;
+            downloadBtn.classList.toggle('is-disabled', !hasEntries);
+        }
+
+        function persistState() {
+            if (!storage) {
+                return;
+            }
+            const dockerSources = {};
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                dockerSources[input.value] = input.checked;
+            });
+            const internalSources = {};
+            Object.keys(internalState).forEach((service) => {
+                internalSources[service] = Array.from(internalState[service].selected);
+            });
+            const tableSize = {};
+            if (tableContainer) {
+                const rect = tableContainer.getBoundingClientRect();
+                tableSize.height = Math.round(rect.height);
+            }
+            const payload = {
+                timeRange: timeRangeSelect?.value || '',
+                level: levelSelect?.value || '',
+                autoRefresh: !!autoRefreshToggle?.checked,
+                dockerSources,
+                internalSources,
+                tableSize,
+            };
+            storage.setItem(logStateStorageKey, JSON.stringify(payload));
+        }
+
+        function applyStoredState() {
+            if (!storedState) {
+                return;
+            }
+            if (timeRangeSelect && storedState.timeRange) {
+                timeRangeSelect.value = storedState.timeRange;
+            }
+            if (levelSelect && storedState.level !== undefined) {
+                levelSelect.value = storedState.level;
+            }
+            if (autoRefreshToggle && storedState.autoRefresh !== undefined) {
+                autoRefreshToggle.checked = Boolean(storedState.autoRefresh);
+            }
+            const dockerSources = storedState.dockerSources || {};
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                if (Object.prototype.hasOwnProperty.call(dockerSources, input.value)) {
+                    input.checked = Boolean(dockerSources[input.value]);
+                }
+            });
+            updateDockerSourcePillStyles();
+            if (tableContainer && storedState.tableSize) {
+                const height = Math.max(defaultTableHeight, storedState.tableSize.height || 0);
+                if (height) {
+                    tableContainer.style.height = `${height}px`;
+                }
+            }
+        }
+
+        function updateDockerSourcePillStyles() {
+            document.querySelectorAll('.log-source-pill').forEach((pill) => {
+                const input = pill.querySelector('input');
+                const hasSelection = Boolean(input?.checked);
+                pill.classList.toggle('has-selection', hasSelection);
+            });
+        }
+
+        /* ── Internal log dropdown state ── */
+        const internalGroups = document.querySelectorAll('.log-internal-group');
+        const internalState = {};
+
+        internalGroups.forEach((group) => {
+            const service = group.dataset.service;
+            const storedInternal = storedState?.internalSources?.[service];
+            const initialSelected = Array.isArray(storedInternal) ? new Set(storedInternal) : new Set();
+            internalState[service] = {
+                labels: [],
+                selected: initialSelected,
+                loaded: false,
+                loading: false,
+                group: group,
+                trigger: group.querySelector('.log-internal-trigger'),
+                panel: group.querySelector('.log-internal-panel'),
+                list: group.querySelector('.log-internal-panel-list'),
+                badge: group.querySelector('.log-internal-badge'),
+            };
+        });
+
+        function closeAllInternalPanels(exceptService) {
+            Object.keys(internalState).forEach((service) => {
+                if (service === exceptService) {
+                    return;
+                }
+                const state = internalState[service];
+                state.panel.classList.remove('is-visible');
+                state.trigger.classList.remove('is-open');
+                state.trigger.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        function updateInternalBadge(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const count = state.selected.size;
+            state.badge.textContent = String(count);
+            if (count > 0) {
+                state.badge.classList.remove('badge-zero');
+                state.trigger.classList.add('has-selection');
+            } else {
+                state.badge.classList.add('badge-zero');
+                state.trigger.classList.remove('has-selection');
+            }
+        }
+
+        function renderInternalOptions(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const list = state.list;
+            list.innerHTML = '';
+
+            if (state.loading) {
+                const loading = document.createElement('div');
+                loading.className = 'log-internal-panel-loading';
+                loading.textContent = 'Discovering log files';
+                list.appendChild(loading);
+                return;
+            }
+
+            if (state.labels.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'log-internal-panel-empty';
+                empty.textContent = 'No log files discovered yet.';
+                list.appendChild(empty);
+                return;
+            }
+
+            state.labels.forEach((label) => {
+                const option = document.createElement('label');
+                option.className = 'log-internal-option';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = label;
+                checkbox.checked = state.selected.has(label);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        state.selected.add(label);
+                    } else {
+                        state.selected.delete(label);
+                    }
+                    updateInternalBadge(service);
+                    persistState();
+                    fetchLogs();
+                });
+
+                const text = document.createElement('span');
+                text.className = 'log-internal-option-label';
+                text.textContent = label;
+                text.title = label;
+
+                option.appendChild(checkbox);
+                option.appendChild(text);
+                list.appendChild(option);
+            });
+        }
+
+        function setInternalSelectAll(service, selectAll) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            state.selected.clear();
+            if (selectAll) {
+                state.labels.forEach((label) => state.selected.add(label));
+            }
+            renderInternalOptions(service);
+            updateInternalBadge(service);
+            persistState();
+            fetchLogs();
+        }
+
+        async function loadInternalLabels(service, options = {}) {
+            const state = internalState[service];
+            const force = Boolean(options.force);
+            if (!state || state.loading || (!force && state.loaded)) {
+                return;
+            }
+            const previousLabels = state.labels.slice();
+            const wasAllSelected =
+                previousLabels.length > 0 && state.selected.size === previousLabels.length;
+            const hadSelection = state.selected.size > 0;
+            state.loading = true;
+            renderInternalOptions(service);
+            const url = `${internalLabelsUrl.toString()}?service=${encodeURIComponent(service)}`;
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                const payload = response.ok ? await response.json() : null;
+                if (payload && Array.isArray(payload.labels)) {
+                    state.labels = payload.labels;
+                    state.loaded = true;
+                    const storedInternal = storedState?.internalSources?.[service];
+                    if (Array.isArray(storedInternal) && !force) {
+                        state.selected = new Set(storedInternal.filter((label) => state.labels.includes(label)));
+                    } else if (!force && !hadSelection) {
+                        // Select all by default on first load.
+                        state.selected = new Set(state.labels);
+                    } else {
+                        const nextSelected = new Set(
+                            Array.from(state.selected).filter((label) => state.labels.includes(label))
+                        );
+                        if (wasAllSelected || (!hadSelection && previousLabels.length === 0)) {
+                            state.labels.forEach((label) => nextSelected.add(label));
+                        }
+                        state.selected = nextSelected;
+                    }
+                }
+            } catch (error) {
+                // Silently fail — panel will show empty state.
+            } finally {
+                state.loading = false;
+                renderInternalOptions(service);
+                updateInternalBadge(service);
+                persistState();
+                fetchLogs();
+            }
+        }
+
+        function toggleInternalPanel(service) {
+            const state = internalState[service];
+            if (!state) {
+                return;
+            }
+            const isOpen = state.panel.classList.contains('is-visible');
+            closeAllInternalPanels(isOpen ? undefined : service);
+
+            if (isOpen) {
+                state.panel.classList.remove('is-visible');
+                state.trigger.classList.remove('is-open');
+                state.trigger.setAttribute('aria-expanded', 'false');
+            } else {
+                state.panel.classList.add('is-visible');
+                state.trigger.classList.add('is-open');
+                state.trigger.setAttribute('aria-expanded', 'true');
+                if (!state.loaded && !state.loading) {
+                    loadInternalLabels(service);
+                }
+            }
+        }
+
+        /* Wire up the triggers and actions. */
+        internalGroups.forEach((group) => {
+            const service = group.dataset.service;
+            const trigger = group.querySelector('.log-internal-trigger');
+            const panel = group.querySelector('.log-internal-panel');
+
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleInternalPanel(service);
+            });
+
+            panel.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+
+            panel.querySelectorAll('.log-internal-select-action').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    setInternalSelectAll(service, btn.dataset.action === 'all');
+                });
+            });
+        });
+
+        document.addEventListener('click', () => {
+            closeAllInternalPanels();
+        });
+
+        /* ── Container selection (Docker pills + internal) ── */
+        function getSelectedContainers() {
+            const docker = Array.from(document.querySelectorAll('.log-source-pill input:checked'))
+                .map((input) => input.value);
+
+            const internal = [];
+            Object.keys(internalState).forEach((service) => {
+                const state = internalState[service];
+                if (state.selected.size > 0) {
+                    internal.push(service);
+                }
+            });
+
+            return docker.concat(internal);
+        }
+
+        function getSelectedInternalFiles() {
+            const internalFiles = [];
+            Object.keys(internalState).forEach((service) => {
+                const state = internalState[service];
+                state.selected.forEach((filename) => {
+                    internalFiles.push(`${service}/${filename}`);
+                });
+            });
+            return internalFiles;
+        }
+
+        function formatTimestamp(value) {
+            if (!value) {
+                return '';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return value;
+            }
+            const pad2 = (num) => String(num).padStart(2, '0');
+            const day = pad2(date.getDate());
+            const month = pad2(date.getMonth() + 1);
+            const year = date.getFullYear();
+            let hours = date.getHours();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours %= 12;
+            if (hours === 0) {
+                hours = 12;
+            }
+            const hourStr = pad2(hours);
+            const minuteStr = pad2(date.getMinutes());
+            const secondStr = pad2(date.getSeconds());
+            return `${day}/${month}/${year}, ${hourStr}:${minuteStr}:${secondStr} ${ampm}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function displayContainerName(name) {
+            /* For internal logs like "omeroserver_internal/Blitz-0.log",
+               show only the filename portion in the table. The full
+               service/filename value is kept in entry.container for
+               filtering and search purposes. */
+            if (name.includes('_internal/')) {
+                return name.split('/').pop();
+            }
+            return name;
+        }
+
+        function cancelRender() {
+            renderToken += 1;
+        }
+
+        function buildRowHtml(entry) {
+            return `
+                <tr>
+                    <td>${escapeHtml(formatTimestamp(entry.timestamp))}</td>
+                    <td>${escapeHtml(displayContainerName(entry.container))}</td>
+                    <td class="log-level log-level-${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</td>
+                    <td class="log-message">${escapeHtml(entry.message)}</td>
+                </tr>
+            `;
+        }
+
+        function renderTable(entries) {
+            if (!tableBody) {
+                return;
+            }
+            cancelRender();
+            const token = renderToken;
+            if (!entries.length) {
+                tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
+                return;
+            }
+            tableBody.innerHTML = '';
+            const batch = Math.max(50, renderChunkSize);
+            let index = 0;
+
+            const appendChunk = () => {
+                if (token !== renderToken) {
+                    return;
+                }
+                const end = Math.min(index + batch, entries.length);
+                let html = '';
+                for (; index < end; index += 1) {
+                    html += buildRowHtml(entries[index]);
+                }
+                tableBody.insertAdjacentHTML('beforeend', html);
+                if (index < entries.length) {
+                    window.requestAnimationFrame(appendChunk);
+                }
+            };
+
+            window.requestAnimationFrame(appendChunk);
+        }
+
+        function applyFilters() {
+            currentViewEntries = activeEntries;
+            loadedEntriesCount = currentViewEntries.length;
+            const shownEntries = currentViewEntries.slice(0, tableRowCap);
+            shownEntriesCount = shownEntries.length;
+            renderTable(shownEntries);
+            updateLoadedStatus();
+            updateDownloadState();
+        }
+
+        function buildDownloadTsv(entries) {
+            const header = ['Timestamp', 'Container/File', 'Severity', 'Message'];
+            const lines = entries.map((entry) => [
+                formatTimestamp(entry.timestamp),
+                displayContainerName(entry.container),
+                entry.level,
+                entry.message,
+            ].map((value) => String(value ?? '')).join('\t'));
+            return [header.join('\t'), ...lines].join('\n');
+        }
+
+        function downloadCurrentEntries() {
+            if (!currentViewEntries.length) {
+                return;
+            }
+            const content = buildDownloadTsv(currentViewEntries);
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'omero_logs.txt';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        }
+
+        function getLookbackSeconds() {
+            const fallback = logConfig?.lookback_seconds || 900;
+            const selected = parseInt(timeRangeSelect?.value || '', 10);
+            if (Number.isNaN(selected) || selected <= 0) {
+                return fallback;
+            }
+            return selected;
+        }
+
+        /**
+         * Attempt to parse a log-level keyword from a message string.
+         * Returns a canonical lowercase level or null.
+         */
+        function parseLevelFromMessage(msg) {
+            if (!msg) return null;
+            const m = msg.substring(0, 500).match(
+                /(?:^|[\s\[(])(TRACE|DEBUG|INFO|NOTICE|WARN|WARNING|ERROR|SEVERE|CRITICAL|FATAL|PANIC|LOG)(?:[\s\])\-:]|$)/
+            );
+            if (!m) return null;
+            const token = m[1].toUpperCase();
+            const map = {
+                TRACE: 'debug', DEBUG: 'debug', INFO: 'info', NOTICE: 'info',
+                WARN: 'warn', WARNING: 'warn', ERROR: 'error', SEVERE: 'error',
+                CRITICAL: 'fatal', FATAL: 'fatal', PANIC: 'fatal', LOG: 'info',
+            };
+            return map[token] || null;
+        }
+
+        function normalizeEntries(entries) {
+            return entries
+                .map((entry) => {
+                    let level = entry.level || 'info';
+                    /* If server sent generic "info", try to refine from
+                       message content (belt-and-suspenders with backend). */
+                    if (level === 'info') {
+                        const parsed = parseLevelFromMessage(entry.message);
+                        if (parsed) level = parsed;
+                    }
+                    return {
+                        timestamp: entry.timestamp,
+                        container: entry.container,
+                        level: level,
+                        message: entry.message,
+                    };
+                })
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        }
+
+        async function fetchLogs() {
+            if (!logConfig) {
+                setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
+                activeEntries = [];
+                currentViewEntries = [];
+                loadedEntriesCount = 0;
+                renderTable(activeEntries);
+                updateDownloadState();
+                return;
+            }
+            const requestId = ++requestCounter;
+            latestRequestId = requestId;
+            const containers = getSelectedContainers();
+            if (!containers.length) {
+                activeEntries = [];
+                loadedEntriesCount = 0;
+                renderTable(activeEntries);
+                setStatus('No log sources selected.');
+                updateDownloadState();
+                return;
+            }
+            setLoading(true);
+            if (loadedEntriesCount > 0) {
+                setStatus(`Loaded ${loadedEntriesCount} log entries. Refreshing...`);
+            } else {
+                setStatus('Loading logs…');
+            }
+            const lookbackSeconds = getLookbackSeconds();
+            const limit = logConfig.max_entries || 5000;
+            const query = filterInput?.value.trim() || '';
+            const level = levelSelect?.value || '';
+            const params = new URLSearchParams({
+                lookback: String(lookbackSeconds),
+                limit: String(limit),
+            });
+            if (query) {
+                params.set('query', query);
+            }
+            if (level) {
+                params.set('level', level);
+            }
+            containers.forEach((container) => params.append('container', container));
+            const internalFiles = getSelectedInternalFiles();
+            internalFiles.forEach((internalFile) => params.append('internal_file', internalFile));
+            const url = `${logsDataUrl.toString()}?${params.toString()}`;
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                const payload = response.ok ? await response.json() : null;
+                if (requestId !== latestRequestId) {
+                    return;
+                }
+                if (!response.ok || payload?.error) {
+                    const message = payload?.error || 'Unable to load logs.';
+                    setStatus(message);
+                    activeEntries = [];
+                    renderTable(activeEntries);
+                    updateDownloadState();
+                    setLoading(false);
+                    return;
+                }
+                activeEntries = normalizeEntries(payload.entries || []);
+                applyFilters();
+            } catch (error) {
+                if (requestId !== latestRequestId) {
+                    return;
+                }
+                setStatus('Failed to fetch logs from backend.');
+                activeEntries = [];
+                renderTable(activeEntries);
+                updateDownloadState();
+            } finally {
+                if (requestId === latestRequestId) {
+                    setLoading(false);
+                }
+            }
+        }
+
+        function clearRefreshTimer() {
+            if (refreshTimer) {
+                window.clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        }
+
+        function scheduleRefresh() {
+            clearRefreshTimer();
+            if (!autoRefreshToggle?.checked) {
+                return;
+            }
+            refreshTimer = window.setInterval(fetchLogs, 10000);
+        }
+
+        function scheduleFilterFetch() {
+            if (filterTimer) {
+                window.clearTimeout(filterTimer);
+            }
+            filterTimer = window.setTimeout(() => {
+                persistState();
+                fetchLogs();
+            }, filterDebounceMs);
+        }
+
+        function setupHandlers() {
+            filterInput?.addEventListener('input', scheduleFilterFetch);
+            levelSelect?.addEventListener('change', () => {
+                persistState();
+                fetchLogs();
+            });
+            timeRangeSelect?.addEventListener('change', () => {
+                persistState();
+                fetchLogs();
+            });
+            autoRefreshToggle?.addEventListener('change', () => {
+                persistState();
+                if (autoRefreshToggle?.checked) {
+                    fetchLogs();
+                }
+                scheduleRefresh();
+            });
+            refreshBtn?.addEventListener('click', fetchLogs);
+            downloadBtn?.addEventListener('click', downloadCurrentEntries);
+            document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                input.addEventListener('change', () => {
+                    updateDockerSourcePillStyles();
+                    persistState();
+                    fetchLogs();
+                });
+            });
+            document.querySelectorAll('[data-docker-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const selectAll = button.dataset.dockerAction === 'all';
+                    document.querySelectorAll('.log-source-pill input').forEach((input) => {
+                        input.checked = selectAll;
+                    });
+                    updateDockerSourcePillStyles();
+                    persistState();
+                    fetchLogs();
+                });
+            });
+            document.querySelectorAll('[data-internal-action]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const selectAll = button.dataset.internalAction === 'all';
+                    Object.keys(internalState).forEach((service) => {
+                        setInternalSelectAll(service, selectAll);
+                    });
+                    persistState();
+                    fetchLogs();
+                });
+            });
+        }
+
+        function setupTableResize() {
+            if (!tableContainer || !tableResizeHandle || !tableResizeCorner) {
+                return;
+            }
+            const handles = [tableResizeHandle, tableResizeCorner];
+            const onMouseDown = (event) => {
+                event.preventDefault();
+                const startY = event.clientY;
+                const startHeight = tableContainer.getBoundingClientRect().height;
+
+                const onMouseMove = (moveEvent) => {
+                    const delta = moveEvent.clientY - startY;
+                    const nextHeight = Math.max(minTableHeight, Math.round(startHeight + delta));
+                    tableContainer.style.height = `${nextHeight}px`;
+                };
+
+                const onMouseUp = () => {
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+                    persistState();
+                };
+
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', onMouseUp);
+            };
+
+            handles.forEach((handle) => {
+                handle.addEventListener('mousedown', onMouseDown);
+            });
+        }
+
+        function refreshInternalLabels() {
+            Object.keys(internalState).forEach((service) => {
+                loadInternalLabels(service, { force: true });
+            });
+        }
+
+        function scheduleInternalLabelRefresh() {
+            if (internalLabelTimer) {
+                window.clearInterval(internalLabelTimer);
+            }
+            internalLabelTimer = window.setInterval(refreshInternalLabels, internalLabelRefreshMs);
+        }
+
+        /* Auto-load internal labels on page load. */
+        function initInternalLabels() {
+            Object.keys(internalState).forEach((service) => {
+                loadInternalLabels(service);
+            });
+        }
+
+        applyStoredState();
+        updateDockerSourcePillStyles();
+        if (tableContainer && window.ResizeObserver) {
+            const observer = new ResizeObserver(() => {
+                persistState();
+            });
+            observer.observe(tableContainer);
+        }
+        setupHandlers();
+        setupTableResize();
+        initInternalLabels();
+        scheduleInternalLabelRefresh();
+        scheduleRefresh();
+        updateDownloadState();
+    </script>
+</body>
+</html>
