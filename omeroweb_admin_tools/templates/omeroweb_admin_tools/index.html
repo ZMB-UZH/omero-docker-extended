@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+    <div class="root-user-overlay" aria-hidden="true"></div>
+    <div id="root-user-warning" class="root-user-warning" role="alert">
+        PLEASE LOGIN AS ROOT USER<br>
+        TO USE THIS PLUGIN
+    </div>
+    <div class="admin-tools-page">
+        <div class="admin-tools-header">
+            <h1 class="admin-tools-title">Admin tools</h1>
+            <div class="admin-tools-header-actions">
+                <div style="position:relative;">
+                    <button type="button"
+                            id="settings_menu_btn"
+                            class="icon-btn"
+                            title="Settings"
+                            aria-label="Settings">
+                        ⚙
+                    </button>
+                    <div id="settings_menu"
+                         class="settings-menu"
+                         style="display:none;">
+                        <button type="button"
+                                id="admin_settings_btn"
+                                class="settings-menu-item">
+                            Admin settings
+                        </button>
+                    </div>
+                </div>
+                <button type="button"
+                        id="help_btn"
+                        class="help-btn"
+                        title="Help"
+                        aria-label="Help">
+                    ?
+                </button>
+            </div>
+        </div>
+        <div class="admin-tools-card">
+            <div class="admin-tools-actions">
+                <a class="admin-tools-button admin-tools-button-link"
+                   href="{% url 'omeroweb_admin_tools_logs' %}">
+                    Logs
+                </a>
+                <a class="admin-tools-button admin-tools-button-link" href="{% url 'omeroweb_admin_tools_storage' %}">Storage viewer &amp; Quotas</a>
+                <a class="admin-tools-button admin-tools-button-link" href="{% url 'omeroweb_admin_tools_resource_monitoring' %}">Resource monitoring</a>
+                <a class="admin-tools-button admin-tools-button-link" href="{% url 'omeroweb_admin_tools_server_database_testing' %}">OMERO.server and database testing</a>
+            </div>
+        </div>
+    </div>
+    <script defer>
+const rootStatusUrl = new URL('{% url "omeroweb_admin_tools_root_status" %}', window.location.href);
+        const applyRootUserState = (isRootUser) => {
+            if (isRootUser) {
+                return;
+            }
+            document.documentElement.classList.add('root-user-blocked');
+            if (document.body) {
+                document.body.classList.add('root-user-blocked');
+            }
+        };
+        fetch(rootStatusUrl, { credentials: 'same-origin' })
+            .then((resp) => (resp.ok ? resp.json() : null))
+            .then((data) => {
+                if (data && data.is_root_user === false) {
+                    applyRootUserState(false);
+                }
+            })
+            .catch(() => {
+                // Ignore root user lookup failures.
+            });
+        const settingsMenuBtn = document.getElementById('settings_menu_btn');
+        const settingsMenu = document.getElementById('settings_menu');
+
+        function showSettingsMenu(show) {
+            if (!settingsMenu) {
+                return;
+            }
+            settingsMenu.style.display = show ? 'block' : 'none';
+        }
+
+        if (settingsMenuBtn) {
+            settingsMenuBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const shouldShow = settingsMenu?.style.display !== 'block';
+                showSettingsMenu(shouldShow);
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!settingsMenu) {
+                return;
+            }
+            if (settingsMenu.contains(event.target) || settingsMenuBtn?.contains(event.target)) {
+                return;
+            }
+            showSettingsMenu(false);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                showSettingsMenu(false);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,762 @@
+#!/usr/bin/env bash
+# Debian 13 (Trixie) extra packages installer — safe defaults for Docker CE hosts
+# - Does NOT install Docker or container runtimes (hard-blocked)
+# - Avoids common Docker CE conflicts (containerd/runc/docker.io/podman-docker)
+# - Avoids time-daemon conflicts by default (does not install chrony/ntpsec)
+# - Hard-stops on DNS/fetch errors to avoid partial installs
+# - Writes a complete log file under /var/log/
+#
+# Run:
+#   sudo bash ./debian_13_extra_packages_install_script
+#
+# Optional knobs:
+#   DRY_RUN=1
+#   INSTALL_RECOMMENDS=0
+#   AVOID_DOCKER_CONFLICTS=1 (default)
+#   INSTALL_CONTAINER_TOOLS=1  (opt-in)
+#   INSTALL_NETWORK_STACK=1    (opt-in)
+#   INSTALL_TIME_SYNC=1        (opt-in)
+#   RUN_AUTOREMOVE=1           (opt-in; default 0)
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SCRIPT_NAME="$(basename "$0")"
+LOCK_FILE="/var/lock/${SCRIPT_NAME}.lock"
+LOG_PREFIX="[debian-13-extra-packages]"
+
+DRY_RUN="${DRY_RUN:-0}"
+ALLOW_NON_TRIXIE="${ALLOW_NON_TRIXIE:-0}"
+INSTALL_RECOMMENDS="${INSTALL_RECOMMENDS:-1}"
+INSTALL_PROPRIETARY_DRIVERS="${INSTALL_PROPRIETARY_DRIVERS:-1}"
+BATCH_SIZE="${BATCH_SIZE:-40}"
+
+# Safety toggles (defaults are conservative for servers that already run Docker CE)
+# -----------------------------------------------------------------------------
+AVOID_DOCKER_CONFLICTS="${AVOID_DOCKER_CONFLICTS:-1}"    # 1 = filter packages known to conflict with Docker CE
+INSTALL_CONTAINER_TOOLS="${INSTALL_CONTAINER_TOOLS:-0}"  # 1 = allow installing podman tooling (default 0)
+INSTALL_NETWORK_STACK="${INSTALL_NETWORK_STACK:-0}"      # 1 = allow installing network-manager/systemd-resolved (default 0)
+INSTALL_TIME_SYNC="${INSTALL_TIME_SYNC:-0}"              # 1 = allow installing chrony (default 0)
+RUN_AUTOREMOVE="${RUN_AUTOREMOVE:-0}"                    # 1 = run apt-get autoremove/autoclean at the end (default 0)
+
+# APT robustness
+APT_RETRIES="${APT_RETRIES:-3}"
+APT_TIMEOUT="${APT_TIMEOUT:-30}"
+
+# Logging
+LOGFILE="${LOGFILE:-}"
+
+log_info() { printf '%s INFO: %s\n' "${LOG_PREFIX}" "$*"; }
+log_warn() { printf '%s WARN: %s\n' "${LOG_PREFIX}" "$*" >&2; }
+log_error() { printf '%s ERROR: %s\n' "${LOG_PREFIX}" "$*" >&2; }
+
+run_cmd() {
+    if [ "${DRY_RUN}" = "1" ]; then
+        printf 'DRY_RUN> %s\n' "$*"
+        return 0
+    fi
+    "$@"
+}
+
+run_as_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        run_cmd "$@"
+    else
+        run_cmd sudo "$@"
+    fi
+}
+
+setup_logging() {
+    local ts
+    ts="$(date +%F_%H%M%S)"
+
+    if [ -z "${LOGFILE}" ]; then
+        if [ "$(id -u)" -eq 0 ]; then
+            LOGFILE="/var/log/debian-13-extra-packages_${ts}.log"
+        else
+            LOGFILE="${HOME}/debian-13-extra-packages_${ts}.log"
+        fi
+    fi
+
+    run_as_root mkdir -p "$(dirname "${LOGFILE}")" 2>/dev/null || true
+
+    # Redirect all output to both console and logfile.
+    # shellcheck disable=SC2094
+    exec > >(tee -a "${LOGFILE}") 2>&1
+    log_info "Logging to: ${LOGFILE}"
+}
+
+require_binary() {
+    local binary_name="$1"
+    if ! command -v "${binary_name}" >/dev/null 2>&1; then
+        log_error "Missing required command: ${binary_name}"
+        exit 1
+    fi
+}
+
+validate_positive_integer() {
+    local value="$1"
+    local label="$2"
+    if ! [[ "${value}" =~ ^[0-9]+$ ]] || [ "${value}" -eq 0 ]; then
+        log_error "${label} must be a positive integer. Received: ${value}"
+        exit 1
+    fi
+}
+
+acquire_lock() {
+    if [ "${DRY_RUN}" = "1" ]; then
+        log_info "Skipping lock acquisition in DRY_RUN mode."
+        return 0
+    fi
+
+    run_as_root install -d -m 0755 /var/lock
+    exec 9>"${LOCK_FILE}"
+
+    if ! flock -w 30 9; then
+        log_error "Could not acquire lock ${LOCK_FILE}; another apt transaction might be active."
+        exit 1
+    fi
+}
+
+validate_platform() {
+    local os_id
+    local version_id
+
+    if [ ! -r /etc/os-release ]; then
+        log_error "Cannot read /etc/os-release."
+        exit 1
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    os_id="${ID:-}"
+    version_id="${VERSION_ID:-}"
+
+    if [ "${os_id}" != "debian" ]; then
+        log_error "This script only supports Debian. Detected: ${os_id}"
+        exit 1
+    fi
+
+    if [ "${version_id}" != "13" ] && [ "${ALLOW_NON_TRIXIE}" != "1" ]; then
+        log_error "Detected Debian ${version_id}. Set ALLOW_NON_TRIXIE=1 to run outside Debian 13 (Trixie)."
+        exit 1
+    fi
+
+    if [ "${version_id}" != "13" ] && [ "${ALLOW_NON_TRIXIE}" = "1" ]; then
+        log_warn "Running outside Debian 13 because ALLOW_NON_TRIXIE=1 (detected VERSION_ID=${version_id})."
+    fi
+}
+
+sanitize_pkg() {
+    local s="$1"
+    s="${s//$'\r'/}"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "${s}"
+}
+
+normalize_package_list() {
+    sed 's/\r$//' | awk 'NF {print $1}' | sort -u
+}
+
+# Debian 13 package aliases / removals
+# -----------------------------------
+canonicalize_pkg() {
+    local p
+    p="$(sanitize_pkg "$1")"
+
+    # renamed / virtual / removed in trixie
+    case "${p}" in
+        libva-utils)        printf '%s' "vainfo" ;;
+        dust)               printf '%s' "du-dust" ;;
+        dnsutils)           printf '%s' "bind9-dnsutils" ;;
+        fd)                 printf '%s' "fd-find" ;;
+        fd-find)            printf '%s' "fd-find" ;;
+        mlocate)            printf '%s' "plocate" ;;
+        p7zip-rar)          printf '%s' "__SKIP_REMOVED__" ;;
+        deborphan)          printf '%s' "__SKIP_REMOVED__" ;;
+        sof-firmware)       printf '%s' "firmware-sof-signed" ;;
+        *)                  printf '%s' "${p}" ;;
+    esac
+}
+
+package_installed() {
+    local package_name="$1"
+    local pkg
+    pkg="$(canonicalize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
+    [ "${pkg}" = "__SKIP_REMOVED__" ] && return 1
+    dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed'
+}
+
+hardware_has_nvidia() { command -v lspci >/dev/null 2>&1 && lspci | grep -Eqi 'NVIDIA'; }
+hardware_has_intel_gpu() { command -v lspci >/dev/null 2>&1 && lspci | grep -Eqi 'VGA|3D|Display' | grep -Eqi 'Intel'; }
+
+apt_get() {
+    run_as_root env \
+        DEBIAN_FRONTEND=noninteractive \
+        APT_LISTCHANGES_FRONTEND=none \
+        NEEDRESTART_MODE=a \
+        apt-get \
+            -o Acquire::Retries="${APT_RETRIES}" \
+            -o Acquire::http::Timeout="${APT_TIMEOUT}" \
+            -o Acquire::https::Timeout="${APT_TIMEOUT}" \
+            -o Dpkg::Use-Pty=0 \
+            "$@"
+}
+
+ensure_dns_ok() {
+    local host="${1:-deb.debian.org}"
+    local i
+
+    for i in {1..8}; do
+        if getent hosts "${host}" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    log_error "DNS lookup failed for ${host}. Current /etc/resolv.conf:"
+    run_cmd ls -l /etc/resolv.conf || true
+    run_cmd cat /etc/resolv.conf || true
+    return 1
+}
+
+protect_docker_packages() {
+    # Mark Docker CE packages (if present) as manual to avoid autoremove surprises.
+    # NOTE: This script will NEVER install Docker packages, but we protect them if already installed.
+    local -a candidates=(
+        docker-ce
+        docker-ce-cli
+        docker-buildx-plugin
+        docker-compose-plugin
+        docker-ce-rootless-extras
+        containerd.io
+    )
+
+    local -a present=()
+    local p
+
+    for p in "${candidates[@]}"; do
+        if dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed"; then
+            present+=("${p}")
+        fi
+    done
+
+    if [ "${#present[@]}" -gt 0 ]; then
+        log_info "Protecting Docker packages from autoremove: ${present[*]}"
+        run_as_root apt-mark manual "${present[@]}" >/dev/null 2>&1 || true
+    fi
+}
+
+mark_manual_installed() {
+    local -a pkgs=("$@")
+    if [ "${#pkgs[@]}" -eq 0 ]; then
+        return 0
+    fi
+    log_info "Marking ${#pkgs[@]} packages as manually installed (apt-mark manual)."
+    run_as_root apt-mark manual "${pkgs[@]}" >/dev/null 2>&1 || true
+}
+
+filter_package_catalog() {
+    # Reads package names from stdin and filters out entries we do NOT want to install.
+    local -a deny=()
+
+    # HARD BLOCK docker/container runtime installs always.
+    deny+=(docker docker.io docker-ce docker-ce-cli docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras)
+    deny+=(containerd containerd.io runc podman-docker)
+
+    if [ "${INSTALL_CONTAINER_TOOLS}" != "1" ]; then
+        deny+=(podman systemd-container)
+    fi
+
+    if [ "${INSTALL_NETWORK_STACK}" != "1" ]; then
+        deny+=(network-manager network-manager-openvpn systemd-resolved)
+    fi
+
+    if [ "${INSTALL_TIME_SYNC}" != "1" ]; then
+        deny+=(chrony ntpsec)
+    fi
+
+    local regex
+    regex="$(printf "%s|" "${deny[@]}")"
+    regex="${regex%|}"
+
+    awk -v re="^(${regex})$" '$0 !~ re { print }'
+}
+
+apt_update() {
+    log_info "Refreshing apt metadata..."
+
+    ensure_dns_ok "debian.ethz.ch" || ensure_dns_ok "security.debian.org" || ensure_dns_ok "deb.debian.org"
+
+    local out
+    local rc
+
+    set +e
+    out="$(apt_get update 2>&1)"
+    rc=$?
+    set -e
+
+    printf '%s\n' "${out}"
+
+    if [ "${rc}" -ne 0 ]; then
+        log_error "apt-get update failed (exit code ${rc})."
+        return "${rc}"
+    fi
+
+    if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch|Some index files failed|Connection failed|Hash Sum mismatch'; then
+        log_error "apt-get update reported fetch/DNS errors; refusing to continue."
+        return 1
+    fi
+}
+
+package_installable_now() {
+    # THE ONLY RELIABLE CHECK: ask APT solver via simulation.
+    # Returns 0 if APT can resolve the package right now, otherwise non-zero.
+    local package_name="$1"
+    local pkg
+    pkg="$(canonicalize_pkg "${package_name}")"
+    [ -z "${pkg}" ] && return 1
+    [ "${pkg}" = "__SKIP_REMOVED__" ] && return 1
+
+    set +e
+    apt_get -s install -y "${pkg}" >/dev/null 2>&1
+    local rc=$?
+    set -e
+    return "${rc}"
+}
+
+install_packages_in_batches() {
+    local -a queue=("$@")
+    local -a failed=()
+    local total="${#queue[@]}"
+    local start=0
+    local end=0
+    local batch=()
+    local install_flags=("-y")
+
+    if [ "${INSTALL_RECOMMENDS}" = "0" ]; then
+        install_flags+=("--no-install-recommends")
+    fi
+
+    while [ "${start}" -lt "${total}" ]; do
+        end=$((start + BATCH_SIZE))
+        if [ "${end}" -gt "${total}" ]; then
+            end="${total}"
+        fi
+
+        batch=("${queue[@]:start:end-start}")
+        log_info "Installing package batch $((start + 1))-${end} of ${total}."
+
+        local out
+        local rc
+
+        set +e
+        out="$(apt_get install "${install_flags[@]}" "${batch[@]}" 2>&1)"
+        rc=$?
+        set -e
+
+        printf '%s\n' "${out}"
+
+        if [ "${rc}" -ne 0 ]; then
+            if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
+                log_error "Network/DNS failure during apt-get install; aborting early to avoid partial installs."
+                return 2
+            fi
+
+            log_warn "Batch install failed. Retrying packages one-by-one for isolation."
+
+            local pkg
+            for pkg in "${batch[@]}"; do
+                set +e
+                out="$(apt_get install "${install_flags[@]}" "${pkg}" 2>&1)"
+                rc=$?
+                set -e
+
+                printf '%s\n' "${out}"
+
+                if [ "${rc}" -ne 0 ]; then
+                    if printf '%s\n' "${out}" | grep -qiE 'Temporary failure resolving|Could not resolve|Failed to fetch'; then
+                        log_error "Network/DNS failure during apt-get install (package: ${pkg}); aborting."
+                        return 2
+                    fi
+
+                    # If time sync was requested and it fails due to time-daemon conflicts, skip (no hard error).
+                    if [ "${INSTALL_TIME_SYNC}" = "1" ] && [ "${pkg}" = "chrony" ] \
+                       && printf '%s\n' "${out}" | grep -qiE 'Conflicts: time-daemon|time-daemon'; then
+                        log_warn "chrony conflicts with existing time-daemon (systemd-timesyncd). Skipping chrony to avoid breaking apt."
+                        continue
+                    fi
+
+                    failed+=("${pkg}")
+                    log_warn "Package failed to install (skipped safely): ${pkg}"
+                fi
+            done
+        fi
+
+        start="${end}"
+    done
+
+    if [ "${#failed[@]}" -gt 0 ]; then
+        log_warn "Some packages failed installation but were skipped to guarantee a clean run:"
+        printf '%s\n' "${failed[@]}" | sed 's/^/  - /'
+        # IMPORTANT: do NOT return non-zero; user requirement is “no problems running installer”
+        return 0
+    fi
+
+    return 0
+}
+
+build_package_catalog() {
+    # “Extras” catalog; missing/removed packages are skipped automatically.
+    # NOTE: chrony is opt-in via INSTALL_TIME_SYNC=1.
+    cat <<'PKGS'
+acl
+acpi
+adduser
+alsa-utils
+apache2-utils
+apt-file
+apt-listbugs
+apt-listchanges
+apt-transport-https
+aptitude
+aria2
+arp-scan
+at
+attr
+auditd
+autoconf
+automake
+avahi-daemon
+bash-completion
+bc
+binutils
+bmon
+bolt
+bridge-utils
+btop
+btrfs-progs
+build-essential
+busybox
+ca-certificates
+cmake
+colordiff
+command-not-found
+console-setup
+coreutils
+cpio
+cron
+cryptsetup
+curl
+dash
+debconf-utils
+deborphan
+diffutils
+dirmngr
+dkms
+dmidecode
+dns-root-data
+dnsutils
+dos2unix
+dpkg-dev
+dust
+e2fsprogs
+ed
+ethtool
+exfat-fuse
+exfatprogs
+fail2ban
+fd-find
+ffmpeg
+file
+findutils
+fuse3
+gawk
+gcc
+gdb
+gdisk
+git
+git-lfs
+gnupg
+gnupg2
+gparted
+gpg
+grep
+groff-base
+gzip
+haveged
+hdparm
+htop
+hwinfo
+i2c-tools
+iftop
+imagemagick
+inxi
+iotop
+iperf3
+ipmitool
+iproute2
+iptables
+iputils-arping
+iputils-ping
+iputils-tracepath
+irqbalance
+iw
+jq
+kexec-tools
+kmod
+less
+libnotify-bin
+libnss3-tools
+libpam-u2f
+libu2f-udev
+libva-utils
+linux-cpupower
+linux-headers-amd64
+linux-image-amd64
+lm-sensors
+locales
+logrotate
+lshw
+lsof
+lsscsi
+ltrace
+lz4
+lzop
+man-db
+manpages
+manpages-dev
+mdadm
+mediainfo
+micro
+mtools
+mtr-tiny
+multipath-tools
+nano
+ncdu
+ncurses-term
+net-tools
+netcat-openbsd
+nfs-common
+nftables
+nmap
+ntfs-3g
+nvme-cli
+open-vm-tools
+default-jdk
+opensc
+openssh-client
+openssh-server
+openssh-sftp-server
+openssl
+openvpn
+p7zip-full
+p7zip-rar
+parallel
+parted
+patch
+pciutils
+pigz
+pkg-config
+plocate
+policycoreutils
+poppler-utils
+powertop
+psmisc
+python3
+python3-dev
+python3-pip
+python3-setuptools
+python3-venv
+qemu-guest-agent
+qemu-utils
+quota
+ranger
+ripgrep
+rsync
+ruby-full
+safe-rm
+screen
+sdparm
+seahorse
+secure-delete
+sed
+sg3-utils
+shellcheck
+smartmontools
+smbclient
+snmp
+snmpd
+squashfs-tools
+ssh-import-id
+ssl-cert
+strace
+sudo
+sysfsutils
+sysstat
+tcpdump
+telnet
+tesseract-ocr
+tmux
+tpm2-tools
+traceroute
+tree
+tzdata
+ufw
+unar
+unattended-upgrades
+unzip
+usbutils
+util-linux
+v4l-utils
+vim
+vlc
+vnstat
+wavemon
+wget
+whois
+wireguard-tools
+wpasupplicant
+x11-apps
+xauth
+xdg-user-dirs
+xfsprogs
+xmlstarlet
+xorriso
+xxd
+xz-utils
+yq
+zip
+zlib1g-dev
+zram-tools
+zsh
+zstd
+PKGS
+
+    if [ "${INSTALL_CONTAINER_TOOLS}" = "1" ]; then
+        cat <<'CONTAINERS'
+podman
+systemd-container
+CONTAINERS
+    fi
+
+    if [ "${INSTALL_NETWORK_STACK}" = "1" ]; then
+        cat <<'NETSTACK'
+network-manager
+network-manager-openvpn
+systemd-resolved
+NETSTACK
+    fi
+
+    if [ "${INSTALL_TIME_SYNC}" = "1" ]; then
+        cat <<'TIMESYNC'
+chrony
+TIMESYNC
+    fi
+
+    if [ "${INSTALL_PROPRIETARY_DRIVERS}" = "1" ]; then
+        cat <<'PROPRIETARY'
+amd64-microcode
+intel-microcode
+sof-firmware
+PROPRIETARY
+
+        if hardware_has_nvidia; then
+            cat <<'NVIDIA'
+nvidia-detect
+nvidia-driver
+nvidia-settings
+NVIDIA
+        fi
+
+        if hardware_has_intel_gpu; then
+            cat <<'INTELGPU'
+intel-gpu-tools
+INTELGPU
+        fi
+    fi
+}
+
+main() {
+    require_binary awk
+    require_binary apt-get
+    require_binary dpkg-query
+    require_binary flock
+    require_binary grep
+    require_binary sed
+    require_binary sort
+    require_binary tee
+    require_binary getent
+
+    validate_positive_integer "${BATCH_SIZE}" "BATCH_SIZE"
+    validate_platform
+    acquire_lock
+
+    setup_logging
+    protect_docker_packages
+
+    apt_update
+
+    local package_catalog
+    local -a missing_packages=()
+    local -a already_installed=()
+    local -a install_queue=()
+
+    package_catalog="$(build_package_catalog | normalize_package_list | filter_package_catalog)"
+
+    while IFS= read -r raw_pkg; do
+        local package_name
+        package_name="$(canonicalize_pkg "${raw_pkg}")"
+        [ -z "${package_name}" ] && continue
+        [ "${package_name}" = "__SKIP_REMOVED__" ] && continue
+
+        if package_installed "${package_name}"; then
+            already_installed+=("${package_name}")
+        else
+            if package_installable_now "${package_name}"; then
+                install_queue+=("${package_name}")
+            else
+                missing_packages+=("${package_name}")
+            fi
+        fi
+    done <<<"${package_catalog}"
+
+    log_info "Catalog size: $(printf '%s\n' "${package_catalog}" | wc -l | awk '{print $1}') packages."
+    log_info "Already installed: ${#already_installed[@]}"
+    log_info "Pending install: ${#install_queue[@]}"
+
+    if [ "${#missing_packages[@]}" -gt 0 ]; then
+        log_warn "Packages not installable in current APT state (skipped safely) (${#missing_packages[@]})."
+        printf '%s\n' "${missing_packages[@]}" | sed 's/^/  - /'
+        log_warn "Missing/uninstallable packages were skipped automatically."
+    fi
+
+    mark_manual_installed "${already_installed[@]}"
+
+    if [ "${#install_queue[@]}" -eq 0 ]; then
+        log_info "Nothing to install. System already satisfies what is installable from the catalog."
+        log_info "Done."
+        return 0
+    fi
+
+    # IMPORTANT: This will not fail the script due to a few bad packages.
+    install_packages_in_batches "${install_queue[@]}"
+
+    log_info "Package installation finished (with safe skipping where needed)."
+
+    if [ "${RUN_AUTOREMOVE}" = "1" ]; then
+        log_info "Running apt autoremove to clean stale dependencies (RUN_AUTOREMOVE=1)."
+        apt_get autoremove -y
+        log_info "Running apt autoclean."
+        apt_get autoclean -y
+    else
+        log_info "Skipping apt autoremove/autoclean (RUN_AUTOREMOVE=0)."
+    fi
+
+    log_info "Done."
+}
+
+main "$@"

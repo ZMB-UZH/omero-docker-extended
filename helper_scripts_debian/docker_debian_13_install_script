@@ -1,0 +1,340 @@
+#!/usr/bin/env bash
+
+# Experimental Docker installation script for Debian 13
+
+# This script follows Docker's official Debian installation guidance while adding
+# defensive checks around existing Docker packages and duplicate apt repository
+# definitions. It is intentionally verbose and fails fast on errors.
+
+# For the official guide, check: https://docs.docker.com/engine/install/debian/
+
+set -euo pipefail
+
+SCRIPT_NAME="$(basename "$0")"
+LOCKFILE="/var/lock/${SCRIPT_NAME}.lock"
+DOCKER_SOURCE_FILE="/etc/apt/sources.list.d/docker.sources"
+DOCKER_REPO_URI="https://download.docker.com/linux/debian"
+BACKUP_ROOT_DIR="/var/backups/${SCRIPT_NAME}"
+DRY_RUN="${DRY_RUN:-0}" # Set DRY_RUN=1 to print commands without changing the system.
+ALLOW_UNSUPPORTED_OS="${ALLOW_UNSUPPORTED_OS:-0}" # Set to 1 to bypass Debian-only guard for test environments.
+DOCKER_NON_ROOT_USER="${DOCKER_NON_ROOT_USER:-}" # Optional explicit user to grant Docker socket access.
+
+log_info() {
+    printf 'INFO: %s\n' "$*"
+}
+
+log_warn() {
+    printf 'WARNING: %s\n' "$*" >&2
+}
+
+log_error() {
+    printf 'ERROR: %s\n' "$*" >&2
+}
+
+run_cmd() {
+    if [ "${DRY_RUN}" = "1" ]; then
+        printf 'DRY_RUN> %s\n' "$*"
+        return 0
+    fi
+
+    "$@"
+}
+
+run_with_sudo() {
+    run_cmd sudo "$@"
+}
+
+require_binary() {
+    local binary_name="$1"
+
+    if ! command -v "${binary_name}" >/dev/null 2>&1; then
+        log_error "Missing required command: ${binary_name}"
+        exit 1
+    fi
+}
+
+acquire_lock() {
+    if [ "${DRY_RUN}" = "1" ]; then
+        return 0
+    fi
+
+    run_with_sudo install -d -m 0755 /var/lock
+    exec 9>"${LOCKFILE}"
+
+    if ! flock -w 30 9; then
+        log_error "Could not acquire lock ${LOCKFILE}. Another install may already be running."
+        exit 1
+    fi
+}
+
+confirm_proceed() {
+    local prompt
+    local user_input
+
+    prompt='This is an experimental docker installation script for Debian 13. It will overwrite any existing docker installations. Do you want to proceed? Y/n (Default: n) '
+
+    read -r -p "${prompt}" user_input || true
+    user_input="${user_input:-n}"
+
+    case "${user_input}" in
+        y|Y)
+            log_info "User confirmed installation."
+            ;;
+        *)
+            log_info "User declined installation. Exiting without changes."
+            exit 0
+            ;;
+    esac
+}
+
+validate_debian() {
+    local os_id
+    local version_id
+
+    if [ ! -r /etc/os-release ]; then
+        log_error "/etc/os-release is missing; cannot verify operating system."
+        exit 1
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    os_id="${ID:-}"
+    version_id="${VERSION_ID:-}"
+
+    if [ "${os_id}" != "debian" ]; then
+        if [ "${ALLOW_UNSUPPORTED_OS}" = "1" ]; then
+            log_warn "Unsupported OS '${os_id}' bypassed because ALLOW_UNSUPPORTED_OS=1 (testing mode)."
+        else
+            log_error "Unsupported OS '${os_id}'. This script only supports Debian."
+            exit 1
+        fi
+    fi
+
+    if [ "${version_id}" != "13" ]; then
+        log_warn "Detected Debian version '${version_id}', not '13'. Continuing because this is an experimental script."
+    fi
+}
+
+remove_existing_docker_packages() {
+    # Matches the package set specified in Docker's documentation and the user request.
+    local package_candidates
+
+    package_candidates="$(dpkg --get-selections docker.io docker-compose docker-doc podman-docker containerd runc 2>/dev/null | awk '{print $1}' || true)"
+
+    if [ -n "${package_candidates}" ]; then
+        log_info "Removing legacy/conflicting container packages before installing Docker CE."
+
+        if [ "${DRY_RUN}" = "1" ]; then
+            printf 'DRY_RUN> sudo apt remove -y %s\n' "${package_candidates}"
+        else
+            # shellcheck disable=SC2086
+            run_with_sudo apt remove -y ${package_candidates}
+        fi
+    else
+        log_info "No legacy Docker/container packages found to remove."
+    fi
+}
+
+backup_file_if_exists() {
+    local source_file="$1"
+    local backup_file="$2"
+    local backup_dir
+
+    if [ -f "${source_file}" ]; then
+        backup_dir="$(dirname "${backup_file}")"
+        run_with_sudo install -d -m 0755 "${backup_dir}"
+        run_with_sudo cp "${source_file}" "${backup_file}"
+        log_info "Backed up ${source_file} to ${backup_file}."
+    fi
+}
+
+remove_duplicate_docker_repository_entries() {
+    # Prevent duplicate Docker repo definitions from causing apt warnings/errors.
+    local timestamp
+    local candidate
+    local docker_repo_pattern
+    local backup_target
+
+    timestamp="$(date +%Y%m%d%H%M%S)"
+    docker_repo_pattern='download\.docker\.com/linux/debian'
+
+    # Remove dedicated Docker source files to ensure a single canonical file.
+    for candidate in /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.sources; do
+        if [ -f "${candidate}" ]; then
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
+            run_with_sudo rm -f "${candidate}"
+            log_info "Removed existing Docker apt source file ${candidate}."
+        fi
+    done
+
+    # Comment out Docker lines in generic list files to avoid duplicate definitions.
+    for candidate in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+        if [ -f "${candidate}" ] && grep -Eq "${docker_repo_pattern}" "${candidate}"; then
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
+
+            if [ "${DRY_RUN}" = "1" ]; then
+                printf "DRY_RUN> sudo sed -i '/%s/ s/^/# Disabled by %s: /' %s\n" "${docker_repo_pattern}" "${SCRIPT_NAME}" "${candidate}"
+            else
+                run_with_sudo sed -i "/${docker_repo_pattern}/ s/^/# Disabled by ${SCRIPT_NAME}: /" "${candidate}"
+            fi
+
+            log_info "Disabled Docker repository entries in ${candidate}."
+        fi
+    done
+
+    # Remove standalone .sources files (except target file) if they reference Docker.
+    for candidate in /etc/apt/sources.list.d/*.sources; do
+        if [ -f "${candidate}" ] && [ "${candidate}" != "${DOCKER_SOURCE_FILE}" ] && grep -Eq "${docker_repo_pattern}" "${candidate}"; then
+            backup_target="${BACKUP_ROOT_DIR}${candidate}.${timestamp}.bak"
+            backup_file_if_exists "${candidate}" "${backup_target}"
+            run_with_sudo rm -f "${candidate}"
+            log_info "Removed duplicate Docker source definition in ${candidate}."
+        fi
+    done
+}
+
+configure_docker_repository() {
+    local version_codename
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    version_codename="${VERSION_CODENAME:-}"
+    if [ -z "${version_codename}" ]; then
+        log_error "VERSION_CODENAME is empty in /etc/os-release; cannot configure apt source."
+        exit 1
+    fi
+
+    log_info "Installing prerequisites and Docker apt signing key."
+    run_with_sudo apt update
+    run_with_sudo apt install -y ca-certificates curl
+    run_with_sudo install -m 0755 -d /etc/apt/keyrings
+    run_with_sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    run_with_sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    log_info "Writing Docker apt source to ${DOCKER_SOURCE_FILE}."
+    if [ "${DRY_RUN}" = "1" ]; then
+        cat <<'DRY_REPO'
+DRY_RUN> sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: <VERSION_CODENAME>
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+DRY_REPO
+        printf 'DRY_RUN> VERSION_CODENAME=%s\n' "${version_codename}"
+    else
+        cat <<EOF_REPO | run_with_sudo tee "${DOCKER_SOURCE_FILE}" >/dev/null
+Types: deb
+URIs: ${DOCKER_REPO_URI}
+Suites: ${version_codename}
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF_REPO
+    fi
+}
+
+install_docker() {
+    log_info "Updating apt metadata and installing Docker CE packages."
+    run_with_sudo apt update
+    run_with_sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+}
+
+ensure_docker_service_running() {
+    # Enable and start Docker so it survives reboot and is immediately usable.
+    log_info "Enabling and starting Docker service."
+    run_with_sudo systemctl enable docker
+    run_with_sudo systemctl start docker
+
+    log_info "Checking Docker service status."
+    run_with_sudo systemctl status docker --no-pager
+}
+
+run_hello_world_check() {
+    log_info "Running Docker hello-world to verify daemon/client functionality."
+    run_with_sudo docker run --rm hello-world
+}
+
+resolve_docker_non_root_user() {
+    local resolved_user=""
+
+    if [ -n "${DOCKER_NON_ROOT_USER}" ]; then
+        resolved_user="${DOCKER_NON_ROOT_USER}"
+    elif [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
+        resolved_user="${SUDO_USER}"
+    fi
+
+    printf '%s' "${resolved_user}"
+}
+
+grant_docker_socket_access() {
+    local target_user
+    local target_group
+
+    target_user="$(resolve_docker_non_root_user)"
+
+    if [ -z "${target_user}" ]; then
+        log_warn "No non-root user detected for Docker group assignment."
+        log_warn "Set DOCKER_NON_ROOT_USER=<username> before running the script if needed."
+        return 0
+    fi
+
+    if ! id "${target_user}" >/dev/null 2>&1; then
+        log_error "Cannot grant Docker access: user '${target_user}' does not exist."
+        exit 1
+    fi
+
+    if ! getent group docker >/dev/null 2>&1; then
+        log_info "Docker group missing; creating docker group."
+        run_with_sudo groupadd docker
+    fi
+
+    target_group="$(id -nG "${target_user}" 2>/dev/null || true)"
+    if printf '%s\n' "${target_group}" | tr ' ' '\n' | grep -Fxq docker; then
+        log_info "User '${target_user}' is already in docker group."
+        return 0
+    fi
+
+    log_info "Adding user '${target_user}' to docker group for non-root Docker CLI access."
+    run_with_sudo usermod -aG docker "${target_user}"
+    log_warn "User '${target_user}' must log out/in (or run 'newgrp docker') for group changes to take effect."
+}
+
+main() {
+    require_binary sudo
+    require_binary dpkg
+    require_binary apt
+    require_binary flock
+    require_binary grep
+    require_binary sed
+    require_binary awk
+    require_binary id
+    require_binary getent
+    require_binary groupadd
+    require_binary usermod
+
+    confirm_proceed
+    validate_debian
+    acquire_lock
+
+    if [ "${DRY_RUN}" != "1" ]; then
+        log_info "Refreshing sudo credentials."
+        run_with_sudo -v
+    fi
+
+    remove_existing_docker_packages
+    remove_duplicate_docker_repository_entries
+    configure_docker_repository
+    install_docker
+    ensure_docker_service_running
+    grant_docker_socket_access
+    run_hello_world_check
+
+    log_info "Docker installation flow completed."
+}
+
+main "$@"

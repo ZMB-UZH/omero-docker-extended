@@ -1,0 +1,132 @@
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "docker_containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.+)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_id"]
+    regex         = "(.+)"
+    target_label  = "container_id"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.+)"
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_containers.output
+  forward_to = [loki.write.local.receiver]
+}
+
+local.file_match "omeroserver_internal_logs" {
+  path_targets = [
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*.log" },
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*.out" },
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*.err" },
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*/*.log" },
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*/*.out" },
+    { __path__ = "/opt/omero/server/OMERO.server/var/log/*/*.err" },
+  ]
+  sync_period = "5s"
+}
+
+discovery.relabel "omeroserver_internal_labels" {
+  targets = local.file_match.omeroserver_internal_logs.targets
+
+  rule {
+    target_label = "compose_service"
+    replacement  = "omeroserver"
+  }
+
+  rule {
+    target_label = "container"
+    replacement  = "omeroserver"
+  }
+
+  rule {
+    target_label = "log_type"
+    replacement  = "internal"
+  }
+
+  // Explicitly copy __path__ to a queryable "filepath" label so that
+  // the filename is always present even if loki.source.file omits it.
+  rule {
+    source_labels = ["__path__"]
+    target_label  = "filepath"
+  }
+}
+
+loki.source.file "omeroserver_internal_logs" {
+  targets        = discovery.relabel.omeroserver_internal_labels.output
+  forward_to     = [loki.write.local.receiver]
+  tail_from_end  = false
+}
+
+local.file_match "omeroweb_internal_logs" {
+  path_targets = [
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*.log" },
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*.out" },
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*.err" },
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.log" },
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.out" },
+    { __path__ = "/opt/omero/web/OMERO.web/var/log/*/*.err" },
+    { __path__ = "/opt/omero/web/logs/*.log" },
+    { __path__ = "/opt/omero/web/logs/*.out" },
+    { __path__ = "/opt/omero/web/logs/*.err" },
+    { __path__ = "/opt/omero/web/logs/*/*.log" },
+    { __path__ = "/opt/omero/web/logs/*/*.out" },
+    { __path__ = "/opt/omero/web/logs/*/*.err" },
+  ]
+  sync_period = "5s"
+}
+
+discovery.relabel "omeroweb_internal_labels" {
+  targets = local.file_match.omeroweb_internal_logs.targets
+
+  rule {
+    target_label = "compose_service"
+    replacement  = "omeroweb"
+  }
+
+  rule {
+    target_label = "container"
+    replacement  = "omeroweb"
+  }
+
+  rule {
+    target_label = "log_type"
+    replacement  = "internal"
+  }
+
+  // Explicitly copy __path__ to a queryable "filepath" label so that
+  // the filename is always present even if loki.source.file omits it.
+  rule {
+    source_labels = ["__path__"]
+    target_label  = "filepath"
+  }
+}
+
+loki.source.file "omeroweb_internal_logs" {
+  targets        = discovery.relabel.omeroweb_internal_labels.output
+  forward_to     = [loki.write.local.receiver]
+  tail_from_end  = false
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

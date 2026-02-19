@@ -1,0 +1,698 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin tools - Storage viewer &amp; Quotas</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
+</head>
+<body>
+<div class="admin-tools-page admin-tools-page--wide">
+    <div class="admin-tools-header">
+        <div class="admin-tools-header-left">
+            <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
+            <h1 class="admin-tools-title">Storage viewer &amp; Quotas</h1>
+            <p class="admin-tools-subtitle">
+                Storage capacity distribution viewer per user/group, with the ability to set per-group storage quotas.
+            </p>
+        </div>
+    </div>
+    <div class="admin-tools-card admin-tools-card--wide">
+        <div class="log-toolbar storage-toolbar">
+            <div class="storage-toolbar-left">
+                <input id="search" class="log-input" type="text" placeholder="Filter by username, name or group">
+                <label class="log-checkbox storage-autorefresh-inline">
+                    <input id="storage_autorefresh" type="checkbox" checked>
+                    Auto refresh
+                </label>
+                <button type="button" id="refresh_btn" class="admin-tools-button log-refresh-button">Refresh now</button>
+                <button type="button" id="export_btn" class="admin-tools-button log-refresh-button">Export CSV</button>
+            </div>
+        </div>
+        <div class="storage-view-toggle-wrap">
+            <div class="storage-view-toggle" role="tablist" aria-label="Storage view mode">
+                <button type="button" id="view_users_btn" class="admin-tools-button log-refresh-button is-active" role="tab" aria-selected="true">User view</button>
+                <button type="button" id="view_groups_btn" class="admin-tools-button log-refresh-button" role="tab" aria-selected="false">Group view</button>
+                <button type="button" id="view_top10_btn" class="admin-tools-button log-refresh-button" role="tab" aria-selected="false">Top-10 users</button>
+                <button type="button" id="view_quotas_btn" class="admin-tools-button log-refresh-button" role="tab" aria-selected="false">Quotas</button>
+            </div>
+        </div>
+        <div class="storage-status-row">
+            <div id="status" class="log-status">Ready.</div>
+
+            <div id="quota_actions" class="storage-quota-actions" hidden>
+                <button type="button" id="quota_edit_btn" class="admin-tools-button log-refresh-button storage-quota-button">Edit quota(s)</button>
+                <button type="button" id="quota_template_btn" class="admin-tools-button log-refresh-button storage-quota-button">Download CSV template</button>
+                <button type="button" id="quota_import_btn" class="admin-tools-button log-refresh-button storage-quota-button">Import quota(s) from CSV</button>
+                <input id="quota_import_file" type="file" accept=".csv,text/csv" hidden>
+            </div>
+        </div>
+        <div id="quota_compatibility_notice" class="log-empty" hidden></div>
+        <div id="storage_visual_layout" class="storage-visual-layout">
+            <div class="storage-chart-card">
+                <canvas id="storage_chart" width="460" height="420" aria-label="Storage usage distribution chart"></canvas>
+                <div id="chart_caption" class="storage-chart-caption"></div>
+            </div>
+            <div class="storage-table-card">
+                <div id="storage_table_scroll" class="storage-table-scroll" aria-label="Storage distribution table">
+                    <table class="log-table storage-table">
+                        <colgroup id="storage_table_cols"></colgroup>
+                        <thead><tr id="storage_table_head"></tr></thead>
+                        <tbody id="storage_table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="quota_logs_panel" class="storage-quota-logs" hidden>
+            <div class="storage-quota-logs-title">Quota enforcement logs</div>
+            <div id="quota_logs" class="storage-quota-logs-body"></div>
+        </div>
+    </div>
+</div>
+<script defer>
+const dataUrl = new URL('{% url "omeroweb_admin_tools_storage_data" %}', window.location.href);
+const quotaDataUrl = new URL('{% url "omeroweb_admin_tools_storage_quota_data" %}', window.location.href);
+const quotaUpdateUrl = new URL('{% url "omeroweb_admin_tools_storage_quota_update" %}', window.location.href);
+const quotaImportUrl = new URL('{% url "omeroweb_admin_tools_storage_quota_import" %}', window.location.href);
+const quotaTemplateUrl = new URL('{% url "omeroweb_admin_tools_storage_quota_template" %}', window.location.href);
+const table = document.getElementById('storage_table');
+const tableHead = document.getElementById('storage_table_head');
+const tableCols = document.getElementById('storage_table_cols');
+const tableScroll = document.getElementById('storage_table_scroll');
+const statusEl = document.getElementById('status');
+const quotaActions = document.getElementById('quota_actions');
+const quotaEditButton = document.getElementById('quota_edit_btn');
+const quotaTemplateButton = document.getElementById('quota_template_btn');
+const quotaImportButton = document.getElementById('quota_import_btn');
+const quotaImportFileInput = document.getElementById('quota_import_file');
+const quotaLogsPanel = document.getElementById('quota_logs_panel');
+const quotaLogsBody = document.getElementById('quota_logs');
+const quotaCompatibilityNotice = document.getElementById('quota_compatibility_notice');
+const searchEl = document.getElementById('search');
+const chartCanvas = document.getElementById('storage_chart');
+const chartCaption = document.getElementById('chart_caption');
+const chartCard = document.querySelector('.storage-chart-card');
+const storageVisualLayout = document.getElementById('storage_visual_layout');
+const autoRefreshToggle = document.getElementById('storage_autorefresh');
+const storage = (() => {
+    try {
+        const testKey = '__admin_tools_storage_state_test__';
+        window.localStorage.setItem(testKey, '1');
+        window.localStorage.removeItem(testKey);
+        return window.localStorage;
+    } catch (error) {
+        return null;
+    }
+})();
+const storageStateKey = 'omeroweb_admin_tools_storage_state_v1';
+const parseStoredState = (raw) => {
+    if (!raw) {
+        return null;
+    }
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        return null;
+    }
+};
+const TABLE_ROW_CAP = 5000;
+const PIE_MAX_ELEMENTS = 15;
+const AUTO_REFRESH_MS = 30000;
+const DISK_USAGE_DECIMALS = 2;
+const PERCENT_DECIMALS = 4;
+const DISK_USAGE_COLUMN_WIDTH_PX = 25;
+const DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX = 30;
+const QUOTA_COLUMN_WIDTH_PX = 24;
+const QUOTA_DECIMALS = 2;
+let autoRefreshTimer = null;
+
+const viewButtons = {
+    users: document.getElementById('view_users_btn'),
+    groups: document.getElementById('view_groups_btn'),
+    top10: document.getElementById('view_top10_btn'),
+    quotas: document.getElementById('view_quotas_btn'),
+};
+
+let rawData = { by_user: [], by_group: [], quotas: { quotas_gb: {}, logs: [], managed_repository: {} } };
+let currentView = 'users';
+let totalUsedBytes = 0;
+let quotasEditMode = false;
+
+function getMinimumQuotaGb() {
+    const configured = Number(rawData?.quotas?.min_quota_gb);
+    if (Number.isFinite(configured) && configured > 0) {
+        return configured;
+    }
+    return 0.10;
+}
+
+function persistState() {
+    if (!storage) {
+        return;
+    }
+    const payload = {
+        currentView,
+        autoRefresh: !!autoRefreshToggle.checked,
+    };
+    storage.setItem(storageStateKey, JSON.stringify(payload));
+}
+
+function applyStoredState() {
+    const storedState = parseStoredState(storage?.getItem(storageStateKey));
+    if (!storedState) {
+        return;
+    }
+    if (Object.prototype.hasOwnProperty.call(storedState, 'autoRefresh')) {
+        autoRefreshToggle.checked = Boolean(storedState.autoRefresh);
+    }
+    if (['users', 'groups', 'top10', 'quotas'].includes(storedState.currentView)) {
+        currentView = storedState.currentView;
+    }
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function bytes(v) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Number(v || 0);
+    let idx = 0;
+    while (value >= 1024 && idx < units.length - 1) {
+        value /= 1024;
+        idx += 1;
+    }
+    return `${value.toFixed(DISK_USAGE_DECIMALS)} ${units[idx]}`;
+}
+
+function getColumnLayoutForView() {
+    if (currentView === 'groups') {
+        return ['15%', `calc(85% - ${(DISK_USAGE_COLUMN_WIDTH_PX * 2) + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
+    }
+    if (currentView === 'quotas') {
+        return ['15%', `calc(85% - ${(DISK_USAGE_COLUMN_WIDTH_PX * 2) + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX + QUOTA_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`, `${QUOTA_COLUMN_WIDTH_PX}px`];
+    }
+    return ['15%', '16%', `calc(69% - ${DISK_USAGE_COLUMN_WIDTH_PX + DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px)`, `${DISK_USAGE_COLUMN_WIDTH_PX}px`, `${DISK_USAGE_GLOBAL_COLUMN_WIDTH_PX}px`];
+}
+
+function syncStorageTableHeight() {
+    if (!tableScroll || !chartCard) {
+        return;
+    }
+    tableScroll.style.maxHeight = `${chartCard.clientHeight}px`;
+}
+
+function gb(value) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return 'not set';
+    }
+    return `${Number(value).toFixed(QUOTA_DECIMALS)} GB`;
+}
+
+
+function managedRepositoryCompatibility() {
+    const compatibility = rawData.quotas?.managed_repository;
+    if (!compatibility || typeof compatibility.is_compatible !== 'boolean') {
+        return null;
+    }
+    return compatibility;
+}
+
+function quotaCompatibilityMessage() {
+    return 'The current ManagedRepository structure is incompatible with setting up storage quotas per group. The suggested ManagedRepository template is: %group%/%user%/%year%-%month%-%day%/%time%.';
+}
+
+function extractErrorMessage(payload, fallbackMessage) {
+    if (payload && typeof payload.error === 'string' && payload.error.trim()) {
+        return payload.error.trim();
+    }
+    return fallbackMessage;
+}
+
+async function readJsonPayload(response, contextLabel) {
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.includes('application/json')) {
+        throw new Error(`${contextLabel} returned a non-JSON response.`);
+    }
+    try {
+        return await response.json();
+    } catch (error) {
+        throw new Error(`${contextLabel} returned malformed JSON.`);
+    }
+}
+
+function getRowsForView() {
+    if (currentView === 'groups' || currentView === 'quotas') {
+        return (rawData.by_group || []).map((item) => {
+            const rawQuotaGb = rawData.quotas?.quotas_gb?.[item.group];
+            const hasQuota = rawQuotaGb !== null && rawQuotaGb !== undefined && rawQuotaGb !== '';
+            const quotaGb = hasQuota ? Number(rawQuotaGb) : null;
+            const usageBytes = Number(item.bytes || 0);
+            const quotaBytes = quotaGb !== null && quotaGb > 0 ? quotaGb * 1024 * 1024 * 1024 : 0;
+            const quotaPercent = quotaBytes > 0 ? (usageBytes / quotaBytes) * 100 : null;
+            return {
+                primary: item.group,
+                secondary: (item.users || []).join(', '),
+                permissions: item.permissions || 'Private',
+                chartLabel: item.group,
+                bytes: usageBytes,
+                percent: totalUsedBytes > 0 ? (usageBytes / totalUsedBytes) * 100 : 0,
+                quotaGb,
+                quotaPercent,
+            };
+        });
+    }
+    const users = (rawData.by_user || []).map((item) => ({
+        username: item.username,
+        fullName: item.full_name || '',
+        groups: (item.groups || []).join(', '),
+        chartLabel: item.username,
+        bytes: item.bytes,
+        percent: totalUsedBytes > 0 ? (Number(item.bytes || 0) / totalUsedBytes) * 100 : 0,
+    }));
+    if (currentView === 'top10') {
+        return users.slice(0, 10);
+    }
+    return users;
+}
+
+function getHeadersForView() {
+    if (currentView === 'groups') {
+        return ['Group', 'Username(s)', 'Permissions', 'Disk usage', 'Disk usage [% global]'];
+    }
+    if (currentView === 'quotas') {
+        return ['Group', 'Username(s)', 'Permissions', 'Disk usage [% quota]', 'Quota [GB]'];
+    }
+    return ['Username', 'Full name', 'Group(s)', 'Disk usage', 'Disk usage [% global]'];
+}
+
+function setView(nextView) {
+    currentView = nextView;
+    Object.entries(viewButtons).forEach(([viewName, button]) => {
+        const isActive = viewName === nextView;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    quotaActions.hidden = currentView !== 'quotas';
+    quotaLogsPanel.hidden = currentView !== 'quotas';
+    quotaCompatibilityNotice.hidden = true;
+    persistState();
+    render();
+}
+
+function palette(index) {
+    const discretePalette = [
+        '#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed',
+        '#0ea5e9', '#65a30d', '#dc2626', '#0284c7', '#b45309',
+        '#8b5cf6', '#0891b2', '#16a34a', '#be123c', '#4338ca',
+    ];
+    return discretePalette[index % discretePalette.length];
+}
+
+function drawPieChart(rows, labelName) {
+    const ctx = chartCanvas.getContext('2d');
+    const cssWidth = Number(chartCanvas.getAttribute('width')) || 460;
+    const cssHeight = Number(chartCanvas.getAttribute('height')) || 420;
+    const pixelRatio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    chartCanvas.style.width = `${cssWidth}px`;
+    chartCanvas.style.height = `${cssHeight}px`;
+    chartCanvas.width = cssWidth * pixelRatio;
+    chartCanvas.height = cssHeight * pixelRatio;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    const width = cssWidth;
+    const height = cssHeight;
+    ctx.clearRect(0, 0, width, height);
+
+    const total = rows.reduce((acc, row) => acc + Number(row.bytes || 0), 0);
+    if (total <= 0) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '16px Helvetica Neue';
+        ctx.textAlign = 'center';
+        ctx.fillText('No usage data available', width / 2, height / 2);
+        chartCaption.textContent = '';
+        return;
+    }
+
+    const maxSlices = PIE_MAX_ELEMENTS;
+    const sorted = [...rows].sort((a, b) => b.bytes - a.bytes);
+    const topRows = sorted.slice(0, maxSlices);
+    const otherBytes = sorted.slice(maxSlices).reduce((acc, row) => acc + row.bytes, 0);
+    if (otherBytes > 0) {
+        topRows.push({ chartLabel: 'Others', bytes: otherBytes });
+    }
+
+    const centerX = 145;
+    const centerY = height / 2;
+    const radius = 130;
+    let startAngle = -Math.PI / 2;
+
+    topRows.forEach((row, index) => {
+        const ratio = row.bytes / total;
+        const endAngle = startAngle + ratio * 2 * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = row.chartLabel === 'Others' ? '#94a3b8' : palette(index);
+        ctx.fill();
+        startAngle = endAngle;
+    });
+
+    ctx.beginPath();
+    ctx.fillStyle = '#f8fafc';
+    ctx.arc(centerX, centerY, 62, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '600 14px Helvetica Neue';
+    ctx.textAlign = 'center';
+    ctx.fillText(bytes(total), centerX, centerY + 5);
+
+    const legendX = 285;
+    let legendY = 54;
+    ctx.textAlign = 'left';
+    topRows.forEach((row, index) => {
+        if (legendY > height - 20) {
+            return;
+        }
+        ctx.fillStyle = row.chartLabel === 'Others' ? '#94a3b8' : palette(index);
+        ctx.fillRect(legendX, legendY - 9, 11, 11);
+        ctx.fillStyle = '#1f2937';
+        ctx.font = '12px Helvetica Neue';
+        const pct = ((row.bytes / total) * 100).toFixed(PERCENT_DECIMALS);
+        const legendLabel = `${row.chartLabel} (${pct}%)`;
+        ctx.fillText(legendLabel.slice(0, 24), legendX + 15, legendY);
+        legendY += 22;
+    });
+
+    chartCaption.textContent = `${labelName}: ${topRows.length} segment${topRows.length === 1 ? '' : 's'} shown${otherBytes > 0 ? ' (including Others)' : ''}.`;
+}
+
+function renderQuotaLogs(logs) {
+    if (!Array.isArray(logs) || !logs.length) {
+        quotaLogsBody.innerHTML = '<div class="log-empty">No quota log entries.</div>';
+        return;
+    }
+    const lines = logs.slice(-50).reverse().map((entry) => {
+        const ts = escapeHtml(entry.timestamp || '');
+        const lvl = escapeHtml(String(entry.level || 'info').toUpperCase());
+        const msg = escapeHtml(entry.message || '');
+        return `<div>[${ts}] <strong>${lvl}</strong> ${msg}</div>`;
+    });
+    quotaLogsBody.innerHTML = lines.join('');
+}
+
+function render() {
+    const storageTable = document.querySelector('.storage-table');
+    const isGroupView = currentView === 'groups' || currentView === 'quotas';
+    storageTable?.classList.toggle('view-groups', isGroupView);
+    storageTable?.classList.toggle('view-quotas-edit', currentView === 'quotas' && quotasEditMode);
+    quotaActions.hidden = currentView !== 'quotas';
+    quotaLogsPanel.hidden = currentView !== 'quotas';
+
+    const compatibility = managedRepositoryCompatibility();
+    if (currentView === 'quotas' && compatibility && !compatibility.is_compatible) {
+        storageVisualLayout.classList.add('storage-visual-layout--hidden');
+        quotaActions.hidden = true;
+        quotaLogsPanel.hidden = true;
+        quotaCompatibilityNotice.hidden = false;
+        quotaCompatibilityNotice.textContent = quotaCompatibilityMessage();
+        tableCols.innerHTML = '';
+        tableHead.innerHTML = '';
+        table.innerHTML = '';
+        chartCaption.textContent = '';
+        statusEl.textContent = 'Quotas view is disabled due to incompatible ManagedRepository template.';
+        const context = chartCanvas.getContext('2d');
+        context.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+        syncStorageTableHeight();
+        return;
+    }
+    storageVisualLayout.classList.remove('storage-visual-layout--hidden');
+    quotaCompatibilityNotice.hidden = true;
+
+    const headers = getHeadersForView();
+    tableCols.innerHTML = getColumnLayoutForView().map((width) => {
+        const hasPixelWidth = width.endsWith('px');
+        if (hasPixelWidth) {
+            return `<col style="width:${width};min-width:${width};max-width:${width}">`;
+        }
+        return `<col style="width:${width}">`;
+    }).join('');
+    tableHead.innerHTML = headers.map((item) => `<th>${escapeHtml(item)}</th>`).join('');
+
+    const needle = searchEl.value.trim().toLowerCase();
+    const allRows = getRowsForView();
+    const filteredRows = allRows.filter((row) => {
+        if (!needle) {
+            return true;
+        }
+        if (currentView === 'groups' || currentView === 'quotas') {
+            return row.primary.toLowerCase().includes(needle) || row.secondary.toLowerCase().includes(needle);
+        }
+        return row.username.toLowerCase().includes(needle)
+            || row.fullName.toLowerCase().includes(needle)
+            || row.groups.toLowerCase().includes(needle);
+    });
+    const shownRows = filteredRows.slice(0, TABLE_ROW_CAP);
+
+    if (!shownRows.length) {
+        table.innerHTML = `<tr><td colspan="${headers.length}" class="log-empty">No rows.</td></tr>`;
+    } else if (currentView === 'groups') {
+        table.innerHTML = shownRows
+            .map((row) => `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(PERCENT_DECIMALS)}%</td></tr>`)
+            .join('');
+    } else if (currentView === 'quotas') {
+        const minimumQuotaGb = getMinimumQuotaGb();
+        table.innerHTML = shownRows
+            .map((row) => {
+                const quotaCell = quotasEditMode
+                    ? `<input type="number" min="${minimumQuotaGb.toFixed(QUOTA_DECIMALS)}" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${row.quotaGb === null ? '' : Number(row.quotaGb).toFixed(QUOTA_DECIMALS)}">`
+                    : (row.quotaGb === null ? '<span class="storage-quota-not-set">not set</span>' : escapeHtml(gb(row.quotaGb)));
+                const quotaPercentCell = row.quotaPercent === null
+                    ? '<span class="storage-quota-not-set">--</span>'
+                    : `${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%`;
+                return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${quotaPercentCell}</td><td>${quotaCell}</td></tr>`;
+            })
+            .join('');
+    } else {
+        table.innerHTML = shownRows
+            .map((row) => `<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.fullName || '—')}</td><td>${escapeHtml(row.groups || '—')}</td><td>${bytes(row.bytes)}</td><td>${row.percent.toFixed(PERCENT_DECIMALS)}%</td></tr>`)
+            .join('');
+    }
+
+    const viewLabel = currentView === 'groups' ? 'Group view' : currentView === 'top10' ? 'Top-10 users' : currentView === 'quotas' ? 'Quotas' : 'User view';
+    statusEl.textContent = `Loaded ${allRows.length} rows for ${viewLabel}.`;
+    drawPieChart(filteredRows, viewLabel);
+    renderQuotaLogs(rawData.quotas?.logs || []);
+    syncStorageTableHeight();
+}
+
+function exportCsv() {
+    const rows = getRowsForView();
+    const headers = getHeadersForView();
+    const body = rows.map((row) => {
+        if (currentView === 'groups') {
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
+        }
+        if (currentView === 'quotas') {
+            const quotaValue = row.quotaGb === null ? '' : row.quotaGb.toFixed(QUOTA_DECIMALS);
+            const quotaPercent = row.quotaPercent === null ? '' : row.quotaPercent.toFixed(PERCENT_DECIMALS);
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${JSON.stringify(quotaPercent)},${JSON.stringify(quotaValue)}`;
+        }
+        return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
+    }).join('\n');
+    const blob = new Blob([`${headers.join(',')}\n${body}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `omero-storage-${currentView}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+async function refreshQuotasData() {
+    const response = await fetch(quotaDataUrl, { credentials: 'same-origin' });
+    const payload = await readJsonPayload(response, 'Quota data request');
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(payload, `Quota request failed with status ${response.status}`));
+    }
+    rawData.quotas = {
+        quotas_gb: payload.quotas_gb || payload.reconcile?.quotas_gb || {},
+        logs: payload.reconcile?.logs || payload.logs || [],
+        managed_repository: payload.reconcile?.managed_repository || {},
+        min_quota_gb: payload.min_quota_gb || payload.reconcile?.min_quota_gb,
+    };
+}
+
+function resetQuotasDataForUnavailableServer() {
+    rawData.quotas = {
+        quotas_gb: {},
+        logs: [],
+        managed_repository: null,
+        min_quota_gb: 0.10,
+    };
+}
+
+async function loadData() {
+    statusEl.textContent = 'Loading storage distribution...';
+    try {
+        const response = await fetch(dataUrl, { credentials: 'same-origin' });
+        const payload = await readJsonPayload(response, 'Storage distribution request');
+        if (!response.ok) {
+            throw new Error(extractErrorMessage(payload, `Request failed with status ${response.status}`));
+        }
+        rawData = {
+            by_user: payload.by_user || [],
+            by_group: payload.by_group || [],
+            quotas: {
+                quotas_gb: payload.quotas?.quotas_gb || {},
+                logs: payload.quotas?.logs || [],
+                managed_repository: payload.quotas?.managed_repository || {},
+                min_quota_gb: payload.quotas?.min_quota_gb,
+            },
+        };
+        totalUsedBytes = Number(payload.totals?.omero_binary_bytes || 0);
+        if (totalUsedBytes <= 0) {
+            totalUsedBytes = (rawData.by_user || []).reduce((acc, item) => acc + Number(item.bytes || 0), 0);
+        }
+        render();
+    } catch (error) {
+        rawData = { by_user: [], by_group: [], quotas: { quotas_gb: {}, logs: [], managed_repository: null } };
+        totalUsedBytes = 0;
+        render();
+        console.error('Failed to load storage distribution.', error);
+        statusEl.textContent = 'Failed to load storage distribution. Please verify the server response and try again.';
+    }
+}
+
+async function saveQuotaEdits() {
+    const inputs = [...document.querySelectorAll('.storage-quota-input')];
+    const updates = inputs.map((input) => ({
+        group: input.dataset.group || '',
+        quota_gb: input.value.trim() === '' ? null : Number(Number(input.value).toFixed(QUOTA_DECIMALS)),
+    }));
+    const response = await fetch(quotaUpdateUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+    });
+    const payload = await readJsonPayload(response, 'Quota update request');
+    if (!response.ok) {
+        throw new Error(extractErrorMessage(payload, `Quota update failed with status ${response.status}`));
+    }
+    rawData.quotas = {
+        quotas_gb: payload.quotas_gb || payload.reconcile?.quotas_gb || {},
+        logs: payload.reconcile?.logs || [],
+        managed_repository: payload.reconcile?.managed_repository || {},
+    };
+}
+
+function clearAutoRefreshTimer() {
+    if (autoRefreshTimer !== null) {
+        window.clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+function syncAutoRefresh() {
+    clearAutoRefreshTimer();
+    persistState();
+    if (!autoRefreshToggle.checked) {
+        return;
+    }
+    loadData().catch(() => {});
+    autoRefreshTimer = window.setInterval(() => {
+        loadData().catch(() => {});
+    }, AUTO_REFRESH_MS);
+}
+
+document.getElementById('refresh_btn').addEventListener('click', () => { loadData().catch(() => {}); });
+document.getElementById('export_btn').addEventListener('click', exportCsv);
+quotaTemplateButton.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.href = quotaTemplateUrl.href;
+    link.download = 'group-quotas-template.csv';
+    link.click();
+});
+quotaImportButton.addEventListener('click', () => quotaImportFileInput.click());
+quotaImportFileInput.addEventListener('change', async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) {
+        return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const response = await fetch(quotaImportUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData,
+        });
+        const payload = await readJsonPayload(response, 'Quota import request');
+        if (!response.ok) {
+            throw new Error(extractErrorMessage(payload, `Quota import failed with status ${response.status}`));
+        }
+        await loadData();
+    } catch (error) {
+        statusEl.textContent = `Failed to import quotas: ${error.message}`;
+    } finally {
+        quotaImportFileInput.value = '';
+    }
+});
+
+quotaEditButton.addEventListener('click', async () => {
+    if (currentView !== 'quotas') {
+        return;
+    }
+    if (!quotasEditMode) {
+        quotasEditMode = true;
+        quotaEditButton.textContent = 'Save quota(s)';
+        render();
+        return;
+    }
+    try {
+        await saveQuotaEdits();
+        quotasEditMode = false;
+        quotaEditButton.textContent = 'Edit quota(s)';
+        await loadData();
+    } catch (error) {
+        statusEl.textContent = `Failed to save quotas: ${error.message}`;
+    }
+});
+
+searchEl.addEventListener('input', render);
+viewButtons.users.addEventListener('click', () => setView('users'));
+viewButtons.groups.addEventListener('click', () => setView('groups'));
+viewButtons.top10.addEventListener('click', () => setView('top10'));
+viewButtons.quotas.addEventListener('click', async () => {
+    setView('quotas');
+    try {
+        await refreshQuotasData();
+        render();
+    } catch (error) {
+        resetQuotasDataForUnavailableServer();
+        render();
+        console.warn('Failed to refresh quota details. Rendering empty quotas view.', error);
+    }
+});
+autoRefreshToggle.addEventListener('change', syncAutoRefresh);
+window.addEventListener('resize', syncStorageTableHeight);
+
+applyStoredState();
+setView(currentView);
+syncAutoRefresh();
+if (!autoRefreshToggle.checked) {
+    loadData().catch(() => {});
+}
+</script>
+</body>
+</html>
