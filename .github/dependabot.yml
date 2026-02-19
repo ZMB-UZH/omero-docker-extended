@@ -19,6 +19,8 @@ updates:
       time: "05:15"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "postgres"
     commit-message:
       prefix: "deps(docker)"
 
@@ -30,5 +32,7 @@ updates:
       time: "05:30"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "postgres"
     commit-message:
       prefix: "deps(docker)"
