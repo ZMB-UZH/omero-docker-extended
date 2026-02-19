@@ -8,7 +8,6 @@ REPO_URL="${REPO_URL:-git@github.com:strmt7/omero-docker-extended.git}"
 REPO_BRANCH="${REPO_BRANCH:-test}"
 INSTALLATION_SCRIPT_RELATIVE_PATH="${INSTALLATION_SCRIPT_RELATIVE_PATH:-installation/installation_script.sh}"
 INSTALLATION_PATHS_ENV_RELATIVE_PATH="${INSTALLATION_PATHS_ENV_RELATIVE_PATH:-installation_paths.env}"
-USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"
 INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE:-1}"
 
 # shellcheck disable=SC2034
@@ -385,12 +384,7 @@ run_installation_script() {
     fi
 
     echo "Executing installation script: ${installation_script_path}"
-    echo "Build mode settings:"
-    echo "  USE_BUILDX_COMPRESSED_BUILD=${USE_BUILDX_COMPRESSED_BUILD}"
-    echo "  INSTALLATION_AUTOMATION_MODE=${INSTALLATION_AUTOMATION_MODE}"
-
     exec env \
-        USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD}" \
         INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}" \
         bash "${installation_script_path}"
 }
