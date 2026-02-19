@@ -248,3 +248,37 @@ def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
 
     updated_payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert updated_payload["_reconcile_event_cache"] == {}
+
+
+def test_reconcile_uses_default_ext4_enforcer_when_command_template_unset(
+    tmp_path, monkeypatch
+) -> None:
+    state_path = tmp_path / "quotas.json"
+    group_root = tmp_path / "ManagedRepository"
+    (group_root / "group-a").mkdir(parents=True)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.delenv("ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", raising=False)
+
+    upsert_quotas([("group-a", 5)])
+
+    seen = {}
+
+    def _fake_run(*, command_template, filesystem, group_name, group_path, quota_bytes, quota_gb):
+        seen["command_template"] = command_template
+        return True, "ok"
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.detect_filesystem",
+        lambda path: type("Fs", (), {"fs_type": "ext4", "mount_point": "/OMERO", "source": "/dev/demo"})(),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._run_quota_apply_command",
+        _fake_run,
+    )
+
+    result = reconcile_quotas(["group-a"])
+
+    assert "group-a" in result["applied_groups"]
+    assert "enforce-ext4-project-quota.sh" in seen["command_template"]
