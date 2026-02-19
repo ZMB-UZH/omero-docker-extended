@@ -7,6 +7,7 @@ import socket
 import subprocess
 import traceback
 import uuid
+from csv import Error as CsvError
 from http.cookies import SimpleCookie
 from http.client import HTTPConnection
 from http.client import HTTPMessage
@@ -35,6 +36,14 @@ from ..services.log_query import (
 )
 from ..services.system_diagnostics import run_diagnostic_script
 from ..services.system_diagnostics import serialize_scripts
+from ..services.storage_quotas import (
+    QuotaError,
+    get_state as get_quota_state,
+    import_quotas_csv,
+    quota_csv_template,
+    reconcile_quotas,
+    upsert_quotas,
+)
 from .utils import current_username
 
 logger = logging.getLogger(__name__)
@@ -1647,6 +1656,9 @@ def storage_data(request, conn=None, url=None, **kwargs):
     except Exception:
         logger.warning("Could not read disk usage for data root %s", data_root)
 
+    known_groups = sorted(totals_by_group.keys())
+    quota_status = reconcile_quotas(known_groups)
+
     return JsonResponse(
         {
             "totals": {
@@ -1681,8 +1693,116 @@ def storage_data(request, conn=None, url=None, **kwargs):
             "by_user_group": sorted(
                 per_user_group, key=lambda item: item["bytes"], reverse=True
             ),
+            "quotas": quota_status,
         }
     )
+
+
+@csrf_exempt
+@login_required()
+def storage_quota_data(request, conn=None, url=None, **kwargs):
+    """Fetch persisted quota definitions and reconciliation logs."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+
+    try:
+        state = get_quota_state()
+        reconciled = reconcile_quotas([])
+    except Exception as exc:
+        logger.exception("Failed to load quota data")
+        return JsonResponse({"error": f"Quota data request failed: {exc}"}, status=500)
+
+    return JsonResponse(
+        {
+            "quotas_gb": state.get("quotas_gb", {}),
+            "logs": state.get("logs", []),
+            "reconcile": reconciled,
+        }
+    )
+
+
+@csrf_exempt
+@login_required()
+def storage_quota_update(request, conn=None, url=None, **kwargs):
+    """Update group quota values from UI edits."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+        updates = payload.get("updates", [])
+        if not isinstance(updates, list):
+            raise QuotaError("Expected JSON payload with list field 'updates'")
+        normalized = []
+        for item in updates:
+            if not isinstance(item, dict):
+                raise QuotaError("Each quota update must be an object")
+            normalized.append((item.get("group", ""), item.get("quota_gb", "")))
+        state = upsert_quotas(normalized, source="ui-edit")
+        reconciled = reconcile_quotas([])
+    except (json.JSONDecodeError, QuotaError, ValueError) as exc:
+        return JsonResponse(
+            {"error": f"Invalid quota update payload: {exc}"}, status=400
+        )
+    except Exception as exc:
+        logger.exception("Failed to update quotas")
+        return JsonResponse({"error": f"Quota update failed: {exc}"}, status=500)
+
+    return JsonResponse(
+        {
+            "quotas_gb": state.get("quotas_gb", {}),
+            "reconcile": reconciled,
+        }
+    )
+
+
+@csrf_exempt
+@login_required()
+def storage_quota_import(request, conn=None, url=None, **kwargs):
+    """Import group quotas from a CSV upload."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    if "file" not in request.FILES:
+        return JsonResponse({"error": "Missing file upload field 'file'"}, status=400)
+    csv_file = request.FILES["file"]
+
+    try:
+        content = csv_file.read().decode("utf-8")
+        state = import_quotas_csv(content)
+        reconciled = reconcile_quotas([])
+    except (UnicodeDecodeError, QuotaError, CsvError) as exc:
+        return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
+    except Exception as exc:
+        logger.exception("Failed to import quotas")
+        return JsonResponse({"error": f"Quota import failed: {exc}"}, status=500)
+
+    return JsonResponse(
+        {
+            "quotas_gb": state.get("quotas_gb", {}),
+            "reconcile": reconciled,
+        }
+    )
+
+
+@login_required()
+def storage_quota_template(request, conn=None, url=None, **kwargs):
+    """Download quota CSV template."""
+    root_error = _require_root_user(request, conn)
+    if root_error:
+        return root_error
+
+    template = quota_csv_template()
+    response = HttpResponse(template, content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="group-quotas-template.csv"'
+    return response
 
 
 @login_required()
