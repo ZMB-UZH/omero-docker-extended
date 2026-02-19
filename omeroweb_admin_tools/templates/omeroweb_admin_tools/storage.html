@@ -435,7 +435,7 @@ function render() {
         table.innerHTML = shownRows
             .map((row) => {
                 const quotaCell = quotasEditMode
-                    ? `<input type="number" min="0.01" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${Number(row.quotaGb || 0).toFixed(QUOTA_DECIMALS)}">`
+                    ? `<input type="number" min="1.00" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${Number(row.quotaGb || 0).toFixed(QUOTA_DECIMALS)}">`
                     : escapeHtml(gb(row.quotaGb));
                 return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%</td><td>${quotaCell}</td></tr>`;
             })
