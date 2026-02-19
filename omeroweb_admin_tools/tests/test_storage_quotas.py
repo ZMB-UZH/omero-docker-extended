@@ -23,7 +23,7 @@ from omeroweb_admin_tools.views.index_view import (
 
 
 def test_quota_csv_template_headers() -> None:
-    assert quota_csv_template() == "Group,Quota (GB)\n"
+    assert quota_csv_template() == "Group,Quota [GB]\n"
 
 
 def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
@@ -31,7 +31,7 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
 
     upsert_quotas([("group-a", 10)])
-    import_quotas_csv("Group,Quota (GB)\ngroup-b,22.5\n")
+    import_quotas_csv("Group,Quota [GB]\ngroup-b,22.5\n")
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert payload["quotas_gb"]["group-a"] == 10.0
@@ -100,7 +100,7 @@ def test_storage_quota_update_endpoint(monkeypatch) -> None:
 
 
 def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
-    file_payload = b"Group,Quota (GB)\ndemo,12\n"
+    file_payload = b"Group,Quota [GB]\ndemo,12\n"
     upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/import/",
@@ -125,7 +125,7 @@ def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert template_response.status_code == 200
-    assert b"Group,Quota (GB)" in template_response.content
+    assert b"Group,Quota [GB]" in template_response.content
 
 
 def test_managed_repository_compatibility_requires_group_user_prefix(
