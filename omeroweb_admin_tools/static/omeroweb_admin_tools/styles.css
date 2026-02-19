@@ -846,7 +846,8 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 8px;
+    min-height: 34px;
+    margin-bottom: 10px;
 }
 
 .storage-status-row .log-status {
