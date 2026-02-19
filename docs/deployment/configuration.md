@@ -4,12 +4,15 @@
 
 This repository uses environment variables as the primary configuration surface.
 
-- `installation_paths.env`: filesystem path definitions.
-- `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
-- `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
+Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
+
+- `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions.
+- `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
+- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
-- `env/omero-celery.env`: Celery and Imaris connector processing controls.
-- `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
+- `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
+- `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
+- `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets).
 
 ## Required Hardening Before Deployment
 
