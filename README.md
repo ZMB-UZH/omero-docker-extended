@@ -165,9 +165,9 @@ Common utilities shared across all plugins:
 - Host storage paths prepared with correct filesystem permissions.
 - Network access to GitHub configured if using the pull-based update workflow (`github_pull_project_bash_example`).
 
-### Host-first installation flow (recommended)
+### Recommended installation workflow
 
-This workflow mirrors the intended production-like deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update helper.
+This workflow mirrors the intended deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update helper.
 
 ```bash
 # Prepare the installation root
