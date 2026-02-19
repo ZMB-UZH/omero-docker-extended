@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
-MIN_QUOTA_GB = 1.0
+MIN_QUOTA_GB = 0.10
 DEFAULT_EXT4_ENFORCER_COMMAND = (
     "/opt/omero/web/bin/enforce-ext4-project-quota.sh "
     "--group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}"
