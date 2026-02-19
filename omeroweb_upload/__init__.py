@@ -1,0 +1,1 @@
+"""OMERO.web upload plugin."""

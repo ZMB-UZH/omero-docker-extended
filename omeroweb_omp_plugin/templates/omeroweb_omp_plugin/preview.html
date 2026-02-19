@@ -1,0 +1,1825 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OMP Preview</title>
+    <link rel="stylesheet" href="{% static 'omeroweb_omp_plugin/styles.css' %}">
+</head>
+<body>
+<div class="omp-page omp-page--wide">
+<div class="omeroweb-omp-plugin"
+     style='padding:10px; --base-font-size:14px; font-size:var(--base-font-size); width:1600px; min-width:1600px; max-width:1600px; margin:0 auto;'>
+    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:8px; margin-bottom:10px;'>
+
+        <div style="display:flex; justify-content:flex-start; align-items:center;">
+            <h2 style='color:#007bff; margin:0;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                    📊
+                </span>
+                <span>
+                    Preview of parsed filenames
+                </span>
+            </h2>
+        </div>
+
+        <div style="display:flex; justify-content:center; align-items:center;">
+            <button onclick="goBack()"
+                    style='padding:8px 8px; font-size:12px;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                    ←
+                </span>
+                <span>
+                    Go back to project selection
+                </span>
+            </button>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; align-items:center;">
+            <button onclick='scrollToBottom()'
+                    style='padding:8px 8px; font-size:12px;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                    ↓
+                </span>
+                <span>
+                    Scroll to bottom
+                </span>
+            </button>
+        </div>
+
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr auto; align-items:start; column-gap:12px;">
+        <div>
+            <p>
+                Project: {{ project_label }} |
+                Input type:
+                {% if separator_mode == "ai_parse" %}
+                    AI-assisted filename parsing
+                {% elif separator_mode == "ai_regex" %}
+                    AI-assisted Regex expression
+                {% elif separator_mode == "regex" %}
+                    Regex expression
+                {% else %}
+                    Characters
+                {% endif %}
+                |
+                {% if separator_mode != "ai_regex" %}
+                    Input:
+                    {% if separator_mode == "ai_parse" %}
+                        "No input required here"
+                    {% else %}
+                        "{{ raw_seps }}"
+                    {% endif %}
+                {% endif %}
+            </p>
+            <p>Previewing {{ preview_count }} images.</p>
+        </div>
+        <div style="display:flex; justify-content:flex-end; align-items:flex-start;">
+            <a href="/omeroweb_omp_plugin/help/"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="Help"
+               aria-label="Help"
+               class="help-btn">
+                ?
+            </a>
+        </div>
+    </div>
+    <div style="max-height:1500px; overflow:auto;">
+        <table id="preview_table" border='1' style='width:100%; border-collapse:collapse; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif; font-size:12px; margin-bottom:10px;'>
+            <thead>
+            <tr style='background:#007bff; color:white;'>
+                <td style='padding:3px; width:20px; text-align:center;'>
+                    <input type='checkbox' id='images_select_all' checked>
+                </td>
+                <td class="sortable-header" data-sort-key="dataset" data-sort-type="text" style='padding:3px; width:500px;'>
+                    Dataset
+                    <span class="sort-indicator" aria-hidden="true">
+                        <span class="sort-arrow sort-arrow--up"></span>
+                        <span class="sort-arrow sort-arrow--down"></span>
+                    </span>
+                </td>
+                <td class="sortable-header" data-sort-key="id" data-sort-type="number" style='padding:3px; width:50px;'>
+                    ID
+                    <span class="sort-indicator" aria-hidden="true">
+                        <span class="sort-arrow sort-arrow--up"></span>
+                        <span class="sort-arrow sort-arrow--down"></span>
+                    </span>
+                </td>
+                <td class="sortable-header" data-sort-key="filename" data-sort-type="text" style='padding:3px; width:500px;'>
+                    Filename
+                    <span class="sort-indicator" aria-hidden="true">
+                        <span class="sort-arrow sort-arrow--up"></span>
+                        <span class="sort-arrow sort-arrow--down"></span>
+                    </span>
+                </td>
+                <td style='padding:3px;'>Parsed variables</td>
+            </tr>
+            </thead>
+            <tbody id="preview_table_body">
+            {% for row in preview_rows %}
+            <tr>
+                <td style='padding:2px; text-align:center;'>
+                    <input type='checkbox' data-image-id='{{ row.img_id }}' checked>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="clamp-2">
+                        {{ row.ds_label }}
+                    </div>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="nowrap-1">
+                        {{ row.img_id }}
+                    </div>
+                </td>
+                <td style='padding:2px;'>
+                    <div class="clamp-2">
+                        {{ row.filename }}
+                    </div>
+                </td>
+                <td style='padding:2px; text-align: left;'>
+                    <div class="clamp-2" style="text-align: left; justify-content: flex-start;">
+                        {{ row.vars_display|safe }}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <hr>
+
+    <div id='var-config' data-var-count='{{ max_vars }}'>
+        <div style='
+                display:grid;
+                grid-template-columns: 300px minmax(0, 1fr);
+                column-gap:15px;
+                align-items:start;
+                width:100%;
+            '>
+            <div style='min-width:300px;'>
+                <label style="font-size:12px; display:block; margin-bottom:6px;">
+                    Variable names: for guidelines see
+                    <a href="https://www.ebi.ac.uk/bioimage-archive/rembi-help-overview/"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       style="color:#007bff; font-weight:600; text-decoration:none;
+                              background:rgba(0,123,255,0.12); padding:1px 4px;
+                              border-radius:4px;">
+                        REMBI
+                    </a>
+                </label>
+
+                <label style="font-size:12px;">
+                    <input type="checkbox"
+                           id="use_defaults"
+                           checked
+                           onclick="toggleVarNameInputs()"
+                           style="vertical-align: middle; margin-right:6px; margin-left:0px">
+                    Use default names
+                </label>
+                
+                <!-- Edit mode controls -->
+                <div class="var-edit-controls" style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                    <button type="button"
+                            id="edit_rows_btn"
+                            class="var-edit-mode-btn"
+                            onclick="toggleEditMode()"
+                            style="display:none;">
+                        ✏️ Edit rows
+                    </button>
+                    <button type="button"
+                            id="finish_edit_btn"
+                            class="var-edit-mode-btn var-finish-btn"
+                            onclick="toggleEditMode()"
+                            style="display:none;">
+                        ✓ Finish
+                    </button>
+                </div>
+                
+                <div id='var_name_inputs' style='margin-top:10px;'>
+                    {% for i in var_range %}
+                    <div class="var-row" draggable="false">
+                        <div class="var-drag-handle" title="Drag to reorder">⋮⋮</div>
+                        <div class="var-index">{{ i }}:</div>
+                        <input id="var_name_{{ i }}"
+                               type="text"
+                               value=""
+                               class="var-input">
+                        <button type="button"
+                                class="var-row-btn var-row-remove"
+                                data-action="remove-var"
+                                aria-label="Remove variable"
+                                style="display:none;">
+                            −
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="var-row-actions" style="display:none;">
+                    <button type="button"
+                            id="add_var_row_btn"
+                            class="var-row-btn var-row-add"
+                            aria-label="Add variable">
+                        +
+                    </button>
+                </div>
+            </div>
+
+            <div id='variable-set-block'
+                style="
+                       display:grid;
+                       grid-auto-rows:auto;
+                       row-gap:15px;
+                       min-width:0;
+                ">
+
+                <div>
+                    <label for='variable_set_select'
+                           style='font-size:12px; display:block; margin-bottom:5px;'>
+                        Variable sets in database
+                    </label>
+
+                <div class="varset-row-3">
+                    <div id="variable_set_wrapper" class="varset-select-wrapper">
+                        <input type="text"
+                               id="variable_set_input"
+                               placeholder="Select a saved set…"
+                               autocomplete="off"
+                               class="varset-control">
+                        <span class="varset-select-arrow" aria-hidden="true">▾</span>
+                        <input type="hidden" id="variable_set_select" value="">
+                        <div id="variable_set_dropdown"
+                             class="varset-dropdown"
+                             style="display:none; position:absolute; left:0; right:0; top:100%;
+                                    background:#fff; border:1px solid #007bff; border-top:none;
+                                    max-height:220px; overflow:auto; z-index:1000; border-radius:0 0 6px 6px;">
+                        </div>
+                    </div>
+                    <button id='load_variable_set_btn'
+                            onclick='loadVariableSet()'
+                            class="varset-btn varset-btn-blue">
+                        Load from database
+                    </button>
+                    <button id='delete_variable_set_btn'
+                            onclick='deleteVariableSet()'
+                            class="varset-btn varset-btn-red">
+                        Delete from database
+                    </button>
+                </div>
+
+                </div>
+
+                <div>
+                    <label for='variable_set_name'
+                           style='font-size:12px; display:block; margin-bottom:5px;'>
+                        Variable set name for saving
+                    </label>
+
+                    <div class="varset-row-2">
+                        <input id='variable_set_name'
+                               type='text'
+                               placeholder='e.g. Electron microscopy'
+                               class="varset-control">
+
+                        <button id='save_variable_set_btn'
+                                onclick='saveVariableSet()'
+                                class="varset-btn varset-btn-green">
+                            Save to database
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
+    <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+        <a href="/omeroweb_omp_plugin/help/"
+           target="_blank"
+           rel="noopener noreferrer"
+           title="Help"
+           aria-label="Help"
+           class="help-btn">
+            ?
+        </a>
+    </div>
+
+    <hr>
+
+    <div style='
+            display:grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items:center;
+            column-gap:50px;
+            width:100%;
+        '>
+
+        <div style="display:flex; justify-content:flex-start; align-items:center;">
+            <!-- LEFT SAVE BUTTON -->
+            <button onclick='startSaveJob()'
+                    style='padding:8px 8px; font-size:12px; background:#28a745; color:white;
+                           border:none; border-radius:6px; cursor:pointer;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                    💾
+                </span>
+                <span>
+                    Save filename metadata into key-value pairs
+                </span>
+            </button>
+        </div>
+
+        <div style="display:flex; justify-content:center; align-items:center;">
+            <!-- CENTER ACQ BUTTON -->
+            <button onclick="startAcquisitionMetadataJob()"
+                    style='padding:8px 8px; font-size:12px; background:#0069d9; color:white;
+                           border:none; border-radius:6px; cursor:pointer;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                    📥
+                </span>
+                <span>
+                    Copy acquisition metadata into key-value pairs
+                </span>
+            </button>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; align-items:center;">
+            <!-- RIGHT DELETE BUTTON (PLUGIN ONLY) -->
+            <button onclick='deletePluginKeyvaluepairs()'
+                    style='padding:8px 8px; font-size:12px; background:#fd7e14; color:white;
+                           border:none; border-radius:6px; cursor:pointer;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:6px; pointer-events:none;">
+                    🗑
+                </span>
+                <span>
+                    Delete ONLY plugin key-value pairs
+                </span>
+            </button>
+        </div>
+
+    </div>
+
+    <div style='display:flex; justify-content:space-between; align-items:center; margin-top:20px;'>
+        <div></div>
+
+        <!-- DELETE ALL BUTTON -->
+        <button onclick='deleteAllKeyvaluepairs()'
+                style='padding:8px 8px; font-size:12px; background:#dc3545; color:white;
+                       border:none; border-radius:6px; cursor:pointer;'>
+            <span aria-hidden="true"
+                  style="display:inline-block; margin-right:6px; pointer-events:none;">
+                🗑
+            </span>
+            <span>
+                Delete ALL key-value pairs
+            </span>
+        </button>
+    </div>
+
+    <div style='display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; margin-top:20px;'>
+
+        <div></div>
+
+        <div style="display:flex; justify-content:center; align-items:center;">
+            <button onclick="goBack()"
+                    style='padding:8px 8px; font-size:12px;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                    ←
+                </span>
+                <span>
+                    Go back to project selection
+                </span>
+            </button>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; align-items:center;">
+            <button onclick='scrollToTop()'
+                    style='padding:8px 8px; font-size:12px;'>
+                <span aria-hidden="true"
+                      style="display:inline-block; margin-right:4px; pointer-events:none;">
+                    ↑
+                </span>
+                <span>
+                    Scroll to top
+                </span>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- HIDDEN FIELDS -->
+    <input type='hidden' id='project_id' value='{{ project_id }}'>
+    <input type='hidden' id='separator' value='{{ raw_seps }}'>
+    <input type='hidden' id='separator_mode' value='{{ separator_mode }}'>
+
+    <div id='progress-section' style='margin-top:30px; display:none;'>
+        <h3>Progress</h3>
+        <div style='width:100%; background:#e9ecef; border-radius:6px; overflow:hidden;'>
+            <div id='progress-bar'
+                 style='width:0%; background:#17a2b8; color:white; padding:6px 0; text-align:center;'>
+                0%
+            </div>
+        </div>
+
+        <p id='progress-text' style='margin-top:8px;'>Waiting to start…</p>
+
+        <pre id='progress-log'
+             style='margin-top:10px; background:#f8f9fa; padding:10px; max-height:250px; overflow:auto;'></pre>
+    </div>
+</div>
+
+<!-- NON-BLOCKING MODAL -->
+<div id="nb-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.3);
+            z-index:9999; align-items:center; justify-content:center;">
+
+    <div style="background:#ffffff; padding:20px 24px; border-radius:8px;
+                box-shadow:0 10px 30px rgba(0,0,0,0.25);
+                font-size:13px; min-width:300px; max-width:500px;">
+
+        <div id="nb-modal-message"
+             style="margin-bottom:16px;">
+        </div>
+
+        <div style="text-align:right;">
+            <button id="nb-modal-ok"
+                    onclick="hideNonBlockingModal()"
+                    style="padding:6px 14px; font-size:12px;">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+
+<script defer>
+const BASE_URL = "/omeroweb_omp_plugin";
+const messages = {{ messages_json|safe }};
+const formatMessage = (template, values = {}) => {
+    const source = String(template || '');
+    return source.replace(/\{(\w+)\}/g, (match, key) => (
+        Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match
+    ));
+};
+let DEFAULT_VARS = {{ default_vars_json|safe }};
+const MAX_PARSED_VARS = {{ max_vars }};
+const MAX_PARSED_VARIABLES_DEFAULT = {{ max_parsed_variables }};  // Maximum allowed variables
+let MAX_PARSED_VARIABLES = MAX_PARSED_VARIABLES_DEFAULT;
+const currentUserId = {{ user_id|default:"null" }};
+const storageKeySuffix = currentUserId ? `_u${currentUserId}` : '';
+const USER_SETTINGS_STORAGE_KEY = `omp_user_settings${storageKeySuffix}`;
+
+// Load user's chunk size setting
+let CHUNK_SIZE_USER = {{ chunk_size }};
+try {
+    const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+    if (stored) {
+        const userSettings = JSON.parse(stored);
+        if (userSettings.jobBatchSize) {
+            CHUNK_SIZE_USER = userSettings.jobBatchSize;
+        }
+    }
+} catch (e) {}
+
+const VARS_LIMIT_EXCEEDED = {{ vars_limit_exceeded|lower }};  // Boolean flag
+const MAX_VARS_UNCAPPED = {{ max_vars_uncapped }};  // Actual max before capping
+const variableSetInput = document.getElementById('variable_set_input');
+const variableSetSelect = document.getElementById('variable_set_select');
+const variableSetDropdown = document.getElementById('variable_set_dropdown');
+const variableSetWrapper = document.getElementById('variable_set_wrapper');
+const varNameInputs = document.getElementById('var_name_inputs');
+const addVarRowBtn = document.getElementById('add_var_row_btn');
+const previewTable = document.getElementById('preview_table');
+const previewTableBody = document.getElementById('preview_table_body');
+let availableVariableSets = [];
+let currentJobId = null;
+let totalImages = 0;
+let pollInterval = null;
+let activeVariableSetIndex = -1;
+let variableSetFilterTimeout = null;
+const previewSortState = { key: null, direction: 'asc', userSet: false };
+
+function loadUserSettings() {
+    try {
+        const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+        if (!stored) return null;
+        return JSON.parse(stored);
+    } catch (error) {
+        return null;
+    }
+}
+
+const storedUserSettings = loadUserSettings();
+if (storedUserSettings) {
+    if (Array.isArray(storedUserSettings.defaultVariableNames)) {
+        DEFAULT_VARS = storedUserSettings.defaultVariableNames;
+    }
+    if (Number.isInteger(storedUserSettings.maxParsedVariables)) {
+        const nextMax = Math.max(
+            MAX_PARSED_VARS,
+            Math.min(storedUserSettings.maxParsedVariables, MAX_PARSED_VARIABLES_DEFAULT),
+        );
+        MAX_PARSED_VARIABLES = nextMax;
+    }
+}
+
+function setPreviewSortIndicator(key, direction) {
+    if (!previewTable) return;
+    const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
+    headers.forEach((header) => {
+        const isActive = header.dataset.sortKey === key;
+        header.classList.toggle('is-sorted', isActive);
+        header.classList.toggle('sort-asc', isActive && direction === 'asc');
+        header.classList.toggle('sort-desc', isActive && direction === 'desc');
+        if (isActive) {
+            header.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+        } else {
+            header.removeAttribute('aria-sort');
+        }
+    });
+}
+
+function getPreviewRowValue(row, key) {
+    const cells = row?.cells;
+    if (!cells) return '';
+    if (key === 'dataset') return cells[1]?.textContent?.trim() || '';
+    if (key === 'id') return Number.parseInt(cells[2]?.textContent || '0', 10);
+    if (key === 'filename') return cells[3]?.textContent?.trim() || '';
+    return '';
+}
+
+function comparePreviewValues(a, b, type) {
+    if (type === 'number') {
+        const numA = Number.isFinite(a) ? a : Number.NaN;
+        const numB = Number.isFinite(b) ? b : Number.NaN;
+        if (Number.isNaN(numA) && Number.isNaN(numB)) return 0;
+        if (Number.isNaN(numA)) return 1;
+        if (Number.isNaN(numB)) return -1;
+        return numA - numB;
+    }
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function sortPreviewRows(key, direction) {
+    if (!previewTableBody) return;
+    const header = previewTable.querySelector(`.sortable-header[data-sort-key="${key}"]`);
+    const type = header?.dataset.sortType || 'text';
+    const rows = Array.from(previewTableBody.querySelectorAll('tr'));
+    const sorted = rows
+        .map((row, index) => ({
+            row,
+            index,
+            value: getPreviewRowValue(row, key)
+        }))
+        .sort((a, b) => {
+            const cmp = comparePreviewValues(a.value, b.value, type);
+            if (cmp !== 0) return direction === 'asc' ? cmp : -cmp;
+            return a.index - b.index;
+        })
+        .map((entry) => entry.row);
+    sorted.forEach((row) => previewTableBody.appendChild(row));
+}
+
+function applyPreviewSort(key) {
+    if (!previewTableBody) return;
+    const nextDirection = previewSortState.key === key && previewSortState.direction === 'asc' ? 'desc' : 'asc';
+    previewSortState.key = key;
+    previewSortState.direction = nextDirection;
+    previewSortState.userSet = true;
+    sortPreviewRows(key, nextDirection);
+    setPreviewSortIndicator(previewSortState.key, previewSortState.direction);
+    updateImageSelectAllState();
+}
+
+function initPreviewSorting() {
+    if (!previewTable) return;
+    const headers = previewTable.querySelectorAll('.sortable-header[data-sort-key]');
+    headers.forEach((header) => {
+        header.setAttribute('role', 'button');
+        header.setAttribute('tabindex', '0');
+        header.addEventListener('click', () => applyPreviewSort(header.dataset.sortKey));
+        header.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                applyPreviewSort(header.dataset.sortKey);
+            }
+        });
+    });
+    setPreviewSortIndicator(null, 'asc');
+}
+
+// Edit mode and drag-and-drop state
+let isEditMode = false;
+let draggedElement = null;
+let draggedIndex = null;
+
+// Show warning if variable limit was exceeded
+if (VARS_LIMIT_EXCEEDED) {
+    showNonBlockingModal(formatMessage(messages.variableParsingCapped, {
+        maxParsedVariables: MAX_PARSED_VARIABLES,
+        maxVarsUncapped: MAX_VARS_UNCAPPED
+    }));
+}
+
+// ============================================================================
+// EDIT MODE & DRAG-AND-DROP FUNCTIONALITY
+// ============================================================================
+
+function toggleEditMode() {
+    isEditMode = !isEditMode;
+    
+    const editBtn = document.getElementById('edit_rows_btn');
+    const finishBtn = document.getElementById('finish_edit_btn');
+    const addBtn = document.getElementById('add_var_row_btn');
+    const varRowActions = document.querySelector('.var-row-actions');
+    const rows = varNameInputs ? Array.from(varNameInputs.querySelectorAll('.var-row')) : [];
+    
+    if (isEditMode) {
+        // Enter edit mode
+        editBtn.style.display = 'none';
+        finishBtn.style.display = 'inline-flex';
+        varRowActions.style.display = 'flex';
+        
+        // Show +/- buttons and enable dragging
+        rows.forEach(row => {
+            row.setAttribute('draggable', 'true');
+            const removeBtn = row.querySelector('.var-row-remove');
+            if (removeBtn) {
+                removeBtn.style.display = 'block';
+            }
+        });
+        
+        // Setup drag and drop
+        setupDragAndDrop();
+        
+    } else {
+        // Exit edit mode
+        editBtn.style.display = 'inline-flex';
+        finishBtn.style.display = 'none';
+        varRowActions.style.display = 'none';
+        
+        // Hide +/- buttons and disable dragging
+        rows.forEach(row => {
+            row.setAttribute('draggable', 'false');
+            row.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+            const removeBtn = row.querySelector('.var-row-remove');
+            if (removeBtn) {
+                removeBtn.style.display = 'none';
+            }
+        });
+        
+        // Clean up drag listeners
+        cleanupDragAndDrop();
+    }
+    
+    updateVarRowControls();
+}
+
+function setupDragAndDrop() {
+    if (!varNameInputs) return;
+    
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    
+    rows.forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragend', handleDragEnd);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+    });
+}
+
+function cleanupDragAndDrop() {
+    if (!varNameInputs) return;
+    
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    
+    rows.forEach(row => {
+        row.removeEventListener('dragstart', handleDragStart);
+        row.removeEventListener('dragend', handleDragEnd);
+        row.removeEventListener('dragover', handleDragOver);
+        row.removeEventListener('dragenter', handleDragEnter);
+        row.removeEventListener('dragleave', handleDragLeave);
+        row.removeEventListener('drop', handleDrop);
+    });
+}
+
+function handleDragStart(e) {
+    draggedElement = this;
+    const rows = Array.from(varNameInputs.children);
+    draggedIndex = rows.indexOf(this);
+    
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    
+    // Remove all drag-over classes
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
+    draggedElement = null;
+    draggedIndex = null;
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    
+    // Center-based drop indicator positioning
+    if (this === draggedElement) return false;
+    
+    // Get the bounding rectangles
+    const draggedRect = draggedElement.getBoundingClientRect();
+    const targetRect = this.getBoundingClientRect();
+    
+    // Calculate center of dragged element
+    const draggedCenter = draggedRect.top + (draggedRect.height / 2);
+    
+    // Calculate position relative to target row
+    const targetTop = targetRect.top;
+    const targetHeight = targetRect.height;
+    const relativePosition = (draggedCenter - targetTop) / targetHeight;
+    
+    // Remove all indicators first
+    const rows = Array.from(varNameInputs.children);
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
+    // 45/55 threshold - small deadzone for easier dropping
+    // If dragged center is in top 45% of target → drop above
+    // If dragged center is in bottom 45% of target → drop below
+    // Middle 10% is deadzone (prevents flickering at exact center)
+    
+    if (relativePosition < 0.45) {
+        // Drop above this row
+        this.classList.add('drag-over-top');
+    } else if (relativePosition > 0.55) {
+        // Drop below this row
+        this.classList.add('drag-over-bottom');
+    }
+    // else: in deadzone, don't show indicator (smoother transition)
+    
+    return false;
+}
+
+function handleDragEnter(e) {
+    // Most logic moved to handleDragOver for smoother center-based positioning
+    if (this === draggedElement) return;
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    if (draggedElement !== this) {
+        // Check which indicator was showing (top or bottom)
+        const dropAbove = this.classList.contains('drag-over-top');
+        const dropBelow = this.classList.contains('drag-over-bottom');
+        
+        // Insert based on indicator position
+        if (dropAbove) {
+            // Drop above this row
+            this.parentNode.insertBefore(draggedElement, this);
+        } else if (dropBelow) {
+            // Drop below this row
+            this.parentNode.insertBefore(draggedElement, this.nextSibling);
+        }
+        // If no indicator (deadzone), don't move
+        
+        // Refresh indices after reordering
+        refreshVarRowIndices();
+    }
+    
+    // Clean up all indicators
+    const rows = Array.from(varNameInputs.children);
+    rows.forEach(row => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    
+    return false;
+}
+
+function goBack() {
+    window.location.href = BASE_URL + "/";
+}
+
+function scrollToBottom() {
+    const target = document.documentElement.scrollHeight;
+    window.scrollTo({ top: target, behavior: "smooth" });
+}
+
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function setVarSetControlsDisabled(disabled) {
+    const select = document.getElementById('variable_set_select');
+    const input = document.getElementById('variable_set_input');
+    const saveBtn = document.getElementById('save_variable_set_btn');
+    const loadBtn = document.getElementById('load_variable_set_btn');
+    const nameInput = document.getElementById('variable_set_name');
+    const block = document.getElementById('variable-set-block');
+    const deleteBtn = document.getElementById('delete_variable_set_btn');
+    [select, input, saveBtn, loadBtn, deleteBtn, nameInput].forEach(el => {
+        if (el) {
+            el.disabled = !!disabled;
+        }
+    });
+    if (block) {
+        if (disabled) {
+            block.classList.add('ui-faded');
+        } else {
+            block.classList.remove('ui-faded');
+        }
+    }
+}
+
+function toggleVarNameInputs() {
+    // Check if in edit mode
+    if (isEditMode) {
+        showNonBlockingModal(messages.exitEditModeFirst);
+        // Prevent checkbox from changing
+        event.preventDefault();
+        document.getElementById('use_defaults').checked = !document.getElementById('use_defaults').checked;
+        return;
+    }
+    
+    let useDefaults = document.getElementById('use_defaults').checked;
+    let count = getVarRowCount();
+    for (let i = 1; i <= count; i++) {
+        let inp = document.getElementById('var_name_' + i);
+        if (!inp) {
+            continue;
+        }
+        if (useDefaults) {
+            inp.value = DEFAULT_VARS[i - 1] || messages.defaultVarName;
+            inp.disabled = true;
+        } else {
+            inp.disabled = false;
+        }
+    }
+    setVarSetControlsDisabled(useDefaults);
+    updateVarRowControls();
+}
+
+function getVarRowCount() {
+    return varNameInputs ? varNameInputs.querySelectorAll('.var-row').length : 0;
+}
+
+function updateVarRowControls() {
+    if (!varNameInputs) return;
+    const useDefaults = document.getElementById('use_defaults').checked;
+    const editBtn = document.getElementById('edit_rows_btn');
+    const removeButtons = Array.from(varNameInputs.querySelectorAll('.var-row-remove'));
+    const rowCount = getVarRowCount();
+    
+    // Show/hide edit button based on defaults checkbox
+    if (editBtn) {
+        editBtn.style.display = useDefaults ? 'none' : 'inline-flex';
+    }
+    
+    // Update remove buttons (only if in edit mode)
+    if (isEditMode) {
+        removeButtons.forEach(btn => {
+            btn.disabled = rowCount <= 1;
+        });
+    }
+    
+    // Disable and fade out add button if at limit (only if in edit mode)
+    if (addVarRowBtn && isEditMode) {
+        const atLimit = rowCount >= MAX_PARSED_VARIABLES;
+        addVarRowBtn.disabled = atLimit;
+        
+        // Fade out when at limit
+        if (atLimit) {
+            addVarRowBtn.style.opacity = '0.3';
+            addVarRowBtn.style.cursor = 'not-allowed';
+        } else {
+            addVarRowBtn.style.opacity = '1';
+            addVarRowBtn.style.cursor = 'pointer';
+        }
+    }
+}
+
+function refreshVarRowIndices() {
+    if (!varNameInputs) return;
+    const rows = Array.from(varNameInputs.querySelectorAll('.var-row'));
+    rows.forEach((row, index) => {
+        const number = index + 1;
+        const indexLabel = row.querySelector('.var-index');
+        const input = row.querySelector('.var-input');
+        if (indexLabel) {
+            indexLabel.textContent = number + ':';
+        }
+        if (input) {
+            input.id = 'var_name_' + number;
+        }
+    });
+    const container = document.getElementById('var-config');
+    if (container) {
+        container.setAttribute('data-var-count', rows.length);
+    }
+    updateVarRowControls();
+}
+
+function createVarRow(index, presetValue = '') {
+    const row = document.createElement('div');
+    row.className = 'var-row';
+    row.setAttribute('draggable', 'false');
+    
+    // Drag handle
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'var-drag-handle';
+    dragHandle.textContent = '⋮⋮';
+    dragHandle.title = 'Drag to reorder';
+
+    const indexLabel = document.createElement('div');
+    indexLabel.className = 'var-index';
+    indexLabel.textContent = index + ':';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'var_name_' + index;
+    input.className = 'var-input';
+    input.value = presetValue;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'var-row-btn var-row-remove';
+    removeBtn.dataset.action = 'remove-var';
+    removeBtn.setAttribute('aria-label', 'Remove variable');
+    removeBtn.textContent = '−';
+    removeBtn.style.display = 'none'; // Hidden by default
+
+    row.appendChild(dragHandle);
+    row.appendChild(indexLabel);
+    row.appendChild(input);
+    row.appendChild(removeBtn);
+    return row;
+}
+
+function addVariableRow() {
+    if (!varNameInputs) return;
+    
+    // Check if at limit
+    const currentCount = getVarRowCount();
+    if (currentCount >= MAX_PARSED_VARIABLES) {
+        showNonBlockingModal(formatMessage(messages.maxVariablesReached, {
+            maxParsedVariables: MAX_PARSED_VARIABLES
+        }));
+        return;
+    }
+    
+    const nextIndex = currentCount + 1;
+    const useDefaults = document.getElementById('use_defaults').checked;
+    const defaultValue = useDefaults
+        ? (DEFAULT_VARS[nextIndex - 1] || messages.defaultVarName)
+        : messages.defaultVarName;
+    const row = createVarRow(nextIndex, defaultValue);
+    const input = row.querySelector('.var-input');
+    if (input) {
+        input.disabled = useDefaults;
+    }
+    
+    // If in edit mode, enable dragging for new row
+    if (isEditMode) {
+        row.setAttribute('draggable', 'true');
+        const removeBtn = row.querySelector('.var-row-remove');
+        if (removeBtn) {
+            removeBtn.style.display = 'block';
+        }
+        
+        // Setup drag listeners for new row
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragend', handleDragEnd);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+    }
+    
+    varNameInputs.appendChild(row);
+    refreshVarRowIndices();
+    updateVarRowControls();
+}
+
+function ensureVarRows(count) {
+    if (!varNameInputs) return;
+    
+    // Cap at MAX_PARSED_VARIABLES
+    const targetCount = Math.min(count, MAX_PARSED_VARIABLES);
+    
+    const current = getVarRowCount();
+    if (targetCount <= current) {
+        return;
+    }
+    for (let i = current + 1; i <= targetCount; i++) {
+        const row = createVarRow(i, '');
+        varNameInputs.appendChild(row);
+    }
+    refreshVarRowIndices();
+    updateVarRowControls();  // Update button states after ensuring rows
+}
+
+if (addVarRowBtn) {
+    addVarRowBtn.addEventListener('click', () => {
+        if (addVarRowBtn.disabled || document.getElementById('use_defaults').checked) {
+            return;
+        }
+        addVariableRow();
+    });
+}
+
+if (varNameInputs) {
+    varNameInputs.addEventListener('click', (event) => {
+        const button = event.target.closest('.var-row-remove');
+        if (!button) return;
+        if (button.disabled || document.getElementById('use_defaults').checked) {
+            return;
+        }
+        const row = button.closest('.var-row');
+        if (!row) return;
+        if (getVarRowCount() <= 1) {
+            updateVarRowControls();
+            return;
+        }
+        row.remove();
+        refreshVarRowIndices();
+        updateVarRowControls();  // Update button states after removal
+    });
+}
+
+function populateVariableSetDropdown(sets) {
+    availableVariableSets = sets || [];
+
+    if (!variableSetInput || !variableSetDropdown || !variableSetSelect) {
+        return;
+    }
+
+    const currentValue = variableSetSelect.value;
+    const currentName = variableSetInput.dataset.selectedName || currentValue;
+
+    if (availableVariableSets.length && currentName && availableVariableSets.includes(currentName)) {
+        variableSetSelect.value = currentName;
+        variableSetInput.value = currentName;
+        variableSetInput.dataset.selectedName = currentName;
+    } else {
+        variableSetSelect.value = "";
+        variableSetInput.value = "";
+        variableSetInput.dataset.selectedName = "";
+    }
+
+    renderVariableSetOptions(variableSetInput.value || "");
+}
+
+function getVariableSetOptions() {
+    return variableSetDropdown
+        ? Array.from(variableSetDropdown.querySelectorAll('.varset-option'))
+        : [];
+}
+
+function setActiveVariableSetIndex(index, useKeyboard = false) {
+    const options = getVariableSetOptions();
+    if (options.length === 0) {
+        activeVariableSetIndex = -1;
+        return;
+    }
+    if (variableSetDropdown) {
+        if (useKeyboard) {
+            variableSetDropdown.classList.add('keyboard-active');
+        } else {
+            variableSetDropdown.classList.remove('keyboard-active');
+        }
+    }
+    const clamped = Math.max(0, Math.min(index, options.length - 1));
+    options.forEach((option, idx) => {
+        if (idx === clamped) {
+            option.classList.add('is-active');
+            option.scrollIntoView({ block: 'nearest' });
+        } else {
+            option.classList.remove('is-active');
+        }
+    });
+    activeVariableSetIndex = clamped;
+}
+
+function selectVariableSetOption(option) {
+    if (!option || !variableSetInput || !variableSetSelect) return;
+    const name = option.dataset.setName || option.textContent || '';
+    variableSetSelect.value = name;
+    variableSetInput.value = name;
+    variableSetInput.dataset.selectedName = name;
+    closeVariableSetDropdown(true);
+}
+
+function renderVariableSetOptions(query) {
+    if (!variableSetDropdown) return;
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = availableVariableSets.filter((name) => {
+        if (!normalizedQuery) return true;
+        return String(name || '').toLowerCase().includes(normalizedQuery);
+    });
+
+    variableSetDropdown.innerHTML = "";
+
+    if (availableVariableSets.length === 0) {
+        const emptyRow = document.createElement('div');
+        emptyRow.style.padding = '8px 12px';
+        emptyRow.style.color = '#6b7280';
+        emptyRow.textContent = 'No saved sets.';
+        variableSetDropdown.appendChild(emptyRow);
+        activeVariableSetIndex = -1;
+        return;
+    }
+
+    if (matches.length === 0) {
+        const emptyRow = document.createElement('div');
+        emptyRow.style.padding = '8px 12px';
+        emptyRow.style.color = '#6b7280';
+        emptyRow.textContent = 'No matching sets.';
+        variableSetDropdown.appendChild(emptyRow);
+        activeVariableSetIndex = -1;
+        return;
+    }
+
+    matches.forEach((name) => {
+        const option = document.createElement('div');
+        option.className = 'varset-option';
+        option.dataset.setName = name;
+        option.style.padding = '8px 12px';
+        option.style.cursor = 'pointer';
+        option.style.whiteSpace = 'nowrap';
+        option.textContent = name;
+        variableSetDropdown.appendChild(option);
+    });
+    setActiveVariableSetIndex(0);
+}
+
+function openVariableSetDropdown() {
+    if (!variableSetDropdown || !variableSetInput) return;
+    variableSetDropdown.style.display = 'block';
+    variableSetDropdown.classList.remove('keyboard-active');
+    variableSetInput.dataset.previousValue = variableSetInput.value;
+    variableSetInput.placeholder = 'Search...';
+    renderVariableSetOptions(variableSetInput.value || "");
+}
+
+function closeVariableSetDropdown(restoreSelection = true) {
+    if (!variableSetDropdown || !variableSetInput) return;
+    variableSetDropdown.style.display = 'none';
+    variableSetDropdown.classList.remove('keyboard-active');
+    if (restoreSelection && !variableSetInput.value) {
+        const selectedName = variableSetInput.dataset.selectedName || '';
+        variableSetInput.value = selectedName;
+    }
+    variableSetInput.placeholder = 'Select a saved set…';
+}
+
+function filterVariableSetOptions(query) {
+    if (variableSetFilterTimeout) {
+        window.clearTimeout(variableSetFilterTimeout);
+    }
+    variableSetFilterTimeout = window.setTimeout(() => {
+        renderVariableSetOptions(query);
+    }, 120);
+}
+
+if (variableSetInput) {
+    variableSetInput.addEventListener('focus', () => {
+        openVariableSetDropdown();
+    });
+
+    variableSetInput.addEventListener('click', () => {
+        if (variableSetDropdown?.style.display !== 'block') {
+            openVariableSetDropdown();
+        }
+    });
+
+    variableSetInput.addEventListener('input', (event) => {
+        filterVariableSetOptions(event.target.value);
+    });
+
+    variableSetInput.addEventListener('keydown', (event) => {
+        if (variableSetDropdown?.style.display !== 'block') return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const options = getVariableSetOptions();
+            if (options.length === 0) return;
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            const nextIndex = activeVariableSetIndex === -1 ? 0 : activeVariableSetIndex + delta;
+            setActiveVariableSetIndex(nextIndex, true);
+        } else if (event.key === 'Enter') {
+            const options = getVariableSetOptions();
+            if (options.length === 0 || activeVariableSetIndex === -1) return;
+            event.preventDefault();
+            selectVariableSetOption(options[activeVariableSetIndex]);
+        }
+    });
+}
+
+if (variableSetDropdown) {
+    variableSetDropdown.addEventListener('click', (event) => {
+        const option = event.target.closest('.varset-option');
+        if (!option) return;
+        selectVariableSetOption(option);
+    });
+
+    variableSetDropdown.addEventListener('mousemove', (event) => {
+        const option = event.target.closest('.varset-option');
+        if (!option) return;
+        const options = getVariableSetOptions();
+        const index = options.indexOf(option);
+        if (index !== -1) {
+            setActiveVariableSetIndex(index, false);
+        }
+    });
+}
+
+if (variableSetWrapper) {
+    document.addEventListener('click', (event) => {
+        if (!variableSetWrapper.contains(event.target)) {
+            closeVariableSetDropdown(true);
+        }
+    });
+}
+
+function fetchVariableSets() {
+    fetch(BASE_URL + "/varsets/", {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        credentials: "same-origin",
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            console.warn(messages.unableLoadVariableSets, data.error);
+            populateVariableSetDropdown([]);
+            return;
+        }
+
+        populateVariableSetDropdown(data.sets || []);
+    })
+    .catch(err => {
+        console.warn(messages.errorLoadingVariableSets, err);
+        populateVariableSetDropdown([]);
+    });
+}
+
+function saveVariableSet() {
+    const useDefaults = document.getElementById('use_defaults').checked;
+    if (useDefaults) return;
+
+    const nameInput = document.getElementById('variable_set_name');
+    const setName = (nameInput.value || "").trim();
+    const count = getVarRowCount();
+
+    let varNames = [];
+    for (let i = 1; i <= count; i++) {
+        const inp = document.getElementById('var_name_' + i);
+        const rawValue = inp ? inp.value : "";
+        const trimmed = rawValue.trim();
+        if (rawValue !== "" && trimmed === "") {
+            showNonBlockingModal(messages.variableNamesSpaces);
+            return;
+        }
+        varNames.push(trimmed);
+    }
+
+    const hasEmpty = varNames.some(v => v === "");
+    if (hasEmpty) {
+        showNonBlockingModal(messages.variableNamesEmpty);
+        return;
+    }
+
+    if (!setName) {
+        showNonBlockingModal(messages.variableSetNameRequired);
+        return;
+    }
+
+    // Get user's max_sets setting
+    let maxSets = {{ max_variable_sets }};
+    try {
+        const stored = window.localStorage?.getItem(USER_SETTINGS_STORAGE_KEY);
+        if (stored) {
+            const userSettings = JSON.parse(stored);
+            if (userSettings.maxVariableSets) {
+                maxSets = userSettings.maxVariableSets;
+            }
+        }
+    } catch (e) {}
+    
+    fetch(BASE_URL + "/varsets/save/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ 
+            set_name: setName, 
+            var_names: varNames,
+            max_sets: maxSets
+        })
+    })
+
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            return;
+        }
+        fetchVariableSets();
+        showNonBlockingModal(formatMessage(messages.variableSetSaved, { setName }));
+        nameInput.value = "";
+    })
+    .catch(err => {
+        showNonBlockingModal(formatMessage(messages.variableSetSaveError, { error: err }));
+    });
+}
+
+function showNonBlockingModal(message) {
+    const overlay = document.getElementById("nb-modal-overlay");
+    const msg = document.getElementById("nb-modal-message");
+    const okBtn = document.getElementById("nb-modal-ok");
+
+    if (!overlay || !msg) {
+        return;
+    }
+
+    msg.textContent = message;
+    overlay.style.display = "flex";
+    if (okBtn) {
+        window.requestAnimationFrame(() => {
+            okBtn.focus();
+        });
+    }
+}
+
+function hideNonBlockingModal() {
+    const overlay = document.getElementById("nb-modal-overlay");
+    if (overlay) {
+        overlay.style.display = "none";
+    }
+}
+
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    const overlay = document.getElementById("nb-modal-overlay");
+    if (overlay?.style.display === 'flex') {
+        event.preventDefault();
+        hideNonBlockingModal();
+    }
+});
+
+function getSelectedImageIds() {
+    const checked = document.querySelectorAll('input[type="checkbox"][data-image-id]:checked');
+    return Array.from(checked)
+        .map((input) => parseInt(input.dataset.imageId, 10))
+        .filter((val) => Number.isFinite(val));
+}
+
+function updateImageSelectAllState() {
+    const selectAll = document.getElementById('images_select_all');
+    if (!selectAll) {
+        return;
+    }
+    const allBoxes = document.querySelectorAll('input[type="checkbox"][data-image-id]');
+    const checked = document.querySelectorAll('input[type="checkbox"][data-image-id]:checked');
+    selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+}
+
+function initImageSelectionControls() {
+    const selectAll = document.getElementById('images_select_all');
+    const imageBoxes = document.querySelectorAll('input[type="checkbox"][data-image-id]');
+
+    imageBoxes.forEach((input) => {
+        input.addEventListener('change', updateImageSelectAllState);
+    });
+
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            const checked = selectAll.checked;
+            imageBoxes.forEach((input) => {
+                input.checked = checked;
+            });
+            updateImageSelectAllState();
+        });
+    }
+
+    updateImageSelectAllState();
+}
+
+function loadVariableSet() {
+    const useDefaults = document.getElementById('use_defaults').checked;
+    if (useDefaults) return;
+
+    if (!availableVariableSets.length) {
+        showNonBlockingModal(messages.variableSetEmptyDb);
+        return;
+    }
+
+    const selected = variableSetSelect
+        ? (variableSetSelect.value || "").trim()
+        : (variableSetInput ? (variableSetInput.value || "").trim() : "");
+
+    if (!selected) {
+        showNonBlockingModal(messages.variableSetSelectRequired);
+        return;
+    }
+
+    fetch(BASE_URL + "/varsets/load/?set_name=" + encodeURIComponent(selected), {
+        method: "GET",
+        headers: { "Accept": "application/json" },
+        credentials: "same-origin",
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            return;
+        }
+
+        const container = document.getElementById('var-config');
+        const saved = data.var_names || [];
+        ensureVarRows(saved.length);
+        const count = getVarRowCount();
+
+        for (let i = 1; i <= count; i++) {
+            const val = saved[i - 1];
+            const inp = document.getElementById('var_name_' + i);
+            if (inp && val && String(val).trim() !== "") {
+                inp.value = val;
+            }
+        }
+
+        showNonBlockingModal(formatMessage(messages.variableSetLoaded, { setName: selected }));
+    })
+    .catch(err => {
+        showNonBlockingModal(formatMessage(messages.variableSetLoadError, { error: err }));
+    });
+}
+
+// -------------------------
+// DELETE VARIABLE SET FROM DATABASE
+// -------------------------
+function deleteVariableSet() {
+    const useDefaults = document.getElementById('use_defaults').checked;
+    if (useDefaults) {
+        return;
+    }
+
+    const selected = variableSetSelect
+        ? (variableSetSelect.value || "").trim()
+        : (variableSetInput ? (variableSetInput.value || "").trim() : "");
+
+    if (!selected) {
+        showNonBlockingModal(messages.variableSetSelectRequired);
+        return;
+    }
+
+    if (!window.confirm(
+        messages.confirmIrreversible
+    )) {
+        return;
+    }
+
+    fetch(BASE_URL + "/varsets/delete/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+            set_name: selected
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            return;
+        }
+
+        fetchVariableSets();
+
+        showNonBlockingModal(formatMessage(messages.variableSetDeleted, { setName: selected }));
+
+    })
+    .catch(err => {
+        showNonBlockingModal(formatMessage(messages.variableSetDeleteError, { error: err }));
+    });
+}
+
+toggleVarNameInputs();
+fetchVariableSets();
+initImageSelectionControls();
+initPreviewSorting();
+
+const JOB_START_MIN_MS = 2000;
+
+function startPollingAfterMinimumDelay(jobStartMessage) {
+    const progressText = document.getElementById("progress-text");
+    progressText.innerText = jobStartMessage;
+
+    setTimeout(() => {
+        pollInterval = setInterval(pollProgress, 500);
+    }, JOB_START_MIN_MS);
+}
+
+function startDeleteJob(endpoint, passwordPrompt, progressMessage, jobStartLabel) {
+    if (currentJobId) {
+        showNonBlockingModal(messages.jobAlreadyRunning);
+        return;
+    }
+
+    const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal(messages.selectImageRequired);
+        return;
+    }
+
+    const pwd = window.prompt(passwordPrompt);
+    if (pwd === null) return;
+    if (!pwd.trim()) {
+        showNonBlockingModal(messages.passwordEmpty);
+        return;
+    }
+
+    if (!window.confirm(messages.confirmIrreversible)) return;
+
+    const progressSection = document.getElementById("progress-section");
+    const progressText = document.getElementById("progress-text");
+    const progressBar = document.getElementById("progress-bar");
+    const progressLog = document.getElementById("progress-log");
+
+    progressSection.style.display = "block";
+    progressBar.style.width = "0%";
+    progressBar.innerText = "0%";
+    progressText.innerText = progressMessage;
+    progressLog.textContent = "";
+
+    fetch(BASE_URL + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+            project_id: projectId,
+            image_ids: selectedImageIds,
+            password: pwd,
+            chunk_size: CHUNK_SIZE_USER
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            progressSection.style.display = "none";
+            return;
+        }
+
+        currentJobId = data.job_id;
+        totalImages = data.total;
+
+        startPollingAfterMinimumDelay(
+            formatMessage(messages.jobStartedForImages, {
+                jobLabel: jobStartLabel,
+                totalImages
+            })
+        );
+    })
+    .catch(err => {
+        showNonBlockingModal(formatMessage(messages.errorWithDetails, { error: err }));
+    });
+}
+
+// -------------------------
+// DELETE ALL KEY-VALUE PAIRS
+// -------------------------
+function deleteAllKeyvaluepairs() {
+    startDeleteJob(
+        "/start_delete_all_job/",
+        messages.deleteAllPasswordPrompt,
+        messages.deleteAllProgress,
+        messages.deleteAllJobLabel
+    );
+}
+
+
+// -------------------------
+// DELETE ONLY PLUGIN KEY-VALUE PAIRS
+// -------------------------
+function deletePluginKeyvaluepairs() {
+    startDeleteJob(
+        "/start_delete_plugin_job/",
+        messages.deletePluginPasswordPrompt,
+        messages.deletePluginProgress,
+        messages.deletePluginJobLabel
+    );
+}
+// -------------------------
+// START SAVE JOB (FIXED)
+// -------------------------
+function startSaveJob() {
+    if (currentJobId) {
+        showNonBlockingModal(messages.jobAlreadyRunning);
+        return;
+    }
+
+    const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal(messages.selectImageRequired);
+        return;
+    }
+    const separator = document.getElementById('separator').value;
+    const separatorMode = document.getElementById('separator_mode').value;
+
+    const count = getVarRowCount();
+    const useDefaults = document.getElementById('use_defaults').checked;
+
+    if (count < MAX_PARSED_VARS) {
+        showNonBlockingModal(formatMessage(messages.minVariablesRequired, {
+            count: MAX_PARSED_VARS
+        }));
+        return;
+    }
+
+    let varNames = [];
+    for (let i = 1; i <= count; i++) {
+        const inp = document.getElementById('var_name_' + i);
+        const rawValue = inp ? inp.value : "";
+        const trimmed = rawValue.trim();
+        if (i <= MAX_PARSED_VARS && rawValue !== "" && trimmed === "") {
+            showNonBlockingModal(formatMessage(messages.variableNamesSpacesFirst, {
+                count: MAX_PARSED_VARS
+            }));
+            return;
+        }
+        if (i <= MAX_PARSED_VARS && rawValue === "") {
+            showNonBlockingModal(formatMessage(messages.variableNamesEmptyFirst, {
+                count: MAX_PARSED_VARS
+            }));
+            return;
+        }
+        varNames.push(trimmed);
+    }
+
+    // FIX: delete_mode *not* "keep", prevents double saves
+    let payload = {
+        project_id: projectId,
+        separator: separator,
+        separator_mode: separatorMode,
+        var_names: varNames,
+        delete_mode: "all",
+        image_ids: selectedImageIds,
+        chunk_size: CHUNK_SIZE_USER
+    };
+
+    document.getElementById("progress-section").style.display = "block";
+    document.getElementById("progress-text").innerText =
+        messages.progressStartSaveJob;
+    document.getElementById("progress-bar").style.width = "0%";
+    document.getElementById("progress-bar").innerText = "0%";
+    document.getElementById("progress-log").textContent = "";
+
+    fetch(BASE_URL + "/start_job/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
+            return;
+        }
+
+        currentJobId = data.job_id;
+        totalImages = data.total;
+
+        startPollingAfterMinimumDelay(
+            formatMessage(messages.jobStartedSave, { totalImages })
+        );
+    });
+}
+
+// -------------------------
+// START ACQUISITION JOB
+// -------------------------
+function startAcquisitionMetadataJob() {
+    if (currentJobId) {
+        showNonBlockingModal(messages.jobAlreadyRunning);
+        return;
+    }
+
+    const projectId = document.getElementById('project_id').value;
+    const selectedImageIds = getSelectedImageIds();
+    if (!selectedImageIds.length) {
+        showNonBlockingModal(messages.selectImageRequired);
+        return;
+    }
+
+    let payload = {
+        project_id: projectId,
+        image_ids: selectedImageIds,
+        chunk_size: CHUNK_SIZE_USER,
+    };
+
+    document.getElementById("progress-section").style.display = "block";
+    document.getElementById("progress-text").innerText =
+        messages.progressStartAcqJob;
+    document.getElementById("progress-bar").style.width = "0%";
+    document.getElementById("progress-bar").innerText = "0%";
+    document.getElementById("progress-log").textContent = "";
+
+    fetch(BASE_URL + "/start_acq_job/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
+            return;
+        }
+
+        currentJobId = data.job_id;
+        totalImages = data.total;
+
+        startPollingAfterMinimumDelay(
+            formatMessage(messages.jobStartedAcq, { totalImages })
+        );
+    });
+}
+
+function pollProgress() {
+    if (!currentJobId) return;
+
+    fetch(BASE_URL + "/progress/" + currentJobId + "/", {
+        method: "GET",
+        headers: { "Accept": "application/json" }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            currentJobId = null;
+            showNonBlockingModal(data.error);
+            document.getElementById("progress-section").style.display = "none";
+            return;
+        }
+
+        let done = data.done;
+        let total = data.total;
+        let percent = data.percent;
+
+        let bar = document.getElementById("progress-bar");
+        bar.style.width = percent.toFixed(1) + "%";
+        bar.innerText = percent.toFixed(1) + "%";
+
+        document.getElementById("progress-text").innerText =
+            formatMessage(messages.progressProcessed, { done, total });
+
+        if (data.last_log) {
+            let logEl = document.getElementById("progress-log");
+            logEl.textContent += data.last_log + "\n";
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        if (data.finished) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            currentJobId = null;
+            document.getElementById("progress-text").innerText =
+                formatMessage(messages.progressCompleted, { done });
+        }
+    });
+}
+</script>
+</div>
+</body>
+</html>
