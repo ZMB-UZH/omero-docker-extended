@@ -849,6 +849,12 @@ body {
 }
 
 
+.storage-quota-actions[hidden],
+.storage-quota-logs[hidden],
+#quota_compatibility_notice[hidden] {
+    display: none !important;
+}
+
 .storage-quota-actions {
     display: inline-flex;
     gap: 8px;
