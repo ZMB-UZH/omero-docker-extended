@@ -310,4 +310,4 @@ See [LICENSE](LICENSE) for details.
 
 If this project helps your work, you can support continued development here:
 
-[Buy me a coffee](https://buymeacoffee.com/strmt7)
+[☕ Buy me a coffee](https://buymeacoffee.com/strmt7)
