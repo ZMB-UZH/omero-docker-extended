@@ -10,6 +10,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 - Embedded/proxied Grafana dashboards and Prometheus query interface.
 - Docker container resource monitoring (stats, system info, process lists).
 - Storage usage analytics by user and group from OMERO API.
+- Quota management tab for group-level quota definitions with CSV import/template export and enforcement reconciliation logs.
 - Server and database diagnostic scripts (platform end-to-end health checks).
 - Root-only access enforcement on all endpoints.
 
@@ -27,7 +28,11 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 | `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/<subpath>` | GET/POST | Proxy to Grafana API |
 | `/omeroweb_admin_tools/resource-monitoring/prometheus-proxy/<subpath>` | GET/POST | Proxy to Prometheus API |
 | `/omeroweb_admin_tools/storage/` | GET | Storage analytics UI |
-| `/omeroweb_admin_tools/storage/data/` | GET | Fetch storage usage data |
+| `/omeroweb_admin_tools/storage/data/` | GET | Fetch storage usage data plus quota reconciliation state |
+| `/omeroweb_admin_tools/storage/quota/data/` | GET | Fetch persisted group quota state and reconciliation logs |
+| `/omeroweb_admin_tools/storage/quota/update/` | POST | Update quota values from Quotas tab edits |
+| `/omeroweb_admin_tools/storage/quota/import/` | POST | Import quota values from CSV (`Group`, `Quota (GB)`) |
+| `/omeroweb_admin_tools/storage/quota/template/` | GET | Download CSV template for quota import |
 | `/omeroweb_admin_tools/server-database-testing/` | GET | Server diagnostics UI |
 | `/omeroweb_admin_tools/server-database-testing/run/` | POST | Execute diagnostic scripts |
 
@@ -63,6 +68,10 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_LOG_LOOKBACK_SECONDS` | Default log query time range | `3600` |
 | `ADMIN_TOOLS_LOG_MAX_ENTRIES` | Maximum log entries per query | `5000` |
 | `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
+| `ADMIN_TOOLS_MANAGED_GROUP_ROOT` | ManagedRepository root for group directories | `${OMERO_DATA_DIR}/omero_user_data/ManagedRepository` |
+| `ADMIN_TOOLS_MANAGED_REPOSITORY_TEMPLATE` | ManagedRepository template used for safe quota-by-group compatibility checks | `%group%/%user%/%year%-%month%-%day%/%time%` |
+| `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
+| `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas safely through host tooling | *(unset by default)* |
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
 
@@ -76,6 +85,8 @@ The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the 
 3. Use Storage page to identify disk growth hotspots by user and group.
 4. Use Server Database Testing to run platform end-to-end health diagnostics.
 5. Apply operational actions externally based on findings (cleanup, scaling, user guidance).
+
+If the configured ManagedRepository template does not start with `%group%/%user%/`, the Quotas tab is intentionally disabled and shows an incompatibility warning to prevent unsafe quota enforcement assumptions.
 
 ## Operator checklist
 
