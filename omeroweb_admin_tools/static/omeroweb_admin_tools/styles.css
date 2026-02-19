@@ -762,6 +762,10 @@ body {
     gap: 12px;
     align-items: start;
 }
+
+.storage-visual-layout.storage-visual-layout--hidden {
+    display: none;
+}
 .storage-chart-card,
 .storage-table-card {
     border: 1px solid #dbe5f3;
