@@ -31,7 +31,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 | `/omeroweb_admin_tools/storage/data/` | GET | Fetch storage usage data plus quota reconciliation state |
 | `/omeroweb_admin_tools/storage/quota/data/` | GET | Fetch persisted group quota state and reconciliation logs |
 | `/omeroweb_admin_tools/storage/quota/update/` | POST | Update quota values from Quotas tab edits |
-| `/omeroweb_admin_tools/storage/quota/import/` | POST | Import quota values from CSV (`Group`, `Quota (GB)`) |
+| `/omeroweb_admin_tools/storage/quota/import/` | POST | Import quota values from CSV (`Group`, `Quota [GB]`) |
 | `/omeroweb_admin_tools/storage/quota/template/` | GET | Download CSV template for quota import |
 | `/omeroweb_admin_tools/server-database-testing/` | GET | Server diagnostics UI |
 | `/omeroweb_admin_tools/server-database-testing/run/` | POST | Execute diagnostic scripts |
