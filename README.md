@@ -148,13 +148,81 @@ Common utilities shared across all plugins:
 
 ## Deployment
 
+> [!WARNING]
+> **Premature alpha release**
+>
+> OMERO Docker Extended is currently in an early alpha stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
+
 ### Prerequisites
 
+- Root (or equivalent sudo) access on the Linux host.
+- 64-bit Linux distribution. Verified on Debian 13 (Trixie) on amd64.
+- Hardware baseline:
+  - CPU: minimum 8 cores for small multi-user operation
+  - RAM: minimum 16 GB (32 GB recommended)
 - Docker Engine and Docker Compose plugin installed on the host.
 - Host storage paths prepared with correct filesystem permissions.
-- SSH access configured if using the pull-based update workflow (`github_pull_project_bash_example`).
 
-### Quick start
+### Host-first installation flow (recommended)
+
+This workflow mirrors the intended production-like deployment pattern where the repository content is staged under a fixed host path and then synchronized with the pull/update helper.
+
+```bash
+# 1) Prepare the installation root
+sudo mkdir -p /opt/omero/env
+cd /opt/omero
+```
+
+Copy the following from this repository into `/opt/omero`:
+
+- `installation_paths_example.env`
+- `docker-compose.yml`
+- `env/` directory
+- `helper_scripts_debian/` directory
+- `github_pull_project_bash_example`
+
+Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep your local edits in the non-example files so future template updates do not overwrite site-specific settings.
+
+> [!IMPORTANT]
+> **Mandatory credential rotation before first start**
+>
+> Open `/opt/omero/env/omero_secrets.env` (the non-example runtime file) and replace every placeholder secret (`CHANGEME...`) with strong unique values (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services.
+
+Install Docker using the official documentation for your OS:
+
+- Debian: <https://docs.docker.com/engine/install/debian/>
+
+An experimental Debian helper exists at `/opt/omero/helper_scripts_debian/docker_debian_13_install_script`, but it is provided as-is and should be used only if you understand and accept that risk.
+
+Verify Docker runtime health:
+
+```bash
+systemctl status docker
+systemctl status containerd
+docker --version
+docker compose version
+docker compose ps
+```
+
+Prepare and execute the pull/install helper:
+
+```bash
+cd /opt/omero
+sudo chown root:root github_pull_project_bash
+sudo chmod +x github_pull_project_bash
+sudo bash ./github_pull_project_bash
+```
+
+The helper updates project files, prompts for installation parameters (defaults are available), and starts the full stack. Installation duration depends on host CPU and disk performance.
+
+After a successful run:
+
+- Portainer: <http://localhost:9000> (set admin password on first login)
+- OMERO.web: <http://localhost:4090>
+
+Log in to OMERO.web using the root credentials configured in `env/omero_secrets.env`.
+
+### Repository-local quick start (developer-oriented)
 
 ```bash
 # 1. Clone the repository
