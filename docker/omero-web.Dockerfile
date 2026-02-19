@@ -79,7 +79,9 @@ RUN set -euo pipefail; \
         gcc-c++ \
         make \
         python3-devel \
-        supervisor; \
+        supervisor \
+        quota \
+        e2fsprogs; \
     dnf clean all; \
     rm -rf /var/cache/dnf /var/tmp/*
 
@@ -230,9 +232,11 @@ RUN set -euo pipefail; \
 COPY supervisord.conf /etc/supervisord.conf
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
 COPY startup/10-web-bootstrap.sh /startup/10-web-bootstrap.sh
+COPY startup/60-enforce-ext4-project-quota.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh
+COPY startup/61-storage-quota-reconcile-loop.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
-    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/10-web-bootstrap.sh; \
+    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/10-web-bootstrap.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
 # FIX: The base image's /startup/99-run.sh executes

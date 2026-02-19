@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import subprocess
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,11 @@ DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
 MIN_QUOTA_GB = 1.0
+DEFAULT_EXT4_ENFORCER_COMMAND = (
+    "/opt/omero/web/bin/enforce-ext4-project-quota.sh "
+    "--group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}"
+)
+_RECONCILE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -339,119 +345,122 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
     ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE. The command receives placeholders:
     {fs_type}, {mount_point}, {source}, {group}, {group_path}, {quota_bytes}, {quota_gb}.
     """
-    path = quota_state_path()
-    state = _load_state(path)
-    quotas = state.setdefault("quotas_gb", {})
-    assert isinstance(quotas, dict)
+    with _RECONCILE_LOCK:
+        path = quota_state_path()
+        state = _load_state(path)
+        quotas = state.setdefault("quotas_gb", {})
+        assert isinstance(quotas, dict)
 
-    group_root = managed_group_root()
-    available_groups = set(list_group_directories(group_root))
-    available_groups.update(set(known_groups))
+        group_root = managed_group_root()
+        available_groups = set(list_group_directories(group_root))
+        available_groups.update(set(known_groups))
 
-    filesystem = detect_filesystem(group_root)
-    command_template = os.environ.get(
-        "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", ""
-    ).strip()
-    repository_compatibility = managed_repository_compatibility()
+        filesystem = detect_filesystem(group_root)
+        command_template = os.environ.get(
+            "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", ""
+        ).strip()
+        if not command_template and filesystem.fs_type == "ext4":
+            command_template = DEFAULT_EXT4_ENFORCER_COMMAND
+        repository_compatibility = managed_repository_compatibility()
 
-    pending = []
-    applied = []
-    reconcile_event_keys: List[str] = []
+        pending = []
+        applied = []
+        reconcile_event_keys: List[str] = []
 
-    if not repository_compatibility["is_compatible"]:
-        event_key = "global:repository_incompatible"
-        reconcile_event_keys.append(event_key)
-        _append_reconcile_event(
-            state,
-            event_key=event_key,
-            level="error",
-            message=(
-                "ManagedRepository template is incompatible with group quota enforcement. "
-                "Required prefix: %group%/%user%/."
-            ),
-        )
-
-    for group_name, raw_quota in sorted(quotas.items()):
-        group_key = f"group:{group_name}"
-        reconcile_event_keys.append(group_key)
-        try:
-            quota_gb = _normalize_quota_gb(raw_quota)
-        except QuotaError as exc:
-            _append_reconcile_event(
-                state,
-                event_key=group_key,
-                level="error",
-                message=f"Invalid stored quota for group '{group_name}': {exc}",
-            )
-            continue
-
-        group_path = group_root / group_name
         if not repository_compatibility["is_compatible"]:
-            pending.append(group_name)
-            continue
-        if group_name not in available_groups or not _is_group_folder_available(
-            group_path
-        ):
-            pending.append(group_name)
+            event_key = "global:repository_incompatible"
+            reconcile_event_keys.append(event_key)
             _append_reconcile_event(
                 state,
-                event_key=group_key,
-                level="warning",
-                message=f"Quota pending for group '{group_name}': directory not present at {group_path}.",
-            )
-            continue
-
-        if not command_template:
-            pending.append(group_name)
-            _append_reconcile_event(
-                state,
-                event_key=group_key,
-                level="warning",
+                event_key=event_key,
+                level="error",
                 message=(
-                    f"Quota for group '{group_name}' is configured but no apply command is set. "
-                    "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level."
+                    "ManagedRepository template is incompatible with group quota enforcement. "
+                    "Required prefix: %group%/%user%/."
                 ),
             )
-            continue
 
-        ok, message = _run_quota_apply_command(
-            command_template=command_template,
-            filesystem=filesystem,
-            group_name=group_name,
-            group_path=group_path,
-            quota_bytes=_bytes_from_gb(quota_gb),
-            quota_gb=quota_gb,
-        )
-        if ok:
-            applied.append(group_name)
-            _append_reconcile_event(
-                state,
-                event_key=group_key,
-                level="info",
-                message=f"Applied quota for group '{group_name}': {message}",
-            )
-        else:
-            pending.append(group_name)
-            _append_reconcile_event(
-                state,
-                event_key=group_key,
-                level="error",
-                message=f"Failed to apply quota for group '{group_name}': {message}",
-            )
+        for group_name, raw_quota in sorted(quotas.items()):
+            group_key = f"group:{group_name}"
+            reconcile_event_keys.append(group_key)
+            try:
+                quota_gb = _normalize_quota_gb(raw_quota)
+            except QuotaError as exc:
+                _append_reconcile_event(
+                    state,
+                    event_key=group_key,
+                    level="error",
+                    message=f"Invalid stored quota for group '{group_name}': {exc}",
+                )
+                continue
 
-    _prune_reconcile_event_cache(state, reconcile_event_keys)
-    _write_state(path, state)
-    return {
-        "filesystem": {
-            "type": filesystem.fs_type,
-            "mount_point": filesystem.mount_point,
-            "source": filesystem.source,
-        },
-        "managed_group_root": str(group_root),
-        "managed_repository": repository_compatibility,
-        "available_groups": sorted(available_groups),
-        "applied_groups": sorted(set(applied)),
-        "pending_groups": sorted(set(pending)),
-        "quotas_gb": state.get("quotas_gb", {}),
-        "logs": state.get("logs", []),
-    }
+            group_path = group_root / group_name
+            if not repository_compatibility["is_compatible"]:
+                pending.append(group_name)
+                continue
+            if group_name not in available_groups or not _is_group_folder_available(
+                group_path
+            ):
+                pending.append(group_name)
+                _append_reconcile_event(
+                    state,
+                    event_key=group_key,
+                    level="warning",
+                    message=f"Quota pending for group '{group_name}': directory not present at {group_path}.",
+                )
+                continue
+
+            if not command_template:
+                pending.append(group_name)
+                _append_reconcile_event(
+                    state,
+                    event_key=group_key,
+                    level="warning",
+                    message=(
+                        f"Quota for group '{group_name}' is configured but no apply command is set. "
+                        "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level."
+                    ),
+                )
+                continue
+
+            ok, message = _run_quota_apply_command(
+                command_template=command_template,
+                filesystem=filesystem,
+                group_name=group_name,
+                group_path=group_path,
+                quota_bytes=_bytes_from_gb(quota_gb),
+                quota_gb=quota_gb,
+            )
+            if ok:
+                applied.append(group_name)
+                _append_reconcile_event(
+                    state,
+                    event_key=group_key,
+                    level="info",
+                    message=f"Applied quota for group '{group_name}': {message}",
+                )
+            else:
+                pending.append(group_name)
+                _append_reconcile_event(
+                    state,
+                    event_key=group_key,
+                    level="error",
+                    message=f"Failed to apply quota for group '{group_name}': {message}",
+                )
+
+        _prune_reconcile_event_cache(state, reconcile_event_keys)
+        _write_state(path, state)
+        return {
+            "filesystem": {
+                "type": filesystem.fs_type,
+                "mount_point": filesystem.mount_point,
+                "source": filesystem.source,
+            },
+            "managed_group_root": str(group_root),
+            "managed_repository": repository_compatibility,
+            "available_groups": sorted(available_groups),
+            "applied_groups": sorted(set(applied)),
+            "pending_groups": sorted(set(pending)),
+            "quotas_gb": state.get("quotas_gb", {}),
+            "logs": state.get("logs", []),
+        }

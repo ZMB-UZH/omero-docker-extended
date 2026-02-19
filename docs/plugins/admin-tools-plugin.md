@@ -70,7 +70,11 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
 | `ADMIN_TOOLS_MANAGED_GROUP_ROOT` | ManagedRepository root for group directories | `${OMERO_DATA_DIR}/omero_user_data/ManagedRepository` |
 | `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
-| `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas safely through host tooling | *(unset by default)* |
+| `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` | Optional command template used to enforce quotas. If unset on ext4, a built-in project-quota enforcer script is used. | ` /opt/omero/web/bin/enforce-ext4-project-quota.sh --group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}` |
+| `ADMIN_TOOLS_QUOTA_RECONCILE_INTERVAL_SECONDS` | Background reconciliation interval for quota enforcement loop | `60` |
+| `ADMIN_TOOLS_QUOTA_PROJECTS_FILE` | ext4 project-quota mapping file updated by the enforcer | `/etc/projects` |
+| `ADMIN_TOOLS_QUOTA_PROJID_FILE` | ext4 project-name mapping file updated by the enforcer | `/etc/projid` |
+| `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN` | Minimum project ID used when assigning new group IDs | `200000` |
 
 The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
 
@@ -99,3 +103,19 @@ Quota values are validated with a minimum accepted value of **1.00 GB** in both 
 - Review Grafana dashboard provisioning files after monitoring configuration changes.
 - Keep query timeouts and entry caps aligned with cluster scale.
 - Verify Docker socket is accessible (check `docker compose logs omeroweb` for socket permission errors).
+
+
+### ext4 project-quota enforcement behavior
+
+When the managed repository is on `ext4`, quota reconciliation now uses `/opt/omero/web/bin/enforce-ext4-project-quota.sh` by default unless `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` is explicitly set.
+
+The enforcer performs the following for each group directory with a configured quota:
+
+1. Validates that the target directory exists and is inside the detected mount point.
+2. Resolves or assigns a stable project ID for the group.
+3. Updates both mapping files (`/etc/projects` and `/etc/projid` by default).
+4. Applies project ID to the group directory via `chattr -p`.
+5. Enables project inheritance on the group directory via `chattr +P`.
+6. Sets hard block quota with `setquota -P` on the filesystem mount point.
+
+Project quota is enforced at the parent group directory, and all files/subdirectories inside that tree count toward the same project quota domain.
