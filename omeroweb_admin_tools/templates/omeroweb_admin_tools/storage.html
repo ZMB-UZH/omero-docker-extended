@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Admin tools - Storage distribution</title>
+    <title>Admin tools - Storage viewer &amp; Quotas</title>
     <link rel="stylesheet" href="{% static 'omeroweb_admin_tools/styles.css' %}">
 </head>
 <body>
@@ -11,7 +11,10 @@
     <div class="admin-tools-header">
         <div class="admin-tools-header-left">
             <a class="admin-tools-back-link" href="{% url 'omeroweb_admin_tools_index' %}">← Back to admin tools</a>
-            <h1 class="admin-tools-title">Storage capacity distribution viewer</h1>
+            <h1 class="admin-tools-title">Storage viewer &amp; Quotas</h1>
+            <p class="admin-tools-subtitle">
+                Storage capacity distribution viewer per user/group, with the ability to set per-group storage quotas.
+            </p>
         </div>
     </div>
     <div class="admin-tools-card admin-tools-card--wide">
