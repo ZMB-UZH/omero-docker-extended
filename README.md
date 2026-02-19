@@ -2,6 +2,14 @@
 
 Production-grade to-be (**DISCLAIMER:** see [LICENSE](LICENSE) for details), alpha version, security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrator tools, and a full server monitoring stack.
 
+## Copyright and third-party software notice
+
+This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
+
+To the best of the maintainer's knowledge, all software dependencies and components referenced in this repository are sourced from publicly available channels and are used under their respective published terms (including open-source licenses where applicable). No paid or proprietary software package is intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
+
+If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
+
 ## What this repository delivers
 
 This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
