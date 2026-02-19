@@ -224,37 +224,6 @@ After a successful run:
 
 Log in to OMERO.web using the root credentials configured in `env/omero_secrets.env`.
 
-### Repository-local quick start (developer-oriented)
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/ZMB-UZH/omero-docker-extended.git
-cd omero-docker-extended
-
-# 2. Create installation_paths.env from the template
-cp installation_paths_example.env installation_paths.env
-# Edit installation_paths.env to set all 15 filesystem paths for your host
-
-# 3. Bootstrap environment files from templates
-cp env/omeroserver_example.env env/omeroserver.env
-cp env/omeroweb_example.env env/omeroweb.env
-cp env/omero-celery_example.env env/omero-celery.env
-cp env/grafana_example.env env/grafana.env
-# IMPORTANT: rotate ALL default credentials before deployment
-
-# Repository rule for operators and AI agents:
-# `*_example*` files are the canonical templates in git.
-# Runtime non-example files are expected to exist on the deployment host
-# and to mirror these templates unless the sysadmin intentionally customizes values.
-
-# 4. Run the installation script (creates paths, sets ownership, builds, starts)
-# Buildx compressed build is automatic with zero required parameters (all compose services with build blocks).
-bash installation/installation_script.sh
-
-# 5. Verify all services are healthy
-docker compose --env-file installation_paths.env ps
-```
-
 ### Configuration files
 
 | File | Scope |
