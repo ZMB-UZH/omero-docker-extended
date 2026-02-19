@@ -7,6 +7,7 @@ This repository uses environment variables as the primary configuration surface.
 - `installation_paths.env`: filesystem path definitions.
 - `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
 - `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, and admin tool endpoints.
+- `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 
