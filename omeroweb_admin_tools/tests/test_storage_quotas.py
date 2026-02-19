@@ -53,6 +53,31 @@ def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> 
     assert "group-b" not in payload["quotas_gb"]
 
 
+def test_upsert_skips_delete_log_when_quota_not_set(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", None)])
+
+    assert not state_path.exists()
+
+
+def test_upsert_does_not_repeat_log_for_unchanged_quota(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 10)])
+    upsert_quotas([("group-a", 10)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    info_messages = [
+        entry["message"] for entry in payload["logs"] if entry["level"] == "info"
+    ]
+    assert info_messages == [
+        "Updated quota for group 'group-a' to 10.000 GB (source=ui)."
+    ]
+
+
 def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
