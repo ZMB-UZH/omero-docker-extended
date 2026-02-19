@@ -201,7 +201,10 @@ function syncStorageTableHeight() {
 }
 
 function gb(value) {
-    return `${Number(value || 0).toFixed(QUOTA_DECIMALS)} GB`;
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return 'not set';
+    }
+    return `${Number(value).toFixed(QUOTA_DECIMALS)} GB`;
 }
 
 
@@ -239,9 +242,11 @@ async function readJsonPayload(response, contextLabel) {
 function getRowsForView() {
     if (currentView === 'groups' || currentView === 'quotas') {
         return (rawData.by_group || []).map((item) => {
-            const quotaGb = Number(rawData.quotas?.quotas_gb?.[item.group] || 0);
+            const rawQuotaGb = rawData.quotas?.quotas_gb?.[item.group];
+            const hasQuota = rawQuotaGb !== null && rawQuotaGb !== undefined && rawQuotaGb !== '';
+            const quotaGb = hasQuota ? Number(rawQuotaGb) : null;
             const usageBytes = Number(item.bytes || 0);
-            const quotaBytes = quotaGb > 0 ? quotaGb * 1024 * 1024 * 1024 : 0;
+            const quotaBytes = quotaGb !== null && quotaGb > 0 ? quotaGb * 1024 * 1024 * 1024 : 0;
             const quotaPercent = quotaBytes > 0 ? (usageBytes / quotaBytes) * 100 : 0;
             return {
                 primary: item.group,
@@ -457,8 +462,8 @@ function render() {
         table.innerHTML = shownRows
             .map((row) => {
                 const quotaCell = quotasEditMode
-                    ? `<input type="number" min="1.00" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${Number(row.quotaGb || 0).toFixed(QUOTA_DECIMALS)}">`
-                    : escapeHtml(gb(row.quotaGb));
+                    ? `<input type="number" min="1.00" step="0.01" class="storage-quota-input" data-group="${escapeHtml(row.primary)}" value="${row.quotaGb === null ? '' : Number(row.quotaGb).toFixed(QUOTA_DECIMALS)}">`
+                    : (row.quotaGb === null ? '<span class="storage-quota-not-set">not set</span>' : escapeHtml(gb(row.quotaGb)));
                 return `<tr><td>${escapeHtml(row.primary)}</td><td>${escapeHtml(row.secondary || '—')}</td><td>${escapeHtml(row.permissions || 'Private')}</td><td>${row.quotaPercent.toFixed(PERCENT_DECIMALS)}%</td><td>${quotaCell}</td></tr>`;
             })
             .join('');
@@ -483,7 +488,8 @@ function exportCsv() {
             return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
         }
         if (currentView === 'quotas') {
-            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.quotaPercent.toFixed(PERCENT_DECIMALS)},${row.quotaGb.toFixed(QUOTA_DECIMALS)}`;
+            const quotaValue = row.quotaGb === null ? '' : row.quotaGb.toFixed(QUOTA_DECIMALS);
+            return `${JSON.stringify(row.primary)},${JSON.stringify(row.secondary)},${JSON.stringify(row.permissions || 'Private')},${row.quotaPercent.toFixed(PERCENT_DECIMALS)},${JSON.stringify(quotaValue)}`;
         }
         return `${JSON.stringify(row.username)},${JSON.stringify(row.fullName)},${JSON.stringify(row.groups)},${row.bytes},${row.percent.toFixed(PERCENT_DECIMALS)}`;
     }).join('\n');
@@ -543,7 +549,7 @@ async function saveQuotaEdits() {
     const inputs = [...document.querySelectorAll('.storage-quota-input')];
     const updates = inputs.map((input) => ({
         group: input.dataset.group || '',
-        quota_gb: Number(Number(input.value || 0).toFixed(QUOTA_DECIMALS)),
+        quota_gb: input.value.trim() === '' ? null : Number(Number(input.value).toFixed(QUOTA_DECIMALS)),
     }));
     const response = await fetch(quotaUpdateUrl, {
         method: 'POST',
