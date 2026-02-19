@@ -336,3 +336,9 @@ Both operations are safe for production and do not require downtime.
 ## License
 
 See [LICENSE](LICENSE) for details.
+
+## Support
+
+If this project helps your work, you can support continued development here:
+
+[Buy me a coffee](https://buymeacoffee.com/strmt7)
