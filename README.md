@@ -213,6 +213,7 @@ docker compose --env-file installation_paths.env ps
 - All `*_example*` files in this repository are the source-of-truth templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
 - This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
+- The pull/update workflow also preserves `logo/logo.png` by excluding the entire `logo/` directory from replacement.
 
 ### Lifecycle commands
 

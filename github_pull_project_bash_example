@@ -256,6 +256,7 @@ replace_working_tree_with_clone() {
     find_args+=( ! -name 'installation_paths.env' )
     find_args+=( ! -name '.env' )
     find_args+=( ! -name 'env' )
+    find_args+=( ! -name 'logo' )
 
     # Data-path exclusions (derived from installation_paths.env)
     for _name in "${protected_data_dirs[@]}"; do
@@ -312,6 +313,7 @@ replace_working_tree_with_clone() {
     echo "  - installation_paths.env (local installation paths source of truth)"
     echo "  - .env (docker compose runtime paths)"
     echo "  - env/ (credential and service env files)"
+    echo "  - logo/ (preserves logo/logo.png branding asset)"
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
     if [ "${SCRIPT_NAME}" != "github_pull_project_bash" ]; then
@@ -352,6 +354,7 @@ replace_working_tree_with_clone() {
     find "${clone_dir}" -mindepth 1 -maxdepth 1 \
         ! -name '.git' \
         ! -name 'installation_paths.env' \
+        ! -name 'logo' \
         ! -name 'env' \
         -exec mv {} "${current_repo_dir}" \;
 
