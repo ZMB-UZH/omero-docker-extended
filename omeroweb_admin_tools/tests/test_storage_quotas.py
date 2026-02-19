@@ -118,7 +118,7 @@ def test_managed_repository_compatibility_requires_group_user_prefix(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv(
-        "ADMIN_TOOLS_MANAGED_REPOSITORY_TEMPLATE",
+        "CONFIG_omero_fs_repo_path",
         "%user%/%group%/%year%-%month%-%day%/%time%",
     )
 
@@ -136,7 +136,7 @@ def test_reconcile_marks_all_pending_when_template_incompatible(
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
     monkeypatch.setenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", str(group_root))
     monkeypatch.setenv(
-        "ADMIN_TOOLS_MANAGED_REPOSITORY_TEMPLATE", "%user%/%group%/%time%"
+        "CONFIG_omero_fs_repo_path", "%user%/%group%/%time%"
     )
 
     upsert_quotas([("group-a", 5)])
