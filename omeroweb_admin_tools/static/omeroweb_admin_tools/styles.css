@@ -872,6 +872,11 @@ body {
     font-size: 13px;
 }
 
+
+.storage-quota-not-set {
+    color: #94a3b8;
+}
+
 .storage-quota-input {
     width: 84px;
     min-width: 84px;

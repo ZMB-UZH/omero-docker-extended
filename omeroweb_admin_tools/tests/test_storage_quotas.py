@@ -41,6 +41,20 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
 
 
 
+def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 10)])
+    upsert_quotas([("group-a", None)])
+    upsert_quotas([("group-b", 12)])
+    upsert_quotas([("group-b", "")])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "group-a" not in payload["quotas_gb"]
+    assert "group-b" not in payload["quotas_gb"]
+
+
 def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
