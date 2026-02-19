@@ -106,10 +106,7 @@ def _bytes_from_gb(quota_gb: float) -> int:
 
 
 def managed_repository_template() -> str:
-    """Return managed repository template from environment for compatibility checks."""
-    primary = os.environ.get("ADMIN_TOOLS_MANAGED_REPOSITORY_TEMPLATE", "").strip()
-    if primary:
-        return primary
+    """Return OMERO managed repository template for compatibility checks."""
     return os.environ.get("CONFIG_omero_fs_repo_path", "").strip()
 
 
