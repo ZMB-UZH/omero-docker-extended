@@ -39,16 +39,6 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-alpha}"', script_text)
 
-    def test_private_pull_script_template_is_preserved(self) -> None:
-        script_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            'REPO_URL="${REPO_URL:-git@github.com:strmt7/omero-docker-extended.git}"',
-            script_text,
-        )
-        self.assertIn('REPO_BRANCH="${REPO_BRANCH:-alpha}"', script_text)
-
     def test_public_pull_script_is_https_only(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -56,6 +46,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertNotIn("GIT_SSH_COMMAND", script_text)
         self.assertIn("supports only HTTP(S) repository URLs", script_text)
 
+    def test_public_pull_script_protects_runtime_pull_helper(self) -> None:
+        script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("! -name 'github_pull_project_bash'", script_text)
 
 
 if __name__ == "__main__":
