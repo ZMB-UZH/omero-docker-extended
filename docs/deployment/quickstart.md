@@ -68,12 +68,20 @@ DOCKER_BUILD_COMPRESSION_LEVEL=15 \
 
 Notes:
 
-- `DOCKER_IMAGE_TAG` is required.
+- If unset, `DOCKER_IMAGE_TAG` defaults to `custom`.
 - Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
-- `DOCKER_BUILD_PUSH_IMAGES=1` (default) pushes images to your registry.
-- Override `DOCKER_BUILD_TARGETS` to limit builds to a subset of services.
-- `DOCKER_REGISTRY_PREFIX` is required.
-- The installation workflow enables this compressed Buildx mode by default. Run:
+- When `DOCKER_REGISTRY_PREFIX` is set, `DOCKER_BUILD_PUSH_IMAGES` defaults to `1` (push enabled).
+- When `DOCKER_REGISTRY_PREFIX` is unset, `DOCKER_BUILD_PUSH_IMAGES` defaults to `0` (local images only).
+- By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
+- Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
+- `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
+- The installation workflow enables this compressed Buildx mode by default with no required parameters. Run:
+
+```bash
+bash installation/installation_script.sh
+```
+
+- To push compressed images to a registry, run:
 
 ```bash
 DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
@@ -81,20 +89,12 @@ DOCKER_IMAGE_TAG=2026.02.0 \
 bash installation/installation_script.sh
 ```
 
-- To opt out and use standard local `docker compose build`, run:
-
-```bash
-USE_BUILDX_COMPRESSED_BUILD=0 \
-bash installation/installation_script.sh
-```
-
-- `github_pull_project_bash` now runs installation in non-interactive mode by default (`INSTALLATION_AUTOMATION_MODE=1`) to avoid any manual prompts during automated pull/update workflows.
+- `github_pull_project_bash` preserves the installation script prompts by default.
+- For unattended automation, you can explicitly set `INSTALLATION_AUTOMATION_MODE=1`.
 
 - To integrate with the pull/update workflow, run:
 
 ```bash
-DOCKER_REGISTRY_PREFIX=myregistry.example.com/omero \
-DOCKER_IMAGE_TAG=2026.02.0 \
 bash github_pull_project_bash
 ```
 
