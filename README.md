@@ -1,6 +1,6 @@
 # OMERO Docker Extended
 
-Production-grade (**DISCLAIMER:** see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrative tools, and a full server monitoring stack.
+Production-grade (**DISCLAIMER:** see [LICENSE](LICENSE) for details), ALPHA VERSION, security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrative tools, and a full server monitoring stack.
 
 ## What this repository delivers
 
