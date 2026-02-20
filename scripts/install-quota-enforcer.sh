@@ -118,8 +118,16 @@ fi
 # ---------------------------------------------------------------------------
 echo "[3/7] Installing enforcer script..."
 
-install -D -m 0755 "${SCRIPT_DIR}/omero-quota-enforcer.sh" /opt/omero/scripts/omero-quota-enforcer.sh
-echo "  Installed: /opt/omero/scripts/omero-quota-enforcer.sh"
+enforcer_src="${SCRIPT_DIR}/omero-quota-enforcer.sh"
+enforcer_dst="/opt/omero/scripts/omero-quota-enforcer.sh"
+
+if [[ "$(readlink -f "$enforcer_src")" == "$(readlink -f "$enforcer_dst")" ]]; then
+    echo "  Enforcer script already at destination; ensuring correct permissions."
+    chmod 0755 "$enforcer_dst"
+else
+    install -D -m 0755 "$enforcer_src" "$enforcer_dst"
+fi
+echo "  Installed: $enforcer_dst"
 
 # ---------------------------------------------------------------------------
 # Step 4: Create /etc/default configuration
@@ -160,7 +168,14 @@ fi
 echo "[5/7] Creating admin-tools directory..."
 
 mkdir -p "${OMERO_DATA_DIR}/.admin-tools/quota"
-echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/"
+# The .admin-tools directory must be writable by both the host-side enforcer
+# (runs as root) and the omeroweb container (runs as a non-root UID that
+# differs from the OMERO data directory owner).  Use mode 1777 (world-writable
+# with sticky bit) so both processes can create and update the quota state
+# file without knowing each other's UID at install time.
+chmod 1777 "${OMERO_DATA_DIR}/.admin-tools"
+chmod 1777 "${OMERO_DATA_DIR}/.admin-tools/quota"
+echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 1777)"
 
 # ---------------------------------------------------------------------------
 # Step 6: Install and enable systemd units
