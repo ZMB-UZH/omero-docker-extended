@@ -596,7 +596,8 @@ async function loadData() {
         totalUsedBytes = 0;
         render();
         console.error('Failed to load storage distribution.', error);
-        statusEl.textContent = 'Failed to load storage distribution. Please verify the server response and try again.';
+        const detail = error?.message ? `: ${error.message}` : '';
+        statusEl.textContent = `Failed to load storage distribution${detail}. Please verify the server response and try again.`;
     }
 }
 

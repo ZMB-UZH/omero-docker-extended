@@ -1676,7 +1676,18 @@ def storage_data(request, conn=None, url=None, **kwargs):
         logger.warning("Could not read disk usage for data root %s", data_root)
 
     known_groups = sorted(totals_by_group.keys())
-    quota_status = reconcile_quotas(known_groups)
+    try:
+        quota_status = reconcile_quotas(known_groups)
+    except Exception:
+        logger.warning(
+            "Quota reconciliation failed; returning storage data without quota info",
+            exc_info=True,
+        )
+        quota_status = {
+            "quotas_gb": {},
+            "logs": [],
+            "quota_enforcement_available": False,
+        }
 
     return JsonResponse(
         {
