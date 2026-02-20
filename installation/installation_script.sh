@@ -1788,6 +1788,108 @@ echo "✔ Host ownership fix complete."
 echo "================================================"
 echo ""
 
+# =====================================================
+# Quota enforcer installation (non-blocking)
+#
+# Detects whether the OMERO user-data filesystem supports ext4 project
+# quotas.  When all prerequisites are met the host-side systemd timer
+# is installed automatically.  When not, a non-blocking info message
+# is printed and the Quotas tab in Admin Tools will be disabled.
+# =====================================================
+install_quota_enforcer_if_supported() {
+    local omero_user_data_dir="$1"
+    local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
+
+    echo "================================================"
+    echo "Checking ext4 project quota support for Quotas"
+    echo "================================================"
+
+    if [ ! -f "${installer_path}" ]; then
+        echo "INFO: Quota enforcer installer not found at ${installer_path}."
+        echo "INFO: Skipping quota enforcer installation."
+        return 0
+    fi
+
+    # ── Detect filesystem type for OMERO user data path ──
+    local quota_fs_type="" quota_mount_point="" quota_block_device=""
+    while read -r line; do
+        local parts
+        # shellcheck disable=SC2206
+        parts=($line)
+        if [ "${#parts[@]}" -lt 3 ]; then continue; fi
+        local mp="${parts[1]}"
+        local ft="${parts[2]}"
+        # Append trailing slash to both paths to ensure correct prefix matching.
+        # Without this, mount point /data would incorrectly match /datafiles/OMERO.
+        case "${omero_user_data_dir%/}/" in
+            "${mp%/}/"*)
+                if [ -z "${quota_mount_point}" ] || [ "${#mp}" -gt "${#quota_mount_point}" ]; then
+                    quota_mount_point="${mp}"
+                    quota_fs_type="${ft}"
+                    quota_block_device="${parts[0]}"
+                fi
+                ;;
+        esac
+    done < /proc/mounts
+
+    if [ "${quota_fs_type}" != "ext4" ]; then
+        echo "INFO: Filesystem for ${omero_user_data_dir} is '${quota_fs_type:-unknown}', not ext4."
+        echo "INFO: ext4 project quotas are not supported on this filesystem type."
+        echo "INFO: The Quotas tab in Admin Tools will be disabled."
+        echo "INFO: To enable quotas, use an ext4 filesystem with prjquota mount option."
+        echo ""
+        return 0
+    fi
+
+    # ── Check prjquota mount option ──
+    if ! mount | grep -qE "on ${quota_mount_point} .*prjquota"; then
+        echo "INFO: Filesystem at ${quota_mount_point} is ext4 but NOT mounted with prjquota."
+        echo "INFO: To enable quotas:"
+        echo "INFO:   1. Add 'prjquota' to mount options in /etc/fstab"
+        echo "INFO:   2. Remount: sudo mount -o remount,prjquota ${quota_mount_point}"
+        echo "INFO:   3. Re-run this installation script."
+        echo "INFO: The Quotas tab in Admin Tools will be disabled until then."
+        echo ""
+        return 0
+    fi
+
+    # ── Check ext4 project feature in superblock ──
+    if command -v tune2fs >/dev/null 2>&1 && [ -n "${quota_block_device}" ]; then
+        if ! tune2fs -l "${quota_block_device}" 2>/dev/null | grep -q "project"; then
+            echo "INFO: ext4 'project' feature is NOT enabled on ${quota_block_device}."
+            echo "INFO: To enable quotas:"
+            echo "INFO:   1. Enable project feature: sudo tune2fs -O project ${quota_block_device}"
+            echo "INFO:   2. Re-run this installation script."
+            echo "INFO: The Quotas tab in Admin Tools will be disabled until then."
+            echo ""
+            return 0
+        fi
+    fi
+
+    echo "ext4 project quota support detected on ${quota_mount_point}."
+    echo "Installing OMERO quota enforcer..."
+    echo ""
+
+    chmod +x "${installer_path}"
+    if ! "${installer_path}" "${omero_user_data_dir}"; then
+        echo ""
+        echo "WARNING: Quota enforcer installation encountered errors (non-blocking)." >&2
+        echo "WARNING: You can install it manually later with:" >&2
+        echo "  sudo ${installer_path} ${omero_user_data_dir}" >&2
+        echo ""
+        return 0
+    fi
+
+    echo ""
+    echo "✔ Quota enforcer installed successfully."
+    return 0
+}
+
+install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
+
+echo "================================================"
+echo ""
+
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     compose_up_with_retries "${COMPOSE_FILE}"
 else

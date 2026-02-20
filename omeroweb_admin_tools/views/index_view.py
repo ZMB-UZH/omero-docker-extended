@@ -437,6 +437,25 @@ def _safe_object_id(obj):
         return None
 
 
+def _list_omero_group_names(conn) -> List[str]:
+    """Return sorted list of OMERO group names from admin service."""
+    if conn is None:
+        return []
+    try:
+        admin_service = conn.getAdminService()
+        groups = []
+        for method_name in ("lookupGroups", "containedGroups"):
+            groups = _call_admin_listing(admin_service, method_name)
+            if groups:
+                break
+        return sorted(
+            name for g in groups if (name := _safe_group_name(g))
+        )
+    except Exception:
+        logger.debug("Could not list OMERO groups for quota reconciliation")
+        return []
+
+
 def _list_all_users_and_groups(conn):
     """Collect all OMERO users and groups to keep zero-usage rows visible."""
     users = {}
@@ -1708,7 +1727,8 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
 
     try:
         state = get_quota_state()
-        reconciled = reconcile_quotas([])
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
     except Exception as exc:
         logger.exception("Failed to load quota data")
         return JsonResponse({"error": f"Quota data request failed: {exc}"}, status=500)
@@ -1743,7 +1763,8 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
                 raise QuotaError("Each quota update must be an object")
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
         state = upsert_quotas(normalized, source="ui-edit")
-        reconciled = reconcile_quotas([])
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
     except (json.JSONDecodeError, QuotaError, ValueError) as exc:
         return JsonResponse(
             {"error": f"Invalid quota update payload: {exc}"}, status=400
@@ -1777,7 +1798,8 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
     try:
         content = csv_file.read().decode("utf-8")
         state = import_quotas_csv(content)
-        reconciled = reconcile_quotas([])
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
     except (UnicodeDecodeError, QuotaError, CsvError) as exc:
         return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
     except Exception as exc:

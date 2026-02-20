@@ -5,8 +5,6 @@ import io
 import json
 import logging
 import os
-import shlex
-import subprocess
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,14 +13,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
+DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
+DEFAULT_ENFORCER_MARKER_PATH = "/OMERO/.admin-tools/quota-enforcer-installed"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
 DEFAULT_MIN_QUOTA_GB = 0.10
-DEFAULT_EXT4_ENFORCER_COMMAND = (
-    "/opt/omero/web/bin/enforce-ext4-project-quota.sh "
-    "--group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}"
-)
 _RECONCILE_LOCK = threading.Lock()
 
 
@@ -64,6 +59,23 @@ def min_quota_gb() -> float:
     if parsed <= 0:
         raise QuotaError("ADMIN_TOOLS_MIN_QUOTA_GB must be greater than 0.")
     return round(parsed, 3)
+
+
+def is_quota_enforcement_available() -> bool:
+    """Return True when the host-side quota enforcer is installed.
+
+    The installer writes a marker file on the shared /OMERO volume when
+    ext4 project quota support is confirmed and the systemd timer is
+    installed.  The absence of this file means the host filesystem does
+    not support quotas or the enforcer was never installed.
+    """
+    marker_path = Path(
+        os.environ.get(
+            "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH",
+            DEFAULT_ENFORCER_MARKER_PATH,
+        )
+    )
+    return marker_path.is_file()
 
 
 MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
@@ -200,10 +212,6 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
     return round(number, 3)
 
 
-def _bytes_from_gb(quota_gb: float) -> int:
-    return int(quota_gb * 1024 * 1024 * 1024)
-
-
 def managed_repository_template() -> str:
     """Return OMERO managed repository template for compatibility checks."""
     return os.environ.get("CONFIG_omero_fs_repo_path", "").strip()
@@ -248,44 +256,6 @@ def detect_filesystem(path: Path) -> FilesystemInfo:
         mount_point=best_match[1],
         fs_type=best_match[2],
     )
-
-
-def _run_quota_apply_command(
-    *,
-    command_template: str,
-    filesystem: FilesystemInfo,
-    group_name: str,
-    group_path: Path,
-    quota_bytes: int,
-    quota_gb: float,
-) -> Tuple[bool, str]:
-    context = {
-        "fs_type": filesystem.fs_type,
-        "mount_point": filesystem.mount_point,
-        "source": filesystem.source,
-        "group": group_name,
-        "group_path": str(group_path),
-        "quota_bytes": str(quota_bytes),
-        "quota_gb": f"{quota_gb:.3f}",
-    }
-    try:
-        expanded = command_template.format(**context)
-    except KeyError as exc:
-        return False, f"Invalid quota command template placeholder: {exc}"
-
-    command = shlex.split(expanded)
-    if not command:
-        return False, "Quota command template produced an empty command"
-
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        stderr = completed.stderr.strip() or completed.stdout.strip()
-        return (
-            False,
-            f"Quota apply command failed (code {completed.returncode}): {stderr}",
-        )
-    stdout = completed.stdout.strip()
-    return True, stdout or "quota applied"
 
 
 def _is_group_folder_available(group_path: Path) -> bool:
@@ -378,15 +348,21 @@ def get_state() -> Dict[str, object]:
     if not isinstance(logs, list):
         logs = []
 
-    return {"quotas_gb": quotas, "logs": logs, "min_quota_gb": min_quota_gb()}
+    return {
+        "quotas_gb": quotas,
+        "logs": logs,
+        "min_quota_gb": min_quota_gb(),
+        "quota_enforcement_available": is_quota_enforcement_available(),
+    }
 
 
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
-    """Reconcile quota definitions with existing directories and attempt enforcement.
+    """Reconcile quota definitions with existing directories.
 
-    Enforcement is performed using an optional external command template from
-    ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE. The command receives placeholders:
-    {fs_type}, {mount_point}, {source}, {group}, {group_path}, {quota_bytes}, {quota_gb}.
+    This function manages the quota state file and ensures group directories
+    exist.  Actual filesystem-level enforcement (chattr, setquota) is
+    performed by the host-side systemd timer (omero-quota-enforcer) which
+    reads the same state file with root privileges.
     """
     with _RECONCILE_LOCK:
         path = quota_state_path()
@@ -402,15 +378,10 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         available_groups.update(set(known_groups))
 
         filesystem = detect_filesystem(group_root)
-        command_template = os.environ.get(
-            "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", ""
-        ).strip()
-        if not command_template and filesystem.fs_type == "ext4":
-            command_template = DEFAULT_EXT4_ENFORCER_COMMAND
         repository_compatibility = managed_repository_compatibility()
 
+        configured = []
         pending = []
-        applied = []
         reconcile_event_keys: List[str] = []
 
         if not root_is_safe:
@@ -460,9 +431,25 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             if not repository_compatibility["is_compatible"]:
                 pending.append(group_name)
                 continue
-            if group_name not in available_groups or not _is_group_folder_available(
-                group_path
-            ):
+            if not _is_group_folder_available(group_path):
+                try:
+                    group_path.mkdir(parents=False, exist_ok=True)
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="info",
+                        message=f"Created group directory for quota enforcement: {group_path}.",
+                    )
+                except OSError as exc:
+                    pending.append(group_name)
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="warning",
+                        message=f"Quota pending for group '{group_name}': could not create directory {group_path}: {exc}.",
+                    )
+                    continue
+            if not _is_group_folder_available(group_path):
                 pending.append(group_name)
                 _append_reconcile_event(
                     state,
@@ -472,43 +459,16 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                 )
                 continue
 
-            if not command_template:
-                pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="warning",
-                    message=(
-                        f"Quota for group '{group_name}' is configured but no apply command is set. "
-                        "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level."
-                    ),
-                )
-                continue
-
-            ok, message = _run_quota_apply_command(
-                command_template=command_template,
-                filesystem=filesystem,
-                group_name=group_name,
-                group_path=group_path,
-                quota_bytes=_bytes_from_gb(quota_gb),
-                quota_gb=quota_gb,
+            configured.append(group_name)
+            _append_reconcile_event(
+                state,
+                event_key=group_key,
+                level="info",
+                message=(
+                    f"Quota for group '{group_name}' is configured at {quota_gb:.3f} GB. "
+                    "Host-side enforcer will apply ext4 project quota."
+                ),
             )
-            if ok:
-                applied.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="info",
-                    message=f"Applied quota for group '{group_name}': {message}",
-                )
-            else:
-                pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="error",
-                    message=f"Failed to apply quota for group '{group_name}': {message}",
-                )
 
         _prune_reconcile_event_cache(state, reconcile_event_keys)
         _write_state(path, state)
@@ -522,9 +482,10 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             "managed_group_root_reason": root_reason,
             "managed_repository": repository_compatibility,
             "available_groups": sorted(available_groups),
-            "applied_groups": sorted(set(applied)),
+            "applied_groups": sorted(set(configured)),
             "pending_groups": sorted(set(pending)),
             "quotas_gb": state.get("quotas_gb", {}),
             "logs": state.get("logs", []),
             "min_quota_gb": min_quota_gb(),
+            "quota_enforcement_available": is_quota_enforcement_available(),
         }
