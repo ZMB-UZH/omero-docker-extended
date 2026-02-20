@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# =============================================================================
+# omero-quota-enforcer.sh — Host-side ext4 project-quota enforcement
+#
+# Reads the quota state JSON written by the omeroweb container and applies
+# ext4 project quotas on the host filesystem using chattr + setquota.
+#
+# Must run as root on the Docker host (via systemd timer or cron).
+# Compatible with Ubuntu 24.04+ and Debian 13 (Trixie)+.
+#
+# Required host packages: e2fsprogs, quota
+# Required filesystem:    ext4 mounted with prjquota, project feature enabled
+# =============================================================================
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Configuration (override via environment or /etc/default/omero-quota-enforcer)
+# ---------------------------------------------------------------------------
+DEFAULTS_FILE="/etc/default/omero-quota-enforcer"
+if [[ -f "$DEFAULTS_FILE" ]]; then
+    # shellcheck source=/dev/null
+    . "$DEFAULTS_FILE"
+fi
+
+# Path to the OMERO data directory (same as OMERO_USER_DATA_PATH from
+# installation_paths.env, e.g. /data/OMERO or /srv/OMERO).
+OMERO_DATA_DIR="${OMERO_DATA_DIR:-}"
+
+# Quota state JSON written by the omeroweb container.
+QUOTA_STATE_FILE="${QUOTA_STATE_FILE:-${OMERO_DATA_DIR}/.admin-tools/group-quotas.json}"
+
+# Managed repository root inside the OMERO data directory.
+MANAGED_REPO_ROOT="${MANAGED_REPO_ROOT:-${OMERO_DATA_DIR}/ManagedRepository}"
+
+# Project-ID mapping files (host-side copies).
+PROJECTS_FILE="${PROJECTS_FILE:-${OMERO_DATA_DIR}/.admin-tools/quota/projects}"
+PROJID_FILE="${PROJID_FILE:-${OMERO_DATA_DIR}/.admin-tools/quota/projid}"
+
+# First project ID to allocate.
+PROJECT_ID_MIN="${PROJECT_ID_MIN:-200000}"
+
+# Minimum quota in GB (reject anything below this).
+MIN_QUOTA_GB="${MIN_QUOTA_GB:-0.10}"
+
+# Lock file for serialised access.
+LOCK_PATH="${LOCK_PATH:-/run/omero-quota-enforcer.lock}"
+
+# ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+if [[ "$(id -u)" -ne 0 ]]; then
+    echo "ERROR: This script must run as root." >&2
+    exit 1
+fi
+
+if [[ -z "$OMERO_DATA_DIR" ]]; then
+    echo "ERROR: OMERO_DATA_DIR is not set." >&2
+    echo "Set it in $DEFAULTS_FILE or export it before running this script." >&2
+    exit 1
+fi
+
+if [[ ! -d "$OMERO_DATA_DIR" ]]; then
+    echo "ERROR: OMERO_DATA_DIR does not exist: $OMERO_DATA_DIR" >&2
+    exit 1
+fi
+
+for cmd in chattr setquota python3 flock; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERROR: Required command '$cmd' is not available." >&2
+        echo "Install packages: e2fsprogs quota python3" >&2
+        exit 1
+    fi
+done
+
+if [[ ! -f "$QUOTA_STATE_FILE" ]]; then
+    # No quota state yet — nothing to enforce.
+    exit 0
+fi
+
+# Detect the filesystem type and mount point for the OMERO data directory.
+fs_info="$(python3 -c "
+import os, pathlib
+p = pathlib.Path('${OMERO_DATA_DIR}').resolve()
+best = None
+for line in pathlib.Path('/proc/mounts').read_text().splitlines():
+    parts = line.split()
+    if len(parts) < 3:
+        continue
+    source, mp, fstype = parts[0], parts[1], parts[2]
+    try:
+        p.relative_to(mp)
+    except ValueError:
+        continue
+    if best is None or len(mp) > len(best[1]):
+        best = (source, mp, fstype)
+if best is None:
+    print('unknown||')
+else:
+    print(f'{best[2]}|{best[1]}|{best[0]}')
+")"
+
+FS_TYPE="${fs_info%%|*}"
+remainder="${fs_info#*|}"
+MOUNT_POINT="${remainder%%|*}"
+FS_SOURCE="${remainder#*|}"
+
+if [[ "$FS_TYPE" != "ext4" ]]; then
+    echo "WARNING: Filesystem at $OMERO_DATA_DIR is '$FS_TYPE', not ext4. Skipping enforcement." >&2
+    exit 0
+fi
+
+if [[ -z "$MOUNT_POINT" ]]; then
+    echo "ERROR: Could not determine mount point for $OMERO_DATA_DIR." >&2
+    exit 1
+fi
+
+# Check that ext4 has prjquota support.
+if ! mount | grep -qE "on ${MOUNT_POINT} .*prjquota"; then
+    echo "ERROR: Filesystem at $MOUNT_POINT is not mounted with prjquota." >&2
+    echo "Add 'prjquota' to the mount options in /etc/fstab and remount." >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Acquire exclusive lock
+# ---------------------------------------------------------------------------
+mkdir -p "$(dirname "$LOCK_PATH")"
+exec 9>"$LOCK_PATH"
+if ! flock -n -x 9; then
+    echo "Another instance is already running (lock: $LOCK_PATH). Exiting." >&2
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Ensure mapping file directories exist
+# ---------------------------------------------------------------------------
+mkdir -p "$(dirname "$PROJECTS_FILE")" "$(dirname "$PROJID_FILE")"
+touch "$PROJECTS_FILE" "$PROJID_FILE"
+
+# ---------------------------------------------------------------------------
+# Read quotas from the state JSON
+# ---------------------------------------------------------------------------
+quotas_json="$(python3 -c "
+import json, sys
+state = json.loads(open('${QUOTA_STATE_FILE}').read())
+quotas = state.get('quotas_gb', {})
+for group, gb in sorted(quotas.items()):
+    print(f'{group}\t{gb}')
+")"
+
+if [[ -z "$quotas_json" ]]; then
+    exit 0
+fi
+
+applied=0
+failed=0
+
+# ---------------------------------------------------------------------------
+# Process each group quota
+# ---------------------------------------------------------------------------
+while IFS=$'\t' read -r group_name quota_gb; do
+    # Validate group name
+    if [[ ! "$group_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "SKIP: Unsafe group name '$group_name'." >&2
+        continue
+    fi
+
+    group_path="${MANAGED_REPO_ROOT}/${group_name}"
+
+    # Create group directory if it doesn't exist yet
+    if [[ ! -d "$group_path" ]]; then
+        mkdir -p "$group_path"
+        echo "INFO: Created group directory: $group_path"
+    fi
+
+    resolved_group_path="$(readlink -f "$group_path")"
+    resolved_mount_point="$(readlink -f "$MOUNT_POINT")"
+
+    # Safety: group path must be under the mount point
+    case "$resolved_group_path" in
+        "$resolved_mount_point"/*) ;;
+        *)
+            echo "SKIP: Group path '$resolved_group_path' is not under mount '$resolved_mount_point'." >&2
+            continue
+            ;;
+    esac
+
+    # -----------------------------------------------------------------------
+    # Allocate or look up project ID
+    # -----------------------------------------------------------------------
+    project_id=""
+    escaped_group_path_regex="$(printf '%s' "$resolved_group_path" | sed 's/[.[\*^$()+?{}|]/\\&/g')"
+    escaped_group_path_sed="$(printf '%s' "$resolved_group_path" | sed 's/[\\/&]/\\\\&/g')"
+
+    if grep -Eq "^${group_name}:" "$PROJID_FILE"; then
+        project_id="$(sed -n "s/^${group_name}:\([0-9][0-9]*\)$/\1/p" "$PROJID_FILE" | tail -n1)"
+    fi
+
+    if [[ -z "$project_id" ]] && grep -Eq "^[0-9]+:${escaped_group_path_regex}$" "$PROJECTS_FILE"; then
+        project_id="$(sed -n "s/^\([0-9][0-9]*\):${escaped_group_path_sed}$/\1/p" "$PROJECTS_FILE" | tail -n1)"
+    fi
+
+    if [[ -z "$project_id" ]]; then
+        max_existing="$(
+            awk -F: 'NF>=2 && $1 ~ /^[0-9]+$/ { if ($1 > max) max=$1 } END { print max+0 }' \
+                "$PROJECTS_FILE" "$PROJID_FILE"
+        )"
+        if [[ "$max_existing" -lt "$PROJECT_ID_MIN" ]]; then
+            project_id="$PROJECT_ID_MIN"
+        else
+            project_id="$((max_existing + 1))"
+        fi
+    fi
+
+    # Update mapping files
+    if ! grep -Eq "^${project_id}:${escaped_group_path_regex}$" "$PROJECTS_FILE"; then
+        awk -F: -v path="$resolved_group_path" '
+            {
+                separator_index = index($0, ":")
+                current_path = (separator_index > 0) ? substr($0, separator_index + 1) : ""
+                if (current_path != path) print $0
+            }
+        ' "$PROJECTS_FILE" > "${PROJECTS_FILE}.tmp"
+        mv "${PROJECTS_FILE}.tmp" "$PROJECTS_FILE"
+        printf '%s:%s\n' "$project_id" "$resolved_group_path" >> "$PROJECTS_FILE"
+    fi
+
+    if ! grep -Eq "^${group_name}:${project_id}$" "$PROJID_FILE"; then
+        sed -i "/^${group_name}:[0-9][0-9]*$/d" "$PROJID_FILE"
+        printf '%s:%s\n' "$group_name" "$project_id" >> "$PROJID_FILE"
+    fi
+
+    # -----------------------------------------------------------------------
+    # Compute quota in 1K blocks
+    # -----------------------------------------------------------------------
+    quota_blocks="$(python3 -c "
+quota_gb = float(${quota_gb})
+min_gb = float(${MIN_QUOTA_GB})
+if min_gb <= 0:
+    raise SystemExit('MIN_QUOTA_GB must be > 0')
+if quota_gb < min_gb:
+    raise SystemExit(f'quota_gb ({quota_gb}) must be >= {min_gb:.2f}')
+print(int(quota_gb * 1024 * 1024))
+")" || {
+        echo "FAIL: Invalid quota value for group '$group_name': ${quota_gb} GB." >&2
+        ((failed++)) || true
+        continue
+    }
+
+    # -----------------------------------------------------------------------
+    # Apply ext4 project attributes and quota
+    # -----------------------------------------------------------------------
+    if ! chattr -p "$project_id" "$resolved_group_path" 2>/dev/null; then
+        echo "FAIL: chattr -p $project_id $resolved_group_path failed." >&2
+        ((failed++)) || true
+        continue
+    fi
+
+    if ! chattr +P "$resolved_group_path" 2>/dev/null; then
+        echo "FAIL: chattr +P $resolved_group_path failed." >&2
+        ((failed++)) || true
+        continue
+    fi
+
+    if ! setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$MOUNT_POINT" 2>/dev/null; then
+        echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $MOUNT_POINT failed." >&2
+        ((failed++)) || true
+        continue
+    fi
+
+    echo "OK: group='$group_name' project_id=$project_id quota=${quota_gb}GB (${quota_blocks} blocks) path=$resolved_group_path"
+    ((applied++)) || true
+
+done <<< "$quotas_json"
+
+echo "Enforcement complete: $applied applied, $failed failed."
+if [[ "$failed" -gt 0 ]]; then
+    exit 1
+fi
