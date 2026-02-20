@@ -176,9 +176,12 @@ while IFS=$'\t' read -r group_name quota_gb; do
     resolved_group_path="$(readlink -f "$group_path")"
     resolved_mount_point="$(readlink -f "$MOUNT_POINT")"
 
-    # Safety: group path must be under the mount point
+    # Safety: group path must be under the mount point.
+    # Strip trailing slash so that root mount "/" becomes "" and the
+    # pattern "/*" correctly matches any absolute path.
+    mount_prefix="${resolved_mount_point%/}"
     case "$resolved_group_path" in
-        "$resolved_mount_point"/*) ;;
+        "$mount_prefix"/*) ;;
         *)
             echo "SKIP: Group path '$resolved_group_path' is not under mount '$resolved_mount_point'." >&2
             continue
@@ -250,20 +253,22 @@ print(int(quota_gb * 1024 * 1024))
     # -----------------------------------------------------------------------
     # Apply ext4 project attributes and quota
     # -----------------------------------------------------------------------
-    if ! chattr -p "$project_id" "$resolved_group_path" 2>/dev/null; then
-        echo "FAIL: chattr -p $project_id $resolved_group_path failed." >&2
+    chattr_err=""
+    if ! chattr_err="$(chattr -p "$project_id" "$resolved_group_path" 2>&1)"; then
+        echo "FAIL: chattr -p $project_id $resolved_group_path: $chattr_err" >&2
         ((failed++)) || true
         continue
     fi
 
-    if ! chattr +P "$resolved_group_path" 2>/dev/null; then
-        echo "FAIL: chattr +P $resolved_group_path failed." >&2
+    if ! chattr_err="$(chattr +P "$resolved_group_path" 2>&1)"; then
+        echo "FAIL: chattr +P $resolved_group_path: $chattr_err" >&2
         ((failed++)) || true
         continue
     fi
 
-    if ! setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$MOUNT_POINT" 2>/dev/null; then
-        echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $MOUNT_POINT failed." >&2
+    setquota_err=""
+    if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$MOUNT_POINT" 2>&1)"; then
+        echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $MOUNT_POINT: $setquota_err" >&2
         ((failed++)) || true
         continue
     fi
