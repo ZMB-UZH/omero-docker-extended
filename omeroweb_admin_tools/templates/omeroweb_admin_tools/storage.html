@@ -138,6 +138,23 @@ let rawData = { by_user: [], by_group: [], quotas: { quotas_gb: {}, logs: [], ma
 let currentView = 'users';
 let totalUsedBytes = 0;
 let quotasEditMode = false;
+let quotaEnforcementAvailable = null;
+
+function syncQuotaTabAvailability() {
+    const btn = viewButtons.quotas;
+    if (quotaEnforcementAvailable === true) {
+        btn.disabled = false;
+        btn.title = '';
+    } else if (quotaEnforcementAvailable === false) {
+        btn.disabled = true;
+        btn.title = 'Quotas are disabled because the host filesystem does not support ext4 project quotas, or the quota enforcer was not installed.';
+        if (currentView === 'quotas') {
+            setView('users');
+        }
+    }
+    // When null (unknown, before first data load): leave button in its current state.
+    // The button starts enabled in HTML; once data loads the correct state is applied.
+}
 
 function getMinimumQuotaGb() {
     const configured = Number(rawData?.quotas?.min_quota_gb);
@@ -529,7 +546,12 @@ async function refreshQuotasData() {
         logs: payload.reconcile?.logs || payload.logs || [],
         managed_repository: payload.reconcile?.managed_repository || {},
         min_quota_gb: payload.min_quota_gb || payload.reconcile?.min_quota_gb,
+        quota_enforcement_available: payload.reconcile?.quota_enforcement_available,
     };
+    if (typeof rawData.quotas.quota_enforcement_available === 'boolean') {
+        quotaEnforcementAvailable = rawData.quotas.quota_enforcement_available;
+        syncQuotaTabAvailability();
+    }
 }
 
 function resetQuotasDataForUnavailableServer() {
@@ -557,8 +579,13 @@ async function loadData() {
                 logs: payload.quotas?.logs || [],
                 managed_repository: payload.quotas?.managed_repository || {},
                 min_quota_gb: payload.quotas?.min_quota_gb,
+                quota_enforcement_available: payload.quotas?.quota_enforcement_available,
             },
         };
+        if (typeof rawData.quotas.quota_enforcement_available === 'boolean') {
+            quotaEnforcementAvailable = rawData.quotas.quota_enforcement_available;
+            syncQuotaTabAvailability();
+        }
         totalUsedBytes = Number(payload.totals?.omero_binary_bytes || 0);
         if (totalUsedBytes <= 0) {
             totalUsedBytes = (rawData.by_user || []).reduce((acc, item) => acc + Number(item.bytes || 0), 0);
@@ -593,7 +620,13 @@ async function saveQuotaEdits() {
         quotas_gb: payload.quotas_gb || payload.reconcile?.quotas_gb || {},
         logs: payload.reconcile?.logs || [],
         managed_repository: payload.reconcile?.managed_repository || {},
+        min_quota_gb: payload.reconcile?.min_quota_gb || rawData.quotas?.min_quota_gb,
+        quota_enforcement_available: payload.reconcile?.quota_enforcement_available,
     };
+    if (typeof rawData.quotas.quota_enforcement_available === 'boolean') {
+        quotaEnforcementAvailable = rawData.quotas.quota_enforcement_available;
+        syncQuotaTabAvailability();
+    }
 }
 
 function clearAutoRefreshTimer() {
