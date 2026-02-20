@@ -756,6 +756,13 @@ body {
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(29, 78, 216, 0.35);
 }
+.storage-view-toggle .log-refresh-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #cbd5e1;
+    color: #64748b;
+    box-shadow: none;
+}
 .storage-visual-layout {
     display: grid;
     grid-template-columns: 500px minmax(0, 1fr);
