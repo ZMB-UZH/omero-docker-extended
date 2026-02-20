@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
+DEFAULT_ENFORCER_MARKER_PATH = "/OMERO/.admin-tools/quota-enforcer-installed"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
 DEFAULT_MIN_QUOTA_GB = 0.10
@@ -58,6 +59,23 @@ def min_quota_gb() -> float:
     if parsed <= 0:
         raise QuotaError("ADMIN_TOOLS_MIN_QUOTA_GB must be greater than 0.")
     return round(parsed, 3)
+
+
+def is_quota_enforcement_available() -> bool:
+    """Return True when the host-side quota enforcer is installed.
+
+    The installer writes a marker file on the shared /OMERO volume when
+    ext4 project quota support is confirmed and the systemd timer is
+    installed.  The absence of this file means the host filesystem does
+    not support quotas or the enforcer was never installed.
+    """
+    marker_path = Path(
+        os.environ.get(
+            "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH",
+            DEFAULT_ENFORCER_MARKER_PATH,
+        )
+    )
+    return marker_path.is_file()
 
 
 MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
@@ -330,7 +348,12 @@ def get_state() -> Dict[str, object]:
     if not isinstance(logs, list):
         logs = []
 
-    return {"quotas_gb": quotas, "logs": logs, "min_quota_gb": min_quota_gb()}
+    return {
+        "quotas_gb": quotas,
+        "logs": logs,
+        "min_quota_gb": min_quota_gb(),
+        "quota_enforcement_available": is_quota_enforcement_available(),
+    }
 
 
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
@@ -464,4 +487,5 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             "quotas_gb": state.get("quotas_gb", {}),
             "logs": state.get("logs", []),
             "min_quota_gb": min_quota_gb(),
+            "quota_enforcement_available": is_quota_enforcement_available(),
         }

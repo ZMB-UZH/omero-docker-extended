@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from omeroweb_admin_tools.services.storage_quotas import (
+    is_quota_enforcement_available,
     reconcile_quotas,
     resolve_managed_group_root,
     upsert_quotas,
@@ -296,3 +297,101 @@ def test_reconcile_reports_configured_status_for_ready_groups(
         "Host-side enforcer will apply" in entry["message"]
         for entry in result["logs"]
     )
+
+
+def test_is_quota_enforcement_available_returns_true_when_marker_exists(
+    tmp_path, monkeypatch
+) -> None:
+    """Enforcement is available when marker file exists."""
+    marker = tmp_path / ".admin-tools" / "quota-enforcer-installed"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("installed\n")
+
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH", str(marker)
+    )
+
+    assert is_quota_enforcement_available() is True
+
+
+def test_is_quota_enforcement_available_returns_false_when_marker_missing(
+    tmp_path, monkeypatch
+) -> None:
+    """Enforcement is NOT available when marker file is absent."""
+    missing_marker = tmp_path / ".admin-tools" / "quota-enforcer-installed"
+
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH", str(missing_marker)
+    )
+
+    assert is_quota_enforcement_available() is False
+
+
+def test_is_quota_enforcement_available_returns_false_when_marker_is_directory(
+    tmp_path, monkeypatch
+) -> None:
+    """Enforcement is NOT available when marker path is a directory (not a file)."""
+    marker_dir = tmp_path / ".admin-tools" / "quota-enforcer-installed"
+    marker_dir.mkdir(parents=True)
+
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH", str(marker_dir)
+    )
+
+    assert is_quota_enforcement_available() is False
+
+
+def test_reconcile_includes_enforcement_available_flag(
+    tmp_path, monkeypatch
+) -> None:
+    """reconcile_quotas includes quota_enforcement_available in response."""
+    state_path = tmp_path / "quotas.json"
+    safe_root = tmp_path / "safe" / "group-root"
+    safe_root.mkdir(parents=True)
+    marker = tmp_path / "marker"
+    marker.write_text("installed\n")
+
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH", str(marker))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (safe_root, "test-override"),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._is_safe_managed_repository_root",
+        lambda path: (True, ""),
+    )
+
+    result = reconcile_quotas([])
+
+    assert "quota_enforcement_available" in result
+    assert result["quota_enforcement_available"] is True
+
+
+def test_reconcile_reports_enforcement_unavailable_when_marker_missing(
+    tmp_path, monkeypatch
+) -> None:
+    """reconcile_quotas reports enforcement unavailable when marker is missing."""
+    state_path = tmp_path / "quotas.json"
+    safe_root = tmp_path / "safe" / "group-root"
+    safe_root.mkdir(parents=True)
+    missing_marker = tmp_path / "nonexistent-marker"
+
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.setenv(
+        "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH", str(missing_marker)
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (safe_root, "test-override"),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._is_safe_managed_repository_root",
+        lambda path: (True, ""),
+    )
+
+    result = reconcile_quotas([])
+
+    assert result["quota_enforcement_available"] is False
