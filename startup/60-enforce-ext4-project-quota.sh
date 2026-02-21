@@ -56,8 +56,11 @@ fi
 
 resolved_group_path="$(readlink -f "$group_path")"
 resolved_mount_point="$(readlink -f "$mount_point")"
+# Strip trailing slash so that root mount "/" becomes "" and the
+# pattern "/*" correctly matches any absolute path.
+mount_prefix="${resolved_mount_point%/}"
 case "$resolved_group_path" in
-  "$resolved_mount_point"/*) ;;
+  "$mount_prefix"/*) ;;
   *)
     echo "Group path '$resolved_group_path' is not under mount point '$resolved_mount_point'" >&2
     exit 1
