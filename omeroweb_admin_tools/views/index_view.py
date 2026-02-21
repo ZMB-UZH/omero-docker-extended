@@ -40,6 +40,7 @@ from ..services.storage_quotas import (
     QuotaError,
     get_state as get_quota_state,
     import_quotas_csv,
+    is_quota_enforcement_available,
     quota_csv_template,
     reconcile_quotas,
     upsert_quotas,
@@ -1683,10 +1684,18 @@ def storage_data(request, conn=None, url=None, **kwargs):
             "Quota reconciliation failed; returning storage data without quota info",
             exc_info=True,
         )
+        # Use the actual marker-file check instead of hardcoding False.
+        # reconcile_quotas() can fail for transient reasons (e.g. first
+        # write to the state file, permission issues) that are unrelated
+        # to whether the host-side quota enforcer is installed.
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
         quota_status = {
             "quotas_gb": {},
             "logs": [],
-            "quota_enforcement_available": False,
+            "quota_enforcement_available": enforcer_available,
         }
 
     return JsonResponse(
@@ -1738,11 +1747,27 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
 
     try:
         state = get_quota_state()
+    except Exception:
+        logger.warning("Could not read quota state file; using empty defaults", exc_info=True)
+        state = {"quotas_gb": {}, "logs": []}
+
+    try:
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
-    except Exception as exc:
-        logger.exception("Failed to load quota data")
-        return JsonResponse({"error": f"Quota data request failed: {exc}"}, status=500)
+    except Exception:
+        logger.warning(
+            "Quota reconciliation failed in quota_data view; returning partial data",
+            exc_info=True,
+        )
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
+        reconciled = {
+            "quotas_gb": state.get("quotas_gb", {}),
+            "logs": state.get("logs", []),
+            "quota_enforcement_available": enforcer_available,
+        }
 
     return JsonResponse(
         {
