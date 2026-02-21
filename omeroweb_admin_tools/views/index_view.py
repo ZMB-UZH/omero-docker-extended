@@ -40,6 +40,7 @@ from ..services.storage_quotas import (
     QuotaError,
     get_state as get_quota_state,
     import_quotas_csv,
+    is_quota_enforcement_available,
     quota_csv_template,
     reconcile_quotas,
     upsert_quotas,
@@ -1683,10 +1684,18 @@ def storage_data(request, conn=None, url=None, **kwargs):
             "Quota reconciliation failed; returning storage data without quota info",
             exc_info=True,
         )
+        # Use the actual marker-file check instead of hardcoding False.
+        # reconcile_quotas() can fail for transient reasons (e.g. first
+        # write to the state file, permission issues) that are unrelated
+        # to whether the host-side quota enforcer is installed.
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
         quota_status = {
             "quotas_gb": {},
             "logs": [],
-            "quota_enforcement_available": False,
+            "quota_enforcement_available": enforcer_available,
         }
 
     return JsonResponse(
