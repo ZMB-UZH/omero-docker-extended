@@ -471,7 +471,16 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             )
 
         _prune_reconcile_event_cache(state, reconcile_event_keys)
-        _write_state(path, state)
+        try:
+            _write_state(path, state)
+        except OSError:
+            logger.warning(
+                "Could not persist quota state to %s; "
+                "reconciliation result is still valid but changes will not "
+                "be saved until the directory is writable",
+                path,
+                exc_info=True,
+            )
         return {
             "filesystem": {
                 "type": filesystem.fs_type,
