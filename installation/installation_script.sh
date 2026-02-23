@@ -404,39 +404,39 @@ compose_up_with_retries() {
 }
 
 
-validate_omero_install_group_specs() {
-    local raw_specs="${1:-}"
+validate_omero_install_group_list() {
+    local raw_group_list="${1:-}"
 
-    if [ -z "${raw_specs}" ]; then
+    if [ -z "${raw_group_list}" ]; then
         return 0
     fi
 
-    local spec_entry=""
+    local group_entry=""
     local group_name=""
     local group_permission=""
 
-    IFS="," read -r -a spec_entries <<< "${raw_specs}"
-    for spec_entry in "${spec_entries[@]}"; do
-        spec_entry="${spec_entry//[[:space:]]/}"
-        if [ -z "${spec_entry}" ]; then
+    IFS="," read -r -a group_entries <<< "${raw_group_list}"
+    for group_entry in "${group_entries[@]}"; do
+        group_entry="${group_entry//[[:space:]]/}"
+        if [ -z "${group_entry}" ]; then
             continue
         fi
 
-        if [[ "${spec_entry}" != *:* ]]; then
-            echo "ERROR: Invalid OMERO_INSTALL_GROUP_SPECS entry (missing ':'): ${spec_entry}" >&2
+        if [[ "${group_entry}" != *:* ]]; then
+            echo "ERROR: Invalid OMERO_INSTALL_GROUP_LIST entry (missing ':'): ${group_entry}" >&2
             return 1
         fi
 
-        group_name="${spec_entry%%:*}"
-        group_permission="${spec_entry#*:}"
+        group_name="${group_entry%%:*}"
+        group_permission="${group_entry#*:}"
 
         if [ -z "${group_name}" ]; then
-            echo "ERROR: OMERO_INSTALL_GROUP_SPECS contains an entry with empty group name: ${spec_entry}" >&2
+            echo "ERROR: OMERO_INSTALL_GROUP_LIST contains an entry with empty group name: ${group_entry}" >&2
             return 1
         fi
 
         if ! [[ "${group_name}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
-            echo "ERROR: Invalid OMERO group name '${group_name}' in OMERO_INSTALL_GROUP_SPECS. Allowed pattern: [A-Za-z0-9_.-]+" >&2
+            echo "ERROR: Invalid OMERO group name '${group_name}' in OMERO_INSTALL_GROUP_LIST. Allowed pattern: [A-Za-z0-9_.-]+" >&2
             return 1
         fi
 
@@ -453,12 +453,12 @@ validate_omero_install_group_specs() {
     return 0
 }
 
-create_omero_groups_from_specs() {
+create_omero_groups_from_list() {
     local compose_file="$1"
-    local raw_specs="${2:-}"
+    local raw_group_list="${2:-}"
 
-    if [ -z "${raw_specs}" ]; then
-        echo "OMERO_INSTALL_GROUP_SPECS is empty; skipping OMERO installation group bootstrap."
+    if [ -z "${raw_group_list}" ]; then
+        echo "OMERO_INSTALL_GROUP_LIST is empty; skipping OMERO installation group bootstrap."
         return 0
     fi
 
@@ -467,24 +467,24 @@ create_omero_groups_from_specs() {
         return 1
     fi
 
-    if ! validate_omero_install_group_specs "${raw_specs}"; then
+    if ! validate_omero_install_group_list "${raw_group_list}"; then
         return 1
     fi
 
-    local spec_entry=""
+    local group_entry=""
     local group_name=""
     local group_permission=""
     local add_output=""
 
-    echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_SPECS..."
+    echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_LIST..."
 
-    IFS="," read -r -a spec_entries <<< "${raw_specs}"
-    for spec_entry in "${spec_entries[@]}"; do
-        spec_entry="${spec_entry//[[:space:]]/}"
-        [ -z "${spec_entry}" ] && continue
+    IFS="," read -r -a group_entries <<< "${raw_group_list}"
+    for group_entry in "${group_entries[@]}"; do
+        group_entry="${group_entry//[[:space:]]/}"
+        [ -z "${group_entry}" ] && continue
 
-        group_name="${spec_entry%%:*}"
-        group_permission="${spec_entry#*:}"
+        group_name="${group_entry%%:*}"
+        group_permission="${group_entry#*:}"
 
         echo "Ensuring OMERO group exists: ${group_name} (${group_permission})"
 
@@ -2030,7 +2030,7 @@ echo ""
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     compose_up_with_retries "${COMPOSE_FILE}"
 
-    if ! create_omero_groups_from_specs "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_SPECS:-}"; then
+    if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
         exit 1
     fi
 else
