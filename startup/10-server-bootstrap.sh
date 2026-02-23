@@ -32,7 +32,7 @@ validate_ldap_configuration() {
         return
     fi
 
-    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
+    local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
 
     local required_non_empty=(
         "CONFIG_omero_ldap_urls"
@@ -47,11 +47,6 @@ validate_ldap_configuration() {
             exit 1
         fi
     done
-
-    if [[ -z "${ldap_user_filter}" ]]; then
-        echo "ERROR: LDAP is enabled but CONFIG_omero_ldap__user__filter is not set in env/omero_secrets.env" >&2
-        exit 1
-    fi
 
     if [[ -z "${CONFIG_omero_ldap_base+x}" ]]; then
         echo "ERROR: LDAP is enabled but CONFIG_omero_ldap_base is not declared in env/omero_secrets.env (empty is allowed, missing is not)." >&2
@@ -89,7 +84,7 @@ apply_ldap_runtime_configuration() {
         return
     fi
 
-    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
+    local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
     local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
 
     # Explicitly set LDAP properties at runtime so settings that include underscores
@@ -100,7 +95,11 @@ apply_ldap_runtime_configuration() {
     run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
     run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
     run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
-    run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
+    if [[ -n "${CONFIG_omero_ldap_user__filter+x}" ]]; then
+        run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
+    else
+        log "LDAP user filter not declared; leaving omero.ldap.user_filter unchanged"
+    fi
 
     if [[ -n "${ldap_new_user_group}" ]]; then
         run_omero config set omero.ldap.new_user_group "${ldap_new_user_group}"
