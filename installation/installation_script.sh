@@ -28,6 +28,7 @@ DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
 DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
+OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -140,6 +141,12 @@ fi
 SECRETS_ENV_FILE="${REPO_ROOT_DIR}/env/omero_secrets.env"
 if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
+fi
+
+if [ -r "${OMERO_SERVER_ENV_FILE}" ]; then
+    set -a
+    load_installation_paths_env "${OMERO_SERVER_ENV_FILE}"
+    set +a
 fi
 
 require_nonempty_config_var() {
@@ -394,6 +401,117 @@ compose_up_with_retries() {
     done
 
     return 1
+}
+
+
+validate_omero_install_group_specs() {
+    local raw_specs="${1:-}"
+
+    if [ -z "${raw_specs}" ]; then
+        return 0
+    fi
+
+    local spec_entry=""
+    local group_name=""
+    local group_permission=""
+
+    IFS="," read -r -a spec_entries <<< "${raw_specs}"
+    for spec_entry in "${spec_entries[@]}"; do
+        spec_entry="${spec_entry//[[:space:]]/}"
+        if [ -z "${spec_entry}" ]; then
+            continue
+        fi
+
+        if [[ "${spec_entry}" != *:* ]]; then
+            echo "ERROR: Invalid OMERO_INSTALL_GROUP_SPECS entry (missing ':'): ${spec_entry}" >&2
+            return 1
+        fi
+
+        group_name="${spec_entry%%:*}"
+        group_permission="${spec_entry#*:}"
+
+        if [ -z "${group_name}" ]; then
+            echo "ERROR: OMERO_INSTALL_GROUP_SPECS contains an entry with empty group name: ${spec_entry}" >&2
+            return 1
+        fi
+
+        if ! [[ "${group_name}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "ERROR: Invalid OMERO group name '${group_name}' in OMERO_INSTALL_GROUP_SPECS. Allowed pattern: [A-Za-z0-9_.-]+" >&2
+            return 1
+        fi
+
+        case "${group_permission}" in
+            private|read-only|read-annotate|read-write)
+                ;;
+            *)
+                echo "ERROR: Invalid OMERO group permission '${group_permission}' for group '${group_name}'. Supported values: private, read-only, read-annotate, read-write" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    return 0
+}
+
+create_omero_groups_from_specs() {
+    local compose_file="$1"
+    local raw_specs="${2:-}"
+
+    if [ -z "${raw_specs}" ]; then
+        echo "OMERO_INSTALL_GROUP_SPECS is empty; skipping OMERO installation group bootstrap."
+        return 0
+    fi
+
+    if [ ! -r "${OMERO_SERVER_ENV_FILE}" ]; then
+        echo "ERROR: OMERO server env file is required for deterministic group bootstrap and was not found: ${OMERO_SERVER_ENV_FILE}" >&2
+        return 1
+    fi
+
+    if ! validate_omero_install_group_specs "${raw_specs}"; then
+        return 1
+    fi
+
+    local spec_entry=""
+    local group_name=""
+    local group_permission=""
+    local add_output=""
+
+    echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_SPECS..."
+
+    IFS="," read -r -a spec_entries <<< "${raw_specs}"
+    for spec_entry in "${spec_entries[@]}"; do
+        spec_entry="${spec_entry//[[:space:]]/}"
+        [ -z "${spec_entry}" ] && continue
+
+        group_name="${spec_entry%%:*}"
+        group_permission="${spec_entry#*:}"
+
+        echo "Ensuring OMERO group exists: ${group_name} (${group_permission})"
+
+        set +e
+        add_output="$(compose_with_installation_env "${compose_file}" exec -T \
+            -e ROOTPASS="${ROOTPASS}" \
+            omeroserver bash -lc "omero login root@localhost -w \"\${ROOTPASS}\" >/dev/null && omero group add --type '${group_permission}' '${group_name}'" 2>&1)"
+        add_exit_code=$?
+        set -e
+
+        if [ "${add_exit_code}" -eq 0 ]; then
+            echo "Created OMERO group '${group_name}' (${group_permission})."
+            continue
+        fi
+
+        if printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+            echo "OMERO group '${group_name}' already exists; skipping creation."
+            continue
+        fi
+
+        echo "ERROR: Failed to ensure OMERO group '${group_name}' (${group_permission})." >&2
+        echo "ERROR: omero output: ${add_output}" >&2
+        return 1
+    done
+
+    echo "OMERO installation group bootstrap completed."
+    return 0
 }
 
 stop_old_installation_containers() {
@@ -1911,6 +2029,10 @@ echo ""
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     compose_up_with_retries "${COMPOSE_FILE}"
+
+    if ! create_omero_groups_from_specs "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_SPECS:-}"; then
+        exit 1
+    fi
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi
