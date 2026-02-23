@@ -1065,6 +1065,9 @@ body {
         .import-log-label--failure {
             color: #fca5a5;
         }
+        .import-log-label--skipped {
+            color: #fde68a;
+        }
         .import-log-rest {
             color: #e2e8f0;
         }

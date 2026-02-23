@@ -7,6 +7,14 @@ def job_error_with_path(path, detail):
     return f"Import failure: {path}"
 
 
+def skipped_non_importable(path):
+    return f"Auto-skipped (not an importable image): {path}"
+
+
+def skipped_incompatible(path):
+    return f"Auto-skipped (incompatible format): {path}"
+
+
 def confirm_irreversible_action():
     return "Are you absolutely sure? This action is irreversible."
 
