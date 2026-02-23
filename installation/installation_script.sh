@@ -503,6 +503,10 @@ create_omero_groups_from_list() {
     local group_name=""
     local group_permission=""
     local add_output=""
+    local add_exit_code=0
+    local add_attempt=0
+    local add_retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-20}"
+    local add_retry_delay_seconds="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-3}"
     local -a group_entries=()
 
     echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_LIST..."
@@ -516,12 +520,27 @@ create_omero_groups_from_list() {
 
         echo "Ensuring OMERO group exists: ${group_name} (${group_permission})"
 
-        set +e
-        add_output="$(compose_with_installation_env "${compose_file}" exec -T \
-            -e ROOTPASS="${ROOTPASS}" \
-            omeroserver bash -lc "omero login root@localhost -w \"\${ROOTPASS}\" >/dev/null && omero group add --type '${group_permission}' '${group_name}'" 2>&1)"
-        add_exit_code=$?
-        set -e
+        add_output=""
+        add_exit_code=1
+        for add_attempt in $(seq 1 "${add_retry_limit}"); do
+            set +e
+            add_output="$(compose_with_installation_env "${compose_file}" exec -T \
+                -e ROOTPASS="${ROOTPASS}" \
+                -e TARGET_GROUP_NAME="${group_name}" \
+                -e TARGET_GROUP_PERMISSION="${group_permission}" \
+                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)." >&2; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+            add_exit_code=$?
+            set -e
+
+            if [ "${add_exit_code}" -eq 0 ] || printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+                break
+            fi
+
+            if [ "${add_attempt}" -lt "${add_retry_limit}" ]; then
+                echo "WARNING: Group bootstrap attempt ${add_attempt}/${add_retry_limit} failed for '${group_name}'. Retrying in ${add_retry_delay_seconds}s..." >&2
+                sleep "${add_retry_delay_seconds}"
+            fi
+        done
 
         if [ "${add_exit_code}" -eq 0 ]; then
             echo "Created OMERO group '${group_name}' (${group_permission})."
