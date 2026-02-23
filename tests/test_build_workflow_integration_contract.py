@@ -21,6 +21,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("run_image_build()", script_text)
         self.assertIn("docker_buildx_compressed_push.sh", script_text)
 
+
+    def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('find / -xdev -type f -name omero -perm -u+x', script_text)
+        self.assertIn('group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"', script_text)
+
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
@@ -36,6 +44,12 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn(
             'REPO_URL="${REPO_URL:-https://github.com/ZMB-UZH/omero-docker-extended.git}"',
             script_text,
+        )
+        self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
+
+    def test_private_pull_script_branch_default_is_independent(self) -> None:
+        script_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
+            encoding="utf-8"
         )
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-alpha}"', script_text)
 

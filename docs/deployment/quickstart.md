@@ -89,6 +89,7 @@ bash installation/installation_script.sh
 ```
 
 - `github_pull_project_bash` preserves the installation script prompts by default.
+- `github_pull_project_bash` defaults to `REPO_BRANCH=main` only for that script; branch defaults for other pull scripts are script-specific.
 - For unattended automation, you can explicitly set `INSTALLATION_AUTOMATION_MODE=1`.
 
 - To integrate with the pull/update workflow, run:
