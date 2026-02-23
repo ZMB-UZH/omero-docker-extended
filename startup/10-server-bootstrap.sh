@@ -27,6 +27,34 @@ run_omero() {
     runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
 }
 
+validate_ldap_configuration() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    local required_non_empty=(
+        "CONFIG_omero_ldap_urls"
+        "CONFIG_omero_ldap_username"
+        "CONFIG_omero_ldap_password"
+        "CONFIG_omero_ldap_user_filter"
+    )
+
+    local var_name
+    for var_name in "${required_non_empty[@]}"; do
+        if [[ -z "${!var_name:-}" ]]; then
+            echo "ERROR: LDAP is enabled but ${var_name} is not set in env/omero_secrets.env" >&2
+            exit 1
+        fi
+    done
+
+    if [[ -z "${CONFIG_omero_ldap_base+x}" ]]; then
+        echo "ERROR: LDAP is enabled but CONFIG_omero_ldap_base is not declared in env/omero_secrets.env (empty is allowed, missing is not)." >&2
+        exit 1
+    fi
+
+    log "LDAP enabled; required secret-backed LDAP settings are present"
+}
+
 check_writable_dir() {
     local path="$1"
     local label="$2"
@@ -237,6 +265,7 @@ main() {
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
 
+    validate_ldap_configuration
     reset_runtime_if_requested
     configure_script_python
     ensure_certificate_sans

@@ -13,6 +13,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 - `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets).
+- LDAP bind and directory settings (`CONFIG_omero_ldap_urls`, `CONFIG_omero_ldap_username`, `CONFIG_omero_ldap_password`, `CONFIG_omero_ldap_base`, `CONFIG_omero_ldap_user_filter`) must be set in `env/omero_secrets.env` when `CONFIG_omero_ldap_config=true`.
 
 ## Required Hardening Before Deployment
 
