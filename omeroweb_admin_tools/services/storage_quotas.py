@@ -15,9 +15,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
 DEFAULT_ENFORCER_MARKER_PATH = "/OMERO/.admin-tools/quota-enforcer-installed"
+DEFAULT_OMERO_DATA_DIR = "/OMERO"
+DEFAULT_MANAGED_REPOSITORY_SUBDIR = "ManagedRepository"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
-DEFAULT_MIN_QUOTA_GB = 0.10
+AUTO_GROUP_QUOTA_ENV = "ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA"
+DEFAULT_GROUP_QUOTA_ENV = "ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB"
+MIN_GROUP_QUOTA_ENV = "ADMIN_TOOLS_MIN_QUOTA_GB"
 _RECONCILE_LOCK = threading.Lock()
 
 
@@ -45,20 +49,50 @@ def quota_state_path() -> Path:
     ).expanduser()
 
 
-def min_quota_gb() -> float:
-    """Return minimum allowed quota in GB from environment."""
-    raw_value = os.environ.get("ADMIN_TOOLS_MIN_QUOTA_GB", "").strip()
-    if not raw_value:
-        return DEFAULT_MIN_QUOTA_GB
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise QuotaError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _parse_bool_env(name: str) -> bool:
+    raw_value = _required_env(name).lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise QuotaError(
+        f"Invalid {name} value {raw_value!r}; expected one of: true/false, 1/0, yes/no, on/off."
+    )
+
+
+def _parse_quota_env(name: str) -> float:
+    raw_value = _required_env(name)
     try:
         parsed = float(raw_value)
     except ValueError as exc:
         raise QuotaError(
-            "Invalid ADMIN_TOOLS_MIN_QUOTA_GB value; expected a numeric value in GB."
+            f"Invalid {name} value; expected a numeric value in GB."
         ) from exc
     if parsed <= 0:
-        raise QuotaError("ADMIN_TOOLS_MIN_QUOTA_GB must be greater than 0.")
+        raise QuotaError(f"{name} must be greater than 0.")
     return round(parsed, 3)
+
+
+def min_quota_gb() -> float:
+    """Return minimum allowed quota in GB from environment."""
+    return _parse_quota_env(MIN_GROUP_QUOTA_ENV)
+
+
+def default_group_quota_gb() -> float:
+    """Return default quota in GB for newly created groups from environment."""
+    return _parse_quota_env(DEFAULT_GROUP_QUOTA_ENV)
+
+
+def auto_set_default_group_quota_enabled() -> bool:
+    """Return whether new OMERO groups should automatically receive default quotas."""
+    return _parse_bool_env(AUTO_GROUP_QUOTA_ENV)
 
 
 def is_quota_enforcement_available() -> bool:
@@ -78,21 +112,24 @@ def is_quota_enforcement_available() -> bool:
     return marker_path.is_file()
 
 
-MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
-
-
 def managed_group_root() -> Path:
-    """Return the fixed OMERO managed repository group root."""
-    return MANAGED_GROUP_ROOT
-
+    """Return OMERO managed repository group root from environment."""
+    configured = os.environ.get("ADMIN_TOOLS_MANAGED_GROUP_ROOT", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    omero_data_dir = os.environ.get("OMERO_DATA_DIR", DEFAULT_OMERO_DATA_DIR).strip()
+    if not omero_data_dir:
+        omero_data_dir = DEFAULT_OMERO_DATA_DIR
+    return Path(omero_data_dir).expanduser() / DEFAULT_MANAGED_REPOSITORY_SUBDIR
 
 
 def resolve_managed_group_root(known_groups: Sequence[str]) -> Tuple[Path, str]:
-    """Return the fixed managed repository root without fallback resolution."""
+    """Return configured managed repository root without fallback resolution."""
     del known_groups
-    if MANAGED_GROUP_ROOT.exists() and MANAGED_GROUP_ROOT.is_dir():
-        return MANAGED_GROUP_ROOT, "using fixed managed repository root"
-    return MANAGED_GROUP_ROOT, "fixed managed repository root does not exist"
+    group_root = managed_group_root()
+    if group_root.exists() and group_root.is_dir():
+        return group_root, "using configured managed repository root"
+    return group_root, "configured managed repository root does not exist"
 
 
 def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
@@ -104,12 +141,16 @@ def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
     if not path.exists() or not path.is_dir():
         return False, "path does not exist or is not a directory"
 
-    omero_root = Path("/OMERO").resolve()
+    omero_data_root = Path(
+        os.environ.get("OMERO_DATA_DIR", DEFAULT_OMERO_DATA_DIR).strip()
+        or DEFAULT_OMERO_DATA_DIR
+    ).expanduser()
+    omero_root = omero_data_root.resolve()
     try:
         resolved.relative_to(omero_root)
     except ValueError:
         if resolved != omero_root:
-            return False, "path must be within /OMERO mount"
+            return False, f"path must be within {omero_root} mount"
 
     return True, ""
 
@@ -262,6 +303,10 @@ def _is_group_folder_available(group_path: Path) -> bool:
     return group_path.exists() and group_path.is_dir()
 
 
+def _can_manage_group_directories(group_root: Path) -> bool:
+    return os.access(group_root, os.W_OK | os.X_OK)
+
+
 def upsert_quotas(
     updates: Sequence[Tuple[str, object]], source: str = "ui"
 ) -> Dict[str, object]:
@@ -370,6 +415,28 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         quotas = state.setdefault("quotas_gb", {})
         assert isinstance(quotas, dict)
 
+        auto_set_default_quota = auto_set_default_group_quota_enabled()
+        default_quota_gb = default_group_quota_gb()
+        minimum_quota_gb = min_quota_gb()
+        if default_quota_gb < minimum_quota_gb:
+            raise QuotaError(
+                f"{DEFAULT_GROUP_QUOTA_ENV} ({default_quota_gb:.3f}) must be >= "
+                f"{MIN_GROUP_QUOTA_ENV} ({minimum_quota_gb:.3f})."
+            )
+
+        for known_group_name in sorted(set(known_groups)):
+            normalized_known_group_name = _normalize_group(str(known_group_name))
+            if auto_set_default_quota and normalized_known_group_name not in quotas:
+                quotas[normalized_known_group_name] = default_quota_gb
+                _append_log(
+                    state,
+                    "info",
+                    (
+                        f"Auto-created quota for new group '{normalized_known_group_name}' at "
+                        f"{default_quota_gb:.3f} GB (source=auto-group-create)."
+                    ),
+                )
+
         group_root, root_reason = resolve_managed_group_root(known_groups)
         root_is_safe, root_safety_reason = _is_safe_managed_repository_root(group_root)
         available_groups = (
@@ -432,6 +499,19 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                 pending.append(group_name)
                 continue
             if not _is_group_folder_available(group_path):
+                if not _can_manage_group_directories(group_root):
+                    pending.append(group_name)
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="info",
+                        message=(
+                            f"Quota pending for group '{group_name}': managed root "
+                            f"{group_root} is not writable by the omeroweb process. "
+                            "Host-side enforcer is expected to create the group directory."
+                        ),
+                    )
+                    continue
                 try:
                     group_path.mkdir(parents=False, exist_ok=True)
                     _append_reconcile_event(
@@ -446,7 +526,10 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                         state,
                         event_key=group_key,
                         level="warning",
-                        message=f"Quota pending for group '{group_name}': could not create directory {group_path}: {exc}.",
+                        message=(
+                            f"Quota pending for group '{group_name}': could not create "
+                            f"directory {group_path}: {exc}."
+                        ),
                     )
                     continue
             if not _is_group_folder_available(group_path):
