@@ -14,6 +14,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
 - `env/omero_secrets_example.env` -> `env/omero_secrets.env`: credentials and secrets (deployment-local only; never commit runtime secrets).
 - LDAP bind and directory settings (`CONFIG_omero_ldap_urls`, `CONFIG_omero_ldap_username`, `CONFIG_omero_ldap_password`, `CONFIG_omero_ldap_base`, `CONFIG_omero_ldap_user_filter`) must be set in `env/omero_secrets.env` when `CONFIG_omero_ldap_config=true`.
+- `OMERO_INSTALL_GROUP_SPECS` (in `env/omeroserver.env`) controls installation-time OMERO group bootstrap as `group:permission` entries (comma-separated). Supported permissions: `private`, `read-only`, `read-annotate`, `read-write`. The installation script creates each configured group only if it does not already exist.
 
 ## Required Hardening Before Deployment
 
