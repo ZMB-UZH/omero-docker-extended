@@ -152,6 +152,7 @@ __all__ = [
     '_safe_remove_tree',
     '_save_job',
     '_special_methods_enabled',
+    '_should_auto_skip_import',
     '_should_run_cleanup',
     '_should_start_compatibility_check',
     '_start_compatibility_check_thread',
@@ -247,6 +248,34 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 
 # Namespace used for SEM-EDX spectra TXT attachments (FileAnnotation.ns)
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
+
+# --------------------------------------------------------------------------
+# AUTO-SKIP: Non-importable file detection
+#
+# Mirrors OMERO Insight / Bio-Formats ImportCandidates behaviour.
+# These files are silently skipped before any import or compatibility check.
+# --------------------------------------------------------------------------
+_ALWAYS_SKIP_FILENAMES = frozenset({
+    "thumbs.db",        # Windows thumbnail cache
+    ".ds_store",        # macOS folder metadata
+    "desktop.ini",      # Windows folder settings
+    ".picasa.ini",      # Google Picasa metadata
+    ".bridgecache",     # Adobe Bridge cache
+    ".bridgecachet",    # Adobe Bridge cache
+})
+
+_COMPANION_METADATA_DIRS = frozenset({
+    "metadata",
+    "_metadata",
+    ".metadata",
+})
+
+_NEVER_SKIP_EXTENSIONS = frozenset({
+    ".ome.xml",
+    ".ome.tif",
+    ".ome.tiff",
+    ".companion.ome",
+})
 SEM_EDX_SETTINGS_DEFAULTS = {
     "create_tables": True,
     "create_figures_attachments": True,
@@ -614,6 +643,47 @@ def _safe_relative_path(raw_name: str):
     if not parts:
         return None
     return "/".join(parts)
+
+
+def _should_auto_skip_import(relative_path: str) -> bool:
+    """
+    Detect files that should never be imported into OMERO.
+
+    Mirrors OMERO Insight / Bio-Formats ImportCandidates behaviour: only actual
+    image files are imported; OS metadata, companion metadata XML and other
+    non-image artefacts are silently skipped.
+
+    Returns True when the file should be marked ``import_skip=True``.
+    """
+    if not relative_path:
+        return False
+
+    parts = PurePosixPath(relative_path)
+    filename = parts.name
+    filename_lower = filename.lower()
+
+    # 1. Known OS / application junk files
+    if filename_lower in _ALWAYS_SKIP_FILENAMES:
+        return True
+
+    # 2. macOS resource-fork files (._*)
+    if filename.startswith("._"):
+        return True
+
+    # 3. Companion metadata: non-OME XML files inside a metadata/ directory.
+    #    Standalone .ome.xml files are a valid OMERO image format and must NOT
+    #    be skipped.
+    if filename_lower.endswith(".xml"):
+        # Protect OME-XML files from being skipped
+        is_ome_xml = any(filename_lower.endswith(ext) for ext in _NEVER_SKIP_EXTENSIONS)
+        if not is_ome_xml:
+            parent_parts = parts.parent.parts
+            if parent_parts and any(
+                p.lower() in _COMPANION_METADATA_DIRS for p in parent_parts
+            ):
+                return True
+
+    return False
 
 
 def _normalize_sem_edx_associations(raw_associations, normalized_entries):
@@ -2335,6 +2405,44 @@ def _process_import_job(job_id: str):
             dataset_map = job.get("dataset_map") or {}
             orphan_dataset_name = job.get("orphan_dataset_name")
             batch_size = _resolve_job_batch_size(job)
+
+            # ----------------------------------------------------------
+            # Pre-process: mark skipped and incompatible files as done
+            # so their bytes are counted in progress tracking.
+            # ----------------------------------------------------------
+            skipped_count = 0
+            incompatible_skipped = 0
+            for entry in job.get("files", []):
+                if entry.get("status") not in ("uploaded", "pending"):
+                    continue
+                rel_path = entry.get("relative_path", "")
+
+                # Files already flagged import_skip at job creation time
+                if entry.get("import_skip"):
+                    if entry.get("status") != "skipped":
+                        entry["status"] = "skipped"
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        _append_job_message(job, messages.skipped_non_importable(rel_path))
+                        skipped_count += 1
+                    continue
+
+                # Files the compatibility check marked as incompatible
+                # should be auto-skipped rather than attempted and failed.
+                if entry.get("compatibility") == "incompatible":
+                    entry["status"] = "skipped"
+                    entry["import_skip"] = True
+                    job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                    _append_job_message(job, messages.skipped_incompatible(rel_path))
+                    incompatible_skipped += 1
+                    continue
+
+            if skipped_count or incompatible_skipped:
+                logger.info(
+                    "Import thread: pre-skipped %d non-importable + %d incompatible files for job %s",
+                    skipped_count, incompatible_skipped, job_id,
+                )
+                _save_job(job)
+
             entries_to_import = []
             for index, entry in enumerate(job.get("files", [])):
                 if entry.get("status") not in ("uploaded", "pending"):
@@ -2400,6 +2508,9 @@ def _process_import_job(job_id: str):
                                 _append_job_error(job, result["job_error"])
                             if result.get("job_message"):
                                 _append_job_message(job, result["job_message"])
+                            # Count errored files as processed so the progress
+                            # bar reflects that the file has been attempted.
+                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
                             _save_job(job)
                             continue
 
