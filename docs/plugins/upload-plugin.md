@@ -8,6 +8,7 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 
 - Upload session creation and multipart file transfer.
 - OMERO CLI-based import with configurable batching and concurrency.
+- Automatic detection and skipping of non-importable files (OS metadata, companion XML in metadata directories) to match OMERO Insight behaviour.
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
