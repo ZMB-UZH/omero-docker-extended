@@ -168,14 +168,16 @@ fi
 echo "[5/7] Creating admin-tools directory..."
 
 mkdir -p "${OMERO_DATA_DIR}/.admin-tools/quota"
-# The .admin-tools directory must be writable by both the host-side enforcer
-# (runs as root) and the omeroweb container (runs as a non-root UID that
-# differs from the OMERO data directory owner).  Use mode 1777 (world-writable
-# with sticky bit) so both processes can create and update the quota state
-# file without knowing each other's UID at install time.
-chmod 1777 "${OMERO_DATA_DIR}/.admin-tools"
-chmod 1777 "${OMERO_DATA_DIR}/.admin-tools/quota"
-echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 1777)"
+# The .admin-tools directory must be writable by both:
+# - the host-side enforcer (root)
+# - the omeroweb container (non-root)
+#
+# DO NOT use sticky-bit (1777) here: it can break atomic replace (os.replace)
+# if group-quotas.json ownership differs from the current writer UID.
+# Use 0777 (world-writable, no sticky) to allow safe atomic updates.
+chmod 0777 "${OMERO_DATA_DIR}/.admin-tools"
+chmod 0777 "${OMERO_DATA_DIR}/.admin-tools/quota"
+echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 0777)"
 
 # ---------------------------------------------------------------------------
 # Step 6: Install and enable systemd units
