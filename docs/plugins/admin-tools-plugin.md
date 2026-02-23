@@ -129,6 +129,6 @@ The enforcer performs the following for each group directory with a configured q
 4. Applies project ID to the group directory via `chattr -p`.
 5. Enables project inheritance on the group directory via `chattr +P`.
 6. Sets hard block quota with `setquota -P` on the filesystem mount point.
-7. Clears stale project mappings and resets stale project quotas (`setquota -P <project_id> 0 0 0 0`) when a group quota is deleted from Admin Tools, so removed quotas stop blocking uploads.
+7. Clears stale project mappings, resets stale project quotas (`setquota -P <project_id> 0 0 0 0`), and removes stale project-id attributes (`chattr -R -p 0`) when a group quota is deleted from Admin Tools, so removed quotas stop blocking uploads.
 
 Project quota is enforced at the parent group directory, and all files/subdirectories inside that tree count toward the same project quota domain.
