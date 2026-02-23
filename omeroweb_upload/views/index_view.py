@@ -159,8 +159,8 @@ def _start_upload(request, conn):
             import_skip = True
             compatibility_skip = True
 
-        # Auto-skip known non-importable files (Thumbs.db, companion metadata
-        # XML, macOS resource forks, etc.) to match OMERO Insight behaviour.
+        # Auto-skip OS junk files (Thumbs.db, .DS_Store, macOS resource
+        # forks, lost+found contents, etc.).  All other files are left to OMERO.
         if _should_auto_skip_import(rel_path):
             import_skip = True
             compatibility_skip = True
