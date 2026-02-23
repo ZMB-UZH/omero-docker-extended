@@ -32,7 +32,7 @@ validate_ldap_configuration() {
         return
     fi
 
-    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-${CONFIG_omero_ldap_user__filter:-${CONFIG_omero_ldap_user_filter:-}}}"
+    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
 
     local required_non_empty=(
         "CONFIG_omero_ldap_urls"
@@ -66,7 +66,7 @@ validate_ldap_new_user_group_configuration() {
         return
     fi
 
-    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-${CONFIG_omero_ldap_new_user_group:-}}"
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
     if [[ -z "${ldap_group_setting}" ]]; then
         log "LDAP enabled without CONFIG_omero_ldap_new__user__group; OMERO will use its built-in default new-user group behavior"
         return
@@ -89,8 +89,8 @@ apply_ldap_runtime_configuration() {
         return
     fi
 
-    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-${CONFIG_omero_ldap_user__filter:-${CONFIG_omero_ldap_user_filter:-}}}"
-    local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-${CONFIG_omero_ldap_new_user_group:-}}"
+    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
+    local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
 
     # Explicitly set LDAP properties at runtime so settings that include underscores
     # (for example omero.ldap.new_user_group) are never lost due to env-name
@@ -221,7 +221,7 @@ schedule_ldap_group_bootstrap() {
         return
     fi
 
-    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-${CONFIG_omero_ldap_new_user_group:-}}"
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
     if [[ -z "${ldap_group_setting}" || "${ldap_group_setting}" == :* ]]; then
         return
     fi
