@@ -168,7 +168,6 @@ Common utilities shared across all plugins:
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
-├── github_pull_private_project_bash_example # Legacy private-upstream pull script template
 ├── docs/                              # Full documentation set (see docs/index.md)
 ├── tools/                             # Development tooling (docs linter)
 ├── tests/                             # Test suite
