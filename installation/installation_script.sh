@@ -1892,17 +1892,18 @@ install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
 # (OMERO_WEB_UID) needs write access to persist quota state from the UI.
 admin_tools_dir="${OMERO_USER_DATA_PATH%/}/.admin-tools"
 if [ -d "${admin_tools_dir}" ]; then
-    chmod 1777 "${admin_tools_dir}" 2>/dev/null || true
+    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
     if [ -d "${admin_tools_dir}/quota" ]; then
-        chmod 1777 "${admin_tools_dir}/quota" 2>/dev/null || true
+        chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
     fi
-    echo "Ensured .admin-tools directory permissions for omeroweb container."
+    echo "Ensured .admin-tools directory permissions for omeroweb container (mode 0777, no sticky bit)."
 else
     # Create it even if the quota enforcer wasn't installed, so the omeroweb
     # container can write the quota state file without permission errors.
-    mkdir -p "${admin_tools_dir}"
-    chmod 1777 "${admin_tools_dir}" 2>/dev/null || true
-    echo "Created .admin-tools directory with write permissions for omeroweb container."
+    mkdir -p "${admin_tools_dir}/quota"
+    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
+    chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
+    echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
 fi
 
 echo "================================================"

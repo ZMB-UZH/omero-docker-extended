@@ -108,6 +108,9 @@ Quota values are validated with a minimum accepted value configured by `ADMIN_TO
 
 When `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA=true`, reconciliation automatically writes a quota entry for each newly detected OMERO group using `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB`; this persisted state is then consumed by the host `omero-quota-enforcer` systemd service on its normal timer cycle.
 
+Quota state persistence is versioned via a `state_schema_version` field in `group-quotas.json`. The service accepts only supported schema versions and fails loudly on unknown future versions to avoid silently misapplying quotas after upgrades.
+Quota state writes are atomic by default and include a compatibility fallback for sticky-bit legacy directories: if atomic replace is blocked but the existing state file remains writable, the state is updated in place; otherwise reconciliation fails with an explicit permission error describing required `.admin-tools` permissions.
+
 ## Operator checklist
 
 - Validate connectivity to Loki, Prometheus, and Grafana from the omeroweb container.
@@ -122,6 +125,9 @@ When `ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA=true`, reconciliation automatical
 When the managed repository is on `ext4`, quota reconciliation uses the bundled enforcer script inside the OMERO.web image by default unless `ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE` is explicitly set.
 
 The enforcer performs the following for each group directory with a configured quota:
+
+During host installer updates, `scripts/install-quota-enforcer.sh` now verifies byte-level integrity (`sha256`) of `scripts/omero-quota-enforcer.sh`: identical files are kept with refreshed permissions, and changed files are reinstalled with post-install checksum verification.
+The installer and `installation/installation_script.sh` both enforce `.admin-tools` directories with mode `0777` (no sticky bit) so quota-state persistence survives container restarts and project updates without `os.replace` rename failures.
 
 1. Validates that the target directory already exists (created/registered by OMERO.server) and is inside the detected mount point.
 2. Resolves or assigns a stable project ID for the group.
