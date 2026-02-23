@@ -191,7 +191,22 @@ mkdir -p "${OMERO_DATA_DIR}/.admin-tools/quota"
 # Use 0777 (world-writable, no sticky) to allow safe atomic updates.
 chmod 0777 "${OMERO_DATA_DIR}/.admin-tools"
 chmod 0777 "${OMERO_DATA_DIR}/.admin-tools/quota"
+
+# Ensure the quota state file remains writable for the non-root omeroweb
+# container user even when this installer is executed as root during upgrades.
+#
+# Without this permission repair, existing root-owned 0644 files can cause
+# PermissionError in omeroweb when updating quotas, which leaves host-side
+# enforcement on stale quota state.
+state_file="${OMERO_DATA_DIR}/.admin-tools/group-quotas.json"
+if [[ -f "$state_file" ]]; then
+    chmod 0666 "$state_file"
+else
+    install -m 0666 /dev/null "$state_file"
+fi
+
 echo "  Created: ${OMERO_DATA_DIR}/.admin-tools/ (mode 0777)"
+echo "  Ensured writable quota state: ${state_file} (mode 0666)"
 
 # ---------------------------------------------------------------------------
 # Step 6: Install and enable systemd units
