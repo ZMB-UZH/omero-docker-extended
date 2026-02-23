@@ -119,7 +119,9 @@ fi
 echo "[3/7] Installing enforcer script..."
 
 enforcer_src="${SCRIPT_DIR}/omero-quota-enforcer.sh"
-enforcer_dst="/opt/omero/scripts/omero-quota-enforcer.sh"
+OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH:-${SCRIPT_DIR%/}/..}"
+OMERO_INSTALLATION_PATH="$(readlink -f "$OMERO_INSTALLATION_PATH")"
+enforcer_dst="${OMERO_INSTALLATION_PATH%/}/scripts/omero-quota-enforcer.sh"
 
 if [[ "$(readlink -f "$enforcer_src")" == "$(readlink -f "$enforcer_dst")" ]]; then
     echo "  Enforcer script already at destination; ensuring correct permissions."
@@ -222,7 +224,7 @@ echo "Useful commands:"
 echo "  systemctl status omero-quota-enforcer.timer    # Check timer status"
 echo "  systemctl list-timers omero-quota-enforcer*    # See next run time"
 echo "  journalctl -u omero-quota-enforcer.service     # View enforcement logs"
-echo "  sudo /opt/omero/scripts/omero-quota-enforcer.sh  # Run manually"
+echo "  sudo ${enforcer_dst}  # Run manually"
 echo ""
 echo "To uninstall:"
 echo "  sudo systemctl disable --now omero-quota-enforcer.timer"
