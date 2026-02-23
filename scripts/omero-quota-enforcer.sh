@@ -10,6 +10,7 @@
 #
 # Required host packages: e2fsprogs, quota
 # Required filesystem:    ext4 mounted with prjquota, project feature enabled
+# Note: group directories are created by OMERO.server; this script never creates them.
 # =============================================================================
 set -euo pipefail
 
@@ -167,10 +168,9 @@ while IFS=$'\t' read -r group_name quota_gb; do
 
     group_path="${MANAGED_REPO_ROOT}/${group_name}"
 
-    # Create group directory if it doesn't exist yet
     if [[ ! -d "$group_path" ]]; then
-        mkdir -p "$group_path"
-        echo "INFO: Created group directory: $group_path"
+        echo "SKIP: Group directory is missing and must be created by OMERO.server: $group_path" >&2
+        continue
     fi
 
     resolved_group_path="$(readlink -f "$group_path")"
