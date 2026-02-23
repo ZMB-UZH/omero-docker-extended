@@ -266,6 +266,47 @@ print(int(quota_gb * 1024 * 1024))
         continue
     fi
 
+    # -----------------------------------------------------------------------
+    # IMPORTANT: One-time recursive retag of existing content
+    #
+    # Setting +P on the group directory only affects NEW inodes created after.
+    # Existing subdirectories (e.g. users/<username>) may still have project 0,
+    # meaning quota enforcement won't apply to OMERO writes under them.
+    #
+    # We retag the entire tree ONCE per (group_name, project_id), and drop a
+    # marker file so we don't rescan every minute.
+    # -----------------------------------------------------------------------
+    retag_marker_dir="$(dirname "$PROJECTS_FILE")"
+    retag_marker_file="${retag_marker_dir}/.retag_done_${group_name}_${project_id}"
+
+    if [[ ! -f "$retag_marker_file" ]]; then
+        echo "INFO: One-time retag for group '$group_name' project_id=$project_id under: $resolved_group_path"
+
+        chattr_err=""
+        if ! chattr_err="$(chattr -R -p "$project_id" "$resolved_group_path" 2>&1)"; then
+            echo "FAIL: chattr -R -p $project_id $resolved_group_path: $chattr_err" >&2
+            ((failed++)) || true
+            continue
+        fi
+
+        retag_failed=0
+        while IFS= read -r -d '' d; do
+            chattr_err=""
+            if ! chattr_err="$(chattr +P "$d" 2>&1)"; then
+                echo "FAIL: chattr +P $d: $chattr_err" >&2
+                retag_failed=1
+                break
+            fi
+        done < <(find "$resolved_group_path" -xdev -type d -print0)
+
+        if [[ "$retag_failed" -ne 0 ]]; then
+            ((failed++)) || true
+            continue
+        fi
+
+        touch "$retag_marker_file"
+    fi
+
     setquota_err=""
 
     # setquota MUST target a real filesystem mountpoint (or device).
