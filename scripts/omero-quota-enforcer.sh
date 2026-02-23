@@ -190,6 +190,30 @@ clear_project_quota() {
     return 0
 }
 
+clear_group_project_attributes() {
+    local group_path="$1"
+    local chattr_err=""
+
+    if [[ ! -d "$group_path" ]]; then
+        return 0
+    fi
+
+    if ! chattr_err="$(chattr -R -p 0 "$group_path" 2>&1)"; then
+        echo "FAIL: chattr -R -p 0 $group_path: $chattr_err" >&2
+        return 1
+    fi
+
+    while IFS= read -r -d '' d; do
+        chattr_err=""
+        if ! chattr_err="$(chattr -p 0 "$d" 2>&1)"; then
+            echo "FAIL: chattr -p 0 $d: $chattr_err" >&2
+            return 1
+        fi
+    done < <(find "$group_path" -xdev -type d -print0)
+
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Remove stale mappings for groups that no longer have configured quotas
 # ---------------------------------------------------------------------------
@@ -205,8 +229,15 @@ while IFS=: read -r mapped_group mapped_project_id; do
         continue
     fi
 
+    group_path="${MANAGED_REPO_ROOT}/${mapped_group}"
     if ! clear_project_quota "$mapped_project_id"; then
         echo "FAIL: Unable to clear quota for stale group '$mapped_group' (project_id=$mapped_project_id)." >&2
+        ((failed++)) || true
+        continue
+    fi
+
+    if ! clear_group_project_attributes "$group_path"; then
+        echo "FAIL: Unable to clear project attributes for stale group '$mapped_group' (path=$group_path)." >&2
         ((failed++)) || true
         continue
     fi
@@ -383,16 +414,16 @@ print(int(quota_gb * 1024 * 1024))
         quota_target="/"
     fi
 
-    if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
+    if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
         # Fallback: some quota toolchains behave better with the block device.
         if [[ -n "${FS_SOURCE:-}" ]]; then
-            if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$FS_SOURCE" 2>&1)"; then
-                echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $quota_target (fallback $FS_SOURCE): $setquota_err" >&2
+            if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$FS_SOURCE" 2>&1)"; then
+                echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target (fallback $FS_SOURCE): $setquota_err" >&2
                 ((failed++)) || true
                 continue
             fi
         else
-            echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $quota_target: $setquota_err" >&2
+            echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target: $setquota_err" >&2
             ((failed++)) || true
             continue
         fi
