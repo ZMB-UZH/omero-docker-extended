@@ -8,6 +8,8 @@ import os
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pwd import getpwuid
+from grp import getgrgid
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -103,13 +105,61 @@ def is_quota_enforcement_available() -> bool:
     installed.  The absence of this file means the host filesystem does
     not support quotas or the enforcer was never installed.
     """
-    marker_path = Path(
+    marker_path = quota_enforcer_marker_path()
+    return marker_path.is_file()
+
+
+def quota_enforcer_marker_path() -> Path:
+    """Return host-side quota enforcer marker path from environment."""
+    return Path(
         os.environ.get(
             "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH",
             DEFAULT_ENFORCER_MARKER_PATH,
         )
     )
-    return marker_path.is_file()
+
+
+def _safe_username(uid: int) -> str:
+    try:
+        return getpwuid(uid).pw_name
+    except KeyError:
+        return str(uid)
+
+
+def _safe_groupname(gid: int) -> str:
+    try:
+        return getgrgid(gid).gr_name
+    except KeyError:
+        return str(gid)
+
+
+def _path_access_summary(path: Path) -> Dict[str, object]:
+    """Return deterministic access diagnostics for an on-disk path."""
+    uid = os.geteuid()
+    gid = os.getegid()
+    summary: Dict[str, object] = {
+        "path": str(path),
+        "exists": path.exists(),
+        "is_directory": path.is_dir(),
+        "writable": os.access(path, os.W_OK),
+        "executable": os.access(path, os.X_OK),
+        "effective_uid": uid,
+        "effective_user": _safe_username(uid),
+        "effective_gid": gid,
+        "effective_group": _safe_groupname(gid),
+    }
+    if path.exists():
+        stat_result = path.stat()
+        summary.update(
+            {
+                "owner_uid": stat_result.st_uid,
+                "owner_user": _safe_username(stat_result.st_uid),
+                "owner_gid": stat_result.st_gid,
+                "owner_group": _safe_groupname(stat_result.st_gid),
+                "mode_octal": f"{stat_result.st_mode & 0o7777:04o}",
+            }
+        )
+    return summary
 
 
 def managed_group_root() -> Path:
@@ -404,8 +454,9 @@ def get_state() -> Dict[str, object]:
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
     """Reconcile quota definitions with existing directories.
 
-    This function manages the quota state file and ensures group directories
-    exist.  Actual filesystem-level enforcement (chattr, setquota) is
+    This function manages the quota state file and reports quota readiness.
+    It never creates ManagedRepository group directories because OMERO.server
+    owns repository registration. Actual filesystem-level enforcement (chattr, setquota) is
     performed by the host-side systemd timer (omero-quota-enforcer) which
     reads the same state file with root privileges.
     """
@@ -446,6 +497,9 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
 
         filesystem = detect_filesystem(group_root)
         repository_compatibility = managed_repository_compatibility()
+        group_root_access = _path_access_summary(group_root)
+        enforcer_marker = quota_enforcer_marker_path()
+        enforcer_available = is_quota_enforcement_available()
 
         configured = []
         pending = []
@@ -499,47 +553,34 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
                 pending.append(group_name)
                 continue
             if not _is_group_folder_available(group_path):
+                pending.append(group_name)
                 if not _can_manage_group_directories(group_root):
-                    pending.append(group_name)
                     _append_reconcile_event(
                         state,
                         event_key=group_key,
                         level="info",
                         message=(
                             f"Quota pending for group '{group_name}': managed root "
-                            f"{group_root} is not writable by the omeroweb process. "
-                            "Host-side enforcer is expected to create the group directory."
+                            f"{group_root} is not writable by the omeroweb process "
+                            f"(uid={group_root_access['effective_uid']}:{group_root_access['effective_gid']} "
+                            f"{group_root_access['effective_user']}:{group_root_access['effective_group']}; "
+                            f"mode={group_root_access.get('mode_octal', 'unknown')}; "
+                            f"owner={group_root_access.get('owner_user', 'unknown')}:{group_root_access.get('owner_group', 'unknown')}). "
+                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"enforcer_available={enforcer_available} marker={enforcer_marker}"
                         ),
                     )
-                    continue
-                try:
-                    group_path.mkdir(parents=False, exist_ok=True)
+                else:
                     _append_reconcile_event(
                         state,
                         event_key=group_key,
                         level="info",
-                        message=f"Created group directory for quota enforcement: {group_path}.",
-                    )
-                except OSError as exc:
-                    pending.append(group_name)
-                    _append_reconcile_event(
-                        state,
-                        event_key=group_key,
-                        level="warning",
                         message=(
-                            f"Quota pending for group '{group_name}': could not create "
-                            f"directory {group_path}: {exc}."
+                            f"Quota pending for group '{group_name}': directory not present at {group_path}. "
+                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"enforcer_available={enforcer_available} marker={enforcer_marker}"
                         ),
                     )
-                    continue
-            if not _is_group_folder_available(group_path):
-                pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="warning",
-                    message=f"Quota pending for group '{group_name}': directory not present at {group_path}.",
-                )
                 continue
 
             configured.append(group_name)
@@ -572,6 +613,7 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             },
             "managed_group_root": str(group_root),
             "managed_group_root_reason": root_reason,
+            "managed_group_root_access": group_root_access,
             "managed_repository": repository_compatibility,
             "available_groups": sorted(available_groups),
             "applied_groups": sorted(set(configured)),
@@ -579,5 +621,6 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             "quotas_gb": state.get("quotas_gb", {}),
             "logs": state.get("logs", []),
             "min_quota_gb": min_quota_gb(),
-            "quota_enforcement_available": is_quota_enforcement_available(),
+            "quota_enforcement_available": enforcer_available,
+            "quota_enforcer_marker_path": str(enforcer_marker),
         }
