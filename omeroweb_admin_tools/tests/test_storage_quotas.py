@@ -364,6 +364,55 @@ def test_storage_quota_update_endpoint(monkeypatch) -> None:
     assert response.status_code == 200
 
 
+
+
+def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data="",
+        content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.upsert_quotas",
+        lambda updates, source: {"quotas_gb": {}},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda groups: {"logs": []},
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 200
+
+
+
+def test_storage_quota_update_endpoint_accepts_form_encoded_updates(monkeypatch) -> None:
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.upsert_quotas",
+        lambda updates, source: {"quotas_gb": {"demo": 0.5}},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda groups: {"logs": []},
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 200
+
 def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
     file_payload = b"Group,Quota [GB]\ndemo,12\n"
     upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")
