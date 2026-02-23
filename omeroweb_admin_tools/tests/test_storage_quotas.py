@@ -8,7 +8,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.services.storage_quotas import (
+    AUTO_GROUP_QUOTA_ENV,
+    DEFAULT_GROUP_QUOTA_ENV,
+    MIN_GROUP_QUOTA_ENV,
     detect_filesystem,
+    managed_group_root,
     managed_repository_compatibility,
     import_quotas_csv,
     QuotaError,
@@ -21,6 +25,15 @@ from omeroweb_admin_tools.views.index_view import (
     storage_quota_template,
     storage_quota_update,
 )
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _set_required_quota_env(monkeypatch) -> None:
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
+    monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.10")
+    monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "false")
 
 
 def test_quota_csv_template_headers() -> None:
@@ -94,7 +107,7 @@ def test_upsert_rejects_quota_below_minimum(tmp_path, monkeypatch) -> None:
 def test_upsert_respects_minimum_quota_from_environment(tmp_path, monkeypatch) -> None:
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MIN_QUOTA_GB", "0.10")
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
 
     upsert_quotas([("group-a", 0.10)])
 
@@ -102,17 +115,21 @@ def test_upsert_respects_minimum_quota_from_environment(tmp_path, monkeypatch) -
     assert payload["quotas_gb"]["group-a"] == 0.1
 
 
-def test_upsert_rejects_invalid_environment_minimum_quota(tmp_path, monkeypatch) -> None:
+def test_upsert_rejects_invalid_environment_minimum_quota(
+    tmp_path, monkeypatch
+) -> None:
     state_path = tmp_path / "quotas.json"
     monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
-    monkeypatch.setenv("ADMIN_TOOLS_MIN_QUOTA_GB", "invalid")
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "invalid")
 
     try:
         upsert_quotas([("group-a", 1.0)])
     except QuotaError as exc:
-        assert "Invalid ADMIN_TOOLS_MIN_QUOTA_GB value" in str(exc)
+        assert f"Invalid {MIN_GROUP_QUOTA_ENV} value" in str(exc)
     else:
-        raise AssertionError("Expected quota validation error for invalid environment minimum")
+        raise AssertionError(
+            "Expected quota validation error for invalid environment minimum"
+        )
 
 
 def test_reconcile_marks_pending_when_group_directory_missing(
@@ -139,6 +156,101 @@ def test_detect_filesystem_returns_metadata_for_existing_path() -> None:
 
     assert isinstance(fs.fs_type, str)
     assert isinstance(fs.mount_point, str)
+
+
+def test_managed_group_root_uses_environment_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("OMERO_DATA_DIR", "/custom-omero")
+
+    assert managed_group_root() == Path("/custom-omero/ManagedRepository")
+
+
+def test_reconcile_does_not_attempt_mkdir_when_root_is_not_writable(
+    tmp_path, monkeypatch
+) -> None:
+    state_path = tmp_path / "quotas.json"
+    group_root = tmp_path / "ManagedRepository"
+    group_root.mkdir(parents=True)
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._is_safe_managed_repository_root",
+        lambda path: (True, ""),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._can_manage_group_directories",
+        lambda path: False,
+    )
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+
+    upsert_quotas([("group-a", 5)])
+    result = reconcile_quotas([])
+
+    assert "group-a" in result["pending_groups"]
+    assert any(
+        "Host-side enforcer is expected to create the group directory"
+        in entry["message"]
+        for entry in result["logs"]
+    )
+
+
+def test_reconcile_auto_sets_default_quota_for_new_group(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    group_root = tmp_path / "ManagedRepository"
+    group_root.mkdir(parents=True)
+
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "true")
+    monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.25")
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
+    monkeypatch.setenv("CONFIG_omero_fs_repo_path", "%group%/%user%/%time%")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.resolve_managed_group_root",
+        lambda known_groups: (group_root, "test-override"),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas._is_safe_managed_repository_root",
+        lambda path: (True, ""),
+    )
+
+    result = reconcile_quotas(["group-a"])
+
+    assert result["quotas_gb"]["group-a"] == 0.25
+    assert "group-a" in result["applied_groups"]
+
+
+def test_reconcile_rejects_default_quota_below_minimum(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+    monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "true")
+    monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.09")
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
+
+    try:
+        reconcile_quotas(["group-a"])
+    except QuotaError as exc:
+        assert DEFAULT_GROUP_QUOTA_ENV in str(exc)
+    else:
+        raise AssertionError(
+            "Expected default quota lower-than-minimum validation error"
+        )
+
+
+def test_get_state_requires_minimum_quota_env(monkeypatch) -> None:
+    monkeypatch.delenv(MIN_GROUP_QUOTA_ENV, raising=False)
+
+    try:
+        from omeroweb_admin_tools.services.storage_quotas import get_state
+
+        get_state()
+    except QuotaError as exc:
+        assert "Missing required environment variable" in str(exc)
+    else:
+        raise AssertionError(
+            "Expected get_state to fail when minimum quota env is missing"
+        )
 
 
 def test_storage_quota_update_endpoint(monkeypatch) -> None:
@@ -329,6 +441,5 @@ def test_reconcile_marks_group_as_applied_when_directory_exists(
 
     assert "group-a" in result["applied_groups"]
     assert any(
-        "Host-side enforcer will apply" in entry["message"]
-        for entry in result["logs"]
+        "Host-side enforcer will apply" in entry["message"] for entry in result["logs"]
     )
