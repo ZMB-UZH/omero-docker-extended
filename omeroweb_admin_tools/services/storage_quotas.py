@@ -21,6 +21,8 @@ DEFAULT_OMERO_DATA_DIR = "/OMERO"
 DEFAULT_MANAGED_REPOSITORY_SUBDIR = "ManagedRepository"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
+STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION_KEY = "state_schema_version"
 AUTO_GROUP_QUOTA_ENV = "ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA"
 DEFAULT_GROUP_QUOTA_ENV = "ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB"
 MIN_GROUP_QUOTA_ENV = "ADMIN_TOOLS_MIN_QUOTA_GB"
@@ -211,21 +213,49 @@ def _ensure_parent(path: Path) -> None:
 
 def _load_state(path: Path) -> Dict[str, object]:
     if not path.exists():
-        return {"quotas_gb": {}, "logs": []}
+        return {
+            STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+            "quotas_gb": {},
+            "logs": [],
+        }
     raw = path.read_text(encoding="utf-8")
     data = json.loads(raw)
     if not isinstance(data, dict):
         raise QuotaError("Quota state file must contain a JSON object")
+    schema_version = data.get(STATE_SCHEMA_VERSION_KEY)
+    if schema_version is None:
+        data[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
+    elif schema_version != STATE_SCHEMA_VERSION:
+        raise QuotaError(
+            "Unsupported quota state schema version "
+            f"{schema_version!r}; expected {STATE_SCHEMA_VERSION}."
+        )
     data.setdefault("quotas_gb", {})
     data.setdefault("logs", [])
     return data
 
 
 def _write_state(path: Path, state: Dict[str, object]) -> None:
+    state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
+    serialized = json.dumps(state, indent=2, sort_keys=True)
     temp_path = path.with_suffix(f"{path.suffix}.tmp")
-    temp_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(temp_path, path)
+    temp_path.write_text(serialized, encoding="utf-8")
+    try:
+        os.replace(temp_path, path)
+    except PermissionError as exc:
+        # Fallback for sticky-bit directories (e.g. mode 1777) where the
+        # current process can write the existing file but cannot replace it
+        # because it does not own the destination entry.
+        if not path.exists() or not os.access(path, os.W_OK):
+            raise QuotaError(
+                f"Quota state path is not replaceable/writable: {path}. "
+                "Ensure /OMERO/.admin-tools is mode 0777 without sticky-bit "
+                "and writable by the omeroweb UID."
+            ) from exc
+
+        path.write_text(serialized, encoding="utf-8")
+        temp_path.unlink(missing_ok=True)
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
