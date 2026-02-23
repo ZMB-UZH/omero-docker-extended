@@ -77,6 +77,34 @@ validate_ldap_new_user_group_configuration() {
     fi
 }
 
+
+apply_ldap_runtime_configuration() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    # Explicitly set LDAP properties at runtime so settings that include underscores
+    # (for example omero.ldap.new_user_group) are never lost due to env-name
+    # translation ambiguities in upstream entrypoints.
+    run_omero config set omero.ldap.config true
+    run_omero config set omero.ldap.urls "${CONFIG_omero_ldap_urls}"
+    run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
+    run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
+    run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
+    run_omero config set omero.ldap.user_filter "${CONFIG_omero_ldap_user_filter}"
+
+    if [[ -n "${CONFIG_omero_ldap_new_user_group:-}" ]]; then
+        run_omero config set omero.ldap.new_user_group "${CONFIG_omero_ldap_new_user_group}"
+        local configured_group=""
+        configured_group="$(run_omero config get omero.ldap.new_user_group 2>/dev/null || true)"
+        if [[ "${configured_group}" != "${CONFIG_omero_ldap_new_user_group}" ]]; then
+            echo "ERROR: Failed to persist LDAP new-user group. Expected '${CONFIG_omero_ldap_new_user_group}', got '${configured_group}'." >&2
+            exit 1
+        fi
+    fi
+
+    log "Applied LDAP runtime configuration from environment"
+}
 check_writable_dir() {
     local path="$1"
     local label="$2"
@@ -189,9 +217,14 @@ schedule_ldap_group_bootstrap() {
         return
     fi
 
+    if [[ "${ldap_group_setting}" == "default" ]]; then
+        log "LDAP new-user group is set to built-in default; explicit group bootstrap is skipped"
+        return
+    fi
+
     local root_pass="${ROOTPASS:-}"
     if [[ -z "${root_pass}" ]]; then
-        echo "ERROR: LDAP group bootstrap requires ROOTPASS when CONFIG_omero_ldap_new_user_group is a static group name." >&2
+        echo "ERROR: LDAP group bootstrap requires ROOTPASS when CONFIG_omero_ldap_new_user_group is a static non-default group name." >&2
         exit 1
     fi
 
@@ -351,6 +384,7 @@ main() {
 
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
+    apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
     ensure_certificate_sans
