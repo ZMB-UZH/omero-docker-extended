@@ -205,7 +205,7 @@ Fix:
 
 ```bash
 CONFIG_omero_ldap_config=true
-CONFIG_omero_ldap_new_user_group=users_ldap
+CONFIG_omero_ldap_new__user__group=users_ldap
 ```
 
 2. Restart OMERO.server and OMERO.web to apply LDAP config.

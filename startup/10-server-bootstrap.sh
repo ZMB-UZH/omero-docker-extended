@@ -32,11 +32,12 @@ validate_ldap_configuration() {
         return
     fi
 
+    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
+
     local required_non_empty=(
         "CONFIG_omero_ldap_urls"
         "CONFIG_omero_ldap_username"
         "CONFIG_omero_ldap_password"
-        "CONFIG_omero_ldap_user_filter"
     )
 
     local var_name
@@ -46,6 +47,11 @@ validate_ldap_configuration() {
             exit 1
         fi
     done
+
+    if [[ -z "${ldap_user_filter}" ]]; then
+        echo "ERROR: LDAP is enabled but CONFIG_omero_ldap__user__filter is not set in env/omero_secrets.env" >&2
+        exit 1
+    fi
 
     if [[ -z "${CONFIG_omero_ldap_base+x}" ]]; then
         echo "ERROR: LDAP is enabled but CONFIG_omero_ldap_base is not declared in env/omero_secrets.env (empty is allowed, missing is not)." >&2
@@ -60,9 +66,9 @@ validate_ldap_new_user_group_configuration() {
         return
     fi
 
-    local ldap_group_setting="${CONFIG_omero_ldap_new_user_group:-}"
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
     if [[ -z "${ldap_group_setting}" ]]; then
-        log "LDAP enabled without CONFIG_omero_ldap_new_user_group; OMERO will use its built-in default new-user group behavior"
+        log "LDAP enabled without CONFIG_omero_ldap_new__user__group; OMERO will use its built-in default new-user group behavior"
         return
     fi
 
@@ -72,7 +78,7 @@ validate_ldap_new_user_group_configuration() {
     fi
 
     if ! [[ "${ldap_group_setting}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
-        echo "ERROR: CONFIG_omero_ldap_new_user_group contains invalid OMERO group name '${ldap_group_setting}'. Allowed pattern: [A-Za-z0-9_.-]+" >&2
+        echo "ERROR: CONFIG_omero_ldap_new__user__group contains invalid OMERO group name '${ldap_group_setting}'. Allowed pattern: [A-Za-z0-9_.-]+" >&2
         exit 1
     fi
 }
@@ -83,6 +89,9 @@ apply_ldap_runtime_configuration() {
         return
     fi
 
+    local ldap_user_filter="${CONFIG_omero_ldap__user__filter:-}"
+    local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
+
     # Explicitly set LDAP properties at runtime so settings that include underscores
     # (for example omero.ldap.new_user_group) are never lost due to env-name
     # translation ambiguities in upstream entrypoints.
@@ -91,14 +100,14 @@ apply_ldap_runtime_configuration() {
     run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
     run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
     run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
-    run_omero config set omero.ldap.user_filter "${CONFIG_omero_ldap_user_filter}"
+    run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
 
-    if [[ -n "${CONFIG_omero_ldap_new_user_group:-}" ]]; then
-        run_omero config set omero.ldap.new_user_group "${CONFIG_omero_ldap_new_user_group}"
+    if [[ -n "${ldap_new_user_group}" ]]; then
+        run_omero config set omero.ldap.new_user_group "${ldap_new_user_group}"
         local configured_group=""
         configured_group="$(run_omero config get omero.ldap.new_user_group 2>/dev/null || true)"
-        if [[ "${configured_group}" != "${CONFIG_omero_ldap_new_user_group}" ]]; then
-            echo "ERROR: Failed to persist LDAP new-user group. Expected '${CONFIG_omero_ldap_new_user_group}', got '${configured_group}'." >&2
+        if [[ "${configured_group}" != "${ldap_new_user_group}" ]]; then
+            echo "ERROR: Failed to persist LDAP new-user group. Expected '${ldap_new_user_group}', got '${configured_group}'." >&2
             exit 1
         fi
     fi
@@ -212,7 +221,7 @@ schedule_ldap_group_bootstrap() {
         return
     fi
 
-    local ldap_group_setting="${CONFIG_omero_ldap_new_user_group:-}"
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
     if [[ -z "${ldap_group_setting}" || "${ldap_group_setting}" == :* ]]; then
         return
     fi
@@ -224,7 +233,7 @@ schedule_ldap_group_bootstrap() {
 
     local root_pass="${ROOTPASS:-}"
     if [[ -z "${root_pass}" ]]; then
-        echo "ERROR: LDAP group bootstrap requires ROOTPASS when CONFIG_omero_ldap_new_user_group is a static non-default group name." >&2
+        echo "ERROR: LDAP group bootstrap requires ROOTPASS when CONFIG_omero_ldap_new__user__group is a static non-default group name." >&2
         exit 1
     fi
 
