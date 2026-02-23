@@ -250,31 +250,53 @@ JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
 
 # --------------------------------------------------------------------------
-# AUTO-SKIP: Non-importable file detection
+# AUTO-SKIP: OS / application junk-file detection
 #
-# Mirrors OMERO Insight / Bio-Formats ImportCandidates behaviour.
-# These files are silently skipped before any import or compatibility check.
+# Only genuine operating-system artefacts, thumbnail caches, and filesystem
+# debris are skipped.  Everything else -- including all XML variants -- is
+# forwarded to OMERO and Bio-Formats so the server decides what it can import.
 # --------------------------------------------------------------------------
 _ALWAYS_SKIP_FILENAMES = frozenset({
-    "thumbs.db",        # Windows thumbnail cache
-    ".ds_store",        # macOS folder metadata
-    "desktop.ini",      # Windows folder settings
-    ".picasa.ini",      # Google Picasa metadata
-    ".bridgecache",     # Adobe Bridge cache
-    ".bridgecachet",    # Adobe Bridge cache
+    # Windows
+    "thumbs.db",            # thumbnail cache
+    "desktop.ini",          # folder display settings
+    "ehthumbs.db",          # Explorer thumbnail cache (legacy)
+    "ehthumbs_vista.db",    # Explorer thumbnail cache (Vista)
+    "$recycle.bin",         # recycle-bin sentinel
+    "ntuser.dat",           # user profile registry hive
+    "ntuser.dat.log",       # user profile registry log
+    "ntuser.ini",           # user profile settings
+    "iconcache.db",         # icon cache
+    # macOS
+    ".ds_store",            # Finder folder metadata
+    ".apdisk",              # Apple disk image metadata
+    ".volumeicon.icns",     # custom volume icon
+    ".fseventsd",           # filesystem-events daemon
+    ".spotlight-v100",      # Spotlight index
+    ".temporaryitems",      # temporary items folder
+    ".trashes",             # per-volume trash
+    # Linux
+    ".directory",           # KDE/Dolphin folder settings
+    ".trash-1000",          # common user-trash sentinel
+    # Cross-platform applications
+    ".picasa.ini",          # Google Picasa metadata
+    ".picasaoriginals",     # Google Picasa originals folder
+    ".bridgecache",         # Adobe Bridge cache
+    ".bridgecachet",        # Adobe Bridge cache thumbnail
+    ".bridgesort",          # Adobe Bridge sort order
+    ".adobe",               # Adobe application data
 })
 
-_COMPANION_METADATA_DIRS = frozenset({
-    "metadata",
-    "_metadata",
-    ".metadata",
-})
-
-_NEVER_SKIP_EXTENSIONS = frozenset({
-    ".ome.xml",
-    ".ome.tif",
-    ".ome.tiff",
-    ".companion.ome",
+# Directories whose *contents* should never be imported.
+# If any path component matches (case-insensitive) the file is skipped.
+_ALWAYS_SKIP_DIRS = frozenset({
+    "lost+found",           # Linux filesystem recovery directory
+    "$recycle.bin",         # Windows recycle bin
+    "system volume information",  # Windows system folder
+    ".trashes",             # macOS per-volume trash
+    ".spotlight-v100",      # macOS Spotlight index
+    ".fseventsd",           # macOS filesystem events
+    ".temporaryitems",      # macOS temporary items
 })
 SEM_EDX_SETTINGS_DEFAULTS = {
     "create_tables": True,
@@ -649,9 +671,10 @@ def _should_auto_skip_import(relative_path: str) -> bool:
     """
     Detect files that should never be imported into OMERO.
 
-    Mirrors OMERO Insight / Bio-Formats ImportCandidates behaviour: only actual
-    image files are imported; OS metadata, companion metadata XML and other
-    non-image artefacts are silently skipped.
+    Only OS-level junk files (thumbnail caches, desktop metadata, recycle bins,
+    lost+found, etc.) are skipped.  Every other file -- including all XML
+    variants -- is forwarded to OMERO so the server and Bio-Formats decide
+    whether it can be imported.
 
     Returns True when the file should be marked ``import_skip=True``.
     """
@@ -662,7 +685,7 @@ def _should_auto_skip_import(relative_path: str) -> bool:
     filename = parts.name
     filename_lower = filename.lower()
 
-    # 1. Known OS / application junk files
+    # 1. Known OS / application junk files (exact filename match)
     if filename_lower in _ALWAYS_SKIP_FILENAMES:
         return True
 
@@ -670,18 +693,10 @@ def _should_auto_skip_import(relative_path: str) -> bool:
     if filename.startswith("._"):
         return True
 
-    # 3. Companion metadata: non-OME XML files inside a metadata/ directory.
-    #    Standalone .ome.xml files are a valid OMERO image format and must NOT
-    #    be skipped.
-    if filename_lower.endswith(".xml"):
-        # Protect OME-XML files from being skipped
-        is_ome_xml = any(filename_lower.endswith(ext) for ext in _NEVER_SKIP_EXTENSIONS)
-        if not is_ome_xml:
-            parent_parts = parts.parent.parts
-            if parent_parts and any(
-                p.lower() in _COMPANION_METADATA_DIRS for p in parent_parts
-            ):
-                return True
+    # 3. Files inside OS junk directories (e.g. lost+found, $RECYCLE.BIN)
+    for part in parts.parent.parts:
+        if part.lower() in _ALWAYS_SKIP_DIRS:
+            return True
 
     return False
 
