@@ -117,8 +117,8 @@ omero_data_dir="${OMERO_DATA_DIR:-/OMERO}"
 admin_tools_dir="${omero_data_dir}/.admin-tools"
 if [[ -d "${admin_tools_dir}" ]]; then
     if [[ ! -w "${admin_tools_dir}" ]]; then
-        echo "[web-bootstrap] WARNING: ${admin_tools_dir} is not writable; attempting chmod 1777"
-        chmod 1777 "${admin_tools_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: ${admin_tools_dir} is not writable; attempting chmod 0777"
+        chmod 0777 "${admin_tools_dir}" 2>/dev/null || \
             echo "[web-bootstrap] WARNING: Could not fix permissions on ${admin_tools_dir}. Quota state persistence may fail." >&2
     fi
 else
