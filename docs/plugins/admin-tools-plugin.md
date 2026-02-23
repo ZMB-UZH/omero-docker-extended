@@ -86,6 +86,10 @@ ManagedRepository quota enforcement uses an environment-driven group root: `${AD
 
 To prevent quotas from affecting unrelated directories, enforcement is blocked unless the resolved root is an existing directory under `${OMERO_DATA_DIR}`; when this validation fails, quotas stay pending and an explicit error is recorded in quota logs (including detection reason metadata).
 
+Quota reconciliation responses include explicit path-access diagnostics for the managed group root (`managed_group_root_access`) and the resolved enforcer marker file path (`quota_enforcer_marker_path`) so operators can quickly diagnose UID/GID ownership and mode mismatches.
+
+Quota reconciliation and the host enforcer intentionally do **not** create missing ManagedRepository group directories. OMERO.server must create/register those directories first; creating them externally can trigger import failures such as `Directory exists but is not registered`.
+
 
 Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
@@ -119,7 +123,7 @@ When the managed repository is on `ext4`, quota reconciliation uses the bundled 
 
 The enforcer performs the following for each group directory with a configured quota:
 
-1. Validates that the target directory exists and is inside the detected mount point.
+1. Validates that the target directory already exists (created/registered by OMERO.server) and is inside the detected mount point.
 2. Resolves or assigns a stable project ID for the group.
 3. Updates both mapping files (`/tmp/omero-admin-tools/quota/projects` and `/tmp/omero-admin-tools/quota/projid` by default).
 4. Applies project ID to the group directory via `chattr -p`.
