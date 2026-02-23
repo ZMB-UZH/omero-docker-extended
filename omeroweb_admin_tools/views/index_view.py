@@ -1789,10 +1789,20 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
     try:
-        payload = json.loads(request.body.decode("utf-8"))
-        updates = payload.get("updates", [])
+        raw_body = request.body.decode("utf-8").strip()
+        payload = json.loads(raw_body) if raw_body else {}
+        updates = payload.get("updates")
+
+        if updates is None and request.POST:
+            updates = request.POST.get("updates", [])
+            if isinstance(updates, str):
+                updates = json.loads(updates)
+
+        if updates is None:
+            updates = []
         if not isinstance(updates, list):
-            raise QuotaError("Expected JSON payload with list field 'updates'")
+            raise QuotaError("Expected payload with list field 'updates'")
+
         normalized = []
         for item in updates:
             if not isinstance(item, dict):
@@ -1801,7 +1811,12 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
         state = upsert_quotas(normalized, source="ui-edit")
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
-    except (json.JSONDecodeError, QuotaError, ValueError) as exc:
+    except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Invalid quota update payload (content_type=%s, content_length=%s)",
+            request.META.get("CONTENT_TYPE", ""),
+            request.META.get("CONTENT_LENGTH", ""),
+        )
         return JsonResponse(
             {"error": f"Invalid quota update payload: {exc}"}, status=400
         )
