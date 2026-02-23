@@ -149,12 +149,79 @@ for group, gb in sorted(quotas.items()):
     print(f'{group}\t{gb}')
 ")"
 
-if [[ -z "$quotas_json" ]]; then
-    exit 0
-fi
+desired_groups="$(python3 -c "
+import json
+state = json.loads(open('${QUOTA_STATE_FILE}').read())
+quotas = state.get('quotas_gb', {})
+for group in sorted(quotas):
+    print(group)
+")"
 
 applied=0
 failed=0
+
+is_desired_group() {
+    local lookup_group="$1"
+    if [[ -z "$desired_groups" ]]; then
+        return 1
+    fi
+    while IFS= read -r desired_group; do
+        [[ "$lookup_group" == "$desired_group" ]] && return 0
+    done <<< "$desired_groups"
+    return 1
+}
+
+clear_project_quota() {
+    local project_id="$1"
+    setquota_err=""
+    quota_target="$MOUNT_POINT"
+    if [[ -z "$quota_target" ]]; then
+        quota_target="/"
+    fi
+    if ! setquota_err="$(setquota -P "$project_id" 0 0 0 0 "$quota_target" 2>&1)"; then
+        if [[ -n "${FS_SOURCE:-}" ]]; then
+            if ! setquota_err="$(setquota -P "$project_id" 0 0 0 0 "$FS_SOURCE" 2>&1)"; then
+                return 1
+            fi
+            return 0
+        fi
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Remove stale mappings for groups that no longer have configured quotas
+# ---------------------------------------------------------------------------
+while IFS=: read -r mapped_group mapped_project_id; do
+    if [[ -z "$mapped_group" || -z "$mapped_project_id" ]]; then
+        continue
+    fi
+    if is_desired_group "$mapped_group"; then
+        continue
+    fi
+    if [[ ! "$mapped_project_id" =~ ^[0-9]+$ ]]; then
+        echo "SKIP: Invalid project ID '$mapped_project_id' for stale group '$mapped_group'." >&2
+        continue
+    fi
+
+    if ! clear_project_quota "$mapped_project_id"; then
+        echo "FAIL: Unable to clear quota for stale group '$mapped_group' (project_id=$mapped_project_id)." >&2
+        ((failed++)) || true
+        continue
+    fi
+
+    sed -i "/^${mapped_group}:[0-9][0-9]*$/d" "$PROJID_FILE"
+    sed -i "/^${mapped_project_id}:/d" "$PROJECTS_FILE"
+    find "$(dirname "$PROJECTS_FILE")" -maxdepth 1 -type f -name ".retag_done_${mapped_group}_*" -delete || true
+
+    echo "OK: cleared stale quota mapping for group '$mapped_group' (project_id=$mapped_project_id)."
+done < "$PROJID_FILE"
+
+if [[ -z "$quotas_json" ]]; then
+    echo "No active group quotas configured; stale mappings (if any) have been reconciled."
+    exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Process each group quota
