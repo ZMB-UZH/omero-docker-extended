@@ -123,13 +123,25 @@ OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH:-${SCRIPT_DIR%/}/..}"
 OMERO_INSTALLATION_PATH="$(readlink -f "$OMERO_INSTALLATION_PATH")"
 enforcer_dst="${OMERO_INSTALLATION_PATH%/}/scripts/omero-quota-enforcer.sh"
 
-if [[ "$(readlink -f "$enforcer_src")" == "$(readlink -f "$enforcer_dst")" ]]; then
-    echo "  Enforcer script already at destination; ensuring correct permissions."
+src_sha256="$(sha256sum "$enforcer_src" | awk '{print $1}')"
+dst_sha256=""
+if [[ -f "$enforcer_dst" ]]; then
+    dst_sha256="$(sha256sum "$enforcer_dst" | awk '{print $1}')"
+fi
+
+if [[ -f "$enforcer_dst" ]] && [[ "$src_sha256" == "$dst_sha256" ]]; then
+    echo "  Enforcer script already installed with matching SHA256; refreshing permissions only."
     chmod 0755 "$enforcer_dst"
 else
     install -D -m 0755 "$enforcer_src" "$enforcer_dst"
+    installed_sha256="$(sha256sum "$enforcer_dst" | awk '{print $1}')"
+    if [[ "$installed_sha256" != "$src_sha256" ]]; then
+        echo "ERROR: Enforcer script integrity check failed after install." >&2
+        echo "ERROR: expected_sha256=$src_sha256 actual_sha256=$installed_sha256" >&2
+        exit 1
+    fi
 fi
-echo "  Installed: $enforcer_dst"
+echo "  Installed: $enforcer_dst (sha256=$src_sha256)"
 
 # ---------------------------------------------------------------------------
 # Step 4: Create /etc/default configuration

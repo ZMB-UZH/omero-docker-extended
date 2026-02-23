@@ -18,6 +18,8 @@ from omeroweb_admin_tools.services.storage_quotas import (
     QuotaError,
     quota_csv_template,
     reconcile_quotas,
+    STATE_SCHEMA_VERSION,
+    STATE_SCHEMA_VERSION_KEY,
     upsert_quotas,
 )
 from omeroweb_admin_tools.views.index_view import (
@@ -51,6 +53,95 @@ def test_upsert_and_import_quotas_roundtrip(tmp_path, monkeypatch) -> None:
     assert payload["quotas_gb"]["group-a"] == 10.0
     assert payload["quotas_gb"]["group-b"] == 22.5
     assert payload["logs"]
+
+
+def test_upsert_writes_schema_version(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 10)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload[STATE_SCHEMA_VERSION_KEY] == STATE_SCHEMA_VERSION
+
+
+def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None:
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION + 1,
+                "quotas_gb": {"group-a": 1.0},
+                "logs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    with pytest.raises(QuotaError, match="Unsupported quota state schema version"):
+        reconcile_quotas(["group-a"])
+
+
+def test_upsert_falls_back_when_atomic_replace_is_not_permitted(
+    tmp_path, monkeypatch
+) -> None:
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+                "quotas_gb": {"group-a": 1.0},
+                "logs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    def _deny_replace(_src: Path, _dst: Path) -> None:
+        raise PermissionError("operation not permitted")
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.os.replace", _deny_replace
+    )
+
+    upsert_quotas([("group-b", 2.0)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["quotas_gb"]["group-a"] == 1.0
+    assert payload["quotas_gb"]["group-b"] == 2.0
+
+
+def test_upsert_raises_clear_error_when_replace_and_write_are_not_permitted(
+    tmp_path, monkeypatch
+) -> None:
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+                "quotas_gb": {"group-a": 1.0},
+                "logs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    def _deny_replace(_src: Path, _dst: Path) -> None:
+        raise PermissionError("operation not permitted")
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.os.replace", _deny_replace
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.storage_quotas.os.access",
+        lambda _path, _mode: False,
+    )
+
+    with pytest.raises(QuotaError, match="not replaceable/writable"):
+        upsert_quotas([("group-b", 2.0)])
 
 
 def test_upsert_deletes_quota_for_null_or_empty_value(tmp_path, monkeypatch) -> None:
@@ -189,11 +280,7 @@ def test_reconcile_does_not_attempt_mkdir_when_root_is_not_writable(
     result = reconcile_quotas([])
 
     assert "group-a" in result["pending_groups"]
-    assert any(
-        "Host-side enforcer is expected to create the group directory"
-        in entry["message"]
-        for entry in result["logs"]
-    )
+    assert any("managed root" in entry["message"] for entry in result["logs"])
 
 
 def test_reconcile_auto_sets_default_quota_for_new_group(tmp_path, monkeypatch) -> None:
@@ -218,7 +305,7 @@ def test_reconcile_auto_sets_default_quota_for_new_group(tmp_path, monkeypatch) 
     result = reconcile_quotas(["group-a"])
 
     assert result["quotas_gb"]["group-a"] == 0.25
-    assert "group-a" in result["applied_groups"]
+    assert "group-a" in result["pending_groups"]
 
 
 def test_reconcile_rejects_default_quota_below_minimum(tmp_path, monkeypatch) -> None:
@@ -404,7 +491,7 @@ def test_reconcile_repeats_warnings_and_cleans_event_cache_after_quota_delete(
         for entry in payload["logs"]
         if entry["message"].startswith("Quota pending for group 'group-a'")
     ]
-    assert len(warning_messages) == 2
+    assert len(warning_messages) == 1
 
     upsert_quotas([("group-a", None)])
     reconcile_quotas([])
