@@ -267,10 +267,27 @@ print(int(quota_gb * 1024 * 1024))
     fi
 
     setquota_err=""
-    if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$MOUNT_POINT" 2>&1)"; then
-        echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $MOUNT_POINT: $setquota_err" >&2
-        ((failed++)) || true
-        continue
+
+    # setquota MUST target a real filesystem mountpoint (or device).
+    # If OMERO_DATA_DIR is under /, the mountpoint is "/" (not OMERO_DATA_DIR).
+    quota_target="$MOUNT_POINT"
+    if [[ -z "$quota_target" ]]; then
+        quota_target="/"
+    fi
+
+    if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
+        # Fallback: some quota toolchains behave better with the block device.
+        if [[ -n "${FS_SOURCE:-}" ]]; then
+            if ! setquota_err="$(setquota -P "$project_id" 0 "$quota_blocks" 0 0 "$FS_SOURCE" 2>&1)"; then
+                echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $quota_target (fallback $FS_SOURCE): $setquota_err" >&2
+                ((failed++)) || true
+                continue
+            fi
+        else
+            echo "FAIL: setquota -P $project_id 0 $quota_blocks 0 0 $quota_target: $setquota_err" >&2
+            ((failed++)) || true
+            continue
+        fi
     fi
 
     echo "OK: group='$group_name' project_id=$project_id quota=${quota_gb}GB (${quota_blocks} blocks) path=$resolved_group_path"
