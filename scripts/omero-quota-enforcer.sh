@@ -159,6 +159,7 @@ for group in sorted(quotas):
 
 applied=0
 failed=0
+SETQUOTA_ERR=""
 
 is_desired_group() {
     local lookup_group="$1"
@@ -173,7 +174,7 @@ is_desired_group() {
 
 clear_project_quota() {
     local project_id="$1"
-    setquota_err=""
+    local setquota_err=""
     quota_target="$MOUNT_POINT"
     if [[ -z "$quota_target" ]]; then
         quota_target="/"
@@ -181,12 +182,35 @@ clear_project_quota() {
     if ! setquota_err="$(setquota -P "$project_id" 0 0 0 0 "$quota_target" 2>&1)"; then
         if [[ -n "${FS_SOURCE:-}" ]]; then
             if ! setquota_err="$(setquota -P "$project_id" 0 0 0 0 "$FS_SOURCE" 2>&1)"; then
+                SETQUOTA_ERR="$setquota_err"
                 return 1
             fi
             return 0
         fi
+        SETQUOTA_ERR="$setquota_err"
         return 1
     fi
+    return 0
+}
+
+apply_project_quota() {
+    local project_id="$1"
+    local quota_blocks="$2"
+    local quota_target="$3"
+    local setquota_err=""
+
+    # Defensive reset: some quota toolchains can retain stale project limits
+    # after a hard-limit breach unless limits are explicitly cleared first.
+    # We clear then re-apply on each run to keep updates deterministic.
+    if ! clear_project_quota "$project_id"; then
+        return 1
+    fi
+
+    if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
+        SETQUOTA_ERR="$setquota_err"
+        return 1
+    fi
+
     return 0
 }
 
@@ -405,7 +429,6 @@ print(int(quota_gb * 1024 * 1024))
         touch "$retag_marker_file"
     fi
 
-    setquota_err=""
 
     # setquota MUST target a real filesystem mountpoint (or device).
     # If OMERO_DATA_DIR is under /, the mountpoint is "/" (not OMERO_DATA_DIR).
@@ -414,16 +437,16 @@ print(int(quota_gb * 1024 * 1024))
         quota_target="/"
     fi
 
-    if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
+    if ! apply_project_quota "$project_id" "$quota_blocks" "$quota_target"; then
         # Fallback: some quota toolchains behave better with the block device.
         if [[ -n "${FS_SOURCE:-}" ]]; then
-            if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$FS_SOURCE" 2>&1)"; then
-                echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target (fallback $FS_SOURCE): $setquota_err" >&2
+            if ! apply_project_quota "$project_id" "$quota_blocks" "$FS_SOURCE"; then
+                echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target (fallback $FS_SOURCE): $SETQUOTA_ERR" >&2
                 ((failed++)) || true
                 continue
             fi
         else
-            echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target: $setquota_err" >&2
+            echo "FAIL: setquota -P $project_id $quota_blocks $quota_blocks 0 0 $quota_target: $SETQUOTA_ERR" >&2
             ((failed++)) || true
             continue
         fi
