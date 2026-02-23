@@ -45,6 +45,8 @@ set -euo pipefail
 load_installation_paths_env() {
     local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
     local env_line
+    local env_key
+    local env_value
 
     if [ ! -r "${env_file_path}" ]; then
         echo "ERROR: Installation paths file is missing or unreadable: ${env_file_path}" >&2
@@ -57,7 +59,9 @@ load_installation_paths_env() {
                 continue
                 ;;
             [A-Za-z_]*=*)
-                eval "${env_line}"
+                env_key="${env_line%%=*}"
+                env_value="${env_line#*=}"
+                eval "${env_key}=\"${env_value}\""
                 ;;
             *)
                 ;;
@@ -404,24 +408,46 @@ compose_up_with_retries() {
 }
 
 
+normalize_omero_install_group_list() {
+    local raw_group_list="${1:-}"
+    local list_without_inline_comment=""
+    local group_entry=""
+    local normalized_entry=""
+    local normalized_list=""
+    local separator=""
+    local -a group_entries=()
+
+    # Allow sysadmins to effectively disable group bootstrap with inline comments,
+    # for example: OMERO_INSTALL_GROUP_LIST=# disabled for fresh install
+    list_without_inline_comment="${raw_group_list%%#*}"
+
+    IFS="," read -r -a group_entries <<< "${list_without_inline_comment}"
+    for group_entry in "${group_entries[@]}"; do
+        normalized_entry="$(printf '%s' "${group_entry}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [ -z "${normalized_entry}" ] && continue
+
+        normalized_list+="${separator}${normalized_entry}"
+        separator=","
+    done
+    printf '%s' "${normalized_list}"
+}
+
 validate_omero_install_group_list() {
     local raw_group_list="${1:-}"
+    local normalized_group_list=""
 
-    if [ -z "${raw_group_list}" ]; then
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
         return 0
     fi
 
     local group_entry=""
     local group_name=""
     local group_permission=""
+    local -a group_entries=()
 
-    IFS="," read -r -a group_entries <<< "${raw_group_list}"
+    IFS="," read -r -a group_entries <<< "${normalized_group_list}"
     for group_entry in "${group_entries[@]}"; do
-        group_entry="${group_entry//[[:space:]]/}"
-        if [ -z "${group_entry}" ]; then
-            continue
-        fi
-
         if [[ "${group_entry}" != *:* ]]; then
             echo "ERROR: Invalid OMERO_INSTALL_GROUP_LIST entry (missing ':'): ${group_entry}" >&2
             return 1
@@ -456,9 +482,11 @@ validate_omero_install_group_list() {
 create_omero_groups_from_list() {
     local compose_file="$1"
     local raw_group_list="${2:-}"
+    local normalized_group_list=""
 
-    if [ -z "${raw_group_list}" ]; then
-        echo "OMERO_INSTALL_GROUP_LIST is empty; skipping OMERO installation group bootstrap."
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
+        echo "OMERO_INSTALL_GROUP_LIST is empty/commented; skipping OMERO installation group bootstrap."
         return 0
     fi
 
@@ -467,7 +495,7 @@ create_omero_groups_from_list() {
         return 1
     fi
 
-    if ! validate_omero_install_group_list "${raw_group_list}"; then
+    if ! validate_omero_install_group_list "${normalized_group_list}"; then
         return 1
     fi
 
@@ -475,12 +503,12 @@ create_omero_groups_from_list() {
     local group_name=""
     local group_permission=""
     local add_output=""
+    local -a group_entries=()
 
     echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_LIST..."
 
-    IFS="," read -r -a group_entries <<< "${raw_group_list}"
+    IFS="," read -r -a group_entries <<< "${normalized_group_list}"
     for group_entry in "${group_entries[@]}"; do
-        group_entry="${group_entry//[[:space:]]/}"
         [ -z "${group_entry}" ] && continue
 
         group_name="${group_entry%%:*}"
