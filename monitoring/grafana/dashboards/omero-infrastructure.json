@@ -100,7 +100,11 @@
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "decimals": 1
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -116,7 +120,7 @@
     },
     {
       "type": "stat",
-      "title": "OMERO data path used space",
+      "title": "OMERO data path usage",
       "id": 4,
       "gridPos": {
         "h": 3,
@@ -132,25 +136,13 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1,
+          "noValue": "N/A",
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          },
-          "noValue": "N/A"
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -183,7 +175,11 @@
           "unit": "percentunit",
           "min": 0,
           "max": 1,
-          "decimals": 1
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -215,23 +211,11 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1,
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "green"
           }
         },
         "overrides": []
@@ -264,24 +248,12 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1,
           "noValue": "No swap configured",
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "green"
           }
         },
         "overrides": []
@@ -298,7 +270,7 @@
     },
     {
       "type": "stat",
-      "title": "Database path(s) used space",
+      "title": "Database path(s) usage",
       "id": 18,
       "gridPos": {
         "h": 3,
@@ -314,25 +286,13 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1,
+          "noValue": "N/A",
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          },
-          "noValue": "N/A"
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -371,7 +331,11 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -401,7 +365,11 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
