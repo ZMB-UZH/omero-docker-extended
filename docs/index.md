@@ -19,7 +19,13 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
 - `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, script processor retry
 
-## 4. Operations
+## 4. Plugin Help
+
+- `help/omeroweb_omp_plugin_help.md` -- end-user help for Filename & Metadata Manager
+- `help/omeroweb_upload_help.md` -- end-user help for Upload plugin
+- `help/omeroweb_admin_tools_help.md` -- end-user help for Admin Tools
+
+## 5. Operations
 
 - `operations/monitoring.md` -- Prometheus, Grafana, Loki, Alloy, exporters, dashboards, alerts
 - `operations/postgres-maintenance.md` -- VACUUM ANALYZE, REINDEX CONCURRENTLY, cron schedule
@@ -27,7 +33,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `RELIABILITY.md` -- startup determinism, health checks, incident classes
 - `SECURITY.md` -- secrets management, image pinning, input validation, access control
 
-## 5. Planning and Design
+## 6. Planning and Design
 
 - `DESIGN.md` -- design principles: explicit contracts, modularity, environment-driven config
 - `FRONTEND.md` -- Django template patterns, plugin-scoped UI, asset management
@@ -39,12 +45,12 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `exec-plans/tech-debt-tracker.md` -- known technical debt items
 - `product-specs/index.md` -- product specification catalog
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 - `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker
 - `troubleshooting/imaris-export.md` -- Celery config, worker activity, script processors, recovery
 
-## 7. Reference
+## 8. Reference
 
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template

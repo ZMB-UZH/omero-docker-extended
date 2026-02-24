@@ -35,6 +35,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 | `/omeroweb_admin_tools/storage/quota/template/` | GET | Download CSV template for quota import |
 | `/omeroweb_admin_tools/server-database-testing/` | GET | Server diagnostics UI |
 | `/omeroweb_admin_tools/server-database-testing/run/` | POST | Execute diagnostic scripts |
+| `/omeroweb_admin_tools/help/` | GET | Serve plugin help documentation (Markdown) |
 
 ## Code structure
 

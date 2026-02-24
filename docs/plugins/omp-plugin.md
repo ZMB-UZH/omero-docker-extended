@@ -40,7 +40,7 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 | `/omeroweb_omp_plugin/user-data/delete-api-keys/` | POST | Delete stored API keys |
 | `/omeroweb_omp_plugin/user-data/delete-variable-sets/` | POST | Delete all variable sets |
 | `/omeroweb_omp_plugin/user-data/delete-all/` | POST | Delete all user data |
-| `/omeroweb_omp_plugin/help/` | GET | Serve help documentation PDF |
+| `/omeroweb_omp_plugin/help/` | GET | Serve plugin help documentation (Markdown) |
 
 ## Typical user workflow
 
@@ -66,7 +66,7 @@ omeroweb_omp_plugin/
 │   ├── ai_credentials_view.py # AI credential management and provider testing
 │   ├── user_data_view.py      # Bulk user data deletion
 │   ├── user_settings_view.py  # User preference persistence
-│   └── help_view.py           # Help PDF download
+│   └── help_view.py           # Help Markdown download
 ├── services/
 │   ├── core.py                # Backward compatibility layer
 │   ├── data_store.py          # PostgreSQL persistence (variable sets, credentials, settings)
