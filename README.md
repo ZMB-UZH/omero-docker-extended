@@ -2,9 +2,11 @@
 
 Production-grade to-be (**DISCLAIMER:** see [LICENSE](LICENSE) for details), alpha version, security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrator tools, and a full server monitoring stack.
 
+
 ## What this repository delivers
 
 This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
+
 
 ## Current development state
 
@@ -25,6 +27,7 @@ For official OMERO documentation, release notes, and guides, see: <https://www.o
 ### 🐢 Not working yet / progressing slowly
 
 - Direct Imaris 11 integration
+
 
 ## Service topology
 
@@ -50,6 +53,7 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
 | `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
+
 
 ## OMERO.web plugins
 
@@ -105,6 +109,7 @@ Common utilities shared across all plugins:
 - `omero_helpers.py` -- OMERO object data extraction (text values, IDs, owners, permissions)
 - `request_utils.py` -- Django request parsing (JSON body, username resolution)
 - `string_utils.py` -- case conversion and message payload building
+
 
 ## Repository layout
 
@@ -165,6 +170,7 @@ Common utilities shared across all plugins:
 ├── tests/                             # Test suite
 └── .github/                           # CI workflows + Dependabot
 ```
+
 
 ## Deployment
 
@@ -286,6 +292,7 @@ bash installation/cleanup_build_containers.sh
 
 This is currently disabled, but easy to enable, at least without strong certificate verification. Reverse proxy and TLS termination can be managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the Docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
 
+
 ## Monitoring
 
 The observability stack provides:
@@ -295,6 +302,7 @@ The observability stack provides:
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
 
+
 ## Database maintenance
 
 The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL databases:
@@ -303,6 +311,7 @@ The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL 
 - **Monthly** (first Sunday 04:00): `REINDEX CONCURRENTLY` -- rebuilds indexes online without locking.
 
 Both operations are safe for production and do not require downtime.
+
 
 ## Documentation
 
@@ -319,12 +328,14 @@ Both operations are safe for production and do not require downtime.
 | [`docs/troubleshooting/`](docs/troubleshooting/) | Diagnostic procedures |
 | [`docs/reference/`](docs/reference/) | Endpoint map and release notes |
 
+
 ## Documentation rules
 
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root.
 - Keep all other project documentation under `docs/`.
 - Documentation structure is enforced by CI via `tools/lint_docs_structure.py`.
 - Update `docs/index.md` cross-links when introducing new documents.
+
 
 ## Copyright and third-party software notice
 
@@ -334,9 +345,11 @@ To the best of the maintainer's knowledge, all software dependencies and compone
 
 If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
 
+
 ## License
 
 See [LICENSE](LICENSE) for details.
+
 
 ## Support
 
