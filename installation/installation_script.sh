@@ -294,6 +294,7 @@ export_compose_interpolation_env() {
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
+        OMERO_WEB_VAR_PATH
         OMERO_SERVER_LOGS_PATH
         OMERO_WEB_LOGS_PATH
         OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -597,6 +598,7 @@ OMERO_DATA_PATH=${old_data_path}
 OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
 OMERO_UPLOAD_PATH=${old_data_path}/omero_upload
 OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
+OMERO_WEB_VAR_PATH=${old_data_path}/omero_web_var
 OMERO_SERVER_LOGS_PATH=${old_data_path}/omero_server_logs
 OMERO_WEB_LOGS_PATH=${old_data_path}/omero_web_logs
 OMERO_WEB_SUPERVISOR_LOGS_PATH=${old_data_path}/omero_web_supervisor_logs
@@ -824,6 +826,7 @@ collect_bootstrap_sentinel_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -885,6 +888,7 @@ collect_repo_data_dir_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -1141,6 +1145,7 @@ write_installation_paths_env() {
 #   OMERO_USER_DATA_PATH
 #   OMERO_UPLOAD_PATH
 #   OMERO_SERVER_VAR_PATH
+#   OMERO_WEB_VAR_PATH
 #   OMERO_SERVER_LOGS_PATH
 #   OMERO_WEB_LOGS_PATH
 #   OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -1159,6 +1164,7 @@ OMERO_DATA_PATH=${OMERO_DATA_PATH}
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
 OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
 OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
+OMERO_WEB_VAR_PATH=\${OMERO_DATA_PATH}/omero_web_var
 OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
 OMERO_WEB_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_logs
 OMERO_WEB_SUPERVISOR_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_supervisor_logs
@@ -1190,6 +1196,7 @@ verify_installation_paths_env_content() {
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
+        OMERO_WEB_VAR_PATH
         OMERO_SERVER_LOGS_PATH
         OMERO_WEB_LOGS_PATH
         OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -1652,6 +1659,7 @@ COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
+OMERO_WEB_VAR_PATH="${OMERO_DATA_PATH%/}/omero_web_var"
 OMERO_SERVER_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_server_logs"
 OMERO_WEB_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_logs"
 OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
