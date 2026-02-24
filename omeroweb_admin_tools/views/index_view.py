@@ -1788,15 +1788,19 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
+    # ---- parse the request payload ----
     try:
         raw_body = request.body.decode("utf-8").strip()
-        payload = json.loads(raw_body) if raw_body else {}
-        updates = payload.get("updates")
+        try:
+            payload = json.loads(raw_body) if raw_body else {}
+        except json.JSONDecodeError:
+            payload = {}
+        updates = payload.get("updates") if isinstance(payload, dict) else None
 
         if updates is None and request.POST:
-            updates = request.POST.get("updates", [])
-            if isinstance(updates, str):
-                updates = json.loads(updates)
+            raw_updates = request.POST.get("updates")
+            if raw_updates is not None:
+                updates = json.loads(raw_updates) if isinstance(raw_updates, str) else raw_updates
 
         if updates is None:
             updates = []
@@ -1808,9 +1812,6 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
             if not isinstance(item, dict):
                 raise QuotaError("Each quota update must be an object")
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
-        state = upsert_quotas(normalized, source="ui-edit")
-        known_groups = _list_omero_group_names(conn)
-        reconciled = reconcile_quotas(known_groups)
     except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
         logger.warning(
             "Invalid quota update payload (content_type=%s, content_length=%s)",
@@ -1820,6 +1821,12 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
         return JsonResponse(
             {"error": f"Invalid quota update payload: {exc}"}, status=400
         )
+
+    # ---- persist and reconcile ----
+    try:
+        state = upsert_quotas(normalized, source="ui-edit")
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
     except Exception as exc:
         logger.exception("Failed to update quotas")
         return JsonResponse({"error": f"Quota update failed: {exc}"}, status=500)
@@ -1846,12 +1853,18 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": "Missing file upload field 'file'"}, status=400)
     csv_file = request.FILES["file"]
 
+    # ---- parse CSV ----
     try:
         content = csv_file.read().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
+
+    # ---- persist and reconcile ----
+    try:
         state = import_quotas_csv(content)
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
-    except (UnicodeDecodeError, QuotaError, CsvError) as exc:
+    except (QuotaError, CsvError) as exc:
         return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
     except Exception as exc:
         logger.exception("Failed to import quotas")
