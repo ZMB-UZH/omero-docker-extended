@@ -54,34 +54,11 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "decbytes"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omero\"}"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Database size",
-      "id": 3,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes"
+          "unit": "decbytes",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -653,6 +630,6 @@
   "timezone": "browser",
   "title": "Database",
   "uid": "database-metrics",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
