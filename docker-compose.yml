@@ -261,6 +261,9 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
       GF_METRICS_ENABLED: "true"
+      OMERO_DATA_PATH: "${OMERO_DATA_PATH:?Set OMERO_DATA_PATH (run installation/installation_script.sh)}"
+      OMERO_DATABASE_PATH: "${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}"
+      OMERO_PLUGIN_DATABASE_PATH: "${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}"
     depends_on:
       prometheus:
         condition: service_healthy
