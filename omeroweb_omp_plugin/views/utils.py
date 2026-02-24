@@ -1,3 +1,7 @@
+from functools import wraps
+
+from django.http import JsonResponse
+
 from ..strings import errors
 from omero_plugin_common.request_utils import (
     current_username as _current_username,
@@ -19,3 +23,22 @@ def load_json_body(request):
     if error:
         return None, errors.invalid_json_body()
     return payload, None
+
+
+def require_non_root_user(view_func):
+    @wraps(view_func)
+    def _wrapped(request, conn=None, url=None, *args, **kwargs):
+        username = current_username(request, conn)
+        if username == "root":
+            return JsonResponse(
+                {
+                    "error": (
+                        "The OMERO root account cannot access OMERO Metadata Parser. "
+                        "Please sign in with a non-root account."
+                    )
+                },
+                status=403,
+            )
+        return view_func(request, conn=conn, url=url, *args, **kwargs)
+
+    return _wrapped
