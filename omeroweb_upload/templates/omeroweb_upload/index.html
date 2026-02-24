@@ -37,7 +37,7 @@
                         aria-label="Settings">
                     ⚙
                 </button>
-                <a href="/omeroweb_omp_plugin/help/"
+                <a href="{% url 'omeroweb_upload_help' %}"
                    target="_blank"
                    rel="noopener noreferrer"
                    title="Help"
@@ -4114,6 +4114,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 return `<span class="import-log-label import-log-label--failure">Txt attachment failure</span>` +
                     `<span class="import-log-rest">${rest}</span>`;
             }
+            const skipMatch = rawEntry.match(/^Auto-skipped\s*\(([^)]*)\)(?:\s*:)?\s*(.*)$/);
+            if (skipMatch) {
+                const reason = skipMatch[1] ? escapeHtml(skipMatch[1].trim()) : '';
+                const detail = skipMatch[2] ? escapeHtml(skipMatch[2].trim()) : '';
+                const rest = detail ? `: ${detail}` : '';
+                return `<span class="import-log-label import-log-label--skipped">Auto-skipped</span>` +
+                    `<span class="import-log-rest"> (${reason})${rest}</span>`;
+            }
             return escapeHtml(rawEntry);
         }
 
@@ -4275,9 +4283,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             if (!hasActiveImport() && totalBytes) {
                 if (hasErrors) {
                     const allErrors = jobs.flatMap((job) => job.errors || []);
-                    updateProgress(percent, 'Import failed.');
+                    updateProgress(100, 'Import completed with errors.');
                     setStatus(
-                        'Import failed: ' + (allErrors[0] || 'Unknown error. Check the log below.'),
+                        'Import completed with errors: ' + (allErrors[0] || 'Check the log below for details.'),
                         'error'
                     );
                 } else {

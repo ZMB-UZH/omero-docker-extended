@@ -14,6 +14,7 @@ from .views.index_view import (
 from .views.special_method_settings_view import load_settings as load_special_method_settings
 from .views.special_method_settings_view import save_settings as save_special_method_settings
 from .views.user_settings_view import save_settings
+from .views.help_view import help_page
 
 urlpatterns = [
     path("", index, name="omeroweb_upload_index"),
@@ -36,4 +37,5 @@ urlpatterns = [
         load_special_method_settings,
         name="omeroweb_upload_load_special_method_settings",
     ),
+    path("help/", help_page, name="omeroweb_upload_help"),
 ]

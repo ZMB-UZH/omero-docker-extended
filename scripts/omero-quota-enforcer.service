@@ -1,0 +1,21 @@
+[Unit]
+Description=OMERO ext4 project-quota enforcement
+After=local-fs.target
+ConditionPathExists=/etc/default/omero-quota-enforcer
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/omero-quota-enforcer
+ExecStart=/opt/omero/scripts/omero-quota-enforcer.sh
+Nice=10
+IOSchedulingClass=idle
+
+# Security hardening
+ProtectSystem=strict
+ReadWritePaths=/OMERO
+PrivateTmp=true
+NoNewPrivileges=false
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true

@@ -27,6 +27,92 @@ run_omero() {
     runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
 }
 
+validate_ldap_configuration() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
+
+    local required_non_empty=(
+        "CONFIG_omero_ldap_urls"
+        "CONFIG_omero_ldap_username"
+        "CONFIG_omero_ldap_password"
+    )
+
+    local var_name
+    for var_name in "${required_non_empty[@]}"; do
+        if [[ -z "${!var_name:-}" ]]; then
+            echo "ERROR: LDAP is enabled but ${var_name} is not set in env/omero_secrets.env" >&2
+            exit 1
+        fi
+    done
+
+    if [[ -z "${CONFIG_omero_ldap_base+x}" ]]; then
+        echo "ERROR: LDAP is enabled but CONFIG_omero_ldap_base is not declared in env/omero_secrets.env (empty is allowed, missing is not)." >&2
+        exit 1
+    fi
+
+    log "LDAP enabled; required secret-backed LDAP settings are present"
+}
+
+validate_ldap_new_user_group_configuration() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
+    if [[ -z "${ldap_group_setting}" ]]; then
+        log "LDAP enabled without CONFIG_omero_ldap_new__user__group; OMERO will use its built-in default new-user group behavior"
+        return
+    fi
+
+    if [[ "${ldap_group_setting}" == :* ]]; then
+        log "LDAP new-user group uses dynamic mapping expression (${ldap_group_setting}); runtime group auto-bootstrap is skipped"
+        return
+    fi
+
+    if ! [[ "${ldap_group_setting}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "ERROR: CONFIG_omero_ldap_new__user__group contains invalid OMERO group name '${ldap_group_setting}'. Allowed pattern: [A-Za-z0-9_.-]+" >&2
+        exit 1
+    fi
+}
+
+
+apply_ldap_runtime_configuration() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
+    local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
+
+    # Explicitly set LDAP properties at runtime so settings that include underscores
+    # (for example omero.ldap.new_user_group) are never lost due to env-name
+    # translation ambiguities in upstream entrypoints.
+    run_omero config set omero.ldap.config true
+    run_omero config set omero.ldap.urls "${CONFIG_omero_ldap_urls}"
+    run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
+    run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
+    run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
+    if [[ -n "${CONFIG_omero_ldap_user__filter+x}" ]]; then
+        run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
+    else
+        log "LDAP user filter not declared; leaving omero.ldap.user_filter unchanged"
+    fi
+
+    if [[ -n "${ldap_new_user_group}" ]]; then
+        run_omero config set omero.ldap.new_user_group "${ldap_new_user_group}"
+        local configured_group=""
+        configured_group="$(run_omero config get omero.ldap.new_user_group 2>/dev/null || true)"
+        if [[ "${configured_group}" != "${ldap_new_user_group}" ]]; then
+            echo "ERROR: Failed to persist LDAP new-user group. Expected '${ldap_new_user_group}', got '${configured_group}'." >&2
+            exit 1
+        fi
+    fi
+
+    log "Applied LDAP runtime configuration from environment"
+}
 check_writable_dir() {
     local path="$1"
     local label="$2"
@@ -127,6 +213,73 @@ schedule_job_service_bootstrap() {
     ) >>"${SERVER_LOG_DIR}/job-service-bootstrap.log" 2>&1 &
 
     log "Scheduled background job-service bootstrap"
+}
+
+schedule_ldap_group_bootstrap() {
+    if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
+        return
+    fi
+
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
+    if [[ -z "${ldap_group_setting}" || "${ldap_group_setting}" == :* ]]; then
+        return
+    fi
+
+    if [[ "${ldap_group_setting}" == "default" ]]; then
+        log "LDAP new-user group is set to built-in default; explicit group bootstrap is skipped"
+        return
+    fi
+
+    local root_pass="${ROOTPASS:-}"
+    if [[ -z "${root_pass}" ]]; then
+        echo "ERROR: LDAP group bootstrap requires ROOTPASS when CONFIG_omero_ldap_new__user__group is a static non-default group name." >&2
+        exit 1
+    fi
+
+    (
+        set -euo pipefail
+        local add_output=""
+        local add_exit_code=1
+        local retry_limit="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRIES:-180}"
+        local retry_delay_seconds="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+        local attempt=1
+
+        for attempt in $(seq 1 "${retry_limit}"); do
+            if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" --wait >/dev/null 2>&1; then
+                break
+            fi
+            sleep "${retry_delay_seconds}"
+        done
+
+        for attempt in $(seq 1 "${retry_limit}"); do
+            set +e
+            add_output="$(run_omero -s localhost -p 4064 -u root -w "${root_pass}" group add "${ldap_group_setting}" --type=private 2>&1)"
+            add_exit_code=$?
+            set -e
+
+            if [[ "${add_exit_code}" -eq 0 ]] || printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+                break
+            fi
+
+            sleep "${retry_delay_seconds}"
+        done
+
+        if [[ "${add_exit_code}" -eq 0 ]]; then
+            log "Ensured LDAP new-user target group exists: ${ldap_group_setting}"
+            exit 0
+        fi
+
+        if printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+            log "LDAP new-user target group already exists: ${ldap_group_setting}"
+            exit 0
+        fi
+
+        echo "ERROR: Failed ensuring LDAP new-user target group '${ldap_group_setting}'." >&2
+        echo "ERROR: omero output: ${add_output}" >&2
+        exit 1
+    ) >>"${SERVER_LOG_DIR}/ldap-group-bootstrap.log" 2>&1 &
+
+    log "Scheduled background LDAP group bootstrap for static group '${ldap_group_setting}'"
 }
 
 
@@ -237,12 +390,16 @@ main() {
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
 
+    validate_ldap_configuration
+    validate_ldap_new_user_group_configuration
+    apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
     ensure_certificate_sans
     install_figure_script
     schedule_script_registration
     schedule_job_service_bootstrap
+    schedule_ldap_group_bootstrap
 
     log "Startup flow finished"
 }

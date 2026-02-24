@@ -159,6 +159,12 @@ def _start_upload(request, conn):
             import_skip = True
             compatibility_skip = True
 
+        # Auto-skip OS junk files (Thumbs.db, .DS_Store, macOS resource
+        # forks, lost+found contents, etc.).  All other files are left to OMERO.
+        if _should_auto_skip_import(rel_path):
+            import_skip = True
+            compatibility_skip = True
+
         staged_path = f"_staged/{upload_id}/{filename}"
 
         total_bytes += size
