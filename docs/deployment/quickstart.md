@@ -138,6 +138,9 @@ docker compose --env-file installation_paths.env down
 
 # Follow logs for a service
 docker compose --env-file installation_paths.env logs -f omeroweb
+
+# Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
+bash tools/cleanup_build_containers.sh
 ```
 
 ## External Reverse Proxy setup (IT-managed)
