@@ -79,7 +79,7 @@
             <p>Previewing {{ preview_count }} images.</p>
         </div>
         <div style="display:flex; justify-content:flex-end; align-items:flex-start;">
-            <a href="/omeroweb_omp_plugin/help/"
+            <a href="{% url 'omeroweb_omp_plugin_help' %}"
                target="_blank"
                rel="noopener noreferrer"
                title="Help"
@@ -301,7 +301,7 @@
 
     <!-- HELP BUTTON (GLOBAL APP HELP — NEVER DISABLED) -->
     <div style="display:flex; justify-content:flex-end; margin-top:6px;">
-        <a href="/omeroweb_omp_plugin/help/"
+        <a href="{% url 'omeroweb_omp_plugin_help' %}"
            target="_blank"
            rel="noopener noreferrer"
            title="Help"

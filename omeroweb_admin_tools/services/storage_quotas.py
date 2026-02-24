@@ -5,24 +5,27 @@ import io
 import json
 import logging
 import os
-import shlex
-import subprocess
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pwd import getpwuid
+from grp import getgrgid
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STATE_PATH = "/tmp/omero-admin-tools/group-quotas.json"
+DEFAULT_STATE_PATH = "/OMERO/.admin-tools/group-quotas.json"
+DEFAULT_ENFORCER_MARKER_PATH = "/OMERO/.admin-tools/quota-enforcer-installed"
+DEFAULT_OMERO_DATA_DIR = "/OMERO"
+DEFAULT_MANAGED_REPOSITORY_SUBDIR = "ManagedRepository"
 DEFAULT_LOG_LIMIT = 200
 EXPECTED_MANAGED_REPOSITORY_PREFIX = "%group%/%user%/"
-DEFAULT_MIN_QUOTA_GB = 0.10
-DEFAULT_EXT4_ENFORCER_COMMAND = (
-    "/opt/omero/web/bin/enforce-ext4-project-quota.sh "
-    "--group {group} --group-path {group_path} --quota-gb {quota_gb} --mount-point {mount_point}"
-)
+STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION_KEY = "state_schema_version"
+AUTO_GROUP_QUOTA_ENV = "ADMIN_TOOLS_AUTO_SET_DEFAULT_GROUP_QUOTA"
+DEFAULT_GROUP_QUOTA_ENV = "ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB"
+MIN_GROUP_QUOTA_ENV = "ADMIN_TOOLS_MIN_QUOTA_GB"
 _RECONCILE_LOCK = threading.Lock()
 
 
@@ -50,37 +53,135 @@ def quota_state_path() -> Path:
     ).expanduser()
 
 
-def min_quota_gb() -> float:
-    """Return minimum allowed quota in GB from environment."""
-    raw_value = os.environ.get("ADMIN_TOOLS_MIN_QUOTA_GB", "").strip()
-    if not raw_value:
-        return DEFAULT_MIN_QUOTA_GB
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise QuotaError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _parse_bool_env(name: str) -> bool:
+    raw_value = _required_env(name).lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise QuotaError(
+        f"Invalid {name} value {raw_value!r}; expected one of: true/false, 1/0, yes/no, on/off."
+    )
+
+
+def _parse_quota_env(name: str) -> float:
+    raw_value = _required_env(name)
     try:
         parsed = float(raw_value)
     except ValueError as exc:
         raise QuotaError(
-            "Invalid ADMIN_TOOLS_MIN_QUOTA_GB value; expected a numeric value in GB."
+            f"Invalid {name} value; expected a numeric value in GB."
         ) from exc
     if parsed <= 0:
-        raise QuotaError("ADMIN_TOOLS_MIN_QUOTA_GB must be greater than 0.")
+        raise QuotaError(f"{name} must be greater than 0.")
     return round(parsed, 3)
 
 
-MANAGED_GROUP_ROOT = Path("/OMERO/ManagedRepository")
+def min_quota_gb() -> float:
+    """Return minimum allowed quota in GB from environment."""
+    return _parse_quota_env(MIN_GROUP_QUOTA_ENV)
+
+
+def default_group_quota_gb() -> float:
+    """Return default quota in GB for newly created groups from environment."""
+    return _parse_quota_env(DEFAULT_GROUP_QUOTA_ENV)
+
+
+def auto_set_default_group_quota_enabled() -> bool:
+    """Return whether new OMERO groups should automatically receive default quotas."""
+    return _parse_bool_env(AUTO_GROUP_QUOTA_ENV)
+
+
+def is_quota_enforcement_available() -> bool:
+    """Return True when the host-side quota enforcer is installed.
+
+    The installer writes a marker file on the shared /OMERO volume when
+    ext4 project quota support is confirmed and the systemd timer is
+    installed.  The absence of this file means the host filesystem does
+    not support quotas or the enforcer was never installed.
+    """
+    marker_path = quota_enforcer_marker_path()
+    return marker_path.is_file()
+
+
+def quota_enforcer_marker_path() -> Path:
+    """Return host-side quota enforcer marker path from environment."""
+    return Path(
+        os.environ.get(
+            "ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH",
+            DEFAULT_ENFORCER_MARKER_PATH,
+        )
+    )
+
+
+def _safe_username(uid: int) -> str:
+    try:
+        return getpwuid(uid).pw_name
+    except KeyError:
+        return str(uid)
+
+
+def _safe_groupname(gid: int) -> str:
+    try:
+        return getgrgid(gid).gr_name
+    except KeyError:
+        return str(gid)
+
+
+def _path_access_summary(path: Path) -> Dict[str, object]:
+    """Return deterministic access diagnostics for an on-disk path."""
+    uid = os.geteuid()
+    gid = os.getegid()
+    summary: Dict[str, object] = {
+        "path": str(path),
+        "exists": path.exists(),
+        "is_directory": path.is_dir(),
+        "writable": os.access(path, os.W_OK),
+        "executable": os.access(path, os.X_OK),
+        "effective_uid": uid,
+        "effective_user": _safe_username(uid),
+        "effective_gid": gid,
+        "effective_group": _safe_groupname(gid),
+    }
+    if path.exists():
+        stat_result = path.stat()
+        summary.update(
+            {
+                "owner_uid": stat_result.st_uid,
+                "owner_user": _safe_username(stat_result.st_uid),
+                "owner_gid": stat_result.st_gid,
+                "owner_group": _safe_groupname(stat_result.st_gid),
+                "mode_octal": f"{stat_result.st_mode & 0o7777:04o}",
+            }
+        )
+    return summary
 
 
 def managed_group_root() -> Path:
-    """Return the fixed OMERO managed repository group root."""
-    return MANAGED_GROUP_ROOT
-
+    """Return OMERO managed repository group root from environment."""
+    configured = os.environ.get("ADMIN_TOOLS_MANAGED_GROUP_ROOT", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    omero_data_dir = os.environ.get("OMERO_DATA_DIR", DEFAULT_OMERO_DATA_DIR).strip()
+    if not omero_data_dir:
+        omero_data_dir = DEFAULT_OMERO_DATA_DIR
+    return Path(omero_data_dir).expanduser() / DEFAULT_MANAGED_REPOSITORY_SUBDIR
 
 
 def resolve_managed_group_root(known_groups: Sequence[str]) -> Tuple[Path, str]:
-    """Return the fixed managed repository root without fallback resolution."""
+    """Return configured managed repository root without fallback resolution."""
     del known_groups
-    if MANAGED_GROUP_ROOT.exists() and MANAGED_GROUP_ROOT.is_dir():
-        return MANAGED_GROUP_ROOT, "using fixed managed repository root"
-    return MANAGED_GROUP_ROOT, "fixed managed repository root does not exist"
+    group_root = managed_group_root()
+    if group_root.exists() and group_root.is_dir():
+        return group_root, "using configured managed repository root"
+    return group_root, "configured managed repository root does not exist"
 
 
 def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
@@ -92,12 +193,16 @@ def _is_safe_managed_repository_root(path: Path) -> Tuple[bool, str]:
     if not path.exists() or not path.is_dir():
         return False, "path does not exist or is not a directory"
 
-    omero_root = Path("/OMERO").resolve()
+    omero_data_root = Path(
+        os.environ.get("OMERO_DATA_DIR", DEFAULT_OMERO_DATA_DIR).strip()
+        or DEFAULT_OMERO_DATA_DIR
+    ).expanduser()
+    omero_root = omero_data_root.resolve()
     try:
         resolved.relative_to(omero_root)
     except ValueError:
         if resolved != omero_root:
-            return False, "path must be within /OMERO mount"
+            return False, f"path must be within {omero_root} mount"
 
     return True, ""
 
@@ -106,23 +211,73 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _fresh_state() -> Dict[str, object]:
+    """Return a blank quota state dict."""
+    return {
+        STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+        "quotas_gb": {},
+        "logs": [],
+    }
+
+
 def _load_state(path: Path) -> Dict[str, object]:
     if not path.exists():
-        return {"quotas_gb": {}, "logs": []}
+        return _fresh_state()
     raw = path.read_text(encoding="utf-8")
-    data = json.loads(raw)
+    if not raw.strip():
+        logger.warning(
+            "Quota state file %s is empty; initialising fresh state", path
+        )
+        return _fresh_state()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning(
+            "Quota state file %s contains invalid JSON; initialising fresh state",
+            path,
+        )
+        return _fresh_state()
     if not isinstance(data, dict):
-        raise QuotaError("Quota state file must contain a JSON object")
+        logger.warning(
+            "Quota state file %s does not contain a JSON object; "
+            "initialising fresh state",
+            path,
+        )
+        return _fresh_state()
+    schema_version = data.get(STATE_SCHEMA_VERSION_KEY)
+    if schema_version is None:
+        data[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
+    elif schema_version != STATE_SCHEMA_VERSION:
+        raise QuotaError(
+            "Unsupported quota state schema version "
+            f"{schema_version!r}; expected {STATE_SCHEMA_VERSION}."
+        )
     data.setdefault("quotas_gb", {})
     data.setdefault("logs", [])
     return data
 
 
 def _write_state(path: Path, state: Dict[str, object]) -> None:
+    state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
+    serialized = json.dumps(state, indent=2, sort_keys=True)
     temp_path = path.with_suffix(f"{path.suffix}.tmp")
-    temp_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(temp_path, path)
+    temp_path.write_text(serialized, encoding="utf-8")
+    try:
+        os.replace(temp_path, path)
+    except PermissionError as exc:
+        # Fallback for sticky-bit directories (e.g. mode 1777) where the
+        # current process can write the existing file but cannot replace it
+        # because it does not own the destination entry.
+        if not path.exists() or not os.access(path, os.W_OK):
+            raise QuotaError(
+                f"Quota state path is not replaceable/writable: {path}. "
+                "Ensure /OMERO/.admin-tools is mode 0777 without sticky-bit "
+                "and writable by the omeroweb UID."
+            ) from exc
+
+        path.write_text(serialized, encoding="utf-8")
+        temp_path.unlink(missing_ok=True)
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
@@ -200,10 +355,6 @@ def _normalize_quota_gb(value: object) -> Optional[float]:
     return round(number, 3)
 
 
-def _bytes_from_gb(quota_gb: float) -> int:
-    return int(quota_gb * 1024 * 1024 * 1024)
-
-
 def managed_repository_template() -> str:
     """Return OMERO managed repository template for compatibility checks."""
     return os.environ.get("CONFIG_omero_fs_repo_path", "").strip()
@@ -250,46 +401,12 @@ def detect_filesystem(path: Path) -> FilesystemInfo:
     )
 
 
-def _run_quota_apply_command(
-    *,
-    command_template: str,
-    filesystem: FilesystemInfo,
-    group_name: str,
-    group_path: Path,
-    quota_bytes: int,
-    quota_gb: float,
-) -> Tuple[bool, str]:
-    context = {
-        "fs_type": filesystem.fs_type,
-        "mount_point": filesystem.mount_point,
-        "source": filesystem.source,
-        "group": group_name,
-        "group_path": str(group_path),
-        "quota_bytes": str(quota_bytes),
-        "quota_gb": f"{quota_gb:.3f}",
-    }
-    try:
-        expanded = command_template.format(**context)
-    except KeyError as exc:
-        return False, f"Invalid quota command template placeholder: {exc}"
-
-    command = shlex.split(expanded)
-    if not command:
-        return False, "Quota command template produced an empty command"
-
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        stderr = completed.stderr.strip() or completed.stdout.strip()
-        return (
-            False,
-            f"Quota apply command failed (code {completed.returncode}): {stderr}",
-        )
-    stdout = completed.stdout.strip()
-    return True, stdout or "quota applied"
-
-
 def _is_group_folder_available(group_path: Path) -> bool:
     return group_path.exists() and group_path.is_dir()
+
+
+def _can_manage_group_directories(group_root: Path) -> bool:
+    return os.access(group_root, os.W_OK | os.X_OK)
 
 
 def upsert_quotas(
@@ -378,21 +495,50 @@ def get_state() -> Dict[str, object]:
     if not isinstance(logs, list):
         logs = []
 
-    return {"quotas_gb": quotas, "logs": logs, "min_quota_gb": min_quota_gb()}
+    return {
+        "quotas_gb": quotas,
+        "logs": logs,
+        "min_quota_gb": min_quota_gb(),
+        "quota_enforcement_available": is_quota_enforcement_available(),
+    }
 
 
 def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
-    """Reconcile quota definitions with existing directories and attempt enforcement.
+    """Reconcile quota definitions with existing directories.
 
-    Enforcement is performed using an optional external command template from
-    ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE. The command receives placeholders:
-    {fs_type}, {mount_point}, {source}, {group}, {group_path}, {quota_bytes}, {quota_gb}.
+    This function manages the quota state file and reports quota readiness.
+    It never creates ManagedRepository group directories because OMERO.server
+    owns repository registration. Actual filesystem-level enforcement (chattr, setquota) is
+    performed by the host-side systemd timer (omero-quota-enforcer) which
+    reads the same state file with root privileges.
     """
     with _RECONCILE_LOCK:
         path = quota_state_path()
         state = _load_state(path)
         quotas = state.setdefault("quotas_gb", {})
         assert isinstance(quotas, dict)
+
+        auto_set_default_quota = auto_set_default_group_quota_enabled()
+        default_quota_gb = default_group_quota_gb()
+        minimum_quota_gb = min_quota_gb()
+        if default_quota_gb < minimum_quota_gb:
+            raise QuotaError(
+                f"{DEFAULT_GROUP_QUOTA_ENV} ({default_quota_gb:.3f}) must be >= "
+                f"{MIN_GROUP_QUOTA_ENV} ({minimum_quota_gb:.3f})."
+            )
+
+        for known_group_name in sorted(set(known_groups)):
+            normalized_known_group_name = _normalize_group(str(known_group_name))
+            if auto_set_default_quota and normalized_known_group_name not in quotas:
+                quotas[normalized_known_group_name] = default_quota_gb
+                _append_log(
+                    state,
+                    "info",
+                    (
+                        f"Auto-created quota for new group '{normalized_known_group_name}' at "
+                        f"{default_quota_gb:.3f} GB (source=auto-group-create)."
+                    ),
+                )
 
         group_root, root_reason = resolve_managed_group_root(known_groups)
         root_is_safe, root_safety_reason = _is_safe_managed_repository_root(group_root)
@@ -402,15 +548,13 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         available_groups.update(set(known_groups))
 
         filesystem = detect_filesystem(group_root)
-        command_template = os.environ.get(
-            "ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE", ""
-        ).strip()
-        if not command_template and filesystem.fs_type == "ext4":
-            command_template = DEFAULT_EXT4_ENFORCER_COMMAND
         repository_compatibility = managed_repository_compatibility()
+        group_root_access = _path_access_summary(group_root)
+        enforcer_marker = quota_enforcer_marker_path()
+        enforcer_available = is_quota_enforcement_available()
 
+        configured = []
         pending = []
-        applied = []
         reconcile_event_keys: List[str] = []
 
         if not root_is_safe:
@@ -460,58 +604,59 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             if not repository_compatibility["is_compatible"]:
                 pending.append(group_name)
                 continue
-            if group_name not in available_groups or not _is_group_folder_available(
-                group_path
-            ):
+            if not _is_group_folder_available(group_path):
                 pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="warning",
-                    message=f"Quota pending for group '{group_name}': directory not present at {group_path}.",
-                )
+                if not _can_manage_group_directories(group_root):
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="info",
+                        message=(
+                            f"Quota pending for group '{group_name}': managed root "
+                            f"{group_root} is not writable by the omeroweb process "
+                            f"(uid={group_root_access['effective_uid']}:{group_root_access['effective_gid']} "
+                            f"{group_root_access['effective_user']}:{group_root_access['effective_group']}; "
+                            f"mode={group_root_access.get('mode_octal', 'unknown')}; "
+                            f"owner={group_root_access.get('owner_user', 'unknown')}:{group_root_access.get('owner_group', 'unknown')}). "
+                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"enforcer_available={enforcer_available} marker={enforcer_marker}"
+                        ),
+                    )
+                else:
+                    _append_reconcile_event(
+                        state,
+                        event_key=group_key,
+                        level="info",
+                        message=(
+                            f"Quota pending for group '{group_name}': directory not present at {group_path}. "
+                            "Waiting for OMERO.server to create/register the directory during normal import/group operations. "
+                            f"enforcer_available={enforcer_available} marker={enforcer_marker}"
+                        ),
+                    )
                 continue
 
-            if not command_template:
-                pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="warning",
-                    message=(
-                        f"Quota for group '{group_name}' is configured but no apply command is set. "
-                        "Set ADMIN_TOOLS_QUOTA_APPLY_COMMAND_TEMPLATE to enforce at filesystem level."
-                    ),
-                )
-                continue
-
-            ok, message = _run_quota_apply_command(
-                command_template=command_template,
-                filesystem=filesystem,
-                group_name=group_name,
-                group_path=group_path,
-                quota_bytes=_bytes_from_gb(quota_gb),
-                quota_gb=quota_gb,
+            configured.append(group_name)
+            _append_reconcile_event(
+                state,
+                event_key=group_key,
+                level="info",
+                message=(
+                    f"Quota for group '{group_name}' is configured at {quota_gb:.3f} GB. "
+                    "Host-side enforcer will apply ext4 project quota."
+                ),
             )
-            if ok:
-                applied.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="info",
-                    message=f"Applied quota for group '{group_name}': {message}",
-                )
-            else:
-                pending.append(group_name)
-                _append_reconcile_event(
-                    state,
-                    event_key=group_key,
-                    level="error",
-                    message=f"Failed to apply quota for group '{group_name}': {message}",
-                )
 
         _prune_reconcile_event_cache(state, reconcile_event_keys)
-        _write_state(path, state)
+        try:
+            _write_state(path, state)
+        except OSError:
+            logger.warning(
+                "Could not persist quota state to %s; "
+                "reconciliation result is still valid but changes will not "
+                "be saved until the directory is writable",
+                path,
+                exc_info=True,
+            )
         return {
             "filesystem": {
                 "type": filesystem.fs_type,
@@ -520,11 +665,14 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
             },
             "managed_group_root": str(group_root),
             "managed_group_root_reason": root_reason,
+            "managed_group_root_access": group_root_access,
             "managed_repository": repository_compatibility,
             "available_groups": sorted(available_groups),
-            "applied_groups": sorted(set(applied)),
+            "applied_groups": sorted(set(configured)),
             "pending_groups": sorted(set(pending)),
             "quotas_gb": state.get("quotas_gb", {}),
             "logs": state.get("logs", []),
             "min_quota_gb": min_quota_gb(),
+            "quota_enforcement_available": enforcer_available,
+            "quota_enforcer_marker_path": str(enforcer_marker),
         }

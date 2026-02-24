@@ -40,6 +40,7 @@ from ..services.storage_quotas import (
     QuotaError,
     get_state as get_quota_state,
     import_quotas_csv,
+    is_quota_enforcement_available,
     quota_csv_template,
     reconcile_quotas,
     upsert_quotas,
@@ -435,6 +436,25 @@ def _safe_object_id(obj):
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _list_omero_group_names(conn) -> List[str]:
+    """Return sorted list of OMERO group names from admin service."""
+    if conn is None:
+        return []
+    try:
+        admin_service = conn.getAdminService()
+        groups = []
+        for method_name in ("lookupGroups", "containedGroups"):
+            groups = _call_admin_listing(admin_service, method_name)
+            if groups:
+                break
+        return sorted(
+            name for g in groups if (name := _safe_group_name(g))
+        )
+    except Exception:
+        logger.debug("Could not list OMERO groups for quota reconciliation")
+        return []
 
 
 def _list_all_users_and_groups(conn):
@@ -1657,7 +1677,26 @@ def storage_data(request, conn=None, url=None, **kwargs):
         logger.warning("Could not read disk usage for data root %s", data_root)
 
     known_groups = sorted(totals_by_group.keys())
-    quota_status = reconcile_quotas(known_groups)
+    try:
+        quota_status = reconcile_quotas(known_groups)
+    except Exception:
+        logger.warning(
+            "Quota reconciliation failed; returning storage data without quota info",
+            exc_info=True,
+        )
+        # Use the actual marker-file check instead of hardcoding False.
+        # reconcile_quotas() can fail for transient reasons (e.g. first
+        # write to the state file, permission issues) that are unrelated
+        # to whether the host-side quota enforcer is installed.
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
+        quota_status = {
+            "quotas_gb": {},
+            "logs": [],
+            "quota_enforcement_available": enforcer_available,
+        }
 
     return JsonResponse(
         {
@@ -1708,10 +1747,27 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
 
     try:
         state = get_quota_state()
-        reconciled = reconcile_quotas([])
-    except Exception as exc:
-        logger.exception("Failed to load quota data")
-        return JsonResponse({"error": f"Quota data request failed: {exc}"}, status=500)
+    except Exception:
+        logger.warning("Could not read quota state file; using empty defaults", exc_info=True)
+        state = {"quotas_gb": {}, "logs": []}
+
+    try:
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
+    except Exception:
+        logger.warning(
+            "Quota reconciliation failed in quota_data view; returning partial data",
+            exc_info=True,
+        )
+        try:
+            enforcer_available = is_quota_enforcement_available()
+        except Exception:
+            enforcer_available = False
+        reconciled = {
+            "quotas_gb": state.get("quotas_gb", {}),
+            "logs": state.get("logs", []),
+            "quota_enforcement_available": enforcer_available,
+        }
 
     return JsonResponse(
         {
@@ -1732,22 +1788,45 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
+    # ---- parse the request payload ----
     try:
-        payload = json.loads(request.body.decode("utf-8"))
-        updates = payload.get("updates", [])
+        raw_body = request.body.decode("utf-8").strip()
+        try:
+            payload = json.loads(raw_body) if raw_body else {}
+        except json.JSONDecodeError:
+            payload = {}
+        updates = payload.get("updates") if isinstance(payload, dict) else None
+
+        if updates is None and request.POST:
+            raw_updates = request.POST.get("updates")
+            if raw_updates is not None:
+                updates = json.loads(raw_updates) if isinstance(raw_updates, str) else raw_updates
+
+        if updates is None:
+            updates = []
         if not isinstance(updates, list):
-            raise QuotaError("Expected JSON payload with list field 'updates'")
+            raise QuotaError("Expected payload with list field 'updates'")
+
         normalized = []
         for item in updates:
             if not isinstance(item, dict):
                 raise QuotaError("Each quota update must be an object")
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
-        state = upsert_quotas(normalized, source="ui-edit")
-        reconciled = reconcile_quotas([])
-    except (json.JSONDecodeError, QuotaError, ValueError) as exc:
+    except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
+        logger.warning(
+            "Invalid quota update payload (content_type=%s, content_length=%s)",
+            request.META.get("CONTENT_TYPE", ""),
+            request.META.get("CONTENT_LENGTH", ""),
+        )
         return JsonResponse(
             {"error": f"Invalid quota update payload: {exc}"}, status=400
         )
+
+    # ---- persist and reconcile ----
+    try:
+        state = upsert_quotas(normalized, source="ui-edit")
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
     except Exception as exc:
         logger.exception("Failed to update quotas")
         return JsonResponse({"error": f"Quota update failed: {exc}"}, status=500)
@@ -1774,11 +1853,18 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": "Missing file upload field 'file'"}, status=400)
     csv_file = request.FILES["file"]
 
+    # ---- parse CSV ----
     try:
         content = csv_file.read().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
+
+    # ---- persist and reconcile ----
+    try:
         state = import_quotas_csv(content)
-        reconciled = reconcile_quotas([])
-    except (UnicodeDecodeError, QuotaError, CsvError) as exc:
+        known_groups = _list_omero_group_names(conn)
+        reconciled = reconcile_quotas(known_groups)
+    except (QuotaError, CsvError) as exc:
         return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
     except Exception as exc:
         logger.exception("Failed to import quotas")
