@@ -187,7 +187,7 @@ Common utilities shared across all plugins:
 <details open>
 <summary><h2>Deployment</h2></summary>
 
-> [!WARNING]
+> WARNING!
 > **Premature alpha release**
 >
 > OMERO Docker Extended is currently in an early alpha stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
@@ -223,7 +223,7 @@ Copy the following from this repository into `/opt/omero`:
 
 Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep your local edits in the non-example files so future template updates do not overwrite site-specific settings.
 
-> [!IMPORTANT]
+> IMPORTANT!
 > **Mandatory credential rotation before first start**
 >
 > Open `/opt/omero/env/omero_secrets.env` (the non-example runtime file) and replace every placeholder secret (`CHANGEME...`) with strong unique values (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services.
