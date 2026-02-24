@@ -206,6 +206,10 @@ RUN set -euo pipefail; \
         omero web syncmedia \
     "
 
+# Backup static files so they can be restored if the host bind-mount shadows var/
+# -------------------------------------------------------------------------------
+RUN cp -a /opt/omero/web/OMERO.web/var/static /opt/omero/web/static_backup
+
 # Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
 # WARNING:
 # - Affects OMERO.web Python runtime

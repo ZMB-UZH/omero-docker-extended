@@ -132,7 +132,6 @@ services:
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
-      - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector"
     pid: host
     networks:
       omero:
@@ -140,30 +139,12 @@ services:
           - node-exporter
     volumes:
       - /:/host:ro,rslave
-      - textfile_collector:/var/lib/node_exporter/textfile_collector:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
       start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-
-  disk-monitor:
-    image: alpine:latest
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "/config/smart_disk_monitor.sh"]
-    volumes:
-      - ./monitoring/prometheus/smart_disk_monitor.sh:/config/smart_disk_monitor.sh:ro
-      - textfile_collector:/out:rw
-      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/data/omero:ro
-      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/data/db:ro
-      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/data/db-plugin:ro
-    networks:
-      omero:
-        aliases:
-          - disk-monitor
     security_opt:
       - no-new-privileges:true
 
@@ -329,7 +310,7 @@ services:
       # which makes data appear lost after container recreation.
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -372,7 +353,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\""
+          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\""
         ]
       interval: 10s
       timeout: 10s
@@ -447,6 +428,7 @@ services:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
       - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (run installation/installation_script.sh)}:/opt/tmp:rw
+      - ${OMERO_WEB_VAR_PATH:?Set OMERO_WEB_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var:rw
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
@@ -488,7 +470,7 @@ services:
     volumes:
       - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5433"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -545,9 +527,6 @@ services:
       start_period: 10s
     security_opt:
       - no-new-privileges:true
-
-volumes:
-  textfile_collector:
 
 networks:
   omero:
