@@ -286,6 +286,8 @@ docker compose --env-file installation_paths.env logs -f omeroweb
 # Rebuild a single service
 docker compose --env-file installation_paths.env build omeroweb
 docker compose --env-file installation_paths.env up -d omeroweb
+# Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
+bash tools/cleanup_build_containers.sh
 ```
 
 ### Reverse proxy
