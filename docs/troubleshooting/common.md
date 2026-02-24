@@ -224,3 +224,32 @@ Expected result:
 - Output is your configured target (for example `users_ldap`) or a deliberate dynamic expression (for example `:dn_attribute:memberOf`), not implicit `default`.
 - If output is still `default` and this is intentional, startup will continue (no failure) and explicit LDAP group bootstrap is skipped.
 - If output is still `default` but you expect another group, inspect OMERO.server bootstrap logs for LDAP config apply/validation failures.
+
+
+## 11. OMERO.web fails with `PermissionError` under `/opt/omero/web/OMERO.web/var/omero`
+
+Symptom:
+
+- `omeroweb` logs show:
+  - `PermissionError: [Errno 13] Permission denied: '/opt/omero/web/OMERO.web/var/omero'`
+  - `Invalid tmp dir: /opt/omero/web/OMERO.web/var/omero/tmp`
+  - `Please create a /opt/omero/web/OMERO.web/var/django_secret_key file`
+
+Cause:
+
+- Host bind mount for `OMERO_WEB_VAR_PATH` exists but ownership/permissions do not match the runtime `omero-web` user.
+- OMERO.web cannot create runtime temp directories or write `django_secret_key`.
+
+Fix:
+
+```bash
+bash installation/installation_script.sh
+
+docker compose up -d --build omeroweb
+```
+
+Expected behavior after this fix:
+
+- Installer assigns `OMERO_WEB_VAR_PATH` ownership to OMERO.web UID/GID.
+- `startup/10-web-bootstrap.sh` repairs missing `var/omero/tmp`, enforces writable permissions, and auto-generates `var/django_secret_key` when missing.
+
