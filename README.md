@@ -18,7 +18,7 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 
 - All official OMERO software components
 - All base installation and orchestration layers
-- Official scripts included in this repository
+- Official and third-party scripts included in this repository
 
 For official OMERO documentation, release notes, and guides, see: <https://www.openmicroscopy.org/omero/>.
 
@@ -27,7 +27,7 @@ For official OMERO documentation, release notes, and guides, see: <https://www.o
 - OMP plugin (`omeroweb_omp_plugin`)
 - Upload plugin (`omeroweb_upload`)
 - Admin tools (`omeroweb_admin_tools`, root user only per design)
-- Unofficial and helper scripts
+- Unofficial and helper scripts specific to this repository
 
 ### 🐢 Not working yet / progressing slowly
 
