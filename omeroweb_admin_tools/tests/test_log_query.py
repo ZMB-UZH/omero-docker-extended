@@ -93,3 +93,4 @@ def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
     ]
     capped = _cap_entries_per_container(entries, 2)
     assert len(capped) == 3
+

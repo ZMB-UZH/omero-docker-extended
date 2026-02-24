@@ -408,7 +408,6 @@ def _suggest_separator_regex(filenames):
 
 @csrf_exempt
 @login_required()
-@require_non_root_user
 def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
@@ -421,6 +420,7 @@ def index(request, conn=None, url=None, **kwargs):
         def build_index_context(extra=None):
             context = {
                 "projects": projects,
+                "error_message": "",
                 "chunk_size": CHUNK_SIZE,
                 "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
                 "max_parsed_variables": MAX_PARSED_VARIABLES,
@@ -958,7 +958,6 @@ def list_projects(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
-@require_non_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

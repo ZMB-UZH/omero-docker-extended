@@ -13,8 +13,7 @@ def require_root_user(view_func):
             return JsonResponse(
                 {
                     "error": (
-                        "OMERO Admin Tools is restricted to the OMERO root account. "
-                        "Please sign in as root to continue."
+                        "PLEASE LOGIN AS ROOT USER\nTO USE THIS PLUGIN"
                     )
                 },
                 status=403,
