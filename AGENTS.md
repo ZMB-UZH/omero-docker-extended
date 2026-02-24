@@ -15,6 +15,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - Treat every `*_example*` file in this repository as the canonical reference for expected configuration and helper scripts.
 - Assume the system administrator has provisioned the corresponding non-example runtime file(s) on the target host, and that those files match their tracked `*_example*` counterparts unless explicitly documented otherwise.
 - The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
+- Treat this distribution as a full-stack, multi-container deployment that may contend with pre-existing Docker workloads (for example via host ports, network names, volumes, or maintenance automation). Operators are expected to validate coexistence in their own environment before production rollout.
 
 ## Where to look first
 
