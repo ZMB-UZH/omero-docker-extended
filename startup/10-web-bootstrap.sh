@@ -126,3 +126,11 @@ else
 fi
 
 configure_docker_socket_access
+
+# Restore static files if shadowed by the host bind mount
+var_dir="/opt/omero/web/OMERO.web/var"
+if [[ ! -d "${var_dir}/static/branding" ]]; then
+    echo "[web-bootstrap] Bind mount detected over var/: Restoring static files..."
+    cp -a /opt/omero/web/static_backup "${var_dir}/static"
+    chown -R omero-web:omero-web "${var_dir}/static"
+fi
