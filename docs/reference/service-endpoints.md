@@ -42,7 +42,7 @@ Base: `/omeroweb_omp_plugin/`
 | `/ai-credentials/`, `/ai-credentials/save/`, `/ai-credentials/test/`, `/ai-credentials/models/` | AI credential management |
 | `/user-settings/save/` | Save user preferences |
 | `/user-data/delete-api-keys/`, `/user-data/delete-variable-sets/`, `/user-data/delete-all/` | User data deletion |
-| `/help/` | Help PDF download |
+| `/help/` | Help Markdown document download |
 
 ### Upload Plugin
 
