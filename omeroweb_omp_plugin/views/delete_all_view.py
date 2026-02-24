@@ -7,7 +7,7 @@ import logging
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_json_body
+from ..views.utils import load_json_body, require_non_root_user
 from ..strings import errors
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ OMERO = OMERO_CLI
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
     Delete ALL MapAnnotations for ALL images in a given project using OMERO CLI.

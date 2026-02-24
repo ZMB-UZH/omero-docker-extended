@@ -12,7 +12,7 @@ from ..services.data_store import (
     delete_all_user_data,
     delete_all_variable_sets,
 )
-from ..views.utils import current_username
+from ..views.utils import current_username, require_non_root_user
 from ..strings import errors
 
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_api_keys(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -41,6 +42,7 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_variable_sets(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -61,6 +63,7 @@ def delete_variable_sets(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_all_data(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
