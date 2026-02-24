@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CLEANUP_SCRIPT="${REPO_ROOT}/tools/cleanup_build_containers.sh"
+CLEANUP_SCRIPT="${REPO_ROOT}/installation/cleanup_build_containers.sh"
 TMP_BASE="$(mktemp -d)"
 PASS=0
 FAIL=0
