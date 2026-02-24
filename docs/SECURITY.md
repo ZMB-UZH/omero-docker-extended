@@ -9,7 +9,7 @@ Security practices and controls for this deployment.
 - `env/omeroserver.env`, `env/omeroweb.env`, `env/omero-celery.env`, and `env/grafana.env` contain credentials and must never be committed.
 - `installation_paths.env` is also gitignored (contains site-specific paths).
 - Rotate all default credentials from example env files before deployment. This includes: database passwords, OMERO root password, job-service account password, Grafana admin password, hash secrets (`FMP_HASH_SECRET`, `OMERO_FIGURE_HASH_SECRET`), and LDAP bind credentials/filter settings.
-- The `github_pull_project_bash_example` update script preserves `env/` and `installation_paths.env`, and preserves only `logo/logo.png` (not `logo/logo_example.png`) during repository updates.
+- The `github_pull_project_bash_example` update script preserves `env/` and `installation_paths.env`, preserves only `logo/logo.png` (not `logo/logo_example.png`), and does not overwrite non-example runtime files during repository updates.
 
 ## Container security
 
