@@ -1,11 +1,15 @@
 # OMERO Docker Extended
 
-Production-grade to-be (**DISCLAIMER:** see [LICENSE](LICENSE) for details), alpha version, security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrator tools, and a full server monitoring stack.
+Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrator tools, and a full server monitoring stack.
 
 <details open>
 <summary><h2>What this repository delivers</h2></summary>
 
 This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
+
+> This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility or behavior must be verified by the user/administrator.
+
+For official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
 </details>
 
@@ -16,16 +20,14 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 
 - All official OMERO software components
 - All base installation and orchestration layers
-- Official scripts included in this repository
-
-For official OMERO documentation, release notes, and guides, see: <https://www.openmicroscopy.org/omero/>.
+- Official and third-party scripts included in this repository
 
 ### 🛠️ Working partially / under active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Upload plugin (`omeroweb_upload`)
 - Admin tools (`omeroweb_admin_tools`, root user only per design)
-- Unofficial and helper scripts
+- Unofficial and helper scripts specific to this repository
 
 ### 🐢 Not working yet / progressing slowly
 
@@ -185,7 +187,7 @@ Common utilities shared across all plugins:
 <details open>
 <summary><h2>Deployment</h2></summary>
 
-> [!WARNING]
+> WARNING!
 > **Premature alpha release**
 >
 > OMERO Docker Extended is currently in an early alpha stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
@@ -221,7 +223,7 @@ Copy the following from this repository into `/opt/omero`:
 
 Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep your local edits in the non-example files so future template updates do not overwrite site-specific settings.
 
-> [!IMPORTANT]
+> IMPORTANT!
 > **Mandatory credential rotation before first start**
 >
 > Open `/opt/omero/env/omero_secrets.env` (the non-example runtime file) and replace every placeholder secret (`CHANGEME...`) with strong unique values (15+ random alphanumeric characters recommended). These credentials protect OMERO.web, the databases, and plugin services.
@@ -347,7 +349,7 @@ Both operations are safe for production and do not require downtime.
 
 </details>
 
-<details open>
+<details>
 <summary><h2>Documentation rules</h2></summary>
 
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root.
@@ -362,9 +364,9 @@ Both operations are safe for production and do not require downtime.
 
 This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
 
-To the best of the maintainer's knowledge, all software dependencies and components referenced in this repository are sourced from publicly available channels and are used under their respective published terms (including open-source licenses where applicable). No paid or proprietary software package is intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
+To the best of the maintainer's knowledge, all software dependencies and components used or referenced referenced in this repository are sourced from publicly available channels and are used under their respective published terms and conditions. No paid or proprietary software packages are intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
 
-If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
+If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact by opening an issue and describe the concern so it can be reviewed and addressed promptly.
 
 </details>
 

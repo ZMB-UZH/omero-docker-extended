@@ -128,6 +128,7 @@ COPY omeroweb_upload /tmp/omeroweb_upload
 COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
 COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
+COPY docs/help /tmp/omero_plugin_help_docs
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
@@ -142,6 +143,8 @@ RUN set -euo pipefail; \
     cp -a /tmp/omeroweb_admin_tools "${SITE_PACKAGES}/omeroweb_admin_tools"; \
     cp -a /tmp/omeroweb_imaris_connector "${SITE_PACKAGES}/omeroweb_imaris_connector"; \
     cp -a /tmp/omero_plugin_common "${SITE_PACKAGES}/omero_plugin_common"; \
+    mkdir -p "${SITE_PACKAGES}/docs"; \
+    cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         matplotlib \
         psycopg2-binary \
@@ -158,8 +161,9 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omeroweb_upload" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
         "${SITE_PACKAGES}/omeroweb_imaris_connector" \
-        "${SITE_PACKAGES}/omero_plugin_common"; \
-    rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common
+        "${SITE_PACKAGES}/omero_plugin_common" \
+        "${SITE_PACKAGES}/docs/help"; \
+    rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
 
 # Pre-create ALL Django static directories and own them (maybe unnecessary)
 # -------------------------------------------------------------------------

@@ -100,23 +100,7 @@
           "unit": "percentunit",
           "min": 0,
           "max": 100,
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          }
+          "decimals": 1
         },
         "overrides": []
       },
@@ -132,43 +116,12 @@
     },
     {
       "type": "stat",
-      "title": "Load (5m)",
+      "title": "OMERO data path used space",
       "id": 4,
       "gridPos": {
         "h": 3,
         "w": 4,
         "x": 12,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "node_load5{job=~\"node-exporter|node_exporter\"}"
-        }
-      ],
-      "options": {
-        "graphMode": "none"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Host memory usage",
-      "id": 2,
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 16,
         "y": 0
       },
       "datasource": {
@@ -196,7 +149,41 @@
                 "value": 0.75
               }
             ]
-          }
+          },
+          "noValue": "N/A"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))"
+        }
+      ],
+      "options": {
+        "graphMode": "none"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Host memory usage",
+      "id": 2,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100,
+          "decimals": 1
         },
         "overrides": []
       },
@@ -311,7 +298,7 @@
     },
     {
       "type": "stat",
-      "title": "Local IP address",
+      "title": "Database path(s) used space",
       "id": 18,
       "gridPos": {
         "h": 3,
@@ -325,8 +312,26 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "decimals": 0,
+          "unit": "percentunit",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.75
+              }
+            ]
+          },
           "noValue": "N/A"
         },
         "overrides": []
@@ -334,17 +339,20 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (address) (node_network_address_info{job=~\"node-exporter|node_exporter\", family=\"inet\", scope=\"global\", address!~\"127[.].*|172[.].*|10[.].*\", device!~\"lo|docker.*|br-.*|veth.*\"})",
-          "legendFormat": "{{address}}"
+          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"})) or (1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))",
+          "legendFormat": "{{mountpoint}}"
         }
       ],
       "options": {
         "graphMode": "none",
-        "textMode": "name",
-        "text": {
-          "titleSize": 14,
-          "valueSize": 20
-        }
+        "reduceOptions": {
+          "values": true,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "value"
       }
     },
     {
@@ -489,19 +497,6 @@
           },
           "color": {
             "mode": "palette-classic"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 75
-              }
-            ]
           }
         },
         "overrides": []
