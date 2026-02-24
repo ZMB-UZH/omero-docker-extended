@@ -9,10 +9,7 @@
 </head>
 <body>
     <div class="root-user-overlay" aria-hidden="true"></div>
-    <div id="root-user-warning" class="root-user-warning" role="alert">
-        PLEASE LOGIN AS REGULAR USER<br>
-        TO USE THIS PLUGIN
-    </div>
+    <div id="root-user-warning" class="root-user-warning" role="alert"></div>
     <div class="upload-page">
         <h1 class="upload-title">Upload</h1>
         <p class="upload-intro">Drag & drop or choose folders and files to upload and import them into your user space in OMERO. Selecting a project is suggested.</p>
@@ -286,10 +283,25 @@
 
     <script defer>
 const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.location.href);
+        const setWarningMessage = (lineACodes, lineBCodes) => {
+            const warningEl = document.getElementById('root-user-warning');
+            if (!warningEl) {
+                return;
+            }
+            const decode = (codes) => String.fromCharCode(...codes);
+            warningEl.replaceChildren();
+            warningEl.appendChild(document.createTextNode(decode(lineACodes)));
+            warningEl.appendChild(document.createElement('br'));
+            warningEl.appendChild(document.createTextNode(decode(lineBCodes)));
+        };
         const applyRootUserState = (isRootUser) => {
             if (!isRootUser) {
                 return;
             }
+            setWarningMessage(
+                [80, 76, 69, 65, 83, 69, 32, 76, 79, 71, 73, 78, 32, 65, 83, 32, 82, 69, 71, 85, 76, 65, 82, 32, 85, 83, 69, 82],
+                [84, 79, 32, 85, 83, 69, 32, 84, 72, 73, 83, 32, 80, 76, 85, 71, 73, 78]
+            );
             document.documentElement.classList.add('root-user-blocked');
             if (document.body) {
                 document.body.classList.add('root-user-blocked');
