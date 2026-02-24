@@ -2161,4 +2161,7 @@ else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi
 
+# Cleanup build containers
+bash "${SCRIPT_DIR}/cleanup_build_containers.sh"
+
 echo "Done. Wait 30 seconds and check if the containers are up and running."
