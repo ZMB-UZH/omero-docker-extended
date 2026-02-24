@@ -431,9 +431,16 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden"
+        }
       },
       "targets": [
         {
@@ -459,9 +466,16 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden"
+        }
       },
       "targets": [
         {
