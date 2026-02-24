@@ -2,11 +2,15 @@
 
 Production-grade to-be (**DISCLAIMER:** see [LICENSE](LICENSE) for details), alpha version, security-hardened, dockerized OMERO deployment with custom web plugins for microscopy metadata workflows, file upload/import management, direct Imaris integration, administrator tools, and a full server monitoring stack.
 
-## What this repository delivers
+<details open>
+<summary><h2>What this repository delivers</h2></summary>
 
 This repository packages the complete runtime for the OMERO microscopy data storage & management platform, extending it with four purpose-built OMERO.web plugins (with several subroutines each), a shared utility library, an observability stack, automated database maintenance, and deployment/update tooling. Every service runs in separate Docker containers with explicit health checks, pinned image versions, and environment variable driven configuration.
 
-## Current development state
+</details>
+
+<details open>
+<summary><h2>Current development state</h2></summary>
 
 ### ✅ Working great
 
@@ -26,88 +30,10 @@ For official OMERO documentation, release notes, and guides, see: <https://www.o
 
 - Direct Imaris 11 integration
 
+</details>
 
-## Service topology
-
-The platform runs **17 containers** on a single Docker bridge network (`omero`):
-
-| Service | Image | Purpose | Port |
-|---|---|---|---|
-| `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
-| `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery worker (supervisord) | 4090 |
-| `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
-| `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database | 5433 (internal) |
-| `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `redis-sysctl-init` | Alpine 3.21 | One-shot sidecar: sets `vm.overcommit_memory=1` | none |
-| `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer-ce:2.38.1 | Docker container management UI | 9000, 9443 |
-| `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
-| `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
-| `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |
-| `alloy` | grafana/alloy:v1.12.2 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
-| `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
-| `node-exporter` | prom/node-exporter:v1.10.2 | Host-level metrics | 9100 (internal) |
-| `cadvisor` | gcr.io/cadvisor/cadvisor:v0.55.1 | Container resource metrics | 8080 (internal) |
-| `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
-| `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
-| `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
-
-## OMERO.web plugins
-
-### OMP Plugin (`omeroweb_omp_plugin`)
-
-Filename-to-metadata extraction workflow. Parses scientific image filenames into structured key-value annotations and writes them to OMERO.
-
-- Regex-based and AI-assisted filename parsing (supports OpenAI, Anthropic, Google, Mistral)
-- Variable set management with per-user PostgreSQL persistence
-- Background job execution with progress tracking
-- Hash-based ownership for safe plugin-only annotation deletion
-- Rate limiting on major actions
-- REMBI-aligned default variable names with scientific nomenclature-aware hyphen protection
-
-### Upload Plugin (`omeroweb_upload`)
-
-Staged file upload and controlled import into OMERO.
-
-- Job lifecycle: start, upload, import, confirm, prune
-- SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement
-- OMERO CLI-based import with configurable batching and concurrency
-- File attachment support (attach related files to imported images)
-- Stale upload cleanup automation
-- Per-user settings and special method configurations
-
-### Admin Tools Plugin (`omeroweb_admin_tools`)
-
-Operational observability interfaces embedded in OMERO.web.
-
-- Log exploration via Loki (LogQL queries with container filtering)
-- Grafana and Prometheus proxy endpoints for embedded dashboards
-- Docker container resource monitoring (stats, system info)
-- Storage analytics by user and group
-- Server and database diagnostic scripts
-- Root-only access controls
-
-### Imaris Connector Plugin (`omeroweb_imaris_connector`)
-
-OMERO image export to Imaris (.ims) format.
-
-- Celery-based async job execution with Redis broker
-- Synchronous and asynchronous request modes with status polling
-- OMERO script processor availability detection and retry logic
-- Job-service account support for background execution
-- ImarisConvertBioformats integration (compiled from source in server image)
-
-### Shared Library (`omero_plugin_common`)
-
-Common utilities shared across all plugins:
-
-- `env_utils.py` -- typed environment variable loading with validation (string, int, float, bool, sanitized+bounded)
-- `logging_utils.py` -- OMERO gateway log noise reduction
-- `omero_helpers.py` -- OMERO object data extraction (text values, IDs, owners, permissions)
-- `request_utils.py` -- Django request parsing (JSON body, username resolution)
-- `string_utils.py` -- case conversion and message payload building
-
-## Repository layout
+<details>
+<summary><h2>Repository layout</h2></summary>
 
 ```
 .
@@ -167,7 +93,96 @@ Common utilities shared across all plugins:
 └── .github/                           # CI workflows + Dependabot
 ```
 
-## Deployment
+</details>
+
+<details>
+<summary><h2>Service topology</h2></summary>
+
+The platform runs **17 containers** on a single Docker bridge network (`omero`):
+
+| Service | Image | Purpose | Port |
+|---|---|---|---|
+| `omeroserver` | Custom (CentOS) | OMERO.server: image storage, metadata API, script execution | 4064 |
+| `omeroweb` | Custom (CentOS) | OMERO.web + all plugins + Celery worker (supervisord) | 4090 |
+| `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
+| `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database | 5433 (internal) |
+| `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
+| `redis-sysctl-init` | Alpine 3.21 | One-shot sidecar: sets `vm.overcommit_memory=1` | none |
+| `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
+| `portainer` | portainer-ce:2.38.1 | Docker container management UI | 9000, 9443 |
+| `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
+| `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
+| `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |
+| `alloy` | grafana/alloy:v1.12.2 | Log collection pipeline (Docker + file-based) | 12345 (internal) |
+| `blackbox-exporter` | prom/blackbox-exporter:v0.28.0 | HTTP/TCP endpoint probing | 9115 (internal) |
+| `node-exporter` | prom/node-exporter:v1.10.2 | Host-level metrics | 9100 (internal) |
+| `cadvisor` | gcr.io/cadvisor/cadvisor:v0.55.1 | Container resource metrics | 8080 (internal) |
+| `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
+| `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
+| `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
+
+</details>
+
+<details open>
+<summary><h2>OMERO.web plugins</h2></summary>
+
+### OMP Plugin (`omeroweb_omp_plugin`)
+
+Filename-to-metadata extraction workflow. Parses scientific image filenames into structured key-value annotations and writes them to OMERO.
+
+- Regex-based and AI-assisted filename parsing (supports OpenAI, Anthropic, Google, Mistral)
+- Variable set management with per-user PostgreSQL persistence
+- Background job execution with progress tracking
+- Hash-based ownership for safe plugin-only annotation deletion
+- Rate limiting on major actions
+- REMBI-aligned default variable names with scientific nomenclature-aware hyphen protection
+
+### Upload Plugin (`omeroweb_upload`)
+
+Staged file upload and controlled import into OMERO.
+
+- Job lifecycle: start, upload, import, confirm, prune
+- SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement
+- OMERO CLI-based import with configurable batching and concurrency
+- File attachment support (attach related files to imported images)
+- Stale upload cleanup automation
+- Per-user settings and special method configurations
+
+### Admin Tools Plugin (`omeroweb_admin_tools`)
+
+Operational observability interfaces embedded in OMERO.web.
+
+- Log exploration via Loki (LogQL queries with container filtering)
+- Grafana and Prometheus proxy endpoints for embedded dashboards
+- Docker container resource monitoring (stats, system info)
+- Storage analytics by user and group
+- Server and database diagnostic scripts
+- Root-only access controls
+
+### Imaris Connector Plugin (`omeroweb_imaris_connector`)
+
+OMERO image export to Imaris (.ims) format.
+
+- Celery-based async job execution with Redis broker
+- Synchronous and asynchronous request modes with status polling
+- OMERO script processor availability detection and retry logic
+- Job-service account support for background execution
+- ImarisConvertBioformats integration (compiled from source in server image)
+
+### Shared Library (`omero_plugin_common`)
+
+Common utilities shared across all plugins:
+
+- `env_utils.py` -- typed environment variable loading with validation (string, int, float, bool, sanitized+bounded)
+- `logging_utils.py` -- OMERO gateway log noise reduction
+- `omero_helpers.py` -- OMERO object data extraction (text values, IDs, owners, permissions)
+- `request_utils.py` -- Django request parsing (JSON body, username resolution)
+- `string_utils.py` -- case conversion and message payload building
+
+</details>
+
+<details open>
+<summary><h2>Deployment</h2></summary>
 
 > [!WARNING]
 > **Premature alpha release**
@@ -287,7 +302,10 @@ bash installation/cleanup_build_containers.sh
 
 This is currently disabled, but easy to enable, at least without strong certificate verification. Reverse proxy and TLS termination can be managed externally (e.g., nginx/Ansible). Forward traffic to `http://omeroweb:4090` on the Docker network. Direct local access at `http://localhost:4090` remains available for troubleshooting.
 
-## Monitoring
+</details>
+
+<details open>
+<summary><h2>Monitoring</h2></summary>
 
 The observability stack provides:
 
@@ -296,7 +314,10 @@ The observability stack provides:
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
 
-## Database maintenance
+</details>
+
+<details open>
+<summary><h2>Database maintenance</h2></summary>
 
 The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL databases:
 
@@ -305,7 +326,10 @@ The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL 
 
 Both operations are safe for production and do not require downtime.
 
-## Documentation
+</details>
+
+<details open>
+<summary><h2>Documentation</h2></summary>
 
 | Entry point | Purpose |
 |---|---|
@@ -320,14 +344,20 @@ Both operations are safe for production and do not require downtime.
 | [`docs/troubleshooting/`](docs/troubleshooting/) | Diagnostic procedures |
 | [`docs/reference/`](docs/reference/) | Endpoint map and release notes |
 
-## Documentation rules
+</details>
+
+<details open>
+<summary><h2>Documentation rules</h2></summary>
 
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root.
 - Keep all other project documentation under `docs/`.
 - Documentation structure is enforced by CI via `tools/lint_docs_structure.py`.
 - Update `docs/index.md` cross-links when introducing new documents.
 
-## Copyright and third-party software notice
+</details>
+
+<details open>
+<summary><h2>Copyright and third-party software notice</h2></summary>
 
 This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
 
@@ -335,12 +365,20 @@ To the best of the maintainer's knowledge, all software dependencies and compone
 
 If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
 
-## License
+</details>
+
+<details open>
+<summary><h2>License</h2></summary>
 
 See [LICENSE](LICENSE) for details.
 
-## Support
+</details>
+
+<details open>
+<summary><h2>Support</h2></summary>
 
 If this project helps your work, you can support continued development here:
 
 [☕ Buy me a coffee](https://buymeacoffee.com/strmt7)
+
+</details>
