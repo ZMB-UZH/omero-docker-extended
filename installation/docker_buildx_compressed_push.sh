@@ -164,9 +164,16 @@ resolve_push_images_default() {
 }
 
 resolve_local_cache_dir() {
+    if [ -n "${BUILDX_DATA_PATH:-}" ]; then
+        printf '%s' "${BUILDX_DATA_PATH}"
+        return 0
+    fi
+
+    # Fallback to old behavior
     local base="${OMERO_DATA_PATH:-}"
     if [ -z "${base}" ]; then
-        echo "ERROR (${SCRIPT_NAME}): OMERO_DATA_PATH is not set. Build cache must be a named folder under OMERO_DATA_PATH." >&2
+        echo "ERROR (${SCRIPT_NAME}): BUILDX_DATA_PATH is not set, and OMERO_DATA_PATH is not set." >&2
+        echo "       Cannot determine build cache location." >&2
         return 1
     fi
 
