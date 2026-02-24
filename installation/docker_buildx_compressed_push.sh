@@ -15,8 +15,11 @@ DOCKER_BUILD_COMPRESSION_LEVEL="${DOCKER_BUILD_COMPRESSION_LEVEL:-15}"
 DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
+DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
+# Buildx builder name kept for backward compat (cleanup scripts, logs),
+# but we intentionally use the built-in `default` builder to avoid
+# creating buildkit containers/volumes.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
-BUILDKIT_CONTAINER_NAME="omero-buildkitd"
 
 readonly SCRIPT_NAME
 readonly SCRIPT_DIR
@@ -24,61 +27,44 @@ readonly REPO_ROOT_DIR
 
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
-
     if ! command -v "${binary_name}" >/dev/null 2>&1; then
         echo "ERROR (${SCRIPT_NAME}): Required binary not found: ${binary_name}" >&2
         return 1
     fi
-
     return 0
 }
 
 require_non_empty() {
     local variable_name="${1:?BUG: require_non_empty requires a variable name}"
     local variable_value="${2-}"
-
     if [ -z "${variable_value}" ]; then
         echo "ERROR (${SCRIPT_NAME}): Missing required variable: ${variable_name}" >&2
         return 1
     fi
-
     return 0
 }
 
 validate_toggle() {
     local variable_name="${1:?BUG: validate_toggle requires variable name}"
     local variable_value="${2-}"
-
     if [ "${variable_value}" != "0" ] && [ "${variable_value}" != "1" ]; then
         echo "ERROR (${SCRIPT_NAME}): ${variable_name} must be 0 or 1. Got: ${variable_value}" >&2
         return 1
     fi
-
     return 0
 }
 
 as_bool_literal() {
     local toggle_value="${1:?BUG: as_bool_literal requires a value}"
-
-    if [ "${toggle_value}" = "1" ]; then
-        printf 'true'
-        return 0
-    fi
-
-    if [ "${toggle_value}" = "0" ]; then
-        printf 'false'
-        return 0
-    fi
-
+    if [ "${toggle_value}" = "1" ]; then printf 'true'; return 0; fi
+    if [ "${toggle_value}" = "0" ]; then printf 'false'; return 0; fi
     echo "ERROR (${SCRIPT_NAME}): Internal toggle conversion failure for value: ${toggle_value}" >&2
     return 1
 }
 
 validate_compression_type() {
     case "${DOCKER_BUILD_COMPRESSION_TYPE}" in
-        gzip|zstd|estargz)
-            return 0
-            ;;
+        gzip|zstd|estargz) return 0 ;;
         *)
             echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_COMPRESSION_TYPE must be one of: gzip, zstd, estargz. Got: ${DOCKER_BUILD_COMPRESSION_TYPE}" >&2
             return 1
@@ -91,12 +77,10 @@ validate_compression_level() {
         echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_COMPRESSION_LEVEL must be an integer. Got: ${DOCKER_BUILD_COMPRESSION_LEVEL}" >&2
         return 1
     fi
-
     if [ "${DOCKER_BUILD_COMPRESSION_LEVEL}" -lt 0 ] || [ "${DOCKER_BUILD_COMPRESSION_LEVEL}" -gt 22 ]; then
         echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_COMPRESSION_LEVEL must be between 0 and 22. Got: ${DOCKER_BUILD_COMPRESSION_LEVEL}" >&2
         return 1
     fi
-
     return 0
 }
 
@@ -105,37 +89,30 @@ validate_compose_file() {
         echo "ERROR (${SCRIPT_NAME}): Compose file is missing or unreadable: ${COMPOSE_FILE}" >&2
         return 1
     fi
-
     return 0
 }
 
 validate_build_targets() {
     local target=""
-
     require_non_empty "DOCKER_BUILD_TARGETS" "${DOCKER_BUILD_TARGETS}"
-
     for target in ${DOCKER_BUILD_TARGETS}; do
         if [[ "${target}" =~ [^a-zA-Z0-9._-] ]]; then
             echo "ERROR (${SCRIPT_NAME}): Invalid build target '${target}'. Allowed characters: a-z A-Z 0-9 . _ -" >&2
             return 1
         fi
     done
-
     return 0
 }
 
 compose_target_image_name() {
     local target="${1:?BUG: compose_target_image_name requires a target}"
-
     if [ -n "${DOCKER_REGISTRY_PREFIX}" ]; then
         printf '%s/%s:%s' "${DOCKER_REGISTRY_PREFIX}" "${target}" "${DOCKER_IMAGE_TAG}"
         return 0
     fi
-
     printf '%s:%s' "${target}" "${DOCKER_IMAGE_TAG}"
     return 0
 }
-
 
 resolve_build_targets_from_compose() {
     local discovered_targets=""
@@ -143,17 +120,12 @@ resolve_build_targets_from_compose() {
     discovered_targets="$(awk '
         /^services:[[:space:]]*$/ { in_services=1; current_service=""; service_has_build=0; next }
         in_services == 1 && /^[^[:space:]]/ {
-            if (current_service != "" && service_has_build == 1) {
-                printf "%s\n", current_service
-            }
-            in_services=0
-            next
+            if (current_service != "" && service_has_build == 1) { printf "%s\n", current_service }
+            in_services=0; next
         }
         in_services == 1 {
             if ($0 ~ /^  [A-Za-z0-9_.-]+:[[:space:]]*$/) {
-                if (current_service != "" && service_has_build == 1) {
-                    printf "%s\n", current_service
-                }
+                if (current_service != "" && service_has_build == 1) { printf "%s\n", current_service }
                 service_line=$0
                 sub(/^  /, "", service_line)
                 sub(/:.*/, "", service_line)
@@ -161,17 +133,9 @@ resolve_build_targets_from_compose() {
                 service_has_build=0
                 next
             }
-
-            if (current_service != "" && $0 ~ /^    build:[[:space:]]*$/) {
-                service_has_build=1
-                next
-            }
+            if (current_service != "" && $0 ~ /^    build:[[:space:]]*$/) { service_has_build=1; next }
         }
-        END {
-            if (in_services == 1 && current_service != "" && service_has_build == 1) {
-                printf "%s\n", current_service
-            }
-        }
+        END { if (in_services == 1 && current_service != "" && service_has_build == 1) { printf "%s\n", current_service } }
     ' "${COMPOSE_FILE}" | paste -sd' ' -)"
 
     if [ -z "${discovered_targets}" ]; then
@@ -183,6 +147,7 @@ resolve_build_targets_from_compose() {
     DOCKER_BUILD_TARGETS="${discovered_targets}"
     return 0
 }
+
 resolve_push_images_default() {
     if [ -n "${DOCKER_BUILD_PUSH_IMAGES}" ]; then
         printf '%s' "${DOCKER_BUILD_PUSH_IMAGES}"
@@ -198,65 +163,23 @@ resolve_push_images_default() {
     return 0
 }
 
-ensure_builder() {
-    # Check for OMERO_DATA_PATH
-    if [ -z "${OMERO_DATA_PATH:-}" ]; then
-         echo "ERROR: OMERO_DATA_PATH is not set. Cannot configure buildx cache volume." >&2
-         return 1
-    fi
-
-    local cache_dir="${OMERO_DATA_PATH}/buildkit_cache"
-    echo "Using buildkit cache directory: ${cache_dir}"
-
-    # Create cache dir
-    mkdir -p "${cache_dir}"
-    
-    # Start buildkit container if not running
-    if ! docker ps --format '{{.Names}}' | grep -q "^${BUILDKIT_CONTAINER_NAME}$"; then
-        echo "Starting ${BUILDKIT_CONTAINER_NAME}..."
-        # Cleanup potential stale container
-        docker rm -f "${BUILDKIT_CONTAINER_NAME}" >/dev/null 2>&1 || true
-
-        docker run -d \
-            --name "${BUILDKIT_CONTAINER_NAME}" \
-            --privileged \
-            --restart always \
-            -v "${cache_dir}:/var/lib/buildkit" \
-            moby/buildkit:latest >/dev/null
-            
-        # Wait for it to be ready
-        sleep 5
-    fi
-    
-    # Get IP
-    local ip
-    ip=$(docker inspect -f '{{.NetworkSettings.IPAddress}}' "${BUILDKIT_CONTAINER_NAME}")
-    if [ -z "$ip" ]; then
-        echo "ERROR: Could not get IP of ${BUILDKIT_CONTAINER_NAME}" >&2
+resolve_local_cache_dir() {
+    local base="${OMERO_DATA_PATH:-}"
+    if [ -z "${base}" ]; then
+        echo "ERROR (${SCRIPT_NAME}): OMERO_DATA_PATH is not set. Build cache must be a named folder under OMERO_DATA_PATH." >&2
         return 1
     fi
-    
-    echo "Buildkit running at ${ip}"
 
-    # Create/Use builder
-    if ! docker buildx ls | grep -q "^${DOCKER_BUILDX_BUILDER_NAME}"; then
-        docker buildx create \
-            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
-            --driver remote \
-            "tcp://${ip}:1234" \
-            --use >/dev/null
-    else
-        # If builder exists but points to wrong IP (e.g. if container recreated), recreate it
-        # Or just replace it always to be safe
-        docker buildx rm "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
-        docker buildx create \
-            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
-            --driver remote \
-            "tcp://${ip}:1234" \
-            --use >/dev/null
-    fi
-    
-    docker buildx inspect --bootstrap >/dev/null
+    base="${base%/}"
+    printf '%s' "${base}/buildx_cache"
+    return 0
+}
+
+ensure_default_builder() {
+    # Explicitly use the built-in default builder to avoid creating buildkit
+    # containers and docker volumes.
+    docker buildx use default >/dev/null 2>&1 || true
+    docker buildx inspect --bootstrap >/dev/null 2>&1 || true
 }
 
 build_target_overrides() {
@@ -264,15 +187,30 @@ build_target_overrides() {
     local target_image_name=""
     local oci_mediatypes_bool=""
     local push_bool=""
+    local cache_dir=""
 
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
+
+    if [ "${DOCKER_BUILD_NO_CACHE}" = "0" ]; then
+        cache_dir="$(resolve_local_cache_dir)"
+        mkdir -p "${cache_dir}"
+    fi
 
     for target in ${DOCKER_BUILD_TARGETS}; do
         target_image_name="$(compose_target_image_name "${target}")"
 
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
+
+        if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ]; then
+            printf -- '--set\n%s.no-cache=true\n' "${target}"
+        else
+            # Persist cache in a named folder (no anonymous docker volumes).
+            printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${cache_dir}"
+            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=max\n' "${target}" "${cache_dir}"
+        fi
+
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
             printf -- '--set\n%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
                 "${target}" \
@@ -315,6 +253,7 @@ main() {
     validate_toggle "DOCKER_BUILD_USE_OCI_MEDIATYPES" "${DOCKER_BUILD_USE_OCI_MEDIATYPES}"
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
+    validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
 
     require_binary docker
 
@@ -324,7 +263,7 @@ main() {
         return 1
     fi
 
-    ensure_builder
+    ensure_default_builder
 
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
@@ -352,6 +291,7 @@ main() {
     echo "  Compression level    : ${DOCKER_BUILD_COMPRESSION_LEVEL}"
     echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
     echo "  Inline cache         : ${DOCKER_BUILD_INLINE_CACHE}"
+    echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
     echo "  Push                 : ${push_bool}"
 
     export DOCKER_BUILDKIT=1
