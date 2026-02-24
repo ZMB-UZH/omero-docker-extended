@@ -124,6 +124,8 @@ curl -s http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-p
 
 `/resource-monitoring/grafana-proxy/*` is protected by OMERO.web authentication. An unauthenticated `curl` request correctly receives `302` to `/webclient/login/...`; this does not indicate a Grafana proxy failure.
 
+When Grafana is down or unreachable, the proxy now returns a custom `503 Service Unavailable` HTML page (instead of forwarding raw upstream gateway HTML). The page reports the attempted upstream endpoint(s), includes `Cache-Control: no-store`, and sends `Retry-After: 30` to support cleaner operator experience and browser behavior.
+
 ### 5) Check Grafana runtime version and datasource API auth behavior
 
 ```bash

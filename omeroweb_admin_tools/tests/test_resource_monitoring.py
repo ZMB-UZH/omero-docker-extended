@@ -671,6 +671,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
         query="",
         *,
         proxy_prefix="",
+        rewrite_origin_headers=False,
     ):
         captured.update(
             {
@@ -727,6 +728,7 @@ def test_grafana_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         query="",
         *,
         proxy_prefix="",
+        rewrite_origin_headers=False,
     ):
         captured.update(
             {
@@ -779,6 +781,7 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
         query="",
         *,
         proxy_prefix="",
+        rewrite_origin_headers=False,
     ):
         captured.update(
             {
@@ -841,6 +844,23 @@ def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
     ]
 
 
+def test_grafana_unavailable_response_has_actionable_metadata() -> None:
+    from omeroweb_admin_tools.views.index_view import _grafana_unavailable_response
+
+    response = _grafana_unavailable_response(
+        proxy_prefix="/admin_tools/resource-monitoring/grafana-proxy",
+        attempted_backends=["http://grafana:3000", "http://130.60.107.205:3000"],
+        status_code=502,
+    )
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 503
+    assert response["Cache-Control"] == "no-store"
+    assert response["Retry-After"] == "30"
+    assert "Grafana is temporarily unavailable" in content
+    assert "grafana:3000" in content
+
+
 def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
     monkeypatch,
 ) -> None:
@@ -870,6 +890,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         query="",
         *,
         proxy_prefix="",
+        rewrite_origin_headers=False,
     ):
         attempts.append(base_url)
         if base_url == "http://grafana:3000":
@@ -891,6 +912,44 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
 
     assert response.status_code == 200
     assert attempts == ["http://grafana:3000", "http://130.60.107.205:3000"]
+
+
+def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
+    monkeypatch,
+) -> None:
+    request = RequestFactory().get(
+        "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
+    )
+
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    class DummyResponse:
+        def __init__(self, status_code: int):
+            self.status_code = status_code
+            self.content = b"{}"
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._proxy_http_request",
+        lambda *a, **k: DummyResponse(status_code=502),
+    )
+
+    from omeroweb_admin_tools.views.index_view import grafana_proxy
+
+    response = grafana_proxy(
+        request,
+        "d/omero-infrastructure/server-infrastructure",
+        conn=None,
+    )
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 503
+    assert "Grafana is temporarily unavailable" in content
+    assert "grafana:3000" in content
 
 
 def test_is_behind_reverse_proxy_detects_forwarded_proto() -> None:
