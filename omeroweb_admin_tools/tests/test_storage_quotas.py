@@ -413,6 +413,105 @@ def test_storage_quota_update_endpoint_accepts_form_encoded_updates(monkeypatch)
 
     assert response.status_code == 200
 
+def test_upsert_recovers_from_empty_state_file(tmp_path, monkeypatch) -> None:
+    """When the state file exists but is empty, upsert should start fresh."""
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 10)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["quotas_gb"]["group-a"] == 10.0
+
+
+def test_upsert_recovers_from_corrupted_state_file(tmp_path, monkeypatch) -> None:
+    """When the state file contains invalid JSON, upsert should start fresh."""
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text("{corrupt", encoding="utf-8")
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 5)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["quotas_gb"]["group-a"] == 5.0
+
+
+def test_upsert_recovers_from_non_object_state_file(tmp_path, monkeypatch) -> None:
+    """When the state file contains a JSON array instead of an object, start fresh."""
+    state_path = tmp_path / "quotas.json"
+    state_path.write_text("[1, 2, 3]", encoding="utf-8")
+    monkeypatch.setenv("ADMIN_TOOLS_QUOTA_STATE_PATH", str(state_path))
+
+    upsert_quotas([("group-a", 5)])
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["quotas_gb"]["group-a"] == 5.0
+
+
+def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> None:
+    """When upsert_quotas raises, the view should return 500 not 400."""
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data=json.dumps({"updates": [{"group": "demo", "quota_gb": 10}]}),
+        content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.upsert_quotas",
+        _raises(OSError("Permission denied: /OMERO/.admin-tools/group-quotas.json")),
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 500
+    body = json.loads(response.content)
+    assert "Quota update failed" in body["error"]
+
+
+def _raises(exc):
+    """Return a callable that raises the given exception."""
+    def _fn(*_a, **_kw):
+        raise exc
+    return _fn
+
+
+def test_storage_quota_update_endpoint_multipart_form(monkeypatch) -> None:
+    """Multipart form-encoded request with updates field should be accepted."""
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
+        content_type="multipart/form-data; boundary=BoUnDaRyStRiNg",
+    )
+    # Django RequestFactory with multipart sends data differently.
+    # Use the standard form POST approach.
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.upsert_quotas",
+        lambda updates, source: {"quotas_gb": {"demo": 0.5}},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.reconcile_quotas",
+        lambda groups: {"logs": []},
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 200
+    body = json.loads(response.content)
+    assert body["quotas_gb"]["demo"] == 0.5
+
+
 def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
     file_payload = b"Group,Quota [GB]\ndemo,12\n"
     upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")

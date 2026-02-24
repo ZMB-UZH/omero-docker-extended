@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import pytest
+
 from omeroweb_admin_tools.services.storage_quotas import (
+    AUTO_GROUP_QUOTA_ENV,
+    DEFAULT_GROUP_QUOTA_ENV,
+    MIN_GROUP_QUOTA_ENV,
     is_quota_enforcement_available,
     reconcile_quotas,
     resolve_managed_group_root,
     upsert_quotas,
 )
+
+
+@pytest.fixture(autouse=True)
+def _set_required_quota_env(monkeypatch) -> None:
+    monkeypatch.setenv(MIN_GROUP_QUOTA_ENV, "0.10")
+    monkeypatch.setenv(DEFAULT_GROUP_QUOTA_ENV, "0.10")
+    monkeypatch.setenv(AUTO_GROUP_QUOTA_ENV, "false")
 
 
 def test_resolve_managed_group_root_uses_fixed_path_when_present(
