@@ -99,7 +99,7 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1
         },
         "overrides": []
@@ -121,8 +121,8 @@
       "gridPos": {
         "h": 3,
         "w": 4,
-        "x": 12,
-        "y": 0
+        "x": 8,
+        "y": 3
       },
       "datasource": {
         "type": "prometheus",
@@ -157,7 +157,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))"
+          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"}))"
         }
       ],
       "options": {
@@ -171,7 +171,7 @@
       "gridPos": {
         "h": 3,
         "w": 4,
-        "x": 16,
+        "x": 12,
         "y": 0
       },
       "datasource": {
@@ -182,7 +182,7 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1
         },
         "overrides": []
@@ -204,7 +204,7 @@
       "gridPos": {
         "h": 3,
         "w": 4,
-        "x": 20,
+        "x": 16,
         "y": 0
       },
       "datasource": {
@@ -253,8 +253,8 @@
       "gridPos": {
         "h": 3,
         "w": 4,
-        "x": 8,
-        "y": 3
+        "x": 20,
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -339,7 +339,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"})) or (1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))",
+          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"})) or (1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"}))",
           "legendFormat": "{{mountpoint}}"
         }
       ],
@@ -432,6 +432,9 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisSoftMax": 100,
             "drawStyle": "line",
