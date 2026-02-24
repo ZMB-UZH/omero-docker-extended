@@ -185,3 +185,42 @@ docker compose --env-file installation_paths.env --env-file env/omero_secrets.en
 Expected result:
 
 - `database` no longer logs repeated auth failures for user `omero`.
+
+
+## 11. LDAP users are placed into `default` group instead of `users_ldap`
+
+Symptom:
+
+- After first LDAP login, OMERO shows a `default` group (if not previously present).
+- LDAP-created users have only `default` as selectable group in OMERO.web admin UI.
+
+Cause:
+
+- OMERO LDAP and OMERO non-LDAP groups are not separate systems.
+- When LDAP is enabled and `omero.ldap.new_user_group` is not explicitly set, OMERO uses the built-in default `default` value and creates/uses that group for new LDAP users.
+
+Fix:
+
+1. Set a deterministic LDAP group mapping in `env/omeroserver.env` (runtime file, not the example), for example:
+
+```bash
+CONFIG_omero_ldap_config=true
+CONFIG_omero_ldap_new__user__group=users_ldap
+```
+
+2. Restart OMERO.server and OMERO.web to apply LDAP config.
+3. Confirm persisted server value is correct (command below).
+4. For existing LDAP users already in `default`, move/add memberships as needed using OMERO admin UI or OMERO CLI (`omero group adduser --user-name <ldap_user> --name users_ldap`).
+
+Validation:
+
+```bash
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroserver \
+  /opt/omero/server/OMERO.server/bin/omero config get omero.ldap.new_user_group
+```
+
+Expected result:
+
+- Output is your configured target (for example `users_ldap`) or a deliberate dynamic expression (for example `:dn_attribute:memberOf`), not implicit `default`.
+- If output is still `default` and this is intentional, startup will continue (no failure) and explicit LDAP group bootstrap is skipped.
+- If output is still `default` but you expect another group, inspect OMERO.server bootstrap logs for LDAP config apply/validation failures.

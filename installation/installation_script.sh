@@ -28,6 +28,7 @@ DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
 DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
+OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
 OMERO_SERVER_IMAGE="${OMERO_SERVER_IMAGE:-omeroserver:custom}"
@@ -44,6 +45,8 @@ set -euo pipefail
 load_installation_paths_env() {
     local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
     local env_line
+    local env_key
+    local env_value
 
     if [ ! -r "${env_file_path}" ]; then
         echo "ERROR: Installation paths file is missing or unreadable: ${env_file_path}" >&2
@@ -56,7 +59,9 @@ load_installation_paths_env() {
                 continue
                 ;;
             [A-Za-z_]*=*)
-                eval "${env_line}"
+                env_key="${env_line%%=*}"
+                env_value="${env_line#*=}"
+                eval "${env_key}=\"${env_value}\""
                 ;;
             *)
                 ;;
@@ -140,6 +145,12 @@ fi
 SECRETS_ENV_FILE="${REPO_ROOT_DIR}/env/omero_secrets.env"
 if ! load_secrets_env "${SECRETS_ENV_FILE}"; then
     exit 1
+fi
+
+if [ -r "${OMERO_SERVER_ENV_FILE}" ]; then
+    set -a
+    load_installation_paths_env "${OMERO_SERVER_ENV_FILE}"
+    set +a
 fi
 
 require_nonempty_config_var() {
@@ -394,6 +405,160 @@ compose_up_with_retries() {
     done
 
     return 1
+}
+
+
+normalize_omero_install_group_list() {
+    local raw_group_list="${1:-}"
+    local list_without_inline_comment=""
+    local group_entry=""
+    local normalized_entry=""
+    local normalized_list=""
+    local separator=""
+    local -a group_entries=()
+
+    # Allow sysadmins to effectively disable group bootstrap with inline comments,
+    # for example: OMERO_INSTALL_GROUP_LIST=# disabled for fresh install
+    list_without_inline_comment="${raw_group_list%%#*}"
+
+    IFS="," read -r -a group_entries <<< "${list_without_inline_comment}"
+    for group_entry in "${group_entries[@]}"; do
+        normalized_entry="$(printf '%s' "${group_entry}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [ -z "${normalized_entry}" ] && continue
+
+        normalized_list+="${separator}${normalized_entry}"
+        separator=","
+    done
+    printf '%s' "${normalized_list}"
+}
+
+validate_omero_install_group_list() {
+    local raw_group_list="${1:-}"
+    local normalized_group_list=""
+
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
+        return 0
+    fi
+
+    local group_entry=""
+    local group_name=""
+    local group_permission=""
+    local -a group_entries=()
+
+    IFS="," read -r -a group_entries <<< "${normalized_group_list}"
+    for group_entry in "${group_entries[@]}"; do
+        if [[ "${group_entry}" != *:* ]]; then
+            echo "ERROR: Invalid OMERO_INSTALL_GROUP_LIST entry (missing ':'): ${group_entry}" >&2
+            return 1
+        fi
+
+        group_name="${group_entry%%:*}"
+        group_permission="${group_entry#*:}"
+
+        if [ -z "${group_name}" ]; then
+            echo "ERROR: OMERO_INSTALL_GROUP_LIST contains an entry with empty group name: ${group_entry}" >&2
+            return 1
+        fi
+
+        if ! [[ "${group_name}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "ERROR: Invalid OMERO group name '${group_name}' in OMERO_INSTALL_GROUP_LIST. Allowed pattern: [A-Za-z0-9_.-]+" >&2
+            return 1
+        fi
+
+        case "${group_permission}" in
+            private|read-only|read-annotate|read-write)
+                ;;
+            *)
+                echo "ERROR: Invalid OMERO group permission '${group_permission}' for group '${group_name}'. Supported values: private, read-only, read-annotate, read-write" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    return 0
+}
+
+create_omero_groups_from_list() {
+    local compose_file="$1"
+    local raw_group_list="${2:-}"
+    local normalized_group_list=""
+
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
+        echo "OMERO_INSTALL_GROUP_LIST is empty/commented; skipping OMERO installation group bootstrap."
+        return 0
+    fi
+
+    if [ ! -r "${OMERO_SERVER_ENV_FILE}" ]; then
+        echo "ERROR: OMERO server env file is required for deterministic group bootstrap and was not found: ${OMERO_SERVER_ENV_FILE}" >&2
+        return 1
+    fi
+
+    if ! validate_omero_install_group_list "${normalized_group_list}"; then
+        return 1
+    fi
+
+    local group_entry=""
+    local group_name=""
+    local group_permission=""
+    local add_output=""
+    local add_exit_code=0
+    local add_attempt=0
+    local add_retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-20}"
+    local add_retry_delay_seconds="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-3}"
+    local -a group_entries=()
+
+    echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_LIST..."
+
+    IFS="," read -r -a group_entries <<< "${normalized_group_list}"
+    for group_entry in "${group_entries[@]}"; do
+        [ -z "${group_entry}" ] && continue
+
+        group_name="${group_entry%%:*}"
+        group_permission="${group_entry#*:}"
+
+        echo "Ensuring OMERO group exists: ${group_name} (${group_permission})"
+
+        add_output=""
+        add_exit_code=1
+        for add_attempt in $(seq 1 "${add_retry_limit}"); do
+            set +e
+            add_output="$(compose_with_installation_env "${compose_file}" exec -T \
+                -e ROOTPASS="${ROOTPASS}" \
+                -e TARGET_GROUP_NAME="${group_name}" \
+                -e TARGET_GROUP_PERMISSION="${group_permission}" \
+                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)." >&2; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+            add_exit_code=$?
+            set -e
+
+            if [ "${add_exit_code}" -eq 0 ] || printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+                break
+            fi
+
+            if [ "${add_attempt}" -lt "${add_retry_limit}" ]; then
+                echo "WARNING: Group bootstrap attempt ${add_attempt}/${add_retry_limit} failed for '${group_name}'. Retrying in ${add_retry_delay_seconds}s..." >&2
+                sleep "${add_retry_delay_seconds}"
+            fi
+        done
+
+        if [ "${add_exit_code}" -eq 0 ]; then
+            echo "Created OMERO group '${group_name}' (${group_permission})."
+            continue
+        fi
+
+        if printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+            echo "OMERO group '${group_name}' already exists; skipping creation."
+            continue
+        fi
+
+        echo "ERROR: Failed to ensure OMERO group '${group_name}' (${group_permission})." >&2
+        echo "ERROR: omero output: ${add_output}" >&2
+        return 1
+    done
+
+    echo "OMERO installation group bootstrap completed."
+    return 0
 }
 
 stop_old_installation_containers() {
@@ -1788,8 +1953,133 @@ echo "✔ Host ownership fix complete."
 echo "================================================"
 echo ""
 
+# =====================================================
+# Quota enforcer installation (non-blocking)
+#
+# Detects whether the OMERO user-data filesystem supports ext4 project
+# quotas.  When all prerequisites are met the host-side systemd timer
+# is installed automatically.  When not, a non-blocking info message
+# is printed and the Quotas tab in Admin Tools will be disabled.
+# =====================================================
+install_quota_enforcer_if_supported() {
+    local omero_user_data_dir="$1"
+    local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
+
+    echo "================================================"
+    echo "Checking ext4 project quota support for Quotas"
+    echo "================================================"
+
+    if [ ! -f "${installer_path}" ]; then
+        echo "INFO: Quota enforcer installer not found at ${installer_path}."
+        echo "INFO: Skipping quota enforcer installation."
+        return 0
+    fi
+
+    # ── Detect filesystem type for OMERO user data path ──
+    local quota_fs_type="" quota_mount_point="" quota_block_device=""
+    while read -r line; do
+        local parts
+        # shellcheck disable=SC2206
+        parts=($line)
+        if [ "${#parts[@]}" -lt 3 ]; then continue; fi
+        local mp="${parts[1]}"
+        local ft="${parts[2]}"
+        # Append trailing slash to both paths to ensure correct prefix matching.
+        # Without this, mount point /data would incorrectly match /datafiles/OMERO.
+        case "${omero_user_data_dir%/}/" in
+            "${mp%/}/"*)
+                if [ -z "${quota_mount_point}" ] || [ "${#mp}" -gt "${#quota_mount_point}" ]; then
+                    quota_mount_point="${mp}"
+                    quota_fs_type="${ft}"
+                    quota_block_device="${parts[0]}"
+                fi
+                ;;
+        esac
+    done < /proc/mounts
+
+    if [ "${quota_fs_type}" != "ext4" ]; then
+        echo "INFO: Filesystem for ${omero_user_data_dir} is '${quota_fs_type:-unknown}', not ext4."
+        echo "INFO: ext4 project quotas are not supported on this filesystem type."
+        echo "INFO: The Quotas tab in Admin Tools will be disabled."
+        echo "INFO: To enable quotas, use an ext4 filesystem with prjquota mount option."
+        echo ""
+        return 0
+    fi
+
+    # ── Check prjquota mount option ──
+    if ! mount | grep -qE "on ${quota_mount_point} .*prjquota"; then
+        echo "INFO: Filesystem at ${quota_mount_point} is ext4 but NOT mounted with prjquota."
+        echo "INFO: To enable quotas:"
+        echo "INFO:   1. Add 'prjquota' to mount options in /etc/fstab"
+        echo "INFO:   2. Remount: sudo mount -o remount,prjquota ${quota_mount_point}"
+        echo "INFO:   3. Re-run this installation script."
+        echo "INFO: The Quotas tab in Admin Tools will be disabled until then."
+        echo ""
+        return 0
+    fi
+
+    # ── Check ext4 project feature in superblock ──
+    if command -v tune2fs >/dev/null 2>&1 && [ -n "${quota_block_device}" ]; then
+        if ! tune2fs -l "${quota_block_device}" 2>/dev/null | grep -q "project"; then
+            echo "INFO: ext4 'project' feature is NOT enabled on ${quota_block_device}."
+            echo "INFO: To enable quotas:"
+            echo "INFO:   1. Enable project feature: sudo tune2fs -O project ${quota_block_device}"
+            echo "INFO:   2. Re-run this installation script."
+            echo "INFO: The Quotas tab in Admin Tools will be disabled until then."
+            echo ""
+            return 0
+        fi
+    fi
+
+    echo "ext4 project quota support detected on ${quota_mount_point}."
+    echo "Installing OMERO quota enforcer..."
+    echo ""
+
+    chmod +x "${installer_path}"
+    if ! "${installer_path}" "${omero_user_data_dir}"; then
+        echo ""
+        echo "WARNING: Quota enforcer installation encountered errors (non-blocking)." >&2
+        echo "WARNING: You can install it manually later with:" >&2
+        echo "  sudo ${installer_path} ${omero_user_data_dir}" >&2
+        echo ""
+        return 0
+    fi
+
+    echo ""
+    echo "✔ Quota enforcer installed successfully."
+    return 0
+}
+
+install_quota_enforcer_if_supported "${OMERO_USER_DATA_PATH}" || true
+
+# Ensure .admin-tools directory exists and is writable by omeroweb container.
+# The quota enforcer installer creates this as root; the omeroweb container
+# (OMERO_WEB_UID) needs write access to persist quota state from the UI.
+admin_tools_dir="${OMERO_USER_DATA_PATH%/}/.admin-tools"
+if [ -d "${admin_tools_dir}" ]; then
+    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
+    if [ -d "${admin_tools_dir}/quota" ]; then
+        chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
+    fi
+    echo "Ensured .admin-tools directory permissions for omeroweb container (mode 0777, no sticky bit)."
+else
+    # Create it even if the quota enforcer wasn't installed, so the omeroweb
+    # container can write the quota state file without permission errors.
+    mkdir -p "${admin_tools_dir}/quota"
+    chmod 0777 "${admin_tools_dir}" 2>/dev/null || true
+    chmod 0777 "${admin_tools_dir}/quota" 2>/dev/null || true
+    echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
+fi
+
+echo "================================================"
+echo ""
+
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     compose_up_with_retries "${COMPOSE_FILE}"
+
+    if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
+        exit 1
+    fi
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi

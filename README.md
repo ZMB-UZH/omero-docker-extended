@@ -26,13 +26,6 @@ For official OMERO documentation, release notes, and guides, see: <https://www.o
 
 - Direct Imaris 11 integration
 
-## Copyright and third-party software notice
-
-This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
-
-To the best of the maintainer's knowledge, all software dependencies and components referenced in this repository are sourced from publicly available channels and are used under their respective published terms (including open-source licenses where applicable). No paid or proprietary software package is intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
-
-If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
 
 ## Service topology
 
@@ -168,7 +161,6 @@ Common utilities shared across all plugins:
 ├── omero-web.config                   # OMERO.web runtime overrides (log directory)
 ├── installation_paths_example.env     # Template: all filesystem path definitions
 ├── github_pull_project_bash_example   # Safe self-updating pull script (public upstream)
-├── github_pull_private_project_bash_example # Legacy private-upstream pull script template
 ├── docs/                              # Full documentation set (see docs/index.md)
 ├── tools/                             # Development tooling (docs linter)
 ├── tests/                             # Test suite
@@ -287,6 +279,8 @@ docker compose --env-file installation_paths.env logs -f omeroweb
 # Rebuild a single service
 docker compose --env-file installation_paths.env build omeroweb
 docker compose --env-file installation_paths.env up -d omeroweb
+# Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
+bash installation/cleanup_build_containers.sh
 ```
 
 ### Reverse proxy
@@ -332,6 +326,14 @@ Both operations are safe for production and do not require downtime.
 - Keep all other project documentation under `docs/`.
 - Documentation structure is enforced by CI via `tools/lint_docs_structure.py`.
 - Update `docs/index.md` cross-links when introducing new documents.
+
+## Copyright and third-party software notice
+
+This project is maintained in good faith for technical, educational, and operational use. The maintainer does not intend to infringe any copyright, trademark, license, or other intellectual property rights.
+
+To the best of the maintainer's knowledge, all software dependencies and components referenced in this repository are sourced from publicly available channels and are used under their respective published terms (including open-source licenses where applicable). No paid or proprietary software package is intentionally redistributed through this repository unless explicitly identified and licensed for that purpose.
+
+If you are a rights holder and believe any content, dependency reference, or distribution pattern in this repository is inappropriate or requires correction, please make contact and describe the concern so it can be reviewed and addressed promptly.
 
 ## License
 
