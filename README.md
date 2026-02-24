@@ -9,6 +9,8 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 
 > This project is delivered as an integrated container platform rather than an additive single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence characteristics are deployment-specific and must be confirmed by the user/administrator.
 
+For official OMERO documentation, release notes, and guides, see <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
+
 </details>
 
 <details open>
@@ -19,8 +21,6 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
-
-For official OMERO documentation, release notes, and guides, see <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
 ### 🛠️ Working partially / under active development
 
