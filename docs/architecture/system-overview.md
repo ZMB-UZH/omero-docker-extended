@@ -27,7 +27,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 - Installs all four plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
 - Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export).
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web and the Imaris Celery worker as two supervised processes.
-- Bootstrap script (`startup/10-web-bootstrap.sh`) validates log directory access and configures Docker socket GID.
+- Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
 - Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), Docker socket (read-only), server logs (read-only for admin tools).
 

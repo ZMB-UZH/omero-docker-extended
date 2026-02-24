@@ -2034,6 +2034,7 @@ chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${OMERO_SERVER_VAR_PATH%/}/tmp"
 chmod 1777 "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
 
 if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
