@@ -598,7 +598,6 @@ def _require_root_user(request, conn):
 
 
 @login_required()
-@require_root_user
 def index(request, conn=None, url=None, **kwargs):
     """Render the Admin tools landing page."""
     return render(
@@ -718,7 +717,6 @@ def logs_data(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
-@require_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     """Return whether the current user is root."""
     username = current_username(request, conn)
