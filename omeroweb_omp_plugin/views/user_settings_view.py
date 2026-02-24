@@ -5,7 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 
 from ..services.data_store import UserSettingsStoreError, save_user_settings
-from ..views.utils import current_username, load_request_data
+from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors, messages
 
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def save_settings(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)

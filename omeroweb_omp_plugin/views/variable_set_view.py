@@ -12,7 +12,7 @@ from ..services.data_store import (
     delete_variable_set,
 )
 from ..constants import MAX_VARIABLE_SET_ENTRIES
-from ..views.utils import current_username, load_request_data
+from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors, messages
 
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def list_sets(request, conn=None, url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
@@ -41,6 +42,7 @@ def list_sets(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def save_set(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -98,6 +100,7 @@ def save_set(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def load_set(request, conn=None, url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
@@ -129,6 +132,7 @@ def load_set(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_set(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)

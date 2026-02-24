@@ -14,7 +14,7 @@ from ..services.data_store import (
     save_ai_credentials,
 )
 from ..services.http_utils import extract_error_details
-from ..views.utils import current_username, load_request_data
+from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors, messages
 
 
@@ -196,6 +196,7 @@ def _parse_cohere_models(payload):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def list_credentials(request, conn=None, url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)
@@ -216,6 +217,7 @@ def list_credentials(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def test_credentials(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -245,6 +247,7 @@ def test_credentials(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def save_credentials(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -273,6 +276,7 @@ def save_credentials(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def list_models(request, conn=None, url=None, **kwargs):
     if request.method != "GET":
         return JsonResponse({"error": errors.method_get_required()}, status=405)

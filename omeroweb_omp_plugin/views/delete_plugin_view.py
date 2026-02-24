@@ -11,7 +11,7 @@ from ..services.core import (
 )
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_json_body
+from ..views.utils import load_json_body, require_non_root_user
 from ..strings import errors
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ OMERO = OMERO_CLI
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
