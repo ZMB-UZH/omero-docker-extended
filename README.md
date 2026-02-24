@@ -221,7 +221,7 @@ Copy the following from this repository into `/opt/omero`:
 - `helper_scripts_debian/` directory
 - `github_pull_project_bash_example`
 
-Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep your local edits in the non-example files so future template updates do not overwrite site-specific settings.
+Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep site-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull workflow.
 
 > IMPORTANT!
 > **Mandatory credential rotation before first start**
@@ -279,7 +279,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
-- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
+- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files (`github_pull_project_bash` / `github_pull_private_project_bash`) that operators manage locally.
 - The pull/update workflow preserves only `logo/logo.png` by backing it up and restoring it after replacement; `logo/logo_example.png` continues to be refreshed from upstream templates.
 
 ### Lifecycle commands
