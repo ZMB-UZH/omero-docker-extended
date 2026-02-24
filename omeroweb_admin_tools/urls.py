@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .views.help_view import help_page
 from .views.index_view import (
     index,
     internal_log_labels,
@@ -94,4 +95,5 @@ urlpatterns = [
         server_database_testing_run,
         name="omeroweb_admin_tools_server_database_testing_run",
     ),
+    path("help/", help_page, name="omeroweb_admin_tools_help"),
 ]
