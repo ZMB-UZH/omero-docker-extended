@@ -349,7 +349,7 @@ Both operations are safe for production and do not require downtime.
 
 </details>
 
-<details open>
+<details>
 <summary><h2>Documentation rules</h2></summary>
 
 - Keep `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `CLAUDE.md` at repository root.
