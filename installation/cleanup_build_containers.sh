@@ -34,10 +34,7 @@ container_state() {
 
 stop_container_best_effort() {
   local name="$1"
-  if ! container_exists "${name}"; then
-    return 0
-  fi
-
+  container_exists "${name}" || return 0
   docker stop -t 20 "${name}" >/dev/null 2>&1 || true
 }
 
@@ -73,10 +70,7 @@ wait_container_stopped() {
 
 remove_container_force() {
   local name="$1"
-  if ! container_exists "${name}"; then
-    return 0
-  fi
-
+  container_exists "${name}" || return 0
   docker rm -f "${name}" >/dev/null 2>&1 || true
 }
 
@@ -90,30 +84,22 @@ discover_container_volume_names() {
   docker container inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' "${name}" 2>/dev/null || true
 }
 
-remove_image_id_force() {
-  local image_id="$1"
-  [ -z "${image_id}" ] && return 0
-
-  if docker image inspect "${image_id}" >/dev/null 2>&1; then
-    docker rmi -f "${image_id}" >/dev/null 2>&1 || true
-  fi
+remove_image_force() {
+  local image_ref="$1"
+  [ -z "${image_ref}" ] && return 0
+  docker rmi -f "${image_ref}" >/dev/null 2>&1 || true
 }
 
 remove_volume_force() {
   local volume_name="$1"
   [ -z "${volume_name}" ] && return 0
-
-  if docker volume inspect "${volume_name}" >/dev/null 2>&1; then
-    docker volume rm -f "${volume_name}" >/dev/null 2>&1 || true
-  fi
+  docker volume rm -f "${volume_name}" >/dev/null 2>&1 || true
 }
 
 cleanup_one_container() {
   local name="$1"
 
-  if ! container_exists "${name}"; then
-    return 0
-  fi
+  container_exists "${name}" || return 0
 
   local image_id=""
   image_id="$(discover_container_image_id "${name}")"
@@ -136,30 +122,37 @@ cleanup_one_container() {
 
   if [ -n "${image_id}" ]; then
     echo "Removing docker image id: ${image_id} (from ${name})"
-    remove_image_id_force "${image_id}"
+    remove_image_force "${image_id}"
   fi
 }
 
 cleanup_buildx_builder() {
   local builder_name="$1"
 
+  # Remove the named builder if present.
   if docker buildx inspect "${builder_name}" >/dev/null 2>&1; then
     echo "Removing buildx builder: ${builder_name}"
     docker buildx rm "${builder_name}" >/dev/null 2>&1 || true
   fi
 
+  # Remove ANY buildx buildkit container (covers default builder, old builders,
+  # and containers that created anonymous volumes).
   local c
   while IFS= read -r c; do
     [ -z "${c}" ] && continue
     cleanup_one_container "${c}"
-  done < <(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "^buildx_buildkit_${builder_name}[0-9]+$" || true)
+  done < <(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E '^buildx_buildkit_.*' || true)
 
+  # Remove any remaining buildx volumes by name (best effort).
   local v
   while IFS= read -r v; do
     [ -z "${v}" ] && continue
     echo "Removing buildx volume: ${v}"
     remove_volume_force "${v}"
-  done < <(docker volume ls -q 2>/dev/null | grep -E "^buildx_buildkit_${builder_name}(_state)?$" || true)
+  done < <(docker volume ls -q 2>/dev/null | grep -E '^buildx_buildkit_.*' || true)
+
+  # Remove buildkit image if present (best effort).
+  remove_image_force "moby/buildkit:latest"
 }
 
 main() {
