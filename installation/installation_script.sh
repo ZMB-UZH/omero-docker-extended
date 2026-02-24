@@ -302,6 +302,7 @@ export_compose_interpolation_env() {
         GRAFANA_DATA_PATH
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
+        BUILDX_DATA_PATH
         OMERO_DB_PASS
         OMP_PLUGIN_DB_PASS
     )
@@ -538,7 +539,7 @@ create_omero_groups_from_list() {
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)." >&2; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)."; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
             add_exit_code=$?
             set -e
 
@@ -1068,7 +1069,7 @@ write_compose_dot_env() {
 # Re-run the installation script to regenerate after changing paths.
 #
 # Load both path and secrets env files automatically for all docker compose
-# commands, including manual lifecycle commands such as `docker compose down`.
+# commands, including manual lifecycle commands such as \`docker compose down\`.
 COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
 #
 # This file contains fully-resolved paths so that docker compose
@@ -1077,7 +1078,7 @@ COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
 #
 # NOTE: OMERO_DB_PASS and OMP_PLUGIN_DB_PASS are intentionally mirrored here
 # because docker compose interpolation happens before service-level env_file
-# loading. This guarantees manual commands like `docker compose down` work.
+# loading. This guarantees manual commands like \`docker compose down\` work.
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
@@ -1148,6 +1149,7 @@ write_installation_paths_env() {
 #   PORTAINER_DATA_PATH
 #   LOKI_DATA_PATH
 #   PG_MAINTENANCE_DATA_PATH
+#   BUILDX_DATA_PATH
 
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
@@ -1165,6 +1167,7 @@ GRAFANA_DATA_PATH=\${OMERO_DATA_PATH}/grafana_data
 PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
 LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
 PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
+BUILDX_DATA_PATH=\${OMERO_DATA_PATH}/buildx_cache
 ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
@@ -1195,16 +1198,17 @@ verify_installation_paths_env_content() {
         PORTAINER_DATA_PATH
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
+        BUILDX_DATA_PATH
     )
 
     for expected_var in "${required_vars[@]}"; do
         expected_value="${!expected_var:-}"
-        actual_value="$(
-            (
+        actual_value="$(\
+            (\
                 # shellcheck disable=SC1090
                 . "${env_file_path}" 2>/dev/null || exit 1
-                printf '%s' "${!expected_var:-}"
-            )
+                printf '%s' "${!expected_var:-}"\
+            )\
         )"
 
         if [ -z "${actual_value}" ]; then
@@ -1555,8 +1559,7 @@ resolve_buildx_compressed_build_choice() {
                 echo "USE_BUILDX_CHOICE=${override_choice}: using docker compose build (Buildx compressed build disabled)."
                 return 0
                 ;;
-            *)
-                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+            *)\n                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
                 return 1
                 ;;
         esac
@@ -1657,6 +1660,12 @@ GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
+
+# Ensure BUILDX_DATA_PATH has a fallback default if not provided by env file
+# (This handles cases where the env file is from an older installation)
+if [ -z "${BUILDX_DATA_PATH:-}" ]; then
+    BUILDX_DATA_PATH="${OMERO_DATA_PATH%/}/buildx_cache"
+fi
 
 # Resolve filesystem mountpoints for Grafana monitoring dashboard queries.
 # Node-exporter exposes metrics by mountpoint (e.g., "/", "/data"), not by
