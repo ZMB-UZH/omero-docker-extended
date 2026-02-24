@@ -132,6 +132,7 @@ services:
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector"
     pid: host
     networks:
       omero:
@@ -139,12 +140,30 @@ services:
           - node-exporter
     volumes:
       - /:/host:ro,rslave
+      - textfile_collector:/var/lib/node_exporter/textfile_collector:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
       start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  disk-monitor:
+    image: alpine:latest
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/config/smart_disk_monitor.sh"]
+    volumes:
+      - ./monitoring/prometheus/smart_disk_monitor.sh:/config/smart_disk_monitor.sh:ro
+      - textfile_collector:/out:rw
+      - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/data/omero:ro
+      - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/data/db:ro
+      - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/data/db-plugin:ro
+    networks:
+      omero:
+        aliases:
+          - disk-monitor
     security_opt:
       - no-new-privileges:true
 
@@ -526,6 +545,9 @@ services:
       start_period: 10s
     security_opt:
       - no-new-privileges:true
+
+volumes:
+  textfile_collector:
 
 networks:
   omero:
