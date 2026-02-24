@@ -60,7 +60,7 @@ Configured in `monitoring/prometheus/prometheus.yml`:
 
 Four dashboards auto-provisioned in the `OMERO` folder:
 
-1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. The **Local IP address** stat resolves a host IPv4 from node-exporter interface metrics and falls back to the numeric `instance` address when route/interface labels are unavailable.
+1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic host-path utilization for `OMERO_DATA_PATH`, `OMERO_DATABASE_PATH`, and `OMERO_PLUGIN_DATABASE_PATH` as injected into Grafana runtime environment. The database-path stat renders one or two percentages depending on whether the two database paths resolve to the same or different mountpoints.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
