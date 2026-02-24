@@ -132,6 +132,7 @@ services:
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/textfile"
     pid: host
     networks:
       omero:
@@ -139,12 +140,102 @@ services:
           - node-exporter
     volumes:
       - /:/host:ro,rslave
+      - node_exporter_textfile:/textfile:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
       start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  path-usage-exporter:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    networks:
+      omero:
+        aliases:
+          - path-usage-exporter
+    volumes:
+      - node_exporter_textfile:/textfile:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro,rslave
+    command:
+      - /bin/sh
+      - -c
+      - |
+          pip install --no-cache-dir docker >/dev/null 2>&1
+          python - <<'PY'
+          import os, time
+          import docker
+
+          OUT = "/textfile/omero_paths.prom"
+          TMP = OUT + ".tmp"
+          INTERVAL = 30
+
+          TARGETS = [
+              ("omero_data",      "omeroserver",     "/OMERO"),
+              ("database_main",   "database",        "/var/lib/postgresql/data"),
+              ("database_plugin", "database-plugin", "/var/lib/postgresql/data"),
+          ]
+
+          def stat_path(host_path: str):
+              st = os.statvfs(host_path)
+              total = st.f_frsize * st.f_blocks
+              avail = st.f_frsize * st.f_bavail
+              used = total - avail
+              ratio = (used / total) if total > 0 else 0.0
+              return total, used, ratio
+
+          def find_mount_source(container, dst):
+              for m in container.attrs.get("Mounts", []):
+                  if m.get("Destination") == dst:
+                      return m.get("Source"), m.get("Type")
+              return None, None
+
+          client = docker.DockerClient(base_url="unix:///var/run/docker.sock")
+
+          while True:
+              lines = []
+              lines.append("# HELP omero_path_used_ratio Filesystem used ratio for OMERO-related Docker mounts")
+              lines.append("# TYPE omero_path_used_ratio gauge")
+              lines.append("# HELP omero_path_bytes_total Total bytes for OMERO-related Docker mounts")
+              lines.append("# TYPE omero_path_bytes_total gauge")
+              lines.append("# HELP omero_path_bytes_used Used bytes for OMERO-related Docker mounts")
+              lines.append("# TYPE omero_path_bytes_used gauge")
+
+              containers = client.containers.list(all=True)
+              by_service = {}
+              for c in containers:
+                  svc = c.labels.get("com.docker.compose.service")
+                  if svc:
+                      by_service[svc] = c
+
+              for kind, service, dst in TARGETS:
+                  c = by_service.get(service)
+                  if not c: continue
+                  src, mtype = find_mount_source(c, dst)
+                  if not src: continue
+
+                  host_src = os.path.join("/host", src.lstrip("/"))
+                  host_src_real = os.path.realpath(host_src)
+
+                  if not os.path.exists(host_src_real): continue
+
+                  total, used, ratio = stat_path(host_src_real)
+                  labels = f'kind="{kind}",service="{service}",dst="{dst}",src="{src}",type="{mtype or ""}"'
+                  lines.append(f"omero_path_used_ratio{{{labels}}} {ratio}")
+                  lines.append(f"omero_path_bytes_total{{{labels}}} {float(total)}")
+                  lines.append(f"omero_path_bytes_used{{{labels}}} {float(used)}")
+
+              data = "\n".join(lines) + "\n"
+              os.makedirs(os.path.dirname(OUT), exist_ok=True)
+              with open(TMP, "w", encoding="utf-8") as f:
+                  f.write(data)
+              os.replace(TMP, OUT)
+              time.sleep(INTERVAL)
+          PY
     security_opt:
       - no-new-privileges:true
 
@@ -166,7 +257,7 @@ services:
     tmpfs:
       - /dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:8080/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -192,7 +283,7 @@ services:
     volumes:
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9187/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -216,7 +307,7 @@ services:
     volumes:
       - ./monitoring/postgres-exporter/postgres_exporter.yml:/etc/postgres-exporter/postgres_exporter.yml:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9187/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9187/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -237,7 +328,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9121/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9121/metrics || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -304,10 +395,6 @@ services:
         aliases:
           - database
     volumes:
-      # IMPORTANT: Intentionally using a pgdata subdirectory to avoid ext4 lost+found issues.
-      # postgres images define VOLUME /var/lib/postgresql/data; mounting only
-      # /var/lib/postgresql can lead to an anonymous nested volume for /data,
-      # which makes data appear lost after container recreation.
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
@@ -490,25 +577,18 @@ services:
     environment:
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-      # Keep maintenance sidecar layout aligned with postgres services:
-      # use a dedicated PGDATA subdirectory inside the mounted data root.
       PGDATA: /var/lib/postgresql/data/pgmaintenance
-      # OMERO main database
       OMERO_DB_HOST: database
       OMERO_DB_PORT: 5432
       OMERO_DB_NAME: omero
       OMERO_DB_USER: omero
       OMERO_DB_PASS: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
-      # OMP plugin database
       PLUGIN_DB_HOST: database-plugin
       PLUGIN_DB_PORT: 5433
       PLUGIN_DB_NAME: omero-plugin
       PLUGIN_DB_USER: omero-plugin
       PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
     volumes:
-      # postgres-derived images declare VOLUME /var/lib/postgresql/data.
-      # Binding that exact path to prevent anonymous volumes.
-      # PGDATA then selects a dedicated subdirectory for sidecar-owned files.
       - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     networks:
       omero:
@@ -530,3 +610,6 @@ services:
 
 networks:
   omero:
+
+volumes:
+  node_exporter_textfile:

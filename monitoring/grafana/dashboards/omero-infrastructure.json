@@ -149,7 +149,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"}))"
+          "expr": "omero_path_used_ratio{kind=\"omero_data\"}"
         }
       ],
       "options": {
@@ -299,8 +299,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"})) or (1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_MOUNTPOINT}\", fstype!~\"tmpfs|overlay|squashfs\"}))",
-          "legendFormat": "{{mountpoint}}"
+          "expr": "max by (kind) (omero_path_used_ratio{kind=~\"database_main|database_plugin\"})",
+          "legendFormat": "{{kind}}"
         }
       ],
       "options": {
