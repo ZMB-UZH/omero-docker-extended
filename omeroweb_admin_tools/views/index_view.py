@@ -45,7 +45,7 @@ from ..services.storage_quotas import (
     reconcile_quotas,
     upsert_quotas,
 )
-from .utils import current_username
+from .utils import current_username, require_root_user
 
 logger = logging.getLogger(__name__)
 LOG_TABLE_ROW_CAP = 5000
@@ -598,6 +598,7 @@ def _require_root_user(request, conn):
 
 
 @login_required()
+@require_root_user
 def index(request, conn=None, url=None, **kwargs):
     """Render the Admin tools landing page."""
     return render(
@@ -639,6 +640,7 @@ def _build_log_sources() -> List[Dict[str, str]]:
 
 
 @login_required()
+@require_root_user
 def logs_view(request, conn=None, url=None, **kwargs):
     """Render the logs view."""
     log_config = optional_log_config()
@@ -654,6 +656,7 @@ def logs_view(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def logs_data(request, conn=None, url=None, **kwargs):
     """Serve log entries as JSON from the Loki backend."""
     root_error = _require_root_user(request, conn)
@@ -715,6 +718,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     """Return whether the current user is root."""
     username = current_username(request, conn)
@@ -722,6 +726,7 @@ def root_status(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def internal_log_labels(request, conn=None, url=None, **kwargs):
     """Return available filenames for an internal log compose_service."""
     root_error = _require_root_user(request, conn)
@@ -1264,12 +1269,14 @@ def _build_target_service_status(
 
 
 @login_required()
+@require_root_user
 def resource_monitoring_view(request, conn=None, url=None, **kwargs):
     """Render resource monitoring dashboard."""
     return render(request, "omeroweb_admin_tools/resource_monitoring.html", {})
 
 
 @login_required()
+@require_root_user
 def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     """Return monitoring endpoint URLs for Grafana and Prometheus dashboards."""
     root_error = _require_root_user(request, conn)
@@ -1496,6 +1503,7 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     """Proxy Grafana HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
@@ -1542,6 +1550,7 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     """Proxy Prometheus HTTP responses through OMERO.web."""
     root_error = _require_root_user(request, conn)
@@ -1591,12 +1600,14 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def storage_view(request, conn=None, url=None, **kwargs):
     """Render storage capacity distribution page."""
     return render(request, "omeroweb_admin_tools/storage.html", {})
 
 
 @login_required()
+@require_root_user
 def storage_data(request, conn=None, url=None, **kwargs):
     """Return size distribution by OMERO user and group using OriginalFile sizes."""
     root_error = _require_root_user(request, conn)
@@ -1739,6 +1750,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def storage_quota_data(request, conn=None, url=None, **kwargs):
     """Fetch persisted quota definitions and reconciliation logs."""
     root_error = _require_root_user(request, conn)
@@ -1780,6 +1792,7 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def storage_quota_update(request, conn=None, url=None, **kwargs):
     """Update group quota values from UI edits."""
     root_error = _require_root_user(request, conn)
@@ -1841,6 +1854,7 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def storage_quota_import(request, conn=None, url=None, **kwargs):
     """Import group quotas from a CSV upload."""
     root_error = _require_root_user(request, conn)
@@ -1879,6 +1893,7 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def storage_quota_template(request, conn=None, url=None, **kwargs):
     """Download quota CSV template."""
     root_error = _require_root_user(request, conn)
@@ -1892,6 +1907,7 @@ def storage_quota_template(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_root_user
 def server_database_testing_view(request, conn=None, url=None, **kwargs):
     """Render OMERO.server and database diagnostics page."""
     return render(
@@ -1903,6 +1919,7 @@ def server_database_testing_view(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_root_user
 def server_database_testing_run(request, conn=None, url=None, **kwargs):
     """Execute selected diagnostics scripts and return a report."""
     root_error = _require_root_user(request, conn)

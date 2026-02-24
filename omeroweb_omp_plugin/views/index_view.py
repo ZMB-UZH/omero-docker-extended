@@ -21,7 +21,7 @@ from ..services.data_store import AiCredentialStoreError, get_ai_credential
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..services.filename_utils import suggest_separator_regex
 from ..services.ai_providers import list_ai_provider_options
-from ..views.utils import current_username
+from ..views.utils import current_username, require_non_root_user
 from ..strings import errors, messages
 from ..constants import (
     CHUNK_SIZE,
@@ -408,6 +408,7 @@ def _suggest_separator_regex(filenames):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
@@ -949,6 +950,7 @@ def index(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
@@ -956,6 +958,7 @@ def list_projects(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

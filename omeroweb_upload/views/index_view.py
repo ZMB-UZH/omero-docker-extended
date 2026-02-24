@@ -3,8 +3,10 @@ Upload plugin views.
 """
 # Import all helper functions from core_functions
 from .core_functions import *
+from .utils import require_non_root_user
 
 @login_required()
+@require_non_root_user
 def index(request, conn=None, url=None, **kwargs):
     try:
         _cleanup_upload_artifacts()
@@ -38,6 +40,7 @@ def index(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
@@ -45,12 +48,14 @@ def list_projects(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})
 
 
 @login_required()
+@require_non_root_user
 def start_upload(request, conn=None, url=None, **kwargs):
     try:
         return _start_upload(request, conn)
@@ -283,6 +288,7 @@ def _start_upload(request, conn):
 
 
 @login_required()
+@require_non_root_user
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
     try:
         return _upload_files(request, job_id)
@@ -386,6 +392,7 @@ def _upload_files(request, job_id):
 
 
 @login_required()
+@require_non_root_user
 def import_step(request, job_id, conn=None, url=None, **kwargs):
     try:
         return _import_step(request, job_id)
@@ -421,6 +428,7 @@ def _import_step(request, job_id):
 
 
 @login_required()
+@require_non_root_user
 def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     if request.method != "POST":
@@ -444,6 +452,7 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def prune_upload(request, job_id, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     if request.method != "POST":
@@ -526,6 +535,7 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
 
 
 @login_required()
+@require_non_root_user
 def job_status(request, job_id, conn=None, url=None, **kwargs):
     _cleanup_upload_artifacts()
     job = _load_job(job_id)

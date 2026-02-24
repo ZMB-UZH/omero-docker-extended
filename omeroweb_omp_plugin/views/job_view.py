@@ -29,7 +29,7 @@ from ..services.core import (
     extract_acquisition_metadata,
 )
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_request_data
+from ..views.utils import load_request_data, require_non_root_user
 from ..strings import errors
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,7 @@ def _save_annotation_link(update, link):
 # ==============================================================================
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def start_job(request, conn=None, url=None, **kwargs):
     cleanup_old_jobs()
     try:
@@ -209,6 +210,7 @@ def start_job(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def start_acq_job(request, conn=None, url=None, **kwargs):
     cleanup_old_jobs()
     try:
@@ -268,6 +270,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def start_delete_all_job(request, conn=None, url=None, **kwargs):
     cleanup_old_jobs()
     try:
@@ -333,6 +336,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
     cleanup_old_jobs()
     try:
@@ -401,6 +405,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 # ==============================================================================
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def job_progress(request, job_id, conn=None, url=None, **kwargs):
     cleanup_old_jobs()
     try:
