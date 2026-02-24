@@ -9,7 +9,7 @@ from ..services.data_store import (
     load_special_method_settings,
     save_special_method_settings,
 )
-from ..views.utils import current_username, load_request_data
+from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors, messages
 
 
@@ -24,6 +24,7 @@ def _normalize_special_method_settings(settings_payload):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def save_settings(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
@@ -59,6 +60,7 @@ def save_settings(request, conn=None, url=None, **kwargs):
 
 @csrf_exempt
 @login_required()
+@require_non_root_user
 def load_settings(request, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return JsonResponse({"error": errors.method_post_required()}, status=405)
