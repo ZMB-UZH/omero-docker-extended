@@ -408,7 +408,6 @@ def _suggest_separator_regex(filenames):
 
 @csrf_exempt
 @login_required()
-@require_non_root_user
 def index(request, conn=None, url=None, **kwargs):
     """
     OMP filename+metadata harverster UI
@@ -958,7 +957,6 @@ def list_projects(request, conn=None, url=None, **kwargs):
 
 
 @login_required()
-@require_non_root_user
 def root_status(request, conn=None, url=None, **kwargs):
     username = current_username(request, conn)
     return JsonResponse({"is_root_user": username == "root"})

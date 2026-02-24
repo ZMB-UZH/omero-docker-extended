@@ -32,10 +32,7 @@ def require_non_root_user(view_func):
         if username == "root":
             return JsonResponse(
                 {
-                    "error": (
-                        "The OMERO root account cannot access OMERO Metadata Parser. "
-                        "Please sign in with a non-root account."
-                    )
+                    "error": "PLEASE LOGIN AS REGULAR USER\nTO USE THIS PLUGIN"
                 },
                 status=403,
             )
