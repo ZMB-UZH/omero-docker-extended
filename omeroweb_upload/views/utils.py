@@ -37,8 +37,7 @@ def require_non_root_user(view_func):
             return JsonResponse(
                 {
                     "error": (
-                        "The OMERO root account cannot access OMERO Upload. "
-                        "Please sign in with a non-root account."
+                        "PLEASE LOGIN AS REGULAR USER\nTO USE THIS PLUGIN"
                     )
                 },
                 status=403,
