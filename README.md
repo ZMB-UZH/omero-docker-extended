@@ -20,7 +20,7 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
 
-For official OMERO documentation, release notes, and guides, see: <https://www.openmicroscopy.org/omero/>.
+For official OMERO documentation, release notes, and guides, see <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
 ### 🛠️ Working partially / under active development
 
