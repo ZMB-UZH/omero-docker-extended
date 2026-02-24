@@ -454,7 +454,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[$__rate_interval])))",
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[5m])))",
           "legendFormat": "{{instance}}"
         }
       ],
@@ -507,7 +507,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
+          "expr": "100 * (1 - (sum by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) / sum by (instance) (node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"})))",
           "legendFormat": "{{instance}}"
         }
       ],
