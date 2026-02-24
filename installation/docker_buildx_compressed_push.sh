@@ -15,7 +15,8 @@ DOCKER_BUILD_COMPRESSION_LEVEL="${DOCKER_BUILD_COMPRESSION_LEVEL:-15}"
 DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
-DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-compression-builder}"
+DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
+BUILDKIT_CONTAINER_NAME="omero-buildkitd"
 
 readonly SCRIPT_NAME
 readonly SCRIPT_DIR
@@ -198,16 +199,63 @@ resolve_push_images_default() {
 }
 
 ensure_builder() {
-    if ! docker buildx inspect "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1; then
-        docker buildx create \
-            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
-            --driver docker-container \
-            --use \
-            >/dev/null
-    else
-        docker buildx use "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null
+    # Check for OMERO_DATA_PATH
+    if [ -z "${OMERO_DATA_PATH:-}" ]; then
+         echo "ERROR: OMERO_DATA_PATH is not set. Cannot configure buildx cache volume." >&2
+         return 1
     fi
 
+    local cache_dir="${OMERO_DATA_PATH}/buildkit_cache"
+    echo "Using buildkit cache directory: ${cache_dir}"
+
+    # Create cache dir
+    mkdir -p "${cache_dir}"
+    
+    # Start buildkit container if not running
+    if ! docker ps --format '{{.Names}}' | grep -q "^${BUILDKIT_CONTAINER_NAME}$"; then
+        echo "Starting ${BUILDKIT_CONTAINER_NAME}..."
+        # Cleanup potential stale container
+        docker rm -f "${BUILDKIT_CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+        docker run -d \
+            --name "${BUILDKIT_CONTAINER_NAME}" \
+            --privileged \
+            --restart always \
+            -v "${cache_dir}:/var/lib/buildkit" \
+            moby/buildkit:latest >/dev/null
+            
+        # Wait for it to be ready
+        sleep 5
+    fi
+    
+    # Get IP
+    local ip
+    ip=$(docker inspect -f '{{.NetworkSettings.IPAddress}}' "${BUILDKIT_CONTAINER_NAME}")
+    if [ -z "$ip" ]; then
+        echo "ERROR: Could not get IP of ${BUILDKIT_CONTAINER_NAME}" >&2
+        return 1
+    fi
+    
+    echo "Buildkit running at ${ip}"
+
+    # Create/Use builder
+    if ! docker buildx ls | grep -q "^${DOCKER_BUILDX_BUILDER_NAME}"; then
+        docker buildx create \
+            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
+            --driver remote \
+            "tcp://${ip}:1234" \
+            --use >/dev/null
+    else
+        # If builder exists but points to wrong IP (e.g. if container recreated), recreate it
+        # Or just replace it always to be safe
+        docker buildx rm "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
+        docker buildx create \
+            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
+            --driver remote \
+            "tcp://${ip}:1234" \
+            --use >/dev/null
+    fi
+    
     docker buildx inspect --bootstrap >/dev/null
 }
 
