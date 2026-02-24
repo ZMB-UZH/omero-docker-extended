@@ -431,45 +431,17 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisSoftMax": 100,
-            "axisSoftMin": 0,
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          }
+          "unit": "percent"
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[5m])))",
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[5m])))",
           "legendFormat": "CPU usage"
         }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "hidden"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
+      ]
     },
     {
       "type": "timeseries",
@@ -487,45 +459,17 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            },
-            "axisSoftMax": 100,
-            "axisSoftMin": 0
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
+          "unit": "percent"
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - (sum by (instance) (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"}) / sum by (instance) (node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"})))",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
           "legendFormat": "Memory usage"
         }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "hidden"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
+      ]
     },
     {
       "type": "timeseries",
@@ -900,6 +844,6 @@
   "timezone": "browser",
   "title": "Server Infrastructure",
   "uid": "omero-infrastructure",
-  "version": 5,
+  "version": 6,
   "weekStart": ""
 }
