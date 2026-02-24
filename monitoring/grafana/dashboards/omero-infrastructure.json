@@ -400,22 +400,24 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "min": 0,
-          "max": 1,
           "decimals": 1
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "hidden"
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
         }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - avg(rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[5m])))",
-          "legendFormat": "CPU usage"
+          "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval]))",
+          "legendFormat": "{{instance}}"
         }
       ]
     },
@@ -436,22 +438,24 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "min": 0,
-          "max": 1,
           "decimals": 1
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "hidden"
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
         }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
-          "legendFormat": "Memory usage"
+          "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "{{instance}}"
         }
       ]
     },
@@ -828,6 +832,6 @@
   "timezone": "browser",
   "title": "Server Infrastructure",
   "uid": "omero-infrastructure",
-  "version": 7,
+  "version": 8,
   "weekStart": ""
 }
