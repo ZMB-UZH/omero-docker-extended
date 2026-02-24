@@ -27,9 +27,15 @@ case "$1" in
     ps)
         shift
         filter_name=""
+        output_format=""
         while [[ $# -gt 0 ]]; do
             case "$1" in
-                -aq)
+                -aq|-a)
+                    shift
+                    ;;
+                --format)
+                    shift
+                    output_format="$1"
                     shift
                     ;;
                 --filter)
@@ -48,7 +54,11 @@ case "$1" in
         while IFS='|' read -r name cid running; do
             [[ -z "${name}" ]] && continue
             if [[ -z "${filter_name}" ]] || [[ "${name}" =~ ${filter_clean} ]]; then
-                echo "${cid}"
+                if [[ -n "${output_format}" ]]; then
+                    echo "${cid} ${name}"
+                else
+                    echo "${cid}"
+                fi
             fi
         done < "${MOCK_DIR}/containers.conf"
         ;;
@@ -205,12 +215,33 @@ validate_full() {
     assert_log_has "${dir}/docker_calls.log" "rmi img1"
 }
 
+
+setup_compose_redis_name() {
+    local dir="$1"
+    cat > "${dir}/containers.conf" <<'EOF2'
+omero-redis-sysctl-init-1|rid9|true
+EOF2
+    cat > "${dir}/images.conf" <<'EOF2'
+redis-sysctl-init:custom|img1
+EOF2
+}
+
+validate_compose_redis_name() {
+    local dir="$1"
+    local output="$2"
+    assert_contains "${output}" "Stopping container 'omero-redis-sysctl-init-1'" &&
+    assert_contains "${output}" "Removing container 'omero-redis-sysctl-init-1'" &&
+    assert_contains "${output}" "Removed 1 container(s) and 1 image(s)." &&
+    assert_log_has "${dir}/docker_calls.log" "stop rid9" &&
+    assert_log_has "${dir}/docker_calls.log" "rm rid9"
+}
+
 setup_empty() { :; }
 validate_empty() {
     local dir="$1"
     local output="$2"
-    assert_contains "${output}" "Container 'redis-sysctl-init' not found" &&
-    assert_contains "${output}" "No buildx_buildkit containers found" &&
+    assert_contains "${output}" "No containers found for redis-sysctl-init - skipping." &&
+    assert_contains "${output}" "No containers found for prefix 'buildx_buildkit_' - skipping." &&
     assert_contains "${output}" "Removed 0 container(s) and 0 image(s)."
 }
 
@@ -227,6 +258,7 @@ validate_dry_run() {
 
 run_case "empty" setup_empty validate_empty
 run_case "full" setup_full validate_full
+run_case "compose_redis_name" setup_compose_redis_name validate_compose_redis_name
 run_case "dry_run" setup_full validate_dry_run "--dry-run"
 
 echo "Results: ${PASS} passed, ${FAIL} failed"

@@ -12,34 +12,46 @@ fi
 removed_containers=0
 removed_images=0
 
-remove_container() {
-    local name="$1"
-    local cid
+remove_containers_by_name_regex() {
+    local name_regex="$1"
+    local label="$2"
+    local found_any=false
+    local cid=""
+    local cname=""
+    local running=""
 
-    cid="$(docker ps -aq --filter "name=^/${name}$" 2>/dev/null || true)"
-    if [[ -z "${cid}" ]]; then
-        echo "  Container '${name}' not found - skipping."
-        return
-    fi
+    while IFS=' ' read -r cid cname; do
+        [ -n "${cid}" ] || continue
+        [ -n "${cname}" ] || continue
 
-    local running
-    running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || true)"
-    if [[ "${running}" == "true" ]]; then
-        if ${DRY_RUN}; then
-            echo "  [dry-run] Would stop container '${name}' (${cid})"
-        else
-            echo "  Stopping container '${name}' (${cid}) ..."
-            docker stop "${cid}" >/dev/null
+        found_any=true
+        running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || true)"
+        if [[ "${running}" == "true" ]]; then
+            if ${DRY_RUN}; then
+                echo "  [dry-run] Would stop container '${cname}' (${cid})"
+            else
+                echo "  Stopping container '${cname}' (${cid}) ..."
+                docker stop "${cid}" >/dev/null
+            fi
         fi
-    fi
 
-    if ${DRY_RUN}; then
-        echo "  [dry-run] Would remove container '${name}' (${cid})"
-    else
-        echo "  Removing container '${name}' (${cid}) ..."
-        docker rm "${cid}" >/dev/null
+        if ${DRY_RUN}; then
+            echo "  [dry-run] Would remove container '${cname}' (${cid})"
+        else
+            echo "  Removing container '${cname}' (${cid}) ..."
+            docker rm "${cid}" >/dev/null
+        fi
+        removed_containers=$((removed_containers + 1))
+    done < <(docker ps -a --format '{{.ID}} {{.Names}}' 2>/dev/null | awk -v r="${name_regex}" '$2 ~ r { print $1 " " $2 }')
+
+    if [[ "${found_any}" != "true" ]]; then
+        echo "  No containers found for ${label} - skipping."
     fi
-    removed_containers=$((removed_containers + 1))
+}
+
+remove_containers_by_name_prefix() {
+    local prefix="$1"
+    remove_containers_by_name_regex "^${prefix}" "prefix '${prefix}'"
 }
 
 remove_image() {
@@ -62,38 +74,12 @@ remove_image() {
 }
 
 echo "=== redis-sysctl-init ==="
-remove_container "redis-sysctl-init"
+remove_containers_by_name_regex "(^|[-_.])redis-sysctl-init($|[-_.][0-9]+$)" "redis-sysctl-init"
 remove_image "redis-sysctl-init:custom"
 echo
 
 echo "=== buildx buildkit ==="
-buildx_ids="$(docker ps -aq --filter "name=^buildx_buildkit_" 2>/dev/null || true)"
-if [[ -z "${buildx_ids}" ]]; then
-    echo "  No buildx_buildkit containers found - skipping."
-else
-    for cid in ${buildx_ids}; do
-        cname="$(docker inspect -f '{{.Name}}' "${cid}" 2>/dev/null | sed 's|^/||')"
-        cname="${cname:-${cid}}"
-
-        running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || true)"
-        if [[ "${running}" == "true" ]]; then
-            if ${DRY_RUN}; then
-                echo "  [dry-run] Would stop container '${cname}' (${cid})"
-            else
-                echo "  Stopping container '${cname}' (${cid}) ..."
-                docker stop "${cid}" >/dev/null
-            fi
-        fi
-
-        if ${DRY_RUN}; then
-            echo "  [dry-run] Would remove container '${cname}' (${cid})"
-        else
-            echo "  Removing container '${cname}' (${cid}) ..."
-            docker rm "${cid}" >/dev/null
-        fi
-        removed_containers=$((removed_containers + 1))
-    done
-fi
+remove_containers_by_name_prefix "buildx_buildkit_"
 
 buildkit_images="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^moby/buildkit:' || true)"
 if [[ -z "${buildkit_images}" ]]; then
