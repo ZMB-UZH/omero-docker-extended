@@ -315,6 +315,16 @@ export_compose_interpolation_env() {
         export "${env_var_name}=${!env_var_name}"
     done
 
+    # Export resolved mountpoint variables for Grafana monitoring.
+    # These are optional (defaulted to "/" in docker-compose.yml) so they
+    # are exported without the emptiness check above.
+    local mountpoint_var
+    for mountpoint_var in OMERO_DATA_MOUNTPOINT OMERO_DATABASE_MOUNTPOINT OMERO_PLUGIN_DATABASE_MOUNTPOINT; do
+        if [ -n "${!mountpoint_var:-}" ]; then
+            export "${mountpoint_var}=${!mountpoint_var}"
+        fi
+    done
+
     return 0
 }
 
@@ -594,6 +604,9 @@ PROMETHEUS_DATA_PATH=${old_data_path}/prometheus_data
 GRAFANA_DATA_PATH=${old_data_path}/grafana_data
 LOKI_DATA_PATH=${old_data_path}/loki_data
 PG_MAINTENANCE_DATA_PATH=${old_data_path}/pg_maintenance_data
+OMERO_DATA_MOUNTPOINT=/
+OMERO_DATABASE_MOUNTPOINT=/
+OMERO_PLUGIN_DATABASE_MOUNTPOINT=/
 OLD_DOTENV
             created_temp_dot_env=true
         fi
@@ -659,6 +672,52 @@ is_valid_linux_path() {
     fi
 
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# resolve_mountpoint
+#
+# Given an arbitrary directory path, returns the filesystem mountpoint that
+# contains it.  Reads /proc/mounts and selects the longest matching prefix.
+# Falls back to "/" if no match is found or /proc/mounts is unreadable.
+# ---------------------------------------------------------------------------
+resolve_mountpoint() {
+    local target_path="${1%/}"
+    local best_mp=""
+    local best_mp_len=0
+
+    if [ ! -r /proc/mounts ]; then
+        printf '%s' "/"
+        return 0
+    fi
+
+    local line
+    while read -r line; do
+        local parts
+        # shellcheck disable=SC2206
+        parts=($line)
+        if [ "${#parts[@]}" -lt 3 ]; then continue; fi
+        local mp="${parts[1]}"
+        local mp_len="${#mp}"
+
+        # Append trailing slash to both paths to ensure correct prefix
+        # matching.  Without this, mount point /data would incorrectly
+        # match /datafiles/something.
+        case "${target_path%/}/" in
+            "${mp%/}/"*)
+                if [ "${mp_len}" -gt "${best_mp_len}" ]; then
+                    best_mp="${mp}"
+                    best_mp_len="${mp_len}"
+                fi
+                ;;
+        esac
+    done < /proc/mounts
+
+    if [ -z "${best_mp}" ]; then
+        best_mp="/"
+    fi
+
+    printf '%s' "${best_mp}"
 }
 
 validate_installation_path() {
@@ -1036,6 +1095,12 @@ LOKI_DATA_PATH=${LOKI_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
 OMERO_DB_PASS=${OMERO_DB_PASS}
 OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
+#
+# Resolved filesystem mountpoints for Grafana monitoring dashboard.
+# Node-exporter exposes disk metrics by mountpoint, not by directory path.
+OMERO_DATA_MOUNTPOINT=${OMERO_DATA_MOUNTPOINT:-/}
+OMERO_DATABASE_MOUNTPOINT=${OMERO_DATABASE_MOUNTPOINT:-/}
+OMERO_PLUGIN_DATABASE_MOUNTPOINT=${OMERO_PLUGIN_DATABASE_MOUNTPOINT:-/}
 DOTENV
 
     chmod 0600 "${dot_env_path}"
@@ -1592,6 +1657,18 @@ GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
+
+# Resolve filesystem mountpoints for Grafana monitoring dashboard queries.
+# Node-exporter exposes metrics by mountpoint (e.g., "/", "/data"), not by
+# arbitrary directory paths.  The dashboard needs the actual mountpoints.
+OMERO_DATA_MOUNTPOINT="$(resolve_mountpoint "${OMERO_DATA_PATH}")"
+OMERO_DATABASE_MOUNTPOINT="$(resolve_mountpoint "${OMERO_DATABASE_PATH}")"
+OMERO_PLUGIN_DATABASE_MOUNTPOINT="$(resolve_mountpoint "${OMERO_PLUGIN_DATABASE_PATH}")"
+
+echo "Resolved monitoring mountpoints:"
+echo "  OMERO_DATA_MOUNTPOINT=${OMERO_DATA_MOUNTPOINT}  (from OMERO_DATA_PATH=${OMERO_DATA_PATH})"
+echo "  OMERO_DATABASE_MOUNTPOINT=${OMERO_DATABASE_MOUNTPOINT}  (from OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH})"
+echo "  OMERO_PLUGIN_DATABASE_MOUNTPOINT=${OMERO_PLUGIN_DATABASE_MOUNTPOINT}  (from OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH})"
 
 if ! export_compose_interpolation_env; then
     exit 1
