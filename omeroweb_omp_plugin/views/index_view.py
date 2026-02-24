@@ -420,6 +420,7 @@ def index(request, conn=None, url=None, **kwargs):
         def build_index_context(extra=None):
             context = {
                 "projects": projects,
+                "error_message": "",
                 "chunk_size": CHUNK_SIZE,
                 "default_variable_names_json": json.dumps(DEFAULT_VARIABLE_NAMES),
                 "max_parsed_variables": MAX_PARSED_VARIABLES,
