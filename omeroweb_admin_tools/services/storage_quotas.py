@@ -211,17 +211,39 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _fresh_state() -> Dict[str, object]:
+    """Return a blank quota state dict."""
+    return {
+        STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
+        "quotas_gb": {},
+        "logs": [],
+    }
+
+
 def _load_state(path: Path) -> Dict[str, object]:
     if not path.exists():
-        return {
-            STATE_SCHEMA_VERSION_KEY: STATE_SCHEMA_VERSION,
-            "quotas_gb": {},
-            "logs": [],
-        }
+        return _fresh_state()
     raw = path.read_text(encoding="utf-8")
-    data = json.loads(raw)
+    if not raw.strip():
+        logger.warning(
+            "Quota state file %s is empty; initialising fresh state", path
+        )
+        return _fresh_state()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning(
+            "Quota state file %s contains invalid JSON; initialising fresh state",
+            path,
+        )
+        return _fresh_state()
     if not isinstance(data, dict):
-        raise QuotaError("Quota state file must contain a JSON object")
+        logger.warning(
+            "Quota state file %s does not contain a JSON object; "
+            "initialising fresh state",
+            path,
+        )
+        return _fresh_state()
     schema_version = data.get(STATE_SCHEMA_VERSION_KEY)
     if schema_version is None:
         data[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
