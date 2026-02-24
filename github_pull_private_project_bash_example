@@ -92,6 +92,7 @@ resolve_all_data_paths() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -176,6 +177,7 @@ collect_sentinel_dir_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -388,6 +390,7 @@ replace_working_tree_with_clone() {
             -exec cp {} "${current_repo_dir}/env/" \;
         echo "Refreshed *_example.env files in env/."
     fi
+
 }
 
 run_installation_script() {
