@@ -607,8 +607,58 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  crowdsec:
+    image: crowdsec-auto:custom
+    build:
+      context: .
+      dockerfile: docker/crowdsec.Dockerfile
+    container_name: crowdsec
+    restart: unless-stopped
+    env_file:
+      - ./env/omero_secrets.env
+    environment:
+      GID: "${GID-1000}"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd crowdsecurity/docker"
+      DS_HOST_ROOT: "/host"
+    volumes:
+      - ./monitoring/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro
+    ports:
+      - "8080:8080"
+    networks:
+      omero:
+        aliases:
+          - crowdsec
+    security_opt:
+      - no-new-privileges:true
+
+  crowdsec-firewall-bouncer:
+    image: crowdsec-firewall-bouncer-auto:custom
+    build:
+      context: .
+      dockerfile: docker/firewall-bouncer.Dockerfile
+    container_name: crowdsec-firewall-bouncer
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    env_file:
+      - ./env/omero_secrets.env
+    environment:
+      API_URL: http://localhost:8080
+      API_KEY: ${CROWDSEC_BOUNCER_API_KEY}
+    volumes:
+      - /var/log:/var/log:ro
+    depends_on:
+      - crowdsec
+
 networks:
   omero:
 
 volumes:
   node_exporter_textfile:
+  crowdsec-db:
+  crowdsec-config:
