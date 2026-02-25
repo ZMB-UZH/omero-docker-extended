@@ -162,8 +162,8 @@ services:
           - path-usage-exporter
     volumes:
       - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:rw
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro,rslave
+      - ./installation_paths.env:/config/installation_paths.env:ro
     healthcheck:
       test: ["CMD-SHELL", "test -f /textfile/omero_paths.prom"]
       interval: 10s
@@ -286,9 +286,6 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
       GF_METRICS_ENABLED: "true"
-      OMERO_DATA_MOUNTPOINT: "${OMERO_DATA_MOUNTPOINT:-/}"
-      OMERO_DATABASE_MOUNTPOINT: "${OMERO_DATABASE_MOUNTPOINT:-/}"
-      OMERO_PLUGIN_DATABASE_MOUNTPOINT: "${OMERO_PLUGIN_DATABASE_MOUNTPOINT:-/}"
     depends_on:
       prometheus:
         condition: service_healthy
