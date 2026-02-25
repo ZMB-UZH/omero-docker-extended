@@ -78,6 +78,11 @@ Alloy collects logs from two sources:
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
+## CrowdSec log expectations
+
+- `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is expected on hosts that do not expose those files (for example journald-only systems). Docker log acquisition still starts normally via `source: docker`.
+- The CrowdSec healthcheck is HTTP-based (`/health`) and should not generate repeated `POST /v1/watchers/login` entries by itself.
+
 ## Operational baseline checks
 
 1. Prometheus targets page (`http://localhost:9090/targets`) shows all targets as UP.
