@@ -180,6 +180,10 @@ main() {
     fi
   done
 
+  # Remove dangling image objects left behind by interrupted/replaced builds.
+  # This prevents <none>:<none> images from persisting in container UIs.
+  docker image prune -f >/dev/null 2>&1 || true
+
   echo "Cleanup complete."
 }
 
