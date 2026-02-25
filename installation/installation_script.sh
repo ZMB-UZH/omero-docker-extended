@@ -268,7 +268,7 @@ run_image_build() {
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
         "${buildx_helper_path}"
-    return 0
+    return $?
 }
 
 compose_with_installation_env() {
