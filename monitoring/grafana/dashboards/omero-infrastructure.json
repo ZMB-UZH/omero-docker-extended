@@ -115,7 +115,7 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
@@ -153,7 +153,7 @@
         }
       ],
       "options": {
-        "graphMode": "none",
+        "graphMode": "area",
         "textMode": "value",
         "reduceOptions": {
           "values": false,
@@ -198,7 +198,7 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
@@ -235,7 +235,7 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
@@ -273,12 +273,12 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
       "type": "stat",
-      "title": "Database path(s) usage",
+      "title": "OMERO database path usage",
       "id": 18,
       "gridPos": {
         "h": 3,
@@ -307,11 +307,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(omero_path_used_ratio{kind=~\"database_main|database_plugin\",env_key!=\"\"})"
+          "expr": "max(omero_path_used_ratio{kind=\"database_main\",env_key!=\"\"})"
         }
       ],
       "options": {
-        "graphMode": "none",
+        "graphMode": "area",
         "reduceOptions": {
           "values": false,
           "calcs": [
@@ -324,7 +324,7 @@
     },
     {
       "type": "stat",
-      "title": "Active targets",
+      "title": "Plugin database path usage",
       "id": 5,
       "gridPos": {
         "h": 3,
@@ -338,27 +338,39 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "percentunit",
           "color": {
             "mode": "fixed",
             "fixedColor": "green"
-          }
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "N/A"
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count(up)"
+          "expr": "max(omero_path_used_ratio{kind=\"database_plugin\",env_key!=\"\"})"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
       }
     },
     {
       "type": "stat",
-      "title": "Healthy targets",
+      "title": "Healthy/Active targets",
       "id": 6,
       "gridPos": {
         "h": 3,
@@ -376,18 +388,34 @@
           "color": {
             "mode": "fixed",
             "fixedColor": "green"
-          }
+          },
+          "decimals": 0
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(up)"
+          "expr": "sum(up)",
+          "legendFormat": "Healthy"
+        },
+        {
+          "refId": "B",
+          "expr": "count(up)",
+          "legendFormat": "Active"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal"
       }
     },
     {
