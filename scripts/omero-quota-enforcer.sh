@@ -199,12 +199,11 @@ apply_project_quota() {
     local quota_target="$3"
     local setquota_err=""
 
-    # Defensive reset: some quota toolchains can retain stale project limits
-    # after a hard-limit breach unless limits are explicitly cleared first.
-    # We clear then re-apply on each run to keep updates deterministic.
-    if ! clear_project_quota "$project_id"; then
-        return 1
-    fi
+    # BUGFIX: Do NOT call clear_project_quota before applying limits. 
+    # Calling setquota with 0 limits drops the boundaries entirely. If a user is
+    # already over the new requested limit when we try to apply it, setting to 0 
+    # first causes the subsequent application of the new block boundaries to fail 
+    # silently (or break ext4 tracking state). Direct overwrite is the safe path.
 
     if ! setquota_err="$(setquota -P "$project_id" "$quota_blocks" "$quota_blocks" 0 0 "$quota_target" 2>&1)"; then
         SETQUOTA_ERR="$setquota_err"
