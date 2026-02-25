@@ -44,7 +44,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (17 containers)
+├── docker-compose.yml                 # Full service orchestration (20 containers)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
@@ -102,7 +102,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-The platform runs **17 containers** on a single Docker bridge network (`omero`):
+The platform runs **20 containers** on a single Docker bridge network (`omero`):
 
 | Service | Image | Purpose | Port |
 |---|---|---|---|
@@ -124,6 +124,8 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
 | `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
+| `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
+| `crowdsec` | Custom (crowdsecurity/crowdsec:v1.7.6) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
 
 </details>
 
@@ -317,6 +319,7 @@ The observability stack provides:
 - **Alloy** collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
+- **CrowdSec** provides host-wide security telemetry by analyzing host syslog/auth logs and Docker logs via mounted sources.
 
 </details>
 

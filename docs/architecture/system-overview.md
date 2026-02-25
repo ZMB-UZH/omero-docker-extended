@@ -61,7 +61,7 @@ Cache backend and Celery message broker:
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.81.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): queries Docker container mount metadata every 30 seconds to measure filesystem usage for OMERO data, database, and plugin database volumes. Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
-- **CrowdSec** (v1.7.6): threat detection engine analyzing host syslog, SSH auth logs, and Docker container logs. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
+- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog, SSH auth logs, and Docker container logs. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`. The service is not run in Docker `privileged` mode by default; it operates through read-only host log, host-root, and Docker-socket mounts.
 
 ### Maintenance sidecar (`pg-maintenance`)
 
@@ -140,7 +140,7 @@ Plugin code accesses configuration through `config.py` modules that use `omero_p
 
 - All containers: `security_opt: no-new-privileges:true`.
 - Secrets in `env/*.env` (gitignored). Rotate all defaults before deployment.
-- Only 6 services expose host ports; all others are internal to the `omero` network.
+- Only 7 services expose host ports; all others are internal to the `omero` network.
 - OMERO.web should run behind a TLS-terminating reverse proxy.
 - Docker socket is read-only in omeroweb (admin tools container stats only).
 - Validate health checks and logs after each deployment change.

@@ -15,7 +15,7 @@
 | Postgres exporter (plugin) | v0.19.0 | Plugin database metrics | `http://postgres-exporter-plugin:9187` |
 | Redis exporter | v1.81.0 | Redis metrics | `http://redis-exporter:9121` |
 | Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
-| CrowdSec | v1.7.6 | Threat detection and IP reputation (host logs + Docker) | `http://crowdsec:8080` |
+| CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
 
 ## Configuration sources
 
