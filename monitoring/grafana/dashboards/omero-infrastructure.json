@@ -299,8 +299,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (kind) (omero_path_used_ratio{kind=~\"database_main|database_plugin\"})",
-          "legendFormat": "{{kind}}"
+          "expr": "max by (mountpoint) (omero_path_used_ratio{kind=~\"database_main|database_plugin\"})",
+          "legendFormat": "{{mountpoint}}"
         }
       ],
       "options": {
