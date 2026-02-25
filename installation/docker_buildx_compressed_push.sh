@@ -24,6 +24,9 @@ DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
+DOCKER_BUILDX_DRIVER="${DOCKER_BUILDX_DRIVER:-docker-container}"
+DOCKER_BUILDX_DRIVER_OPTS="${DOCKER_BUILDX_DRIVER_OPTS:-}"
+DOCKER_BUILDX_FORCE_RECREATE_BUILDER="${DOCKER_BUILDX_FORCE_RECREATE_BUILDER:-0}"
 # Buildx/BuildKit bootstrap can hang indefinitely when the docker-container
 # driver builder is in a broken state. Enforce a timeout and recreate the
 # builder on failure.
@@ -95,6 +98,23 @@ validate_serial_mode() {
             return 1
             ;;
     esac
+}
+
+validate_buildx_driver() {
+    case "${DOCKER_BUILDX_DRIVER}" in
+        docker-container)
+            return 0
+            ;;
+        *)
+            echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILDX_DRIVER must be docker-container. Got: ${DOCKER_BUILDX_DRIVER}" >&2
+            return 1
+            ;;
+    esac
+}
+
+resolve_builder_driver() {
+    local builder_name="${1:?BUG: resolve_builder_driver requires builder name}"
+    docker buildx inspect "${builder_name}" 2>/dev/null | awk '/^Driver:/ {print $2; exit}'
 }
 
 is_transient_layer_lock_error() {
@@ -458,6 +478,10 @@ ensure_builder() {
 
     local bootstrap_timeout="${DOCKER_BUILDX_BOOTSTRAP_TIMEOUT_SECONDS}"
     local bootstrap_attempts="${DOCKER_BUILDX_BOOTSTRAP_ATTEMPTS}"
+    local existing_driver=""
+    local create_cmd=()
+    local driver_opt=""
+    local -a driver_opts=()
     local attempt
 
     validate_positive_integer "DOCKER_BUILDX_BOOTSTRAP_TIMEOUT_SECONDS" "${bootstrap_timeout}"
@@ -471,14 +495,36 @@ ensure_builder() {
         return 1
     fi
 
+    if [ "${DOCKER_BUILDX_FORCE_RECREATE_BUILDER}" = "1" ]; then
+        echo "INFO (${SCRIPT_NAME}): DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1, recreating buildx builder '${DOCKER_BUILDX_BUILDER_NAME}'." >&2
+        cleanup_buildx_builder "${DOCKER_BUILDX_BUILDER_NAME}" || true
+    fi
+
+    if [ -n "${DOCKER_BUILDX_DRIVER_OPTS}" ]; then
+        IFS=',' read -r -a driver_opts <<<"${DOCKER_BUILDX_DRIVER_OPTS}"
+    fi
+
     for attempt in $(seq 1 "${bootstrap_attempts}"); do
         if ! docker buildx inspect "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1; then
-            docker buildx create \
-                --name "${DOCKER_BUILDX_BUILDER_NAME}" \
-                --driver docker-container \
-                --use \
-                >/dev/null 2>&1
+            create_cmd=(
+                docker buildx create
+                --name "${DOCKER_BUILDX_BUILDER_NAME}"
+                --driver "${DOCKER_BUILDX_DRIVER}"
+                --use
+            )
+            for driver_opt in "${driver_opts[@]}"; do
+                if [ -n "${driver_opt}" ]; then
+                    create_cmd+=(--driver-opt "${driver_opt}")
+                fi
+            done
+            "${create_cmd[@]}" >/dev/null 2>&1
         else
+            existing_driver="$(resolve_builder_driver "${DOCKER_BUILDX_BUILDER_NAME}")"
+            if [ "${existing_driver}" != "${DOCKER_BUILDX_DRIVER}" ]; then
+                echo "WARNING (${SCRIPT_NAME}): Existing builder '${DOCKER_BUILDX_BUILDER_NAME}' uses driver '${existing_driver}', expected '${DOCKER_BUILDX_DRIVER}'. Recreating builder to enforce deterministic driver selection." >&2
+                cleanup_buildx_builder "${DOCKER_BUILDX_BUILDER_NAME}" || true
+                continue
+            fi
             docker buildx use "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
         fi
 
@@ -701,6 +747,8 @@ main() {
     validate_local_cache_mode
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+    validate_buildx_driver
+    validate_toggle "DOCKER_BUILDX_FORCE_RECREATE_BUILDER" "${DOCKER_BUILDX_FORCE_RECREATE_BUILDER}"
     validate_serial_mode
 
     now_epoch="$(date +%s)"
@@ -753,6 +801,12 @@ main() {
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     echo "  Serial mode          : ${DOCKER_BUILD_BAKE_SERIAL_MODE}"
+    echo "  Buildx driver        : ${DOCKER_BUILDX_DRIVER}"
+    if [ -n "${DOCKER_BUILDX_DRIVER_OPTS}" ]; then
+        echo "  Buildx driver opts   : ${DOCKER_BUILDX_DRIVER_OPTS}"
+    else
+        echo "  Buildx driver opts   : (none)"
+    fi
 
 
     export DOCKER_BUILDKIT=1
