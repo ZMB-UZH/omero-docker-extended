@@ -176,6 +176,7 @@ services:
   cadvisor:
     image: "gcr.io/cadvisor/cadvisor:v0.55.1"
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
     devices:
       - /dev/kmsg:/dev/kmsg
@@ -184,6 +185,7 @@ services:
         aliases:
           - cadvisor
     volumes:
+      - ./monitoring/cadvisor/entrypoint.sh:/entrypoint.sh:ro
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
