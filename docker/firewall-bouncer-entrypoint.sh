@@ -1,10 +1,9 @@
 #!/bin/sh
 
-set -e
+set -eu
 
-# NOTE: Bouncer API Key logic has been removed.
-# The crowdsec stack now uses the enroll key for central console registration.
-# Local bouncer functionality will be initialized natively if required without a manually set API_KEY.
-
-echo "Starting Firewall Bouncer..."
-exec "$@"
+echo "ERROR: Standalone firewall bouncer container is disabled in this deployment."
+echo "CrowdSec now installs bouncers locally inside the crowdsec container:"
+echo "  - crowdsec-firewall-bouncer-iptables"
+echo "  - crowdsec-nginx-bouncer"
+exit 1
