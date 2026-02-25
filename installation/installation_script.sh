@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
-USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 0 to use plain docker compose build
+USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -1531,7 +1531,7 @@ resolve_buildx_compressed_build_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? Y/n (Default: Y)" "yes")"
+    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? y/N (Default: N)" "no")"
     if [ "${reply}" = "yes" ]; then
         USE_BUILDX_COMPRESSED_BUILD=1
     else
