@@ -3,6 +3,7 @@ import logging
 import re
 import urllib.error
 import urllib.request
+import urllib.parse
 from collections import Counter
 from .filename_utils import (
     build_hyphen_protection_pattern,
@@ -246,9 +247,13 @@ def _call_ai_provider_raw(provider, api_key, prompt, max_tokens, model=None):
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.0, "maxOutputTokens": max_tokens},
         }
+        # FIX: URL-encode the user-provided parts of the URL to prevent SSRF via path traversal
+        # or query injection ( CodeQL #89 ). We do NOT enforce strict https allowlist to allow local proxies.
+        safe_model_path = urllib.parse.quote(model_path, safe="/")
+        safe_api_key = urllib.parse.quote(api_key, safe="")
         url = (
             "https://generativelanguage.googleapis.com/v1beta/"
-            f"{model_path}:generateContent?key={api_key}"
+            f"{safe_model_path}:generateContent?key={safe_api_key}"
         )
         response = _post_json(url, {"Content-Type": "application/json"}, payload)
         try:

@@ -140,6 +140,14 @@ def _execute_loki_query(
         }
     )
     url = f"{config.loki_url}/loki/api/v1/query_range?{params}"
+    
+    # FIX: Validate URL against config to prevent SSRF (CodeQL #91)
+    base_parsed = urllib.parse.urlparse(config.loki_url)
+    url_parsed = urllib.parse.urlparse(url)
+    if (url_parsed.scheme != base_parsed.scheme or 
+        url_parsed.netloc != base_parsed.netloc):
+            raise RuntimeError("Invalid Loki URL (SSRF protection)")
+
     request = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(
@@ -419,6 +427,14 @@ def fetch_internal_log_labels(
         }
     )
     url = f"{config.loki_url}/loki/api/v1/series?{params}"
+
+    # FIX: Validate URL against config to prevent SSRF (CodeQL #91)
+    base_parsed = urllib.parse.urlparse(config.loki_url)
+    url_parsed = urllib.parse.urlparse(url)
+    if (url_parsed.scheme != base_parsed.scheme or 
+        url_parsed.netloc != base_parsed.netloc):
+            raise RuntimeError("Invalid Loki URL (SSRF protection)")
+
     logger.debug("fetch_internal_log_labels: querying %s", url)
     request = urllib.request.Request(url, method="GET")
     try:
