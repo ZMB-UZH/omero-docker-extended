@@ -2,6 +2,18 @@
 set -eu
 
 REQUIRED_BOUNCER_PACKAGES="crowdsec-firewall-bouncer-iptables crowdsec-nginx-bouncer"
+CROWDSEC_REQUIRE_BOUNCERS="${CROWDSEC_REQUIRE_BOUNCERS:-false}"
+
+is_true() {
+    case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
 
 is_installed_deb() {
     dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
@@ -24,24 +36,31 @@ ensure_bouncer_packages_installed() {
             apt-get install -y --no-install-recommends ${missing_packages}
             rm -rf /var/lib/apt/lists/*
         fi
-    else
-        echo "ERROR: Unsupported base image package manager. Expected apt/dpkg to install required bouncers." >&2
+
+        return 0
+    fi
+
+    if is_true "${CROWDSEC_REQUIRE_BOUNCERS}"; then
+        echo "ERROR: CROWDSEC_REQUIRE_BOUNCERS=true but unsupported base image package manager (requires apt/dpkg)." >&2
         exit 1
     fi
+
+    echo "WARNING: Unsupported base image package manager. Skipping automatic bouncer package installation." >&2
+    echo "WARNING: Set CROWDSEC_REQUIRE_BOUNCERS=true to fail fast when bouncers are required." >&2
 }
 
 validate_bouncer_binaries() {
-    if ! command -v crowdsec-firewall-bouncer >/dev/null 2>&1; then
-        echo "ERROR: crowdsec-firewall-bouncer binary not found after package installation." >&2
+    if command -v crowdsec-firewall-bouncer >/dev/null 2>&1 && command -v crowdsec-nginx-bouncer >/dev/null 2>&1; then
+        echo "Installed bouncer binaries detected: crowdsec-firewall-bouncer, crowdsec-nginx-bouncer"
+        return 0
+    fi
+
+    if is_true "${CROWDSEC_REQUIRE_BOUNCERS}"; then
+        echo "ERROR: CROWDSEC_REQUIRE_BOUNCERS=true but one or more bouncer binaries are missing." >&2
         exit 1
     fi
 
-    if ! command -v crowdsec-nginx-bouncer >/dev/null 2>&1; then
-        echo "ERROR: crowdsec-nginx-bouncer binary not found after package installation." >&2
-        exit 1
-    fi
-
-    echo "Installed bouncer binaries detected: crowdsec-firewall-bouncer, crowdsec-nginx-bouncer"
+    echo "WARNING: Bouncer binaries not found; continuing because CROWDSEC_REQUIRE_BOUNCERS=false." >&2
 }
 
 ensure_bouncer_packages_installed
