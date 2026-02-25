@@ -612,11 +612,11 @@ build_target_overrides() {
             # For large images this loads all layer data into RAM simultaneously
             # and causes a massive memory spike — completely pointless for a
             # local build where compression format is irrelevant.
-            # type=image,push=false is sufficient to make the image available
-            # in the local docker daemon without any recompression overhead.
-            printf -- '--set\n%s.output=type=image,name=%s,push=false\n' \
-                "${target}" \
-                "${target_image_name}"
+            # With docker-container driver, type=image,push=false keeps the image
+            # INSIDE the BuildKit daemon — NOT visible to the host Docker daemon.
+            # type=docker exports it back to the host daemon via the Docker socket.
+            printf -- '--set\n%s.output=type=docker\n' \
+                "${target}"
         fi
     done
 }
