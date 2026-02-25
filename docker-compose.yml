@@ -608,7 +608,7 @@ services:
       - no-new-privileges:true
 
   crowdsec:
-    image: crowdsec-auto:custom
+    image: crowdsec:custom
     build:
       context: .
       dockerfile: docker/crowdsec.Dockerfile
