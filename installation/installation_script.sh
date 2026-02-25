@@ -1531,7 +1531,7 @@ resolve_buildx_compressed_build_choice() {
         esac
     fi
 
-    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? y/N (Default: N)" "no")"
+    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? Y/n (Default: n)" "no")"
     if [ "${reply}" = "yes" ]; then
         USE_BUILDX_COMPRESSED_BUILD=1
     else
