@@ -154,14 +154,21 @@ exit 0
 
             log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
             bake_lines = [line for line in log_lines if line.startswith("buildx bake")]
-            self.assertTrue(bake_lines, msg="Expected buildx bake invocation in fake docker log")
-            bake_line = bake_lines[-1]
+            self.assertEqual(
+                len(bake_lines),
+                2,
+                msg=(
+                    "Expected serial multi-target Buildx execution to emit one "
+                    "bake command per target"
+                ),
+            )
 
-            self.assertIn("omeroserver", bake_line)
-            self.assertIn("omeroweb", bake_line)
+            joined_bake_lines = "\n".join(bake_lines)
+            self.assertIn("omeroserver", joined_bake_lines)
+            self.assertIn("omeroweb", joined_bake_lines)
             self.assertIn(
                 "omeroserver.output=type=image,name=registry.example.com/omero/omeroserver:2026.02.1,push=true,compression=estargz,compression-level=9,force-compression=true,oci-mediatypes=true",
-                bake_line,
+                joined_bake_lines,
             )
 
 
