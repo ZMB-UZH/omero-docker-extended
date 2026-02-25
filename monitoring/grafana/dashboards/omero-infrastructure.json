@@ -149,11 +149,19 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "omero_path_used_ratio{kind=\"omero_data\"}"
+          "expr": "max(omero_path_used_ratio{kind=\"omero_data\",env_key!=\"\"})"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
       }
     },
     {
@@ -299,14 +307,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (mountpoint) (omero_path_used_ratio{kind=~\"database_main|database_plugin\"})",
-          "legendFormat": "{{mountpoint}}"
+          "expr": "max(omero_path_used_ratio{kind=~\"database_main|database_plugin\",env_key!=\"\"})"
         }
       ],
       "options": {
         "graphMode": "none",
         "reduceOptions": {
-          "values": true,
+          "values": false,
           "calcs": [
             "lastNotNull"
           ],
