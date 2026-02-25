@@ -16,6 +16,8 @@ DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
 DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
+DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
+DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
@@ -29,6 +31,7 @@ readonly SCRIPT_DIR
 readonly REPO_ROOT_DIR
 
 LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
+LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
 
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
@@ -69,6 +72,16 @@ validate_positive_integer() {
     return 0
 }
 
+validate_local_cache_mode() {
+    case "${DOCKER_BUILD_LOCAL_CACHE_MODE}" in
+        min|max) return 0 ;;
+        *)
+            echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_LOCAL_CACHE_MODE must be one of: min, max. Got: ${DOCKER_BUILD_LOCAL_CACHE_MODE}" >&2
+            return 1
+            ;;
+    esac
+}
+
 validate_serial_mode() {
     case "${DOCKER_BUILD_BAKE_SERIAL_MODE}" in
         auto|always|never) return 0 ;;
@@ -91,14 +104,33 @@ is_transient_layer_lock_error() {
     return 1
 }
 
+is_transient_cache_export_error() {
+    local output_file="${1:?BUG: is_transient_cache_export_error requires output file path}"
+    if [ ! -r "${output_file}" ]; then
+        return 1
+    fi
+
+    if rg -q "failed to receive status: rpc error: code = Unavailable desc = error reading from server: EOF" "${output_file}"; then
+        return 0
+    fi
+
+    if rg -q "exporting cache to client directory" "${output_file}" && rg -q "rpc error: code = Unavailable" "${output_file}"; then
+        return 0
+    fi
+
+    return 1
+}
+
 run_buildx_bake_with_retries() {
     local max_attempts="${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     local sleep_seconds="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     local attempt=1
     local output_file=""
     local saw_transient_lock="0"
+    local saw_transient_cache_export="0"
 
     LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
+    LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
 
     while [ "${attempt}" -le "${max_attempts}" ]; do
         output_file="$(mktemp)"
@@ -124,18 +156,32 @@ run_buildx_bake_with_retries() {
             continue
         fi
 
+        if is_transient_cache_export_error "${output_file}" && [ "${attempt}" -lt "${max_attempts}" ]; then
+            saw_transient_cache_export="1"
+            echo "WARNING (${SCRIPT_NAME}): Buildx bake failed during cache export transport (BuildKit Unavailable/EOF); retrying (${attempt}/${max_attempts}) in ${sleep_seconds}s..." >&2
+            rm -f "${output_file}"
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
         if is_transient_layer_lock_error "${output_file}"; then
             saw_transient_lock="1"
+        fi
+        if is_transient_cache_export_error "${output_file}"; then
+            saw_transient_cache_export="1"
         fi
 
         echo "ERROR (${SCRIPT_NAME}): Buildx bake failed on attempt ${attempt}/${max_attempts}." >&2
         rm -f "${output_file}"
         LAST_BUILDX_FAILURE_TRANSIENT_LOCK="${saw_transient_lock}"
+        LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT="${saw_transient_cache_export}"
         return "${build_exit_code}"
     done
 
     echo "ERROR (${SCRIPT_NAME}): Buildx bake failed after ${max_attempts} attempt(s)." >&2
     LAST_BUILDX_FAILURE_TRANSIENT_LOCK="${saw_transient_lock}"
+    LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT="${saw_transient_cache_export}"
     return 1
 }
 
@@ -294,7 +340,7 @@ build_target_overrides() {
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
 
-    if [ "${DOCKER_BUILD_NO_CACHE}" = "0" ]; then
+    if [ "${DOCKER_BUILD_NO_CACHE}" = "0" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
         cache_dir="$(resolve_local_cache_dir)"
         mkdir -p "${cache_dir}"
     fi
@@ -307,7 +353,7 @@ build_target_overrides() {
 
         if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ]; then
             printf -- '--set\n%s.no-cache=true\n' "${target}"
-        else
+        elif [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
             # Buildx can run service builds in parallel. Exporting every target
             # to the same local cache path causes transient layer lock
             # contention ("ref layer-sha256 ... locked ... unavailable").
@@ -320,7 +366,7 @@ build_target_overrides() {
             else
                 echo "INFO (${SCRIPT_NAME}): Skipping cache import for '${target}' (no existing cache index at ${target_cache_dir}/index.json)." >&2
             fi
-            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=max\n' "${target}" "${target_cache_dir}"
+            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
@@ -375,6 +421,36 @@ run_buildx_bake_serial_fallback() {
     return 0
 }
 
+run_buildx_bake_without_local_cache_fallback() {
+    local original_local_cache_enabled="${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
+
+    if [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" != "1" ]; then
+        return 1
+    fi
+
+    echo "WARNING (${SCRIPT_NAME}): Retrying Buildx bake with local cache export disabled due to cache-export transport failure (rpc Unavailable/EOF)." >&2
+    DOCKER_BUILD_LOCAL_CACHE_ENABLED="0"
+
+    set +e
+    mapfile -t TARGET_OVERRIDES < <(build_target_overrides)
+    OVERRIDES_EXIT_CODE=$?
+    set -e
+
+    if [ "${OVERRIDES_EXIT_CODE}" -ne 0 ]; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to construct build target overrides for no-local-cache fallback." >&2
+        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
+        return 1
+    fi
+
+    if run_buildx_bake_with_retries; then
+        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
+        return 0
+    fi
+
+    DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
+    return 1
+}
+
 should_run_serial_mode() {
     local target_count
     target_count="$(count_build_targets)"
@@ -386,7 +462,7 @@ should_run_serial_mode() {
             # BuildKit local cache exporter is still prone to transient layer
             # lock contention during parallel multi-target exports. Prefer
             # serial target execution up front to avoid long retry loops.
-            if [ "${target_count}" -gt 1 ] && [ "${DOCKER_BUILD_NO_CACHE}" = "0" ]; then
+            if [ "${target_count}" -gt 1 ] && [ "${DOCKER_BUILD_NO_CACHE}" = "0" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
                 return 0
             fi
             return 1
@@ -425,6 +501,8 @@ main() {
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
+    validate_toggle "DOCKER_BUILD_LOCAL_CACHE_ENABLED" "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
+    validate_local_cache_mode
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     validate_serial_mode
@@ -466,6 +544,8 @@ main() {
     echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
     echo "  Inline cache         : ${DOCKER_BUILD_INLINE_CACHE}"
     echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
+    echo "  Local cache export   : ${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
+    echo "  Local cache mode     : ${DOCKER_BUILD_LOCAL_CACHE_MODE}"
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
@@ -486,6 +566,11 @@ main() {
 
     if [ "${LAST_BUILDX_FAILURE_TRANSIENT_LOCK}" = "1" ] && [ "$(count_build_targets)" -gt 1 ]; then
         run_buildx_bake_serial_fallback
+        return $?
+    fi
+
+    if [ "${LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT}" = "1" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
+        run_buildx_bake_without_local_cache_fallback
         return $?
     fi
 
