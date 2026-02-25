@@ -113,10 +113,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     try:
                         link_ids = find_annotation_link_ids(conn, aid)
                         for lid in link_ids:
+                            # Explicitly cast to int to prevent command injection
                             link_cmd = [
                                 OMERO,
                                 "delete",
-                                f"ImageAnnotationLink:{lid}",
+                                f"ImageAnnotationLink:{int(lid)}",
                                 "--force",
                             ]
                             link_result = subprocess.run(
@@ -148,10 +149,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                             )
                             continue
 
+                        # Explicitly cast to int to prevent command injection
                         cmd = [
                             OMERO,
                             "delete",
-                            f"Annotation:{aid}",
+                            f"Annotation:{int(aid)}",
                             "--force",
                         ]
 
