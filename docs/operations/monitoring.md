@@ -14,6 +14,8 @@
 | Postgres exporter | v0.19.0 | OMERO database metrics | `http://postgres-exporter:9187` |
 | Postgres exporter (plugin) | v0.19.0 | Plugin database metrics | `http://postgres-exporter-plugin:9187` |
 | Redis exporter | v1.81.0 | Redis metrics | `http://redis-exporter:9121` |
+| Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
+| CrowdSec | v1.7.6 | Threat detection and IP reputation (host logs + Docker) | `http://crowdsec:8080` |
 
 ## Configuration sources
 
@@ -27,6 +29,8 @@
 | `monitoring/grafana/dashboards/*.json` | Dashboard definitions |
 | `monitoring/blackbox/config.yml` | HTTP and TCP probe modules |
 | `monitoring/postgres-exporter/postgres_exporter.yml` | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
+| `monitoring/crowdsec/acquis.yaml` | CrowdSec log acquisition sources (host syslog, Docker containers) |
+| `monitoring/path-usage-exporter/path_usage_exporter.py` | Path usage exporter script for OMERO volume metrics |
 
 ## Prometheus scrape targets
 

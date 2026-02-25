@@ -15,6 +15,12 @@ FIXED_CONTAINERS=(
   "redis-sysctl-init"
 )
 
+# Images to remove after installation, even if the container is already gone.
+# These are one-shot images that serve no purpose after the init phase.
+FIXED_IMAGES=(
+  "redis-sysctl-init:custom"
+)
+
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR (${SCRIPT_NAME}): Must run as root." >&2
@@ -163,6 +169,15 @@ main() {
   local name
   for name in "${FIXED_CONTAINERS[@]}"; do
     cleanup_one_container "${name}"
+  done
+
+  # Remove one-shot images that may linger after the container is already gone.
+  local image_name
+  for image_name in "${FIXED_IMAGES[@]}"; do
+    if docker image inspect "${image_name}" >/dev/null 2>&1; then
+      echo "Removing one-shot image: ${image_name}"
+      remove_image_force "${image_name}"
+    fi
   done
 
   echo "Cleanup complete."

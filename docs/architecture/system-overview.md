@@ -60,6 +60,8 @@ Cache backend and Celery message broker:
 - **cAdvisor** (v0.55.1): container resource metrics.
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.81.0): Redis metrics.
+- **Path usage exporter** (custom Python 3.12 image): queries Docker container mount metadata every 30 seconds to measure filesystem usage for OMERO data, database, and plugin database volumes. Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
+- **CrowdSec** (v1.7.6): threat detection engine analyzing host syslog, SSH auth logs, and Docker container logs. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
 
 ### Maintenance sidecar (`pg-maintenance`)
 
@@ -128,7 +130,7 @@ Five utility modules shared across all plugins:
 
 Configuration is environment-driven and consumed at three levels:
 
-1. **Host paths** (`installation_paths.env`): 15 variables for OMERO data, databases, logs, monitoring state.
+1. **Host paths** (`installation_paths.env`): 17 variables for OMERO data, databases, logs, monitoring state, and CrowdSec.
 2. **Service parameters** (`env/*.env`): database credentials, Java heap, OMERO settings, plugin config, Celery settings, monitoring endpoints.
 3. **Docker Compose** (`docker-compose.yml`): maps env files to containers, defines dependencies with health conditions, networks, and volume mounts.
 
