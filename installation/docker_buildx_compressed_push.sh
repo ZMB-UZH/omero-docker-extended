@@ -21,9 +21,8 @@ DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
-# Buildx builder name kept for backward compat (cleanup scripts, logs),
-# but we intentionally use the built-in `default` builder to avoid
-# creating buildkit containers/volumes.
+# Named docker-container driver builder. The docker (default) driver does NOT
+# support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
 
 readonly SCRIPT_NAME
@@ -322,10 +321,20 @@ resolve_local_cache_dir() {
     return 0
 }
 
-ensure_default_builder() {
-    # Explicitly use the built-in default builder to avoid creating buildkit
-    # containers and docker volumes.
-    docker buildx use default >/dev/null 2>&1 || true
+ensure_builder() {
+    # The docker (default) driver only supports inline cache export.
+    # type=local cache-to requires the docker-container driver, which runs
+    # BuildKit in a dedicated container and keeps the gRPC session alive for
+    # the full bake, including the cache export phase (#33).
+    if ! docker buildx inspect "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1; then
+        docker buildx create \
+            --name "${DOCKER_BUILDX_BUILDER_NAME}" \
+            --driver docker-container \
+            --use \
+            >/dev/null 2>&1
+    else
+        docker buildx use "${DOCKER_BUILDX_BUILDER_NAME}" >/dev/null 2>&1 || true
+    fi
     docker buildx inspect --bootstrap >/dev/null 2>&1 || true
 }
 
@@ -370,17 +379,24 @@ build_target_overrides() {
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
-            printf -- '--set
-%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s
-'                 "${target}"                 "${target_image_name}"                 "${push_bool}"                 "${DOCKER_BUILD_COMPRESSION_TYPE}"                 "${DOCKER_BUILD_COMPRESSION_LEVEL}"                 "${oci_mediatypes_bool}"
+            printf -- '--set\n%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
+                "${target}" \
+                "${target_image_name}" \
+                "${push_bool}" \
+                "${DOCKER_BUILD_COMPRESSION_TYPE}" \
+                "${DOCKER_BUILD_COMPRESSION_LEVEL}" \
+                "${oci_mediatypes_bool}"
         else
             # Keep images local while still forcing Buildx compression settings
             # through the image exporter. This provides deterministic behavior
             # differences versus docker compose build without requiring prompts
             # or registry configuration changes.
-            printf -- '--set
-%s.output=type=image,name=%s,push=false,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s
-'                 "${target}"                 "${target_image_name}"                 "${DOCKER_BUILD_COMPRESSION_TYPE}"                 "${DOCKER_BUILD_COMPRESSION_LEVEL}"                 "${oci_mediatypes_bool}"
+            printf -- '--set\n%s.output=type=image,name=%s,push=false,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
+                "${target}" \
+                "${target_image_name}" \
+                "${DOCKER_BUILD_COMPRESSION_TYPE}" \
+                "${DOCKER_BUILD_COMPRESSION_LEVEL}" \
+                "${oci_mediatypes_bool}"
         fi
     done
 }
@@ -515,7 +531,7 @@ main() {
         return 1
     fi
 
-    ensure_default_builder
+    ensure_builder
 
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
