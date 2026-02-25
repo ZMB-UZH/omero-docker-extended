@@ -78,6 +78,9 @@ Notes:
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
+- The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
+- Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
+- Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
 - In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
 - Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
 - Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
