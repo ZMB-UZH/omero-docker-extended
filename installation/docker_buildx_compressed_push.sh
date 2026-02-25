@@ -11,7 +11,7 @@ DOCKER_BUILD_TARGETS="${DOCKER_BUILD_TARGETS:-}"
 DOCKER_REGISTRY_PREFIX="${DOCKER_REGISTRY_PREFIX:-}"
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-custom}"
 DOCKER_BUILD_COMPRESSION_TYPE="${DOCKER_BUILD_COMPRESSION_TYPE:-zstd}"
-DOCKER_BUILD_COMPRESSION_LEVEL="${DOCKER_BUILD_COMPRESSION_LEVEL:-3}"
+DOCKER_BUILD_COMPRESSION_LEVEL="${DOCKER_BUILD_COMPRESSION_LEVEL:-12}"
 DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
@@ -114,7 +114,7 @@ validate_buildx_driver() {
 
 resolve_builder_driver() {
     local builder_name="${1:?BUG: resolve_builder_driver requires builder name}"
-    docker buildx inspect "${builder_name}" 2>/dev/null | awk '/^Driver:/ {print $2; exit}'
+    docker buildx inspect "${builder_name}" 2>/dev/null | awk '/^Driver:/ {print $2; exit}' || true
 }
 
 is_transient_layer_lock_error() {
