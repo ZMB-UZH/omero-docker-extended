@@ -118,7 +118,7 @@
     },
     {
       "type": "stat",
-      "title": "Transactions / sec",
+      "title": "Transaction rate",
       "description": "Combined commit + rollback rate for the selected database.",
       "id": 5,
       "gridPos": {
@@ -221,7 +221,7 @@
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "hidden",
           "placement": "bottom"
         },
         "tooltip": {
@@ -239,14 +239,115 @@
     },
     {
       "type": "timeseries",
+      "title": "Database size",
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}",
+          "legendFormat": "{{datname}} ({{server}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "description": "Buffer cache hit ratio per database. Values below 99% may indicate insufficient shared_buffers.",
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "pg_stat_database_blks_hit{datname=\"omero-plugin\"} / (pg_stat_database_blks_hit{datname=\"omero-plugin\"} + pg_stat_database_blks_read{datname=\"omero-plugin\"})",
+          "legendFormat": "{{datname}} ({{server}})"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Transaction rate",
       "description": "Commits and rollbacks per second, per database.",
       "id": 8,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 8,
-        "y": 4
+        "x": 0,
+        "y": 12
       },
       "datasource": {
         "type": "prometheus",
@@ -294,65 +395,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Cache hit ratio",
-      "description": "Buffer cache hit ratio per database. Values below 99% may indicate insufficient shared_buffers.",
-      "id": 9,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pg_stat_database_blks_hit{datname=\"omero-plugin\"} / (pg_stat_database_blks_hit{datname=\"omero-plugin\"} + pg_stat_database_blks_read{datname=\"omero-plugin\"})",
-          "legendFormat": "{{datname}} ({{server}})"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
       "title": "Row operations",
       "description": "Tuple operations per second (inserts, updates, deletes) by database.",
       "id": 10,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
+        "x": 8,
         "y": 12
       },
       "datasource": {
@@ -401,55 +450,6 @@
           "refId": "C",
           "expr": "rate(pg_stat_database_tup_deleted{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Delete \u2014 {{datname}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Database size",
-      "id": 11,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 12
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}",
-          "legendFormat": "{{datname}} ({{server}})"
         }
       ]
     },
@@ -515,7 +515,7 @@
       "id": 13,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 20
       },
@@ -544,7 +544,7 @@
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "hidden",
           "placement": "bottom"
         },
         "tooltip": {
@@ -567,8 +567,8 @@
       "id": 14,
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 20
       },
       "datasource": {
@@ -595,7 +595,7 @@
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "hidden",
           "placement": "bottom"
         },
         "tooltip": {
