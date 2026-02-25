@@ -54,34 +54,11 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "decbytes"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}"
-        }
-      ]
-    },
-    {
-      "type": "stat",
-      "title": "Database size",
-      "id": 3,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 8,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes"
+          "unit": "decbytes",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -100,7 +77,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 12,
+        "x": 8,
         "y": 0
       },
       "datasource": {
@@ -141,13 +118,13 @@
     },
     {
       "type": "stat",
-      "title": "Transactions / sec",
+      "title": "Transaction rate",
       "description": "Combined commit + rollback rate for the selected database.",
       "id": 5,
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 16,
+        "x": 12,
         "y": 0
       },
       "datasource": {
@@ -175,7 +152,7 @@
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 20,
+        "x": 16,
         "y": 0
       },
       "datasource": {
@@ -262,9 +239,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Transaction rate",
-      "description": "Commits and rollbacks per second, per database.",
-      "id": 8,
+      "title": "Database size",
+      "id": 11,
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -277,7 +253,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "decbytes",
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
@@ -305,13 +281,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"omero-plugin\"}[5m])",
-          "legendFormat": "Commit \u2014 {{datname}}"
-        },
-        {
-          "refId": "B",
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"omero-plugin\"}[5m])",
-          "legendFormat": "Rollback \u2014 {{datname}}"
+          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}",
+          "legendFormat": "{{datname}} ({{server}})"
         }
       ]
     },
@@ -369,13 +340,68 @@
     },
     {
       "type": "timeseries",
+      "title": "Transaction rate",
+      "description": "Commits and rollbacks per second, per database.",
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(pg_stat_database_xact_commit{datname=\"omero-plugin\"}[5m])",
+          "legendFormat": "Commit \u2014 {{datname}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(pg_stat_database_xact_rollback{datname=\"omero-plugin\"}[5m])",
+          "legendFormat": "Rollback \u2014 {{datname}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Row operations",
       "description": "Tuple operations per second (inserts, updates, deletes) by database.",
       "id": 10,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
+        "x": 8,
         "y": 12
       },
       "datasource": {
@@ -424,55 +450,6 @@
           "refId": "C",
           "expr": "rate(pg_stat_database_tup_deleted{datname=\"omero-plugin\"}[5m])",
           "legendFormat": "Delete \u2014 {{datname}}"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "Database size",
-      "id": 11,
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 12
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "decbytes",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pg_database_size_bytes{datname=\"omero-plugin\"}",
-          "legendFormat": "{{datname}} ({{server}})"
         }
       ]
     },
@@ -538,7 +515,7 @@
       "id": 13,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 20
       },
@@ -590,8 +567,8 @@
       "id": 14,
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 20
       },
       "datasource": {
@@ -654,6 +631,6 @@
   "timezone": "browser",
   "title": "Plugin database",
   "uid": "plugin-database-metrics",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

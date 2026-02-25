@@ -41,6 +41,10 @@ scrape_configs:
     static_configs:
       - targets: ['redis-exporter:9121']
 
+  - job_name: blackbox_exporter
+    static_configs:
+      - targets: ['blackbox-exporter:9115']
+
   - job_name: blackbox_http
     metrics_path: /probe
     params:
@@ -55,6 +59,9 @@ scrape_configs:
           - http://postgres-exporter:9187/metrics
           - http://postgres-exporter-plugin:9187/metrics
           - http://redis-exporter:9121/metrics
+          - http://blackbox-exporter:9115/-/healthy
+          - http://portainer:9000/api/system/status
+          - http://crowdsec:8080/health
           - http://omeroserver:4064
           - http://omeroweb:4090/webgateway/
           - http://alloy:12345/metrics

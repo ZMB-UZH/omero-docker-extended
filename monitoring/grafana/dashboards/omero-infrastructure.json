@@ -99,8 +99,12 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
-          "decimals": 1
+          "max": 1,
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
@@ -111,145 +115,13 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
       "type": "stat",
-      "title": "OMERO data path used space",
+      "title": "OMERO data path usage",
       "id": 4,
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 12,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          },
-          "noValue": "N/A"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATA_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))"
-        }
-      ],
-      "options": {
-        "graphMode": "none"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Host memory usage",
-      "id": 2,
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 16,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 100,
-          "decimals": 1
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))"
-        }
-      ],
-      "options": {
-        "graphMode": "none"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Root disk usage",
-      "id": 3,
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 20,
-        "y": 0
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!=\"tmpfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!=\"tmpfs\"}))"
-        }
-      ],
-      "options": {
-        "graphMode": "none"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Swap usage",
-      "id": 17,
       "gridPos": {
         "h": 3,
         "w": 4,
@@ -264,24 +136,132 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "N/A",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(omero_path_used_ratio{kind=\"omero_data\",env_key!=\"\"})"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Host memory usage",
+      "id": 2,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))"
+        }
+      ],
+      "options": {
+        "graphMode": "area"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Root disk usage",
+      "id": 3,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!=\"tmpfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"/\", fstype!=\"tmpfs\"}))"
+        }
+      ],
+      "options": {
+        "graphMode": "area"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Swap usage",
+      "id": 17,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
           "decimals": 1,
           "noValue": "No swap configured",
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
+            "mode": "fixed",
+            "fixedColor": "green"
           }
         },
         "overrides": []
@@ -293,12 +273,12 @@
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area"
       }
     },
     {
       "type": "stat",
-      "title": "Database path(s) used space",
+      "title": "OMERO database path usage",
       "id": 18,
       "gridPos": {
         "h": 3,
@@ -314,39 +294,26 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 100,
+          "max": 1,
           "decimals": 1,
+          "noValue": "N/A",
           "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.75
-              }
-            ]
-          },
-          "noValue": "N/A"
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"})) or (1 - (node_filesystem_avail_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{job=~\"node-exporter|node_exporter\", mountpoint=\"${__env:OMERO_PLUGIN_DATABASE_PATH}\", fstype!~\"tmpfs|overlay|squashfs\"}))",
-          "legendFormat": "{{mountpoint}}"
+          "expr": "max(omero_path_used_ratio{kind=\"database_main\",env_key!=\"\"})"
         }
       ],
       "options": {
-        "graphMode": "none",
+        "graphMode": "area",
         "reduceOptions": {
-          "values": true,
+          "values": false,
           "calcs": [
             "lastNotNull"
           ],
@@ -357,7 +324,7 @@
     },
     {
       "type": "stat",
-      "title": "Active targets",
+      "title": "Plugin database path usage",
       "id": 5,
       "gridPos": {
         "h": 3,
@@ -371,23 +338,39 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "percentunit",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "N/A"
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "count(up)"
+          "expr": "max(omero_path_used_ratio{kind=\"database_plugin\",env_key!=\"\"})"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area",
+        "textMode": "value",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
       }
     },
     {
       "type": "stat",
-      "title": "Healthy targets",
+      "title": "Healthy/Active targets",
       "id": 6,
       "gridPos": {
         "h": 3,
@@ -401,18 +384,38 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "decimals": 0
         },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(up)"
+          "expr": "sum(up)",
+          "legendFormat": "Healthy"
+        },
+        {
+          "refId": "B",
+          "expr": "count(up)",
+          "legendFormat": "Active"
         }
       ],
       "options": {
-        "graphMode": "none"
+        "graphMode": "area",
+        "textMode": "value_and_name",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "horizontal"
       }
     },
     {
@@ -431,39 +434,27 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "custom": {
-            "axisSoftMax": 100,
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            },
-            "axisSoftMin": 0
-          }
+          "unit": "percentunit",
+          "decimals": 1
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=~\"node-exporter|node_exporter\", mode=\"idle\"}[$__rate_interval])))",
+          "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval]))",
           "legendFormat": "{{instance}}"
         }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "hidden"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
+      ]
     },
     {
       "type": "timeseries",
@@ -481,42 +472,27 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "pointSize": 5,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            },
-            "axisSoftMax": 100,
-            "axisSoftMin": 0
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
+          "unit": "percentunit",
+          "decimals": 1
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|node_exporter\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|node_exporter\"}))",
+          "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
           "legendFormat": "{{instance}}"
         }
-      ],
-      "options": {
-        "legend": {
-          "displayMode": "hidden"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      }
+      ]
     },
     {
       "type": "timeseries",
@@ -891,6 +867,6 @@
   "timezone": "browser",
   "title": "Server Infrastructure",
   "uid": "omero-infrastructure",
-  "version": 4,
+  "version": 8,
   "weekStart": ""
 }

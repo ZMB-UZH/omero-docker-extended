@@ -8,6 +8,7 @@ import subprocess
 import traceback
 import uuid
 from csv import Error as CsvError
+from html import escape
 from http.cookies import SimpleCookie
 from http.client import HTTPConnection
 from http.client import HTTPMessage
@@ -291,6 +292,80 @@ def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     return HttpResponseRedirect(dashboard_path)
 
 
+def _grafana_unavailable_response(
+    *,
+    proxy_prefix: str,
+    attempted_backends: List[str],
+    status_code: int,
+) -> HttpResponse:
+    """Render a concise Grafana outage page for proxied dashboard requests."""
+    refreshed_path = str(proxy_prefix or "").rstrip("/") + "/"
+    attempted_targets = ", ".join(
+        escape(urlparse(url).netloc or url) for url in attempted_backends
+    )
+    if not attempted_targets:
+        attempted_targets = "configured Grafana endpoints"
+
+    template = f"""<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Grafana temporarily unavailable</title>
+    <style>
+      body {{
+        margin: 0;
+        padding: 24px;
+        background: #0b1020;
+        color: #e5e7eb;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }}
+      .panel {{
+        max-width: 880px;
+        margin: 24px auto;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #111827;
+        padding: 24px;
+      }}
+      h1 {{ margin: 0 0 8px; font-size: 1.5rem; }}
+      p {{ margin: 0 0 12px; line-height: 1.5; }}
+      code {{ background: #0f172a; border-radius: 4px; padding: 2px 6px; }}
+      .actions {{ margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }}
+      .btn {{
+        text-decoration: none;
+        color: #111827;
+        background: #38bdf8;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-weight: 600;
+      }}
+      .btn.secondary {{ background: #374151; color: #f9fafb; }}
+    </style>
+  </head>
+  <body>
+    <div class=\"panel\">
+      <h1>Grafana is temporarily unavailable</h1>
+      <p>The monitoring dashboard cannot be loaded right now because Grafana is not reachable from OMERO.web.</p>
+      <p><strong>Upstream status:</strong> <code>{status_code}</code></p>
+      <p><strong>Checked endpoints:</strong> <code>{attempted_targets}</code></p>
+      <p>Recommended checks: ensure the Grafana container is running and healthy, then retry.</p>
+      <div class=\"actions\">
+        <a class=\"btn\" href=\"{escape(refreshed_path)}\">Retry dashboard</a>
+        <a class=\"btn secondary\" href=\"javascript:window.history.back()\">Back</a>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+    response = HttpResponse(
+        template, status=503, content_type="text/html; charset=utf-8"
+    )
+    response["Cache-Control"] = "no-store"
+    response["Retry-After"] = "30"
+    return response
+
+
 def _is_internal_hostname(hostname: str) -> bool:
     """Return whether hostname points to a local/container-only endpoint."""
     lowered = str(hostname or "").strip().lower()
@@ -449,9 +524,7 @@ def _list_omero_group_names(conn) -> List[str]:
             groups = _call_admin_listing(admin_service, method_name)
             if groups:
                 break
-        return sorted(
-            name for g in groups if (name := _safe_group_name(g))
-        )
+        return sorted(name for g in groups if (name := _safe_group_name(g)))
     except Exception:
         logger.debug("Could not list OMERO groups for quota reconciliation")
         return []
@@ -1543,6 +1616,17 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             return response
 
     assert last_response is not None
+    if getattr(last_response, "status_code", 502) in {500, 502, 503, 504}:
+        logger.warning(
+            "Grafana proxy unavailable for path=%s after checking backends=%s",
+            subpath,
+            ", ".join(backend_urls),
+        )
+        return _grafana_unavailable_response(
+            proxy_prefix=proxy_prefix,
+            attempted_backends=backend_urls,
+            status_code=int(getattr(last_response, "status_code", 502)),
+        )
     return last_response
 
 
@@ -1758,7 +1842,9 @@ def storage_quota_data(request, conn=None, url=None, **kwargs):
     try:
         state = get_quota_state()
     except Exception:
-        logger.warning("Could not read quota state file; using empty defaults", exc_info=True)
+        logger.warning(
+            "Could not read quota state file; using empty defaults", exc_info=True
+        )
         state = {"quotas_gb": {}, "logs": []}
 
     try:
@@ -1811,7 +1897,11 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
         if updates is None and request.POST:
             raw_updates = request.POST.get("updates")
             if raw_updates is not None:
-                updates = json.loads(raw_updates) if isinstance(raw_updates, str) else raw_updates
+                updates = (
+                    json.loads(raw_updates)
+                    if isinstance(raw_updates, str)
+                    else raw_updates
+                )
 
         if updates is None:
             updates = []

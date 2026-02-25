@@ -1,0 +1,16 @@
+# CrowdSec acquisition configuration.
+# Defines log sources for threat detection across the host system and Docker.
+
+# SSH authentication logs (host-level, mounted via /var/log)
+filenames:
+  - /var/log/auth.log
+  - /var/log/syslog
+labels:
+  type: syslog
+---
+# Docker container logs via the Docker socket
+source: docker
+container_name_regexp:
+  - ".*"
+labels:
+  type: docker
