@@ -267,6 +267,8 @@ run_image_build() {
     COMPOSE_FILE="${COMPOSE_FILE}" \
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
+        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
+        DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
         "${buildx_helper_path}"
     return $?
 }

@@ -75,11 +75,15 @@ Notes:
 - By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
-- Transient Buildx layer-lock export failures (for example `(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) are retried automatically.
+- Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
-- In `auto` mode, multi-target cached builds run serially up front (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
-- Local cache import is enabled only when a target cache index already exists (`.../index.json`), so first-run builds avoid noisy missing-cache warnings.
+- In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
+- Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
+- Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
+- Set `DOCKER_BUILD_LOCAL_CACHE_MODE=max` only when you explicitly need full cache graph export despite the higher risk of long export phases.
+- If retries still fail with cache-export transport errors, the helper automatically performs one fallback build with local cache export disabled for that run (compression remains enabled).
+- Image compression settings (`DOCKER_BUILD_COMPRESSION_TYPE`, `DOCKER_BUILD_COMPRESSION_LEVEL`, `force-compression=true`) are unchanged by local cache mode; compressed image output remains enabled.
 - The installation workflow enables this compressed Buildx mode by default, and prompts whether to keep Buildx enabled during each interactive run (question 2). If you disable it, the script falls back to `docker compose build`. Run:
 
 ```bash
