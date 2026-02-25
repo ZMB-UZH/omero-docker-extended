@@ -94,7 +94,7 @@ Quick operator check after any change:
 
 Four dashboards auto-provisioned in the `OMERO` folder:
 
-1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic filesystem utilization for the resolved mountpoints `OMERO_DATA_MOUNTPOINT`, `OMERO_DATABASE_MOUNTPOINT`, and `OMERO_PLUGIN_DATABASE_MOUNTPOINT` as injected into Grafana runtime environment by `installation_script.sh`. The database-path stat renders one or two percentages depending on whether the two database paths resolve to the same or different mountpoints.
+1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic filesystem utilization for OMERO data and database paths from `installation_paths.env`, collected by the path-usage exporter via host `df -P -B1`. The database-path stat renders one percentage when both database paths are on the same filesystem mountpoint, or two percentages when they are on different mountpoints.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
