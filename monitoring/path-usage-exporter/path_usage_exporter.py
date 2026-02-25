@@ -50,38 +50,41 @@ def main():
         lines.append("# HELP omero_path_bytes_used Used bytes for OMERO-related Docker mounts")
         lines.append("# TYPE omero_path_bytes_used gauge")
 
-        containers = client.containers.list(all=True)
-        by_service = {}
-        for c in containers:
-            svc = c.labels.get("com.docker.compose.service")
-            if svc:
-                by_service[svc] = c
+        try:
+            containers = client.containers.list(all=True)
+            by_service = {}
+            for c in containers:
+                svc = c.labels.get("com.docker.compose.service")
+                if svc:
+                    by_service[svc] = c
 
-        for kind, service, dst in TARGETS:
-            c = by_service.get(service)
-            if not c:
-                continue
-            src, mtype = find_mount_source(c, dst)
-            if not src:
-                continue
+            for kind, service, dst in TARGETS:
+                c = by_service.get(service)
+                if not c:
+                    continue
+                src, mtype = find_mount_source(c, dst)
+                if not src:
+                    continue
 
-            host_src = os.path.join("/host", src.lstrip("/"))
-            host_src_real = os.path.realpath(host_src)
+                host_src = os.path.join("/host", src.lstrip("/"))
+                host_src_real = os.path.realpath(host_src)
 
-            if not os.path.exists(host_src_real):
-                continue
+                if not os.path.exists(host_src_real):
+                    continue
 
-            total, used, ratio = stat_path(host_src_real)
-            labels = f'kind="{kind}",service="{service}",dst="{dst}",src="{src}",type="{mtype or ""}"'
-            lines.append(f"omero_path_used_ratio{{{labels}}} {ratio}")
-            lines.append(f"omero_path_bytes_total{{{labels}}} {float(total)}")
-            lines.append(f"omero_path_bytes_used{{{labels}}} {float(used)}")
+                total, used, ratio = stat_path(host_src_real)
+                labels = f'kind="{kind}",service="{service}",dst="{dst}",src="{src}",type="{mtype or ""}"'
+                lines.append(f"omero_path_used_ratio{{{labels}}} {ratio}")
+                lines.append(f"omero_path_bytes_total{{{labels}}} {float(total)}")
+                lines.append(f"omero_path_bytes_used{{{labels}}} {float(used)}")
 
-        data = "\n".join(lines) + "\n"
-        os.makedirs(os.path.dirname(OUT), exist_ok=True)
-        with open(TMP, "w", encoding="utf-8") as f:
-            f.write(data)
-        os.replace(TMP, OUT)
+            data = "\n".join(lines) + "\n"
+            os.makedirs(os.path.dirname(OUT), exist_ok=True)
+            with open(TMP, "w", encoding="utf-8") as f:
+                f.write(data)
+            os.replace(TMP, OUT)
+        except Exception as e:
+            print(f"Error collecting metrics: {e}")
         time.sleep(INTERVAL)
 
 
