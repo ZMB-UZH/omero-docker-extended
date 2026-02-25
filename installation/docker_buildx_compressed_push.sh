@@ -36,6 +36,7 @@ readonly REPO_ROOT_DIR
 
 LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
 LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
+LOCAL_CACHE_ROTATION_TOKEN=""
 
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
@@ -326,6 +327,92 @@ resolve_local_cache_dir() {
     return 0
 }
 
+resolve_target_cache_dir() {
+    local cache_root="${1:?BUG: resolve_target_cache_dir requires cache root}"
+    local target_name="${2:?BUG: resolve_target_cache_dir requires target name}"
+    printf '%s' "${cache_root%/}/${target_name}"
+    return 0
+}
+
+resolve_target_cache_staging_dir() {
+    local target_cache_dir="${1:?BUG: resolve_target_cache_staging_dir requires cache dir}"
+    local rotation_token="${2:?BUG: resolve_target_cache_staging_dir requires rotation token}"
+    printf '%s' "${target_cache_dir}.staging.${rotation_token}"
+    return 0
+}
+
+prepare_target_cache_staging_dir() {
+    local target_cache_staging_dir="${1:?BUG: prepare_target_cache_staging_dir requires staging dir}"
+    rm -rf "${target_cache_staging_dir}"
+    mkdir -p "${target_cache_staging_dir}"
+    return 0
+}
+
+swap_target_cache_staging_dir() {
+    local target_cache_dir="${1:?BUG: swap_target_cache_staging_dir requires cache dir}"
+    local target_cache_staging_dir="${2:?BUG: swap_target_cache_staging_dir requires staging dir}"
+    local target_cache_previous_dir="${target_cache_dir}.previous"
+
+    if [ ! -d "${target_cache_staging_dir}" ]; then
+        echo "ERROR (${SCRIPT_NAME}): Expected staging cache directory is missing: ${target_cache_staging_dir}" >&2
+        return 1
+    fi
+
+    rm -rf "${target_cache_previous_dir}"
+    if [ -d "${target_cache_dir}" ]; then
+        mv "${target_cache_dir}" "${target_cache_previous_dir}"
+    fi
+    mv "${target_cache_staging_dir}" "${target_cache_dir}"
+    rm -rf "${target_cache_previous_dir}"
+    return 0
+}
+
+cleanup_target_cache_staging_dir() {
+    local target_cache_staging_dir="${1:?BUG: cleanup_target_cache_staging_dir requires staging dir}"
+    rm -rf "${target_cache_staging_dir}"
+    return 0
+}
+
+commit_local_cache_staging_dirs() {
+    local cache_root=""
+    local target=""
+    local target_cache_dir=""
+    local target_cache_staging_dir=""
+
+    if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ] || [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" != "1" ]; then
+        return 0
+    fi
+
+    cache_root="$(resolve_local_cache_dir)"
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        target_cache_dir="$(resolve_target_cache_dir "${cache_root}" "${target}")"
+        target_cache_staging_dir="$(resolve_target_cache_staging_dir "${target_cache_dir}" "${LOCAL_CACHE_ROTATION_TOKEN}")"
+        swap_target_cache_staging_dir "${target_cache_dir}" "${target_cache_staging_dir}"
+    done
+
+    return 0
+}
+
+cleanup_local_cache_staging_dirs() {
+    local cache_root=""
+    local target=""
+    local target_cache_dir=""
+    local target_cache_staging_dir=""
+
+    if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ] || [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" != "1" ]; then
+        return 0
+    fi
+
+    cache_root="$(resolve_local_cache_dir)"
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        target_cache_dir="$(resolve_target_cache_dir "${cache_root}" "${target}")"
+        target_cache_staging_dir="$(resolve_target_cache_staging_dir "${target_cache_dir}" "${LOCAL_CACHE_ROTATION_TOKEN}")"
+        cleanup_target_cache_staging_dir "${target_cache_staging_dir}"
+    done
+
+    return 0
+}
+
 has_timeout() {
     command -v timeout >/dev/null 2>&1
 }
@@ -423,6 +510,7 @@ build_target_overrides() {
     local push_bool=""
     local cache_dir=""
     local target_cache_dir=""
+    local target_cache_staging_dir=""
 
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
@@ -446,14 +534,16 @@ build_target_overrides() {
             # contention ("ref layer-sha256 ... locked ... unavailable").
             # Keep each target cache isolated while retaining deterministic
             # cache persistence under a single configured root.
-            target_cache_dir="${cache_dir%/}/${target}"
+            target_cache_dir="$(resolve_target_cache_dir "${cache_dir}" "${target}")"
             mkdir -p "${target_cache_dir}"
             if [ -f "${target_cache_dir}/index.json" ]; then
                 printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${target_cache_dir}"
             else
                 echo "INFO (${SCRIPT_NAME}): Skipping cache import for '${target}' (no existing cache index at ${target_cache_dir}/index.json)." >&2
             fi
-            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
+            target_cache_staging_dir="$(resolve_target_cache_staging_dir "${target_cache_dir}" "${LOCAL_CACHE_ROTATION_TOKEN}")"
+            prepare_target_cache_staging_dir "${target_cache_staging_dir}"
+            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_staging_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
@@ -512,9 +602,12 @@ run_buildx_bake_serial_fallback() {
         fi
 
         if ! run_buildx_bake_with_retries; then
+            cleanup_local_cache_staging_dirs || true
             DOCKER_BUILD_TARGETS="${original_targets}"
             return 1
         fi
+
+        commit_local_cache_staging_dirs
     done
 
     DOCKER_BUILD_TARGETS="${original_targets}"
@@ -543,10 +636,12 @@ run_buildx_bake_without_local_cache_fallback() {
     fi
 
     if run_buildx_bake_with_retries; then
+        commit_local_cache_staging_dirs
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
         return 0
     fi
 
+    cleanup_local_cache_staging_dirs || true
     DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
     return 1
 }
@@ -577,6 +672,7 @@ should_run_serial_mode() {
 main() {
     local push_bool=""
     local oci_mediatypes_bool=""
+    local now_epoch=""
 
     require_non_empty "DOCKER_IMAGE_TAG" "${DOCKER_IMAGE_TAG}"
 
@@ -606,6 +702,9 @@ main() {
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     validate_serial_mode
+
+    now_epoch="$(date +%s)"
+    LOCAL_CACHE_ROTATION_TOKEN="${now_epoch}.$$"
 
     require_binary docker
 
@@ -665,8 +764,11 @@ main() {
     fi
 
     if run_buildx_bake_with_retries; then
+        commit_local_cache_staging_dirs
         return 0
     fi
+
+    cleanup_local_cache_staging_dirs || true
 
     if [ "${LAST_BUILDX_FAILURE_TRANSIENT_LOCK}" = "1" ] && [ "$(count_build_targets)" -gt 1 ]; then
         run_buildx_bake_serial_fallback

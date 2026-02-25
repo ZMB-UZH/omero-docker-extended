@@ -69,7 +69,7 @@ Notes:
 
 - If unset, `DOCKER_IMAGE_TAG` defaults to `custom`.
 - Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
-- When push mode is disabled (`DOCKER_BUILD_PUSH_IMAGES=0`, the default without `DOCKER_REGISTRY_PREFIX`), the helper still uses the Buildx image exporter with `force-compression=true`, so the compressed-build path remains materially different from `docker compose build` while keeping images local.
+- When push mode is disabled (`DOCKER_BUILD_PUSH_IMAGES=0`, the default without `DOCKER_REGISTRY_PREFIX`), the helper builds local images without `force-compression=true` to avoid unnecessary BuildKit recompression/memory pressure.
 - When `DOCKER_REGISTRY_PREFIX` is set, `DOCKER_BUILD_PUSH_IMAGES` defaults to `1` (push enabled).
 - When `DOCKER_REGISTRY_PREFIX` is unset, `DOCKER_BUILD_PUSH_IMAGES` defaults to `0` (local images only).
 - By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
@@ -81,6 +81,7 @@ Notes:
 - In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
 - Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
 - Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
+- Local cache export now writes each target into a per-run staging directory and atomically swaps it into place only after a successful build, preventing unbounded stale cache growth from interrupted/failed exports.
 - Set `DOCKER_BUILD_LOCAL_CACHE_MODE=max` only when you explicitly need full cache graph export despite the higher risk of long export phases.
 - If retries still fail with cache-export transport errors, the helper automatically performs one fallback build with local cache export disabled for that run (compression remains enabled).
 - Image compression settings (`DOCKER_BUILD_COMPRESSION_TYPE`, `DOCKER_BUILD_COMPRESSION_LEVEL`, `force-compression=true`) are unchanged by local cache mode; compressed image output remains enabled.
