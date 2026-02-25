@@ -435,6 +435,12 @@ main() {
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
 
+    if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "0" ]; then
+        echo "NOTE (${SCRIPT_NAME}): Push mode is disabled, so build outputs use type=docker for local image loading."
+        echo "NOTE (${SCRIPT_NAME}): Compression settings affect pushed/registry artifacts, not the local 'docker image ls' size."
+        echo "NOTE (${SCRIPT_NAME}): To validate compressed payload size differences, enable push mode with DOCKER_REGISTRY_PREFIX and compare registry transfer bytes."
+    fi
+
     export DOCKER_BUILDKIT=1
 
     if run_buildx_bake_with_retries; then

@@ -69,6 +69,7 @@ Notes:
 
 - If unset, `DOCKER_IMAGE_TAG` defaults to `custom`.
 - Compression is explicit and environment-driven (`DOCKER_BUILD_COMPRESSION_*`).
+- When push mode is disabled (`DOCKER_BUILD_PUSH_IMAGES=0`, the default without `DOCKER_REGISTRY_PREFIX`), builds use local `type=docker` output. In that mode, compressed export settings do not change `docker image ls` size; compression primarily impacts pushed/registry artifacts.
 - When `DOCKER_REGISTRY_PREFIX` is set, `DOCKER_BUILD_PUSH_IMAGES` defaults to `1` (push enabled).
 - When `DOCKER_REGISTRY_PREFIX` is unset, `DOCKER_BUILD_PUSH_IMAGES` defaults to `0` (local images only).
 - By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
