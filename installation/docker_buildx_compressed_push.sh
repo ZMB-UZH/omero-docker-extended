@@ -18,6 +18,7 @@ DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
 DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
+DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
 # Buildx builder name kept for backward compat (cleanup scripts, logs),
 # but we intentionally use the built-in `default` builder to avoid
 # creating buildkit containers/volumes.
@@ -66,6 +67,16 @@ validate_positive_integer() {
         return 1
     fi
     return 0
+}
+
+validate_serial_mode() {
+    case "${DOCKER_BUILD_BAKE_SERIAL_MODE}" in
+        auto|always|never) return 0 ;;
+        *)
+            echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_BAKE_SERIAL_MODE must be one of: auto, always, never. Got: ${DOCKER_BUILD_BAKE_SERIAL_MODE}" >&2
+            return 1
+            ;;
+    esac
 }
 
 is_transient_layer_lock_error() {
@@ -364,6 +375,29 @@ run_buildx_bake_serial_fallback() {
     return 0
 }
 
+should_run_serial_mode() {
+    local target_count
+    target_count="$(count_build_targets)"
+
+    case "${DOCKER_BUILD_BAKE_SERIAL_MODE}" in
+        always) return 0 ;;
+        never) return 1 ;;
+        auto)
+            # BuildKit local cache exporter is still prone to transient layer
+            # lock contention during parallel multi-target exports. Prefer
+            # serial target execution up front to avoid long retry loops.
+            if [ "${target_count}" -gt 1 ] && [ "${DOCKER_BUILD_NO_CACHE}" = "0" ]; then
+                return 0
+            fi
+            return 1
+            ;;
+        *)
+            echo "ERROR (${SCRIPT_NAME}): Internal invalid serial mode value: ${DOCKER_BUILD_BAKE_SERIAL_MODE}" >&2
+            return 1
+            ;;
+    esac
+}
+
 main() {
     local push_bool=""
     local oci_mediatypes_bool=""
@@ -393,6 +427,7 @@ main() {
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+    validate_serial_mode
 
     require_binary docker
 
@@ -434,9 +469,16 @@ main() {
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+    echo "  Serial mode          : ${DOCKER_BUILD_BAKE_SERIAL_MODE}"
 
 
     export DOCKER_BUILDKIT=1
+
+    if should_run_serial_mode; then
+        echo "INFO (${SCRIPT_NAME}): Running Buildx bake in serial mode to reduce cache export lock contention." >&2
+        run_buildx_bake_serial_fallback
+        return $?
+    fi
 
     if run_buildx_bake_with_retries; then
         return 0
