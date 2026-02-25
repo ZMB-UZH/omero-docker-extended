@@ -142,7 +142,7 @@ services:
       - /:/host:ro,rslave
       - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/ || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -151,7 +151,10 @@ services:
       - no-new-privileges:true
 
   path-usage-exporter:
-    image: python:3.12-alpine
+    image: path-usage-exporter:custom
+    build:
+      context: .
+      dockerfile: docker/path-usage-exporter.Dockerfile
     restart: unless-stopped
     networks:
       omero:
@@ -161,81 +164,12 @@ services:
       - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro,rslave
-    command:
-      - /bin/sh
-      - -c
-      - |
-          pip install --no-cache-dir docker >/dev/null 2>&1
-          python - <<'PY'
-          import os, time
-          import docker
-
-          OUT = "/textfile/omero_paths.prom"
-          TMP = OUT + ".tmp"
-          INTERVAL = 30
-
-          TARGETS = [
-              ("omero_data",      "omeroserver",     "/OMERO"),
-              ("database_main",   "database",        "/var/lib/postgresql/data"),
-              ("database_plugin", "database-plugin", "/var/lib/postgresql/data"),
-          ]
-
-          def stat_path(host_path: str):
-              st = os.statvfs(host_path)
-              total = st.f_frsize * st.f_blocks
-              avail = st.f_frsize * st.f_bavail
-              used = total - avail
-              ratio = (used / total) if total > 0 else 0.0
-              return total, used, ratio
-
-          def find_mount_source(container, dst):
-              for m in container.attrs.get("Mounts", []):
-                  if m.get("Destination") == dst:
-                      return m.get("Source"), m.get("Type")
-              return None, None
-
-          client = docker.DockerClient(base_url="unix:///var/run/docker.sock")
-
-          while True:
-              lines = []
-              lines.append("# HELP omero_path_used_ratio Filesystem used ratio for OMERO-related Docker mounts")
-              lines.append("# TYPE omero_path_used_ratio gauge")
-              lines.append("# HELP omero_path_bytes_total Total bytes for OMERO-related Docker mounts")
-              lines.append("# TYPE omero_path_bytes_total gauge")
-              lines.append("# HELP omero_path_bytes_used Used bytes for OMERO-related Docker mounts")
-              lines.append("# TYPE omero_path_bytes_used gauge")
-
-              containers = client.containers.list(all=True)
-              by_service = {}
-              for c in containers:
-                  svc = c.labels.get("com.docker.compose.service")
-                  if svc:
-                      by_service[svc] = c
-
-              for kind, service, dst in TARGETS:
-                  c = by_service.get(service)
-                  if not c: continue
-                  src, mtype = find_mount_source(c, dst)
-                  if not src: continue
-
-                  host_src = os.path.join("/host", src.lstrip("/"))
-                  host_src_real = os.path.realpath(host_src)
-
-                  if not os.path.exists(host_src_real): continue
-
-                  total, used, ratio = stat_path(host_src_real)
-                  labels = f'kind="{kind}",service="{service}",dst="{dst}",src="{src}",type="{mtype or ""}"'
-                  lines.append(f"omero_path_used_ratio{{{labels}}} {ratio}")
-                  lines.append(f"omero_path_bytes_total{{{labels}}} {float(total)}")
-                  lines.append(f"omero_path_bytes_used{{{labels}}} {float(used)}")
-
-              data = "\n".join(lines) + "\n"
-              os.makedirs(os.path.dirname(OUT), exist_ok=True)
-              with open(TMP, "w", encoding="utf-8") as f:
-                  f.write(data)
-              os.replace(TMP, OUT)
-              time.sleep(INTERVAL)
-          PY
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /textfile/omero_paths.prom"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     security_opt:
       - no-new-privileges:true
 
@@ -617,8 +551,7 @@ services:
     env_file:
       - ./env/omero_secrets.env
     environment:
-      GID: "${GID-1000}"
-      COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd crowdsecurity/docker"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
       DS_HOST_ROOT: "/host"
     volumes:
       - ./monitoring/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
@@ -633,6 +566,12 @@ services:
       omero:
         aliases:
           - crowdsec
+    healthcheck:
+      test: ["CMD-SHELL", "cscli lapi status >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
     security_opt:
       - no-new-privileges:true
 
