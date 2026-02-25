@@ -1895,7 +1895,7 @@ discover_first_existing_user_or_die() {
 
     for candidate in "$@"; do
         [ -z "${candidate}" ] && continue
-        if docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
+        if docker run --rm --name "omero-install-probe-user-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
             found="${candidate}"
             break
         fi
@@ -1906,7 +1906,7 @@ discover_first_existing_user_or_die() {
         echo "Tried candidates: $*" >&2
         echo "" >&2
         echo "DEBUG: Listing passwd entries containing 'omero' from image '${image}':" >&2
-        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
+        docker run --rm --name "omero-install-probe-users-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
         echo "" >&2
         return 1
     fi
@@ -1922,9 +1922,9 @@ discover_uid_gid_or_die() {
 
     local out=""
 
-    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
+    if ! out="$(docker run --rm --name "omero-install-probe-id-$RANDOM" --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
-        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
+        docker run --rm --name "omero-install-probe-passwd-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
         return 1
     fi
 
@@ -1979,7 +1979,7 @@ discover_container_default_id_or_die() {
 
     local out=""
 
-    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
+    if ! out="$(docker run --rm --name "omero-install-probe-default-id-$RANDOM" --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
         echo "ERROR: Failed to discover default runtime id ${id_flag} from image '${image}'." >&2
         return 1
     fi

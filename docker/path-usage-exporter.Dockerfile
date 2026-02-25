@@ -1,6 +1,8 @@
-FROM python:3.12-alpine
+FROM alpine:3.22.1
 
-RUN pip install --no-cache-dir docker
+RUN apk add --no-cache \
+    python3 \
+    py3-docker
 
 COPY monitoring/path-usage-exporter/path_usage_exporter.py /opt/path_usage_exporter.py
 
