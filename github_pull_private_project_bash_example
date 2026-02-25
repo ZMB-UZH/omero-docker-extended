@@ -23,6 +23,14 @@ configure_github_ssh() {
     local ssh_dir="${HOME}/.ssh"
     local known_hosts_file="${ssh_dir}/known_hosts"
 
+    case "${REPO_URL}" in
+        git@*|ssh://*)
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
     if ! install -d -m 0700 "${ssh_dir}"; then
         echo "ERROR: Failed to create SSH directory: ${ssh_dir}" >&2
         return 1
@@ -49,7 +57,7 @@ clone_latest_repository_snapshot() {
 
     if ! git clone --depth 1 -b "${REPO_BRANCH}" "${REPO_URL}" "${BOOTSTRAP_CLONE_DIR}"; then
         echo "ERROR: Failed to pull latest project files from ${REPO_URL} (${REPO_BRANCH})." >&2
-        echo "INFO: Ensure SSH access works with: ssh -T git@github.com" >&2
+        echo "INFO: Verify REPO_URL/REPO_BRANCH and repository authentication are correct." >&2
         return 1
     fi
 }
