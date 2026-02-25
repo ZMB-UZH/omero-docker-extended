@@ -45,12 +45,42 @@ Configured in `monitoring/prometheus/prometheus.yml`:
 - `postgres-exporter` -- OMERO database
 - `postgres-exporter-plugin` -- plugin database
 - `redis-exporter` -- Redis cache/broker
+- `blackbox-exporter` -- blackbox exporter self-metrics
+
+### Discovery behavior (important)
+
+Prometheus in this stack currently uses explicit `static_configs` for scrape jobs and probe targets; it does **not** use Docker service discovery or other automatic target discovery in `prometheus.yml`.
+
+What this means operationally:
+
+- If you add a new exporter or service endpoint, you must add/update a Prometheus scrape job (or blackbox probe target) in `monitoring/prometheus/prometheus.yml`.
+- Existing targets continue to work automatically only as long as service names and ports remain unchanged (for example `redis-exporter:9121`).
+- Alloy **does** auto-discover Docker containers for logs, but that behavior is independent from Prometheus metric scraping.
+
+### Do you need to change Prometheus after a deployment change?
+
+| Change type | Update `monitoring/prometheus/prometheus.yml`? | Why |
+|---|---|---|
+| Restarting containers, host reboot, normal redeploy with same service names/ports | No | Targets remain the same (`service:port`), so existing scrape config still matches. |
+| Updating image tags/versions only | No (usually) | Scrape discovery is name/port/path based, not image-tag based. |
+| Adding a new exporter/service that should be monitored | Yes | Prometheus only scrapes configured jobs/targets in this stack. |
+| Renaming a Docker Compose service | Yes | Target hostname changes (for example `redis-exporter` -> new service name). |
+| Changing metrics port or metrics path | Yes | Scrape endpoint changed; Prometheus must point to the new address/path. |
+| Adding/removing blackbox probe endpoints | Yes | Probe target lists are explicitly declared under blackbox jobs. |
+
+Quick operator check after any change:
+
+1. Open `http://localhost:9090/targets`.
+2. Confirm expected jobs are `UP`.
+3. If a target is missing, add/update it in `monitoring/prometheus/prometheus.yml` and reload Prometheus (`/-/reload`) or restart the service.
 
 ## Blackbox probes
 
 **HTTP probes** (verify 2xx response):
 - Loki, Prometheus, Grafana, cAdvisor
 - All exporters (node, postgres x2, redis, blackbox)
+- Portainer (`/api/system/status`)
+- CrowdSec (`/health`)
 - OMERO.server (port 4064 via HTTP)
 - OMERO.web (port 4090)
 
