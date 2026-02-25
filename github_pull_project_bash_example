@@ -19,6 +19,7 @@ cleanup_bootstrap_clone_dir() {
     fi
 }
 
+
 clone_latest_repository_snapshot() {
     BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.project-pull.XXXXXX")"
 
@@ -405,7 +406,6 @@ main() {
 
     trap cleanup_bootstrap_clone_dir EXIT
 
-    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
     case "${REPO_URL}" in
         https://*|http://*)
             ;;
@@ -415,6 +415,7 @@ main() {
             ;;
     esac
 
+    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
     if [ ! -r "${installation_paths_env_path}" ]; then
         echo "ERROR: Required file is missing or unreadable before update: ${installation_paths_env_path}" >&2
         echo "ERROR: This update script is intentionally refusing to run without installation_paths.env in the repository root to prevent accidental deletion of persistent OMERO paths." >&2
