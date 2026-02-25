@@ -76,6 +76,8 @@ Notes:
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - Transient Buildx layer-lock export failures (for example `(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) are retried automatically.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
+- If lock contention persists after retries, the helper automatically falls back to serial per-target `buildx bake` execution to reduce concurrent cache-writer pressure.
+- Local cache import is enabled only when a target cache index already exists (`.../index.json`), so first-run builds avoid noisy missing-cache warnings.
 - The installation workflow enables this compressed Buildx mode by default, and prompts whether to keep Buildx enabled during each interactive run (question 2). If you disable it, the script falls back to `docker compose build`. Run:
 
 ```bash
