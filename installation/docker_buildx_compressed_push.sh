@@ -123,7 +123,7 @@ is_transient_layer_lock_error() {
         return 1
     fi
 
-    if rg -q "ERROR: \(\*service\)\.Write failed: rpc error: code = Unavailable desc = ref layer-sha256:.* locked .*: unavailable" "${output_file}"; then
+    if grep -Eq "ERROR: \(\*service\)\.Write failed: rpc error: code = Unavailable desc = ref layer-sha256:.* locked .*: unavailable" "${output_file}"; then
         return 0
     fi
     return 1
@@ -135,11 +135,11 @@ is_transient_cache_export_error() {
         return 1
     fi
 
-    if rg -q "failed to receive status: rpc error: code = Unavailable desc = error reading from server: EOF" "${output_file}"; then
+    if grep -Eq "failed to receive status: rpc error: code = Unavailable desc = error reading from server: EOF" "${output_file}"; then
         return 0
     fi
 
-    if rg -q "exporting cache to client directory" "${output_file}" && rg -q "rpc error: code = Unavailable" "${output_file}"; then
+    if grep -Eq "exporting cache to client directory" "${output_file}" && grep -Eq "rpc error: code = Unavailable" "${output_file}"; then
         return 0
     fi
 
