@@ -1612,49 +1612,6 @@ resolve_start_containers_choice() {
     return 0
 }
 
-prompt_crowdsec_enroll_key() {
-    local reply=""
-    local current_key="${CROWDSEC_ENROLL_KEY:-}"
-
-    if [ "${INSTALLATION_AUTOMATION_MODE}" = "1" ] || [ ! -r /dev/tty ]; then
-        return 0
-    fi
-
-    echo "" > /dev/tty
-    echo "Crowdsec enroll command; go to https://app.crowdsec.net/security-engines?distribution=linux" > /dev/tty
-    echo "and click 'Enroll command' to get it." > /dev/tty
-    echo "[Default behavior: leave empty and press Enter to disable Crowdsec console enrollment]" > /dev/tty
-    
-    if [ -n "${current_key}" ]; then
-        echo "(Current key is set. Press Enter to keep it, or type 'none' to remove it)" > /dev/tty
-    fi
-
-    printf '> ' > /dev/tty
-
-    if ! IFS= read -r reply < /dev/tty; then
-        return 0
-    fi
-
-    if [ -z "${reply}" ]; then
-        # Kept default or existing
-        return 0
-    elif [ "${reply}" = "none" ]; then
-        # User wants to remove it
-        sed -i 's/^CROWDSEC_ENROLL_KEY=.*/CROWDSEC_ENROLL_KEY=/' "${SECRETS_ENV_FILE}"
-        CROWDSEC_ENROLL_KEY=""
-    else
-        # Update the key in secrets file
-        # Check if CROWDSEC_ENROLL_KEY exists in the file, if not add it
-        if grep -q "^CROWDSEC_ENROLL_KEY=" "${SECRETS_ENV_FILE}"; then
-            # Use | as delimiter for sed to avoid issues if reply contains slashes
-            sed -i "s|^CROWDSEC_ENROLL_KEY=.*|CROWDSEC_ENROLL_KEY=${reply}|" "${SECRETS_ENV_FILE}"
-        else
-            echo "CROWDSEC_ENROLL_KEY=${reply}" >> "${SECRETS_ENV_FILE}"
-        fi
-        CROWDSEC_ENROLL_KEY="${reply}"
-    fi
-}
-
 if ! resolve_delete_images_choice; then
     exit 1
 fi
@@ -1670,9 +1627,6 @@ fi
 if ! resolve_start_containers_choice; then
     exit 1
 fi
-
-# Add the new 9th prompt for CrowdSec enrollment
-prompt_crowdsec_enroll_key
 
 if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOMATION_MODE}"; then
     exit 1
