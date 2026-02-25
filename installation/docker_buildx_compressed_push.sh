@@ -313,17 +313,17 @@ build_target_overrides() {
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
-            printf -- '--set\n%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
-                "${target}" \
-                "${target_image_name}" \
-                "${push_bool}" \
-                "${DOCKER_BUILD_COMPRESSION_TYPE}" \
-                "${DOCKER_BUILD_COMPRESSION_LEVEL}" \
-                "${oci_mediatypes_bool}"
+            printf -- '--set
+%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s
+'                 "${target}"                 "${target_image_name}"                 "${push_bool}"                 "${DOCKER_BUILD_COMPRESSION_TYPE}"                 "${DOCKER_BUILD_COMPRESSION_LEVEL}"                 "${oci_mediatypes_bool}"
         else
-            printf -- '--set\n%s.output=type=docker,name=%s\n' \
-                "${target}" \
-                "${target_image_name}"
+            # Keep images local while still forcing Buildx compression settings
+            # through the image exporter. This provides deterministic behavior
+            # differences versus docker compose build without requiring prompts
+            # or registry configuration changes.
+            printf -- '--set
+%s.output=type=image,name=%s,push=false,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s
+'                 "${target}"                 "${target_image_name}"                 "${DOCKER_BUILD_COMPRESSION_TYPE}"                 "${DOCKER_BUILD_COMPRESSION_LEVEL}"                 "${oci_mediatypes_bool}"
         fi
     done
 }
@@ -434,6 +434,7 @@ main() {
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+
 
     export DOCKER_BUILDKIT=1
 
