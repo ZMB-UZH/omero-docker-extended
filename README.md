@@ -191,7 +191,7 @@ Common utilities shared across all plugins:
 <summary><h2>Deployment</h2></summary>
 
 > WARNING!
-> **Premature alpha release**
+> **Early alpha version**
 >
 > OMERO Docker Extended is currently in an early alpha stage. Run initial deployments only on a disposable virtual machine until you are fully comfortable with its behavior and operational model. You are responsible for host configuration, backups, and data protection.
 
