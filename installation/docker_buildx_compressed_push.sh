@@ -16,6 +16,8 @@ DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
 DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
+DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
+DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 # Buildx builder name kept for backward compat (cleanup scripts, logs),
 # but we intentionally use the built-in `default` builder to avoid
 # creating buildkit containers/volumes.
@@ -52,6 +54,66 @@ validate_toggle() {
         return 1
     fi
     return 0
+}
+
+validate_positive_integer() {
+    local variable_name="${1:?BUG: validate_positive_integer requires variable name}"
+    local variable_value="${2-}"
+    if ! [[ "${variable_value}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR (${SCRIPT_NAME}): ${variable_name} must be a non-negative integer. Got: ${variable_value}" >&2
+        return 1
+    fi
+    return 0
+}
+
+is_transient_layer_lock_error() {
+    local output_file="${1:?BUG: is_transient_layer_lock_error requires output file path}"
+    if [ ! -r "${output_file}" ]; then
+        return 1
+    fi
+
+    if rg -q "ERROR: \(\*service\)\.Write failed: rpc error: code = Unavailable desc = ref layer-sha256:.* locked .*: unavailable" "${output_file}"; then
+        return 0
+    fi
+    return 1
+}
+
+run_buildx_bake_with_retries() {
+    local max_attempts="${DOCKER_BUILD_BAKE_RETRY_COUNT}"
+    local sleep_seconds="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
+    local attempt=1
+    local output_file=""
+
+    while [ "${attempt}" -le "${max_attempts}" ]; do
+        output_file="$(mktemp)"
+        set +e
+        docker buildx bake \
+            --file "${COMPOSE_FILE}" \
+            ${DOCKER_BUILD_TARGETS} \
+            "${TARGET_OVERRIDES[@]}" 2>&1 | tee "${output_file}"
+        local build_exit_code=${PIPESTATUS[0]}
+        set -e
+
+        if [ "${build_exit_code}" -eq 0 ]; then
+            rm -f "${output_file}"
+            return 0
+        fi
+
+        if is_transient_layer_lock_error "${output_file}" && [ "${attempt}" -lt "${max_attempts}" ]; then
+            echo "WARNING (${SCRIPT_NAME}): Buildx bake failed due to transient layer lock contention; retrying (${attempt}/${max_attempts}) in ${sleep_seconds}s..." >&2
+            rm -f "${output_file}"
+            sleep "${sleep_seconds}"
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        echo "ERROR (${SCRIPT_NAME}): Buildx bake failed on attempt ${attempt}/${max_attempts}." >&2
+        rm -f "${output_file}"
+        return "${build_exit_code}"
+    done
+
+    echo "ERROR (${SCRIPT_NAME}): Buildx bake failed after ${max_attempts} attempt(s)." >&2
+    return 1
 }
 
 as_bool_literal() {
@@ -261,6 +323,8 @@ main() {
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
+    validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
+    validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
 
     require_binary docker
 
@@ -300,13 +364,12 @@ main() {
     echo "  Inline cache         : ${DOCKER_BUILD_INLINE_CACHE}"
     echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
     echo "  Push                 : ${push_bool}"
+    echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
+    echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
 
     export DOCKER_BUILDKIT=1
 
-    docker buildx bake \
-        --file "${COMPOSE_FILE}" \
-        ${DOCKER_BUILD_TARGETS} \
-        "${TARGET_OVERRIDES[@]}"
+    run_buildx_bake_with_retries
 }
 
 main "$@"
