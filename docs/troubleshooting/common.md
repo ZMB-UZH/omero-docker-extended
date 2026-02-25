@@ -159,42 +159,40 @@ Expected compose configuration:
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
 
 
-## 10. cAdvisor logs repeated `failed to collect filesystem stats` for overlay paths
+## 10. cAdvisor exits immediately and prints command-line help
 
 Symptom:
 
-- `cadvisor` logs repeatedly show messages like:
-  - `failed to collect filesystem stats`
-  - `could not stat "/disks/.../docker_runtime/rootfs/overlayfs/...": no such file or directory`
+- `cadvisor` restarts repeatedly.
+- Logs show the full command-line flag help output instead of normal startup messages.
 
 Root cause:
 
-- cAdvisor discovers container filesystems under the host root, but without an explicit rootfs flag it may attempt to stat host-absolute overlay paths directly (for example `/disks/...`) instead of resolving them through the mounted host root (`/rootfs`).
-- This is independent from `OMERO_DATA_PATH` and should not be modeled as an OMERO path variable.
+- cAdvisor v0.55.1 in this stack does not accept `--rootfs=/rootfs` as a startup flag.
+- Passing an unsupported flag makes cAdvisor exit after printing usage/help.
 
 Fix in this distribution:
 
-- cAdvisor now starts with `--rootfs=/rootfs` and keeps the host root bind `/:/rootfs:ro` so host paths resolve consistently from inside the container.
+- `cadvisor` now runs with its default command (no unsupported custom flags).
+- Host filesystem visibility is still provided by the existing read-only root bind mount `/:/rootfs:ro`.
 
 Check/verify commands:
 
 ```bash
-# 1) Confirm host Docker data-root (for diagnosis only)
-docker info | rg -n '^ Docker Root Dir:'
-
-# 2) Recreate only cAdvisor with current compose config
+# 1) Recreate only cAdvisor with current compose config
 docker compose --env-file installation_paths.env up -d cadvisor
 
-# 3) Verify cAdvisor started with the rootfs flag
-docker compose --env-file installation_paths.env logs --since=2m cadvisor | rg -- '--rootfs=/rootfs|Starting cAdvisor version'
+# 2) Confirm startup no longer prints usage/help
+docker compose --env-file installation_paths.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
 
-# 4) Watch for filesystem-stat errors after restart
-docker compose --env-file installation_paths.env logs --since=5m cadvisor | rg -n 'failed to collect filesystem stats|overlayfs|no such file or directory'
+# 3) Confirm metrics endpoint is reachable inside the container network
+docker compose --env-file installation_paths.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
 ```
 
 Expected result:
 
-- Startup logs include normal cAdvisor initialization without persistent overlay stat errors for missing host paths.
+- Logs show normal startup (for example `Starting cAdvisor version ...`) and no unsupported-flag usage output.
+- Healthcheck remains healthy and Prometheus can scrape `http://cadvisor:8080/metrics`.
 
 ## 11. Postgres keeps rejecting `omero` after startup
 
