@@ -26,7 +26,7 @@ Configuration access pattern:
 - Never hard-code hostnames, ports, paths, or credentials in Python or shell code.
 
 Key files for understanding the system:
-- docker-compose.yml: 17 services, dependency graph, health checks, volume mounts.
+- docker-compose.yml: 20 services, dependency graph, health checks, volume mounts.
 - docker/omero-web.Dockerfile: how plugins are installed and supervisord is configured.
 - docker/omero-server.Dockerfile: how OMERO.server is extended with CLI plugins and scripts.
 - startup/*.sh: runtime configuration that cannot be done at build time.
