@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 
 import urllib.error
 import urllib.request
+import urllib.parse
 
 from django.http import JsonResponse
 from django.http import HttpResponse
@@ -88,6 +89,17 @@ def _proxy_http_request(
     target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
     if query:
         target_url = f"{target_url}?{query}"
+
+    # FIX: Validate that the constructed target_url matches the base_url's scheme and netloc (CodeQL #90)
+    # This prevents SSRF where path traversal or scheme injection might redirect requests.
+    try:
+        base_parsed = urllib.parse.urlparse(base_url)
+        target_parsed = urllib.parse.urlparse(target_url)
+        if (target_parsed.scheme != base_parsed.scheme or 
+            target_parsed.netloc != base_parsed.netloc):
+             return JsonResponse({"error": "Invalid proxy target"}, status=400)
+    except Exception:
+        return JsonResponse({"error": "Invalid URL format"}, status=400)
 
     forwarded_headers = {}
     for header_name in (

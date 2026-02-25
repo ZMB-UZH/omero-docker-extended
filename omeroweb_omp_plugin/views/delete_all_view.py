@@ -105,7 +105,9 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
             # DO NOT increase CHUNK too much else the users might be tempted to interrupt the process
             CHUNK = 100
             for i in range(0, len(image_ids), CHUNK):
-                chunk_ids = image_ids[i:i + CHUNK]
+                # Explicitly cast to int and then str to ensure no shell injection characters
+                # are present in the IDs before passing to the command line.
+                chunk_ids = [str(int(x)) for x in image_ids[i:i + CHUNK]]
                 target = "Image/Annotation:" + ",".join(chunk_ids)
                 cmd = [
                     OMERO,
