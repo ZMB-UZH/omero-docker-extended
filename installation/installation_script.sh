@@ -1883,7 +1883,7 @@ if ! run_image_build; then
 fi
 
 echo "============================================"
-echo "Discovering ACTUAL UID/GID from built images"
+echo "Discovering actual UID/GID from built images"
 echo "============================================"
 
 discover_first_existing_user_or_die() {
@@ -2035,9 +2035,9 @@ echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (imag
 echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
 echo ""
 
-echo "================================================"
-echo "Fixing host bind-mount ownership based on ACTUAL UID/GID"
-echo "================================================"
+echo "========================================================"
+echo "Fixing host bind-mount ownership based on actual UID/GID"
+echo "========================================================"
 
 chown_tree_or_die() {
     local path="$1"
@@ -2085,7 +2085,7 @@ if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${
 
 echo ""
 echo "✔ Host ownership fix complete."
-echo "================================================"
+echo "==============================="
 echo ""
 
 # =====================================================
@@ -2100,9 +2100,9 @@ install_quota_enforcer_if_supported() {
     local omero_user_data_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
 
-    echo "================================================"
-    echo "Checking ext4 project quota support for Quotas"
-    echo "================================================"
+    echo "=============================================="
+    echo "Checking ext4 project quota support for quotas"
+    echo "=============================================="
 
     if [ ! -f "${installer_path}" ]; then
         echo "INFO: Quota enforcer installer not found at ${installer_path}."
