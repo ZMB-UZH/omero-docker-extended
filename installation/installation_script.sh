@@ -304,6 +304,9 @@ export_compose_interpolation_env() {
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
+        NODE_EXPORTER_TEXTFILE_PATH
+        CROWDSEC_DB_PATH
+        CROWDSEC_CONFIG_PATH
         OMERO_DB_PASS
         OMP_PLUGIN_DB_PASS
     )
@@ -607,6 +610,9 @@ PROMETHEUS_DATA_PATH=${old_data_path}/prometheus_data
 GRAFANA_DATA_PATH=${old_data_path}/grafana_data
 LOKI_DATA_PATH=${old_data_path}/loki_data
 PG_MAINTENANCE_DATA_PATH=${old_data_path}/pg_maintenance_data
+NODE_EXPORTER_TEXTFILE_PATH=${old_data_path}/node_exporter_textfile
+CROWDSEC_DB_PATH=${old_data_path}/crowdsec_db
+CROWDSEC_CONFIG_PATH=${old_data_path}/crowdsec_config
 OMERO_DATA_MOUNTPOINT=/
 OMERO_DATABASE_MOUNTPOINT=/
 OMERO_PLUGIN_DATABASE_MOUNTPOINT=/
@@ -834,7 +840,10 @@ collect_bootstrap_sentinel_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
@@ -896,7 +905,10 @@ collect_repo_data_dir_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
@@ -1099,6 +1111,9 @@ PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 LOKI_DATA_PATH=${LOKI_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
+NODE_EXPORTER_TEXTFILE_PATH=${NODE_EXPORTER_TEXTFILE_PATH}
+CROWDSEC_DB_PATH=${CROWDSEC_DB_PATH}
+CROWDSEC_CONFIG_PATH=${CROWDSEC_CONFIG_PATH}
 OMERO_DB_PASS=${OMERO_DB_PASS}
 OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 #
@@ -1156,6 +1171,9 @@ write_installation_paths_env() {
 #   LOKI_DATA_PATH
 #   PG_MAINTENANCE_DATA_PATH
 #   BUILDX_DATA_PATH
+#   NODE_EXPORTER_TEXTFILE_PATH
+#   CROWDSEC_DB_PATH
+#   CROWDSEC_CONFIG_PATH
 #
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
@@ -1175,6 +1193,9 @@ PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
 LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
 PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
 BUILDX_DATA_PATH=\${OMERO_DATA_PATH}/buildx_cache
+NODE_EXPORTER_TEXTFILE_PATH=\${OMERO_DATA_PATH}/node_exporter_textfile
+CROWDSEC_DB_PATH=\${OMERO_DATA_PATH}/crowdsec_db
+CROWDSEC_CONFIG_PATH=\${OMERO_DATA_PATH}/crowdsec_config
 #
 ENVFILE
 
@@ -1208,6 +1229,9 @@ verify_installation_paths_env_content() {
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
         BUILDX_DATA_PATH
+        NODE_EXPORTER_TEXTFILE_PATH
+        CROWDSEC_DB_PATH
+        CROWDSEC_CONFIG_PATH
     )
 
     for expected_var in "${required_vars[@]}"; do
@@ -1664,6 +1688,9 @@ GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
+NODE_EXPORTER_TEXTFILE_PATH="${OMERO_DATA_PATH%/}/node_exporter_textfile"
+CROWDSEC_DB_PATH="${OMERO_DATA_PATH%/}/crowdsec_db"
+CROWDSEC_CONFIG_PATH="${OMERO_DATA_PATH%/}/crowdsec_config"
 
 # Ensure BUILDX_DATA_PATH has a fallback default if not provided by env file
 # (This handles cases where the env file is from an older installation)
@@ -1773,6 +1800,9 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO cer
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
+if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
+if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
