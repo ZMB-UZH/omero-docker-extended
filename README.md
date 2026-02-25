@@ -9,7 +9,7 @@ This repository packages the complete runtime for the OMERO microscopy data stor
 
 > This project is delivered as an integrated container platform rather than a single-service image. In environments that already run other Docker containers, validate port mappings, network/volume naming, and installation/update automation behavior in a test host first; coexistence possibility or behavior must be verified by the user/administrator.
 
-For official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
+For the official OMERO documentation, release notes, and guides, your first points of reference should be: <https://www.openmicroscopy.org/omero/> and <https://github.com/ome/omero-server-docker>.
 
 </details>
 
@@ -44,11 +44,12 @@ For official OMERO documentation, release notes, and guides, your first points o
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (17 containers)
+├── docker-compose.yml                 # Full service orchestration (20 containers)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
 │   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 24.04 + Python 3.9)
+│   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
 │   ├── redis-sysctl-init.Dockerfile   #   Alpine sidecar for kernel parameter tuning
 │   └── redis-sysctl-init.sh
@@ -101,7 +102,7 @@ For official OMERO documentation, release notes, and guides, your first points o
 <details>
 <summary><h2>Service topology</h2></summary>
 
-The platform runs **17 containers** on a single Docker bridge network (`omero`):
+The platform runs **20 containers** on a single Docker bridge network (`omero`):
 
 | Service | Image | Purpose | Port |
 |---|---|---|---|
@@ -123,6 +124,8 @@ The platform runs **17 containers** on a single Docker bridge network (`omero`):
 | `postgres-exporter` | postgres-exporter:v0.19.0 | OMERO database metrics | 9187 (internal) |
 | `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
 | `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
+| `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
+| `crowdsec` | Custom (crowdsecurity/crowdsec:v1.7.6) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
 
 </details>
 
@@ -221,7 +224,7 @@ Copy the following from this repository into `/opt/omero`:
 - `helper_scripts_debian/` directory
 - `github_pull_project_bash_example`
 
-Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep your local edits in the non-example files so future template updates do not overwrite site-specific settings.
+Then create runtime copies by removing the `_example` suffix where applicable (for example `installation_paths.env`, `github_pull_project_bash`, and non-example env files). Keep site-specific settings in `installation_paths.env` and `env/*.env`; non-example runtime files are authoritative and are not overwritten by the pull workflow.
 
 > IMPORTANT!
 > **Mandatory credential rotation before first start**
@@ -279,7 +282,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
-- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git.
+- This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files (`github_pull_project_bash` / `github_pull_private_project_bash`) that operators manage locally.
 - The pull/update workflow preserves only `logo/logo.png` by backing it up and restoring it after replacement; `logo/logo_example.png` continues to be refreshed from upstream templates.
 
 ### Lifecycle commands
@@ -316,6 +319,7 @@ The observability stack provides:
 - **Alloy** collects Docker container logs and OMERO server/web internal log files, pushes to Loki.
 - **Grafana** ships with 4 pre-provisioned dashboards: OMERO infrastructure, database metrics, plugin database metrics, Redis metrics.
 - **Blackbox exporter** validates HTTP 2xx for all web endpoints and TCP connectivity for critical internal services.
+- **CrowdSec** provides host-wide security telemetry by analyzing host syslog/auth logs and Docker logs via mounted sources.
 
 </details>
 

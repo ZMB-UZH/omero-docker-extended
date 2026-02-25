@@ -132,6 +132,7 @@ services:
     restart: unless-stopped
     command:
       - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/textfile"
     pid: host
     networks:
       omero:
@@ -139,8 +140,9 @@ services:
           - node-exporter
     volumes:
       - /:/host:ro,rslave
+      - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O /dev/null http://localhost:9100/ || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -148,9 +150,33 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  path-usage-exporter:
+    image: path-usage-exporter:custom
+    build:
+      context: .
+      dockerfile: docker/path-usage-exporter.Dockerfile
+    restart: unless-stopped
+    networks:
+      omero:
+        aliases:
+          - path-usage-exporter
+    volumes:
+      - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:rw
+      - /:/host:ro,rslave
+      - ./installation_paths.env:/config/installation_paths.env:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /textfile/omero_paths.prom"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
   cadvisor:
     image: "gcr.io/cadvisor/cadvisor:v0.55.1"
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     privileged: true
     devices:
       - /dev/kmsg:/dev/kmsg
@@ -159,6 +185,7 @@ services:
         aliases:
           - cadvisor
     volumes:
+      - ./monitoring/cadvisor/entrypoint.sh:/entrypoint.sh:ro
       - /:/rootfs:ro
       - /var/run:/var/run:rw
       - /sys:/sys:ro
@@ -261,9 +288,6 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/json/omero-infrastructure.json
       GF_METRICS_ENABLED: "true"
-      OMERO_DATA_PATH: "${OMERO_DATA_PATH:?Set OMERO_DATA_PATH (run installation/installation_script.sh)}"
-      OMERO_DATABASE_PATH: "${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}"
-      OMERO_PLUGIN_DATABASE_PATH: "${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}"
     depends_on:
       prometheus:
         condition: service_healthy
@@ -304,13 +328,9 @@ services:
         aliases:
           - database
     volumes:
-      # IMPORTANT: Intentionally using a pgdata subdirectory to avoid ext4 lost+found issues.
-      # postgres images define VOLUME /var/lib/postgresql/data; mounting only
-      # /var/lib/postgresql can lead to an anonymous nested volume for /data,
-      # which makes data appear lost after container recreation.
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -353,7 +373,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$${ROOTPASS}\""
+          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\""
         ]
       interval: 10s
       timeout: 10s
@@ -368,6 +388,8 @@ services:
       context: .
       dockerfile: docker/redis-sysctl-init.Dockerfile
     container_name: redis-sysctl-init
+    profiles:
+      - init
     privileged: true
     restart: "no"
     command: []
@@ -388,9 +410,6 @@ services:
       omero:
         aliases:
           - redis
-    depends_on:
-      redis-sysctl-init:
-        condition: service_completed_successfully
     tmpfs:
       - /data:size=512m
     healthcheck:
@@ -428,6 +447,7 @@ services:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
       - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (run installation/installation_script.sh)}:/opt/tmp:rw
+      - ${OMERO_WEB_VAR_PATH:?Set OMERO_WEB_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var:rw
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
@@ -469,7 +489,7 @@ services:
     volumes:
       - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h 127.0.0.1 -p 5433"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5433"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -489,25 +509,18 @@ services:
     environment:
       TZ: Europe/Zurich
       PGTZ: Europe/Zurich
-      # Keep maintenance sidecar layout aligned with postgres services:
-      # use a dedicated PGDATA subdirectory inside the mounted data root.
       PGDATA: /var/lib/postgresql/data/pgmaintenance
-      # OMERO main database
       OMERO_DB_HOST: database
       OMERO_DB_PORT: 5432
       OMERO_DB_NAME: omero
       OMERO_DB_USER: omero
       OMERO_DB_PASS: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
-      # OMP plugin database
       PLUGIN_DB_HOST: database-plugin
       PLUGIN_DB_PORT: 5433
       PLUGIN_DB_NAME: omero-plugin
       PLUGIN_DB_USER: omero-plugin
       PLUGIN_DB_PASS: "${OMP_PLUGIN_DB_PASS:?Set OMP_PLUGIN_DB_PASS in env/omero_secrets.env}"
     volumes:
-      # postgres-derived images declare VOLUME /var/lib/postgresql/data.
-      # Binding that exact path to prevent anonymous volumes.
-      # PGDATA then selects a dedicated subdirectory for sidecar-owned files.
       - ${PG_MAINTENANCE_DATA_PATH:?Set PG_MAINTENANCE_DATA_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     networks:
       omero:
@@ -526,6 +539,41 @@ services:
       start_period: 10s
     security_opt:
       - no-new-privileges:true
+
+  crowdsec:
+    image: crowdsec:custom
+    build:
+      context: .
+      dockerfile: docker/crowdsec.Dockerfile
+    container_name: crowdsec
+    restart: unless-stopped
+    env_file:
+      - ./env/omero_secrets.env
+    environment:
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
+      DS_HOST_ROOT: "/host"
+    volumes:
+      - ./monitoring/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
+      - ${CROWDSEC_DB_PATH:?Set CROWDSEC_DB_PATH (run installation/installation_script.sh)}:/var/lib/crowdsec/data/
+      - ${CROWDSEC_CONFIG_PATH:?Set CROWDSEC_CONFIG_PATH (run installation/installation_script.sh)}:/etc/crowdsec/
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro
+    ports:
+      - "8080:8080"
+    networks:
+      omero:
+        aliases:
+          - crowdsec
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
 
 networks:
   omero:

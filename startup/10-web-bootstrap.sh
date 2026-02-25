@@ -77,6 +77,59 @@ configure_docker_socket_access() {
     fi
 }
 
+ensure_web_var_layout() {
+    local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
+    local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
+
+    echo "[web-bootstrap] Checking OMERO.web var directory: ${var_dir}"
+    mkdir -p "${var_dir}" "${var_dir}/omero/tmp" "${var_dir}/static"
+
+    if id -u "${runtime_user}" >/dev/null 2>&1; then
+        chown -R "${runtime_user}:${runtime_user}" "${var_dir}" || true
+    else
+        echo "[web-bootstrap] WARNING: Runtime user ${runtime_user} does not exist; skipping chown for ${var_dir}" >&2
+    fi
+
+    chmod 0755 "${var_dir}" "${var_dir}/omero" || true
+    chmod 1777 "${var_dir}/omero/tmp" || true
+
+    if [[ ! -w "${var_dir}" ]]; then
+        echo "[web-bootstrap] ERROR: OMERO.web var directory is not writable: ${var_dir}" >&2
+        ls -ld "${var_dir}" >&2 || true
+        exit 1
+    fi
+
+    if [[ ! -w "${var_dir}/omero" ]]; then
+        echo "[web-bootstrap] ERROR: OMERO.web runtime directory is not writable: ${var_dir}/omero" >&2
+        ls -ld "${var_dir}/omero" >&2 || true
+        exit 1
+    fi
+
+    if [[ ! -w "${var_dir}/omero/tmp" ]]; then
+        echo "[web-bootstrap] ERROR: OMERO.web tmp directory is not writable: ${var_dir}/omero/tmp" >&2
+        ls -ld "${var_dir}/omero/tmp" >&2 || true
+        exit 1
+    fi
+
+    if [[ ! -f "${var_dir}/django_secret_key" ]]; then
+        if command -v openssl >/dev/null 2>&1; then
+            umask 077
+            openssl rand -base64 64 > "${var_dir}/django_secret_key"
+        else
+            echo "[web-bootstrap] ERROR: Missing ${var_dir}/django_secret_key and openssl is unavailable to generate one" >&2
+            exit 1
+        fi
+        if id -u "${runtime_user}" >/dev/null 2>&1; then
+            chown "${runtime_user}:${runtime_user}" "${var_dir}/django_secret_key" || true
+        fi
+        chmod 0600 "${var_dir}/django_secret_key" || true
+        echo "[web-bootstrap] Generated ${var_dir}/django_secret_key"
+    fi
+}
+
+
+
+ensure_web_var_layout
 
 # Create log directory if it doesn't exist
 mkdir -p "${log_dir}"
@@ -126,3 +179,11 @@ else
 fi
 
 configure_docker_socket_access
+
+# Restore static files if shadowed by the host bind mount
+var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
+if [[ ! -d "${var_dir}/static/branding" ]]; then
+    echo "[web-bootstrap] Bind mount detected over var/: Restoring static files..."
+    cp -a /opt/omero/web/static_backup "${var_dir}/static"
+    chown -R omero-web:omero-web "${var_dir}/static"
+fi

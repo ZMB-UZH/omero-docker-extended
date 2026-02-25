@@ -19,6 +19,7 @@ cleanup_bootstrap_clone_dir() {
     fi
 }
 
+
 clone_latest_repository_snapshot() {
     BOOTSTRAP_CLONE_DIR="$(mktemp -d "${SCRIPT_DIR%/}/.project-pull.XXXXXX")"
 
@@ -72,6 +73,7 @@ resolve_all_data_paths() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -79,7 +81,10 @@ resolve_all_data_paths() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"
     )
 }
 
@@ -156,6 +161,7 @@ collect_sentinel_dir_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -163,7 +169,10 @@ collect_sentinel_dir_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
@@ -366,6 +375,7 @@ replace_working_tree_with_clone() {
             -exec cp {} "${current_repo_dir}/env/" \;
         echo "Refreshed *_example.env files in env/."
     fi
+
 }
 
 run_installation_script() {
@@ -396,7 +406,6 @@ main() {
 
     trap cleanup_bootstrap_clone_dir EXIT
 
-    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
     case "${REPO_URL}" in
         https://*|http://*)
             ;;
@@ -406,6 +415,7 @@ main() {
             ;;
     esac
 
+    local installation_paths_env_path="${SCRIPT_DIR%/}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}"
     if [ ! -r "${installation_paths_env_path}" ]; then
         echo "ERROR: Required file is missing or unreadable before update: ${installation_paths_env_path}" >&2
         echo "ERROR: This update script is intentionally refusing to run without installation_paths.env in the repository root to prevent accidental deletion of persistent OMERO paths." >&2
