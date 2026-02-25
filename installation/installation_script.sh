@@ -28,6 +28,8 @@ DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
 DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
+CROWDSEC_UID="${CROWDSEC_UID:-}"
+CROWDSEC_GID="${CROWDSEC_GID:-}"
 OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
@@ -38,6 +40,7 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
 DATABASE_IMAGE="${DATABASE_IMAGE:-}"
 DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
+CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
 
 set -euo pipefail
 
@@ -1748,6 +1751,12 @@ fi
 if [ -n "${LOKI_GID}" ]; then
     if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
 fi
+if [ -n "${CROWDSEC_UID}" ]; then
+    if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
+fi
+if [ -n "${CROWDSEC_GID}" ]; then
+    if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
+fi
 
 require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
@@ -2013,6 +2022,8 @@ if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
+if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
+if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
@@ -2021,6 +2032,7 @@ echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAG
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
+echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
 echo ""
 
 echo "================================================"
@@ -2068,6 +2080,8 @@ if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database dire
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
 
 echo ""
 echo "✔ Host ownership fix complete."
