@@ -649,7 +649,6 @@ services:
       - ./env/omero_secrets.env
     environment:
       API_URL: http://localhost:8080
-      API_KEY: ${CROWDSEC_BOUNCER_API_KEY}
     volumes:
       - /var/log:/var/log:ro
     depends_on:
