@@ -636,23 +636,6 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  crowdsec-firewall-bouncer:
-    image: crowdsec-firewall-bouncer-auto:custom
-    build:
-      context: .
-      dockerfile: docker/firewall-bouncer.Dockerfile
-    container_name: crowdsec-firewall-bouncer
-    restart: unless-stopped
-    network_mode: host
-    privileged: true
-    env_file:
-      - ./env/omero_secrets.env
-    environment:
-      API_URL: http://localhost:8080
-    volumes:
-      - /var/log:/var/log:ro
-    depends_on:
-      - crowdsec
 
 networks:
   omero:
