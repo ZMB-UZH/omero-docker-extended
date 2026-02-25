@@ -26,7 +26,7 @@
 | Postgres exporter (plugin) | `postgres-exporter-plugin:9187` | Plugin DB metrics |
 | Redis exporter | `redis-exporter:9121` | Redis metrics |
 | Path usage exporter | `path-usage-exporter` (no HTTP port) | OMERO volume disk usage (textfile collector) |
-| CrowdSec | `crowdsec:8080` | Threat detection LAPI |
+| CrowdSec | `crowdsec:8080` | Host-wide cybersecurity engine LAPI |
 
 ## OMERO.web plugin routes
 
