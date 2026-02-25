@@ -140,7 +140,7 @@ services:
           - node-exporter
     volumes:
       - /:/host:ro,rslave
-      - node_exporter_textfile:/textfile:ro
+      - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
       interval: 10s
@@ -158,7 +158,7 @@ services:
         aliases:
           - path-usage-exporter
     volumes:
-      - node_exporter_textfile:/textfile:rw
+      - ${NODE_EXPORTER_TEXTFILE_PATH:?Set NODE_EXPORTER_TEXTFILE_PATH (run installation/installation_script.sh)}:/textfile:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro,rslave
     command:
@@ -622,8 +622,8 @@ services:
       DS_HOST_ROOT: "/host"
     volumes:
       - ./monitoring/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
-      - crowdsec-db:/var/lib/crowdsec/data/
-      - crowdsec-config:/etc/crowdsec/
+      - ${CROWDSEC_DB_PATH:?Set CROWDSEC_DB_PATH (run installation/installation_script.sh)}:/var/lib/crowdsec/data/
+      - ${CROWDSEC_CONFIG_PATH:?Set CROWDSEC_CONFIG_PATH (run installation/installation_script.sh)}:/etc/crowdsec/
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro
@@ -656,8 +656,3 @@ services:
 
 networks:
   omero:
-
-volumes:
-  node_exporter_textfile:
-  crowdsec-db:
-  crowdsec-config:
