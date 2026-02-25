@@ -40,7 +40,7 @@ Purpose: visualize storage usage and manage per-group quotas.
 Capabilities include:
 
 - user/group/top-N storage distribution views,
-- quota editing with minimum thresholds,
+- quota editing with minimum thresholds (disabled if ext4 `prjquota` or `project` features are missing),
 - CSV template export/import for quota management,
 - quota enforcement log visibility.
 
