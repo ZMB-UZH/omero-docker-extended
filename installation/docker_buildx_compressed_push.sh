@@ -27,6 +27,8 @@ readonly SCRIPT_NAME
 readonly SCRIPT_DIR
 readonly REPO_ROOT_DIR
 
+LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
+
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
     if ! command -v "${binary_name}" >/dev/null 2>&1; then
@@ -83,6 +85,9 @@ run_buildx_bake_with_retries() {
     local sleep_seconds="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     local attempt=1
     local output_file=""
+    local saw_transient_lock="0"
+
+    LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
 
     while [ "${attempt}" -le "${max_attempts}" ]; do
         output_file="$(mktemp)"
@@ -100,6 +105,7 @@ run_buildx_bake_with_retries() {
         fi
 
         if is_transient_layer_lock_error "${output_file}" && [ "${attempt}" -lt "${max_attempts}" ]; then
+            saw_transient_lock="1"
             echo "WARNING (${SCRIPT_NAME}): Buildx bake failed due to transient layer lock contention; retrying (${attempt}/${max_attempts}) in ${sleep_seconds}s..." >&2
             rm -f "${output_file}"
             sleep "${sleep_seconds}"
@@ -107,13 +113,28 @@ run_buildx_bake_with_retries() {
             continue
         fi
 
+        if is_transient_layer_lock_error "${output_file}"; then
+            saw_transient_lock="1"
+        fi
+
         echo "ERROR (${SCRIPT_NAME}): Buildx bake failed on attempt ${attempt}/${max_attempts}." >&2
         rm -f "${output_file}"
+        LAST_BUILDX_FAILURE_TRANSIENT_LOCK="${saw_transient_lock}"
         return "${build_exit_code}"
     done
 
     echo "ERROR (${SCRIPT_NAME}): Buildx bake failed after ${max_attempts} attempt(s)." >&2
+    LAST_BUILDX_FAILURE_TRANSIENT_LOCK="${saw_transient_lock}"
     return 1
+}
+
+count_build_targets() {
+    local count=0
+    local target=""
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        count=$((count + 1))
+    done
+    printf '%s' "${count}"
 }
 
 as_bool_literal() {
@@ -283,7 +304,11 @@ build_target_overrides() {
             # cache persistence under a single configured root.
             target_cache_dir="${cache_dir%/}/${target}"
             mkdir -p "${target_cache_dir}"
-            printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${target_cache_dir}"
+            if [ -f "${target_cache_dir}/index.json" ]; then
+                printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${target_cache_dir}"
+            else
+                echo "INFO (${SCRIPT_NAME}): Skipping cache import for '${target}' (no existing cache index at ${target_cache_dir}/index.json)." >&2
+            fi
             printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=max\n' "${target}" "${target_cache_dir}"
         fi
 
@@ -301,6 +326,42 @@ build_target_overrides() {
                 "${target_image_name}"
         fi
     done
+}
+
+run_buildx_bake_serial_fallback() {
+    local original_targets="${DOCKER_BUILD_TARGETS}"
+    local target=""
+    local target_count="$(count_build_targets)"
+
+    if [ "${target_count}" -le 1 ]; then
+        return 1
+    fi
+
+    echo "WARNING (${SCRIPT_NAME}): Falling back to serial per-target Buildx bake to avoid cache export lock contention." >&2
+
+    for target in ${original_targets}; do
+        echo "INFO (${SCRIPT_NAME}): Serial Buildx bake target: ${target}" >&2
+        DOCKER_BUILD_TARGETS="${target}"
+
+        set +e
+        mapfile -t TARGET_OVERRIDES < <(build_target_overrides)
+        OVERRIDES_EXIT_CODE=$?
+        set -e
+
+        if [ "${OVERRIDES_EXIT_CODE}" -ne 0 ]; then
+            echo "ERROR (${SCRIPT_NAME}): Failed to construct build target overrides for target '${target}'." >&2
+            DOCKER_BUILD_TARGETS="${original_targets}"
+            return 1
+        fi
+
+        if ! run_buildx_bake_with_retries; then
+            DOCKER_BUILD_TARGETS="${original_targets}"
+            return 1
+        fi
+    done
+
+    DOCKER_BUILD_TARGETS="${original_targets}"
+    return 0
 }
 
 main() {
@@ -376,7 +437,16 @@ main() {
 
     export DOCKER_BUILDKIT=1
 
-    run_buildx_bake_with_retries
+    if run_buildx_bake_with_retries; then
+        return 0
+    fi
+
+    if [ "${LAST_BUILDX_FAILURE_TRANSIENT_LOCK}" = "1" ] && [ "$(count_build_targets)" -gt 1 ]; then
+        run_buildx_bake_serial_fallback
+        return $?
+    fi
+
+    return 1
 }
 
 main "$@"
