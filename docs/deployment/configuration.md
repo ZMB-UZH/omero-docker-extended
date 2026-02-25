@@ -72,6 +72,10 @@ Relevant variables include:
 
 Queue names and broker URLs must be consistent between job producer and worker.
 
+## Quota Enforcer
+
+The installation script automatically installs the host-side quota enforcer systemd units if the OMERO user data directory is on an **ext4** filesystem mounted with `prjquota` and the `project` feature enabled in the superblock. If these conditions are not met, the installation continues without blocking, but the Quotas tab in the Admin Tools plugin will be disabled.
+
 ## Configuration Change Process (Recommended)
 
 1. Edit env files in version control.
