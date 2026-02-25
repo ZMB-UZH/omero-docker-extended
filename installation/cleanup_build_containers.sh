@@ -135,13 +135,18 @@ cleanup_one_container() {
 cleanup_buildx_builder() {
   local builder_name="$1"
 
+  # Discover buildkit images BEFORE removing the builder container
+  # (Since docker buildx rm destroys the container, we'd lose the image reference otherwise)
+  local buildkit_images=""
+  buildkit_images="$(docker ps -a --filter "name=buildx_buildkit_${builder_name}" --format '{{.Image}}' 2>/dev/null || true)"
+
   # Remove the named builder if present.
   if docker buildx inspect "${builder_name}" >/dev/null 2>&1; then
     echo "Removing buildx builder: ${builder_name}"
     docker buildx rm "${builder_name}" >/dev/null 2>&1 || true
   fi
 
-  # Remove ANY buildx buildkit container (covers default builder, old builders,
+  # Remove ANY remaining buildx buildkit container (covers default builder, old builders,
   # and containers that created anonymous volumes).
   local c
   while IFS= read -r c; do
@@ -157,8 +162,28 @@ cleanup_buildx_builder() {
     remove_volume_force "${v}"
   done < <(docker volume ls -q 2>/dev/null | grep -E '^buildx_buildkit_.*' || true)
 
-  # Remove buildkit image if present (best effort).
-  remove_image_force "moby/buildkit:latest"
+  # Remove discovered buildkit images from the named builder
+  if [ -n "${buildkit_images}" ]; then
+    local img
+    while IFS= read -r img; do
+      [ -z "${img}" ] && continue
+      echo "Removing buildx image: ${img}"
+      remove_image_force "${img}"
+    done <<< "${buildkit_images}"
+  fi
+
+  # Fallback: aggressively remove ALL moby/buildkit images to prevent orphaned images
+  # (Buildx creates dynamic tags like moby/buildkit:buildx-stable-1)
+  local dangling_buildkit
+  dangling_buildkit="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep '^moby/buildkit' || true)"
+  if [ -n "${dangling_buildkit}" ]; then
+    local img
+    while IFS= read -r img; do
+      [ -z "${img}" ] && continue
+      echo "Removing fallback buildx image: ${img}"
+      remove_image_force "${img}"
+    done <<< "${dangling_buildkit}"
+  fi
 }
 
 main() {
