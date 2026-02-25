@@ -262,6 +262,10 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     _ensure_parent(path)
     serialized = json.dumps(state, indent=2, sort_keys=True)
     temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    
+    # Avoid [Errno 13] Permission denied if tmp file exists and is owned by root
+    temp_path.unlink(missing_ok=True)
+    
     temp_path.write_text(serialized, encoding="utf-8")
     try:
         os.replace(temp_path, path)
