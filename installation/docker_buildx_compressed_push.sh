@@ -257,6 +257,7 @@ build_target_overrides() {
     local oci_mediatypes_bool=""
     local push_bool=""
     local cache_dir=""
+    local target_cache_dir=""
 
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
@@ -275,9 +276,15 @@ build_target_overrides() {
         if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ]; then
             printf -- '--set\n%s.no-cache=true\n' "${target}"
         else
-            # Persist cache in a named folder (no anonymous docker volumes).
-            printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${cache_dir}"
-            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=max\n' "${target}" "${cache_dir}"
+            # Buildx can run service builds in parallel. Exporting every target
+            # to the same local cache path causes transient layer lock
+            # contention ("ref layer-sha256 ... locked ... unavailable").
+            # Keep each target cache isolated while retaining deterministic
+            # cache persistence under a single configured root.
+            target_cache_dir="${cache_dir%/}/${target}"
+            mkdir -p "${target_cache_dir}"
+            printf -- '--set\n%s.cache-from=type=local,src=%s\n' "${target}" "${target_cache_dir}"
+            printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=max\n' "${target}" "${target_cache_dir}"
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
