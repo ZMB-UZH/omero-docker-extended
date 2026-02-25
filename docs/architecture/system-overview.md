@@ -44,7 +44,7 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.4.0-alpine with in-memory only configuration (`--save "" --appendonly no`).
+- Version 8.4.0-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1` set by the `redis-sysctl-init` one-shot sidecar.
 - Used as: OMERO.web session cache (db 1), Celery broker and result backend (db 2).
@@ -73,7 +73,7 @@ Custom image based on postgres:16.12 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.38.1) for Docker container management UI, exposed on ports 9000 and 9443.
+Portainer CE (2.39.0) for Docker container management UI, exposed on ports 9000 and 9443.
 
 ## Plugin architecture
 
