@@ -457,6 +457,10 @@ build_target_overrides() {
         fi
 
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+            # Registry push: apply full compression settings.
+            # force-compression=true is intentional here — it ensures all
+            # layers in the pushed manifest use the target codec regardless
+            # of how they were originally built.
             printf -- '--set\n%s.output=type=image,name=%s,push=%s,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
                 "${target}" \
                 "${target_image_name}" \
@@ -465,16 +469,18 @@ build_target_overrides() {
                 "${DOCKER_BUILD_COMPRESSION_LEVEL}" \
                 "${oci_mediatypes_bool}"
         else
-            # Keep images local while still forcing Buildx compression settings
-            # through the image exporter. This provides deterministic behavior
-            # differences versus docker compose build without requiring prompts
-            # or registry configuration changes.
-            printf -- '--set\n%s.output=type=image,name=%s,push=false,compression=%s,compression-level=%s,force-compression=true,oci-mediatypes=%s\n' \
+            # Local build only (no registry push).
+            # DO NOT use force-compression=true here.
+            # force-compression causes BuildKit to decompress EVERY cached
+            # layer back into memory and re-encode it with the target codec.
+            # For large images this loads all layer data into RAM simultaneously
+            # and causes a massive memory spike — completely pointless for a
+            # local build where compression format is irrelevant.
+            # type=image,push=false is sufficient to make the image available
+            # in the local docker daemon without any recompression overhead.
+            printf -- '--set\n%s.output=type=image,name=%s,push=false\n' \
                 "${target}" \
-                "${target_image_name}" \
-                "${DOCKER_BUILD_COMPRESSION_TYPE}" \
-                "${DOCKER_BUILD_COMPRESSION_LEVEL}" \
-                "${oci_mediatypes_bool}"
+                "${target_image_name}"
         fi
     done
 }
@@ -633,9 +639,13 @@ main() {
         echo "  Registry prefix      : (not set; building local images only)"
     fi
     echo "  Image tag            : ${DOCKER_IMAGE_TAG}"
-    echo "  Compression type     : ${DOCKER_BUILD_COMPRESSION_TYPE}"
-    echo "  Compression level    : ${DOCKER_BUILD_COMPRESSION_LEVEL}"
-    echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
+    if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+        echo "  Compression type     : ${DOCKER_BUILD_COMPRESSION_TYPE}"
+        echo "  Compression level    : ${DOCKER_BUILD_COMPRESSION_LEVEL}"
+        echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
+    else
+        echo "  Compression          : disabled for local build (only applies on registry push)"
+    fi
     echo "  Inline cache         : ${DOCKER_BUILD_INLINE_CACHE}"
     echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
     echo "  Local cache export   : ${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
