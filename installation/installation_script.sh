@@ -1849,9 +1849,9 @@ if ! run_image_build; then
     exit 1
 fi
 
-echo "================================================"
-echo "Discovering ACTUAL OMERO UID/GID from built images"
-echo "================================================"
+echo "============================================"
+echo "Discovering ACTUAL UID/GID from built images"
+echo "============================================"
 
 discover_first_existing_user_or_die() {
     local image="$1"
