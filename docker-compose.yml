@@ -455,6 +455,8 @@ services:
       context: .
       dockerfile: docker/redis-sysctl-init.Dockerfile
     container_name: redis-sysctl-init
+    profiles:
+      - init
     privileged: true
     restart: "no"
     command: []
@@ -475,9 +477,6 @@ services:
       omero:
         aliases:
           - redis
-    depends_on:
-      redis-sysctl-init:
-        condition: service_completed_successfully
     tmpfs:
       - /data:size=512m
     healthcheck:
