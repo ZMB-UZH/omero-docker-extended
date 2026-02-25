@@ -158,7 +158,45 @@ Expected compose configuration:
 
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
 
-## 10. Postgres keeps rejecting `omero` after startup
+
+## 10. cAdvisor logs repeated `failed to collect filesystem stats` for overlay paths
+
+Symptom:
+
+- `cadvisor` logs repeatedly show messages like:
+  - `failed to collect filesystem stats`
+  - `could not stat "/disks/.../docker_runtime/rootfs/overlayfs/...": no such file or directory`
+
+Root cause:
+
+- cAdvisor discovers container filesystems under the host root, but without an explicit rootfs flag it may attempt to stat host-absolute overlay paths directly (for example `/disks/...`) instead of resolving them through the mounted host root (`/rootfs`).
+- This is independent from `OMERO_DATA_PATH` and should not be modeled as an OMERO path variable.
+
+Fix in this distribution:
+
+- cAdvisor now starts with `--rootfs=/rootfs` and keeps the host root bind `/:/rootfs:ro` so host paths resolve consistently from inside the container.
+
+Check/verify commands:
+
+```bash
+# 1) Confirm host Docker data-root (for diagnosis only)
+docker info | rg -n '^ Docker Root Dir:'
+
+# 2) Recreate only cAdvisor with current compose config
+docker compose --env-file installation_paths.env up -d cadvisor
+
+# 3) Verify cAdvisor started with the rootfs flag
+docker compose --env-file installation_paths.env logs --since=2m cadvisor | rg -- '--rootfs=/rootfs|Starting cAdvisor version'
+
+# 4) Watch for filesystem-stat errors after restart
+docker compose --env-file installation_paths.env logs --since=5m cadvisor | rg -n 'failed to collect filesystem stats|overlayfs|no such file or directory'
+```
+
+Expected result:
+
+- Startup logs include normal cAdvisor initialization without persistent overlay stat errors for missing host paths.
+
+## 11. Postgres keeps rejecting `omero` after startup
 
 Symptom:
 
@@ -187,7 +225,7 @@ Expected result:
 - `database` no longer logs repeated auth failures for user `omero`.
 
 
-## 11. LDAP users are placed into `default` group instead of `users_ldap`
+## 12. LDAP users are placed into `default` group instead of `users_ldap`
 
 Symptom:
 
@@ -226,7 +264,7 @@ Expected result:
 - If output is still `default` but you expect another group, inspect OMERO.server bootstrap logs for LDAP config apply/validation failures.
 
 
-## 11. OMERO.web fails with `PermissionError` under `/opt/omero/web/OMERO.web/var/omero`
+## 13. OMERO.web fails with `PermissionError` under `/opt/omero/web/OMERO.web/var/omero`
 
 Symptom:
 
