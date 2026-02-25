@@ -49,6 +49,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
 │   ├── omero-celery-worker.Dockerfile #   Standalone Celery worker (Ubuntu 24.04 + Python 3.9)
+│   ├── crowdsec.Dockerfile            #   CrowdSec service with custom bootstrap
 │   ├── pg-maintenance.Dockerfile      #   PostgreSQL maintenance sidecar with cron
 │   ├── redis-sysctl-init.Dockerfile   #   Alpine sidecar for kernel parameter tuning
 │   └── redis-sysctl-init.sh
