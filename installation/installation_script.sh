@@ -1730,11 +1730,13 @@ fi
 if [ -n "${LOKI_GID}" ]; then
     if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
 fi
-if [ -n "${CROWDSEC_UID}" ]; then
-    if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
-fi
-if [ -n "${CROWDSEC_GID}" ]; then
-    if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if [ -n "${CROWDSEC_UID}" ]; then
+        if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
+    fi
+    if [ -n "${CROWDSEC_GID}" ]; then
+        if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
+    fi
 fi
 
 require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
@@ -1789,8 +1791,10 @@ if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data dir
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
-if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
-if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
+    if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
+fi
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
@@ -1968,6 +1972,13 @@ resolve_service_image_from_compose_or_die() {
     return 0
 }
 
+# Returns true (0) if CrowdSec is enabled:
+# CROWDSEC_ENROLL_KEY must be set, non-empty, and not the placeholder value.
+is_crowdsec_enabled() {
+    local key="${CROWDSEC_ENROLL_KEY:-}"
+    [[ -n "${key}" && "${key}" != "CHANGEVALUE2" ]]
+}
+
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
@@ -2020,8 +2031,14 @@ if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
-if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
-if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
+if is_crowdsec_enabled; then
+    if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
+    if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
+else
+    echo "CrowdSec is disabled (no enroll key). Skipping CrowdSec UID/GID discovery."
+    CROWDSEC_UID=0
+    CROWDSEC_GID=0
+fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
@@ -2030,7 +2047,11 @@ echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAG
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
-echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
+if is_crowdsec_enabled; then
+    echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
+else
+    echo "CrowdSec:            disabled (no enroll key)"
+fi
 echo ""
 
 echo "========================================================"
@@ -2078,8 +2099,10 @@ if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database dire
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+    if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+fi
 
 echo ""
 echo "â Host ownership fix complete."
