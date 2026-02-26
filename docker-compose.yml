@@ -31,8 +31,6 @@ services:
   loki:
     image: "grafana/loki:3.2.0"
     restart: unless-stopped
-    # Temporarily run as root to fix permissions if needed, then switch back to loki
-    user: "10001:10001"
     command: -config.file=/etc/loki/loki-config.yml
     networks:
       omero:
