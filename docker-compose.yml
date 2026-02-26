@@ -548,6 +548,8 @@ services:
       context: .
       dockerfile: docker/crowdsec.Dockerfile
     container_name: crowdsec
+    profiles:
+      - crowdsec
     restart: unless-stopped
     network_mode: "host"
     cap_add:
