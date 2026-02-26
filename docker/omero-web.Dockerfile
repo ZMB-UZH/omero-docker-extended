@@ -22,8 +22,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # - APPLY_DNF_UPDATES is kept as a backward-compatible alias.
 ARG APPLY_OMEROWEB_DNF_UPDATES=0
 ARG APPLY_DNF_UPDATES=0
-ARG DNF_MAX_ATTEMPTS=5
-ARG DNF_RETRY_SLEEP_SECONDS=15
+ARG DNF_MAX_ATTEMPTS=3
+ARG DNF_RETRY_SLEEP_SECONDS=0
 ARG DNF_USE_ROCKY_MIRRORLIST=1
 
 # Basic hardening for pip (no behavior change expected)
@@ -83,8 +83,8 @@ RUN set -euo pipefail; \
         local fallback_applied=0; \
         while true; do \
             if dnf -y --refresh \
-                --setopt=timeout=60 \
-                --setopt=retries=20 \
+                --setopt=timeout=20 \
+                --setopt=retries=2 \
                 "$@"; then \
                 return 0; \
             fi; \
