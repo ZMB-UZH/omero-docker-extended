@@ -273,6 +273,59 @@ run_image_build() {
     return $?
 }
 
+resolve_buildx_local_cache_dir() {
+    if [ -n "${BUILDX_DATA_PATH:-}" ]; then
+        printf '%s' "${BUILDX_DATA_PATH}"
+        return 0
+    fi
+
+    if [ -n "${OMERO_DATA_PATH:-}" ]; then
+        printf '%s' "${OMERO_DATA_PATH%/}/buildx_cache"
+        return 0
+    fi
+
+    return 1
+}
+
+cleanup_local_build_cache_if_disabled() {
+    local buildx_local_cache_dir=""
+
+    if [ "${USE_CACHE_BUILD}" != "0" ]; then
+        return 0
+    fi
+
+    echo "Build cache is disabled; cleaning local build cache before rebuild..."
+
+    if docker builder prune --help >/dev/null 2>&1; then
+        if ! docker builder prune -a -f >/dev/null; then
+            echo "ERROR: Failed to clean docker builder cache while USE_CACHE_BUILD=0." >&2
+            return 1
+        fi
+        echo "Removed docker builder cache."
+    else
+        echo "WARNING: docker builder prune is unavailable; skipping docker builder cache cleanup."
+    fi
+
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "1" ]; then
+        if ! buildx_local_cache_dir="$(resolve_buildx_local_cache_dir)"; then
+            echo "ERROR: Buildx cache cleanup requested but no cache path could be resolved (BUILDX_DATA_PATH and OMERO_DATA_PATH are both unset)." >&2
+            return 1
+        fi
+
+        if [ -d "${buildx_local_cache_dir}" ]; then
+            if ! rm -rf "${buildx_local_cache_dir}"; then
+                echo "ERROR: Failed to remove Buildx local cache directory: ${buildx_local_cache_dir}" >&2
+                return 1
+            fi
+            echo "Removed Buildx local cache directory: ${buildx_local_cache_dir}"
+        else
+            echo "Buildx local cache directory not present, nothing to remove: ${buildx_local_cache_dir}"
+        fi
+    fi
+
+    return 0
+}
+
 compose_with_installation_env() {
     local compose_file="$1"
     shift
@@ -1802,6 +1855,10 @@ if [ -d "${OMERO_USER_DATA_PATH}" ]; then
     find "${OMERO_USER_DATA_PATH}" -name "*.lock" -delete || true
 else
     echo "WARNING: OMERO user data path ${OMERO_USER_DATA_PATH} not found; skipping lock cleanup."
+fi
+
+if ! cleanup_local_build_cache_if_disabled; then
+    exit 1
 fi
 
 if ! run_image_build; then
