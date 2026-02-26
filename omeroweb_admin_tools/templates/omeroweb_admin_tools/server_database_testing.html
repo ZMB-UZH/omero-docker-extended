@@ -63,18 +63,42 @@ function setRequestInfo(requestId, responseStatus) {
 }
 
 function renderScripts() {
-    scriptsEl.innerHTML = scripts.map((script) => `
-        <label class="diag-script-card">
-            <input type="checkbox" class="diag-script-checkbox" value="${escapeHtml(script.script_id)}" ${script.script_id === 'platform_end_to_end' ? 'checked' : ''}>
-            <div class="diag-script-content">
-                <div class="diag-script-header">
-                    <strong>${escapeHtml(script.label)}</strong>
-                    <span class="diag-script-category">${escapeHtml(script.category)}</span>
+    let savedSelection = [];
+    try {
+        const stored = localStorage.getItem('omeroweb_admin_tools_diag_selection');
+        if (stored) {
+            savedSelection = JSON.parse(stored);
+        }
+    } catch (e) {
+        console.warn('Failed to parse saved diagnostics selection', e);
+    }
+
+    scriptsEl.innerHTML = scripts.map((script) => {
+        const isChecked = savedSelection.includes(script.script_id) ? 'checked' : '';
+        return `
+            <label class="diag-script-card">
+                <input type="checkbox" class="diag-script-checkbox" value="${escapeHtml(script.script_id)}" ${isChecked}>
+                <div class="diag-script-content">
+                    <div class="diag-script-header">
+                        <strong>${escapeHtml(script.label)}</strong>
+                        <span class="diag-script-category">${escapeHtml(script.category)}</span>
+                    </div>
+                    <div class="diag-script-description">${escapeHtml(script.description)}</div>
                 </div>
-                <div class="diag-script-description">${escapeHtml(script.description)}</div>
-            </div>
-        </label>
-    `).join('');
+            </label>
+        `;
+    }).join('');
+
+    document.querySelectorAll('.diag-script-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const currentSelection = selectedScripts();
+            try {
+                localStorage.setItem('omeroweb_admin_tools_diag_selection', JSON.stringify(currentSelection));
+            } catch (e) {
+                console.warn('Failed to save diagnostics selection', e);
+            }
+        });
+    });
 }
 
 function selectedScripts() {
@@ -107,7 +131,7 @@ function renderResults(payload) {
                     <span class="diag-total">Total: ${summary.total}</span>
                 </div>
                 <div class="diag-table-wrap">
-                    <table class="log-table diag-table">
+                    <table class="diag-table">
                         <thead>
                             <tr>
                                 <th>Check</th>
