@@ -324,11 +324,11 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
     return {"regex": regex, "source": "ai", "ai_regex": regex}
 
 
-def _build_parse_prompt(filenames):
+def _build_parse_prompt(filenames, custom_instructions=""):
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
 
-    return (
+    prompt = (
         "You are given multiple filenames.\n"
         "\n"
         "Each filename contains fixed structural labels (field names like 'ec', 'sa', 'sc')\n"
@@ -359,6 +359,9 @@ def _build_parse_prompt(filenames):
         "Filenames:\n"
         f"{list_block}\n"
     )
+    if custom_instructions:
+        prompt += f"\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}\n"
+    return prompt
 
 
 def _parse_ai_value_rows(text, expected_count, filenames=None):
@@ -395,7 +398,7 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
     return rows
 
 
-def generate_ai_parsed_values(provider, api_key, filenames, model=None):
+def generate_ai_parsed_values(provider, api_key, filenames, model=None, custom_instructions=""):
     provider = (provider or "").strip().lower()
 
     if not provider:
@@ -404,7 +407,7 @@ def generate_ai_parsed_values(provider, api_key, filenames, model=None):
     if not filenames:
         raise AiAssistError(errors.no_filenames_provided())
 
-    prompt = _build_parse_prompt(filenames)
+    prompt = _build_parse_prompt(filenames, custom_instructions=custom_instructions)
 
     content = _call_ai_provider_raw(provider, api_key, prompt, 800, model=model)
 
