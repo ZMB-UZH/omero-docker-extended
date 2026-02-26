@@ -172,16 +172,15 @@ RUN set -euo pipefail; \
                 return 0; \
             fi; \
             if [[ "${attempt}" -eq 1 && "${fallback_applied}" -eq 0 && "${DNF_USE_ROCKY_MIRRORLIST}" == "1" ]]; then \
-                echo "WARNING: First dnf attempt failed; enabling Rocky mirrorlist fallback and cleaning metadata cache before retry." >&2; \
+                echo "WARNING: First dnf attempt failed; enabling Rocky baseurl fallback and cleaning metadata cache before retry." >&2; \
                 for repo_file in /etc/yum.repos.d/rocky*.repo; do \
                     if [[ -f "${repo_file}" ]]; then \
-                        sed -i -E 's|^mirrorlist=http://|mirrorlist=https://|g' "${repo_file}"; \
-                        sed -i -E 's|^#mirrorlist=|mirrorlist=|g' "${repo_file}"; \
-                        sed -i -E 's|^baseurl=https?://dl\.rockylinux\.org|#baseurl=https://dl.rockylinux.org|g' "${repo_file}"; \
+                        sed -i -E 's|^mirrorlist=|#mirrorlist=|g' "${repo_file}"; \
+                        sed -i -E 's|^#baseurl=|baseurl=|g' "${repo_file}"; \
                     fi; \
                 done; \
-                dnf clean all; \
-                rm -rf /var/cache/dnf; \
+                dnf clean all || true; \
+                rm -rf /var/cache/dnf || true; \
                 fallback_applied=1; \
             fi; \
             if [[ "${attempt}" -ge "${max_attempts}" ]]; then \
@@ -218,8 +217,8 @@ RUN set -euo pipefail; \
         zlib-devel \
         lz4-devel \
         freeimage-devel; \
-    dnf clean all; \
-    rm -rf /var/cache/dnf /var/tmp/*
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true
 
 # Prepare writable paths for startup-installed tools
 # --------------------------------------------------
