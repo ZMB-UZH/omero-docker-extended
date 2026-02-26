@@ -29,6 +29,7 @@
     </div>
 </div>
 <script defer>
+const STORAGE_KEY = 'omeroweb_admin_tools_diag_selected';
 const runUrl = new URL('{% url "omeroweb_admin_tools_server_database_testing_run" %}', window.location.href);
 const scripts = {{ diagnostic_scripts|safe }};
 const summaryEl = document.getElementById('diag_summary');
@@ -62,41 +63,49 @@ function setRequestInfo(requestId, responseStatus) {
     requestInfoEl.textContent = `Request ID: ${requestId}${responseStatus ? ` · HTTP ${responseStatus}` : ''}`;
 }
 
-function renderScripts() {
-    let savedSelection = [];
-    try {
-        const stored = localStorage.getItem('omeroweb_admin_tools_diag_selection');
-        if (stored) {
-            savedSelection = JSON.parse(stored);
-        }
-    } catch (e) {
-        console.warn('Failed to parse saved diagnostics selection', e);
-    }
+// --- localStorage persistence (per-user, per-browser, same mechanism as upload/omp plugins) ---
 
+function loadSavedSelection() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed);
+    } catch (_) { /* ignore corrupt storage */ }
+    return null;
+}
+
+function saveSelection(selectedSet) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...selectedSet]));
+    } catch (_) { /* ignore quota errors */ }
+}
+
+function renderScripts() {
+    const saved = loadSavedSelection();
+    // For a brand-new user (no saved state) nothing is pre-selected.
     scriptsEl.innerHTML = scripts.map((script) => {
-        const isChecked = savedSelection.includes(script.script_id) ? 'checked' : '';
+        const checked = saved !== null ? saved.has(script.script_id) : false;
         return `
-            <label class="diag-script-card">
-                <input type="checkbox" class="diag-script-checkbox" value="${escapeHtml(script.script_id)}" ${isChecked}>
-                <div class="diag-script-content">
-                    <div class="diag-script-header">
-                        <strong>${escapeHtml(script.label)}</strong>
-                        <span class="diag-script-category">${escapeHtml(script.category)}</span>
-                    </div>
-                    <div class="diag-script-description">${escapeHtml(script.description)}</div>
+        <label class="diag-script-card">
+            <input type="checkbox" class="diag-script-checkbox" value="${escapeHtml(script.script_id)}"${checked ? ' checked' : ''}>
+            <div class="diag-script-content">
+                <div class="diag-script-header">
+                    <strong>${escapeHtml(script.label)}</strong>
+                    <span class="diag-script-category">${escapeHtml(script.category)}</span>
                 </div>
-            </label>
-        `;
+                <div class="diag-script-description">${escapeHtml(script.description)}</div>
+            </div>
+        </label>
+    `;
     }).join('');
 
-    document.querySelectorAll('.diag-script-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-            const currentSelection = selectedScripts();
-            try {
-                localStorage.setItem('omeroweb_admin_tools_diag_selection', JSON.stringify(currentSelection));
-            } catch (e) {
-                console.warn('Failed to save diagnostics selection', e);
-            }
+    // Attach change listeners to persist selection on every toggle.
+    scriptsEl.querySelectorAll('.diag-script-checkbox').forEach((cb) => {
+        cb.addEventListener('change', () => {
+            saveSelection(new Set(
+                Array.from(scriptsEl.querySelectorAll('.diag-script-checkbox:checked')).map((el) => el.value)
+            ));
         });
     });
 }

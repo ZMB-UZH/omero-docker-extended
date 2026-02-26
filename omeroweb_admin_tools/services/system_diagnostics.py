@@ -161,7 +161,7 @@ def _http_probe(
 
 def _docker_compose_command() -> Optional[List[str]]:
     # Always use the project name 'omero' when running from inside the container
-    # so docker compose knows what to target, since it's not running in the 
+    # so docker compose knows what to target, since it's not running in the
     # directory where the docker-compose.yml lives.
     for candidate in (("docker", "compose"), ("docker-compose",)):
         ok, _, _ = _run_command([*candidate, "version"], timeout_s=5.0)
@@ -316,6 +316,9 @@ def list_diagnostic_scripts() -> List[DiagnosticScript]:
 
 
 def _run_omero_server_core() -> List[DiagnosticCheckResult]:
+    # Source of truth: docker-compose.yml
+    # omeroserver: ports 4064 (blitz), 4063 (secure/ssl)
+    # omeroweb: port 4090, healthcheck hits http://127.0.0.1:4090/webgateway/
     host = _get_env("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
     blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
     secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
@@ -348,8 +351,15 @@ def _run_omero_server_core() -> List[DiagnosticCheckResult]:
 
 
 def _run_database_checks(
-    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str, default_host: str, default_port: str = "5432"
+    script_prefix: str,
+    label_prefix: str,
+    host_env: str,
+    port_env: str,
+    service: str,
+    default_host: str,
+    default_port: str = "5432",
 ) -> List[DiagnosticCheckResult]:
+    # default_host and default_port must match docker-compose network alias and PGPORT.
     host = _get_env(host_env, default_host)
     port = int(_get_env(port_env, default_port))
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
@@ -381,6 +391,8 @@ def _run_database_checks(
 def run_diagnostic_script(script_id: str) -> Dict[str, object]:
     script_map: Dict[str, Callable[[], List[DiagnosticCheckResult]]] = {
         "omero_server_core": _run_omero_server_core,
+        # Source of truth: docker-compose.yml
+        # database service: network alias="database", PGPORT=5432 (default)
         "omero_database": lambda: _run_database_checks(
             "omero_database",
             "OMERO database",
@@ -388,7 +400,10 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             "ADMIN_TOOLS_OMERO_DB_PORT",
             "database",
             "database",
+            "5432",
         ),
+        # Source of truth: docker-compose.yml
+        # database_plugin service: network alias="database-plugin", PGPORT=5433
         "plugin_database": lambda: _run_database_checks(
             "plugin_database",
             "plugin database",
