@@ -116,6 +116,8 @@ services:
       omero:
         aliases:
           - blackbox-exporter
+    extra_hosts:
+      - "crowdsec:host-gateway"
     volumes:
       - ./monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
     healthcheck:
@@ -547,6 +549,10 @@ services:
       dockerfile: docker/crowdsec.Dockerfile
     container_name: crowdsec
     restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     env_file:
       - ./env/omero_secrets.env
     environment:
@@ -559,12 +565,6 @@ services:
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro
-    ports:
-      - "8080:8080"
-    networks:
-      omero:
-        aliases:
-          - crowdsec
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
       interval: 10s
