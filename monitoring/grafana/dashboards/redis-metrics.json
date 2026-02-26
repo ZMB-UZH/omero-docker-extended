@@ -11,7 +11,7 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Connected clients",
+      "title": "Active connections",
       "id": 1,
       "gridPos": {
         "h": 4,
@@ -35,11 +35,12 @@
           "refId": "A",
           "expr": "redis_connected_clients"
         }
-      ]
+      ],
+      "description": "Current number of connected Redis clients."
     },
     {
       "type": "stat",
-      "title": "Memory used",
+      "title": "Memory usage",
       "id": 2,
       "gridPos": {
         "h": 4,
@@ -66,7 +67,8 @@
           "refId": "A",
           "expr": "redis_memory_used_bytes"
         }
-      ]
+      ],
+      "description": "Current Redis memory usage in bytes (used_memory)."
     },
     {
       "type": "stat",
@@ -117,7 +119,7 @@
     },
     {
       "type": "stat",
-      "title": "Ops / sec",
+      "title": "Transaction rate",
       "id": 4,
       "gridPos": {
         "h": 4,
@@ -132,7 +134,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
-          "decimals": 0
+          "decimals": 1
         },
         "overrides": []
       },
@@ -141,7 +143,8 @@
           "refId": "A",
           "expr": "rate(redis_commands_processed_total[5m])"
         }
-      ]
+      ],
+      "description": "Processed Redis transactions per second, computed from redis_commands_processed_total over 5 minutes."
     },
     {
       "type": "stat",
@@ -169,7 +172,8 @@
           "refId": "A",
           "expr": "sum(redis_db_keys)"
         }
-      ]
+      ],
+      "description": "Total keys currently stored across all Redis databases."
     },
     {
       "type": "stat",
@@ -200,7 +204,8 @@
           "refId": "A",
           "expr": "redis_uptime_in_seconds"
         }
-      ]
+      ],
+      "description": "Redis server uptime since last restart."
     },
     {
       "type": "timeseries",
@@ -210,7 +215,7 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
+        "x": 8,
         "y": 4
       },
       "datasource": {
@@ -287,12 +292,12 @@
     },
     {
       "type": "timeseries",
-      "title": "Commands / sec",
+      "title": "Transaction rate",
       "id": 8,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 8,
+        "x": 16,
         "y": 4
       },
       "datasource": {
@@ -332,16 +337,17 @@
           "expr": "rate(redis_commands_processed_total[5m])",
           "legendFormat": "Commands / sec"
         }
-      ]
+      ],
+      "description": "Processed Redis transactions per second over time, computed from redis_commands_processed_total over 5 minutes."
     },
     {
       "type": "timeseries",
-      "title": "Connected clients",
+      "title": "Active connections",
       "id": 9,
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 16,
+        "x": 0,
         "y": 4
       },
       "datasource": {
@@ -387,7 +393,8 @@
           "expr": "redis_blocked_clients",
           "legendFormat": "Blocked"
         }
-      ]
+      ],
+      "description": "Connected clients and blocked clients over time."
     },
     {
       "type": "timeseries",
@@ -396,7 +403,7 @@
       "id": 10,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 12
       },
@@ -448,8 +455,8 @@
       "id": 11,
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 12
       },
       "datasource": {

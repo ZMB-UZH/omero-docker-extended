@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pwd import getpwuid
@@ -261,14 +262,26 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
     serialized = json.dumps(state, indent=2, sort_keys=True)
-    temp_path = path.with_suffix(f"{path.suffix}.tmp")
-    temp_path.write_text(serialized, encoding="utf-8")
+    
+    # We use a unique randomized suffix instead of a fixed .tmp to avoid ANY
+    # chance of colliding with a locked or root-owned file from a previous 
+    # process or host-side tool.
+    random_suffix = uuid.uuid4().hex[:8]
+    temp_path = path.with_suffix(f"{path.suffix}.tmp_{random_suffix}")
+    
     try:
+        temp_path.write_text(serialized, encoding="utf-8")
+        
+        # Ensure the final file maintains readability for the host enforcer (root)
+        os.chmod(temp_path, 0o666)
+        
+        # os.replace is atomic on POSIX
         os.replace(temp_path, path)
     except PermissionError as exc:
-        # Fallback for sticky-bit directories (e.g. mode 1777) where the
-        # current process can write the existing file but cannot replace it
-        # because it does not own the destination entry.
+        # Fallback if replacing fails (e.g., sticky bit preventing rename)
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+            
         if not path.exists() or not os.access(path, os.W_OK):
             raise QuotaError(
                 f"Quota state path is not replaceable/writable: {path}. "
@@ -276,8 +289,19 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
                 "and writable by the omeroweb UID."
             ) from exc
 
+        # Last resort fallback: direct write to existing file
         path.write_text(serialized, encoding="utf-8")
-        temp_path.unlink(missing_ok=True)
+    finally:
+        # Clean up any unique random tmp files we created if something went terribly wrong
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+            
+        # Optional: Attempt to clean up the legacy fixed .tmp file to prevent future confusion
+        legacy_tmp = path.with_suffix(f"{path.suffix}.tmp")
+        try:
+            legacy_tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:

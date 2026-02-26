@@ -116,7 +116,8 @@
       ],
       "options": {
         "graphMode": "area"
-      }
+      },
+      "description": "Percentage of host CPU currently in use (1 - idle)."
     },
     {
       "type": "stat",
@@ -162,7 +163,8 @@
           ],
           "fields": ""
         }
-      }
+      },
+      "description": "Usage ratio for the configured OMERO data path."
     },
     {
       "type": "stat",
@@ -199,7 +201,8 @@
       ],
       "options": {
         "graphMode": "area"
-      }
+      },
+      "description": "Percentage of host RAM currently used (1 - available/total)."
     },
     {
       "type": "stat",
@@ -236,7 +239,8 @@
       ],
       "options": {
         "graphMode": "area"
-      }
+      },
+      "description": "Root filesystem usage ratio for / (excluding tmpfs)."
     },
     {
       "type": "stat",
@@ -274,7 +278,8 @@
       ],
       "options": {
         "graphMode": "area"
-      }
+      },
+      "description": "Swap usage ratio when swap is configured on the host."
     },
     {
       "type": "stat",
@@ -320,7 +325,8 @@
           "fields": ""
         },
         "textMode": "value"
-      }
+      },
+      "description": "Usage ratio for the configured primary OMERO database path."
     },
     {
       "type": "stat",
@@ -366,7 +372,8 @@
           ],
           "fields": ""
         }
-      }
+      },
+      "description": "Usage ratio for the configured plugin database path."
     },
     {
       "type": "stat",
@@ -416,7 +423,8 @@
           "fields": ""
         },
         "orientation": "horizontal"
-      }
+      },
+      "description": "Number of healthy Prometheus targets compared with total discovered targets."
     },
     {
       "type": "timeseries",
@@ -435,7 +443,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "decimals": 1
+          "decimals": 1,
+          "min": 0
         },
         "overrides": []
       },
@@ -454,7 +463,8 @@
           "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval]))",
           "legendFormat": "{{instance}}"
         }
-      ]
+      ],
+      "description": "Per-host CPU usage over time (1 - idle)."
     },
     {
       "type": "timeseries",
@@ -473,7 +483,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "decimals": 1
+          "decimals": 1,
+          "min": 0
         },
         "overrides": []
       },
@@ -492,7 +503,8 @@
           "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
           "legendFormat": "{{instance}}"
         }
-      ]
+      ],
+      "description": "Per-host memory usage over time (1 - available/total)."
     },
     {
       "type": "timeseries",
@@ -560,7 +572,8 @@
           "expr": "clamp_min(irate(node_disk_writes_completed_total{device!~\"loop.*|dm-.*\"}[5m]), 0)",
           "legendFormat": "Write {{device}}"
         }
-      ]
+      ],
+      "description": "Host disk read/write IOPS, excluding loop and device-mapper devices."
     },
     {
       "type": "timeseries",
@@ -593,7 +606,8 @@
           "expr": "sum(rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m]))",
           "legendFormat": "TX"
         }
-      ]
+      ],
+      "description": "Aggregate host network receive and transmit throughput (excluding loopback)."
     },
     {
       "type": "timeseries",
@@ -621,7 +635,8 @@
           "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\",image!=\"\"}[5m]))",
           "legendFormat": "{{container_label_com_docker_compose_service}}"
         }
-      ]
+      ],
+      "description": "Container CPU usage rate grouped by Docker Compose service."
     },
     {
       "type": "timeseries",
@@ -649,7 +664,8 @@
           "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\",image!=\"\"})",
           "legendFormat": "{{container_label_com_docker_compose_service}}"
         }
-      ]
+      ],
+      "description": "Container memory working set grouped by Docker Compose service."
     },
     {
       "type": "timeseries",
@@ -677,7 +693,8 @@
           "expr": "node_filesystem_avail_bytes{fstype!=\"tmpfs\"}",
           "legendFormat": "{{mountpoint}}"
         }
-      ]
+      ],
+      "description": "Available filesystem bytes by mountpoint (excluding tmpfs)."
     },
     {
       "type": "table",
@@ -844,7 +861,8 @@
             }
           }
         }
-      ]
+      ],
+      "description": "Current Prometheus target health by scrape target and job (1=up, 0=down)."
     }
   ],
   "refresh": "10s",
