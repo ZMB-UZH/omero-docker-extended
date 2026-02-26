@@ -320,7 +320,7 @@ def _run_omero_server_core() -> List[DiagnosticCheckResult]:
     blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
     secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
     web_url = _get_env(
-        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4080/webclient/"
+        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4090/webclient/"
     )
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
@@ -348,10 +348,10 @@ def _run_omero_server_core() -> List[DiagnosticCheckResult]:
 
 
 def _run_database_checks(
-    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str
+    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str, default_host: str, default_port: str = "5432"
 ) -> List[DiagnosticCheckResult]:
-    host = _get_env(host_env, service)
-    port = int(_get_env(port_env, "5432"))
+    host = _get_env(host_env, default_host)
+    port = int(_get_env(port_env, default_port))
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
     return [
@@ -387,6 +387,7 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             "ADMIN_TOOLS_OMERO_DB_HOST",
             "ADMIN_TOOLS_OMERO_DB_PORT",
             "database",
+            "database",
         ),
         "plugin_database": lambda: _run_database_checks(
             "plugin_database",
@@ -394,6 +395,8 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             "ADMIN_TOOLS_PLUGIN_DB_HOST",
             "ADMIN_TOOLS_PLUGIN_DB_PORT",
             "database_plugin",
+            "database-plugin",
+            "5433",
         ),
     }
 
