@@ -220,11 +220,20 @@ sed "s|ReadWritePaths=/OMERO|ReadWritePaths=${OMERO_DATA_DIR}|g" \
 
 cp "${SCRIPT_DIR}/omero-quota-enforcer.timer" /etc/systemd/system/omero-quota-enforcer.timer
 
+# Update the path unit to watch the actual JSON file for instant updates
+sed "s|PathModified=.*|PathModified=${state_file}|g" \
+    "${SCRIPT_DIR}/omero-quota-enforcer.path" \
+    > /etc/systemd/system/omero-quota-enforcer.path
+
 systemctl daemon-reload
 systemctl enable omero-quota-enforcer.timer
 systemctl start omero-quota-enforcer.timer
 
-echo "  Installed and enabled: omero-quota-enforcer.timer"
+systemctl enable omero-quota-enforcer.path
+systemctl start omero-quota-enforcer.path
+
+echo "  Installed and enabled: omero-quota-enforcer.timer (60s fallback/reconciliation)"
+echo "  Installed and enabled: omero-quota-enforcer.path  (instant updates via inotify)"
 
 # ---------------------------------------------------------------------------
 # Step 7: Write marker file for container-side detection
@@ -245,15 +254,15 @@ echo "  Written: ${marker_file}"
 echo ""
 echo "=== Installation complete ==="
 echo ""
-echo "The quota enforcer will run every 60 seconds."
+echo "The quota enforcer is now triggered INSTANTLY upon changes, and runs a fallback sweep every 60 seconds."
 echo ""
 echo "Useful commands:"
+echo "  systemctl status omero-quota-enforcer.path     # Check file watcher status"
 echo "  systemctl status omero-quota-enforcer.timer    # Check timer status"
-echo "  systemctl list-timers omero-quota-enforcer*    # See next run time"
 echo "  journalctl -u omero-quota-enforcer.service     # View enforcement logs"
 echo "  sudo ${enforcer_dst}  # Run manually"
 echo ""
 echo "To uninstall:"
-echo "  sudo systemctl disable --now omero-quota-enforcer.timer"
-echo "  sudo rm /etc/systemd/system/omero-quota-enforcer.{service,timer}"
+echo "  sudo systemctl disable --now omero-quota-enforcer.timer omero-quota-enforcer.path"
+echo "  sudo rm /etc/systemd/system/omero-quota-enforcer.{service,timer,path}"
 echo "  sudo systemctl daemon-reload"
