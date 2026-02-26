@@ -1,1 +1,446 @@
-from __future__ import annotations\n\nimport json\nimport os\nimport shlex\nimport socket\nimport subprocess\nimport time\nimport logging\nfrom dataclasses import asdict\nfrom dataclasses import dataclass\nfrom typing import Callable, Dict, List, Optional, Sequence, Tuple\n\nimport urllib.error\nimport urllib.request\n\nlogger = logging.getLogger(__name__)\n\n\n@dataclass(frozen=True)\nclass DiagnosticCheckResult:\n    \"\"\"Single test execution outcome.\"\"\"\n\n    check_id: str\n    label: str\n    status: str\n    duration_ms: int\n    summary: str\n    details: str\n\n\n@dataclass(frozen=True)\nclass DiagnosticScript:\n    \"\"\"Runnable script profile displayed in the UI.\"\"\"\n\n    script_id: str\n    label: str\n    description: str\n    category: str\n\n\ndef _get_env(name: str, default: str) -> str:\n    value = os.environ.get(name, default)\n    return str(value).strip() or default\n\n\ndef _to_float_env(name: str, default: float) -> float:\n    raw_value = _get_env(name, str(default))\n    try:\n        return float(raw_value)\n    except ValueError:\n        return default\n\n\ndef _elapsed_ms(start: float) -> int:\n    return int(max(0.0, (time.monotonic() - start) * 1000.0))\n\n\ndef _run_command(cmd: Sequence[str], timeout_s: float = 8.0) -> Tuple[bool, str, str]:\n    try:\n        completed = subprocess.run(\n            list(cmd),\n            check=False,\n            capture_output=True,\n            text=True,\n            timeout=timeout_s,\n        )\n    except FileNotFoundError:\n        return False, \"\", f\"Command not available: {cmd[0]}\"\n    except subprocess.TimeoutExpired:\n        return False, \"\", f\"Command timed out after {timeout_s:.1f}s\"\n    return completed.returncode == 0, completed.stdout.strip(), completed.stderr.strip()\n\n\ndef _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckResult:\n    start = time.monotonic()\n    try:\n        addresses = socket.getaddrinfo(host, None)\n    except socket.gaierror as exc:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"fail\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"Unable to resolve host {host}\",\n            details=str(exc),\n        )\n    unique_ips = sorted({entry[4][0] for entry in addresses if entry and entry[4]})\n    return DiagnosticCheckResult(\n        check_id=check_id,\n        label=label,\n        status=\"pass\",\n        duration_ms=_elapsed_ms(start),\n        summary=f\"Resolved {host}\",\n        details=\", \".join(unique_ips[:6]),\n    )\n\n\ndef _tcp_connect(\n    check_id: str, label: str, host: str, port: int, timeout_s: float\n) -> DiagnosticCheckResult:\n    start = time.monotonic()\n    try:\n        with socket.create_connection((host, port), timeout=timeout_s):\n            return DiagnosticCheckResult(\n                check_id=check_id,\n                label=label,\n                status=\"pass\",\n                duration_ms=_elapsed_ms(start),\n                summary=f\"TCP connection succeeded ({host}:{port})\",\n                details=\"Socket opened and closed successfully.\",\n            )\n    except OSError as exc:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"fail\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"TCP connection failed ({host}:{port})\",\n            details=str(exc),\n        )\n\n\ndef _http_probe(\n    check_id: str, label: str, url: str, timeout_s: float\n) -> DiagnosticCheckResult:\n    start = time.monotonic()\n    try:\n        request = urllib.request.Request(url, method=\"GET\")\n        with urllib.request.urlopen(request, timeout=timeout_s) as response:\n            status_code = int(getattr(response, \"status\", 0) or 0)\n    except urllib.error.HTTPError as exc:\n        status_code = int(exc.code)\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"fail\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"HTTP probe returned {status_code}\",\n            details=f\"{url} returned HTTP {status_code}\",\n        )\n    except urllib.error.URLError as exc:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"fail\",\n            duration_ms=_elapsed_ms(start),\n            summary=\"HTTP probe failed\",\n            details=f\"{url}: {exc.reason}\",\n        )\n    status = \"pass\" if 200 <= status_code < 400 else \"warn\"\n    return DiagnosticCheckResult(\n        check_id=check_id,\n        label=label,\n        status=status,\n        duration_ms=_elapsed_ms(start),\n        summary=f\"HTTP probe returned {status_code}\",\n        details=url,\n    )\n\n\ndef _docker_compose_command() -> Optional[List[str]]:\n    # Always use the project name 'omero' when running from inside the container\n    # so docker compose knows what to target, since it's not running in the \n    # directory where the docker-compose.yml lives.\n    for candidate in ((\"docker\", \"compose\"), (\"docker-compose\",)):\n        ok, _, _ = _run_command([*candidate, \"version\"], timeout_s=5.0)\n        if ok:\n            return [*candidate, \"--project-name\", \"omero\"]\n    return None\n\n\ndef _compose_ps_health(\n    check_id: str, label: str, service: str\n) -> DiagnosticCheckResult:\n    start = time.monotonic()\n    compose_cmd = _docker_compose_command()\n    if compose_cmd is None:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=\"Docker compose command unavailable\",\n            details=\"Cannot inspect container state from this environment.\",\n        )\n    ok, stdout, stderr = _run_command(\n        [*compose_cmd, \"ps\", service, \"--format\", \"json\"], timeout_s=8.0\n    )\n    if not ok:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"Unable to read compose state for {service}\",\n            details=stderr or stdout or \"No compose output.\",\n        )\n    if not stdout.strip():\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"Service {service} not found in compose output\",\n            details=\"Empty response from docker compose ps.\",\n        )\n    try:\n        payload = json.loads(stdout)\n    except json.JSONDecodeError as exc:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"Failed to parse compose output for {service}\",\n            details=f\"JSON Decode Error: {exc}\\nOutput: {stdout[:280]}\",\n        )\n    records = payload if isinstance(payload, list) else [payload]\n    if not records:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"Service {service} missing from compose output\",\n            details=stdout[:280],\n        )\n    record = records[0]\n    state = str(record.get(\"State\") or \"unknown\")\n    health = str(record.get(\"Health\") or \"unknown\")\n    status = (\n        \"pass\"\n        if state.lower() == \"running\"\n        and health.lower() in {\"\", \"healthy\", \"none\", \"unknown\"}\n        else \"warn\"\n    )\n    return DiagnosticCheckResult(\n        check_id=check_id,\n        label=label,\n        status=status,\n        duration_ms=_elapsed_ms(start),\n        summary=f\"Compose state: {state}, health: {health}\",\n        details=f\"Service: {service}\",\n    )\n\n\ndef _compose_pg_test(check_id: str, label: str, service: str) -> DiagnosticCheckResult:\n    start = time.monotonic()\n    compose_cmd = _docker_compose_command()\n    if compose_cmd is None:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"warn\",\n            duration_ms=_elapsed_ms(start),\n            summary=\"Docker compose command unavailable\",\n            details=\"Cannot execute in-container PostgreSQL checks.\",\n        )\n    shell_cmd = (\n        'db_name=\"${POSTGRES_DB:-postgres}\"; '\n        'db_user=\"${POSTGRES_USER:-postgres}\"; '\n        'pg_isready -d \"$db_name\" -U \"$db_user\" && '\n        'psql -d \"$db_name\" -U \"$db_user\" -tAc \"SELECT 1\"'\n    )\n    cmd = [*compose_cmd, \"exec\", \"-T\", service, \"sh\", \"-lc\", shell_cmd]\n    ok, stdout, stderr = _run_command(cmd, timeout_s=10.0)\n    if not ok:\n        return DiagnosticCheckResult(\n            check_id=check_id,\n            label=label,\n            status=\"fail\",\n            duration_ms=_elapsed_ms(start),\n            summary=f\"In-container SQL test failed ({service})\",\n            details=stderr or stdout or \"No output.\",\n        )\n    sql_result = stdout.splitlines()[-1].strip() if stdout else \"\"\n    status = \"pass\" if sql_result == \"1\" else \"warn\"\n    return DiagnosticCheckResult(\n        check_id=check_id,\n        label=label,\n        status=status,\n        duration_ms=_elapsed_ms(start),\n        summary=f\"In-container SQL check completed ({service})\",\n        details=stdout or \"No output.\",\n    )\n\n\ndef list_diagnostic_scripts() -> List[DiagnosticScript]:\n    return [\n        DiagnosticScript(\n            script_id=\"omero_server_core\",\n            label=\"OMERO.server core connectivity\",\n            description=\"DNS resolution, Blitz TCP ports, web health probe, and compose state.\",\n            category=\"OMERO.server\",\n        ),\n        DiagnosticScript(\n            script_id=\"omero_database\",\n            label=\"OMERO database deep check\",\n            description=\"Host resolution, TCP connectivity, compose status, pg_isready and SQL probe.\",\n            category=\"Database\",\n        ),\n        DiagnosticScript(\n            script_id=\"plugin_database\",\n            label=\"Plugin database deep check\",\n            description=\"Host resolution, TCP connectivity, compose status, pg_isready and SQL probe.\",\n            category=\"Database\",\n        ),\n        DiagnosticScript(\n            script_id=\"platform_end_to_end\",\n            label=\"Platform end-to-end bundle\",\n            description=\"Runs all checks and returns an operator-friendly readiness report.\",\n            category=\"Bundle\",\n        ),\n    ]\n\n\ndef _run_omero_server_core() -> List[DiagnosticCheckResult]:\n    host = _get_env(\"ADMIN_TOOLS_OMERO_SERVER_HOST\", \"omeroserver\")\n    blitz_port = int(_get_env(\"ADMIN_TOOLS_OMERO_BLITZ_PORT\", \"4064\"))\n    secure_port = int(_get_env(\"ADMIN_TOOLS_OMERO_SECURE_PORT\", \"4063\"))\n    web_url = _get_env(\n        \"ADMIN_TOOLS_OMERO_WEB_HEALTH_URL\", \"http://omeroweb:4080/webclient/\"\n    )\n    timeout_s = _to_float_env(\"ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS\", 3.5)\n\n    return [\n        _resolve_hostname(\"omero_host_dns\", \"Resolve OMERO.server hostname\", host),\n        _tcp_connect(\n            \"omero_blitz_tcp\",\n            \"Connect to OMERO Blitz port\",\n            host,\n            blitz_port,\n            timeout_s,\n        ),\n        _tcp_connect(\n            \"omero_secure_tcp\",\n            \"Connect to OMERO secure port\",\n            host,\n            secure_port,\n            timeout_s,\n        ),\n        _http_probe(\"omero_web_http\", \"Probe OMERO.web endpoint\", web_url, timeout_s),\n        _compose_ps_health(\n            \"omero_compose_state\", \"Inspect OMERO.server compose state\", \"omeroserver\"\n        ),\n    ]\n\n\ndef _run_database_checks(\n    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str\n) -> List[DiagnosticCheckResult]:\n    host = _get_env(host_env, service)\n    port = int(_get_env(port_env, \"5432\"))\n    timeout_s = _to_float_env(\"ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS\", 3.5)\n\n    return [\n        _resolve_hostname(\n            f\"{script_prefix}_dns\", f\"Resolve {label_prefix} hostname\", host\n        ),\n        _tcp_connect(\n            f\"{script_prefix}_tcp\",\n            f\"Connect to {label_prefix} PostgreSQL TCP endpoint\",\n            host,\n            port,\n            timeout_s,\n        ),\n        _compose_ps_health(\n            f\"{script_prefix}_compose_state\",\n            f\"Inspect {label_prefix} compose state\",\n            service,\n        ),\n        _compose_pg_test(\n            f\"{script_prefix}_sql\",\n            f\"Run in-container SQL sanity test ({label_prefix})\",\n            service,\n        ),\n    ]\n\n\ndef run_diagnostic_script(script_id: str) -> Dict[str, object]:\n    script_map: Dict[str, Callable[[], List[DiagnosticCheckResult]]] = {\n        \"omero_server_core\": _run_omero_server_core,\n        \"omero_database\": lambda: _run_database_checks(\n            \"omero_database\",\n            \"OMERO database\",\n            \"ADMIN_TOOLS_OMERO_DB_HOST\",\n            \"ADMIN_TOOLS_OMERO_DB_PORT\",\n            \"database\",\n        ),\n        \"plugin_database\": lambda: _run_database_checks(\n            \"plugin_database\",\n            \"plugin database\",\n            \"ADMIN_TOOLS_PLUGIN_DB_HOST\",\n            \"ADMIN_TOOLS_PLUGIN_DB_PORT\",\n            \"database_plugin\",\n        ),\n    }\n\n    try:\n        if script_id == \"platform_end_to_end\":\n            checks: List[DiagnosticCheckResult] = []\n            for child_script in (\"omero_server_core\", \"omero_database\", \"plugin_database\"):\n                checks.extend(script_map[child_script]())\n        elif script_id in script_map:\n            checks = script_map[script_id]()\n        else:\n            return {\n                \"script_id\": script_id,\n                \"status\": \"fail\",\n                \"error\": f\"Unknown script_id: {shlex.quote(script_id)}\",\n                \"checks\": [],\n            }\n\n        pass_count = sum(1 for item in checks if item.status == \"pass\")\n        warn_count = sum(1 for item in checks if item.status == \"warn\")\n        fail_count = sum(1 for item in checks if item.status == \"fail\")\n        status = \"pass\"\n        if fail_count:\n            status = \"fail\"\n        elif warn_count:\n            status = \"warn\"\n\n        return {\n            \"script_id\": script_id,\n            \"status\": status,\n            \"summary\": {\n                \"pass\": pass_count,\n                \"warn\": warn_count,\n                \"fail\": fail_count,\n                \"total\": len(checks),\n            },\n            \"checks\": [asdict(item) for item in checks],\n        }\n    except Exception as exc:\n        logger.exception(f\"Exception running diagnostic script {script_id}\")\n        return {\n            \"script_id\": script_id,\n            \"status\": \"fail\",\n            \"error\": f\"Failed to execute check: {exc}\",\n            \"checks\": [],\n        }\n\n\ndef serialize_scripts() -> List[Dict[str, str]]:\n    return [asdict(item) for item in list_diagnostic_scripts()]\n
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import socket
+import subprocess
+import time
+import logging
+from dataclasses import asdict
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
+
+import urllib.error
+import urllib.request
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DiagnosticCheckResult:
+    """Single test execution outcome."""
+
+    check_id: str
+    label: str
+    status: str
+    duration_ms: int
+    summary: str
+    details: str
+
+
+@dataclass(frozen=True)
+class DiagnosticScript:
+    """Runnable script profile displayed in the UI."""
+
+    script_id: str
+    label: str
+    description: str
+    category: str
+
+
+def _get_env(name: str, default: str) -> str:
+    value = os.environ.get(name, default)
+    return str(value).strip() or default
+
+
+def _to_float_env(name: str, default: float) -> float:
+    raw_value = _get_env(name, str(default))
+    try:
+        return float(raw_value)
+    except ValueError:
+        return default
+
+
+def _elapsed_ms(start: float) -> int:
+    return int(max(0.0, (time.monotonic() - start) * 1000.0))
+
+
+def _run_command(cmd: Sequence[str], timeout_s: float = 8.0) -> Tuple[bool, str, str]:
+    try:
+        completed = subprocess.run(
+            list(cmd),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except FileNotFoundError:
+        return False, "", f"Command not available: {cmd[0]}"
+    except subprocess.TimeoutExpired:
+        return False, "", f"Command timed out after {timeout_s:.1f}s"
+    return completed.returncode == 0, completed.stdout.strip(), completed.stderr.strip()
+
+
+def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckResult:
+    start = time.monotonic()
+    try:
+        addresses = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary=f"Unable to resolve host {host}",
+            details=str(exc),
+        )
+    unique_ips = sorted({entry[4][0] for entry in addresses if entry and entry[4]})
+    return DiagnosticCheckResult(
+        check_id=check_id,
+        label=label,
+        status="pass",
+        duration_ms=_elapsed_ms(start),
+        summary=f"Resolved {host}",
+        details=", ".join(unique_ips[:6]),
+    )
+
+
+def _tcp_connect(
+    check_id: str, label: str, host: str, port: int, timeout_s: float
+) -> DiagnosticCheckResult:
+    start = time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=timeout_s):
+            return DiagnosticCheckResult(
+                check_id=check_id,
+                label=label,
+                status="pass",
+                duration_ms=_elapsed_ms(start),
+                summary=f"TCP connection succeeded ({host}:{port})",
+                details="Socket opened and closed successfully.",
+            )
+    except OSError as exc:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary=f"TCP connection failed ({host}:{port})",
+            details=str(exc),
+        )
+
+
+def _http_probe(
+    check_id: str, label: str, url: str, timeout_s: float
+) -> DiagnosticCheckResult:
+    start = time.monotonic()
+    try:
+        request = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            status_code = int(getattr(response, "status", 0) or 0)
+    except urllib.error.HTTPError as exc:
+        status_code = int(exc.code)
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary=f"HTTP probe returned {status_code}",
+            details=f"{url} returned HTTP {status_code}",
+        )
+    except urllib.error.URLError as exc:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary="HTTP probe failed",
+            details=f"{url}: {exc.reason}",
+        )
+    status = "pass" if 200 <= status_code < 400 else "warn"
+    return DiagnosticCheckResult(
+        check_id=check_id,
+        label=label,
+        status=status,
+        duration_ms=_elapsed_ms(start),
+        summary=f"HTTP probe returned {status_code}",
+        details=url,
+    )
+
+
+def _docker_compose_command() -> Optional[List[str]]:
+    # Always use the project name 'omero' when running from inside the container
+    # so docker compose knows what to target, since it's not running in the 
+    # directory where the docker-compose.yml lives.
+    for candidate in (("docker", "compose"), ("docker-compose",)):
+        ok, _, _ = _run_command([*candidate, "version"], timeout_s=5.0)
+        if ok:
+            return [*candidate, "--project-name", "omero"]
+    return None
+
+
+def _compose_ps_health(
+    check_id: str, label: str, service: str
+) -> DiagnosticCheckResult:
+    start = time.monotonic()
+    compose_cmd = _docker_compose_command()
+    if compose_cmd is None:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary="Docker compose command unavailable",
+            details="Cannot inspect container state from this environment.",
+        )
+    ok, stdout, stderr = _run_command(
+        [*compose_cmd, "ps", service, "--format", "json"], timeout_s=8.0
+    )
+    if not ok:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary=f"Unable to read compose state for {service}",
+            details=stderr or stdout or "No compose output.",
+        )
+    if not stdout.strip():
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary=f"Service {service} not found in compose output",
+            details="Empty response from docker compose ps.",
+        )
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary=f"Failed to parse compose output for {service}",
+            details=f"JSON Decode Error: {exc}\nOutput: {stdout[:280]}",
+        )
+    records = payload if isinstance(payload, list) else [payload]
+    if not records:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary=f"Service {service} missing from compose output",
+            details=stdout[:280],
+        )
+    record = records[0]
+    state = str(record.get("State") or "unknown")
+    health = str(record.get("Health") or "unknown")
+    status = (
+        "pass"
+        if state.lower() == "running"
+        and health.lower() in {"", "healthy", "none", "unknown"}
+        else "warn"
+    )
+    return DiagnosticCheckResult(
+        check_id=check_id,
+        label=label,
+        status=status,
+        duration_ms=_elapsed_ms(start),
+        summary=f"Compose state: {state}, health: {health}",
+        details=f"Service: {service}",
+    )
+
+
+def _compose_pg_test(check_id: str, label: str, service: str) -> DiagnosticCheckResult:
+    start = time.monotonic()
+    compose_cmd = _docker_compose_command()
+    if compose_cmd is None:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="warn",
+            duration_ms=_elapsed_ms(start),
+            summary="Docker compose command unavailable",
+            details="Cannot execute in-container PostgreSQL checks.",
+        )
+    shell_cmd = (
+        'db_name="${POSTGRES_DB:-postgres}"; '
+        'db_user="${POSTGRES_USER:-postgres}"; '
+        'pg_isready -d "$db_name" -U "$db_user" && '
+        'psql -d "$db_name" -U "$db_user" -tAc "SELECT 1"'
+    )
+    cmd = [*compose_cmd, "exec", "-T", service, "sh", "-lc", shell_cmd]
+    ok, stdout, stderr = _run_command(cmd, timeout_s=10.0)
+    if not ok:
+        return DiagnosticCheckResult(
+            check_id=check_id,
+            label=label,
+            status="fail",
+            duration_ms=_elapsed_ms(start),
+            summary=f"In-container SQL test failed ({service})",
+            details=stderr or stdout or "No output.",
+        )
+    sql_result = stdout.splitlines()[-1].strip() if stdout else ""
+    status = "pass" if sql_result == "1" else "warn"
+    return DiagnosticCheckResult(
+        check_id=check_id,
+        label=label,
+        status=status,
+        duration_ms=_elapsed_ms(start),
+        summary=f"In-container SQL check completed ({service})",
+        details=stdout or "No output.",
+    )
+
+
+def list_diagnostic_scripts() -> List[DiagnosticScript]:
+    return [
+        DiagnosticScript(
+            script_id="omero_server_core",
+            label="OMERO.server core connectivity",
+            description="DNS resolution, Blitz TCP ports, web health probe, and compose state.",
+            category="OMERO.server",
+        ),
+        DiagnosticScript(
+            script_id="omero_database",
+            label="OMERO database deep check",
+            description="Host resolution, TCP connectivity, compose status, pg_isready and SQL probe.",
+            category="Database",
+        ),
+        DiagnosticScript(
+            script_id="plugin_database",
+            label="Plugin database deep check",
+            description="Host resolution, TCP connectivity, compose status, pg_isready and SQL probe.",
+            category="Database",
+        ),
+        DiagnosticScript(
+            script_id="platform_end_to_end",
+            label="Platform end-to-end bundle",
+            description="Runs all checks and returns an operator-friendly readiness report.",
+            category="Bundle",
+        ),
+    ]
+
+
+def _run_omero_server_core() -> List[DiagnosticCheckResult]:
+    host = _get_env("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
+    blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
+    secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
+    web_url = _get_env(
+        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4080/webclient/"
+    )
+    timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
+
+    return [
+        _resolve_hostname("omero_host_dns", "Resolve OMERO.server hostname", host),
+        _tcp_connect(
+            "omero_blitz_tcp",
+            "Connect to OMERO Blitz port",
+            host,
+            blitz_port,
+            timeout_s,
+        ),
+        _tcp_connect(
+            "omero_secure_tcp",
+            "Connect to OMERO secure port",
+            host,
+            secure_port,
+            timeout_s,
+        ),
+        _http_probe("omero_web_http", "Probe OMERO.web endpoint", web_url, timeout_s),
+        _compose_ps_health(
+            "omero_compose_state", "Inspect OMERO.server compose state", "omeroserver"
+        ),
+    ]
+
+
+def _run_database_checks(
+    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str
+) -> List[DiagnosticCheckResult]:
+    host = _get_env(host_env, service)
+    port = int(_get_env(port_env, "5432"))
+    timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
+
+    return [
+        _resolve_hostname(
+            f"{script_prefix}_dns", f"Resolve {label_prefix} hostname", host
+        ),
+        _tcp_connect(
+            f"{script_prefix}_tcp",
+            f"Connect to {label_prefix} PostgreSQL TCP endpoint",
+            host,
+            port,
+            timeout_s,
+        ),
+        _compose_ps_health(
+            f"{script_prefix}_compose_state",
+            f"Inspect {label_prefix} compose state",
+            service,
+        ),
+        _compose_pg_test(
+            f"{script_prefix}_sql",
+            f"Run in-container SQL sanity test ({label_prefix})",
+            service,
+        ),
+    ]
+
+
+def run_diagnostic_script(script_id: str) -> Dict[str, object]:
+    script_map: Dict[str, Callable[[], List[DiagnosticCheckResult]]] = {
+        "omero_server_core": _run_omero_server_core,
+        "omero_database": lambda: _run_database_checks(
+            "omero_database",
+            "OMERO database",
+            "ADMIN_TOOLS_OMERO_DB_HOST",
+            "ADMIN_TOOLS_OMERO_DB_PORT",
+            "database",
+        ),
+        "plugin_database": lambda: _run_database_checks(
+            "plugin_database",
+            "plugin database",
+            "ADMIN_TOOLS_PLUGIN_DB_HOST",
+            "ADMIN_TOOLS_PLUGIN_DB_PORT",
+            "database_plugin",
+        ),
+    }
+
+    try:
+        if script_id == "platform_end_to_end":
+            checks: List[DiagnosticCheckResult] = []
+            for child_script in ("omero_server_core", "omero_database", "plugin_database"):
+                checks.extend(script_map[child_script]())
+        elif script_id in script_map:
+            checks = script_map[script_id]()
+        else:
+            return {
+                "script_id": script_id,
+                "status": "fail",
+                "error": f"Unknown script_id: {shlex.quote(script_id)}",
+                "checks": [],
+            }
+
+        pass_count = sum(1 for item in checks if item.status == "pass")
+        warn_count = sum(1 for item in checks if item.status == "warn")
+        fail_count = sum(1 for item in checks if item.status == "fail")
+        status = "pass"
+        if fail_count:
+            status = "fail"
+        elif warn_count:
+            status = "warn"
+
+        return {
+            "script_id": script_id,
+            "status": status,
+            "summary": {
+                "pass": pass_count,
+                "warn": warn_count,
+                "fail": fail_count,
+                "total": len(checks),
+            },
+            "checks": [asdict(item) for item in checks],
+        }
+    except Exception as exc:
+        logger.exception(f"Exception running diagnostic script {script_id}")
+        return {
+            "script_id": script_id,
+            "status": "fail",
+            "error": f"Failed to execute check: {exc}",
+            "checks": [],
+        }
+
+
+def serialize_scripts() -> List[Dict[str, str]]:
+    return [asdict(item) for item in list_diagnostic_scripts()]
