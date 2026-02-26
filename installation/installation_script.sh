@@ -1982,24 +1982,107 @@ is_crowdsec_enabled() {
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
-    local probe_name="omero-install-probe-default-id-$RANDOM"
+    local configured_user=""
+    local configured_account=""
+    local configured_group=""
+    local container_name=""
+    local passwd_file=""
+    local group_file=""
+    local resolved_uid=""
+    local resolved_gid=""
 
-    local out=""
+    configured_user="$(docker image inspect --format '{{.Config.User}}' "${image}" 2>/dev/null || true)"
+    configured_user="${configured_user// /}"
 
-    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
-        echo "ERROR: Failed to discover default runtime id ${id_flag} from image '${image}'." >&2
+    if [ -z "${configured_user}" ]; then
+        if [ "${id_flag}" = "-u" ] || [ "${id_flag}" = "-g" ]; then
+            printf '0'
+            return 0
+        fi
+        echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
         return 1
     fi
-    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
 
-    if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: Discovered non-numeric default runtime id (${id_flag})='${out}' in image '${image}'." >&2
-        return 1
+    configured_account="${configured_user%%:*}"
+    if [ "${configured_user}" != "${configured_account}" ]; then
+        configured_group="${configured_user#*:}"
     fi
 
-    printf '%s' "${out}"
-    return 0
+    if [[ "${configured_account}" =~ ^[0-9]+$ ]]; then
+        resolved_uid="${configured_account}"
+    fi
+    if [ -n "${configured_group}" ] && [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+        resolved_gid="${configured_group}"
+    fi
+
+    if [ -n "${resolved_uid}" ] && ([ "${id_flag}" = "-u" ] || [ -n "${resolved_gid}" ]); then
+        if [ "${id_flag}" = "-u" ]; then
+            printf '%s' "${resolved_uid}"
+            return 0
+        fi
+        printf '%s' "${resolved_gid}"
+        return 0
+    fi
+
+    container_name="omero-install-probe-default-id-$RANDOM"
+    if ! docker create --name "${container_name}" --entrypoint /bin/true "${image}" >/dev/null 2>&1; then
+        if ! docker create --name "${container_name}" "${image}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to create probe container for image '${image}' while resolving ${id_flag}." >&2
+            return 1
+        fi
+    fi
+
+    passwd_file="$(mktemp)"
+    group_file="$(mktemp)"
+
+    if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
+        echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${configured_account}'." >&2
+        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        rm -f "${passwd_file}" "${group_file}" || true
+        return 1
+    fi
+    docker cp "${container_name}:/etc/group" "${group_file}" >/dev/null 2>&1 || true
+
+    if [ -z "${resolved_uid}" ]; then
+        resolved_uid="$(awk -F: -v user="${configured_account}" '$1==user {print $3; exit}' "${passwd_file}")"
+    fi
+
+    if [ -z "${resolved_gid}" ]; then
+        if [ -n "${configured_group}" ]; then
+            if [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+                resolved_gid="${configured_group}"
+            elif [ -s "${group_file}" ]; then
+                resolved_gid="$(awk -F: -v grp="${configured_group}" '$1==grp {print $3; exit}' "${group_file}")"
+            fi
+        fi
+        if [ -z "${resolved_gid}" ]; then
+            resolved_gid="$(awk -F: -v user="${configured_account}" '$1==user {print $4; exit}' "${passwd_file}")"
+        fi
+    fi
+
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    rm -f "${passwd_file}" "${group_file}" || true
+
+    if [ "${id_flag}" = "-u" ]; then
+        if ! [[ "${resolved_uid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric default runtime UID from image '${image}' (Config.User='${configured_user}')." >&2
+            return 1
+        fi
+        printf '%s' "${resolved_uid}"
+        return 0
+    fi
+
+    if [ "${id_flag}" = "-g" ]; then
+        if ! [[ "${resolved_gid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric default runtime GID from image '${image}' (Config.User='${configured_user}')." >&2
+            return 1
+        fi
+        printf '%s' "${resolved_gid}"
+        return 0
+    fi
+
+    echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+    return 1
 }
 
 
