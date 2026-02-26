@@ -31,6 +31,7 @@ ARG SETUPTOOLS_VERSION=80.9.0
 # --------------------------------------------------------------
 ARG DNF_MAX_ATTEMPTS=5
 ARG DNF_RETRY_SLEEP_SECONDS=15
+ARG DNF_USE_ROCKY_MIRRORLIST=1
 
 # Locate OMERO.server venv and fail fast if layout changes
 # --------------------------------------------------------
@@ -162,9 +163,26 @@ RUN set -euo pipefail; \
     dnf_retry() { \
         local attempt=1; \
         local max_attempts="${DNF_MAX_ATTEMPTS}"; \
+        local fallback_applied=0; \
         while true; do \
-            if dnf -y --refresh --setopt=timeout=60 --setopt=retries=20 "$@"; then \
+            if dnf -y --refresh \
+                --setopt=timeout=60 \
+                --setopt=retries=20 \
+                "$@"; then \
                 return 0; \
+            fi; \
+            if [[ "${attempt}" -eq 1 && "${fallback_applied}" -eq 0 && "${DNF_USE_ROCKY_MIRRORLIST}" == "1" ]]; then \
+                echo "WARNING: First dnf attempt failed; enabling Rocky mirrorlist fallback and cleaning metadata cache before retry." >&2; \
+                for repo_file in /etc/yum.repos.d/rocky*.repo; do \
+                    if [[ -f "${repo_file}" ]]; then \
+                        sed -i -E 's|^mirrorlist=http://|mirrorlist=https://|g' "${repo_file}"; \
+                        sed -i -E 's|^#mirrorlist=|mirrorlist=|g' "${repo_file}"; \
+                        sed -i -E 's|^baseurl=https?://dl\.rockylinux\.org|#baseurl=https://dl.rockylinux.org|g' "${repo_file}"; \
+                    fi; \
+                done; \
+                dnf clean all; \
+                rm -rf /var/cache/dnf; \
+                fallback_applied=1; \
             fi; \
             if [[ "${attempt}" -ge "${max_attempts}" ]]; then \
                 echo "ERROR: dnf command failed after ${max_attempts} attempts: dnf $*" >&2; \
