@@ -11,7 +11,7 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Connected clients",
+      "title": "Active connections",
       "id": 1,
       "gridPos": {
         "h": 4,
@@ -336,7 +336,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Connected clients",
+      "title": "Active connections",
       "id": 9,
       "gridPos": {
         "h": 8,
