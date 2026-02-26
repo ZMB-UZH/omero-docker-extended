@@ -2047,10 +2047,14 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
         )
 
     request_id = str(uuid.uuid4())
+    try:
+        username = current_username(request, conn)
+    except Exception:
+        username = "unknown"
     logger.info(
         "[%s] Running diagnostics scripts requested by %s: %s",
         request_id,
-        current_username(request),
+        username,
         ", ".join(normalized_script_ids),
     )
     try:
