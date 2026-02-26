@@ -27,6 +27,11 @@ ENV PIP_NO_CACHE_DIR=1 \
 # --------------------------------------------------------------
 ARG SETUPTOOLS_VERSION=80.9.0
 
+# Shared DNF retry settings for transient upstream mirror failures
+# --------------------------------------------------------------
+ARG DNF_MAX_ATTEMPTS=5
+ARG DNF_RETRY_SLEEP_SECONDS=15
+
 # Locate OMERO.server venv and fail fast if layout changes
 # --------------------------------------------------------
 RUN set -euo pipefail; \
@@ -154,10 +159,26 @@ RUN set -euo pipefail; \
 # Install runtime diagnostics + git
 # ---------------------------------
 RUN set -euo pipefail; \
+    dnf_retry() { \
+        local attempt=1; \
+        local max_attempts="${DNF_MAX_ATTEMPTS}"; \
+        while true; do \
+            if dnf -y --refresh --setopt=timeout=60 --setopt=retries=20 "$@"; then \
+                return 0; \
+            fi; \
+            if [[ "${attempt}" -ge "${max_attempts}" ]]; then \
+                echo "ERROR: dnf command failed after ${max_attempts} attempts: dnf $*" >&2; \
+                return 1; \
+            fi; \
+            echo "WARNING: dnf command failed on attempt ${attempt}/${max_attempts}; retrying in ${DNF_RETRY_SLEEP_SECONDS}s..." >&2; \
+            attempt=$((attempt + 1)); \
+            sleep "${DNF_RETRY_SLEEP_SECONDS}"; \
+        done; \
+    }; \
     if [[ "${APPLY_DNF_UPDATES}" == "1" ]]; then \
-        dnf -y update --security || dnf -y update; \
+        dnf_retry update --security || dnf_retry update; \
     fi; \
-    dnf -y install \
+    dnf_retry install \
         --allowerasing \
         --setopt=install_weak_deps=False \
         --setopt=tsflags=nodocs \
