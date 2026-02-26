@@ -1041,6 +1041,7 @@ body {
     color: #334155;
 }
 
+/* ── Diagnostics page ── */
 .diagnostics-card {
     gap: 14px;
 }
@@ -1072,19 +1073,32 @@ body {
 }
 .diag-script-checkbox {
     margin-top: 3px;
+    flex-shrink: 0;
+}
+.diag-script-content {
+    flex: 1;
+    min-width: 0;
 }
 .diag-script-header {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 8px;
 }
+.diag-script-header strong {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
 .diag-script-category {
+    flex-shrink: 0;
     color: #1d4ed8;
     font-size: 12px;
     font-weight: 700;
     background: #dbeafe;
     padding: 2px 7px;
     border-radius: 999px;
+    white-space: nowrap;
 }
 .diag-script-description {
     margin-top: 6px;
@@ -1102,11 +1116,15 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
 }
 .diag-result-header h3 {
     margin: 0;
     font-size: 16px;
     color: #1e3a8a;
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
 }
 .diag-counter-row {
     display: flex;
@@ -1122,7 +1140,73 @@ body {
 }
 .diag-table-wrap {
     overflow: auto;
-    max-height: 320px;
+    max-height: 400px;
+}
+/* ── Diagnostic results table — independent layout from .log-table ── */
+.diag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+.diag-table th,
+.diag-table td {
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+    overflow: hidden;
+    word-break: break-word;
+}
+.diag-table tr:last-child td {
+    border-bottom: none;
+}
+.diag-table th {
+    background: #3b6df2;
+    color: #fff;
+    font-weight: 700;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Column 1: Check label — fixed width, allow wrapping */
+.diag-table th:nth-child(1),
+.diag-table td:nth-child(1) {
+    width: 200px;
+    min-width: 200px;
+}
+/* Column 2: Status badge — fixed narrow */
+.diag-table th:nth-child(2),
+.diag-table td:nth-child(2) {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    text-align: center;
+    white-space: nowrap;
+}
+/* Column 3: Summary — flex fill */
+.diag-table th:nth-child(3),
+.diag-table td:nth-child(3) {
+    width: auto;
+    min-width: 160px;
+}
+/* Column 4: Details — flex fill, slightly wider */
+.diag-table th:nth-child(4),
+.diag-table td:nth-child(4) {
+    width: auto;
+    min-width: 200px;
+}
+/* Column 5: Duration — fixed narrow */
+.diag-table th:nth-child(5),
+.diag-table td:nth-child(5) {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    white-space: nowrap;
+    text-align: right;
 }
 .diag-badge {
     display: inline-flex;
@@ -1134,6 +1218,7 @@ body {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.4px;
+    white-space: nowrap;
 }
 .diag-badge--pass {
     color: #166534;
