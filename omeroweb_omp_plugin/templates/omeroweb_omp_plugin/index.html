@@ -343,6 +343,17 @@
                       style="width:100%; min-height:110px; max-height:260px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
                       placeholder='Click "Process" to generate a set of suggested parsed values.'></textarea>
         </div>
+        <div style="margin-bottom:10px;">
+            <label style="display:flex; align-items:center; gap:8px; font-weight:600; margin-bottom:4px; cursor:pointer;">
+                <input type="checkbox" id="ai_parse_custom_toggle">
+                Provide custom instructions
+            </label>
+            <div id="ai_parse_custom_wrapper" style="display:none;">
+                <textarea id="ai_parse_custom_instructions"
+                          style="width:100%; min-height:60px; max-height:150px; border-radius:6px; resize:vertical; border:1px solid #007bff; padding:8px;"
+                          placeholder="E.g. treat the number after 'rep' as the replicate value, etc."></textarea>
+            </div>
+        </div>
         <div style="display:flex; justify-content:flex-end; gap:8px;">
             <button type="button" id="ai_parse_process_btn">Process</button>
             <button type="button" id="ai_parse_transfer_btn" disabled>Transfer</button>
@@ -3580,6 +3591,15 @@ const previewForm = document.getElementById('preview_form');
             formData.append('project', projectId);
             formData.append('selected_datasets', datasetIds.join(','));
             formData.append('provider', provider);
+
+            const aiParseCustomToggle = document.getElementById('ai_parse_custom_toggle');
+            if (aiParseCustomToggle && aiParseCustomToggle.checked) {
+                const customInst = document.getElementById('ai_parse_custom_instructions')?.value?.trim();
+                if (customInst) {
+                    formData.append('custom_instructions', customInst);
+                }
+            }
+
             if (isModelSelectionPending(aiParseModelSelect)) {
                 updateAiParseModalStatus(
                     formatMessage(messages.aiModelsLoading, { provider: getProviderLabel(provider) }),
@@ -3942,6 +3962,14 @@ const previewForm = document.getElementById('preview_form');
     if (datasetClearBtn) {
         datasetClearBtn.addEventListener('click', () => {
             resetAllSelections();
+        });
+    }
+
+    const aiParseCustomToggle = document.getElementById('ai_parse_custom_toggle');
+    if (aiParseCustomToggle) {
+        aiParseCustomToggle.addEventListener('change', function() {
+            const wrapper = document.getElementById('ai_parse_custom_wrapper');
+            if (wrapper) wrapper.style.display = this.checked ? 'block' : 'none';
         });
     }
 
