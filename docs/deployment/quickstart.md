@@ -76,7 +76,8 @@ Notes:
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
-- OMERO.web and OMERO.server image builds now retry transient `dnf` metadata/package fetch failures (for example Rocky mirror `500/504` responses) up to 5 times before failing, reducing temporary mirror-outage build failures during update/install runs.
+- OMERO.web and OMERO.server image builds now harden Rocky package retrieval by default: retry transient `dnf` metadata/package fetch failures (for example mirror `500/504` responses), prefer Rocky `mirrorlist` as a fallback only after the first `dnf` failure, then clean metadata/cache before retrying so transient mirror errors can recover without changing first-attempt behavior.
+- Advanced override: Docker builds can tune these safeguards with `--build-arg DNF_MAX_ATTEMPTS=...`, `--build-arg DNF_RETRY_SLEEP_SECONDS=...`, and `--build-arg DNF_USE_ROCKY_MIRRORLIST=0|1`.
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
