@@ -77,6 +77,7 @@ RUN set -euo pipefail; \
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
 # -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
+    curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo; \
     dnf_retry() { \
         local attempt=1; \
         local max_attempts="${DNF_MAX_ATTEMPTS}"; \
@@ -116,7 +117,9 @@ RUN set -euo pipefail; \
         python3-devel \
         supervisor \
         quota \
-        e2fsprogs; \
+        e2fsprogs \
+        docker-ce-cli \
+        docker-compose-plugin; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true
 
