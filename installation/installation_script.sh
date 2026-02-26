@@ -1272,7 +1272,7 @@ validate_path_is_preparable() {
         return 1
     fi
 
-    if [ -e "${path_to_check}" ] && [ ! -d "${path_to_check}"]; then
+    if [ -e "${path_to_check}" ] && [ ! -d "${path_to_check}" ]; then
         echo "ERROR: ${path_label} exists but is not a directory: ${path_to_check}" >&2
         return 1
     fi
@@ -1594,7 +1594,8 @@ resolve_buildx_compressed_build_choice() {
                 echo "USE_BUILDX_CHOICE=${override_choice}: using docker compose build (Buildx compressed build disabled)."
                 return 0
                 ;;
-            *)\n                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+            *)
+                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
                 return 1
                 ;;
         esac
