@@ -2048,6 +2048,10 @@ discover_container_default_id_or_die() {
     fi
 
     if [ -z "${resolved_gid}" ]; then
+        if [[ "${configured_account}" =~ ^[0-9]+$ ]] && [ -z "${configured_group}" ]; then
+            resolved_gid="$(awk -F: -v uid="${configured_account}" '$3==uid {print $4; exit}' "${passwd_file}")"
+        fi
+
         if [ -n "${configured_group}" ]; then
             if [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
                 resolved_gid="${configured_group}"
