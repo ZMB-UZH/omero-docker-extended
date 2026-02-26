@@ -74,7 +74,20 @@ RUN set -euo pipefail; \
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
 # -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    dnf -y install \
+    dnf_retry() { \
+        local attempt=1; \
+        local max_attempts=5; \
+        until dnf -y --refresh --setopt=timeout=60 --setopt=retries=20 "$@"; do \
+            if [[ "${attempt}" -ge "${max_attempts}" ]]; then \
+                echo "ERROR: dnf command failed after ${max_attempts} attempts: dnf $*" >&2; \
+                return 1; \
+            fi; \
+            echo "WARNING: dnf command failed on attempt ${attempt}/${max_attempts}; retrying in 15s..." >&2; \
+            attempt=$((attempt + 1)); \
+            sleep 15; \
+        done; \
+    }; \
+    dnf_retry install \
         gcc \
         gcc-c++ \
         make \
