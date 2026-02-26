@@ -158,7 +158,43 @@ Expected compose configuration:
 
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
 
-## 10. Postgres keeps rejecting `omero` after startup
+
+## 10. cAdvisor exits immediately and prints command-line help
+
+Symptom:
+
+- `cadvisor` restarts repeatedly.
+- Logs show the full command-line flag help output instead of normal startup messages.
+
+Root cause:
+
+- cAdvisor v0.55.1 in this stack does not accept `--rootfs=/rootfs` as a startup flag.
+- Passing an unsupported flag makes cAdvisor exit after printing usage/help.
+
+Fix in this distribution:
+
+- `cadvisor` now runs with its default command (no unsupported custom flags).
+- Host filesystem visibility is still provided by the existing read-only root bind mount `/:/rootfs:ro`.
+
+Check/verify commands:
+
+```bash
+# 1) Recreate only cAdvisor with current compose config
+docker compose --env-file installation_paths.env up -d cadvisor
+
+# 2) Confirm startup no longer prints usage/help
+docker compose --env-file installation_paths.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
+
+# 3) Confirm metrics endpoint is reachable inside the container network
+docker compose --env-file installation_paths.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
+```
+
+Expected result:
+
+- Logs show normal startup (for example `Starting cAdvisor version ...`) and no unsupported-flag usage output.
+- Healthcheck remains healthy and Prometheus can scrape `http://cadvisor:8080/metrics`.
+
+## 11. Postgres keeps rejecting `omero` after startup
 
 Symptom:
 
@@ -187,7 +223,7 @@ Expected result:
 - `database` no longer logs repeated auth failures for user `omero`.
 
 
-## 11. LDAP users are placed into `default` group instead of `users_ldap`
+## 12. LDAP users are placed into `default` group instead of `users_ldap`
 
 Symptom:
 
@@ -224,3 +260,32 @@ Expected result:
 - Output is your configured target (for example `users_ldap`) or a deliberate dynamic expression (for example `:dn_attribute:memberOf`), not implicit `default`.
 - If output is still `default` and this is intentional, startup will continue (no failure) and explicit LDAP group bootstrap is skipped.
 - If output is still `default` but you expect another group, inspect OMERO.server bootstrap logs for LDAP config apply/validation failures.
+
+
+## 13. OMERO.web fails with `PermissionError` under `/opt/omero/web/OMERO.web/var/omero`
+
+Symptom:
+
+- `omeroweb` logs show:
+  - `PermissionError: [Errno 13] Permission denied: '/opt/omero/web/OMERO.web/var/omero'`
+  - `Invalid tmp dir: /opt/omero/web/OMERO.web/var/omero/tmp`
+  - `Please create a /opt/omero/web/OMERO.web/var/django_secret_key file`
+
+Cause:
+
+- Host bind mount for `OMERO_WEB_VAR_PATH` exists but ownership/permissions do not match the runtime `omero-web` user.
+- OMERO.web cannot create runtime temp directories or write `django_secret_key`.
+
+Fix:
+
+```bash
+bash installation/installation_script.sh
+
+docker compose up -d --build omeroweb
+```
+
+Expected behavior after this fix:
+
+- Installer assigns `OMERO_WEB_VAR_PATH` ownership to OMERO.web UID/GID.
+- `startup/10-web-bootstrap.sh` repairs missing `var/omero/tmp`, enforces writable permissions, and auto-generates `var/django_secret_key` when missing.
+

@@ -27,7 +27,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 - Installs all four plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
 - Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export).
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web and the Imaris Celery worker as two supervised processes.
-- Bootstrap script (`startup/10-web-bootstrap.sh`) validates log directory access and configures Docker socket GID.
+- Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
 - Mounts: OMERO data (read-write), upload temp directory (tmpfs for job files), Docker socket (read-only), server logs (read-only for admin tools).
 
@@ -44,7 +44,7 @@ Both use a `pgdata` subdirectory inside bind mounts to avoid ext4 `lost+found` i
 
 Cache backend and Celery message broker:
 
-- Version 8.4.0-alpine with in-memory only configuration (`--save "" --appendonly no`).
+- Version 8.4.0-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
 - Requires `vm.overcommit_memory=1` set by the `redis-sysctl-init` one-shot sidecar.
 - Used as: OMERO.web session cache (db 1), Celery broker and result backend (db 2).
@@ -60,6 +60,8 @@ Cache backend and Celery message broker:
 - **cAdvisor** (v0.55.1): container resource metrics.
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.81.0): Redis metrics.
+- **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs host `df -P -B1` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
+- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog, SSH auth logs, and Docker container logs. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`. The service is not run in Docker `privileged` mode by default; it operates through read-only host log, host-root, and Docker-socket mounts.
 
 ### Maintenance sidecar (`pg-maintenance`)
 
@@ -71,7 +73,7 @@ Custom image based on postgres:16.12 with cron:
 
 ### Container management (`portainer`)
 
-Portainer CE (2.38.1) for Docker container management UI, exposed on ports 9000 and 9443.
+Portainer CE (2.39.0) for Docker container management UI, exposed on ports 9000 and 9443.
 
 ## Plugin architecture
 
@@ -128,7 +130,7 @@ Five utility modules shared across all plugins:
 
 Configuration is environment-driven and consumed at three levels:
 
-1. **Host paths** (`installation_paths.env`): 15 variables for OMERO data, databases, logs, monitoring state.
+1. **Host paths** (`installation_paths.env`): 17 variables for OMERO data, databases, logs, monitoring state, and CrowdSec.
 2. **Service parameters** (`env/*.env`): database credentials, Java heap, OMERO settings, plugin config, Celery settings, monitoring endpoints.
 3. **Docker Compose** (`docker-compose.yml`): maps env files to containers, defines dependencies with health conditions, networks, and volume mounts.
 
@@ -138,7 +140,7 @@ Plugin code accesses configuration through `config.py` modules that use `omero_p
 
 - All containers: `security_opt: no-new-privileges:true`.
 - Secrets in `env/*.env` (gitignored). Rotate all defaults before deployment.
-- Only 6 services expose host ports; all others are internal to the `omero` network.
+- Only 7 services expose host ports; all others are internal to the `omero` network.
 - OMERO.web should run behind a TLS-terminating reverse proxy.
 - Docker socket is read-only in omeroweb (admin tools container stats only).
 - Validate health checks and logs after each deployment change.

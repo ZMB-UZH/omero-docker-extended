@@ -22,6 +22,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # - APPLY_DNF_UPDATES is kept as a backward-compatible alias.
 ARG APPLY_OMEROWEB_DNF_UPDATES=0
 ARG APPLY_DNF_UPDATES=0
+ARG DNF_MAX_ATTEMPTS=3
+ARG DNF_RETRY_SLEEP_SECONDS=0
+ARG DNF_USE_ROCKY_MIRRORLIST=1
 
 # Basic hardening for pip (no behavior change expected)
 # -----------------------------------------------------
@@ -74,7 +77,39 @@ RUN set -euo pipefail; \
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
 # -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    dnf -y install \
+    dnf_retry() { \
+        local attempt=1; \
+        local max_attempts="${DNF_MAX_ATTEMPTS}"; \
+        local fallback_applied=0; \
+        while true; do \
+            if dnf -y --refresh \
+                --setopt=timeout=20 \
+                --setopt=retries=2 \
+                "$@"; then \
+                return 0; \
+            fi; \
+            if [[ "${attempt}" -eq 1 && "${fallback_applied}" -eq 0 && "${DNF_USE_ROCKY_MIRRORLIST}" == "1" ]]; then \
+                echo "WARNING: First dnf attempt failed; enabling Rocky baseurl fallback and cleaning metadata cache before retry." >&2; \
+                for repo_file in /etc/yum.repos.d/rocky*.repo; do \
+                    if [[ -f "${repo_file}" ]]; then \
+                        sed -i -E 's|^mirrorlist=|#mirrorlist=|g' "${repo_file}"; \
+                        sed -i -E 's|^#baseurl=|baseurl=|g' "${repo_file}"; \
+                    fi; \
+                done; \
+                dnf clean all || true; \
+                rm -rf /var/cache/dnf || true; \
+                fallback_applied=1; \
+            fi; \
+            if [[ "${attempt}" -ge "${max_attempts}" ]]; then \
+                echo "ERROR: dnf command failed after ${max_attempts} attempts: dnf $*" >&2; \
+                return 1; \
+            fi; \
+            echo "WARNING: dnf command failed on attempt ${attempt}/${max_attempts}; retrying in ${DNF_RETRY_SLEEP_SECONDS}s..." >&2; \
+            attempt=$((attempt + 1)); \
+            sleep "${DNF_RETRY_SLEEP_SECONDS}"; \
+        done; \
+    }; \
+    dnf_retry install \
         gcc \
         gcc-c++ \
         make \
@@ -82,8 +117,8 @@ RUN set -euo pipefail; \
         supervisor \
         quota \
         e2fsprogs; \
-    dnf clean all; \
-    rm -rf /var/cache/dnf /var/tmp/*
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true
 
 # Install OMERO Python API into OMERO.web venv (needed for BlitzGateway + TXT attachments)
 # IMPORTANT: Pin omero-py to match OMERO.server stack
@@ -205,6 +240,10 @@ RUN set -euo pipefail; \
         source \"${VENV_DIR}/bin/activate\" && \
         omero web syncmedia \
     "
+
+# Backup static files so they can be restored if the host bind-mount shadows var/
+# -------------------------------------------------------------------------------
+RUN cp -a /opt/omero/web/OMERO.web/var/static /opt/omero/web/static_backup
 
 # Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
 # WARNING:

@@ -7,7 +7,7 @@ FROM postgres:16.12
 # Install cron
 # ------------
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends cron && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cron && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the maintenance script and cron schedule

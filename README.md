@@ -44,7 +44,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (20 containers)
+├── docker-compose.yml                 # Full service orchestration (19 runtime containers + helper init container)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
@@ -102,7 +102,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-The platform runs **20 containers** on a single Docker bridge network (`omero`):
+The platform runs **19 runtime containers** on a single Docker bridge network (`omero`):
 
 | Service | Image | Purpose | Port |
 |---|---|---|---|
@@ -111,9 +111,8 @@ The platform runs **20 containers** on a single Docker bridge network (`omero`):
 | `database` | postgres:16.12 | Primary OMERO PostgreSQL database | 5432 (internal) |
 | `database_plugin` | postgres:16.12 | OMERO plugin PostgreSQL database | 5433 (internal) |
 | `redis` | redis:8.4.0-alpine | Session cache + Celery broker/result backend | 6379 (internal) |
-| `redis-sysctl-init` | Alpine 3.21 | One-shot sidecar: sets `vm.overcommit_memory=1` | none |
 | `pg-maintenance` | Custom (postgres:16.12) | Cron-scheduled VACUUM ANALYZE / REINDEX for both databases | none |
-| `portainer` | portainer-ce:2.38.1 | Docker container management UI | 9000, 9443 |
+| `portainer` | portainer-ce:2.39.0 | Docker container management UI | 9000, 9443 |
 | `prometheus` | prom/prometheus:v3.5.1 | Metrics scraping and storage | 9090 |
 | `grafana` | grafana/grafana:12.3.3 | Dashboards and visualization | 3000 |
 | `loki` | grafana/loki:3.2.0 | Log aggregation backend | 3100 |

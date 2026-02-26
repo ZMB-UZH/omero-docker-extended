@@ -1,7 +1,7 @@
 Docker Compose reference notes for AI agent workflows.
 
 Service topology (docker-compose.yml):
-- 17 services on a single "omero" bridge network.
+- 20 services on a single "omero" bridge network.
 - All services have explicit healthcheck: blocks (interval 10s, timeout 10s, retries 30).
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
@@ -30,6 +30,8 @@ Monitoring services:
 - postgres-exporter: OMERO database metrics.
 - postgres-exporter-plugin: plugin database metrics.
 - redis-exporter: Redis metrics.
+- path-usage-exporter: custom Python 3.12 service exporting host path usage metrics via node-exporter textfile collector.
+- crowdsec (port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
 
 Environment files:
 - installation_paths.env: 15 host filesystem path variables consumed by volume mounts.
@@ -54,4 +56,4 @@ Compose commands (always include --env-file):
 - docker compose --env-file installation_paths.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
-Only 6 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100).
+Only 7 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).

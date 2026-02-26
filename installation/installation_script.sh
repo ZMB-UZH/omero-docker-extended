@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
-USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}" # set to 0 to use plain docker compose build
+USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -28,6 +28,8 @@ DATABASE_UID="${DATABASE_UID:-}"
 DATABASE_GID="${DATABASE_GID:-}"
 DATABASE_PLUGIN_UID="${DATABASE_PLUGIN_UID:-}"
 DATABASE_PLUGIN_GID="${DATABASE_PLUGIN_GID:-}"
+CROWDSEC_UID="${CROWDSEC_UID:-}"
+CROWDSEC_GID="${CROWDSEC_GID:-}"
 OMERO_SERVER_ENV_FILE="${REPO_ROOT_DIR}/env/omeroserver.env"
 
 # Allow override, but default to the repo's current image names (adjust via env vars if you rename them in compose)
@@ -38,6 +40,7 @@ GRAFANA_IMAGE="${GRAFANA_IMAGE:-}"
 LOKI_IMAGE="${LOKI_IMAGE:-}"
 DATABASE_IMAGE="${DATABASE_IMAGE:-}"
 DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
+CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
 
 set -euo pipefail
 
@@ -74,7 +77,7 @@ load_secrets_env() {
 
     if [ ! -r "${secrets_env_file}" ]; then
         echo "ERROR: Secrets env file is missing or unreadable: ${secrets_env_file}" >&2
-        echo "ERROR: Create it from env/omero_secrets_example.env (copy → env/omero_secrets.env) and set real values." >&2
+        echo "ERROR: Create it from env/omero_secrets_example.env (copy â env/omero_secrets.env) and set real values." >&2
         return 1
     fi
 
@@ -102,7 +105,7 @@ bootstrap_env_files_from_examples() {
             continue
         fi
 
-        # Derive the actual filename: foo_example.env → foo.env
+        # Derive the actual filename: foo_example.env â foo.env
         actual_file="${example_file%_example.env}.env"
         if [ ! -f "${actual_file}" ]; then
             echo "First-time setup: creating ${actual_file} from $(basename "${example_file}")"
@@ -264,7 +267,62 @@ run_image_build() {
     COMPOSE_FILE="${COMPOSE_FILE}" \
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
+        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
+        DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
         "${buildx_helper_path}"
+    return $?
+}
+
+resolve_buildx_local_cache_dir() {
+    if [ -n "${BUILDX_DATA_PATH:-}" ]; then
+        printf '%s' "${BUILDX_DATA_PATH}"
+        return 0
+    fi
+
+    if [ -n "${OMERO_DATA_PATH:-}" ]; then
+        printf '%s' "${OMERO_DATA_PATH%/}/buildx_cache"
+        return 0
+    fi
+
+    return 1
+}
+
+cleanup_local_build_cache_if_disabled() {
+    local buildx_local_cache_dir=""
+
+    if [ "${USE_CACHE_BUILD}" != "0" ]; then
+        return 0
+    fi
+
+    echo "Build cache is disabled; cleaning local build cache before rebuild..."
+
+    if docker builder prune --help >/dev/null 2>&1; then
+        if ! docker builder prune -a -f >/dev/null; then
+            echo "ERROR: Failed to clean docker builder cache while USE_CACHE_BUILD=0." >&2
+            return 1
+        fi
+        echo "Removed docker builder cache."
+    else
+        echo "WARNING: docker builder prune is unavailable; skipping docker builder cache cleanup."
+    fi
+
+    if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "1" ]; then
+        if ! buildx_local_cache_dir="$(resolve_buildx_local_cache_dir)"; then
+            echo "ERROR: Buildx cache cleanup requested but no cache path could be resolved (BUILDX_DATA_PATH and OMERO_DATA_PATH are both unset)." >&2
+            return 1
+        fi
+
+        if [ -d "${buildx_local_cache_dir}" ]; then
+            if ! rm -rf "${buildx_local_cache_dir}"; then
+                echo "ERROR: Failed to remove Buildx local cache directory: ${buildx_local_cache_dir}" >&2
+                return 1
+            fi
+            echo "Removed Buildx local cache directory: ${buildx_local_cache_dir}"
+        else
+            echo "Buildx local cache directory not present, nothing to remove: ${buildx_local_cache_dir}"
+        fi
+    fi
+
     return 0
 }
 
@@ -294,6 +352,7 @@ export_compose_interpolation_env() {
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
+        OMERO_WEB_VAR_PATH
         OMERO_SERVER_LOGS_PATH
         OMERO_WEB_LOGS_PATH
         OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -302,6 +361,10 @@ export_compose_interpolation_env() {
         GRAFANA_DATA_PATH
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
+        BUILDX_DATA_PATH
+        NODE_EXPORTER_TEXTFILE_PATH
+        CROWDSEC_DB_PATH
+        CROWDSEC_CONFIG_PATH
         OMERO_DB_PASS
         OMP_PLUGIN_DB_PASS
     )
@@ -314,6 +377,7 @@ export_compose_interpolation_env() {
 
         export "${env_var_name}=${!env_var_name}"
     done
+
 
     return 0
 }
@@ -528,7 +592,7 @@ create_omero_groups_from_list() {
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)." >&2; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)."; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
             add_exit_code=$?
             set -e
 
@@ -586,6 +650,7 @@ OMERO_DATA_PATH=${old_data_path}
 OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
 OMERO_UPLOAD_PATH=${old_data_path}/omero_upload
 OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
+OMERO_WEB_VAR_PATH=${old_data_path}/omero_web_var
 OMERO_SERVER_LOGS_PATH=${old_data_path}/omero_server_logs
 OMERO_WEB_LOGS_PATH=${old_data_path}/omero_web_logs
 OMERO_WEB_SUPERVISOR_LOGS_PATH=${old_data_path}/omero_web_supervisor_logs
@@ -594,6 +659,9 @@ PROMETHEUS_DATA_PATH=${old_data_path}/prometheus_data
 GRAFANA_DATA_PATH=${old_data_path}/grafana_data
 LOKI_DATA_PATH=${old_data_path}/loki_data
 PG_MAINTENANCE_DATA_PATH=${old_data_path}/pg_maintenance_data
+NODE_EXPORTER_TEXTFILE_PATH=${old_data_path}/node_exporter_textfile
+CROWDSEC_DB_PATH=${old_data_path}/crowdsec_db
+CROWDSEC_CONFIG_PATH=${old_data_path}/crowdsec_config
 OLD_DOTENV
             created_temp_dot_env=true
         fi
@@ -764,6 +832,7 @@ collect_bootstrap_sentinel_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -771,7 +840,10 @@ collect_bootstrap_sentinel_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
@@ -825,6 +897,7 @@ collect_repo_data_dir_names() {
             "${OMERO_USER_DATA_PATH:-}" \
             "${OMERO_UPLOAD_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
+            "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
             "${OMERO_WEB_LOGS_PATH:-}" \
             "${OMERO_WEB_SUPERVISOR_LOGS_PATH:-}" \
@@ -832,7 +905,10 @@ collect_repo_data_dir_names() {
             "${PROMETHEUS_DATA_PATH:-}" \
             "${GRAFANA_DATA_PATH:-}" \
             "${LOKI_DATA_PATH:-}" \
-            "${PG_MAINTENANCE_DATA_PATH:-}"; do
+            "${PG_MAINTENANCE_DATA_PATH:-}" \
+            "${NODE_EXPORTER_TEXTFILE_PATH:-}" \
+            "${CROWDSEC_DB_PATH:-}" \
+            "${CROWDSEC_CONFIG_PATH:-}"; do
 
             [ -z "${_path}" ] && continue
             _path="${_path%/}"
@@ -1005,11 +1081,11 @@ write_compose_dot_env() {
     local dot_env_path="${1:?BUG: write_compose_dot_env requires a path}"
 
     cat > "${dot_env_path}" <<DOTENV
-# Auto-generated by installation_script.sh – do not edit manually.
+# Auto-generated by installation_script.sh â do not edit manually.
 # Re-run the installation script to regenerate after changing paths.
 #
 # Load both path and secrets env files automatically for all docker compose
-# commands, including manual lifecycle commands such as `docker compose down`.
+# commands, including manual lifecycle commands such as \`docker compose down\`.
 COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
 #
 # This file contains fully-resolved paths so that docker compose
@@ -1018,7 +1094,7 @@ COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env
 #
 # NOTE: OMERO_DB_PASS and OMP_PLUGIN_DB_PASS are intentionally mirrored here
 # because docker compose interpolation happens before service-level env_file
-# loading. This guarantees manual commands like `docker compose down` work.
+# loading. This guarantees manual commands like \`docker compose down\` work.
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
@@ -1027,6 +1103,7 @@ OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
 OMERO_UPLOAD_PATH=${OMERO_UPLOAD_PATH}
 OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
 OMERO_SERVER_LOGS_PATH=${OMERO_SERVER_LOGS_PATH}
+OMERO_WEB_VAR_PATH=${OMERO_WEB_VAR_PATH}
 OMERO_WEB_LOGS_PATH=${OMERO_WEB_LOGS_PATH}
 OMERO_WEB_SUPERVISOR_LOGS_PATH=${OMERO_WEB_SUPERVISOR_LOGS_PATH}
 PORTAINER_DATA_PATH=${PORTAINER_DATA_PATH}
@@ -1034,6 +1111,9 @@ PROMETHEUS_DATA_PATH=${PROMETHEUS_DATA_PATH}
 GRAFANA_DATA_PATH=${GRAFANA_DATA_PATH}
 LOKI_DATA_PATH=${LOKI_DATA_PATH}
 PG_MAINTENANCE_DATA_PATH=${PG_MAINTENANCE_DATA_PATH}
+NODE_EXPORTER_TEXTFILE_PATH=${NODE_EXPORTER_TEXTFILE_PATH}
+CROWDSEC_DB_PATH=${CROWDSEC_DB_PATH}
+CROWDSEC_CONFIG_PATH=${CROWDSEC_CONFIG_PATH}
 OMERO_DB_PASS=${OMERO_DB_PASS}
 OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 DOTENV
@@ -1060,7 +1140,7 @@ write_installation_paths_env() {
 
     mkdir -p "$(dirname "${env_file_path}")"
     cat > "${env_file_path}" <<ENVFILE
-# Auto-generated by installation_script.sh – do not edit manually.
+# Auto-generated by installation_script.sh â do not edit manually.
 # Re-run the installation script to regenerate after changing paths.
 #
 # This file is the single source of truth for all installation paths.
@@ -1075,6 +1155,7 @@ write_installation_paths_env() {
 #   OMERO_USER_DATA_PATH
 #   OMERO_UPLOAD_PATH
 #   OMERO_SERVER_VAR_PATH
+#   OMERO_WEB_VAR_PATH
 #   OMERO_SERVER_LOGS_PATH
 #   OMERO_WEB_LOGS_PATH
 #   OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -1083,7 +1164,11 @@ write_installation_paths_env() {
 #   PORTAINER_DATA_PATH
 #   LOKI_DATA_PATH
 #   PG_MAINTENANCE_DATA_PATH
-
+#   BUILDX_DATA_PATH
+#   NODE_EXPORTER_TEXTFILE_PATH
+#   CROWDSEC_DB_PATH
+#   CROWDSEC_CONFIG_PATH
+#
 OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
@@ -1092,6 +1177,7 @@ OMERO_DATA_PATH=${OMERO_DATA_PATH}
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
 OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
 OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
+OMERO_WEB_VAR_PATH=\${OMERO_DATA_PATH}/omero_web_var
 OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
 OMERO_WEB_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_logs
 OMERO_WEB_SUPERVISOR_LOGS_PATH=\${OMERO_DATA_PATH}/omero_web_supervisor_logs
@@ -1100,6 +1186,11 @@ GRAFANA_DATA_PATH=\${OMERO_DATA_PATH}/grafana_data
 PORTAINER_DATA_PATH=\${OMERO_DATA_PATH}/portainer_data
 LOKI_DATA_PATH=\${OMERO_DATA_PATH}/loki_data
 PG_MAINTENANCE_DATA_PATH=\${OMERO_DATA_PATH}/pg_maintenance_data
+BUILDX_DATA_PATH=\${OMERO_DATA_PATH}/buildx_cache
+NODE_EXPORTER_TEXTFILE_PATH=\${OMERO_DATA_PATH}/node_exporter_textfile
+CROWDSEC_DB_PATH=\${OMERO_DATA_PATH}/crowdsec_db
+CROWDSEC_CONFIG_PATH=\${OMERO_DATA_PATH}/crowdsec_config
+#
 ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
@@ -1122,6 +1213,7 @@ verify_installation_paths_env_content() {
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
+        OMERO_WEB_VAR_PATH
         OMERO_SERVER_LOGS_PATH
         OMERO_WEB_LOGS_PATH
         OMERO_WEB_SUPERVISOR_LOGS_PATH
@@ -1130,17 +1222,15 @@ verify_installation_paths_env_content() {
         PORTAINER_DATA_PATH
         LOKI_DATA_PATH
         PG_MAINTENANCE_DATA_PATH
+        BUILDX_DATA_PATH
+        NODE_EXPORTER_TEXTFILE_PATH
+        CROWDSEC_DB_PATH
+        CROWDSEC_CONFIG_PATH
     )
 
     for expected_var in "${required_vars[@]}"; do
         expected_value="${!expected_var:-}"
-        actual_value="$(
-            (
-                # shellcheck disable=SC1090
-                . "${env_file_path}" 2>/dev/null || exit 1
-                printf '%s' "${!expected_var:-}"
-            )
-        )"
+        actual_value="$(CMD="\. \"${env_file_path}\" 2>/dev/null || exit 1; printf '%s' \"\${${expected_var}:-}\""; bash -c "$CMD")"
 
         if [ -z "${actual_value}" ]; then
             echo "ERROR: ${expected_var} was not written to ${env_file_path}." >&2
@@ -1490,14 +1580,13 @@ resolve_buildx_compressed_build_choice() {
                 echo "USE_BUILDX_CHOICE=${override_choice}: using docker compose build (Buildx compressed build disabled)."
                 return 0
                 ;;
-            *)
-                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+            *)\n                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
                 return 1
                 ;;
         esac
     fi
 
-    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? Y/n (Default: Y)" "yes")"
+    reply="$(prompt_yes_no "Enable Buildx compressed build workflow? Y/n (Default: n)" "no")"
     if [ "${reply}" = "yes" ]; then
         USE_BUILDX_COMPRESSED_BUILD=1
     else
@@ -1584,6 +1673,7 @@ COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
+OMERO_WEB_VAR_PATH="${OMERO_DATA_PATH%/}/omero_web_var"
 OMERO_SERVER_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_server_logs"
 OMERO_WEB_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_logs"
 OMERO_WEB_SUPERVISOR_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_web_supervisor_logs"
@@ -1592,6 +1682,15 @@ GRAFANA_DATA_PATH="${OMERO_DATA_PATH%/}/grafana_data"
 PORTAINER_DATA_PATH="${OMERO_DATA_PATH%/}/portainer_data"
 LOKI_DATA_PATH="${OMERO_DATA_PATH%/}/loki_data"
 PG_MAINTENANCE_DATA_PATH="${OMERO_DATA_PATH%/}/pg_maintenance_data"
+NODE_EXPORTER_TEXTFILE_PATH="${OMERO_DATA_PATH%/}/node_exporter_textfile"
+CROWDSEC_DB_PATH="${OMERO_DATA_PATH%/}/crowdsec_db"
+CROWDSEC_CONFIG_PATH="${OMERO_DATA_PATH%/}/crowdsec_config"
+
+# Ensure BUILDX_DATA_PATH has a fallback default if not provided by env file
+# (This handles cases where the env file is from an older installation)
+if [ -z "${BUILDX_DATA_PATH:-}" ]; then
+    BUILDX_DATA_PATH="${OMERO_DATA_PATH%/}/buildx_cache"
+fi
 
 if ! export_compose_interpolation_env; then
     exit 1
@@ -1630,6 +1729,12 @@ if [ -n "${LOKI_UID}" ]; then
 fi
 if [ -n "${LOKI_GID}" ]; then
     if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
+fi
+if [ -n "${CROWDSEC_UID}" ]; then
+    if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
+fi
+if [ -n "${CROWDSEC_GID}" ]; then
+    if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
 fi
 
 require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
@@ -1683,6 +1788,9 @@ if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO cer
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
+if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
+if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
+if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
@@ -1749,13 +1857,17 @@ else
     echo "WARNING: OMERO user data path ${OMERO_USER_DATA_PATH} not found; skipping lock cleanup."
 fi
 
+if ! cleanup_local_build_cache_if_disabled; then
+    exit 1
+fi
+
 if ! run_image_build; then
     exit 1
 fi
 
-echo "================================================"
-echo "Discovering ACTUAL OMERO UID/GID from built images"
-echo "================================================"
+echo "============================================"
+echo "Discovering actual UID/GID from built images"
+echo "============================================"
 
 discover_first_existing_user_or_die() {
     local image="$1"
@@ -1766,10 +1878,15 @@ discover_first_existing_user_or_die() {
 
     for candidate in "$@"; do
         [ -z "${candidate}" ] && continue
-        if docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
-            found="${candidate}"
-            break
+        if docker run --rm --name "omero-install-probe-user-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1" || true; then
+            # We must verify if it successfully found it, wait, the previous line ignores exit codes via || true if not careful.
+            # Actually, `docker run ... || true` will always succeed. Let's fix this.
+            if docker run --rm --name "omero-install-probe-user-$RANDOM" --entrypoint "" "${image}" sh -c "getent passwd '${candidate}' >/dev/null 2>&1"; then
+                found="${candidate}"
+                break
+            fi
         fi
+        docker rm -f "omero-install-probe-user-*" >/dev/null 2>&1 || true
     done
 
     if [ -z "${found}" ]; then
@@ -1777,7 +1894,9 @@ discover_first_existing_user_or_die() {
         echo "Tried candidates: $*" >&2
         echo "" >&2
         echo "DEBUG: Listing passwd entries containing 'omero' from image '${image}':" >&2
-        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
+        local probe_name="omero-install-probe-users-$RANDOM"
+        docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
+        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
         echo "" >&2
         return 1
     fi
@@ -1790,14 +1909,19 @@ discover_uid_gid_or_die() {
     local image="$1"
     local user_name="$2"
     local id_flag="$3"
+    local probe_name="omero-install-probe-id-$RANDOM"
 
     local out=""
 
-    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
+    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
+        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
-        docker run --rm --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
+        local pass_probe="omero-install-probe-passwd-$RANDOM"
+        docker run --rm --name "${pass_probe}" --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
+        docker rm -f "${pass_probe}" >/dev/null 2>&1 || true
         return 1
     fi
+    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
 
     if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for user '${user_name}' in image '${image}'" >&2
@@ -1847,13 +1971,16 @@ resolve_service_image_from_compose_or_die() {
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
+    local probe_name="omero-install-probe-default-id-$RANDOM"
 
     local out=""
 
-    if ! out="$(docker run --rm --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
+    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
+        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
         echo "ERROR: Failed to discover default runtime id ${id_flag} from image '${image}'." >&2
         return 1
     fi
+    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
 
     if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: Discovered non-numeric default runtime id (${id_flag})='${out}' in image '${image}'." >&2
@@ -1893,6 +2020,8 @@ if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
+if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
+if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
@@ -1901,11 +2030,12 @@ echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAG
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
+echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
 echo ""
 
-echo "================================================"
-echo "Fixing host bind-mount ownership based on ACTUAL UID/GID"
-echo "================================================"
+echo "========================================================"
+echo "Fixing host bind-mount ownership based on actual UID/GID"
+echo "========================================================"
 
 chown_tree_or_die() {
     local path="$1"
@@ -1939,6 +2069,7 @@ chown "${OMERO_SERVER_UID}:${OMERO_SERVER_GID}" "${OMERO_SERVER_VAR_PATH%/}/tmp"
 chmod 1777 "${OMERO_SERVER_VAR_PATH%/}/tmp" || true
 
 if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
@@ -1947,10 +2078,12 @@ if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database dire
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
 
 echo ""
-echo "✔ Host ownership fix complete."
-echo "================================================"
+echo "â Host ownership fix complete."
+echo "==============================="
 echo ""
 
 # =====================================================
@@ -1965,9 +2098,9 @@ install_quota_enforcer_if_supported() {
     local omero_user_data_dir="$1"
     local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-quota-enforcer.sh"
 
-    echo "================================================"
-    echo "Checking ext4 project quota support for Quotas"
-    echo "================================================"
+    echo "=============================================="
+    echo "Checking ext4 project quota support for quotas"
+    echo "=============================================="
 
     if [ ! -f "${installer_path}" ]; then
         echo "INFO: Quota enforcer installer not found at ${installer_path}."
@@ -1975,7 +2108,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ── Detect filesystem type for OMERO user data path ──
+    # ââ Detect filesystem type for OMERO user data path ââ
     local quota_fs_type="" quota_mount_point="" quota_block_device=""
     while read -r line; do
         local parts
@@ -2006,7 +2139,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ── Check prjquota mount option ──
+    # ââ Check prjquota mount option ââ
     if ! mount | grep -qE "on ${quota_mount_point} .*prjquota"; then
         echo "INFO: Filesystem at ${quota_mount_point} is ext4 but NOT mounted with prjquota."
         echo "INFO: To enable quotas:"
@@ -2018,7 +2151,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ── Check ext4 project feature in superblock ──
+    # ââ Check ext4 project feature in superblock ââ
     if command -v tune2fs >/dev/null 2>&1 && [ -n "${quota_block_device}" ]; then
         if ! tune2fs -l "${quota_block_device}" 2>/dev/null | grep -q "project"; then
             echo "INFO: ext4 'project' feature is NOT enabled on ${quota_block_device}."
@@ -2046,7 +2179,7 @@ install_quota_enforcer_if_supported() {
     fi
 
     echo ""
-    echo "✔ Quota enforcer installed successfully."
+    echo "â Quota enforcer installed successfully."
     return 0
 }
 
@@ -2083,5 +2216,8 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi
+
+# Cleanup build containers
+bash "${SCRIPT_DIR}/cleanup_build_containers.sh"
 
 echo "Done. Wait 30 seconds and check if the containers are up and running."

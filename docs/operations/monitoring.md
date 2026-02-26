@@ -14,6 +14,8 @@
 | Postgres exporter | v0.19.0 | OMERO database metrics | `http://postgres-exporter:9187` |
 | Postgres exporter (plugin) | v0.19.0 | Plugin database metrics | `http://postgres-exporter-plugin:9187` |
 | Redis exporter | v1.81.0 | Redis metrics | `http://redis-exporter:9121` |
+| Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
+| CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
 
 ## Configuration sources
 
@@ -27,6 +29,8 @@
 | `monitoring/grafana/dashboards/*.json` | Dashboard definitions |
 | `monitoring/blackbox/config.yml` | HTTP and TCP probe modules |
 | `monitoring/postgres-exporter/postgres_exporter.yml` | Explicit Postgres exporter config file (keeps startup deterministic, no implicit defaults) |
+| `monitoring/crowdsec/acquis.yaml` | CrowdSec log acquisition sources (host syslog, Docker containers) |
+| `monitoring/path-usage-exporter/path_usage_exporter.py` | Path usage exporter script for OMERO volume metrics |
 
 ## Prometheus scrape targets
 
@@ -41,12 +45,42 @@ Configured in `monitoring/prometheus/prometheus.yml`:
 - `postgres-exporter` -- OMERO database
 - `postgres-exporter-plugin` -- plugin database
 - `redis-exporter` -- Redis cache/broker
+- `blackbox-exporter` -- blackbox exporter self-metrics
+
+### Discovery behavior (important)
+
+Prometheus in this stack currently uses explicit `static_configs` for scrape jobs and probe targets; it does **not** use Docker service discovery or other automatic target discovery in `prometheus.yml`.
+
+What this means operationally:
+
+- If you add a new exporter or service endpoint, you must add/update a Prometheus scrape job (or blackbox probe target) in `monitoring/prometheus/prometheus.yml`.
+- Existing targets continue to work automatically only as long as service names and ports remain unchanged (for example `redis-exporter:9121`).
+- Alloy **does** auto-discover Docker containers for logs, but that behavior is independent from Prometheus metric scraping.
+
+### Do you need to change Prometheus after a deployment change?
+
+| Change type | Update `monitoring/prometheus/prometheus.yml`? | Why |
+|---|---|---|
+| Restarting containers, host reboot, normal redeploy with same service names/ports | No | Targets remain the same (`service:port`), so existing scrape config still matches. |
+| Updating image tags/versions only | No (usually) | Scrape discovery is name/port/path based, not image-tag based. |
+| Adding a new exporter/service that should be monitored | Yes | Prometheus only scrapes configured jobs/targets in this stack. |
+| Renaming a Docker Compose service | Yes | Target hostname changes (for example `redis-exporter` -> new service name). |
+| Changing metrics port or metrics path | Yes | Scrape endpoint changed; Prometheus must point to the new address/path. |
+| Adding/removing blackbox probe endpoints | Yes | Probe target lists are explicitly declared under blackbox jobs. |
+
+Quick operator check after any change:
+
+1. Open `http://localhost:9090/targets`.
+2. Confirm expected jobs are `UP`.
+3. If a target is missing, add/update it in `monitoring/prometheus/prometheus.yml` and reload Prometheus (`/-/reload`) or restart the service.
 
 ## Blackbox probes
 
 **HTTP probes** (verify 2xx response):
 - Loki, Prometheus, Grafana, cAdvisor
 - All exporters (node, postgres x2, redis, blackbox)
+- Portainer (`/api/system/status`)
+- CrowdSec (`/health`)
 - OMERO.server (port 4064 via HTTP)
 - OMERO.web (port 4090)
 
@@ -60,7 +94,7 @@ Configured in `monitoring/prometheus/prometheus.yml`:
 
 Four dashboards auto-provisioned in the `OMERO` folder:
 
-1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic host-path utilization for `OMERO_DATA_PATH`, `OMERO_DATABASE_PATH`, and `OMERO_PLUGIN_DATABASE_PATH` as injected into Grafana runtime environment. The database-path stat renders one or two percentages depending on whether the two database paths resolve to the same or different mountpoints.
+1. **OMERO Infrastructure** (`omero-infrastructure.json`) -- service health overview, blackbox probe results, container stats. Set as Grafana home dashboard. Top summary stats include host CPU/memory, root and swap usage, and dynamic filesystem utilization for OMERO data and database paths from `installation_paths.env`, collected by the path-usage exporter via host `df -P -B1`. The database-path stat renders one percentage when both database paths are on the same filesystem mountpoint, or two percentages when they are on different mountpoints.
 2. **Database Metrics** (`database-metrics.json`) -- OMERO core database: connections, transactions, index usage, table sizes.
 3. **Plugin Database Metrics** (`plugin-database-metrics.json`) -- OMERO plugin database: same metrics for the omero-plugin database.
 4. **Redis Metrics** (`redis-metrics.json`) -- memory usage, connected clients, commands/sec, keyspace stats.
@@ -73,6 +107,11 @@ Alloy collects logs from two sources:
 2. **OMERO internal log files**: discovered by file path patterns in mounted OMERO server and web log directories (`*.log`, `*.out`, `*.err`). Labeled with `compose_service`, `log_type=internal`, and `filepath`.
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
+
+## CrowdSec log expectations
+
+- `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is expected on hosts that do not expose those files (for example journald-only systems). Docker log acquisition still starts normally via `source: docker`.
+- The CrowdSec healthcheck is HTTP-based (`/health`) and should not generate repeated `POST /v1/watchers/login` entries by itself.
 
 ## Operational baseline checks
 
@@ -123,6 +162,8 @@ curl -s http://127.0.0.1:4090/omeroweb_admin_tools/resource-monitoring/grafana-p
 ```
 
 `/resource-monitoring/grafana-proxy/*` is protected by OMERO.web authentication. An unauthenticated `curl` request correctly receives `302` to `/webclient/login/...`; this does not indicate a Grafana proxy failure.
+
+When Grafana is down or unreachable, the proxy now returns a custom `503 Service Unavailable` HTML page (instead of forwarding raw upstream gateway HTML). The page reports the attempted upstream endpoint(s), includes `Cache-Control: no-store`, and sends `Retry-After: 30` to support cleaner operator experience and browser behavior.
 
 ### 5) Check Grafana runtime version and datasource API auth behavior
 

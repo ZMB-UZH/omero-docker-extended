@@ -25,6 +25,8 @@
 | Postgres exporter | `postgres-exporter:9187` | OMERO DB metrics |
 | Postgres exporter (plugin) | `postgres-exporter-plugin:9187` | Plugin DB metrics |
 | Redis exporter | `redis-exporter:9121` | Redis metrics |
+| Path usage exporter | `path-usage-exporter` (no HTTP port) | OMERO volume disk usage (textfile collector) |
+| CrowdSec | `crowdsec:8080` | Host-wide cybersecurity engine LAPI |
 
 ## OMERO.web plugin routes
 
@@ -94,6 +96,9 @@ Base: `/omeroweb_admin_tools/`
 | `grafana` | `wget http://localhost:3000/api/health` |
 | `loki` | `wget http://localhost:3100/ready` |
 | `portainer` | `wget http://localhost:9000/api/system/status` |
+| `node-exporter` | `wget -O /dev/null http://localhost:9100/` |
+| `path-usage-exporter` | `test -f /textfile/omero_paths.prom` |
+| `crowdsec` | `cscli lapi status` |
 
 ## External reverse proxy forwarding target
 
