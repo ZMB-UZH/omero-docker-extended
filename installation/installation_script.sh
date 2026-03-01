@@ -356,6 +356,7 @@ export_compose_interpolation_env() {
         OMERO_DATABASE_PATH
         OMERO_PLUGIN_DATABASE_PATH
         OMERO_DATA_PATH
+        OMERO_TMP_PATH
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
@@ -657,8 +658,9 @@ OMERO_INSTALLATION_PATH=${old_install_path}/
 OMERO_DATABASE_PATH=${old_database_path}
 OMERO_PLUGIN_DATABASE_PATH=${old_plugin_database_path}
 OMERO_DATA_PATH=${old_data_path}
+OMERO_TMP_PATH=${old_install_path}/omero_temp
 OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
-OMERO_UPLOAD_PATH=${old_data_path}/omero_upload
+OMERO_UPLOAD_PATH=${old_install_path}/omero_temp/omeroweb-upload
 OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
 OMERO_WEB_VAR_PATH=${old_data_path}/omero_web_var
 OMERO_SERVER_LOGS_PATH=${old_data_path}/omero_server_logs
@@ -1109,6 +1111,7 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
+OMERO_TMP_PATH=${OMERO_TMP_PATH}
 OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
 OMERO_UPLOAD_PATH=${OMERO_UPLOAD_PATH}
 OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
@@ -1166,6 +1169,7 @@ write_installation_paths_env() {
 #   OMERO_DATABASE_PATH
 #   OMERO_PLUGIN_DATABASE_PATH
 #   OMERO_DATA_PATH
+#   OMERO_TMP_PATH
 #   OMERO_USER_DATA_PATH
 #   OMERO_UPLOAD_PATH
 #   OMERO_SERVER_VAR_PATH
@@ -1187,9 +1191,10 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
+OMERO_TMP_PATH=${OMERO_TMP_PATH}
 #
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
-OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
+OMERO_UPLOAD_PATH=\${OMERO_TMP_PATH}/omeroweb-upload
 OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
 OMERO_WEB_VAR_PATH=\${OMERO_DATA_PATH}/omero_web_var
 OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
@@ -1224,6 +1229,7 @@ verify_installation_paths_env_content() {
         OMERO_DATABASE_PATH
         OMERO_PLUGIN_DATABASE_PATH
         OMERO_DATA_PATH
+        OMERO_TMP_PATH
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
@@ -1685,8 +1691,14 @@ fi
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
 
+# Ensure OMERO_TMP_PATH has a fallback default if not provided by env file
+# (This handles cases where the env file is from an older installation)
+if [ -z "${OMERO_TMP_PATH:-}" ]; then
+    OMERO_TMP_PATH="${OMERO_INSTALLATION_PATH%/}/omero_temp"
+fi
+
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
-OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
+OMERO_UPLOAD_PATH="${OMERO_TMP_PATH%/}/omeroweb-upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
 OMERO_WEB_VAR_PATH="${OMERO_DATA_PATH%/}/omero_web_var"
 OMERO_SERVER_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_server_logs"
@@ -1758,6 +1770,7 @@ require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_PLUGIN_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATA_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_TMP_PATH" "${SCRIPT_ENV_FILE}"
 require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
 
@@ -1781,12 +1794,18 @@ if ! validate_installation_path "${OMERO_DATA_PATH}"; then
     exit 1
 fi
 
+if ! validate_installation_path "${OMERO_TMP_PATH}"; then
+    echo "ERROR: Invalid OMERO_TMP_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_TMP_PATH}" >&2
+    exit 1
+fi
+
 echo "Using installation paths from ${SCRIPT_ENV_FILE}"
 echo "Using docker compose .env file: ${OMERO_INSTALLATION_PATH%/}/.env"
 echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
+echo "OMERO_TMP_PATH=${OMERO_TMP_PATH}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
@@ -1796,10 +1815,12 @@ fi
 warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
 warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
+warn_directory_not_empty "${OMERO_TMP_PATH}" "OMERO temp directory"
 
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_TMP_PATH}" "OMERO temp directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then exit 1; fi
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
@@ -1836,6 +1857,7 @@ echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (before docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker compose down)"
+log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (before docker compose down)"
 
 echo "Stopping existing containers..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
@@ -1868,6 +1890,7 @@ echo "Recording post-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after docker compose down)"
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
+log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
 
 echo "Removing stale OMERO repository lock files from OMERO user data path..."
 if [ -d "${OMERO_USER_DATA_PATH}" ]; then
@@ -2188,7 +2211,7 @@ if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory"
 if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_TMP_PATH}" "OMERO temp directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi

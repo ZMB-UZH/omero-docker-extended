@@ -448,14 +448,12 @@ services:
     volumes:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (run installation/installation_script.sh)}:/opt/tmp:rw
+      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:/opt/omero/omero_temp:rw
       - ${OMERO_WEB_VAR_PATH:?Set OMERO_WEB_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var:rw
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
       interval: 10s
