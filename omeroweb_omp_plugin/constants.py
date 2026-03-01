@@ -1,6 +1,7 @@
 import os
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 import time
 import logging
 
@@ -12,10 +13,9 @@ OMERO_WEB_ROOT = get_env("OMERO_WEB_ROOT", env_file=ENV_FILE_OMEROWEB)
 OMERO_WEB_VENV = get_env("OMERO_WEB_VENV", env_file=ENV_FILE_OMEROWEB)
 OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
 
-# Storage directory for job JSON files
-# Create the directory. No error if it already exists. Root access to the host machine assumed.
-JOBS_DIR = "/tmp/omp_plugin_filename_metadata_jobs"
-os.makedirs(JOBS_DIR, exist_ok=True)
+# Storage directory for job JSON files.
+# Auto-detected from OMERO_TMP_PATH; directory is created by get_plugin_tmp_dir.
+JOBS_DIR = str(get_plugin_tmp_dir("jobs"))
 
 # Chunk size for data processing
 # Smaller chunks yield more responsive progress updates.
