@@ -9,9 +9,12 @@ import time
 import subprocess
 import shutil
 import re
+import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
+
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +218,7 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}")
     
     try:
         result = subprocess.run(

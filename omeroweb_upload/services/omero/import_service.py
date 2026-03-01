@@ -15,7 +15,9 @@ import omero
 import portalocker
 from omero.gateway import BlitzGateway
 from ...constants import OMERO_CLI
+from ...utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from ...utils.omero_helpers import get_id
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +36,7 @@ JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
 JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
 JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
-DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
 DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
 UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
@@ -1038,7 +1038,7 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}")
     
     try:
         result = subprocess.run(
