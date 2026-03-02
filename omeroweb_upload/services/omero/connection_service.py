@@ -170,8 +170,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     if old_conn:
         try:
             old_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
     
     try:
         client = omero.client(host=host, port=port)
@@ -184,8 +184,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             logger.error("Newly created session is invalid")
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
             return None
             
         return conn
@@ -403,8 +403,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
             return None
 
         if not ok:
@@ -420,8 +420,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -445,8 +445,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
     except Exception:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
         raise
 
 
@@ -501,8 +501,8 @@ def _attach_txt_to_image_service(
         finally:
             try:
                 store.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -554,5 +554,5 @@ def _attach_txt_to_image_service(
         # Always close the user connection
         try:
             user_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)

@@ -87,8 +87,8 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         if callable(getattr(val, "getValue", None)):
             try:
                 return val.getValue()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
         # Some OMERO rtypes expose `.val` instead of `.getValue()`
         val = getattr(val, "val", val)
         return val
@@ -149,8 +149,8 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
         if hasattr(mv, "getValue"):
             try:
                 mv = mv.getValue()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
 
         if not mv:
             aid = None
@@ -421,8 +421,8 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
             try:
                 ns_obj = ann.getNs() if hasattr(ann, "getNs") else obj.getNs()
                 ns = ns_obj.getValue() if ns_obj else None
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
 
             if mode == "all":
                 target_ids.add(ann_id)

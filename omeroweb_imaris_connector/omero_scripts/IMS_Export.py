@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from omero.gateway import BlitzGateway
@@ -79,8 +82,8 @@ def _ensure_bioformats_jar(install_dir):
             try:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
             return None
         os.replace(tmp_path, jar_path)
         os.chmod(jar_path, 0o644)
@@ -89,16 +92,16 @@ def _ensure_bioformats_jar(install_dir):
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
         return None
     except Exception as e:
         print(f"ERROR: Unexpected error downloading Bio-Formats jar: {e}")
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
         return None
 
     if not os.path.exists(jar_path) or os.path.getsize(jar_path) == 0:
