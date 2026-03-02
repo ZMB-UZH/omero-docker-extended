@@ -36,5 +36,7 @@ if not settings.configured:
         DATABASES={},
         INSTALLED_APPS=["django.contrib.contenttypes"],
         DEFAULT_AUTO_FIELD="django.db.models.BigAutoField",
+        ROOT_URLCONF="omeroweb_admin_tools.urls",
+        ALLOWED_HOSTS=["*"],
     )
     django.setup()

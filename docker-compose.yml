@@ -439,6 +439,9 @@ services:
       - ./env/omeroserver.env
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
+    environment:
+      # Container-internal path – must match the volume mount target below.
+      OMERO_TMP_PATH: /opt/omero/omero_temp
     networks:
       omero:
         aliases:
