@@ -355,7 +355,10 @@ services:
       - ./env/omero-celery.env
     environment:
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
-      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}"
+      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
+      OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
+      OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
+      TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
     hostname: omeroserver
     working_dir: /opt/omero/server/OMERO.server
     networks:
@@ -446,7 +449,10 @@ services:
         aliases:
           - omeroweb
     environment:
-      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}"
+      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
+      OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
+      OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
+      TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
     ports:
       - "4090:4090"
     volumes:
