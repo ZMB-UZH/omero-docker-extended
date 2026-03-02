@@ -79,6 +79,8 @@ All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no pe
 
 The bootstrap script also derives the OMERO internal lock-file temp path from the OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and attempts to prepare it for OMERO lock-file compatibility. If this legacy path cannot be created or is not writable, bootstrap logs a warning and continues using the dedicated `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` namespace as `TMPDIR`.
 
+At image build time, `docker/omero-server.Dockerfile` now also enforces writable permissions on `${SERVER_HOME}/etc/grid` for the runtime `omero-server` account so `omero config set ...` can always persist updates to `config.xml` during bootstrap.
+
 ### Managed Repository Path Setting
 
 In `env/omeroserver.env`, `CONFIG_omero_fs_repo_path` configures the managed
