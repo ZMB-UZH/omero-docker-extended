@@ -1119,6 +1119,21 @@ IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 
 
 def _run_omero_cli(cmd, timeout=None):
+    cli_env = os.environ.copy()
+
+    # OMERO CLI imports may need to download OMERO.java and write under the
+    # current user's cache/home. In containerized deployments HOME can resolve
+    # to a non-writable path (for example /root when running as a non-root
+    # service account), which causes import failures before OMERO is contacted.
+    # Force a deterministic writable HOME/cache rooted in the upload workspace.
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+
+    cli_env["HOME"] = str(cli_home)
+    cli_env["XDG_CACHE_HOME"] = str(cli_cache)
+
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -1126,6 +1141,7 @@ def _run_omero_cli(cmd, timeout=None):
         check=False,
         timeout=timeout,
         stdin=subprocess.DEVNULL,
+        env=cli_env,
     )
 
 
