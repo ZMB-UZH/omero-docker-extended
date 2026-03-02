@@ -370,6 +370,23 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
     chmod -R g+rwX /opt/omero/server/OMERO.server/var
 
-# Drop privileges for runtime
-# ---------------------------
-USER omero-server
+# Fix base image start script to drop privileges and keep root as image user
+# --------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    rm -f /startup/99-run.sh; \
+    printf '%s\n' \
+        '#!/bin/bash' \
+        'set -eu' \
+        'omero=/opt/omero/server/venv3/bin/omero' \
+        'if [ ! -x "$omero" ]; then' \
+        '    omero="$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero"' \
+        'fi' \
+        'cd /opt/omero/server' \
+        'echo "Starting OMERO.server as omero-server"' \
+        'exec runuser -p -u omero-server -- "$omero" admin start --foreground' \
+        > /startup/99-run.sh; \
+    chmod 0555 /startup/99-run.sh
+
+# Keep root as image user so bootstrap scripts can reconcile runtime permissions
+# before dropping to the application user in 99-run.sh
+USER root
