@@ -905,8 +905,8 @@ def create_spectrum_table(
             logger.exception("Failed to populate table for image %d", image_id)
             try:
                 table.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in sem_edx_parser.py", exc_info=exc)
             return None
             
     except Exception as exc:

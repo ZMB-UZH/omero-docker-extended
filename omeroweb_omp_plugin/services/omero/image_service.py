@@ -200,10 +200,10 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                                 return format_map.get(fmt_val, fmt_val)
                                 except Exception:
                                     continue
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    except Exception as exc:
+                        logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
         
         # METHOD 2: Extract from original filename extension
         if hasattr(img, "getFileset"):
@@ -250,8 +250,8 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                             return format_map.get(ext, ext)
                             except Exception:
                                 continue
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
         
         # METHOD 3: Fallback to image name extension
         if hasattr(img, "getName"):
@@ -265,8 +265,8 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                     ext = parts[-1].upper()
                     if ext and len(ext) <= 10:
                         return ext
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
         
         return "Unknown"
 
