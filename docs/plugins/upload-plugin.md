@@ -95,6 +95,8 @@ Configuration values in `env/omeroweb.env`:
 | `UPLOAD_CLEANUP_AGE_THRESHOLD` | Minimum age before stale cleanup (seconds) |
 | `OMERO_UPLOAD_PATH` | Host path for temporary upload storage |
 
+The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_UPLOAD_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
+
 ## Operator checklist
 
 - Ensure temporary upload paths are writable by the container user.
