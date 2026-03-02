@@ -580,8 +580,8 @@ create_omero_groups_from_list() {
     local add_output=""
     local add_exit_code=0
     local add_attempt=0
-    local add_retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-8}"
-    local add_retry_delay_seconds="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+    local add_retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-20}"
+    local add_retry_delay_seconds="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-3}"
     local -a group_entries=()
 
     echo "Bootstrapping OMERO groups from OMERO_INSTALL_GROUP_LIST..."
@@ -604,7 +604,7 @@ create_omero_groups_from_list() {
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -lc 'set -euo pipefail; OMERO_BIN="/opt/omero/server/OMERO.server/bin/omero"; if [ ! -x "${OMERO_BIN}" ]; then echo "OMERO CLI not executable at expected path: ${OMERO_BIN}"; exit 127; fi; "${OMERO_BIN}" -s 127.0.0.1 -p 4064 login -u root -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" -s 127.0.0.1 -p 4064 group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+                omeroserver bash -lc 'set -euo pipefail; resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; runuser -p -m -u omero-server -- env HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" "${OMERO_BIN}" -s 127.0.0.1 -p 4064 login -u root -w "${ROOTPASS}" >/dev/null; runuser -p -m -u omero-server -- env HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" "${OMERO_BIN}" -s 127.0.0.1 -p 4064 group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
             add_exit_code=$?
             set -e
 
