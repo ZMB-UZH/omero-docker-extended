@@ -387,7 +387,7 @@ RUN set -euo pipefail; \
         > /startup/99-run.sh; \
     chmod 0555 /startup/99-run.sh
 
-# Wrap entrypoint so all /startup/*.py scripts run as omero-server, avoiding permission corruption
+# Wrap entrypoint so all /startup/*.py AND 60-database.sh scripts run as omero-server, avoiding permission corruption
 # ----------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
     mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
@@ -398,7 +398,7 @@ RUN set -euo pipefail; \
         'for f in /startup/*; do' \
         '    if [ -f "$f" -a -x "$f" ]; then' \
         '        echo "Running $f $@"' \
-        '        if [[ "$f" == *.py ]]; then' \
+        '        if [[ "$f" == *.py ]] || [[ "$f" == *60-database.sh ]]; then' \
         '            runuser -p -m -u omero-server -- "$f" "$@"' \
         '        else' \
         '            "$f" "$@"' \
