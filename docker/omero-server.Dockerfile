@@ -383,10 +383,31 @@ RUN set -euo pipefail; \
         'fi' \
         'cd /opt/omero/server' \
         'echo "Starting OMERO.server as omero-server"' \
-        'exec runuser -p -u omero-server -- "$omero" admin start --foreground' \
+        'exec runuser -p -m -u omero-server -- "$omero" admin start --foreground' \
         > /startup/99-run.sh; \
     chmod 0555 /startup/99-run.sh
 
+# Wrap entrypoint so all /startup/*.py scripts run as omero-server, avoiding permission corruption
+# ----------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
+    printf '%s\n' \
+        '#!/bin/bash' \
+        'set -e' \
+        'source /opt/omero/server/venv3/bin/activate' \
+        'for f in /startup/*; do' \
+        '    if [ -f "$f" -a -x "$f" ]; then' \
+        '        echo "Running $f $@"' \
+        '        if [[ "$f" == *.py ]]; then' \
+        '            runuser -p -m -u omero-server -- "$f" "$@"' \
+        '        else' \
+        '            "$f" "$@"' \
+        '        fi' \
+        '    fi' \
+        'done' \
+        > /usr/local/bin/entrypoint.sh; \
+    chmod 0755 /usr/local/bin/entrypoint.sh
+
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
-# before dropping to the application user in 99-run.sh
+# before dropping to the application user in 99-run.sh and in entrypoint python scripts
 USER root
