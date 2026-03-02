@@ -2074,6 +2074,31 @@ discover_container_default_id_or_die() {
     configured_user="$(docker image inspect --format '{{.Config.User}}' "${image}" 2>/dev/null || true)"
     configured_user="${configured_user// /}"
 
+    # Some images intentionally leave Config.User empty and switch to a
+    # non-root runtime UID/GID in the image entrypoint/binary defaults.
+    # Probe the effective default process IDs first to avoid chowning
+    # bind-mounted host data to root when the service actually runs unprivileged.
+    if [ -z "${configured_user}" ]; then
+        local runtime_uid=""
+        local runtime_gid=""
+
+        runtime_uid="$(docker run --rm --entrypoint /usr/bin/id "${image}" -u 2>/dev/null || true)"
+        runtime_gid="$(docker run --rm --entrypoint /usr/bin/id "${image}" -g 2>/dev/null || true)"
+
+        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+            if [ "${id_flag}" = "-u" ]; then
+                printf '%s' "${runtime_uid}"
+                return 0
+            fi
+            if [ "${id_flag}" = "-g" ]; then
+                printf '%s' "${runtime_gid}"
+                return 0
+            fi
+            echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+            return 1
+        fi
+    fi
+
     if [ -z "${configured_user}" ]; then
         if [ -n "${fallback_user_name}" ]; then
             discover_uid_gid_from_passwd_or_die "${image}" "${fallback_user_name}" "${id_flag}"
