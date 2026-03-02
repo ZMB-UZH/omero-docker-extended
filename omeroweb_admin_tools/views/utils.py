@@ -7,7 +7,8 @@ from omero_plugin_common.request_utils import current_username
 
 def require_root_user(view_func):
     @wraps(view_func)
-    def _wrapped(request, conn=None, url=None, *args, **kwargs):
+    def _wrapped(request, *args, **kwargs):
+        conn = kwargs.get("conn")
         username = current_username(request, conn)
         if username != "root":
             return JsonResponse(
@@ -18,7 +19,7 @@ def require_root_user(view_func):
                 },
                 status=403,
             )
-        return view_func(request, conn=conn, url=url, *args, **kwargs)
+        return view_func(request, *args, **kwargs)
 
     return _wrapped
 

@@ -29,7 +29,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", "/tmp")
     monkeypatch.setenv("OMERO_IMS_EXPORT_TIMEOUT", "10")
     monkeypatch.setenv("OMERO_IMS_EXPORT_POLL_INTERVAL", "0.1")
-    monkeypatch.setenv("OMERO_IMS_PROCESS_JOB_DIR", "/tmp")
+    monkeypatch.setenv("OMERO_TMP_PATH", "/tmp")
     monkeypatch.setenv("OMERO_IMS_SCRIPT_START_TIMEOUT", "1")
     monkeypatch.setenv("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "0.1")
     monkeypatch.setenv("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "10")

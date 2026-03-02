@@ -347,6 +347,10 @@ def test_storage_quota_update_endpoint(monkeypatch) -> None:
         content_type="application/json",
     )
     monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
@@ -373,6 +377,10 @@ def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
         content_type="application/json",
     )
     monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
@@ -395,6 +403,10 @@ def test_storage_quota_update_endpoint_accepts_form_encoded_updates(monkeypatch)
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
@@ -457,6 +469,10 @@ def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> No
         content_type="application/json",
     )
     monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
@@ -493,6 +509,10 @@ def test_storage_quota_update_endpoint_multipart_form(monkeypatch) -> None:
         data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
     )
     monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
@@ -520,6 +540,10 @@ def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
         data={"file": upload},
     )
 
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,

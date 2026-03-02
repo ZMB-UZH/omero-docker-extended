@@ -31,6 +31,7 @@ if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "version" ]; then
   exit 0
 fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "inspect" ]; then
+  printf 'Name:   %s\nDriver: docker-container\n' "${3:-default}"
   exit 0
 fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "create" ]; then
@@ -99,6 +100,7 @@ exit 0
                     "DOCKER_BUILD_TARGETS": "omeroserver",
                     "DOCKER_BUILD_PUSH_IMAGES": "0",
                     "DOCKER_REGISTRY_PREFIX_DEFAULT": "sandbox/omero",
+                    "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
                 }
             )
             env.pop("DOCKER_REGISTRY_PREFIX", None)
@@ -133,6 +135,7 @@ exit 0
                     "DOCKER_IMAGE_TAG": "2026.02.1",
                     "DOCKER_BUILD_TARGETS": "omeroserver omeroweb",
                     "DOCKER_BUILD_COMPRESSION_TYPE": "estargz",
+                    "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
                     "DOCKER_BUILD_COMPRESSION_LEVEL": "9",
                     "DOCKER_BUILD_PUSH_IMAGES": "1",
                     "DOCKER_BUILD_USE_OCI_MEDIATYPES": "1",
