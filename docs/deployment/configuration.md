@@ -51,7 +51,7 @@ Ensure host paths exist and are writable by container runtime users before start
 
 ### Centralized Temporary File Storage
 
-`OMERO_TMP_PATH` (default `/opt/omero/omero_temp`) is the single persistent root for all plugin temporary data. It is mounted into the `omeroweb` container at `/opt/omero/omero_temp`.
+`OMERO_TMP_PATH` (set in `installation_paths.env` and `env/omeroweb.env`) is the single persistent root for all plugin temporary data. It is mounted into the `omeroweb` container at `/opt/omero/omero_temp`.
 
 Each plugin automatically receives its own subfolder (detected from the Python package name at runtime via `omero_plugin_common.tmp_utils`). Plugins further subdivide into purpose-specific subdirectories (`data`, `jobs`, `compat-check`, etc.).
 
@@ -69,7 +69,7 @@ Example runtime layout:
     └── jobs/         # Imaris export process state
 ```
 
-Per-plugin env vars (`OMERO_WEB_UPLOAD_DIR`, `OMERO_WEB_UPLOAD_JOBS_DIR`, `OMERO_IMS_PROCESS_JOB_DIR`) are optional overrides. When unset, defaults are auto-derived from `OMERO_TMP_PATH`.
+All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no per-plugin env var overrides.
 
 ### Managed Repository Path Setting
 
