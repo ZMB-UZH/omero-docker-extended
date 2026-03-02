@@ -17,7 +17,7 @@
 | Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
 | CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
 
-Loki UID/GID ownership is auto-detected by `installation/installation_script.sh` (using image metadata and `/etc/passwd` fallback for the `loki` account) before each install/update, then `${LOKI_DATA_PATH}` ownership is reconciled to the detected IDs. `LOKI_UID` / `LOKI_GID` remain optional explicit overrides when required by host policy.
+Monitoring data-directory ownership is auto-detected by `installation/installation_script.sh` before each install/update. For images that set `Config.User`, the installer resolves IDs from image metadata (with `/etc/passwd` fallback where needed, such as Loki). For images that leave `Config.User` empty but still run non-root by default (for example Prometheus), the installer probes effective runtime IDs via `id` inside the image and uses those values for host bind-mount ownership reconciliation. `PROMETHEUS_UID` / `PROMETHEUS_GID`, `LOKI_UID` / `LOKI_GID`, and other `*_UID` / `*_GID` variables remain optional explicit overrides when required by host policy.
 
 ## Configuration sources
 
