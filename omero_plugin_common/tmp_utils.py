@@ -21,14 +21,23 @@ logger = logging.getLogger(__name__)
 # installation_paths.env and the container-side variable in omeroweb.env.
 TMP_PATH_ENV = "OMERO_TMP_PATH"
 
-# Fallback used only when the env var is absent (should not happen in a
-# correctly provisioned deployment).
-_DEFAULT_TMP_BASE = "/opt/omero/omero_temp"
-
 
 def get_tmp_base() -> Path:
-    """Return the root temporary directory from the environment."""
-    return Path(os.environ.get(TMP_PATH_ENV, _DEFAULT_TMP_BASE))
+    """Return the root temporary directory from the environment.
+
+    Raises
+    ------
+    RuntimeError
+        If ``OMERO_TMP_PATH`` is not set.
+    """
+    value = os.environ.get(TMP_PATH_ENV)
+    if not value:
+        raise RuntimeError(
+            f"{TMP_PATH_ENV} environment variable is not set. "
+            "Ensure it is defined in env/omeroweb.env and that the "
+            "container receives it via env_file in docker-compose.yml."
+        )
+    return Path(value)
 
 
 def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
