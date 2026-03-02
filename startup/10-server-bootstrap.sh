@@ -13,19 +13,6 @@ SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
 OMERO_BIN="${SERVER_HOME}/bin/omero"
 OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
 
-resolve_user_home() {
-    local username="$1"
-    local home_dir=""
-
-    home_dir="$(getent passwd "${username}" 2>/dev/null | cut -d: -f6 || true)"
-    if [[ -z "${home_dir}" ]]; then
-        echo "ERROR: Could not resolve home directory for user '${username}' via getent passwd." >&2
-        exit 1
-    fi
-
-    printf '%s\n' "${home_dir}"
-}
-
 run_omero() {
     if [[ "$(id -u)" -ne 0 ]]; then
         "${OMERO_BIN}" "$@"
@@ -47,14 +34,18 @@ run_omero() {
 
 ensure_tmpdir_permissions() {
     local requested_owner="$1"
-    local user_home=""
+    local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
 
-    user_home="$(resolve_user_home "${requested_owner}")"
-    expected_tmp_dir="${user_home%/}/tmp"
+    if [[ -z "${tmp_root}" ]]; then
+        echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
+        exit 1
+    fi
 
-    if [[ -e "${expected_tmp_dir}" && ! -d "${expected_tmp_dir}" ]]; then
-        echo "ERROR: OMERO temp path exists but is not a directory: ${expected_tmp_dir}" >&2
+    expected_tmp_dir="${tmp_root%/}/${requested_owner}/tmp"
+
+    if [[ -e "${tmp_root}" && ! -d "${tmp_root}" ]]; then
+        echo "ERROR: OMERO tmp root exists but is not a directory: ${tmp_root}" >&2
         exit 1
     fi
 
