@@ -75,32 +75,37 @@ ensure_tmpdir_permissions() {
     fi
 
     export TMPDIR="${expected_tmp_dir}"
+    # Setting OMERO_TEMPDIR (deprecated but takes priority over OMERO_TMPDIR fallback in OMERO.py)
+    export OMERO_TEMPDIR="${expected_tmp_dir}"
     export OMERO_TMPDIR="${expected_tmp_dir}"
 
-    # Some OMERO CLI code paths resolve lock files under an internal runtime
-    # location adjacent to OMERO.server. Keep that derived path writable so
-    # startup config updates never fail on lock acquisition.
-    if [[ -e "${legacy_tmp_dir}" && ! -d "${legacy_tmp_dir}" ]]; then
-        echo "ERROR: Legacy OMERO temp path exists but is not a directory: ${legacy_tmp_dir}" >&2
-        exit 1
-    fi
-
-    if ! mkdir -p "${legacy_tmp_dir}"; then
-        log "WARNING: Failed to create legacy OMERO temp directory (${legacy_tmp_dir}); continuing with TMPDIR=${expected_tmp_dir}"
-        log "OMERO temp directory ready: ${TMPDIR}"
-        return
-    fi
-
+    # Pre-emptively create the specific omero temp dirs to avoid Python locking errors.
+    local omero_py_dir="${expected_tmp_dir}/omero"
+    local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
+    
+    mkdir -p "${omero_py_dir}" "${omero_py_user_dir}"
     if [[ "$(id -u)" -eq 0 ]]; then
-        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true
-        chmod 0700 "${legacy_tmp_dir}" 2>/dev/null || true
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${omero_py_dir}" "${omero_py_user_dir}"
+        chmod 0700 "${omero_py_dir}" "${omero_py_user_dir}"
     fi
 
-    if [[ ! -w "${legacy_tmp_dir}" ]]; then
-        log "WARNING: Legacy OMERO temp directory is not writable (${legacy_tmp_dir}); continuing with TMPDIR=${expected_tmp_dir}"
-        ls -ld "${legacy_tmp_dir}" >&2 || true
-        log "OMERO temp directory ready: ${TMPDIR}"
-        return
+    # Explicitly clear out old omero_<user>* directories under the target to prevent Lock errors
+    # (these are safe to clear since this is bootstrap before the server actually starts)
+    if [[ "$(id -u)" -eq 0 ]]; then
+       rm -rf "${expected_tmp_dir}/omero_${requested_owner}"_* || true
+    fi
+
+    # Ensure legacy dir is clean / symlinked so the fallback logic in Python never triggers
+    # PermissionError on /opt/omero/server/omero/tmp
+    if [[ -d "${legacy_tmp_dir}" && ! -L "${legacy_tmp_dir}" ]]; then
+        rm -rf "${legacy_tmp_dir}" || true
+    fi
+    if [[ ! -e "${legacy_tmp_dir}" ]]; then
+        mkdir -p "$(dirname "${legacy_tmp_dir}")"
+        ln -sf "${expected_tmp_dir}" "${legacy_tmp_dir}"
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown -h "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true
     fi
 
     log "OMERO temp directory ready: ${TMPDIR}"
