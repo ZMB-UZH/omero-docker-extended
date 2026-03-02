@@ -51,14 +51,14 @@ Ensure host paths exist and are writable by container runtime users before start
 
 ### Centralized Temporary File Storage
 
-`OMERO_TMP_PATH` (set in `installation_paths.env` and `env/omeroweb.env`) is the single persistent root for all plugin temporary data. It is mounted into the `omeroweb` container at `/opt/omero/omero_temp`.
+`OMERO_TMP_PATH` (set in `installation_paths.env`) is the single persistent root for temporary/working data. It is mounted into both `omeroweb` and `omeroserver` at the same absolute path value configured in `OMERO_TMP_PATH` (host path equals in-container path).
 
 Each plugin automatically receives its own subfolder (detected from the Python package name at runtime via `omero_plugin_common.tmp_utils`). Plugins further subdivide into purpose-specific subdirectories (`data`, `jobs`, `compat-check`, etc.).
 
 Example runtime layout:
 
 ```
-/opt/omero/omero_temp/
+${OMERO_TMP_PATH}/
 ├── omeroweb-upload/
 │   ├── data/         # staged upload files
 │   ├── jobs/         # upload job state JSON
@@ -67,9 +67,15 @@ Example runtime layout:
 │   └── jobs/         # filename metadata job state
 └── omeroweb-imaris-connector/
     └── jobs/         # Imaris export process state
+
+# server bootstrap temp namespace (separate from plugin namespaces)
+${OMERO_CLI_USER}/
+└── tmp/
 ```
 
 All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no per-plugin env var overrides.
+
+`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI bootstrap operations, but the bootstrap script uses a dedicated server-only subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid collisions with plugin folders and permission churn on the shared root. The script fails fast when `OMERO_TMP_PATH` is unset or when the server tmp subpath is not writable.
 
 ### Managed Repository Path Setting
 
