@@ -288,4 +288,31 @@ Expected behavior after this fix:
 
 - Installer assigns `OMERO_WEB_VAR_PATH` ownership to OMERO.web UID/GID.
 - `startup/10-web-bootstrap.sh` repairs missing `var/omero/tmp`, enforces writable permissions, and auto-generates `var/django_secret_key` when missing.
+## 14. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
+
+Symptom:
+
+- `docker compose up` reports `omeroserver` as unhealthy/restarting.
+- `docker compose logs omeroserver` repeatedly shows:
+  - `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
+
+Cause:
+
+- `OMERO_TMP_PATH` is not present in the container environment.
+- `startup/10-server-bootstrap.sh` fails fast because it requires `OMERO_TMP_PATH` to create and validate the server bootstrap `TMPDIR` namespace.
+
+Fix:
+
+```bash
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env config | rg '^\s+OMERO_TMP_PATH:' -n
+
+# if missing in config output, ensure compose service env wiring and restart
+bash installation/installation_script.sh
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d --build omeroserver omeroweb
+```
+
+Expected result:
+
+- `omeroserver` healthcheck passes and the service stays `healthy`.
+- Bootstrap logs proceed past temp-dir validation without `OMERO_TMP_PATH` errors.
 
