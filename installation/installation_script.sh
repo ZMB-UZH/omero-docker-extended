@@ -2005,9 +2005,63 @@ resolve_service_image_from_compose_or_die() {
     return 0
 }
 
+discover_uid_gid_from_passwd_or_die() {
+    local image="$1"
+    local user_name="$2"
+    local id_flag="$3"
+    local container_name=""
+    local passwd_file=""
+    local uid=""
+    local gid=""
+
+    container_name="omero-install-probe-passwd-id-$RANDOM"
+    if ! docker create --name "${container_name}" --entrypoint /bin/true "${image}" >/dev/null 2>&1; then
+        if ! docker create --name "${container_name}" "${image}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to create probe container for image '${image}' while resolving passwd entry for user '${user_name}'." >&2
+            return 1
+        fi
+    fi
+
+    passwd_file="$(mktemp)"
+    if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
+        echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${user_name}'." >&2
+        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        rm -f "${passwd_file}" || true
+        return 1
+    fi
+
+    uid="$(awk -F: -v user="${user_name}" '$1==user {print $3; exit}' "${passwd_file}")"
+    gid="$(awk -F: -v user="${user_name}" '$1==user {print $4; exit}' "${passwd_file}")"
+
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    rm -f "${passwd_file}" || true
+
+    if [ "${id_flag}" = "-u" ]; then
+        if ! [[ "${uid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric UID for user '${user_name}' from image '${image}' /etc/passwd." >&2
+            return 1
+        fi
+        printf '%s' "${uid}"
+        return 0
+    fi
+
+    if [ "${id_flag}" = "-g" ]; then
+        if ! [[ "${gid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric GID for user '${user_name}' from image '${image}' /etc/passwd." >&2
+            return 1
+        fi
+        printf '%s' "${gid}"
+        return 0
+    fi
+
+    echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+    return 1
+}
+
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
+    local fallback_user_name="${3:-}"
     local configured_user=""
     local configured_account=""
     local configured_group=""
@@ -2021,6 +2075,11 @@ discover_container_default_id_or_die() {
     configured_user="${configured_user// /}"
 
     if [ -z "${configured_user}" ]; then
+        if [ -n "${fallback_user_name}" ]; then
+            discover_uid_gid_from_passwd_or_die "${image}" "${fallback_user_name}" "${id_flag}"
+            return $?
+        fi
+
         if [ "${id_flag}" = "-u" ] || [ "${id_flag}" = "-g" ]; then
             printf '0'
             return 0
@@ -2138,8 +2197,8 @@ if [ -z "${PROMETHEUS_UID}" ]; then PROMETHEUS_UID="$(discover_container_default
 if [ -z "${PROMETHEUS_GID}" ]; then PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"; fi
 if [ -z "${GRAFANA_UID}" ]; then GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"; fi
 if [ -z "${GRAFANA_GID}" ]; then GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"; fi
-if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u")"; fi
-if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"; fi
+if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u" "loki")"; fi
+if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g" "loki")"; fi
 if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
