@@ -22,8 +22,8 @@ def get_id(obj):
     """Extract ID from OMERO object."""
     try:
         return obj._obj.id.val
-    except (AttributeError, Exception):
-        pass
+    except Exception as exc:
+        logger.debug("Falling back to getId() for %r: %s", obj, exc)
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
@@ -41,15 +41,15 @@ def get_owner_id(obj):
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to resolve owner via details for %r: %s", obj, exc)
     try:
         owner = obj.getOwner()
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to resolve owner via getOwner() for %r: %s", obj, exc)
     return None
 
 

@@ -801,8 +801,8 @@ def _get_text(value_obj):
 def _get_id(obj):
     try:
         return obj._obj.id.val
-    except (AttributeError, Exception):
-        pass
+    except Exception as exc:
+        logger.debug("Falling back to getId() for object %r: %s", obj, exc)
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
@@ -819,15 +819,15 @@ def _get_owner_id(obj):
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not resolve owner via details for object %r: %s", obj, exc)
     try:
         owner = obj.getOwner()
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not resolve owner via getOwner() for object %r: %s", obj, exc)
     return None
 
 
@@ -910,8 +910,8 @@ def _iter_accessible_projects(conn):
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to read current OMERO group context: %s", exc)
     
     try:
         # Set group context to -1 to query across all groups
@@ -938,8 +938,8 @@ def _iter_accessible_projects(conn):
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to restore OMERO group context to %s: %s", current_group, exc)
     
     # Final fallback: try without cross-group querying
     try:
@@ -1199,8 +1199,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     if old_conn:
         try:
             old_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to close stale OMERO connection before reconnect: %s", exc)
     
     try:
         client = omero.client(host=host, port=port)
@@ -1213,8 +1213,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             logger.error("Newly created session is invalid")
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to close invalid OMERO session during reconnect: %s", exc)
             return None
 
         return conn
@@ -1434,8 +1434,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as close_exc:
+                logger.debug("Failed to close job-service connection after connect() exception: %s", close_exc)
             return None
 
         if not ok:
@@ -1451,8 +1451,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as close_exc:
+                logger.debug("Failed to close job-service connection after failed connect(): %s", close_exc)
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -1476,8 +1476,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
     except Exception:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as close_exc:
+            logger.debug("Failed to close job-service connection during exception cleanup: %s", close_exc)
         raise
 
 
@@ -1533,8 +1533,8 @@ def _attach_txt_to_image_service(
         finally:
             try:
                 store.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to close raw file store after attaching %s: %s", file_path, exc)
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -1586,8 +1586,8 @@ def _attach_txt_to_image_service(
         # Always close the user connection
         try:
             user_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to close temporary user OMERO connection: %s", exc)
 
 
 def _append_job_message(job: dict, message: str):
@@ -2641,8 +2641,8 @@ def _process_import_job(job_id: str):
                                         try:
                                             try:
                                                 conn.close()
-                                            except Exception:
-                                                pass
+                                            except Exception as close_exc:
+                                                logger.debug("Failed to close expired job-service connection: %s", close_exc)
                                             conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                                         except Exception:
                                             conn = None

@@ -1,4 +1,7 @@
+import logging
 import traceback
+
+logger = logging.getLogger(__name__)
 #
 # <CustomTools>
 #  <Menu>
@@ -336,8 +339,8 @@ class OMEROWebClient:
             _xt_debug(f"API POST error ({e.code}): {e.reason}")
             try:
                 _xt_debug(e.read().decode('utf-8'))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
             return None
         except Exception as e:
             _xt_debug(f"API POST error: {e}")
@@ -673,8 +676,8 @@ class OMEROWebClient:
             body = ""
             try:
                 body = e.read().decode("utf-8", errors="replace")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
             raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}") from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
@@ -1013,8 +1016,8 @@ def _xt_write_log(log_path, msg):
             f.write(msg)
             if not msg.endswith("\n"):
                 f.write("\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
 
 
 def _xt_show_fatal(title, message):
@@ -1057,8 +1060,8 @@ def XTOmeroConnector(aImarisId):
         # Keep console open when launched by double-click / Imaris
         try:
             input("Press ENTER to close...")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
 
 
 if __name__ == "__main__":
@@ -1069,5 +1072,5 @@ if __name__ == "__main__":
         print("Fatal:", e)
         try:
             input("Press ENTER to close...")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
