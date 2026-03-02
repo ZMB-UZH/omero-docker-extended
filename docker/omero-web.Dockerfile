@@ -203,6 +203,19 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/docs/help"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
 
+# Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
+# --------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \
+    if [[ -f "${TEMP_FILES_PY}" ]]; then \
+        echo "Removing fallback directories from OMERO python TempFileManager..."; \
+        sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+    fi
+
 # Pre-create ALL Django static directories and own them (maybe unnecessary)
 # -------------------------------------------------------------------------
 RUN set -euo pipefail; \
@@ -317,12 +330,13 @@ RUN set -euo pipefail; \
         '        if [ "$(basename "$f")" = "10-web-bootstrap.sh" ]; then' \
         '            "$f" "$@"' \
         '        else' \
-        '            runuser -u omero-web -- "$f" "$@"' \
+        '            # STRICT ENV: Preserve the OMERO_TMPDIR environment variables so python uses them directly' \
+        '            runuser -p -u omero-web -- "$f" "$@"' \
         '        fi' \
         '    fi' \
         'done' \
         'echo "Startup scripts complete. Launching as omero-web: $@"' \
-        'exec runuser -u omero-web -- "$@"' \
+        'exec runuser -p -u omero-web -- "$@"' \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
