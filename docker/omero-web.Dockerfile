@@ -214,6 +214,7 @@ RUN set -euo pipefail; \
         echo "Removing fallback directories from OMERO python TempFileManager..."; \
         sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
         sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i 's/while i < 10:/while False:/g' "${TEMP_FILES_PY}"; \
     fi
 
 # Pre-create ALL Django static directories and own them (maybe unnecessary)
