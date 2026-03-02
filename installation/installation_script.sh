@@ -1691,12 +1691,6 @@ fi
 
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
 
-# Ensure OMERO_TMP_PATH has a fallback default if not provided by env file
-# (This handles cases where the env file is from an older installation)
-if [ -z "${OMERO_TMP_PATH:-}" ]; then
-    OMERO_TMP_PATH="${OMERO_INSTALLATION_PATH%/}/omero_temp"
-fi
-
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
 OMERO_UPLOAD_PATH="${OMERO_TMP_PATH%/}/omeroweb-upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"

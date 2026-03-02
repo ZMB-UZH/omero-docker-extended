@@ -16,7 +16,6 @@ from omero_plugin_common.env_utils import (
     get_env,
     get_float_env,
     get_int_env,
-    get_optional_env,
 )
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
@@ -33,10 +32,7 @@ EXPORT_ROOT = get_env(
 )
 EXPORT_TIMEOUT = get_export_timeout()
 EXPORT_POLL_INTERVAL = get_export_poll_interval()
-PROCESS_JOB_DIR = get_optional_env(
-    "OMERO_IMS_PROCESS_JOB_DIR",
-    env_file=ENV_FILE_OMERO_CELERY,
-) or str(get_plugin_tmp_dir("jobs"))
+PROCESS_JOB_DIR = str(get_plugin_tmp_dir("jobs"))
 SCRIPT_START_TIMEOUT = get_int_env(
     "OMERO_IMS_SCRIPT_START_TIMEOUT",
     env_file=ENV_FILE_OMERO_CELERY,
