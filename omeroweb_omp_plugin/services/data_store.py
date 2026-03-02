@@ -131,8 +131,8 @@ def _connect():
         if conn is not None:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in data_store.py", exc_info=exc)
 
 
 def _ensure_schema(conn):

@@ -47,8 +47,8 @@ def extract_acquisition_metadata(img):
                         meta["objective_id"] = str(oid.getValue())
                     except AttributeError:
                         meta["objective_id"] = str(oid)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
 
             try:
                 collar = os.getCorrectionCollar()
@@ -57,8 +57,8 @@ def extract_acquisition_metadata(img):
                         meta["objective_collar"] = str(collar.getValue())
                     except AttributeError:
                         meta["objective_collar"] = str(collar)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
     except Exception as e:
         try:
             logger.error("ACQ: error reading objective settings for image %s: %s", img.getId(), e)
@@ -77,8 +77,8 @@ def extract_acquisition_metadata(img):
                 lbl = ch.getLabel()
                 if lbl:
                     meta[f"channel_{idx}_label"] = str(lbl)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
 
             try:
                 ew = ch.getEmissionWave()
@@ -87,8 +87,8 @@ def extract_acquisition_metadata(img):
                         meta[f"channel_{idx}_emission"] = str(ew.getValue())
                     except AttributeError:
                         meta[f"channel_{idx}_emission"] = str(ew)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
 
             try:
                 exw = ch.getExcitationWave()
@@ -97,8 +97,8 @@ def extract_acquisition_metadata(img):
                         meta[f"channel_{idx}_excitation"] = str(exw.getValue())
                     except AttributeError:
                         meta[f"channel_{idx}_excitation"] = str(exw)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
     except Exception as e:
         try:
             logger.error("ACQ: error reading channel metadata for image %s: %s", img.getId(), e)
@@ -128,8 +128,8 @@ def extract_acquisition_metadata(img):
                             meta[f"detector_{did}_binning"] = str(binning.getValue())
                         except AttributeError:
                             meta[f"detector_{did}_binning"] = str(binning)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
 
                 try:
                     gain = ds.getGain()
@@ -138,8 +138,8 @@ def extract_acquisition_metadata(img):
                             meta[f"detector_{did}_gain"] = str(gain.getValue())
                         except AttributeError:
                             meta[f"detector_{did}_gain"] = str(gain)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
     except Exception as e:
         try:
             logger.error("ACQ: error reading detector settings for image %s: %s", img.getId(), e)
@@ -223,8 +223,8 @@ def extract_acquisition_metadata(img):
         finally:
             try:
                 store.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
 
         fa = FileAnnotationI()
         fa.setNs(rstring("acquisition.fullmetadata"))
