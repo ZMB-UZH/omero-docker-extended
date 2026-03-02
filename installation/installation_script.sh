@@ -600,6 +600,7 @@ create_omero_groups_from_list() {
         for add_attempt in $(seq 1 "${add_retry_limit}"); do
             set +e
             add_output="$(compose_with_installation_env "${compose_file}" exec -T \
+                -e HOME="/tmp" \
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
