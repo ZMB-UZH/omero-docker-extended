@@ -425,7 +425,12 @@ def _build_public_service_url(
     when the client connected over TLS to a reverse proxy.
     """
     parsed = urlparse(internal_url)
-    scheme = forwarded_proto or parsed.scheme or request_scheme
+    if forwarded_proto:
+        scheme = forwarded_proto
+    elif is_proxied:
+        scheme = request_scheme
+    else:
+        scheme = parsed.scheme or request_scheme
     base_path = parsed.path.rstrip("/")
     host_only = str(request_host or "").strip()
     if host_only.startswith("[") and "]" in host_only:
