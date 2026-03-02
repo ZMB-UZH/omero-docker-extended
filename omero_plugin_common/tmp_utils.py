@@ -18,7 +18,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Environment variable name – matches the host-side variable in
-# installation_paths.env and the container-side variable in omeroweb.env.
+# installation_paths.env (single source of truth mounted into containers).
 TMP_PATH_ENV = "OMERO_TMP_PATH"
 
 
@@ -34,8 +34,8 @@ def get_tmp_base() -> Path:
     if not value:
         raise RuntimeError(
             f"{TMP_PATH_ENV} environment variable is not set. "
-            "Ensure it is defined in env/omeroweb.env and that the "
-            "container receives it via env_file in docker-compose.yml."
+            "Ensure it is defined via installation_paths.env and passed into the "
+            "container environment through docker-compose env_file loading."
         )
     return Path(value)
 
