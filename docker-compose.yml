@@ -367,6 +367,7 @@ services:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ${OMERO_SERVER_VAR_PATH:?Set OMERO_SERVER_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:rw
+      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
     ulimits:
       nofile:
         soft: 15000
@@ -439,9 +440,6 @@ services:
       - ./env/omeroserver.env
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
-    environment:
-      # Container-internal path – must match the volume mount target below.
-      OMERO_TMP_PATH: /opt/omero/omero_temp
     networks:
       omero:
         aliases:
@@ -451,7 +449,7 @@ services:
     volumes:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:/opt/omero/omero_temp:rw
+      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
       - ${OMERO_WEB_VAR_PATH:?Set OMERO_WEB_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var:rw
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
