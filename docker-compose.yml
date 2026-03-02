@@ -380,7 +380,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "HOME=/opt/omero runuser -p -m -u omero-server -- /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\""
+          "runuser -p -m -u omero-server -- sh -c 'HOME=/opt/omero /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\"'"
         ]
       interval: 10s
       timeout: 10s
