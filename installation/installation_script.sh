@@ -599,12 +599,14 @@ create_omero_groups_from_list() {
         add_exit_code=1
         for add_attempt in $(seq 1 "${add_retry_limit}"); do
             set +e
+            # Use docker exec explicitly with non-interactive flags and without pseudo-TTY (-T)
+            # The < /dev/null redirect ensures if any prompt triggers it fails instead of hanging forever
             add_output="$(compose_with_installation_env "${compose_file}" exec -T \
                 -e HOME="/tmp" \
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -lc 'set -euo pipefail; resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; runuser -p -m -u omero-server -- env HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" "${OMERO_BIN}" -s 127.0.0.1 -p 4064 login -u root -w "${ROOTPASS}" >/dev/null; runuser -p -m -u omero-server -- env HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}" "${OMERO_BIN}" -s 127.0.0.1 -p 4064 group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+                omeroserver bash -c 'set -euo pipefail; resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"; if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then echo "Failed to login or ICE not ready"; exit 1; fi; su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 group add \"${TARGET_GROUP_NAME}\" --type=\"${TARGET_GROUP_PERMISSION}\"" </dev/null' 2>&1)"
             add_exit_code=$?
             set -e
 
