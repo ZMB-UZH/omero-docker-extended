@@ -316,3 +316,31 @@ Expected result:
 - `omeroserver` healthcheck passes and the service stays `healthy`.
 - Bootstrap logs proceed past temp-dir validation without `OMERO_TMP_PATH` errors.
 
+## 15. `omeroserver` logs `WARNING: Legacy OMERO temp directory is not writable` during bootstrap
+
+Symptom:
+
+- `docker compose logs omeroserver` shows:
+  - `WARNING: Legacy OMERO temp directory is not writable: /opt/omero/server/omero/tmp`
+
+Cause:
+
+- A pre-existing path under `/opt/omero/server/omero/tmp` is owned by another user/group and is not writable by the OMERO bootstrap user.
+- `startup/10-server-bootstrap.sh` now treats this legacy lock-file path as best-effort compatibility and falls back to `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`.
+
+Fix (optional hardening):
+
+```bash
+# inspect ownership/mode inside the container
+docker compose exec omeroserver ls -ld /opt/omero/server/omero/tmp
+
+# fix ownership/permissions on the host path mounted at /opt/omero/server
+# so the legacy path is writable and warning-free on startup
+
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d --build omeroserver
+```
+
+Expected result:
+
+- Bootstrap continues successfully using `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR`.
+- If ownership/permissions are corrected, the legacy warning disappears.
