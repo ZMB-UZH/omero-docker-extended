@@ -300,7 +300,7 @@ RUN set -euo pipefail; \
 # FIX: The base image's /startup/99-run.sh executes
 #   "omero web start --foreground"
 # which blocks forever. The base image entrypoint loops over /startup/* and
-# never reaches exec "$@" so our CMD (supervisord) never runs.
+# never reaches exec "$@", so our CMD (supervisord) never runs.
 #
 # Solution:
 #  1. Delete 99-run.sh — supervisord manages gunicorn instead.
@@ -330,13 +330,13 @@ RUN set -euo pipefail; \
         '        if [ "$(basename "$f")" = "10-web-bootstrap.sh" ]; then' \
         '            "$f" "$@"' \
         '        else' \
-        '            # STRICT ENV: Preserve the OMERO_TMPDIR environment variables so python uses them directly' \
+        '            # STRICT ENV: Preserve the PATH and OMERO_TMPDIR environment variables' \
         '            runuser -p -u omero-web -- "$f" "$@"' \
         '        fi' \
         '    fi' \
         'done' \
         'echo "Startup scripts complete. Launching as omero-web: $@"' \
-        'exec runuser -p -u omero-web -- "$@"' \
+        'exec runuser -p -m -u omero-web -- "$@"' \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 
