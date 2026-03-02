@@ -25,7 +25,12 @@ run_omero() {
     fi
 
     if [[ -n "${TMPDIR:-}" ]]; then
-        runuser -u "${OMERO_CLI_USER}" -- env TMPDIR="${TMPDIR}" "${OMERO_BIN}" "$@"
+        # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
+        runuser -u "${OMERO_CLI_USER}" -- env \
+            TMPDIR="${TMPDIR}" \
+            OMERO_TMPDIR="${OMERO_TMPDIR:-}" \
+            OMERO_TEMPDIR="${OMERO_TEMPDIR:-}" \
+            "${OMERO_BIN}" "$@"
         return
     fi
 
