@@ -2071,6 +2071,47 @@ discover_container_default_id_or_die() {
     local resolved_uid=""
     local resolved_gid=""
 
+    probe_effective_runtime_ids_from_proc() {
+        local probe_image="$1"
+        local probe_container=""
+        local proc_status_file=""
+        local proc_uid=""
+        local proc_gid=""
+
+        probe_container="omero-install-probe-runtime-id-$RANDOM"
+        proc_status_file="$(mktemp)"
+
+        if ! docker create --name "${probe_container}" "${probe_image}" >/dev/null 2>&1; then
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        if ! docker start "${probe_container}" >/dev/null 2>&1; then
+            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        if ! docker cp "${probe_container}:/proc/1/status" "${proc_status_file}" >/dev/null 2>&1; then
+            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        proc_uid="$(awk '/^Uid:/ {print $2; exit}' "${proc_status_file}")"
+        proc_gid="$(awk '/^Gid:/ {print $2; exit}' "${proc_status_file}")"
+
+        docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+        rm -f "${proc_status_file}" || true
+
+        if [[ "${proc_uid}" =~ ^[0-9]+$ ]] && [[ "${proc_gid}" =~ ^[0-9]+$ ]]; then
+            printf '%s:%s' "${proc_uid}" "${proc_gid}"
+            return 0
+        fi
+
+        return 1
+    }
+
     configured_user="$(docker image inspect --format '{{.Config.User}}' "${image}" 2>/dev/null || true)"
     configured_user="${configured_user// /}"
 
@@ -2081,9 +2122,27 @@ discover_container_default_id_or_die() {
     if [ -z "${configured_user}" ]; then
         local runtime_uid=""
         local runtime_gid=""
+        local runtime_id_pair=""
 
-        runtime_uid="$(docker run --rm --entrypoint /usr/bin/id "${image}" -u 2>/dev/null || true)"
-        runtime_gid="$(docker run --rm --entrypoint /usr/bin/id "${image}" -g 2>/dev/null || true)"
+        runtime_uid="$(docker run --rm --entrypoint id "${image}" -u 2>/dev/null || true)"
+        runtime_gid="$(docker run --rm --entrypoint id "${image}" -g 2>/dev/null || true)"
+
+        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+            if [ "${id_flag}" = "-u" ]; then
+                printf '%s' "${runtime_uid}"
+                return 0
+            fi
+            if [ "${id_flag}" = "-g" ]; then
+                printf '%s' "${runtime_gid}"
+                return 0
+            fi
+            echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+            return 1
+        fi
+
+        runtime_id_pair="$(probe_effective_runtime_ids_from_proc "${image}" 2>/dev/null || true)"
+        runtime_uid="${runtime_id_pair%%:*}"
+        runtime_gid="${runtime_id_pair#*:}"
 
         if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
             if [ "${id_flag}" = "-u" ]; then
@@ -2105,11 +2164,8 @@ discover_container_default_id_or_die() {
             return $?
         fi
 
-        if [ "${id_flag}" = "-u" ] || [ "${id_flag}" = "-g" ]; then
-            printf '0'
-            return 0
-        fi
-        echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+        echo "ERROR: Unable to determine default runtime ${id_flag} for image '${image}' with empty Config.User." >&2
+        echo "ERROR: Set an explicit override (for example PROMETHEUS_UID/PROMETHEUS_GID) and rerun installation/installation_script.sh." >&2
         return 1
     fi
 
