@@ -56,8 +56,8 @@ def cleanup_old_jobs():
                     if os.path.exists(lock_file):
                         try:
                             os.remove(lock_file)
-                        except OSError:
-                            pass  # Lock file might be in use, ignore
+                        except OSError as exc:
+                            logger.debug("Ignoring lock cleanup error for %s: %s", lock_file, exc)
             except OSError as e:
                 error_count += 1
                 logger.warning(f"Failed to cleanup job file {filename}: {e}")
