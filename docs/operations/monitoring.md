@@ -17,6 +17,8 @@
 | Path usage exporter | custom (Python 3.12) | OMERO volume disk usage via textfile collector | writes to node-exporter textfile directory |
 | CrowdSec | v1.7.6 | Host-wide cybersecurity engine (host syslog/auth + Docker log analysis) | `http://crowdsec:8080` |
 
+Loki UID/GID ownership is auto-detected by `installation/installation_script.sh` (using image metadata and `/etc/passwd` fallback for the `loki` account) before each install/update, then `${LOKI_DATA_PATH}` ownership is reconciled to the detected IDs. `LOKI_UID` / `LOKI_GID` remain optional explicit overrides when required by host policy.
+
 ## Configuration sources
 
 | File | Content |
