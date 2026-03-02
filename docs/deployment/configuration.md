@@ -75,7 +75,9 @@ ${OMERO_CLI_USER}/
 
 All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no per-plugin env var overrides.
 
-`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI bootstrap operations, but the bootstrap script uses a dedicated server-only subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid collisions with plugin folders and permission churn on the shared root. During installation, `installation/installation_script.sh` pre-creates this namespace and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions while preserving root traversal (`x`) so OMERO.web-owned temp roots remain accessible for server namespace creation. The bootstrap script still fails fast when `OMERO_TMP_PATH` is unset or when the server tmp subpath is not writable.
+`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI bootstrap operations, but the bootstrap script uses a dedicated server-only subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid collisions with plugin folders and permission churn on the shared root. During installation, `installation/installation_script.sh` pre-creates this namespace and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions while preserving root traversal (`x`) so OMERO.web-owned temp roots remain accessible for server namespace creation.
+
+The bootstrap script also derives the OMERO internal lock-file temp path from the OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`), then validates that the path is a directory and writable by the OMERO runtime user; startup fails fast if any check fails.
 
 ### Managed Repository Path Setting
 
