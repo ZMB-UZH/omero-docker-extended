@@ -1886,7 +1886,12 @@ def _update_job(job_id: str, update_fn):
     return _robust_update_job(job_id, update_fn)
 
 
-def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+def _classify_compatibility_output(
+    return_code: int,
+    stdout: str,
+    stderr: str,
+    expected_file_path: Optional[Path] = None,
+):
     """
     Classify OMERO import compatibility check output.
 
@@ -1909,7 +1914,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     # 1. Check stdout for actual import candidates FIRST.
     #    If Bio-Formats found importable files, the file IS compatible regardless
     #    of any warnings/errors printed to stderr.
-    has_candidates = _has_import_candidates_in_output(stdout or "")
+    has_candidates = _has_import_candidates_in_output(
+        stdout or "",
+        expected_file_path=expected_file_path,
+    )
     if has_candidates:
         return "compatible", "File format supported by OMERO"
 
@@ -1946,7 +1954,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
 
 
 
-def _has_import_candidates_in_output(output: str) -> bool:
+def _has_import_candidates_in_output(
+    output: str,
+    expected_file_path: Optional[Path] = None,
+) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
     
@@ -1958,43 +1969,29 @@ def _has_import_candidates_in_output(output: str) -> bool:
     if not output or not output.strip():
         return False
     
-    lines = output.strip().split('\n')
-    
-    # Metadata patterns to skip (these are NOT import candidates)
-    skip_patterns = [
-        "# group:",
-        "to import",
-        "file(s)",
-        "group(s)",
-        "call(s)",
-        "parsed into",
-        "setid",
-        "reader:",
-        "dry run",
-        "would import",
-    ]
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Skip empty lines
-        if not stripped:
+    candidates = _extract_import_candidates(output)
+    if not candidates:
+        return False
+
+    if expected_file_path is None:
+        return True
+
+    try:
+        expected_resolved = expected_file_path.resolve()
+    except OSError:
+        expected_resolved = expected_file_path
+
+    for candidate in candidates:
+        candidate_path = candidate.strip().strip('"').strip("'")
+        if not candidate_path:
             continue
-        
-        # Skip comment lines
-        if stripped.startswith("#"):
-            continue
-        
-        # Skip metadata lines
-        stripped_lower = stripped.lower()
-        if any(pattern in stripped_lower for pattern in skip_patterns):
-            continue
-        
-        # If we reach here, this is likely an actual file path (import candidate)
-        # Additional validation: check if it looks like a file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
+        try:
+            resolved_candidate = Path(candidate_path).resolve()
+        except OSError:
+            resolved_candidate = Path(candidate_path)
+        if resolved_candidate == expected_resolved:
             return True
-    
+
     return False
 
 
@@ -2114,7 +2111,12 @@ def _check_import_compatibility(
         }
     
     # CRITICAL FIX: Classify based on stdout content, NOT return code
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    status, details = _classify_compatibility_output(
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        expected_file_path=file_path,
+    )
     
     # Additional logging for debugging
     logger.debug(
