@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Optional, Tuple
+
+
+logger = logging.getLogger(__name__)
 
 
 def current_username(request, conn):
@@ -11,8 +15,8 @@ def current_username(request, conn):
         user = conn.getUser()
         if user:
             return user.getName()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to resolve username from OMERO connection: %s", exc)
 
     try:
         return request.user.username
