@@ -49,7 +49,14 @@ ensure_tmpdir_permissions() {
         exit 1
     fi
 
-    mkdir -p "${expected_tmp_dir}"
+    if ! mkdir -p "${expected_tmp_dir}"; then
+        echo "ERROR: Failed to create OMERO temp directory: ${expected_tmp_dir}" >&2
+        if [[ -d "${tmp_root}" ]]; then
+            ls -ld "${tmp_root}" >&2 || true
+        fi
+        echo "ERROR: Ensure OMERO_TMP_PATH is executable and writable for both OMERO.server and OMERO.web users." >&2
+        exit 1
+    fi
 
     if [[ "$(id -u)" -eq 0 ]]; then
         chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${expected_tmp_dir}"
