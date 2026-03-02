@@ -37,7 +37,6 @@ ensure_tmpdir_permissions() {
     local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
     local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
-
     if [[ -z "${tmp_root}" ]]; then
         echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
         exit 1
@@ -87,19 +86,21 @@ ensure_tmpdir_permissions() {
     fi
 
     if ! mkdir -p "${legacy_tmp_dir}"; then
-        echo "ERROR: Failed to create legacy OMERO temp directory: ${legacy_tmp_dir}" >&2
-        exit 1
+        log "WARNING: Failed to create legacy OMERO temp directory (${legacy_tmp_dir}); continuing with TMPDIR=${expected_tmp_dir}"
+        log "OMERO temp directory ready: ${TMPDIR}"
+        return
     fi
 
     if [[ "$(id -u)" -eq 0 ]]; then
-        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}"
-        chmod 0700 "${legacy_tmp_dir}"
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true
+        chmod 0700 "${legacy_tmp_dir}" 2>/dev/null || true
     fi
 
     if [[ ! -w "${legacy_tmp_dir}" ]]; then
-        echo "ERROR: Legacy OMERO temp directory is not writable: ${legacy_tmp_dir}" >&2
+        log "WARNING: Legacy OMERO temp directory is not writable (${legacy_tmp_dir}); continuing with TMPDIR=${expected_tmp_dir}"
         ls -ld "${legacy_tmp_dir}" >&2 || true
-        exit 1
+        log "OMERO temp directory ready: ${TMPDIR}"
+        return
     fi
 
     log "OMERO temp directory ready: ${TMPDIR}"
