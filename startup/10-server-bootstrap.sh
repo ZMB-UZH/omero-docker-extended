@@ -13,6 +13,19 @@ SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
 OMERO_BIN="${SERVER_HOME}/bin/omero"
 OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
 
+resolve_user_home() {
+    local username="$1"
+    local home_dir=""
+
+    home_dir="$(getent passwd "${username}" 2>/dev/null | cut -d: -f6 || true)"
+    if [[ -z "${home_dir}" ]]; then
+        echo "ERROR: Could not resolve home directory for user '${username}' via getent passwd." >&2
+        exit 1
+    fi
+
+    printf '%s\n' "${home_dir}"
+}
+
 run_omero() {
     if [[ "$(id -u)" -ne 0 ]]; then
         "${OMERO_BIN}" "$@"
@@ -24,7 +37,47 @@ run_omero() {
         exit 1
     fi
 
+    if [[ -n "${TMPDIR:-}" ]]; then
+        runuser -u "${OMERO_CLI_USER}" -- env TMPDIR="${TMPDIR}" "${OMERO_BIN}" "$@"
+        return
+    fi
+
     runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
+}
+
+ensure_tmpdir_permissions() {
+    local requested_owner="$1"
+    local user_home=""
+    local expected_tmp_dir=""
+
+    user_home="$(resolve_user_home "${requested_owner}")"
+    expected_tmp_dir="${user_home%/}/tmp"
+
+    if [[ -e "${expected_tmp_dir}" && ! -d "${expected_tmp_dir}" ]]; then
+        echo "ERROR: OMERO temp path exists but is not a directory: ${expected_tmp_dir}" >&2
+        exit 1
+    fi
+
+    mkdir -p "${expected_tmp_dir}"
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${expected_tmp_dir}"
+        chmod 0700 "${expected_tmp_dir}"
+    fi
+
+    if [[ ! -d "${expected_tmp_dir}" ]]; then
+        echo "ERROR: OMERO temp directory missing after creation attempt: ${expected_tmp_dir}" >&2
+        exit 1
+    fi
+
+    if [[ ! -w "${expected_tmp_dir}" ]]; then
+        echo "ERROR: OMERO temp directory is not writable: ${expected_tmp_dir}" >&2
+        ls -ld "${expected_tmp_dir}" >&2 || true
+        exit 1
+    fi
+
+    export TMPDIR="${expected_tmp_dir}"
+    log "OMERO temp directory ready: ${TMPDIR}"
 }
 
 validate_ldap_configuration() {
@@ -389,6 +442,7 @@ main() {
     check_writable_dir "${CERTS_DIR}" "OMERO certificates"
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
+    ensure_tmpdir_permissions "${OMERO_CLI_USER}"
 
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
