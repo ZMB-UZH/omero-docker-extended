@@ -2112,6 +2112,14 @@ discover_container_default_id_or_die() {
         return 1
     }
 
+    if ! docker image inspect "${image}" >/dev/null 2>&1; then
+        echo "INFO: Image '${image}' not found locally. Pulling to inspect configuration..." >&2
+        if ! docker pull "${image}" >/dev/null; then
+            echo "ERROR: Failed to pull image '${image}'" >&2
+            return 1
+        fi
+    fi
+
     configured_user="$(docker image inspect --format '{{.Config.User}}' "${image}" 2>/dev/null || true)"
     configured_user="${configured_user// /}"
 
