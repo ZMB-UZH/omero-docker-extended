@@ -37,3 +37,31 @@ def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Pat
     )
 
     assert status == "compatible"
+
+
+def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Path):
+    expected_file = tmp_path / "sample.unsupported"
+    stdout = "Using OMERODIR=/tmp/compat-check-1234\n"
+
+    status, _details = _classify_compatibility_output(
+        0,
+        stdout,
+        "",
+        expected_file_path=expected_file,
+    )
+
+    assert status == "incompatible"
+
+
+def test_classify_marks_compatible_for_quoted_expected_candidate(tmp_path: Path):
+    expected_file = tmp_path / "image.ome.tif"
+    stdout = f'"{expected_file}"\n'
+
+    status, _details = _classify_compatibility_output(
+        0,
+        stdout,
+        "",
+        expected_file_path=expected_file,
+    )
+
+    assert status == "compatible"
