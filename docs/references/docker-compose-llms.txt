@@ -44,7 +44,7 @@ Volume mount patterns:
 - Host paths from installation_paths.env bind-mounted into containers.
 - PostgreSQL uses pgdata subdirectory inside mount to avoid ext4 lost+found issues.
 - Redis uses tmpfs for /data (512MB).
-- Upload plugin uses tmpfs for /tmp/omp_plugin_filename_metadata_jobs (256MB).
+- OMERO_TMP_PATH bind-mounted into omeroweb at /opt/omero/omero_temp for all plugin temporary data.
 - Docker socket mounted read-only in omeroweb for admin tools container stats.
 - Monitoring configs mounted read-only from ./monitoring/ directories.
 
