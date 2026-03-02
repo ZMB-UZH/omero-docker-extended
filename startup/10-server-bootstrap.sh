@@ -36,6 +36,7 @@ ensure_tmpdir_permissions() {
     local requested_owner="$1"
     local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
+    local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
 
     if [[ -z "${tmp_root}" ]]; then
         echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
@@ -75,6 +76,32 @@ ensure_tmpdir_permissions() {
     fi
 
     export TMPDIR="${expected_tmp_dir}"
+    export OMERO_TMPDIR="${expected_tmp_dir}"
+
+    # Some OMERO CLI code paths resolve lock files under an internal runtime
+    # location adjacent to OMERO.server. Keep that derived path writable so
+    # startup config updates never fail on lock acquisition.
+    if [[ -e "${legacy_tmp_dir}" && ! -d "${legacy_tmp_dir}" ]]; then
+        echo "ERROR: Legacy OMERO temp path exists but is not a directory: ${legacy_tmp_dir}" >&2
+        exit 1
+    fi
+
+    if ! mkdir -p "${legacy_tmp_dir}"; then
+        echo "ERROR: Failed to create legacy OMERO temp directory: ${legacy_tmp_dir}" >&2
+        exit 1
+    fi
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}"
+        chmod 0700 "${legacy_tmp_dir}"
+    fi
+
+    if [[ ! -w "${legacy_tmp_dir}" ]]; then
+        echo "ERROR: Legacy OMERO temp directory is not writable: ${legacy_tmp_dir}" >&2
+        ls -ld "${legacy_tmp_dir}" >&2 || true
+        exit 1
+    fi
+
     log "OMERO temp directory ready: ${TMPDIR}"
 }
 
