@@ -708,8 +708,8 @@ def _process_import_job(job_id: str):
                                         try:
                                             try:
                                                 conn.close()
-                                            except Exception:
-                                                pass
+                                            except Exception as exc:
+                                                logger.debug("Suppressed non-fatal exception in workflow_service.py", exc_info=exc)
                                             conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                                         except Exception:
                                             conn = None
