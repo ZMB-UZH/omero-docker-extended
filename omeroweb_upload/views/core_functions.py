@@ -33,21 +33,20 @@ from omeroweb.decorators import login_required
 from typing import Optional
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
+from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
     'BlitzGateway',
     'DatasetI',
-    'DEFAULT_JOBS_DIR',
     'DEFAULT_UPLOAD_BATCH_FILES',
     'DEFAULT_UPLOAD_CLEANUP_INTERVAL',
     'DEFAULT_UPLOAD_CLEANUP_MAX_AGE',
     'DEFAULT_UPLOAD_CLEANUP_MAX_DELETE',
     'DEFAULT_UPLOAD_CLEANUP_STALE_AGE',
     'DEFAULT_UPLOAD_CONCURRENCY',
-    'DEFAULT_UPLOAD_ROOT',
     'INT_SANITIZER',
-    'JOBS_DIR_ENV',
     'JOB_ID_SANITIZER',
     'JOB_SERVICE_GROUP_ENV',
     'JOB_SERVICE_PASS_ENV',
@@ -75,7 +74,6 @@ __all__ = [
     'UPLOAD_CLEANUP_MAX_DELETE_ENV',
     'UPLOAD_CLEANUP_STALE_AGE_ENV',
     'UPLOAD_CONCURRENCY_ENV',
-    'UPLOAD_ROOT_ENV',
     '_CLEANUP_IN_PROGRESS',
     '_CLI_ID_PATTERN',
     '_DIRS_INITIALIZED',
@@ -196,10 +194,6 @@ _UPLOAD_CLEANUP_GUARD = threading.Lock()
 _LAST_UPLOAD_CLEANUP_TIME = 0.0
 _CLEANUP_IN_PROGRESS = False
 
-UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
-JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
-DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
@@ -315,13 +309,11 @@ _DIRS_INITIALIZED = False
 # --------------------------------------------------------------------------
 
 def _resolve_upload_root() -> Path:
-    configured = (os.environ.get(UPLOAD_ROOT_ENV) or "").strip()
-    return Path(configured) if configured else Path(DEFAULT_UPLOAD_ROOT)
+    return resolve_upload_root()
 
 
 def _resolve_jobs_root() -> Path:
-    configured = (os.environ.get(JOBS_DIR_ENV) or "").strip()
-    return Path(configured) if configured else Path(DEFAULT_JOBS_DIR)
+    return resolve_jobs_root()
 
 
 def _ensure_parent_dir(path: Path) -> bool:
@@ -2068,7 +2060,7 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}")
     
     try:
         result = subprocess.run(

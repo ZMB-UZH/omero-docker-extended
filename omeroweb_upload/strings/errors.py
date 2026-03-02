@@ -8,7 +8,7 @@ def upload_start_post_required():
 
 
 def upload_folder_not_writable():
-    return "Upload folder is not writable. Please configure OMERO_WEB_UPLOAD_DIR."
+    return "Upload folder is not writable. Please check OMERO_TMP_PATH configuration."
 
 
 def no_files_provided():
