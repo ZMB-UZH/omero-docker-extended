@@ -351,6 +351,9 @@ RUN set -euo pipefail; \
 # ----------------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/server/OMERO.server/var/log; \
+    mkdir -p /opt/omero/server/OMERO.server/etc/grid; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/etc/grid; \
+    chmod -R u+rwX,g+rwX /opt/omero/server/OMERO.server/etc/grid; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
     chmod -R g+rwX /opt/omero/server/OMERO.server/var
 
