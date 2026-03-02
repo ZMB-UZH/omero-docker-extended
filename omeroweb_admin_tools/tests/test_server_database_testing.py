@@ -10,6 +10,10 @@ from omeroweb_admin_tools.views.index_view import server_database_testing_run
 def test_server_database_testing_run_requires_post(monkeypatch) -> None:
     request = RequestFactory().get("/admin_tools/server-database-testing/run/")
     monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
         lambda request, conn: None,
     )
@@ -24,6 +28,10 @@ def test_server_database_testing_run_rejects_empty_script_ids(monkeypatch) -> No
         "/admin_tools/server-database-testing/run/",
         data=json.dumps({"scripts": ["omero_server_core", ""]}),
         content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
@@ -42,6 +50,10 @@ def test_server_database_testing_run_returns_results(monkeypatch) -> None:
         "/admin_tools/server-database-testing/run/",
         data=json.dumps({"scripts": ["omero_server_core"]}),
         content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view._require_root_user",
