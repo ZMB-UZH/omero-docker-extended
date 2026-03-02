@@ -346,6 +346,20 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server "${SITE_PACKAGES}/omero_plugin_common"; \
     rm -rf /tmp/omero_plugin_common
 
+# Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
+# --------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \
+    if [[ -f "${TEMP_FILES_PY}" ]]; then \
+        echo "Removing fallback directories from OMERO python TempFileManager..."; \
+        sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i 's/while i < 10:/while False:/g' "${TEMP_FILES_PY}"; \
+    fi
+
 # Ensure OMERO server runtime directories are owned by omero-server
 # so named volumes inherit correct permissions on first run.
 # ----------------------------------------------------------
