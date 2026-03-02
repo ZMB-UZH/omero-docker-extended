@@ -214,7 +214,6 @@ RUN set -euo pipefail; \
         echo "Removing fallback directories from OMERO python TempFileManager..."; \
         sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
         sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
-        sed -i 's/while i < 10:/while False:/g' "${TEMP_FILES_PY}"; \
     fi
 
 # Pre-create ALL Django static directories and own them (maybe unnecessary)
@@ -301,7 +300,7 @@ RUN set -euo pipefail; \
 # FIX: The base image's /startup/99-run.sh executes
 #   "omero web start --foreground"
 # which blocks forever. The base image entrypoint loops over /startup/* and
-# never reaches exec "$@", so our CMD (supervisord) never runs.
+# never reaches exec "$@" so our CMD (supervisord) never runs.
 #
 # Solution:
 #  1. Delete 99-run.sh — supervisord manages gunicorn instead.
