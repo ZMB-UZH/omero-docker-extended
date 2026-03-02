@@ -1982,13 +1982,13 @@ def _has_import_candidates_in_output(
         expected_resolved = expected_file_path
 
     for candidate in candidates:
-        candidate_path = candidate.strip().strip('"').strip("'")
-        if not candidate_path:
+        candidate_path = _parse_candidate_path_line(candidate)
+        if candidate_path is None:
             continue
         try:
-            resolved_candidate = Path(candidate_path).resolve()
+            resolved_candidate = candidate_path.resolve()
         except OSError:
-            resolved_candidate = Path(candidate_path)
+            resolved_candidate = candidate_path
         if resolved_candidate == expected_resolved:
             return True
 
@@ -2033,11 +2033,35 @@ def _extract_import_candidates(output: str):
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
         
-        # This looks like an actual file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
-            candidates.append(stripped)
-    
+        parsed_candidate = _parse_candidate_path_line(stripped)
+        if parsed_candidate is not None:
+            candidates.append(str(parsed_candidate))
+
     return candidates
+
+
+def _parse_candidate_path_line(line: str) -> Optional[Path]:
+    """Parse an OMERO import candidate line into a concrete path.
+
+    Returns ``None`` when the input does not look like a standalone path line.
+    """
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    unquoted = raw.strip('"').strip("'")
+    if not unquoted:
+        return None
+
+    candidate = Path(unquoted)
+    if not candidate.is_absolute():
+        return None
+
+    # Reject lines that include additional text and only keep concrete path entries.
+    if str(candidate) != unquoted:
+        return None
+
+    return candidate
 
 
 def _check_import_compatibility(
