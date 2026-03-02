@@ -1214,7 +1214,6 @@ ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
 }
-
 verify_installation_paths_env_content() {
     local env_file_path="${1:?BUG: verify_installation_paths_env_content requires a path}"
 
