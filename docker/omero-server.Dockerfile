@@ -408,6 +408,14 @@ RUN set -euo pipefail; \
         > /usr/local/bin/entrypoint.sh; \
     chmod 0755 /usr/local/bin/entrypoint.sh
 
+# IMPORTANT: Fix the Docker healthcheck!
+# The official image defines: HEALTHCHECK CMD omero admin diagnostics
+# Since the image user is now root, this runs as root and crashes with the permission error.
+# We must redefine it to drop to the omero-server user.
+# --------------------------------------------------------------------------------------
+HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
+    CMD runuser -p -m -u omero-server -- /opt/omero/server/venv3/bin/omero admin diagnostics
+
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts
 USER root
