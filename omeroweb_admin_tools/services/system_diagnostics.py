@@ -52,6 +52,11 @@ def _to_float_env(name: str, default: float) -> float:
         return default
 
 
+def _env_truthy(name: str, default: bool = False) -> bool:
+    raw = _get_env(name, "1" if default else "0").strip().lower()
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
 def _elapsed_ms(start: float) -> int:
     return int(max(0.0, (time.monotonic() - start) * 1000.0))
 
@@ -170,19 +175,31 @@ def _docker_compose_command() -> Optional[List[str]]:
     return None
 
 
+def _compose_required() -> bool:
+    # When diagnostics run *inside* the OMERO.web container (typical), docker/compose
+    # is often not present and the docker socket is not mounted. Historically these
+    # checks were best-effort; treat missing compose as "skipped" unless explicitly
+    # required by operators.
+    return _env_truthy("ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE", default=False)
+
+
 def _compose_ps_health(
     check_id: str, label: str, service: str
 ) -> DiagnosticCheckResult:
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
+        status = "warn" if _compose_required() else "pass"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
-            status="warn",
+            status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable",
-            details="Cannot inspect container state from this environment.",
+            summary="Docker compose command unavailable (skipped)",
+            details=(
+                "Cannot inspect container state from this environment. "
+                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+            ),
         )
     ok, stdout, stderr = _run_command(
         [*compose_cmd, "ps", service, "--format", "json"], timeout_s=8.0
@@ -249,13 +266,17 @@ def _compose_pg_test(check_id: str, label: str, service: str) -> DiagnosticCheck
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
+        status = "warn" if _compose_required() else "pass"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
-            status="warn",
+            status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable",
-            details="Cannot execute in-container PostgreSQL checks.",
+            summary="Docker compose command unavailable (skipped)",
+            details=(
+                "Cannot execute in-container PostgreSQL checks. "
+                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+            ),
         )
     shell_cmd = (
         'db_name="${POSTGRES_DB:-postgres}"; '
