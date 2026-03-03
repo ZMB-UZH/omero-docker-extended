@@ -125,7 +125,11 @@ fi
 
 if [ -n "${CROWDSEC_ENROLL_KEY:-}" ]; then
     CLEAN_TOKEN=$(echo "$CROWDSEC_ENROLL_KEY" | awk '{print $NF}')
-    cscli console enroll "$CLEAN_TOKEN" || echo "WARNING: Failed to enroll to CrowdSec Console."
+    ENROLL_ARGS="$CLEAN_TOKEN"
+    if [ -n "${CROWDSEC_ENGINE_NAME:-}" ]; then
+        ENROLL_ARGS="$ENROLL_ARGS --name $CROWDSEC_ENGINE_NAME --overwrite"
+    fi
+    cscli console enroll $ENROLL_ARGS || echo "WARNING: Failed to enroll to CrowdSec Console."
 fi
 
 wait $CROWDSEC_PID
