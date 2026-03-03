@@ -83,8 +83,8 @@ Quick operator check after any change:
 - All exporters (node, postgres x2, redis, blackbox)
 - Portainer (`/api/system/status`)
 - CrowdSec (`/health`)
-- OMERO.server (port 4064 via HTTP)
 - OMERO.web (port 4090)
+- Alloy (`/metrics`)
 
 **TCP probes** (verify connectivity):
 - `database:5432` (OMERO PostgreSQL)
@@ -186,7 +186,7 @@ docker compose up -d grafana
 
 ## Recommended alerts (minimum)
 
-- OMERO.server unavailable (blackbox HTTP/TCP probe failure).
+- OMERO.server unavailable (blackbox TCP probe failure).
 - OMERO.web unavailable (blackbox HTTP probe failure).
 - Database unavailable (blackbox TCP probe failure or postgres-exporter down).
 - Redis unavailable (blackbox TCP probe failure or redis-exporter down).
