@@ -184,6 +184,12 @@ configure_docker_socket_access
 var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
 if [[ ! -d "${var_dir}/static/branding" ]]; then
     echo "[web-bootstrap] Bind mount detected over var/: Restoring static files..."
-    cp -a /opt/omero/web/static_backup "${var_dir}/static"
+    mkdir -p "${var_dir}/static"
+    cp -a /opt/omero/web/static_backup/. "${var_dir}/static/"
     chown -R omero-web:omero-web "${var_dir}/static"
+
+    if [[ ! -d "${var_dir}/static/branding" ]]; then
+        echo "[web-bootstrap] ERROR: Failed to restore OMERO.web static assets into ${var_dir}/static" >&2
+        exit 1
+    fi
 fi
