@@ -26,7 +26,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn('find / -xdev -type f -name omero -perm -u+x', script_text)
+        self.assertIn('resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }', script_text)
         self.assertIn('group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"', script_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
