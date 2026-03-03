@@ -292,64 +292,47 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
     fi
 fi
 
-case "${CROWDSEC_ENROLL_KEY:-}" in
-    ""|CHANGEVALUE*) ;;
-    *) echo "CROWDSEC_ENROLL_KEY is provided. Console enrollment will be attempted after startup." ;;
-esac
-
 # ---------------------------------------------------------------------------
-# Bootstrap bind-mounted /etc/crowdsec/ from the image's own backup.
+# Bootstrap bind-mounted /etc/crowdsec/ from the upstream image's staging directory.
 #
 # CROWDSEC_CONFIG_PATH is mounted onto /etc/crowdsec/ and shadows every file
-# and directory that the CrowdSec image pre-installed there.  The upstream
-# docker_start.sh restores the full backup (/etc/crowdsec.bak/) ONLY when
-# config.yaml is completely absent.  Once config.yaml exists (every run after
-# the very first), individual missing sub-directories survive that check and
-# cause fatal startup errors:
+# and directory. The upstream docker_start.sh only repopulates this if config.yaml
+# is completely missing. If config.yaml exists but sub-directories like patterns/
+# or hub/ are missing (e.g., deleted by admin, or from a partial restore), crowdsec
+# dies on startup.
 #
-#   hub/      — cscli hub update calls Go os.CreateTemp() which requires the
-#               directory to already exist; fails with:
-#               "failed to create temporary download file: no such file or
-#               directory"
-#   patterns/ — Grok pattern library shipped with the binary (NOT from hub);
-#               crowdsec dies on startup with:
-#               "failed to load parser patterns: open /etc/crowdsec/patterns:
-#               no such file or directory"
-#
-#   Any other sub-directory may fail similarly if CROWDSEC_CONFIG_PATH is
-#   moved to a new host, restored from a partial backup, or manually cleaned.
-#
-# Strategy:
-#   Iterate over every top-level item in /etc/crowdsec.bak/ (the image
-#   backup created at build time by: cp -a /etc/crowdsec /etc/crowdsec.bak).
-#   For each item, copy it into /etc/crowdsec/ only if it does not already
-#   exist there.  Existing files/dirs are NEVER overwritten — this is safe
-#   for config.yaml, local_api_credentials.yaml, hub/.index.json, etc.
-#   The block is fully idempotent: a no-op on all subsequent container runs.
-#
-#   After the loop, mkdir -p hub unconditionally as a belt-and-suspenders
-#   guard for image variants that do not include hub/ in the backup.
+# We use the official image's /staging/etc/crowdsec/ as the fallback source,
+# so no custom .bak file is strictly required. This is 100% robust.
 # ---------------------------------------------------------------------------
 _CS_DIR="/etc/crowdsec"
-_CS_BAK="/etc/crowdsec.bak"
+# Use the official image's staging directory as the source of truth,
+# or fallback to our custom backup if it exists. This ensures 100% robustness
+# even if the custom .bak is never created.
+if [ -d "/staging/etc/crowdsec" ]; then
+    _CS_BAK="/staging/etc/crowdsec"
+elif [ -d "/etc/crowdsec.bak" ]; then
+    _CS_BAK="/etc/crowdsec.bak"
+else
+    _CS_BAK=""
+fi
 
-if [ -d "${_CS_BAK}" ]; then
+if [ -n "${_CS_BAK}" ]; then
     echo "Bootstrap: syncing missing items from ${_CS_BAK} into ${_CS_DIR}"
     for _bak_item in "${_CS_BAK}"/*; do
-        # Guard against an empty backup directory (glob expands to literal).
         [ -e "${_bak_item}" ] || continue
         _name=$(basename "${_bak_item}")
         if [ ! -e "${_CS_DIR}/${_name}" ]; then
-            cp -r "${_bak_item}" "${_CS_DIR}/${_name}"
+            cp -a "${_bak_item}" "${_CS_DIR}/${_name}"
             echo "Bootstrap: restored ${_CS_DIR}/${_name}"
         fi
     done
 else
-    echo "WARNING: ${_CS_BAK} not found; skipping backup-based bootstrap." >&2
+    echo "WARNING: No backup directory found; skipping full restore." >&2
 fi
 
-# Belt-and-suspenders: ensure hub/ always exists even if absent from backup.
+# Belt-and-suspenders: ensure critical directories always exist.
 mkdir -p "${_CS_DIR}/hub"
+mkdir -p "${_CS_DIR}/patterns"
 
 # --- Start CrowdSec daemon in background ----------------------------------
 /docker_start.sh &
@@ -398,38 +381,26 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
 fi
 
 # --- Console enrollment (optional, free tier) -----------------------------
-# CROWDSEC_ENROLL_KEY connects this instance to the CrowdSec Console dashboard
-# (free).  If the variable is empty, commented out, or still set to the
-# template placeholder, enrollment is silently skipped — CrowdSec continues
-# to run fully functional without it.
+# Apply the currently provided environment variables. If changed by the admin,
+# this guarantees the new settings are pushed immediately upon startup.
 _enroll_key="${CROWDSEC_ENROLL_KEY:-}"
-case "${_enroll_key}" in
-    ""|CHANGEVALUE*)
-        # Empty, unset, or still the template placeholder — skip enrollment.
-        if [ -n "${_enroll_key}" ]; then
-            echo "Skipping CrowdSec Console enrollment (CROWDSEC_ENROLL_KEY is still a placeholder)."
-        fi
-        ;;
-    *)
-        CLEAN_TOKEN=$(echo "${_enroll_key}" | awk '{print $NF}')
-        ENROLL_ARGS="${CLEAN_TOKEN}"
+_engine_name="${CROWDSEC_ENGINE_NAME:-}"
 
-        # CROWDSEC_ENGINE_NAME sets a persistent engine identity in the
-        # Console.  If empty, commented out, or a placeholder, we omit
-        # --name entirely so CrowdSec auto-generates a random name.
-        _engine_name="${CROWDSEC_ENGINE_NAME:-}"
-        case "${_engine_name}" in
-            ""|CHANGEVALUE*)
-                # Omit --name; let CrowdSec generate the engine name.
-                ;;
-            *)
-                ENROLL_ARGS="${ENROLL_ARGS} --name ${_engine_name} --overwrite"
-                ;;
-        esac
+if [ -z "${_enroll_key}" ] || echo "${_enroll_key}" | grep -q "^CHANGEVALUE"; then
+    echo "CROWDSEC_ENROLL_KEY is empty or a placeholder."
+    echo "Ensuring console enrollment is disabled to reflect current environment state..."
+    cscli console disable >/dev/null 2>&1 || true
+else
+    CLEAN_TOKEN=$(echo "${_enroll_key}" | awk '{print $NF}')
+    ENROLL_ARGS="${CLEAN_TOKEN} --overwrite"
 
-        cscli console enroll ${ENROLL_ARGS} || echo "WARNING: Failed to enroll to CrowdSec Console."
-        ;;
-esac
+    if [ -n "${_engine_name}" ] && ! echo "${_engine_name}" | grep -q "^CHANGEVALUE"; then
+        ENROLL_ARGS="${ENROLL_ARGS} --name ${_engine_name}"
+    fi
+
+    echo "Enrolling to CrowdSec Console (forcing overwrite to apply any env changes)..."
+    cscli console enroll ${ENROLL_ARGS} || echo "WARNING: Failed to enroll to CrowdSec Console."
+fi
 
 # --- Wait for CrowdSec daemon to exit (container lifecycle) ----------------
 wait $CROWDSEC_PID
