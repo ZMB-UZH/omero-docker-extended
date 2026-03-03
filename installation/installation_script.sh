@@ -705,7 +705,7 @@ OLD_DOTENV
     for fixed_name in portainer redis-sysctl-init pg-maintenance; do
         if docker container inspect "${fixed_name}" >/dev/null 2>&1; then
             echo "Force-removing leftover container with fixed name: ${fixed_name}"
-            docker rm -f "${fixed_name}" 2>/dev/null || true
+            docker rm -fv "${fixed_name}" 2>/dev/null || true
         fi
     done
 
@@ -1926,7 +1926,7 @@ discover_first_existing_user_or_die() {
                 break
             fi
         fi
-        docker rm -f "omero-install-probe-user-*" >/dev/null 2>&1 || true
+        docker rm -fv "omero-install-probe-user-*" >/dev/null 2>&1 || true
     done
 
     if [ -z "${found}" ]; then
@@ -1936,7 +1936,7 @@ discover_first_existing_user_or_die() {
         echo "DEBUG: Listing passwd entries containing 'omero' from image '${image}':" >&2
         local probe_name="omero-install-probe-users-$RANDOM"
         docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
         echo "" >&2
         return 1
     fi
@@ -1954,14 +1954,14 @@ discover_uid_gid_or_die() {
     local out=""
 
     if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
         local pass_probe="omero-install-probe-passwd-$RANDOM"
         docker run --rm --name "${pass_probe}" --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
-        docker rm -f "${pass_probe}" >/dev/null 2>&1 || true
+        docker rm -fv "${pass_probe}" >/dev/null 2>&1 || true
         return 1
     fi
-    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
 
     if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for user '${user_name}' in image '${image}'" >&2
@@ -2028,7 +2028,7 @@ discover_uid_gid_from_passwd_or_die() {
     passwd_file="$(mktemp)"
     if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
         echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${user_name}'." >&2
-        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${container_name}" >/dev/null 2>&1 || true
         rm -f "${passwd_file}" || true
         return 1
     fi
@@ -2036,7 +2036,7 @@ discover_uid_gid_from_passwd_or_die() {
     uid="$(awk -F: -v user="${user_name}" '$1==user {print $3; exit}' "${passwd_file}")"
     gid="$(awk -F: -v user="${user_name}" '$1==user {print $4; exit}' "${passwd_file}")"
 
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${container_name}" >/dev/null 2>&1 || true
     rm -f "${passwd_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
@@ -2090,13 +2090,13 @@ discover_container_default_id_or_die() {
         fi
 
         if ! docker start "${probe_container}" >/dev/null 2>&1; then
-            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
             rm -f "${proc_status_file}" || true
             return 1
         fi
 
         if ! docker cp "${probe_container}:/proc/1/status" "${proc_status_file}" >/dev/null 2>&1; then
-            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
             rm -f "${proc_status_file}" || true
             return 1
         fi
@@ -2104,7 +2104,7 @@ discover_container_default_id_or_die() {
         proc_uid="$(awk '/^Uid:/ {print $2; exit}' "${proc_status_file}")"
         proc_gid="$(awk '/^Gid:/ {print $2; exit}' "${proc_status_file}")"
 
-        docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
         rm -f "${proc_status_file}" || true
 
         if [[ "${proc_uid}" =~ ^[0-9]+$ ]] && [[ "${proc_gid}" =~ ^[0-9]+$ ]]; then
@@ -2214,7 +2214,7 @@ discover_container_default_id_or_die() {
 
     if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
         echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${configured_account}'." >&2
-        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${container_name}" >/dev/null 2>&1 || true
         rm -f "${passwd_file}" "${group_file}" || true
         return 1
     fi
@@ -2241,7 +2241,7 @@ discover_container_default_id_or_die() {
         fi
     fi
 
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${container_name}" >/dev/null 2>&1 || true
     rm -f "${passwd_file}" "${group_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
