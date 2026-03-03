@@ -415,6 +415,10 @@
       "options": {
         "graphMode": "area",
         "textMode": "value_and_name",
+        "text": {
+          "titleSize": 24,
+          "valueSize": 42
+        },
         "reduceOptions": {
           "values": false,
           "calcs": [
