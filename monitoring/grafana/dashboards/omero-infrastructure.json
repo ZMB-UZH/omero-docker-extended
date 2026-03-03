@@ -415,10 +415,6 @@
       "options": {
         "graphMode": "area",
         "textMode": "value_and_name",
-        "text": {
-          "titleSize": 24,
-          "valueSize": 42
-        },
         "reduceOptions": {
           "values": false,
           "calcs": [
@@ -426,7 +422,11 @@
           ],
           "fields": ""
         },
-        "orientation": "horizontal"
+        "orientation": "horizontal",
+        "text": {
+          "titleSize": 14,
+          "valueSize": 36
+        }
       },
       "description": "Number of healthy Prometheus targets compared with total discovered targets."
     },
