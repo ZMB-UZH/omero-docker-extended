@@ -90,6 +90,7 @@ Quick operator check after any change:
 - `database:5432` (OMERO PostgreSQL)
 - `database-plugin:5433` (plugin PostgreSQL)
 - `redis:6379` (Redis)
+- `omeroserver:4063` (OMERO.server SSL)
 - `omeroserver:4064` (OMERO.server)
 
 ## Grafana dashboards
