@@ -297,20 +297,59 @@ case "${CROWDSEC_ENROLL_KEY:-}" in
     *) echo "CROWDSEC_ENROLL_KEY is provided. Console enrollment will be attempted after startup." ;;
 esac
 
-# --- Ensure required CrowdSec hub directory exists ------------------------
-# When CROWDSEC_CONFIG_PATH is bind-mounted onto /etc/crowdsec/ and the host
-# directory does not contain a hub/ sub-directory, the upstream docker_start.sh
-# calls 'cscli hub update' which internally invokes Go's os.CreateTemp() to
-# write a download file at:
-#   /etc/crowdsec/hub/.index.json.<timestamp>.download
-# If /etc/crowdsec/hub/ does not exist, os.CreateTemp() returns:
-#   "no such file or directory"
-# causing hub update — and everything that depends on it (hub upgrade,
-# parsers inspect, parsers install) — to fail completely.
+# ---------------------------------------------------------------------------
+# Bootstrap bind-mounted /etc/crowdsec/ from the image's own backup.
 #
-# mkdir -p is idempotent: on subsequent runs where the directory already
-# exists (populated by a successful hub update) this is a no-op.
-mkdir -p /etc/crowdsec/hub
+# CROWDSEC_CONFIG_PATH is mounted onto /etc/crowdsec/ and shadows every file
+# and directory that the CrowdSec image pre-installed there.  The upstream
+# docker_start.sh restores the full backup (/etc/crowdsec.bak/) ONLY when
+# config.yaml is completely absent.  Once config.yaml exists (every run after
+# the very first), individual missing sub-directories survive that check and
+# cause fatal startup errors:
+#
+#   hub/      — cscli hub update calls Go os.CreateTemp() which requires the
+#               directory to already exist; fails with:
+#               "failed to create temporary download file: no such file or
+#               directory"
+#   patterns/ — Grok pattern library shipped with the binary (NOT from hub);
+#               crowdsec dies on startup with:
+#               "failed to load parser patterns: open /etc/crowdsec/patterns:
+#               no such file or directory"
+#
+#   Any other sub-directory may fail similarly if CROWDSEC_CONFIG_PATH is
+#   moved to a new host, restored from a partial backup, or manually cleaned.
+#
+# Strategy:
+#   Iterate over every top-level item in /etc/crowdsec.bak/ (the image
+#   backup created at build time by: cp -a /etc/crowdsec /etc/crowdsec.bak).
+#   For each item, copy it into /etc/crowdsec/ only if it does not already
+#   exist there.  Existing files/dirs are NEVER overwritten — this is safe
+#   for config.yaml, local_api_credentials.yaml, hub/.index.json, etc.
+#   The block is fully idempotent: a no-op on all subsequent container runs.
+#
+#   After the loop, mkdir -p hub unconditionally as a belt-and-suspenders
+#   guard for image variants that do not include hub/ in the backup.
+# ---------------------------------------------------------------------------
+_CS_DIR="/etc/crowdsec"
+_CS_BAK="/etc/crowdsec.bak"
+
+if [ -d "${_CS_BAK}" ]; then
+    echo "Bootstrap: syncing missing items from ${_CS_BAK} into ${_CS_DIR}"
+    for _bak_item in "${_CS_BAK}"/*; do
+        # Guard against an empty backup directory (glob expands to literal).
+        [ -e "${_bak_item}" ] || continue
+        _name=$(basename "${_bak_item}")
+        if [ ! -e "${_CS_DIR}/${_name}" ]; then
+            cp -r "${_bak_item}" "${_CS_DIR}/${_name}"
+            echo "Bootstrap: restored ${_CS_DIR}/${_name}"
+        fi
+    done
+else
+    echo "WARNING: ${_CS_BAK} not found; skipping backup-based bootstrap." >&2
+fi
+
+# Belt-and-suspenders: ensure hub/ always exists even if absent from backup.
+mkdir -p "${_CS_DIR}/hub"
 
 # --- Start CrowdSec daemon in background ----------------------------------
 /docker_start.sh &
