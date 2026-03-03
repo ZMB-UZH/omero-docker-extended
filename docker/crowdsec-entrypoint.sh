@@ -297,6 +297,21 @@ case "${CROWDSEC_ENROLL_KEY:-}" in
     *) echo "CROWDSEC_ENROLL_KEY is provided. Console enrollment will be attempted after startup." ;;
 esac
 
+# --- Ensure required CrowdSec hub directory exists ------------------------
+# When CROWDSEC_CONFIG_PATH is bind-mounted onto /etc/crowdsec/ and the host
+# directory does not contain a hub/ sub-directory, the upstream docker_start.sh
+# calls 'cscli hub update' which internally invokes Go's os.CreateTemp() to
+# write a download file at:
+#   /etc/crowdsec/hub/.index.json.<timestamp>.download
+# If /etc/crowdsec/hub/ does not exist, os.CreateTemp() returns:
+#   "no such file or directory"
+# causing hub update — and everything that depends on it (hub upgrade,
+# parsers inspect, parsers install) — to fail completely.
+#
+# mkdir -p is idempotent: on subsequent runs where the directory already
+# exists (populated by a successful hub update) this is a no-op.
+mkdir -p /etc/crowdsec/hub
+
 # --- Start CrowdSec daemon in background ----------------------------------
 /docker_start.sh &
 CROWDSEC_PID=$!
