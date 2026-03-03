@@ -2097,8 +2097,20 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = str(get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}")
-    
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    # CRITICAL: Ensure OMERO CLI cache paths are writable.
+    # Without this, OMERO CLI may try to write to /root/.cache and crash (PermissionError),
+    # which makes compatibility_status="error" and the UI will not block imports.
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+
+    env["HOME"] = str(cli_home)
+    env["XDG_CACHE_HOME"] = str(cli_cache)
+
     try:
         result = subprocess.run(
             cmd,
