@@ -137,6 +137,7 @@ Symptom:
 Cause:
 
 - cAdvisor may trigger an anonymous volume when its image-defined `/dev/disk` mount is not explicitly overridden.
+- Historically, the installer also created short-lived probe containers using `docker create` against images that declare `VOLUME`; removing those probe containers without `docker rm -v` could leave anonymous volumes behind.
 
 Fix:
 
@@ -154,9 +155,10 @@ docker volume ls
 docker volume rm <anonymous-volume-name>
 ```
 
-Expected compose configuration:
+Expected compose/runtime configuration:
 
 - `cadvisor` uses the standard compose `tmpfs:` section: `/dev/disk:ro,noexec,nosuid,nodev,size=1m,mode=0555`.
+- Installer probe-container cleanup uses `docker rm -fv` so anonymous probe volumes are deleted together with probe containers.
 
 
 ## 10. cAdvisor exits immediately and prints command-line help
