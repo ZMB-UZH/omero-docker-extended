@@ -2,16 +2,20 @@
 # ---------------------------------------------------------------------------
 # CrowdSec custom entrypoint with host-firewall-aware bouncer configuration.
 #
+# Compatible with free/community CrowdSec — no paid features required.
+#
 # This script:
 #   1. Detects the HOST firewall backend (nftables vs iptables-legacy).
 #   2. Validates that the bouncer binary and firewall access work.
-#   3. Starts the CrowdSec daemon and waits for the LAPI.
-#   4. Registers the firewall bouncer, generates its config for the detected
-#      backend, and starts it.
+#   3. Starts the CrowdSec daemon and waits for the LOCAL LAPI.
+#   4. Registers the firewall bouncer with the local LAPI (generates a local
+#      API key — no cloud/paid API involved), generates its config for the
+#      detected backend, and starts it.
 #   5. For nftables mode: injects supplementary FORWARD-hook chains so that
 #      Docker-bridged containers are also protected (the bouncer's built-in
 #      nftables mode only creates INPUT-hook chains).
-#   6. Optionally enrolls to the CrowdSec Console.
+#   6. Optionally enrolls to the CrowdSec Console (free tier; skipped when
+#      CROWDSEC_ENROLL_KEY is empty or a placeholder value).
 #
 # Guaranteed host compatibility: Ubuntu 24.04+, Debian 13 (Trixie).
 # Both use nftables as the default kernel firewall backend.
@@ -288,9 +292,10 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
     fi
 fi
 
-if [ -n "${CROWDSEC_ENROLL_KEY:-}" ]; then
-    echo "CROWDSEC_ENROLL_KEY is provided. Console enrollment will be attempted after startup."
-fi
+case "${CROWDSEC_ENROLL_KEY:-}" in
+    ""|CHANGEVALUE*) ;;
+    *) echo "CROWDSEC_ENROLL_KEY is provided. Console enrollment will be attempted after startup." ;;
+esac
 
 # --- Start CrowdSec daemon in background ----------------------------------
 /docker_start.sh &
@@ -307,33 +312,70 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
     echo "Configuring crowdsec-firewall-bouncer (backend=${FIREWALL_BACKEND})..."
 
     # Remove stale bouncer registration from a previous run, then register.
+    # The API key is generated LOCALLY by the LAPI — it is a random string
+    # stored in the local CrowdSec SQLite database.  No cloud API, no paid
+    # subscription, and no CROWDSEC_ENROLL_KEY is required for this step.
+    # The bouncer uses this key to authenticate with the local LAPI at
+    # http://127.0.0.1:8080/ inside this same container.
     if cscli bouncers list 2>/dev/null | grep -q "firewall-bouncer"; then
         cscli bouncers delete firewall-bouncer || true
     fi
-    API_KEY=$(cscli bouncers add firewall-bouncer -o raw)
 
-    generate_bouncer_config "${API_KEY}" "${FIREWALL_BACKEND}"
+    if API_KEY=$(cscli bouncers add firewall-bouncer -o raw 2>/dev/null) && [ -n "${API_KEY}" ]; then
+        generate_bouncer_config "${API_KEY}" "${FIREWALL_BACKEND}"
 
-    echo "Starting crowdsec-firewall-bouncer in background..."
-    crowdsec-firewall-bouncer \
-        -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml &
+        echo "Starting crowdsec-firewall-bouncer in background..."
+        crowdsec-firewall-bouncer \
+            -c /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml &
 
-    # For nftables mode, add supplementary FORWARD-hook chains so that
-    # Docker-bridged containers are also covered by CrowdSec bans.
-    if [ "${FIREWALL_BACKEND}" = "nftables" ]; then
-        add_nftables_forward_chains || true
+        # For nftables mode, add supplementary FORWARD-hook chains so that
+        # Docker-bridged containers are also covered by CrowdSec bans.
+        if [ "${FIREWALL_BACKEND}" = "nftables" ]; then
+            add_nftables_forward_chains || true
+        fi
+    else
+        echo "WARNING: Failed to register firewall bouncer with local LAPI." >&2
+        echo "  'cscli bouncers add firewall-bouncer -o raw' returned empty or failed." >&2
+        if is_true "${CROWDSEC_REQUIRE_BOUNCERS}"; then
+            exit 1
+        fi
+        echo "  Continuing without firewall bouncer (CrowdSec detection still active)." >&2
     fi
 fi
 
-# --- Console enrollment ---------------------------------------------------
-if [ -n "${CROWDSEC_ENROLL_KEY:-}" ]; then
-    CLEAN_TOKEN=$(echo "$CROWDSEC_ENROLL_KEY" | awk '{print $NF}')
-    ENROLL_ARGS="$CLEAN_TOKEN"
-    if [ -n "${CROWDSEC_ENGINE_NAME:-}" ]; then
-        ENROLL_ARGS="$ENROLL_ARGS --name $CROWDSEC_ENGINE_NAME --overwrite"
-    fi
-    cscli console enroll $ENROLL_ARGS || echo "WARNING: Failed to enroll to CrowdSec Console."
-fi
+# --- Console enrollment (optional, free tier) -----------------------------
+# CROWDSEC_ENROLL_KEY connects this instance to the CrowdSec Console dashboard
+# (free).  If the variable is empty, commented out, or still set to the
+# template placeholder, enrollment is silently skipped — CrowdSec continues
+# to run fully functional without it.
+_enroll_key="${CROWDSEC_ENROLL_KEY:-}"
+case "${_enroll_key}" in
+    ""|CHANGEVALUE*)
+        # Empty, unset, or still the template placeholder — skip enrollment.
+        if [ -n "${_enroll_key}" ]; then
+            echo "Skipping CrowdSec Console enrollment (CROWDSEC_ENROLL_KEY is still a placeholder)."
+        fi
+        ;;
+    *)
+        CLEAN_TOKEN=$(echo "${_enroll_key}" | awk '{print $NF}')
+        ENROLL_ARGS="${CLEAN_TOKEN}"
+
+        # CROWDSEC_ENGINE_NAME sets a persistent engine identity in the
+        # Console.  If empty, commented out, or a placeholder, we omit
+        # --name entirely so CrowdSec auto-generates a random name.
+        _engine_name="${CROWDSEC_ENGINE_NAME:-}"
+        case "${_engine_name}" in
+            ""|CHANGEVALUE*)
+                # Omit --name; let CrowdSec generate the engine name.
+                ;;
+            *)
+                ENROLL_ARGS="${ENROLL_ARGS} --name ${_engine_name} --overwrite"
+                ;;
+        esac
+
+        cscli console enroll ${ENROLL_ARGS} || echo "WARNING: Failed to enroll to CrowdSec Console."
+        ;;
+esac
 
 # --- Wait for CrowdSec daemon to exit (container lifecycle) ----------------
 wait $CROWDSEC_PID
