@@ -66,6 +66,7 @@ Capabilities include:
 - **Monitoring links unauthorized/not found**: use documented Grafana navigation guidance in UI subtitle.
 - **Quota updates fail**: verify repository compatibility and permissions.
 - **Diagnostics fail broadly**: investigate shared infrastructure dependencies first (database, network, Docker health).
+- **Docker compose unavailable warnings in diagnostics**: expected when diagnostics run in an environment without `docker compose` access (for example inside restricted containers). Set `ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1` only when compose-backed checks must be enforced.
 
 ## Best practices
 
