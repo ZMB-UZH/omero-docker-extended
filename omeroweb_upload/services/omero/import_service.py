@@ -1057,8 +1057,30 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = str(get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}")
-    
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    # CRITICAL: Ensure OMERO CLI cache paths are writable.
+    # Otherwise it may try to write to /root/.cache (PermissionError) even when running as omero-web.
+    env["HOME"] = str(omerodir_path)
+    env["XDG_CACHE_HOME"] = str(omerodir_path / ".cache")
+    env["XDG_CONFIG_HOME"] = str(omerodir_path / ".config")
+    env["XDG_DATA_HOME"] = str(omerodir_path / ".local" / "share")
+
+    # Ensure directories exist before running the CLI
+    try:
+        (omerodir_path / ".cache").mkdir(parents=True, exist_ok=True)
+        (omerodir_path / ".config").mkdir(parents=True, exist_ok=True)
+        (omerodir_path / ".local" / "share").mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": str(exc),
+            "details": f"Failed to prepare compatibility check directories: {exc}",
+        }
+
     try:
         result = subprocess.run(
             cmd,
