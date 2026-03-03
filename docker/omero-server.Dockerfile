@@ -346,14 +346,76 @@ RUN set -euo pipefail; \
     chown -R omero-server:omero-server "${SITE_PACKAGES}/omero_plugin_common"; \
     rm -rf /tmp/omero_plugin_common
 
+# Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
+# --------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \
+    if [[ -f "${TEMP_FILES_PY}" ]]; then \
+        echo "Removing fallback directories from OMERO python TempFileManager..."; \
+        sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+    fi
+
 # Ensure OMERO server runtime directories are owned by omero-server
 # so named volumes inherit correct permissions on first run.
 # ----------------------------------------------------------
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/server/OMERO.server/var/log; \
+    mkdir -p /opt/omero/server/OMERO.server/etc/grid; \
+    chown -R omero-server:omero-server /opt/omero/server/OMERO.server/etc/grid; \
+    chmod -R u+rwX,g+rwX /opt/omero/server/OMERO.server/etc/grid; \
     chown -R omero-server:omero-server /opt/omero/server/OMERO.server/var; \
     chmod -R g+rwX /opt/omero/server/OMERO.server/var
 
-# Drop privileges for runtime
-# ---------------------------
-USER omero-server
+# Fix base image start script to drop privileges and keep root as image user
+# --------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    rm -f /startup/99-run.sh; \
+    printf '%s\n' \
+        '#!/bin/bash' \
+        'set -eu' \
+        'omero=/opt/omero/server/venv3/bin/omero' \
+        'if [ ! -x "$omero" ]; then' \
+        '    omero="$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero"' \
+        'fi' \
+        'cd /opt/omero/server' \
+        'echo "Starting OMERO.server as omero-server"' \
+        'exec runuser -p -m -u omero-server -- "$omero" admin start --foreground' \
+        > /startup/99-run.sh; \
+    chmod 0555 /startup/99-run.sh
+
+# Wrap entrypoint so all /startup/*.py AND 60-database.sh scripts run as omero-server, avoiding permission corruption
+# ----------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    mv /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint-original.sh; \
+    printf '%s\n' \
+        '#!/bin/bash' \
+        'set -e' \
+        'source /opt/omero/server/venv3/bin/activate' \
+        'for f in /startup/*; do' \
+        '    if [ -f "$f" -a -x "$f" ]; then' \
+        '        echo "Running $f $@"' \
+        '        if [[ "$f" == *.py ]] || [[ "$f" == *60-database.sh ]]; then' \
+        '            runuser -p -m -u omero-server -- "$f" "$@"' \
+        '        else' \
+        '            "$f" "$@"' \
+        '        fi' \
+        '    fi' \
+        'done' \
+        > /usr/local/bin/entrypoint.sh; \
+    chmod 0755 /usr/local/bin/entrypoint.sh
+
+# IMPORTANT: Fix the Docker healthcheck!
+# The official image defines: HEALTHCHECK CMD omero admin diagnostics
+# Since the image user is now root, this runs as root and crashes with the permission error.
+# We must redefine it to drop to the omero-server user.
+# --------------------------------------------------------------------------------------
+HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
+    CMD runuser -p -m -u omero-server -- /opt/omero/server/venv3/bin/omero admin diagnostics
+
+# Keep root as image user so bootstrap scripts can reconcile runtime permissions
+# before dropping to the application user in 99-run.sh and in entrypoint python scripts
+USER root

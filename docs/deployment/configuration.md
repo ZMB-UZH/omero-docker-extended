@@ -16,7 +16,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 - CrowdSec attempts to install two local bouncer packages at startup (`crowdsec-firewall-bouncer-iptables` and `crowdsec-nginx-bouncer`) only on apt/dpkg-based images. On other base images it logs a warning and continues by default; set `CROWDSEC_REQUIRE_BOUNCERS=true` to enforce fail-fast behavior when bouncers are mandatory. CrowdSec installs the `crowdsecurity/linux` and `crowdsecurity/sshd` collections plus `crowdsecurity/docker-logs` and `crowdsecurity/cri-logs` parsers for Docker log analysis. Log acquisition sources are defined in `monitoring/crowdsec/acquis.yaml`. CrowdSec UID/GID is auto-detected from the built image and used to chown `CROWDSEC_DB_PATH` and `CROWDSEC_CONFIG_PATH` during installation. The CrowdSec service healthcheck uses `GET http://localhost:8080/health` to avoid repeated authenticated watcher-login noise from `cscli lapi status` polling.
 - LDAP bind and directory settings (`CONFIG_omero_ldap_urls`, `CONFIG_omero_ldap_username`, `CONFIG_omero_ldap_password`, and `CONFIG_omero_ldap_base`) must be set in `env/omero_secrets.env` when `CONFIG_omero_ldap_config=true`. `CONFIG_omero_ldap_user__filter` is optional and is applied only when declared.
 - `CONFIG_omero_ldap_new__user__group` (in `env/omeroserver.env`) should be set when LDAP is enabled to avoid fallback to OMERO's built-in `omero.ldap.new_user_group=default` behavior, which can auto-create/use a `default` OMERO group for LDAP-created users. Static non-default values (for example `users_ldap`) are validated at startup and bootstrapped automatically if missing. If unset/commented or explicitly set to `default`, bootstrap does not fail and explicit group creation is skipped. At startup, `startup/10-server-bootstrap.sh` also applies LDAP properties explicitly via `omero config set` and verifies persisted `omero.ldap.new_user_group` to avoid underscore-translation ambiguity in environment-driven config loading. Dynamic LDAP expressions beginning with `:` are passed through unchanged and are not auto-created because they resolve memberships at login time.
-- `OMERO_INSTALL_GROUP_LIST` (in `env/omeroserver.env`) controls installation-time OMERO group bootstrap as `group:permission` entries (comma-separated). Supported permissions: `private`, `read-only`, `read-annotate`, `read-write`. Empty values and comment-only values (for example `OMERO_INSTALL_GROUP_LIST=# disabled`) are treated as disabled bootstrap, so fresh installations can run with zero custom groups. The installation script creates each configured group only if it does not already exist. During bootstrap, the installer performs runtime discovery of a working `omero` CLI executable inside the running `omeroserver` container by scanning executable files named `omero` inside the running container and validating invocation, rather than relying on a fixed path or shell `PATH` assumptions.
+- `OMERO_INSTALL_GROUP_LIST` (in `env/omeroserver.env`) controls installation-time OMERO group bootstrap as `group:permission` entries (comma-separated). Supported permissions: `private`, `read-only`, `read-annotate`, `read-write`. Empty values and comment-only values (for example `OMERO_INSTALL_GROUP_LIST=# disabled`) are treated as disabled bootstrap, so fresh installations can run with zero custom groups. The installation script creates each configured group only if it does not already exist. Bootstrap resolves a valid OMERO CLI path inside the running `omeroserver` container (`/opt/omero/server/venv*/bin/omero` preferred, with `/opt/omero/server/OMERO.server/bin/omero` fallback), then executes login and group-creation commands as user `omero-server` with explicit `HOME`/`TMPDIR`/`OMERO_TMPDIR`/`OMERO_TEMPDIR` to match the runtime temp-directory model and avoid root-owned temp artifacts.
 
 ## Required Hardening Before Deployment
 
@@ -37,16 +37,49 @@ When adding or removing a plugin:
 3. restart OMERO.web,
 4. verify menu link visibility and route health.
 
-## Data and Logs
+## Data, Temp, and Logs
 
 Paths declared in `installation_paths.env` map host storage into containers for:
 
 - OMERO data,
 - databases,
+- temporary/working data (`OMERO_TMP_PATH`),
 - OMERO server/web logs,
 - monitoring state.
 
 Ensure host paths exist and are writable by container runtime users before startup.
+
+### Centralized Temporary File Storage
+
+`OMERO_TMP_PATH` (set in `installation_paths.env`) is the single persistent root for temporary/working data. It is mounted into both `omeroweb` and `omeroserver` at the same absolute path value configured in `OMERO_TMP_PATH` (host path equals in-container path).
+
+Each plugin automatically receives its own subfolder (detected from the Python package name at runtime via `omero_plugin_common.tmp_utils`). Plugins further subdivide into purpose-specific subdirectories (`data`, `jobs`, `compat-check`, etc.).
+
+Example runtime layout:
+
+```
+${OMERO_TMP_PATH}/
+├── omeroweb-upload/
+│   ├── data/         # staged upload files
+│   ├── jobs/         # upload job state JSON
+│   └── compat-check/ # transient OMERO CLI isolation dirs
+├── omeroweb-omp-plugin/
+│   └── jobs/         # filename metadata job state
+└── omeroweb-imaris-connector/
+    └── jobs/         # Imaris export process state
+
+# server bootstrap temp namespace (separate from plugin namespaces)
+${OMERO_CLI_USER}/
+└── tmp/
+```
+
+All plugin paths are controlled exclusively by `OMERO_TMP_PATH`. There are no per-plugin env var overrides.
+
+`OMERO_TMP_PATH` is also used by `startup/10-server-bootstrap.sh` for OMERO CLI bootstrap operations, but the bootstrap script uses a dedicated server-only subpath `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR` to avoid collisions with plugin folders and permission churn on the shared root. During installation, `installation/installation_script.sh` pre-creates this namespace and sets ownership to the OMERO.server runtime UID/GID with `0700` permissions while preserving root traversal (`x`) so OMERO.web-owned temp roots remain accessible for server namespace creation.
+
+The bootstrap script also derives the OMERO internal lock-file temp path from the OMERO.server installation root (`$(dirname "${SERVER_HOME}")/omero/tmp`) and attempts to prepare it for OMERO lock-file compatibility. If this legacy path cannot be created or is not writable, bootstrap logs a warning and continues using the dedicated `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` namespace as `TMPDIR`.
+
+At image build time, `docker/omero-server.Dockerfile` now also enforces writable permissions on `${SERVER_HOME}/etc/grid` for the runtime `omero-server` account so `omero config set ...` can always persist updates to `config.xml` during bootstrap.
 
 ### Managed Repository Path Setting
 

@@ -77,6 +77,7 @@ RUN set -euo pipefail; \
 # NOTE: omero-py depends on ZeroC Ice (native extension) and cannot be installed without a compiler
 # -------------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
+    curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo; \
     dnf_retry() { \
         local attempt=1; \
         local max_attempts="${DNF_MAX_ATTEMPTS}"; \
@@ -116,7 +117,9 @@ RUN set -euo pipefail; \
         python3-devel \
         supervisor \
         quota \
-        e2fsprogs; \
+        e2fsprogs \
+        docker-ce-cli \
+        docker-compose-plugin; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* || true
 
@@ -199,6 +202,19 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+
+# Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
+# --------------------------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \
+    if [[ -f "${TEMP_FILES_PY}" ]]; then \
+        echo "Removing fallback directories from OMERO python TempFileManager..."; \
+        sed -i -e '/targets\.append(get_omero_userdir() \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+        sed -i -e '/targets\.append(path(tempfile\.gettempdir()) \/ "omero" \/ "tmp")/d' "${TEMP_FILES_PY}"; \
+    fi
 
 # Pre-create ALL Django static directories and own them (maybe unnecessary)
 # -------------------------------------------------------------------------
@@ -314,12 +330,13 @@ RUN set -euo pipefail; \
         '        if [ "$(basename "$f")" = "10-web-bootstrap.sh" ]; then' \
         '            "$f" "$@"' \
         '        else' \
-        '            runuser -u omero-web -- "$f" "$@"' \
+        '            # STRICT ENV: Preserve the PATH and OMERO_TMPDIR environment variables' \
+        '            runuser -p -u omero-web -- "$f" "$@"' \
         '        fi' \
         '    fi' \
         'done' \
         'echo "Startup scripts complete. Launching as omero-web: $@"' \
-        'exec runuser -u omero-web -- "$@"' \
+        'exec runuser -p -m -u omero-web -- "$@"' \
         > /usr/local/bin/entrypoint-supervisord.sh; \
     chmod 0555 /usr/local/bin/entrypoint-supervisord.sh
 

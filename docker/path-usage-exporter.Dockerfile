@@ -1,4 +1,4 @@
-FROM alpine:3.23.3
+FROM alpine:3.22.3
 
 RUN apk add --no-cache python3
 

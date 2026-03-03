@@ -44,6 +44,13 @@ CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
 
 set -euo pipefail
 
+# Returns true (0) if CrowdSec is enabled:
+# CROWDSEC_ENROLL_KEY must be set, non-empty, and not the placeholder value.
+is_crowdsec_enabled() {
+    local key="${CROWDSEC_ENROLL_KEY:-}"
+    [[ -n "${key}" && "${key}" != "CHANGEVALUE2" ]]
+}
+
 
 load_installation_paths_env() {
     local env_file_path="${1:?BUG: load_installation_paths_env requires a path}"
@@ -77,7 +84,7 @@ load_secrets_env() {
 
     if [ ! -r "${secrets_env_file}" ]; then
         echo "ERROR: Secrets env file is missing or unreadable: ${secrets_env_file}" >&2
-        echo "ERROR: Create it from env/omero_secrets_example.env (copy â env/omero_secrets.env) and set real values." >&2
+        echo "ERROR: Create it from env/omero_secrets_example.env (copy → env/omero_secrets.env) and set real values." >&2
         return 1
     fi
 
@@ -105,7 +112,7 @@ bootstrap_env_files_from_examples() {
             continue
         fi
 
-        # Derive the actual filename: foo_example.env â foo.env
+        # Derive the actual filename: foo_example.env → foo.env
         actual_file="${example_file%_example.env}.env"
         if [ ! -f "${actual_file}" ]; then
             echo "First-time setup: creating ${actual_file} from $(basename "${example_file}")"
@@ -349,6 +356,7 @@ export_compose_interpolation_env() {
         OMERO_DATABASE_PATH
         OMERO_PLUGIN_DATABASE_PATH
         OMERO_DATA_PATH
+        OMERO_TMP_PATH
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
@@ -378,6 +386,9 @@ export_compose_interpolation_env() {
         export "${env_var_name}=${!env_var_name}"
     done
 
+    if is_crowdsec_enabled; then
+        export COMPOSE_PROFILES="crowdsec${COMPOSE_PROFILES:+,${COMPOSE_PROFILES}}"
+    fi
 
     return 0
 }
@@ -588,15 +599,18 @@ create_omero_groups_from_list() {
         add_exit_code=1
         for add_attempt in $(seq 1 "${add_retry_limit}"); do
             set +e
+            # Use docker exec explicitly with non-interactive flags and without pseudo-TTY (-T)
+            # The < /dev/null redirect ensures if any prompt triggers it fails instead of hanging forever
             add_output="$(compose_with_installation_env "${compose_file}" exec -T \
+                -e HOME="/tmp" \
                 -e ROOTPASS="${ROOTPASS}" \
                 -e TARGET_GROUP_NAME="${group_name}" \
                 -e TARGET_GROUP_PERMISSION="${group_permission}" \
-                omeroserver bash -lc 'set -euo pipefail; discover_omero_cli() { local candidate=""; while IFS= read -r candidate; do [ -z "${candidate}" ] && continue; if "${candidate}" --help >/dev/null 2>&1; then printf "%s" "${candidate}"; return 0; fi; done < <(find / -xdev -type f -name omero -perm -u+x 2>/dev/null | sort -u); echo "Unable to locate a working OMERO CLI executable inside omeroserver container (searched executable files named omero on local mounts)."; return 127; }; OMERO_BIN="$(discover_omero_cli)"; "${OMERO_BIN}" login root@localhost -w "${ROOTPASS}" >/dev/null; "${OMERO_BIN}" group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"' 2>&1)"
+                omeroserver bash -c 'set -euo pipefail; resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"; if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then echo "Failed to login or ICE not ready"; exit 1; fi; su omero-server -c "\"${OMERO_BIN}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\" group add \"${TARGET_GROUP_NAME}\" --type=\"${TARGET_GROUP_PERMISSION}\"" </dev/null' 2>&1)"
             add_exit_code=$?
             set -e
 
-            if [ "${add_exit_code}" -eq 0 ] || printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|exists"; then
+            if [ "${add_exit_code}" -eq 0 ] || printf '%s' "${add_output}" | grep -qiE "already exists|duplicate|name already in use|name in use|exists"; then
                 break
             fi
 
@@ -647,8 +661,9 @@ OMERO_INSTALLATION_PATH=${old_install_path}/
 OMERO_DATABASE_PATH=${old_database_path}
 OMERO_PLUGIN_DATABASE_PATH=${old_plugin_database_path}
 OMERO_DATA_PATH=${old_data_path}
+OMERO_TMP_PATH=${old_install_path}/omero_temp
 OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
-OMERO_UPLOAD_PATH=${old_data_path}/omero_upload
+OMERO_UPLOAD_PATH=${old_install_path}/omero_temp/omeroweb-upload
 OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
 OMERO_WEB_VAR_PATH=${old_data_path}/omero_web_var
 OMERO_SERVER_LOGS_PATH=${old_data_path}/omero_server_logs
@@ -1081,7 +1096,7 @@ write_compose_dot_env() {
     local dot_env_path="${1:?BUG: write_compose_dot_env requires a path}"
 
     cat > "${dot_env_path}" <<DOTENV
-# Auto-generated by installation_script.sh â do not edit manually.
+# Auto-generated by installation_script.sh – do not edit manually.
 # Re-run the installation script to regenerate after changing paths.
 #
 # Load both path and secrets env files automatically for all docker compose
@@ -1099,6 +1114,7 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
+OMERO_TMP_PATH=${OMERO_TMP_PATH}
 OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
 OMERO_UPLOAD_PATH=${OMERO_UPLOAD_PATH}
 OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
@@ -1117,6 +1133,10 @@ CROWDSEC_CONFIG_PATH=${CROWDSEC_CONFIG_PATH}
 OMERO_DB_PASS=${OMERO_DB_PASS}
 OMP_PLUGIN_DB_PASS=${OMP_PLUGIN_DB_PASS}
 DOTENV
+
+    if is_crowdsec_enabled; then
+        echo "COMPOSE_PROFILES=crowdsec" >> "${dot_env_path}"
+    fi
 
     chmod 0600 "${dot_env_path}"
 
@@ -1140,7 +1160,7 @@ write_installation_paths_env() {
 
     mkdir -p "$(dirname "${env_file_path}")"
     cat > "${env_file_path}" <<ENVFILE
-# Auto-generated by installation_script.sh â do not edit manually.
+# Auto-generated by installation_script.sh – do not edit manually.
 # Re-run the installation script to regenerate after changing paths.
 #
 # This file is the single source of truth for all installation paths.
@@ -1152,6 +1172,7 @@ write_installation_paths_env() {
 #   OMERO_DATABASE_PATH
 #   OMERO_PLUGIN_DATABASE_PATH
 #   OMERO_DATA_PATH
+#   OMERO_TMP_PATH
 #   OMERO_USER_DATA_PATH
 #   OMERO_UPLOAD_PATH
 #   OMERO_SERVER_VAR_PATH
@@ -1173,9 +1194,10 @@ OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}
 OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
+OMERO_TMP_PATH=${OMERO_TMP_PATH}
 #
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
-OMERO_UPLOAD_PATH=\${OMERO_DATA_PATH}/omero_upload
+OMERO_UPLOAD_PATH=\${OMERO_TMP_PATH}/omeroweb-upload
 OMERO_SERVER_VAR_PATH=\${OMERO_DATA_PATH}/omero_server_var
 OMERO_WEB_VAR_PATH=\${OMERO_DATA_PATH}/omero_web_var
 OMERO_SERVER_LOGS_PATH=\${OMERO_DATA_PATH}/omero_server_logs
@@ -1195,7 +1217,6 @@ ENVFILE
 
     echo "Generated installation paths env file: ${env_file_path}"
 }
-
 verify_installation_paths_env_content() {
     local env_file_path="${1:?BUG: verify_installation_paths_env_content requires a path}"
 
@@ -1210,6 +1231,7 @@ verify_installation_paths_env_content() {
         OMERO_DATABASE_PATH
         OMERO_PLUGIN_DATABASE_PATH
         OMERO_DATA_PATH
+        OMERO_TMP_PATH
         OMERO_USER_DATA_PATH
         OMERO_UPLOAD_PATH
         OMERO_SERVER_VAR_PATH
@@ -1580,7 +1602,8 @@ resolve_buildx_compressed_build_choice() {
                 echo "USE_BUILDX_CHOICE=${override_choice}: using docker compose build (Buildx compressed build disabled)."
                 return 0
                 ;;
-            *)\n                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+            *)
+                echo "ERROR: USE_BUILDX_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
                 return 1
                 ;;
         esac
@@ -1658,11 +1681,13 @@ DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
 DEFAULT_OMERO_DATA_PATH="${OMERO_DATA_PATH}"
+DEFAULT_OMERO_TMP_PATH="${OMERO_TMP_PATH}"
 
 OMERO_INSTALLATION_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
 OMERO_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
 OMERO_PLUGIN_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database path")"
 OMERO_DATA_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATA_PATH}" "OMERO data path")"
+OMERO_TMP_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_TMP_PATH}" "OMERO tmp path")"
 
 if ! bootstrap_installation_checkout_if_missing "${OMERO_INSTALLATION_PATH}"; then
     exit 1
@@ -1671,7 +1696,7 @@ fi
 COMPOSE_FILE="${OMERO_INSTALLATION_PATH%/}/docker-compose.yml"
 
 OMERO_USER_DATA_PATH="${OMERO_DATA_PATH%/}/omero_user_data"
-OMERO_UPLOAD_PATH="${OMERO_DATA_PATH%/}/omero_upload"
+OMERO_UPLOAD_PATH="${OMERO_TMP_PATH%/}/omeroweb-upload"
 OMERO_SERVER_VAR_PATH="${OMERO_DATA_PATH%/}/omero_server_var"
 OMERO_WEB_VAR_PATH="${OMERO_DATA_PATH%/}/omero_web_var"
 OMERO_SERVER_LOGS_PATH="${OMERO_DATA_PATH%/}/omero_server_logs"
@@ -1730,17 +1755,20 @@ fi
 if [ -n "${LOKI_GID}" ]; then
     if ! validate_numeric_id "LOKI_GID" "${LOKI_GID}"; then exit 1; fi
 fi
-if [ -n "${CROWDSEC_UID}" ]; then
-    if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
-fi
-if [ -n "${CROWDSEC_GID}" ]; then
-    if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if [ -n "${CROWDSEC_UID}" ]; then
+        if ! validate_numeric_id "CROWDSEC_UID" "${CROWDSEC_UID}"; then exit 1; fi
+    fi
+    if [ -n "${CROWDSEC_GID}" ]; then
+        if ! validate_numeric_id "CROWDSEC_GID" "${CROWDSEC_GID}"; then exit 1; fi
+    fi
 fi
 
 require_path_config_var "OMERO_INSTALLATION_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_PLUGIN_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATA_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_TMP_PATH" "${SCRIPT_ENV_FILE}"
 require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
 
@@ -1764,12 +1792,18 @@ if ! validate_installation_path "${OMERO_DATA_PATH}"; then
     exit 1
 fi
 
+if ! validate_installation_path "${OMERO_TMP_PATH}"; then
+    echo "ERROR: Invalid OMERO_TMP_PATH from ${SCRIPT_ENV_FILE}: ${OMERO_TMP_PATH}" >&2
+    exit 1
+fi
+
 echo "Using installation paths from ${SCRIPT_ENV_FILE}"
 echo "Using docker compose .env file: ${OMERO_INSTALLATION_PATH%/}/.env"
 echo "OMERO_INSTALLATION_PATH=${OMERO_INSTALLATION_PATH}"
 echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
+echo "OMERO_TMP_PATH=${OMERO_TMP_PATH}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
@@ -1779,18 +1813,22 @@ fi
 warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
 warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
+warn_directory_not_empty "${OMERO_TMP_PATH}" "OMERO temp directory"
 
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_TMP_PATH}" "OMERO temp directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory"; then exit 1; fi
 if ! ensure_container_writable_path "${PORTAINER_DATA_PATH}" "Portainer data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${LOKI_DATA_PATH}" "Loki data directory"; then exit 1; fi
 if ! ensure_data_path "${PG_MAINTENANCE_DATA_PATH}" "PG maintenance data directory"; then exit 1; fi
 if ! ensure_container_writable_path "${NODE_EXPORTER_TEXTFILE_PATH}" "Node exporter textfile directory"; then exit 1; fi
-if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
-if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if ! ensure_data_path "${CROWDSEC_DB_PATH}" "Crowdsec database directory"; then exit 1; fi
+    if ! ensure_data_path "${CROWDSEC_CONFIG_PATH}" "Crowdsec config directory"; then exit 1; fi
+fi
 
 write_installation_paths_env "${SCRIPT_ENV_FILE}"
 if ! verify_installation_paths_env_content "${SCRIPT_ENV_FILE}"; then
@@ -1817,6 +1855,7 @@ echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (before docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker compose down)"
+log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (before docker compose down)"
 
 echo "Stopping existing containers..."
 if [ "${KEEP_IMAGES}" -eq 1 ]; then
@@ -1849,6 +1888,7 @@ echo "Recording post-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after docker compose down)"
 log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
+log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
 
 echo "Removing stale OMERO repository lock files from OMERO user data path..."
 if [ -d "${OMERO_USER_DATA_PATH}" ]; then
@@ -1968,27 +2008,262 @@ resolve_service_image_from_compose_or_die() {
     return 0
 }
 
+discover_uid_gid_from_passwd_or_die() {
+    local image="$1"
+    local user_name="$2"
+    local id_flag="$3"
+    local container_name=""
+    local passwd_file=""
+    local uid=""
+    local gid=""
+
+    container_name="omero-install-probe-passwd-id-$RANDOM"
+    if ! docker create --name "${container_name}" --entrypoint /bin/true "${image}" >/dev/null 2>&1; then
+        if ! docker create --name "${container_name}" "${image}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to create probe container for image '${image}' while resolving passwd entry for user '${user_name}'." >&2
+            return 1
+        fi
+    fi
+
+    passwd_file="$(mktemp)"
+    if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
+        echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${user_name}'." >&2
+        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        rm -f "${passwd_file}" || true
+        return 1
+    fi
+
+    uid="$(awk -F: -v user="${user_name}" '$1==user {print $3; exit}' "${passwd_file}")"
+    gid="$(awk -F: -v user="${user_name}" '$1==user {print $4; exit}' "${passwd_file}")"
+
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    rm -f "${passwd_file}" || true
+
+    if [ "${id_flag}" = "-u" ]; then
+        if ! [[ "${uid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric UID for user '${user_name}' from image '${image}' /etc/passwd." >&2
+            return 1
+        fi
+        printf '%s' "${uid}"
+        return 0
+    fi
+
+    if [ "${id_flag}" = "-g" ]; then
+        if ! [[ "${gid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric GID for user '${user_name}' from image '${image}' /etc/passwd." >&2
+            return 1
+        fi
+        printf '%s' "${gid}"
+        return 0
+    fi
+
+    echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+    return 1
+}
+
 discover_container_default_id_or_die() {
     local image="$1"
     local id_flag="$2"
-    local probe_name="omero-install-probe-default-id-$RANDOM"
+    local fallback_user_name="${3:-}"
+    local configured_user=""
+    local configured_account=""
+    local configured_group=""
+    local container_name=""
+    local passwd_file=""
+    local group_file=""
+    local resolved_uid=""
+    local resolved_gid=""
 
-    local out=""
+    probe_effective_runtime_ids_from_proc() {
+        local probe_image="$1"
+        local probe_container=""
+        local proc_status_file=""
+        local proc_uid=""
+        local proc_gid=""
 
-    if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag}" 2>/dev/null)"; then
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
-        echo "ERROR: Failed to discover default runtime id ${id_flag} from image '${image}'." >&2
+        probe_container="omero-install-probe-runtime-id-$RANDOM"
+        proc_status_file="$(mktemp)"
+
+        if ! docker create --name "${probe_container}" "${probe_image}" >/dev/null 2>&1; then
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        if ! docker start "${probe_container}" >/dev/null 2>&1; then
+            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        if ! docker cp "${probe_container}:/proc/1/status" "${proc_status_file}" >/dev/null 2>&1; then
+            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            rm -f "${proc_status_file}" || true
+            return 1
+        fi
+
+        proc_uid="$(awk '/^Uid:/ {print $2; exit}' "${proc_status_file}")"
+        proc_gid="$(awk '/^Gid:/ {print $2; exit}' "${proc_status_file}")"
+
+        docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+        rm -f "${proc_status_file}" || true
+
+        if [[ "${proc_uid}" =~ ^[0-9]+$ ]] && [[ "${proc_gid}" =~ ^[0-9]+$ ]]; then
+            printf '%s:%s' "${proc_uid}" "${proc_gid}"
+            return 0
+        fi
+
+        return 1
+    }
+
+    if ! docker image inspect "${image}" >/dev/null 2>&1; then
+        echo "INFO: Image '${image}' not found locally. Pulling to inspect configuration..." >&2
+        if ! docker pull "${image}" >/dev/null; then
+            echo "ERROR: Failed to pull image '${image}'" >&2
+            return 1
+        fi
+    fi
+
+    configured_user="$(docker image inspect --format '{{.Config.User}}' "${image}" 2>/dev/null || true)"
+    configured_user="${configured_user// /}"
+
+    # Some images intentionally leave Config.User empty and switch to a
+    # non-root runtime UID/GID in the image entrypoint/binary defaults.
+    # Probe the effective default process IDs first to avoid chowning
+    # bind-mounted host data to root when the service actually runs unprivileged.
+    if [ -z "${configured_user}" ]; then
+        local runtime_uid=""
+        local runtime_gid=""
+        local runtime_id_pair=""
+
+        runtime_uid="$(docker run --rm --entrypoint id "${image}" -u 2>/dev/null || true)"
+        runtime_gid="$(docker run --rm --entrypoint id "${image}" -g 2>/dev/null || true)"
+
+        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+            if [ "${id_flag}" = "-u" ]; then
+                printf '%s' "${runtime_uid}"
+                return 0
+            fi
+            if [ "${id_flag}" = "-g" ]; then
+                printf '%s' "${runtime_gid}"
+                return 0
+            fi
+            echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+            return 1
+        fi
+
+        runtime_id_pair="$(probe_effective_runtime_ids_from_proc "${image}" 2>/dev/null || true)"
+        runtime_uid="${runtime_id_pair%%:*}"
+        runtime_gid="${runtime_id_pair#*:}"
+
+        if [[ "${runtime_uid}" =~ ^[0-9]+$ ]] && [[ "${runtime_gid}" =~ ^[0-9]+$ ]]; then
+            if [ "${id_flag}" = "-u" ]; then
+                printf '%s' "${runtime_uid}"
+                return 0
+            fi
+            if [ "${id_flag}" = "-g" ]; then
+                printf '%s' "${runtime_gid}"
+                return 0
+            fi
+            echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+            return 1
+        fi
+    fi
+
+    if [ -z "${configured_user}" ]; then
+        if [ -n "${fallback_user_name}" ]; then
+            discover_uid_gid_from_passwd_or_die "${image}" "${fallback_user_name}" "${id_flag}"
+            return $?
+        fi
+
+        echo "ERROR: Unable to determine default runtime ${id_flag} for image '${image}' with empty Config.User." >&2
+        echo "ERROR: Set an explicit override (for example PROMETHEUS_UID/PROMETHEUS_GID) and rerun installation/installation_script.sh." >&2
         return 1
     fi
-    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
 
-    if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
-        echo "ERROR: Discovered non-numeric default runtime id (${id_flag})='${out}' in image '${image}'." >&2
-        return 1
+    configured_account="${configured_user%%:*}"
+    if [ "${configured_user}" != "${configured_account}" ]; then
+        configured_group="${configured_user#*:}"
     fi
 
-    printf '%s' "${out}"
-    return 0
+    if [[ "${configured_account}" =~ ^[0-9]+$ ]]; then
+        resolved_uid="${configured_account}"
+    fi
+    if [ -n "${configured_group}" ] && [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+        resolved_gid="${configured_group}"
+    fi
+
+    if [ -n "${resolved_uid}" ] && ([ "${id_flag}" = "-u" ] || [ -n "${resolved_gid}" ]); then
+        if [ "${id_flag}" = "-u" ]; then
+            printf '%s' "${resolved_uid}"
+            return 0
+        fi
+        printf '%s' "${resolved_gid}"
+        return 0
+    fi
+
+    container_name="omero-install-probe-default-id-$RANDOM"
+    if ! docker create --name "${container_name}" --entrypoint /bin/true "${image}" >/dev/null 2>&1; then
+        if ! docker create --name "${container_name}" "${image}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to create probe container for image '${image}' while resolving ${id_flag}." >&2
+            return 1
+        fi
+    fi
+
+    passwd_file="$(mktemp)"
+    group_file="$(mktemp)"
+
+    if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
+        echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${configured_account}'." >&2
+        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        rm -f "${passwd_file}" "${group_file}" || true
+        return 1
+    fi
+    docker cp "${container_name}:/etc/group" "${group_file}" >/dev/null 2>&1 || true
+
+    if [ -z "${resolved_uid}" ]; then
+        resolved_uid="$(awk -F: -v user="${configured_account}" '$1==user {print $3; exit}' "${passwd_file}")"
+    fi
+
+    if [ -z "${resolved_gid}" ]; then
+        if [[ "${configured_account}" =~ ^[0-9]+$ ]] && [ -z "${configured_group}" ]; then
+            resolved_gid="$(awk -F: -v uid="${configured_account}" '$3==uid {print $4; exit}' "${passwd_file}")"
+        fi
+
+        if [ -n "${configured_group}" ]; then
+            if [[ "${configured_group}" =~ ^[0-9]+$ ]]; then
+                resolved_gid="${configured_group}"
+            elif [ -s "${group_file}" ]; then
+                resolved_gid="$(awk -F: -v grp="${configured_group}" '$1==grp {print $3; exit}' "${group_file}")"
+            fi
+        fi
+        if [ -z "${resolved_gid}" ]; then
+            resolved_gid="$(awk -F: -v user="${configured_account}" '$1==user {print $4; exit}' "${passwd_file}")"
+        fi
+    fi
+
+    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    rm -f "${passwd_file}" "${group_file}" || true
+
+    if [ "${id_flag}" = "-u" ]; then
+        if ! [[ "${resolved_uid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric default runtime UID from image '${image}' (Config.User='${configured_user}')." >&2
+            return 1
+        fi
+        printf '%s' "${resolved_uid}"
+        return 0
+    fi
+
+    if [ "${id_flag}" = "-g" ]; then
+        if ! [[ "${resolved_gid}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to resolve numeric default runtime GID from image '${image}' (Config.User='${configured_user}')." >&2
+            return 1
+        fi
+        printf '%s' "${resolved_gid}"
+        return 0
+    fi
+
+    echo "ERROR: Unsupported id flag '${id_flag}' for image '${image}'." >&2
+    return 1
 }
 
 
@@ -2014,14 +2289,20 @@ if [ -z "${PROMETHEUS_UID}" ]; then PROMETHEUS_UID="$(discover_container_default
 if [ -z "${PROMETHEUS_GID}" ]; then PROMETHEUS_GID="$(discover_container_default_id_or_die "${PROMETHEUS_IMAGE}" "-g")"; fi
 if [ -z "${GRAFANA_UID}" ]; then GRAFANA_UID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-u")"; fi
 if [ -z "${GRAFANA_GID}" ]; then GRAFANA_GID="$(discover_container_default_id_or_die "${GRAFANA_IMAGE}" "-g")"; fi
-if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u")"; fi
-if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g")"; fi
+if [ -z "${LOKI_UID}" ]; then LOKI_UID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-u" "loki")"; fi
+if [ -z "${LOKI_GID}" ]; then LOKI_GID="$(discover_container_default_id_or_die "${LOKI_IMAGE}" "-g" "loki")"; fi
 if [ -z "${DATABASE_UID}" ]; then DATABASE_UID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_GID}" ]; then DATABASE_GID="$(discover_container_default_id_or_die "${DATABASE_IMAGE}" "-g")"; fi
 if [ -z "${DATABASE_PLUGIN_UID}" ]; then DATABASE_PLUGIN_UID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-u")"; fi
 if [ -z "${DATABASE_PLUGIN_GID}" ]; then DATABASE_PLUGIN_GID="$(discover_container_default_id_or_die "${DATABASE_PLUGIN_IMAGE}" "-g")"; fi
-if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
-if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
+if is_crowdsec_enabled; then
+    if [ -z "${CROWDSEC_UID}" ]; then CROWDSEC_UID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-u")"; fi
+    if [ -z "${CROWDSEC_GID}" ]; then CROWDSEC_GID="$(discover_container_default_id_or_die "${CROWDSEC_IMAGE}" "-g")"; fi
+else
+    echo "CrowdSec is disabled (no enroll key). Skipping CrowdSec UID/GID discovery."
+    CROWDSEC_UID=0
+    CROWDSEC_GID=0
+fi
 
 echo "OMERO.server UID:GID = ${OMERO_SERVER_UID}:${OMERO_SERVER_GID} (image=${OMERO_SERVER_IMAGE})"
 echo "OMERO.web    UID:GID = ${OMERO_WEB_UID}:${OMERO_WEB_GID} (image=${OMERO_WEB_IMAGE})"
@@ -2030,7 +2311,11 @@ echo "Grafana      UID:GID = ${GRAFANA_UID}:${GRAFANA_GID} (image=${GRAFANA_IMAG
 echo "Loki         UID:GID = ${LOKI_UID}:${LOKI_GID} (image=${LOKI_IMAGE})"
 echo "Database     UID:GID = ${DATABASE_UID}:${DATABASE_GID} (image=${DATABASE_IMAGE})"
 echo "DB Plugin    UID:GID = ${DATABASE_PLUGIN_UID}:${DATABASE_PLUGIN_GID} (image=${DATABASE_PLUGIN_IMAGE})"
-echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
+if is_crowdsec_enabled; then
+    echo "CrowdSec     UID:GID = ${CROWDSEC_UID}:${CROWDSEC_GID} (image=${CROWDSEC_IMAGE})"
+else
+    echo "CrowdSec:            disabled (no enroll key)"
+fi
 echo ""
 
 echo "========================================================"
@@ -2060,6 +2345,34 @@ chown_tree_or_die() {
     return 0
 }
 
+ensure_omero_server_tmp_namespace() {
+    local tmp_root="$1"
+    local server_uid="$2"
+    local server_gid="$3"
+    local server_runtime_user="$4"
+    local server_namespace_dir="${tmp_root%/}/${server_runtime_user}"
+    local server_tmp_dir="${server_namespace_dir}/tmp"
+
+    mkdir -p "${server_tmp_dir}"
+
+    if ! chmod u+rwx,go+x "${tmp_root}"; then
+        echo "ERROR: Failed to set traversal permissions on OMERO temp root: ${tmp_root}" >&2
+        return 1
+    fi
+
+    if ! chown "${server_uid}:${server_gid}" "${server_namespace_dir}" "${server_tmp_dir}"; then
+        echo "ERROR: Failed to assign OMERO.server ownership for temp namespace: ${server_tmp_dir}" >&2
+        return 1
+    fi
+
+    if ! chmod 0700 "${server_namespace_dir}" "${server_tmp_dir}"; then
+        echo "ERROR: Failed to set secure permissions on OMERO.server temp namespace: ${server_tmp_dir}" >&2
+        return 1
+    fi
+
+    echo "Prepared OMERO.server temp namespace: ${server_tmp_dir} (owner ${server_uid}:${server_gid}, mode 0700)"
+}
+
 if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}" "OMERO user data directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_USER_DATA_PATH%/}/certs" "OMERO certificate directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_SERVER_VAR_PATH}" "OMERO server var directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
@@ -2072,17 +2385,20 @@ if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory"
 if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${OMERO_UPLOAD_PATH}" "OMERO upload directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_TMP_PATH}" "OMERO temp directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
+if ! ensure_omero_server_tmp_namespace "${OMERO_TMP_PATH}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+if is_crowdsec_enabled; then
+    if ! chown_tree_or_die "${CROWDSEC_DB_PATH}" "CrowdSec data directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+    if ! chown_tree_or_die "${CROWDSEC_CONFIG_PATH}" "CrowdSec config directory" "${CROWDSEC_UID}" "${CROWDSEC_GID}"; then exit 1; fi
+fi
 
 echo ""
-echo "â Host ownership fix complete."
+echo "✔ Host ownership fix complete."
 echo "==============================="
 echo ""
 
@@ -2108,7 +2424,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ââ Detect filesystem type for OMERO user data path ââ
+    # ─── Detect filesystem type for OMERO user data path ───
     local quota_fs_type="" quota_mount_point="" quota_block_device=""
     while read -r line; do
         local parts
@@ -2139,7 +2455,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ââ Check prjquota mount option ââ
+    # ─── Check prjquota mount option ───
     if ! mount | grep -qE "on ${quota_mount_point} .*prjquota"; then
         echo "INFO: Filesystem at ${quota_mount_point} is ext4 but NOT mounted with prjquota."
         echo "INFO: To enable quotas:"
@@ -2151,7 +2467,7 @@ install_quota_enforcer_if_supported() {
         return 0
     fi
 
-    # ââ Check ext4 project feature in superblock ââ
+    # ─── Check ext4 project feature in superblock ───
     if command -v tune2fs >/dev/null 2>&1 && [ -n "${quota_block_device}" ]; then
         if ! tune2fs -l "${quota_block_device}" 2>/dev/null | grep -q "project"; then
             echo "INFO: ext4 'project' feature is NOT enabled on ${quota_block_device}."
@@ -2179,7 +2495,7 @@ install_quota_enforcer_if_supported() {
     fi
 
     echo ""
-    echo "â Quota enforcer installed successfully."
+    echo "✔ Quota enforcer installed successfully."
     return 0
 }
 
