@@ -324,27 +324,32 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
     return {"regex": regex, "source": "ai", "ai_regex": regex}
 
 
-def _build_parse_prompt(filenames):
+def _build_parse_prompt(filenames, custom_instructions=""):
     sample = filenames[:60]
     list_block = "\n".join(f"- {name}" for name in sample)
 
-    return (
+    prompt = (
         "You are given multiple filenames.\n"
         "\n"
-        "Each filename contains:\n"
-        "- fixed structural labels (field names, markers)\n"
-        "- variable values (numbers, codes, magnifications, optional suffix text)\n"
+        "Each filename contains fixed structural labels (field names like 'ec', 'sa', 'sc')\n"
+        "and variable values (the actual changing numbers, codes, magnifications, text).\n"
         "\n"
         "Task:\n"
-        "For EACH filename, output ONE line containing ONLY the variable values.\n"
-        "Example (do NOT output this example):\n"
+        "For EACH filename, output ONE line of ONLY the variable values, comma-separated.\n"
+        "The OUTPUT must contain only the VALUES, never the label names.\n"
+        "\n"
+        "Examples (do NOT output these examples):\n"
         "Input: 10444-ec-01-sa-01-sc-01-20x\n"
         "Output: 10444,01,01,01,20x\n"
+        "   (ec, sa, sc are labels and are DROPPED; 10444, 01, 01, 01, 20x are the VALUES)\n"
+        "Input: sample-cond-ctrl-rep-3-ch-DAPI\n"
+        "Output: ctrl,3,DAPI\n"
+        "   (cond, rep, ch are labels and are DROPPED; ctrl, 3, DAPI are the VALUES)\n"
         "\n"
         "Rules:\n"
-        "- Do NOT include labels\n"
+        "- OUTPUT VALUES ONLY — never output label names\n"
         "- Do NOT convert or normalize values\n"
-        "- Preserve original text exactly\n"
+        "- Preserve original text of values exactly\n"
         "- Keep original order\n"
         "- Do NOT repeat the original filename\n"
         "- The number of values may differ per line\n"
@@ -354,6 +359,9 @@ def _build_parse_prompt(filenames):
         "Filenames:\n"
         f"{list_block}\n"
     )
+    if custom_instructions:
+        prompt += f"\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}\n"
+    return prompt
 
 
 def _parse_ai_value_rows(text, expected_count, filenames=None):
@@ -390,7 +398,7 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
     return rows
 
 
-def generate_ai_parsed_values(provider, api_key, filenames, model=None):
+def generate_ai_parsed_values(provider, api_key, filenames, model=None, custom_instructions=""):
     provider = (provider or "").strip().lower()
 
     if not provider:
@@ -399,7 +407,7 @@ def generate_ai_parsed_values(provider, api_key, filenames, model=None):
     if not filenames:
         raise AiAssistError(errors.no_filenames_provided())
 
-    prompt = _build_parse_prompt(filenames)
+    prompt = _build_parse_prompt(filenames, custom_instructions=custom_instructions)
 
     content = _call_ai_provider_raw(provider, api_key, prompt, 800, model=model)
 

@@ -52,6 +52,11 @@ def _to_float_env(name: str, default: float) -> float:
         return default
 
 
+def _env_truthy(name: str, default: bool = False) -> bool:
+    raw = _get_env(name, "1" if default else "0").strip().lower()
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
 def _elapsed_ms(start: float) -> int:
     return int(max(0.0, (time.monotonic() - start) * 1000.0))
 
@@ -161,7 +166,7 @@ def _http_probe(
 
 def _docker_compose_command() -> Optional[List[str]]:
     # Always use the project name 'omero' when running from inside the container
-    # so docker compose knows what to target, since it's not running in the 
+    # so docker compose knows what to target, since it's not running in the
     # directory where the docker-compose.yml lives.
     for candidate in (("docker", "compose"), ("docker-compose",)):
         ok, _, _ = _run_command([*candidate, "version"], timeout_s=5.0)
@@ -170,19 +175,31 @@ def _docker_compose_command() -> Optional[List[str]]:
     return None
 
 
+def _compose_required() -> bool:
+    # When diagnostics run *inside* the OMERO.web container (typical), docker/compose
+    # is often not present and the docker socket is not mounted. Historically these
+    # checks were best-effort; treat missing compose as "skipped" unless explicitly
+    # required by operators.
+    return _env_truthy("ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE", default=False)
+
+
 def _compose_ps_health(
     check_id: str, label: str, service: str
 ) -> DiagnosticCheckResult:
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
+        status = "warn" if _compose_required() else "pass"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
-            status="warn",
+            status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable",
-            details="Cannot inspect container state from this environment.",
+            summary="Docker compose command unavailable (skipped)",
+            details=(
+                "Cannot inspect container state from this environment. "
+                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+            ),
         )
     ok, stdout, stderr = _run_command(
         [*compose_cmd, "ps", service, "--format", "json"], timeout_s=8.0
@@ -249,13 +266,17 @@ def _compose_pg_test(check_id: str, label: str, service: str) -> DiagnosticCheck
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
+        status = "warn" if _compose_required() else "pass"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
-            status="warn",
+            status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable",
-            details="Cannot execute in-container PostgreSQL checks.",
+            summary="Docker compose command unavailable (skipped)",
+            details=(
+                "Cannot execute in-container PostgreSQL checks. "
+                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+            ),
         )
     shell_cmd = (
         'db_name="${POSTGRES_DB:-postgres}"; '
@@ -316,11 +337,14 @@ def list_diagnostic_scripts() -> List[DiagnosticScript]:
 
 
 def _run_omero_server_core() -> List[DiagnosticCheckResult]:
+    # Source of truth: docker-compose.yml
+    # omeroserver: ports 4064 (blitz), 4063 (secure/ssl)
+    # omeroweb: port 4090, healthcheck hits http://127.0.0.1:4090/webgateway/
     host = _get_env("ADMIN_TOOLS_OMERO_SERVER_HOST", "omeroserver")
     blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
     secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
     web_url = _get_env(
-        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4080/webclient/"
+        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4090/webclient/"
     )
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
@@ -348,10 +372,17 @@ def _run_omero_server_core() -> List[DiagnosticCheckResult]:
 
 
 def _run_database_checks(
-    script_prefix: str, label_prefix: str, host_env: str, port_env: str, service: str
+    script_prefix: str,
+    label_prefix: str,
+    host_env: str,
+    port_env: str,
+    service: str,
+    default_host: str,
+    default_port: str = "5432",
 ) -> List[DiagnosticCheckResult]:
-    host = _get_env(host_env, service)
-    port = int(_get_env(port_env, "5432"))
+    # default_host and default_port must match docker-compose network alias and PGPORT.
+    host = _get_env(host_env, default_host)
+    port = int(_get_env(port_env, default_port))
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
     return [
@@ -381,19 +412,27 @@ def _run_database_checks(
 def run_diagnostic_script(script_id: str) -> Dict[str, object]:
     script_map: Dict[str, Callable[[], List[DiagnosticCheckResult]]] = {
         "omero_server_core": _run_omero_server_core,
+        # Source of truth: docker-compose.yml
+        # database service: network alias="database", PGPORT=5432 (default)
         "omero_database": lambda: _run_database_checks(
             "omero_database",
             "OMERO database",
             "ADMIN_TOOLS_OMERO_DB_HOST",
             "ADMIN_TOOLS_OMERO_DB_PORT",
             "database",
+            "database",
+            "5432",
         ),
+        # Source of truth: docker-compose.yml
+        # database_plugin service: network alias="database-plugin", PGPORT=5433
         "plugin_database": lambda: _run_database_checks(
             "plugin_database",
             "plugin database",
             "ADMIN_TOOLS_PLUGIN_DB_HOST",
             "ADMIN_TOOLS_PLUGIN_DB_PORT",
             "database_plugin",
+            "database-plugin",
+            "5433",
         ),
     }
 

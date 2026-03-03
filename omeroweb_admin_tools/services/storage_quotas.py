@@ -300,8 +300,8 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
         legacy_tmp = path.with_suffix(f"{path.suffix}.tmp")
         try:
             legacy_tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as exc:
+            logger.debug("Suppressed non-fatal exception in storage_quotas.py", exc_info=exc)
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:

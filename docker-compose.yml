@@ -29,7 +29,7 @@ services:
       - no-new-privileges:true
 
   loki:
-    image: "grafana/loki:3.2.0"
+    image: "grafana/loki:3.6.7"
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -42,7 +42,7 @@ services:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - ${LOKI_DATA_PATH:?Set LOKI_DATA_PATH (run installation/installation_script.sh)}:/loki:rw
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      test: ["CMD", "loki", "-version"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -51,7 +51,7 @@ services:
       - no-new-privileges:true
 
   alloy:
-    image: "grafana/alloy:v1.12.2"
+    image: "grafana/alloy:v1.13.2"
     restart: unless-stopped
     command:
       - "run"
@@ -71,7 +71,7 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "kill -0 1"]
+      test: ["CMD", "alloy", "--help"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -80,7 +80,7 @@ services:
       - no-new-privileges:true
 
   prometheus:
-    image: "prom/prometheus:v3.5.1"
+    image: "prom/prometheus:v3.10.0"
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -116,6 +116,8 @@ services:
       omero:
         aliases:
           - blackbox-exporter
+    extra_hosts:
+      - "crowdsec:host-gateway"
     volumes:
       - ./monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
     healthcheck:
@@ -202,7 +204,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter:
-    image: "prometheuscommunity/postgres-exporter:v0.19.0"
+    image: "prometheuscommunity/postgres-exporter:v0.19.1"
     restart: unless-stopped
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
     environment:
@@ -228,7 +230,7 @@ services:
       - no-new-privileges:true
 
   postgres-exporter-plugin:
-    image: "prometheuscommunity/postgres-exporter:v0.19.0"
+    image: "prometheuscommunity/postgres-exporter:v0.19.1"
     restart: unless-stopped
     command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
     environment:
@@ -273,7 +275,7 @@ services:
       - no-new-privileges:true
 
   grafana:
-    image: "grafana/grafana:12.3.3"
+    image: "grafana/grafana:12.4.0"
     restart: unless-stopped
     networks:
       omero:
@@ -353,6 +355,10 @@ services:
       - ./env/omero-celery.env
     environment:
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
+      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
+      OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
+      OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
+      TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
     hostname: omeroserver
     working_dir: /opt/omero/server/OMERO.server
     networks:
@@ -365,6 +371,7 @@ services:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ${OMERO_SERVER_VAR_PATH:?Set OMERO_SERVER_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:rw
+      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
     ulimits:
       nofile:
         soft: 15000
@@ -373,7 +380,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/omero/server/OMERO.server/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\""
+          "runuser -p -m -u omero-server -- sh -c 'HOME=/tmp /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\"'"
         ]
       interval: 10s
       timeout: 10s
@@ -401,7 +408,7 @@ services:
       - no-new-privileges:true
 
   redis:
-    image: "redis:8.4.0-alpine"
+    image: "redis:8.6.1-alpine"
     restart: unless-stopped
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
@@ -441,19 +448,22 @@ services:
       omero:
         aliases:
           - omeroweb
+    environment:
+      OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
+      OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
+      OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
+      TMPDIR: "${OMERO_TMP_PATH}/omero-web/tmp"
     ports:
       - "4090:4090"
     volumes:
       - ${OMERO_USER_DATA_PATH:?Set OMERO_USER_DATA_PATH (run installation/installation_script.sh)}:/OMERO:rw
       - ./omero-web.config:/opt/omero/web/OMERO.web/etc/omero.web.config:ro
-      - ${OMERO_UPLOAD_PATH:?Set OMERO_UPLOAD_PATH (run installation/installation_script.sh)}:/opt/tmp:rw
+      - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
       - ${OMERO_WEB_VAR_PATH:?Set OMERO_WEB_VAR_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var:rw
       - ${OMERO_WEB_LOGS_PATH:?Set OMERO_WEB_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/OMERO.web/var/log:rw
       - ${OMERO_WEB_SUPERVISOR_LOGS_PATH:?Set OMERO_WEB_SUPERVISOR_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/web/logs:rw
       - ${OMERO_SERVER_LOGS_PATH:?Set OMERO_SERVER_LOGS_PATH (run installation/installation_script.sh)}:/opt/omero/server/OMERO.server/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /tmp/omp_plugin_filename_metadata_jobs:size=256m,mode=1777
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4090/webgateway/ >/dev/null"]
       interval: 10s
@@ -546,7 +556,13 @@ services:
       context: .
       dockerfile: docker/crowdsec.Dockerfile
     container_name: crowdsec
+    profiles:
+      - crowdsec
     restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     env_file:
       - ./env/omero_secrets.env
     environment:
@@ -559,12 +575,6 @@ services:
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro
-    ports:
-      - "8080:8080"
-    networks:
-      omero:
-        aliases:
-          - crowdsec
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
       interval: 10s

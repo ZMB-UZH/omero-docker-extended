@@ -94,8 +94,8 @@ def _validate_user_password(conn, password):
     finally:
         try:
             client.closeSession()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in job_view.py", exc_info=exc)
 
     return True, None
 
@@ -649,5 +649,5 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
     finally:
         try:
             lk.release()
-        except:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in job_view.py", exc_info=exc)

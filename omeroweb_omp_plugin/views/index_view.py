@@ -41,15 +41,15 @@ def _get_owner_id(obj):
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     try:
         owner = obj.getOwner()
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     return None
 
 
@@ -111,8 +111,8 @@ def _get_permissions(obj):
         permissions = details.getPermissions() if details else None
         if permissions is not None:
             return permissions
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     for attr in ("getPermissions", "permissions"):
         try:
             permissions = getattr(obj, attr)()
@@ -161,8 +161,8 @@ def _iter_accessible_projects(conn):
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     try:
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         try:
@@ -181,8 +181,8 @@ def _iter_accessible_projects(conn):
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     try:
         for proj in conn.getObjects("Project"):
             yield proj
@@ -204,16 +204,16 @@ def _iter_member_groups(conn):
         groups = conn.getGroupsMemberOf()
         if groups:
             return list(groups)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     try:
         user = conn.getUser()
         if user is not None:
             groups = user.getGroups()
             if groups:
                 return list(groups)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     return []
 
 
@@ -260,8 +260,8 @@ def _group_is_read_write(group):
         perm_str = str(permissions)
         # Read-write groups have patterns like "rwrw--" or "rwra--"
         return "rw" in perm_str.lower()[:4]  # Check first 4 chars for group perms
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     # Fallback: try the isGroupRead/isGroupWrite methods if they exist
     try:
         return (_permissions_flag(permissions, "isGroupRead") and 
@@ -279,8 +279,8 @@ def _group_is_read_annotate(group):
         perm_str = str(permissions)
         # Read-annotate groups have pattern like "rwra--"
         return "ra" in perm_str.lower()[2:4]  # Check positions 2-3 for group perms
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     # Fallback
     try:
         return (_permissions_flag(permissions, "isGroupRead") and 
@@ -306,8 +306,8 @@ def _get_object_group(obj):
         if details:
             group = details.getGroup()
             return group
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     return None
 
 
@@ -320,8 +320,8 @@ def _is_user_in_group(conn, group_id, user_id):
             gid = get_id(group)
             if gid and int(gid) == int(group_id):
                 return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     return False
 
 
@@ -559,6 +559,7 @@ def index(request, conn=None, url=None, **kwargs):
             selected_dataset_ids_raw = request.POST.get("selected_datasets", "")
             provider = (request.POST.get("provider") or "").strip().lower()
             model = (request.POST.get("model") or "").strip()
+            custom_instructions = (request.POST.get("custom_instructions") or "").strip()
 
             if provider == "local":
                 return JsonResponse(
@@ -633,7 +634,7 @@ def index(request, conn=None, url=None, **kwargs):
                 return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
             try:
-                result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None)
+                result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None, custom_instructions=custom_instructions)
             except AiAssistError as e:
                 return JsonResponse({"error": str(e)}, status=400)
             except Exception as e:
