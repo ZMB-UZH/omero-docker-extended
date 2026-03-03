@@ -98,7 +98,7 @@ Base: `/omeroweb_admin_tools/`
 | `portainer` | `wget http://localhost:9000/api/system/status` |
 | `node-exporter` | `wget -O /dev/null http://localhost:9100/` |
 | `path-usage-exporter` | `test -f /textfile/omero_paths.prom` |
-| `crowdsec` | `cscli lapi status` |
+| `crowdsec` | `wget http://localhost:8080/health` |
 
 ## External reverse proxy forwarding target
 
