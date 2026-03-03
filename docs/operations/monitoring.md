@@ -204,6 +204,40 @@ docker compose pull grafana
 docker compose up -d grafana
 ```
 
+### 6) Diagnose `Swap usage` panel showing `No swap configured`
+
+The `Server Infrastructure -> Swap usage` stat intentionally shows `No swap configured` when the host reports zero swap capacity. This is not a dashboard failure by itself.
+
+Panel query (from `monitoring/grafana/dashboards/omero-infrastructure.json`):
+
+```promql
+((node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"} - node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}) / node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}) and on(instance) (node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"} > 0)
+```
+
+Direct checks:
+
+```bash
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}'
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}'
+```
+
+Interpretation:
+
+- If `SwapTotal` is `0`, Grafana displays `No swap configured` by design.
+- If `SwapTotal` is greater than `0` and the panel is still empty, check node-exporter scrape health and label matching (`job=~"node-exporter|node_exporter"`).
+
+### 7) Compare current panel behavior vs one week ago (repo-level)
+
+Use git history to verify whether dashboard logic changed recently:
+
+```bash
+git log --since='14 days ago' --oneline -- monitoring/grafana/dashboards/omero-infrastructure.json
+git rev-list -1 --before='7 days ago' HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json
+git diff "$(git rev-list -1 --before='7 days ago' HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json)"..HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json
+```
+
+For the `Swap usage` panel specifically, only presentation options (for example graph mode/description text) should differ across recent revisions; the PromQL logic and `noValue` fallback are expected to remain unchanged unless intentionally updated.
+
 ## Recommended alerts (minimum)
 
 - OMERO.server unavailable (blackbox TCP probe failure).
