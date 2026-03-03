@@ -113,7 +113,6 @@ __all__ = [
     '_import_job_entry',
     '_initialize_directories',
     '_is_owned_by_user',
-    '_is_within_root',
     '_iter_accessible_projects',
     '_job_path',
     '_link_dataset_to_project',
@@ -136,11 +135,9 @@ __all__ = [
     '_run_omero_cli',
     '_safe_job_id',
     '_safe_relative_path',
-    '_safe_remove_tree',
     '_save_job',
     '_special_methods_enabled',
     '_should_auto_skip_import',
-    '_should_run_cleanup',
     '_should_start_compatibility_check',
     '_start_compatibility_check_thread',
     '_start_import_thread',
@@ -1077,7 +1074,7 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
