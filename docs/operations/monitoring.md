@@ -116,6 +116,25 @@ All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 - `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is expected on hosts that do not expose those files (for example journald-only systems). Docker log acquisition still starts normally via `source: docker`.
 - The CrowdSec healthcheck is HTTP-based (`/health`) and should not generate repeated `POST /v1/watchers/login` entries by itself.
 
+## CrowdSec firewall bouncer
+
+The firewall bouncer runs inside the CrowdSec container (not as a separate host package) and manipulates the **host's** firewall rules directly via `network_mode: host` and `NET_ADMIN` capability.
+
+At startup the entrypoint auto-detects the host firewall backend:
+
+| Host OS | Backend detected | Bouncer mode | Protection scope |
+|---|---|---|---|
+| Ubuntu 24.04+, Debian 13+ (Trixie) | nftables | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
+| Older distributions with iptables-legacy | iptables | `mode: iptables` | `INPUT` + `DOCKER-USER` chains |
+
+For nftables mode the entrypoint adds supplementary FORWARD-hook chains referencing the bouncer's banned-IP sets so that Docker-bridged containers are also protected — the bouncer's built-in nftables mode only creates INPUT-hook chains.
+
+Expected startup log lines:
+- `Detected host firewall backend: nftables` (or `iptables`)
+- `Validated: nftables kernel access OK (NET_ADMIN + host network)`
+- `Added IPv4 FORWARD chain in table 'ip crowdsec' (set=...)`
+- `Added IPv6 FORWARD chain in table 'ip6 crowdsec6' (set=...)`
+
 ## Operational baseline checks
 
 1. Prometheus targets page (`http://localhost:9090/targets`) shows all targets as UP.
