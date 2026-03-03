@@ -2520,6 +2520,58 @@ else
     echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
 fi
 
+# =====================================================
+# Tmp artifact cleaner installation (non-blocking)
+#
+# Installs a host-side systemd timer that periodically deletes temporary
+# artifacts under OMERO_TMP_PATH that are older than 24 hours.
+#
+# IMPORTANT:
+# - This replaces all previous "cleanup on page load" mechanisms in plugins.
+# - Immediate cleanup after successful jobs is handled inside the plugins.
+# =====================================================
+install_tmp_cleaner_if_available() {
+    local omero_tmp_dir="$1"
+    local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-tmp-cleaner.sh"
+
+    echo "=============================================="
+    echo "Installing host-side tmp artifact cleaner"
+    echo "=============================================="
+
+    if [ ! -f "${installer_path}" ]; then
+        echo "INFO: Tmp cleaner installer not found at ${installer_path}."
+        echo "INFO: Skipping tmp cleaner installation."
+        return 0
+    fi
+
+    if [ -z "${omero_tmp_dir}" ] || [ ! -d "${omero_tmp_dir}" ]; then
+        echo "INFO: OMERO_TMP_PATH is not a directory (${omero_tmp_dir:-unset})."
+        echo "INFO: Skipping tmp cleaner installation."
+        return 0
+    fi
+
+    chmod +x "${installer_path}"
+    if ! "${installer_path}" "${omero_tmp_dir}"; then
+        echo ""
+        echo "WARNING: Tmp cleaner installation encountered errors (non-blocking)." >&2
+        echo "WARNING: You can install it manually later with:" >&2
+        echo "  sudo ${installer_path} ${omero_tmp_dir}" >&2
+        echo ""
+        return 0
+    fi
+
+    echo ""
+    echo "✔ Tmp cleaner installed successfully."
+    echo ""
+    echo "Useful commands:"
+    echo "  systemctl status omero-tmp-cleaner.timer"
+    echo "  journalctl -u omero-tmp-cleaner.service"
+    echo "  sudo /usr/local/sbin/omero-tmp-cleaner --tmp-dir ${omero_tmp_dir}"
+    echo ""
+    return 0
+}
+
+install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
 

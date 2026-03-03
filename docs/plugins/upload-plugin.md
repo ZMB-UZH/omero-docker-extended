@@ -13,9 +13,24 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
 - File attachment support: link related files (spectra, metadata) to imported images.
-- Stale upload pruning with configurable age thresholds.
+- Automatic temp cleanup: immediate deletion after successful import + host-side sweep deleting remnants older than 24h.
 - User settings and special-method settings persistence in `database_plugin`.
 - Project listing and root status checks.
+
+## Host-side tmp cleaner (automatic)
+
+Temporary artifacts live under `OMERO_TMP_PATH`.
+
+Cleanup is performed by two mechanisms:
+
+- **Immediate**: the upload payload directory for a job is deleted right after a successful import finishes (job JSON remains for UI status).
+- **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours.
+
+Useful commands (host):
+
+- `systemctl status omero-tmp-cleaner.timer`
+- `journalctl -u omero-tmp-cleaner.service`
+- `sudo /usr/local/sbin/omero-tmp-cleaner --tmp-dir "$OMERO_TMP_PATH"`
 
 ## Key routes
 
@@ -91,8 +106,6 @@ Configuration values in `env/omeroweb.env`:
 |---|---|
 | `UPLOAD_CONCURRENT_LIMIT` | Maximum simultaneous upload jobs |
 | `UPLOAD_BATCH_SIZE` | Files per import batch |
-| `UPLOAD_CLEANUP_INTERVAL` | How often cleanup runs (seconds) |
-| `UPLOAD_CLEANUP_AGE_THRESHOLD` | Minimum age before stale cleanup (seconds) |
 | `OMERO_UPLOAD_PATH` | Host path for temporary upload storage |
 
 The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_UPLOAD_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
