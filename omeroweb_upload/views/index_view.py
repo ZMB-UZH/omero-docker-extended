@@ -7,10 +7,6 @@ from .utils import require_non_root_user
 
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
-    try:
-        _cleanup_upload_artifacts()
-    except Exception:
-        logger.exception("Upload cleanup failed.")
     username = current_username(request, conn)
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
@@ -55,18 +51,12 @@ def root_status(request, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_upload(request, conn=None, url=None, **kwargs):
-    try:
         return _start_upload(request, conn)
-    except Exception:
         logger.exception("Unhandled error while starting upload job.")
         return json_error(errors.unexpected_server_error_start_upload(), status=500)
 
 
 def _start_upload(request, conn):
-    try:
-        _cleanup_upload_artifacts()
-    except Exception:
-        logger.exception("Upload cleanup failed.")
     if request.method != "POST":
         return json_error(errors.upload_start_post_required())
 
@@ -87,10 +77,8 @@ def _start_upload(request, conn):
             project_id = int(raw_project_id)
         except (TypeError, ValueError):
             return json_error(errors.invalid_project_selection(), status=400)
-        try:
-            project = conn.getObject("Project", project_id)
-        except Exception:
-            project = None
+
+        project = conn.getObject("Project", project_id)
         if project is None or not (
             _is_owned_by_user(project, _current_user_id(conn)) or _has_read_write_permissions(project)
         ):
@@ -204,20 +192,17 @@ def _start_upload(request, conn):
 
     dataset_map = {}
     orphan_dataset_name = None
-    try:
-        dataset_names = set()
-        if any(_dataset_name_for_path(entry["relative_path"]) is None for entry in normalized):
-            orphan_dataset_name = _generate_orphan_dataset_name()
-        for entry in normalized:
-            dataset_name = _dataset_name_for_path(entry["relative_path"], orphan_dataset_name)
-            if dataset_name:
-                dataset_names.add(dataset_name)
-        for dataset_name in sorted(dataset_names):
-            dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map, project_id=project_id)
-            if dataset_id is None:
-                logger.warning("Unable to resolve dataset for %s", dataset_name)
-    except Exception:
-        logger.exception("Unable to prepare datasets for upload request.")
+    dataset_names = set()
+    if any(_dataset_name_for_path(entry["relative_path"]) is None for entry in normalized):
+        orphan_dataset_name = _generate_orphan_dataset_name()
+    for entry in normalized:
+        dataset_name = _dataset_name_for_path(entry["relative_path"], orphan_dataset_name)
+        if dataset_name:
+            dataset_names.add(dataset_name)
+    for dataset_name in sorted(dataset_names):
+        dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map, project_id=project_id)
+        if dataset_id is None:
+            return json_error(errors.dataset_create_failed(dataset_name), status=500)
 
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
@@ -288,15 +273,12 @@ def _start_upload(request, conn):
 @login_required()
 @require_non_root_user
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
-    try:
         return _upload_files(request, job_id)
-    except Exception:
         logger.exception("Unhandled error while uploading files for job %s.", job_id)
         return json_error(errors.unexpected_server_error_uploading_files(), status=500)
 
 
 def _upload_files(request, job_id):
-    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
 
@@ -365,6 +347,7 @@ def _upload_files(request, job_id):
                 {"upload_id": entry.get("upload_id"), "status": "error", "errors": [str(exc)]}
             )
 
+
     updated_job = _apply_upload_updates(job_id, updates, upload_errors)
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state())
@@ -392,15 +375,12 @@ def _upload_files(request, job_id):
 @login_required()
 @require_non_root_user
 def import_step(request, job_id, conn=None, url=None, **kwargs):
-    try:
         return _import_step(request, job_id)
-    except Exception:
         logger.exception("Unhandled error while importing job %s.", job_id)
         return json_error(errors.unexpected_server_error_importing(), status=500)
 
 
 def _import_step(request, job_id):
-    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
 
@@ -428,7 +408,6 @@ def _import_step(request, job_id):
 @login_required()
 @require_non_root_user
 def confirm_import(request, job_id, conn=None, url=None, **kwargs):
-    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -452,7 +431,6 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def prune_upload(request, job_id, conn=None, url=None, **kwargs):
-    _cleanup_upload_artifacts()
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
@@ -535,7 +513,6 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_status(request, job_id, conn=None, url=None, **kwargs):
-    _cleanup_upload_artifacts()
     job = _load_job(job_id)
     if not job:
         return json_error(errors.upload_job_not_found())
