@@ -328,9 +328,9 @@ The observability stack provides:
 The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL databases:
 
 - **Weekly** (Sunday 03:00): `VACUUM ANALYZE` -- reclaims dead tuples, updates query planner statistics.
-- **Monthly** (first Sunday 04:00): `REINDEX CONCURRENTLY` -- rebuilds indexes online without locking.
+- **Monthly** (first Sunday 04:00): `REINDEX CONCURRENTLY` -- rebuilds indexes online with short lock phases.
 
-Both operations are safe for production and do not require downtime.
+Both operations are designed for online use. They may briefly acquire locks; the maintenance scripts are configured to fail fast instead of waiting on locks.
 
 </details>
 
