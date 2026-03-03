@@ -81,6 +81,7 @@ scrape_configs:
           - database:5432
           - database-plugin:5433
           - redis:6379
+          - omeroserver:4063
           - omeroserver:4064
     relabel_configs:
       - source_labels: [__address__]
