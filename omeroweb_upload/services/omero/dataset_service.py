@@ -171,8 +171,8 @@ def _iter_accessible_projects(conn):
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Suppressed non-fatal exception in dataset_service.py", exc_info=exc)
     
     try:
         # Set group context to -1 to query across all groups
@@ -199,8 +199,8 @@ def _iter_accessible_projects(conn):
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in dataset_service.py", exc_info=exc)
     
     # Final fallback: try without cross-group querying
     try:

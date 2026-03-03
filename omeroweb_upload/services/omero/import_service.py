@@ -15,7 +15,9 @@ import omero
 import portalocker
 from omero.gateway import BlitzGateway
 from ...constants import OMERO_CLI
+from ...utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from ...utils.omero_helpers import get_id
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +35,6 @@ JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
 JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
 JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
-UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
-JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
-DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
 DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
 UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
@@ -175,8 +173,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     if old_conn:
         try:
             old_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
     
     try:
         client = omero.client(host=host, port=port)
@@ -190,8 +188,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             logger.error("Newly created session is invalid")
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
             return None
 
         return conn
@@ -413,8 +411,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
             return None
 
         if not ok:
@@ -430,8 +428,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -455,8 +453,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
     except Exception:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
         raise
 
 
@@ -511,8 +509,8 @@ def _attach_txt_to_image_service(
         finally:
             try:
                 store.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -564,8 +562,8 @@ def _attach_txt_to_image_service(
         # Always close the user connection
         try:
             user_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
 
 
 def _append_job_message(job: dict, message: str):
@@ -848,7 +846,12 @@ def _update_job(job_id: str, update_fn):
     return _robust_update_job(job_id, update_fn)
 
 
-def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+def _classify_compatibility_output(
+    return_code: int,
+    stdout: str,
+    stderr: str,
+    expected_file_path: Optional[Path] = None,
+):
     """
     Classify OMERO import compatibility check output.
     
@@ -897,7 +900,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     
     # CRITICAL FIX: Check if stdout contains actual import candidates
     # The -f flag ALWAYS returns 0, so we MUST parse stdout
-    has_candidates = _has_import_candidates_in_output(stdout or "")
+    has_candidates = _has_import_candidates_in_output(
+        stdout or "",
+        expected_file_path=expected_file_path,
+    )
     
     if has_candidates:
         return "compatible", "File format supported by OMERO"
@@ -908,7 +914,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
 
 
 
-def _has_import_candidates_in_output(output: str) -> bool:
+def _has_import_candidates_in_output(
+    output: str,
+    expected_file_path: Optional[Path] = None,
+) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
     
@@ -920,43 +929,29 @@ def _has_import_candidates_in_output(output: str) -> bool:
     if not output or not output.strip():
         return False
     
-    lines = output.strip().split('\n')
-    
-    # Metadata patterns to skip (these are NOT import candidates)
-    skip_patterns = [
-        "# group:",
-        "to import",
-        "file(s)",
-        "group(s)",
-        "call(s)",
-        "parsed into",
-        "setid",
-        "reader:",
-        "dry run",
-        "would import",
-    ]
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Skip empty lines
-        if not stripped:
+    candidates = _extract_import_candidates(output)
+    if not candidates:
+        return False
+
+    if expected_file_path is None:
+        return True
+
+    try:
+        expected_resolved = expected_file_path.resolve()
+    except OSError:
+        expected_resolved = expected_file_path
+
+    for candidate in candidates:
+        candidate_path = _parse_candidate_path_line(candidate)
+        if candidate_path is None:
             continue
-        
-        # Skip comment lines
-        if stripped.startswith("#"):
-            continue
-        
-        # Skip metadata lines
-        stripped_lower = stripped.lower()
-        if any(pattern in stripped_lower for pattern in skip_patterns):
-            continue
-        
-        # If we reach here, this is likely an actual file path (import candidate)
-        # Additional validation: check if it looks like a file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
+        try:
+            resolved_candidate = candidate_path.resolve()
+        except OSError:
+            resolved_candidate = candidate_path
+        if resolved_candidate == expected_resolved:
             return True
-    
+
     return False
 
 
@@ -998,11 +993,35 @@ def _extract_import_candidates(output: str):
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
         
-        # This looks like an actual file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
-            candidates.append(stripped)
-    
+        parsed_candidate = _parse_candidate_path_line(stripped)
+        if parsed_candidate is not None:
+            candidates.append(str(parsed_candidate))
+
     return candidates
+
+
+def _parse_candidate_path_line(line: str) -> Optional[Path]:
+    """Parse an OMERO import candidate line into a concrete path.
+
+    Returns ``None`` when the input does not look like a standalone path line.
+    """
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    unquoted = raw.strip('\"').strip("'")
+    if not unquoted:
+        return None
+
+    candidate = Path(unquoted)
+    if not candidate.is_absolute():
+        return None
+
+    # Reject lines that include additional text and only keep concrete path entries.
+    if str(candidate) != unquoted:
+        return None
+
+    return candidate
 
 
 def _check_import_compatibility(
@@ -1038,8 +1057,30 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-    
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    # CRITICAL: Ensure OMERO CLI cache paths are writable.
+    # Otherwise it may try to write to /root/.cache (PermissionError) even when running as omero-web.
+    env["HOME"] = str(omerodir_path)
+    env["XDG_CACHE_HOME"] = str(omerodir_path / ".cache")
+    env["XDG_CONFIG_HOME"] = str(omerodir_path / ".config")
+    env["XDG_DATA_HOME"] = str(omerodir_path / ".local" / "share")
+
+    # Ensure directories exist before running the CLI
+    try:
+        (omerodir_path / ".cache").mkdir(parents=True, exist_ok=True)
+        (omerodir_path / ".config").mkdir(parents=True, exist_ok=True)
+        (omerodir_path / ".local" / "share").mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": str(exc),
+            "details": f"Failed to prepare compatibility check directories: {exc}",
+        }
+
     try:
         result = subprocess.run(
             cmd,
@@ -1076,7 +1117,12 @@ def _check_import_compatibility(
         }
     
     # CRITICAL FIX: Classify based on stdout content, NOT return code
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    status, details = _classify_compatibility_output(
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        expected_file_path=file_path,
+    )
     
     # Additional logging for debugging
     logger.debug(

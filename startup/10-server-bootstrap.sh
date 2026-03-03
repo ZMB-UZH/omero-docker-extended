@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 log() {
     echo "[server-bootstrap] $*"
@@ -24,15 +23,100 @@ run_omero() {
         exit 1
     fi
 
+    if [[ -n "${TMPDIR:-}" ]]; then
+        # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
+        runuser -u "${OMERO_CLI_USER}" -- env \
+            TMPDIR="${TMPDIR}" \
+            OMERO_TMPDIR="${OMERO_TMPDIR:-}" \
+            OMERO_TEMPDIR="${OMERO_TEMPDIR:-}" \
+            "${OMERO_BIN}" "$@"
+        return
+    fi
+
     runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
+}
+
+ensure_tmpdir_permissions() {
+    local requested_owner="$1"
+    local tmp_root="${OMERO_TMP_PATH:-}"
+    local expected_tmp_dir=""
+    local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
+    if [[ -z "${tmp_root}" ]]; then
+        echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
+        exit 1
+    fi
+
+    expected_tmp_dir="${tmp_root%/}/${requested_owner}/tmp"
+
+    if [[ -e "${tmp_root}" && ! -d "${tmp_root}" ]]; then
+        echo "ERROR: OMERO tmp root exists but is not a directory: ${tmp_root}" >&2
+        exit 1
+    fi
+
+    if ! mkdir -p "${expected_tmp_dir}"; then
+        echo "ERROR: Failed to create OMERO temp directory: ${expected_tmp_dir}" >&2
+        if [[ -d "${tmp_root}" ]]; then
+            ls -ld "${tmp_root}" >&2 || true
+        fi
+        echo "ERROR: Ensure OMERO_TMP_PATH is executable and writable for both OMERO.server and OMERO.web users." >&2
+        exit 1
+    fi
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${expected_tmp_dir}"
+        chmod 0777 "${expected_tmp_dir}"
+    fi
+
+    if [[ ! -d "${expected_tmp_dir}" ]]; then
+        echo "ERROR: OMERO temp directory missing after creation attempt: ${expected_tmp_dir}" >&2
+        exit 1
+    fi
+
+    if [[ ! -w "${expected_tmp_dir}" ]]; then
+        echo "ERROR: OMERO temp directory is not writable: ${expected_tmp_dir}" >&2
+        ls -ld "${expected_tmp_dir}" >&2 || true
+        exit 1
+    fi
+
+    export TMPDIR="${expected_tmp_dir}"
+    export OMERO_TEMPDIR="${expected_tmp_dir}"
+    export OMERO_TMPDIR="${expected_tmp_dir}"
+
+    local omero_py_dir="${expected_tmp_dir}/omero"
+    local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
+    
+    # CRITICAL: Always try to remove these if they exist, to prevent OMERO python from 
+    # hitting a permission error if they were left over from a previous root execution.
+    # Since expected_tmp_dir is writable (checked above), we can remove them even if owned by root.
+    rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${expected_tmp_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+
+    # Pre-emptively create the specific omero temp dirs to avoid Python locking errors.
+    mkdir -p "${omero_py_dir}" "${omero_py_user_dir}"
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${omero_py_dir}" "${omero_py_user_dir}"
+        chmod 0777 "${omero_py_dir}" "${omero_py_user_dir}"
+    fi
+
+    # Ensure legacy dir is clean / symlinked so the fallback logic in Python never triggers
+    # PermissionError on /opt/omero/server/omero/tmp
+    if [[ -d "${legacy_tmp_dir}" && ! -L "${legacy_tmp_dir}" ]]; then
+        rm -rf "${legacy_tmp_dir}" || true
+    fi
+    if [[ ! -e "${legacy_tmp_dir}" ]]; then
+        mkdir -p "$(dirname "${legacy_tmp_dir}")"
+        ln -sf "${expected_tmp_dir}" "${legacy_tmp_dir}"
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+        chown -h "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true
+    fi
+
+    log "OMERO temp directory ready: ${TMPDIR}"
 }
 
 validate_ldap_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
     fi
-
-    local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
 
     local required_non_empty=(
         "CONFIG_omero_ldap_urls"
@@ -78,7 +162,6 @@ validate_ldap_new_user_group_configuration() {
     fi
 }
 
-
 apply_ldap_runtime_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -87,14 +170,12 @@ apply_ldap_runtime_configuration() {
     local ldap_user_filter="${CONFIG_omero_ldap_user__filter:-}"
     local ldap_new_user_group="${CONFIG_omero_ldap_new__user__group:-}"
 
-    # Explicitly set LDAP properties at runtime so settings that include underscores
-    # (for example omero.ldap.new_user_group) are never lost due to env-name
-    # translation ambiguities in upstream entrypoints.
     run_omero config set omero.ldap.config true
     run_omero config set omero.ldap.urls "${CONFIG_omero_ldap_urls}"
     run_omero config set omero.ldap.username "${CONFIG_omero_ldap_username}"
     run_omero config set omero.ldap.password "${CONFIG_omero_ldap_password}"
     run_omero config set omero.ldap.base "${CONFIG_omero_ldap_base}"
+    
     if [[ -n "${CONFIG_omero_ldap_user__filter+x}" ]]; then
         run_omero config set omero.ldap.user_filter "${ldap_user_filter}"
     else
@@ -113,6 +194,7 @@ apply_ldap_runtime_configuration() {
 
     log "Applied LDAP runtime configuration from environment"
 }
+
 check_writable_dir() {
     local path="$1"
     local label="$2"
@@ -197,18 +279,17 @@ schedule_job_service_bootstrap() {
     fi
 
     (
-        set -euo pipefail
+        set -eo pipefail
         sleep 5
         for _ in $(seq 1 180); do
-            if run_omero -s localhost -p 4064 -u root -w "${root_pass}" user list >/dev/null 2>&1; then
+            if run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
                 break
             fi
             sleep 2
         done
 
-        if ! run_omero -s localhost -p 4064 -u root -w "${root_pass}" user info --user-name "${job_user}" >/dev/null 2>&1; then
-            run_omero -s localhost -p 4064 -u root -w "${root_pass}" \
-                user add "${job_user}" Job Service --group-name user -P "${job_pass}"
+        if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+            run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
         fi
     ) >>"${SERVER_LOG_DIR}/job-service-bootstrap.log" 2>&1 &
 
@@ -237,7 +318,7 @@ schedule_ldap_group_bootstrap() {
     fi
 
     (
-        set -euo pipefail
+        set -eo pipefail
         local add_output=""
         local add_exit_code=1
         local retry_limit="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRIES:-180}"
@@ -245,7 +326,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" --wait >/dev/null 2>&1; then
+            if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
                 break
             fi
             sleep "${retry_delay_seconds}"
@@ -253,7 +334,7 @@ schedule_ldap_group_bootstrap() {
 
         for attempt in $(seq 1 "${retry_limit}"); do
             set +e
-            add_output="$(run_omero -s localhost -p 4064 -u root -w "${root_pass}" group add "${ldap_group_setting}" --type=private 2>&1)"
+            add_output="$(run_omero group add "${ldap_group_setting}" --type=private -s localhost -p 4064 -u root -w "${root_pass}" 2>&1)"
             add_exit_code=$?
             set -e
 
@@ -282,13 +363,9 @@ schedule_ldap_group_bootstrap() {
     log "Scheduled background LDAP group bootstrap for static group '${ldap_group_setting}'"
 }
 
-
 install_figure_script() {
-    # Ensure OMERO.Figure PDF export script exists under OMERO.server scripts tree so it can be uploaded.
-    # The script is NOT part of the official OMERO scripts bundle.
     local figure_version="${OMERO_FIGURE_VERSION:-}"
     if [[ -z "${figure_version}" ]]; then
-        # Default chosen to match env/omeroserver.env, but keep this robust if unset.
         figure_version="7.3.0"
     fi
 
@@ -298,7 +375,6 @@ install_figure_script() {
 
     mkdir -p "${script_dir}"
 
-    # If script exists, keep it if version matches.
     if [[ -f "${script_path}" ]]; then
         local current_version="unknown"
         current_version="$(grep -Eo "__version__\s*=\s*'[^']+'" "${script_path}" 2>/dev/null | head -n 1 | sed -E "s/.*'([^']+)'.*/\1/" || true)"
@@ -314,7 +390,6 @@ install_figure_script() {
     mkdir -p "${tmp_dir}"
 
     log "Installing OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
-    # Use git if available (installed in Dockerfile). Fall back to tarball if needed.
     if command -v git >/dev/null 2>&1; then
         git clone --depth 1 --branch "v${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
             || git clone --depth 1 --branch "${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
@@ -324,7 +399,6 @@ install_figure_script() {
     if [[ -f "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
         cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
     else
-        # Tarball fallback (works even if git clone is blocked)
         local url="https://github.com/ome/omero-figure/archive/refs/tags/v${figure_version}.tar.gz"
         curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz"
         tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}"
@@ -339,7 +413,6 @@ install_figure_script() {
 
     rm -rf "${tmp_dir}"
 
-    # Ensure ownership/permissions suitable for script upload
     if [[ "$(id -u)" -eq 0 ]]; then
         chown -R "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
     fi
@@ -360,10 +433,10 @@ schedule_script_registration() {
     fi
 
     (
-        set -euo pipefail
+        set -eo pipefail
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" --wait >/dev/null 2>&1; do
+        until run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; do
             sleep 2
         done
 
@@ -373,7 +446,7 @@ schedule_script_registration() {
 
         while IFS= read -r script; do
             run_omero script upload --official --sudo root \
-                -s localhost -p 4064 -u root -w "${root_pass}" "${script}" >/dev/null 2>&1 || true
+                "${script}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 || true
         done < <(find "${scripts_dir}" -type f -name '*.py' | sort)
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
 
@@ -389,6 +462,7 @@ main() {
     check_writable_dir "${CERTS_DIR}" "OMERO certificates"
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
+    ensure_tmpdir_permissions "${OMERO_CLI_USER}"
 
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration

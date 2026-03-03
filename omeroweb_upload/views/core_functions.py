@@ -33,21 +33,20 @@ from omeroweb.decorators import login_required
 from typing import Optional
 from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
+from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
     'BlitzGateway',
     'DatasetI',
-    'DEFAULT_JOBS_DIR',
     'DEFAULT_UPLOAD_BATCH_FILES',
     'DEFAULT_UPLOAD_CLEANUP_INTERVAL',
     'DEFAULT_UPLOAD_CLEANUP_MAX_AGE',
     'DEFAULT_UPLOAD_CLEANUP_MAX_DELETE',
     'DEFAULT_UPLOAD_CLEANUP_STALE_AGE',
     'DEFAULT_UPLOAD_CONCURRENCY',
-    'DEFAULT_UPLOAD_ROOT',
     'INT_SANITIZER',
-    'JOBS_DIR_ENV',
     'JOB_ID_SANITIZER',
     'JOB_SERVICE_GROUP_ENV',
     'JOB_SERVICE_PASS_ENV',
@@ -75,7 +74,6 @@ __all__ = [
     'UPLOAD_CLEANUP_MAX_DELETE_ENV',
     'UPLOAD_CLEANUP_STALE_AGE_ENV',
     'UPLOAD_CONCURRENCY_ENV',
-    'UPLOAD_ROOT_ENV',
     '_CLEANUP_IN_PROGRESS',
     '_CLI_ID_PATTERN',
     '_DIRS_INITIALIZED',
@@ -196,10 +194,6 @@ _UPLOAD_CLEANUP_GUARD = threading.Lock()
 _LAST_UPLOAD_CLEANUP_TIME = 0.0
 _CLEANUP_IN_PROGRESS = False
 
-UPLOAD_ROOT_ENV = "OMERO_WEB_UPLOAD_DIR"
-DEFAULT_UPLOAD_ROOT = "/tmp/omero-upload-tmp"
-JOBS_DIR_ENV = "OMERO_WEB_UPLOAD_JOBS_DIR"
-DEFAULT_JOBS_DIR = "/tmp/omero_web_upload_jobs"
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
@@ -315,13 +309,11 @@ _DIRS_INITIALIZED = False
 # --------------------------------------------------------------------------
 
 def _resolve_upload_root() -> Path:
-    configured = (os.environ.get(UPLOAD_ROOT_ENV) or "").strip()
-    return Path(configured) if configured else Path(DEFAULT_UPLOAD_ROOT)
+    return resolve_upload_root()
 
 
 def _resolve_jobs_root() -> Path:
-    configured = (os.environ.get(JOBS_DIR_ENV) or "").strip()
-    return Path(configured) if configured else Path(DEFAULT_JOBS_DIR)
+    return resolve_jobs_root()
 
 
 def _ensure_parent_dir(path: Path) -> bool:
@@ -809,8 +801,8 @@ def _get_text(value_obj):
 def _get_id(obj):
     try:
         return obj._obj.id.val
-    except (AttributeError, Exception):
-        pass
+    except Exception as exc:
+        logger.debug("Falling back to getId() for object %r: %s", obj, exc)
     try:
         gid = obj.getId()
         return gid.getValue() if hasattr(gid, "getValue") else gid
@@ -827,15 +819,15 @@ def _get_owner_id(obj):
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not resolve owner via details for object %r: %s", obj, exc)
     try:
         owner = obj.getOwner()
         if owner is not None:
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not resolve owner via getOwner() for object %r: %s", obj, exc)
     return None
 
 
@@ -918,8 +910,8 @@ def _iter_accessible_projects(conn):
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Failed to read current OMERO group context: %s", exc)
     
     try:
         # Set group context to -1 to query across all groups
@@ -946,8 +938,8 @@ def _iter_accessible_projects(conn):
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to restore OMERO group context to %s: %s", current_group, exc)
     
     # Final fallback: try without cross-group querying
     try:
@@ -1127,6 +1119,21 @@ IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 
 
 def _run_omero_cli(cmd, timeout=None):
+    cli_env = os.environ.copy()
+
+    # OMERO CLI imports may need to download OMERO.java and write under the
+    # current user's cache/home. In containerized deployments HOME can resolve
+    # to a non-writable path (for example /root when running as a non-root
+    # service account), which causes import failures before OMERO is contacted.
+    # Force a deterministic writable HOME/cache rooted in the upload workspace.
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+
+    cli_env["HOME"] = str(cli_home)
+    cli_env["XDG_CACHE_HOME"] = str(cli_cache)
+
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -1134,6 +1141,7 @@ def _run_omero_cli(cmd, timeout=None):
         check=False,
         timeout=timeout,
         stdin=subprocess.DEVNULL,
+        env=cli_env,
     )
 
 
@@ -1207,8 +1215,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     if old_conn:
         try:
             old_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Failed to close stale OMERO connection before reconnect: %s", exc)
     
     try:
         client = omero.client(host=host, port=port)
@@ -1221,8 +1229,8 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             logger.error("Newly created session is invalid")
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to close invalid OMERO session during reconnect: %s", exc)
             return None
 
         return conn
@@ -1442,8 +1450,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as close_exc:
+                logger.debug("Failed to close job-service connection after connect() exception: %s", close_exc)
             return None
 
         if not ok:
@@ -1459,8 +1467,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             )
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as close_exc:
+                logger.debug("Failed to close job-service connection after failed connect(): %s", close_exc)
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -1484,8 +1492,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
     except Exception:
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as close_exc:
+            logger.debug("Failed to close job-service connection during exception cleanup: %s", close_exc)
         raise
 
 
@@ -1541,8 +1549,8 @@ def _attach_txt_to_image_service(
         finally:
             try:
                 store.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to close raw file store after attaching %s: %s", file_path, exc)
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -1594,8 +1602,8 @@ def _attach_txt_to_image_service(
         # Always close the user connection
         try:
             user_conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to close temporary user OMERO connection: %s", exc)
 
 
 def _append_job_message(job: dict, message: str):
@@ -1878,7 +1886,12 @@ def _update_job(job_id: str, update_fn):
     return _robust_update_job(job_id, update_fn)
 
 
-def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+def _classify_compatibility_output(
+    return_code: int,
+    stdout: str,
+    stderr: str,
+    expected_file_path: Optional[Path] = None,
+):
     """
     Classify OMERO import compatibility check output.
 
@@ -1901,7 +1914,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     # 1. Check stdout for actual import candidates FIRST.
     #    If Bio-Formats found importable files, the file IS compatible regardless
     #    of any warnings/errors printed to stderr.
-    has_candidates = _has_import_candidates_in_output(stdout or "")
+    has_candidates = _has_import_candidates_in_output(
+        stdout or "",
+        expected_file_path=expected_file_path,
+    )
     if has_candidates:
         return "compatible", "File format supported by OMERO"
 
@@ -1938,7 +1954,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
 
 
 
-def _has_import_candidates_in_output(output: str) -> bool:
+def _has_import_candidates_in_output(
+    output: str,
+    expected_file_path: Optional[Path] = None,
+) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
     
@@ -1950,43 +1969,29 @@ def _has_import_candidates_in_output(output: str) -> bool:
     if not output or not output.strip():
         return False
     
-    lines = output.strip().split('\n')
-    
-    # Metadata patterns to skip (these are NOT import candidates)
-    skip_patterns = [
-        "# group:",
-        "to import",
-        "file(s)",
-        "group(s)",
-        "call(s)",
-        "parsed into",
-        "setid",
-        "reader:",
-        "dry run",
-        "would import",
-    ]
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Skip empty lines
-        if not stripped:
+    candidates = _extract_import_candidates(output)
+    if not candidates:
+        return False
+
+    if expected_file_path is None:
+        return True
+
+    try:
+        expected_resolved = expected_file_path.resolve()
+    except OSError:
+        expected_resolved = expected_file_path
+
+    for candidate in candidates:
+        candidate_path = _parse_candidate_path_line(candidate)
+        if candidate_path is None:
             continue
-        
-        # Skip comment lines
-        if stripped.startswith("#"):
-            continue
-        
-        # Skip metadata lines
-        stripped_lower = stripped.lower()
-        if any(pattern in stripped_lower for pattern in skip_patterns):
-            continue
-        
-        # If we reach here, this is likely an actual file path (import candidate)
-        # Additional validation: check if it looks like a file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
+        try:
+            resolved_candidate = candidate_path.resolve()
+        except OSError:
+            resolved_candidate = candidate_path
+        if resolved_candidate == expected_resolved:
             return True
-    
+
     return False
 
 
@@ -2028,11 +2033,35 @@ def _extract_import_candidates(output: str):
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
         
-        # This looks like an actual file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
-            candidates.append(stripped)
-    
+        parsed_candidate = _parse_candidate_path_line(stripped)
+        if parsed_candidate is not None:
+            candidates.append(str(parsed_candidate))
+
     return candidates
+
+
+def _parse_candidate_path_line(line: str) -> Optional[Path]:
+    """Parse an OMERO import candidate line into a concrete path.
+
+    Returns ``None`` when the input does not look like a standalone path line.
+    """
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    unquoted = raw.strip('"').strip("'")
+    if not unquoted:
+        return None
+
+    candidate = Path(unquoted)
+    if not candidate.is_absolute():
+        return None
+
+    # Reject lines that include additional text and only keep concrete path entries.
+    if str(candidate) != unquoted:
+        return None
+
+    return candidate
 
 
 def _check_import_compatibility(
@@ -2068,8 +2097,20 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-    
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    # CRITICAL: Ensure OMERO CLI cache paths are writable.
+    # Without this, OMERO CLI may try to write to /root/.cache and crash (PermissionError),
+    # which makes compatibility_status="error" and the UI will not block imports.
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+
+    env["HOME"] = str(cli_home)
+    env["XDG_CACHE_HOME"] = str(cli_cache)
+
     try:
         result = subprocess.run(
             cmd,
@@ -2106,7 +2147,12 @@ def _check_import_compatibility(
         }
     
     # CRITICAL FIX: Classify based on stdout content, NOT return code
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    status, details = _classify_compatibility_output(
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        expected_file_path=file_path,
+    )
     
     # Additional logging for debugging
     logger.debug(
@@ -2649,8 +2695,8 @@ def _process_import_job(job_id: str):
                                         try:
                                             try:
                                                 conn.close()
-                                            except Exception:
-                                                pass
+                                            except Exception as close_exc:
+                                                logger.debug("Failed to close expired job-service connection: %s", close_exc)
                                             conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                                         except Exception:
                                             conn = None

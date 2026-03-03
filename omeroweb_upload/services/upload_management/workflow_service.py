@@ -9,9 +9,12 @@ import time
 import subprocess
 import shutil
 import re
+import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
+
+from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,12 @@ UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
 
-def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
+def _classify_compatibility_output(
+    return_code: int,
+    stdout: str,
+    stderr: str,
+    expected_file_path: Optional[Path] = None,
+):
     """
     Classify OMERO import compatibility check output.
 
@@ -42,7 +50,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
     # 1. Check stdout for actual import candidates FIRST.
     #    If Bio-Formats found importable files, the file IS compatible regardless
     #    of any warnings/errors printed to stderr.
-    has_candidates = _has_import_candidates_in_output(stdout or "")
+    has_candidates = _has_import_candidates_in_output(
+        stdout or "",
+        expected_file_path=expected_file_path,
+    )
     if has_candidates:
         return "compatible", "File format supported by OMERO"
 
@@ -81,7 +92,10 @@ def _classify_compatibility_output(return_code: int, stdout: str, stderr: str):
 
 
 
-def _has_import_candidates_in_output(output: str) -> bool:
+def _has_import_candidates_in_output(
+    output: str,
+    expected_file_path: Optional[Path] = None,
+) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
     
@@ -93,43 +107,29 @@ def _has_import_candidates_in_output(output: str) -> bool:
     if not output or not output.strip():
         return False
     
-    lines = output.strip().split('\n')
-    
-    # Metadata patterns to skip (these are NOT import candidates)
-    skip_patterns = [
-        "# group:",
-        "to import",
-        "file(s)",
-        "group(s)",
-        "call(s)",
-        "parsed into",
-        "setid",
-        "reader:",
-        "dry run",
-        "would import",
-    ]
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Skip empty lines
-        if not stripped:
+    candidates = _extract_import_candidates(output)
+    if not candidates:
+        return False
+
+    if expected_file_path is None:
+        return True
+
+    try:
+        expected_resolved = expected_file_path.resolve()
+    except OSError:
+        expected_resolved = expected_file_path
+
+    for candidate in candidates:
+        candidate_path = _parse_candidate_path_line(candidate)
+        if candidate_path is None:
             continue
-        
-        # Skip comment lines
-        if stripped.startswith("#"):
-            continue
-        
-        # Skip metadata lines
-        stripped_lower = stripped.lower()
-        if any(pattern in stripped_lower for pattern in skip_patterns):
-            continue
-        
-        # If we reach here, this is likely an actual file path (import candidate)
-        # Additional validation: check if it looks like a file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
+        try:
+            resolved_candidate = candidate_path.resolve()
+        except OSError:
+            resolved_candidate = candidate_path
+        if resolved_candidate == expected_resolved:
             return True
-    
+
     return False
 
 
@@ -173,13 +173,35 @@ def _extract_import_candidates(output: str):
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
         
-        # This looks like an actual file path
-        if '/' in stripped or '\\' in stripped or '.' in stripped:
-            candidates.append(stripped)
-    
+        parsed_candidate = _parse_candidate_path_line(stripped)
+        if parsed_candidate is not None:
+            candidates.append(str(parsed_candidate))
+
     return candidates
 
 
+def _parse_candidate_path_line(line: str) -> Optional[Path]:
+    """Parse an OMERO import candidate line into a concrete path.
+
+    Returns ``None`` when the input does not look like a standalone path line.
+    """
+    raw = (line or "").strip()
+    if not raw:
+        return None
+
+    unquoted = raw.strip('"').strip("'")
+    if not unquoted:
+        return None
+
+    candidate = Path(unquoted)
+    if not candidate.is_absolute():
+        return None
+
+    # Reject lines that include additional text and only keep concrete path entries.
+    if str(candidate) != unquoted:
+        return None
+
+    return candidate
 
 
 def _check_import_compatibility(
@@ -215,7 +237,24 @@ def _check_import_compatibility(
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    env["OMERODIR"] = f"/tmp/omero-compat-check-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    # CRITICAL: Ensure OMERO CLI cache paths are writable.
+    # Without this, OMERO CLI may try to write to /root/.cache and crash (PermissionError),
+    # which makes compatibility_status="error" and the UI will not block imports.
+    cli_home = get_plugin_tmp_dir("omeroweb-upload") / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    os.makedirs(cli_cache, exist_ok=True)
+    try:
+        os.chmod(cli_home, 0o700)
+        os.chmod(cli_cache, 0o700)
+    except Exception:
+        # Best-effort only; container/filesystem may not allow chmod.
+        pass
+
+    env["HOME"] = str(cli_home)
+    env["XDG_CACHE_HOME"] = str(cli_cache)
     
     try:
         result = subprocess.run(
@@ -252,7 +291,12 @@ def _check_import_compatibility(
         }
     
     # CRITICAL FIX: Classify based on stdout content, NOT return code
-    status, details = _classify_compatibility_output(result.returncode, result.stdout, result.stderr)
+    status, details = _classify_compatibility_output(
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        expected_file_path=file_path,
+    )
     
     # Additional logging for debugging
     logger.debug(
@@ -705,8 +749,8 @@ def _process_import_job(job_id: str):
                                         try:
                                             try:
                                                 conn.close()
-                                            except Exception:
-                                                pass
+                                            except Exception as exc:
+                                                logger.debug("Suppressed non-fatal exception in workflow_service.py", exc_info=exc)
                                             conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                                         except Exception:
                                             conn = None
