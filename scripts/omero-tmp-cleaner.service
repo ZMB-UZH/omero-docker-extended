@@ -1,0 +1,33 @@
+[Unit]
+Description=OMERO temporary artifact cleaner (OMERO_TMP_PATH)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/omero-tmp-cleaner --tmp-dir __OMERO_TMP_PATH__ --max-age-seconds 86400
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# Allow writing only to OMERO_TMP_PATH
+ReadWritePaths=__OMERO_TMP_PATH__

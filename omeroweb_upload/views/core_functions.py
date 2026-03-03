@@ -35,16 +35,13 @@ from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+from omero_plugin_common.tmp_cleanup import safe_remove_job_data
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
     'BlitzGateway',
     'DatasetI',
     'DEFAULT_UPLOAD_BATCH_FILES',
-    'DEFAULT_UPLOAD_CLEANUP_INTERVAL',
-    'DEFAULT_UPLOAD_CLEANUP_MAX_AGE',
-    'DEFAULT_UPLOAD_CLEANUP_MAX_DELETE',
-    'DEFAULT_UPLOAD_CLEANUP_STALE_AGE',
     'DEFAULT_UPLOAD_CONCURRENCY',
     'INT_SANITIZER',
     'JOB_ID_SANITIZER',
@@ -69,19 +66,12 @@ __all__ = [
     'SEM_EDX_FILEANNOTATION_NS',
     'ThreadPoolExecutor',
     'UPLOAD_BATCH_FILES_ENV',
-    'UPLOAD_CLEANUP_INTERVAL_ENV',
-    'UPLOAD_CLEANUP_MAX_AGE_ENV',
-    'UPLOAD_CLEANUP_MAX_DELETE_ENV',
-    'UPLOAD_CLEANUP_STALE_AGE_ENV',
     'UPLOAD_CONCURRENCY_ENV',
-    '_CLEANUP_IN_PROGRESS',
     '_CLI_ID_PATTERN',
     '_DIRS_INITIALIZED',
     '_IMPORT_LOCKS',
     '_IMPORT_LOCKS_GUARD',
     '_JOBS_ROOT_CACHE',
-    '_LAST_UPLOAD_CLEANUP_TIME',
-    '_UPLOAD_CLEANUP_GUARD',
     '_UPLOAD_ROOT_CACHE',
     '_append_job_error',
     '_append_job_message',
@@ -93,7 +83,6 @@ __all__ = [
     '_build_sem_edx_associations_from_entries',
     '_check_import_compatibility',
     '_classify_compatibility_output',
-    '_cleanup_upload_artifacts',
     '_collect_project_payload',
     '_compatibility_pending_entries',
     '_current_user_id',
@@ -190,23 +179,12 @@ logger = logging.getLogger(__name__)
 
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
-_UPLOAD_CLEANUP_GUARD = threading.Lock()
-_LAST_UPLOAD_CLEANUP_TIME = 0.0
-_CLEANUP_IN_PROGRESS = False
 
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
-UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
-DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
-UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
-DEFAULT_UPLOAD_CLEANUP_MAX_AGE = 12 * 60 * 60
-UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
-DEFAULT_UPLOAD_CLEANUP_STALE_AGE = 48 * 60 * 60
-UPLOAD_CLEANUP_MAX_DELETE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_DELETE"
-DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -1665,197 +1643,6 @@ def _safe_job_id(value: str) -> bool:
     return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
 
 
-def _is_within_root(path: Path, root: Path) -> bool:
-    try:
-        resolved_path = path.resolve()
-        resolved_root = root.resolve()
-    except OSError:
-        return False
-    if resolved_root == resolved_path:
-        return True
-    return resolved_root in resolved_path.parents
-
-
-def _should_run_cleanup(interval: int) -> bool:
-    global _LAST_UPLOAD_CLEANUP_TIME, _CLEANUP_IN_PROGRESS
-    now = time.time()
-    with _UPLOAD_CLEANUP_GUARD:
-        if _CLEANUP_IN_PROGRESS:
-            return False
-        if now - _LAST_UPLOAD_CLEANUP_TIME < interval:
-            return False
-        _CLEANUP_IN_PROGRESS = True
-        _LAST_UPLOAD_CLEANUP_TIME = now
-    return True
-
-
-def _safe_remove_tree(path: Path, root: Path):
-    if not path.exists():
-        return False
-    if path.is_symlink():
-        return False
-    if not _is_within_root(path, root):
-        return False
-    try:
-        for root_dir, dirnames, filenames in os.walk(path, followlinks=False):
-            for name in dirnames:
-                candidate = Path(root_dir) / name
-                if candidate.is_symlink():
-                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
-                    return False
-            for name in filenames:
-                candidate = Path(root_dir) / name
-                if candidate.is_symlink():
-                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
-                    return False
-    except OSError:
-        return False
-    try:
-        for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=False):
-            for name in filenames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.unlink()
-                except OSError:
-                    return False
-            for name in dirnames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.rmdir()
-                except OSError:
-                    return False
-        path.rmdir()
-        return True
-    except OSError:
-        return False
-
-
-def _cleanup_upload_artifacts():
-    interval = _get_env_int(
-        UPLOAD_CLEANUP_INTERVAL_ENV,
-        60,
-        10,
-        6 * 60 * 60,
-    )
-    if not _should_run_cleanup(interval):
-        return
-
-    try:
-        upload_root = _get_upload_root()
-        jobs_root = _get_jobs_root()
-        if not upload_root.exists() or not jobs_root.exists():
-            return
-
-        max_age = _get_env_int(
-            UPLOAD_CLEANUP_MAX_AGE_ENV,
-            15 * 60,
-            60,
-            14 * 24 * 60 * 60,
-        )
-        stale_age = _get_env_int(
-            UPLOAD_CLEANUP_STALE_AGE_ENV,
-            max_age,
-            max_age,
-            30 * 24 * 60 * 60,
-        )
-        max_delete = _get_env_int(
-            UPLOAD_CLEANUP_MAX_DELETE_ENV,
-            DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
-            1,
-            500,
-        )
-        now = time.time()
-
-        deleted = 0
-        seen_job_ids = set()
-
-        try:
-            for entry in os.scandir(jobs_root):
-                if deleted >= max_delete:
-                    break
-                if not entry.name.endswith(".json"):
-                    continue
-                job_id = entry.name[:-5]
-                if not _safe_job_id(job_id):
-                    continue
-                seen_job_ids.add(job_id)
-                job_path = Path(entry.path)
-
-                try:
-                    with portalocker.Lock(job_path, "r", timeout=0) as handle:
-                        try:
-                            job = json.load(handle)
-                        except json.JSONDecodeError:
-                            job = None
-                except (portalocker.exceptions.LockException, OSError):
-                    continue
-
-                job_status = job.get("status") if isinstance(job, dict) else None
-                updated = None
-                if isinstance(job, dict):
-                    updated = job.get("updated") or job.get("created")
-                if updated is None:
-                    try:
-                        updated = entry.stat(follow_symlinks=False).st_mtime
-                    except OSError:
-                        continue
-                age = now - float(updated)
-
-                should_delete = False
-                if job_status in ("done", "error") and age > max_age:
-                    should_delete = True
-                elif job_status in ("uploading", "ready", "importing") and age > stale_age:
-                    should_delete = True
-                elif job_status is None and age > stale_age:
-                    should_delete = True
-
-                if not should_delete:
-                    continue
-
-                job_dir = upload_root / job_id
-                if job_dir.exists():
-                    if not _safe_remove_tree(job_dir, upload_root):
-                        continue
-                try:
-                    job_path.unlink()
-                except OSError:
-                    continue
-                deleted += 1
-        except OSError as exc:
-            logger.warning("Upload cleanup failed while scanning jobs: %s", exc)
-
-        if deleted >= max_delete:
-            return
-
-        try:
-            for entry in os.scandir(upload_root):
-                if deleted >= max_delete:
-                    break
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-                job_id = entry.name
-                if not _safe_job_id(job_id):
-                    continue
-                if job_id in seen_job_ids:
-                    continue
-                try:
-                    mtime = entry.stat(follow_symlinks=False).st_mtime
-                except OSError:
-                    continue
-                if now - mtime <= stale_age:
-                    continue
-                job_dir = Path(entry.path)
-                if _safe_remove_tree(job_dir, upload_root):
-                    deleted += 1
-        except OSError as exc:
-            logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
-
-    finally:
-        global _CLEANUP_IN_PROGRESS
-        with _UPLOAD_CLEANUP_GUARD:
-            _CLEANUP_IN_PROGRESS = False
-
-
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
     def apply_updates(job_dict):
         entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
@@ -2906,6 +2693,12 @@ def _process_import_job(job_id: str):
                     len(job.get("messages", [])),
                 )
             _save_job(job)
+            try:
+                # Immediately delete large temporary upload payloads after successful import.
+                # Keep the job JSON so the UI can still display final status/messages.
+                safe_remove_job_data(job_id, _get_upload_root())
+            except Exception as exc:
+                logger.warning("Post-success cleanup failed for job %s: %s", job_id, exc)
         finally:
             lock.release()
             logger.info("Import thread: lock released for job %s", job_id)

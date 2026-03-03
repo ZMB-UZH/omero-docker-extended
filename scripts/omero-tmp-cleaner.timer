@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OMERO tmp cleaner periodically
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
