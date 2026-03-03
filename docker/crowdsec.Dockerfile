@@ -17,10 +17,6 @@ RUN apk update \
         ipset \
     && rm -rf /var/cache/apk/*
 
-# Create a backup of the default configuration to allow the custom entrypoint
-# to restore missing files (like hub/ and patterns/) into bind-mounted volumes.
-RUN cp -a /etc/crowdsec /etc/crowdsec.bak
-
 COPY docker/crowdsec-entrypoint.sh /usr/local/bin/custom-entrypoint.sh
 RUN chmod +x /usr/local/bin/custom-entrypoint.sh
 
