@@ -659,26 +659,10 @@ add_job_service_to_install_groups() {
     local normalized_group_list=""
     normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
     if [ -z "${normalized_group_list}" ]; then
-        echo "Skipping job-service group membership (no groups configured)."
-        return 0
+        echo "OMERO_INSTALL_GROUP_LIST is empty/commented; continuing with full group discovery for job-service membership sync."
     fi
 
-    # Extract group names (strip :permission suffix)
-    local group_names=""
-    local entry=""
-    local -a entries=()
-    IFS="," read -r -a entries <<< "${normalized_group_list}"
-    for entry in "${entries[@]}"; do
-        local name="${entry%%:*}"
-        [ -z "${name}" ] && continue
-        group_names="${group_names:+${group_names} }${name}"
-    done
-
-    if [ -z "${group_names}" ]; then
-        return 0
-    fi
-
-    echo "Adding ${job_user} to installation groups: ${group_names}..."
+    echo "Adding ${job_user} to all OMERO groups (excluding: root, system, user)..."
 
     local output=""
     local exit_code=1
@@ -693,8 +677,93 @@ add_job_service_to_install_groups() {
             -e ROOTPASS="${ROOTPASS}" \
             -e JOB_USER="${job_user}" \
             -e JOB_PASS="${job_pass}" \
-            -e GROUP_NAMES="${group_names}" \
-            omeroserver bash -c 'set -uo pipefail; resolve_omero_bin() { local c=""; for c in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${c}" ] || continue; printf "%s" "${c}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI not found"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"; if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then echo "ICE not ready"; exit 1; fi; if ! su omero-server -c "\"${OMERO_BIN}\" user info --user-name \"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then su omero-server -c "\"${OMERO_BIN}\" user add \"${JOB_USER}\" Job Service --group-name user -P \"${JOB_PASS}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null || { echo "Failed to create ${JOB_USER}"; exit 1; }; echo "Created user ${JOB_USER}"; fi; failed=0; for g in ${GROUP_NAMES}; do out="$(su omero-server -c "\"${OMERO_BIN}\" user joingroup \"${g}\" --name=\"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)" && { echo "Added ${JOB_USER} to ${g}"; continue; }; echo "${out}" | grep -qiE "already.*(member|in group)|duplicate" && { echo "${JOB_USER} already in ${g}"; continue; }; echo "WARN: joingroup ${g} failed: ${out}"; failed=1; done; exit ${failed}' 2>&1)"
+            omeroserver bash -s <<'EOS_JOB_SERVICE'
+set -uo pipefail
+
+resolve_omero_bin() {
+    local candidate=""
+    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+        [ -x "${candidate}" ] || continue
+        printf "%s" "${candidate}"
+        return 0
+    done
+    return 1
+}
+
+parse_group_names() {
+    local output_text="$1"
+    if printf '%s' "${output_text}" | grep -q '|'; then
+        printf '%s\n' "${output_text}" \
+            | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}'
+    else
+        printf '%s\n' "${output_text}" \
+            | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}'
+    fi
+}
+
+omero_user_exists() {
+    local users_out=""
+    users_out="$(su omero-server -c "\"${OMERO_BIN}\" user list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>/dev/null || true)"
+    printf '%s\n' "${users_out}" \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == ENVIRON["JOB_USER"]) found = 1} END {exit(found ? 0 : 1)}'
+}
+
+OMERO_BIN="$(resolve_omero_bin || true)"
+if [ -z "${OMERO_BIN}" ]; then
+    echo "OMERO CLI not found"
+    exit 127
+fi
+
+OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"
+if [ -z "${OMERO_TMP_PATH:-}" ]; then
+    OMERO_TMPDIR_VALUE="/tmp"
+fi
+mkdir -p "${OMERO_TMPDIR_VALUE}"
+chmod 0777 "${OMERO_TMPDIR_VALUE}" || true
+export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"
+
+if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then
+    echo "ICE not ready"
+    exit 1
+fi
+
+if ! omero_user_exists >/dev/null 2>&1; then
+    create_out="$(su omero-server -c "\"${OMERO_BIN}\" user add \"${JOB_USER}\" Job Service --group-name user -P \"${JOB_PASS}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)"
+    create_rc=$?
+    if [ "${create_rc}" -ne 0 ] && ! printf '%s' "${create_out}" | grep -qiE 'already exists|User exists|name already in use'; then
+        echo "Failed to create ${JOB_USER}: ${create_out}"
+        exit 1
+    fi
+    echo "Ensured user ${JOB_USER} exists"
+fi
+
+group_out="$(su omero-server -c "\"${OMERO_BIN}\" group list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1 || true)"
+eligible_groups="$(parse_group_names "${group_out}" | grep -v -E '^(root|system|user)$' | sort -u || true)"
+if [ -z "${eligible_groups}" ]; then
+    echo "No eligible groups found"
+    exit 1
+fi
+
+failed=0
+for group_name in ${eligible_groups}; do
+    [ -z "${group_name}" ] && continue
+    out="$(su omero-server -c "\"${OMERO_BIN}\" user joingroup \"${group_name}\" --name=\"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)" && {
+        echo "Added ${JOB_USER} to ${group_name}"
+        continue
+    }
+
+    if printf '%s' "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
+        echo "${JOB_USER} already in ${group_name}"
+        continue
+    fi
+
+    echo "WARN: joingroup ${group_name} failed: ${out}"
+    failed=1
+done
+
+exit "${failed}"
+EOS_JOB_SERVICE
+        2>&1)"
         exit_code=$?
         set -e
 
@@ -709,7 +778,7 @@ add_job_service_to_install_groups() {
     done
 
     if [ "${exit_code}" -ne 0 ]; then
-        echo "WARNING: Could not add ${job_user} to all installation groups. The hourly runtime sync will retry." >&2
+        echo "WARNING: Could not add ${job_user} to all eligible groups during installation. The hourly runtime sync will retry." >&2
         echo "WARNING: Last output: ${output}" >&2
         # Non-fatal: the background sync in 10-server-bootstrap.sh will catch up
         return 0
