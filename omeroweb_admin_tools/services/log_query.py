@@ -98,9 +98,9 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     }
 
     # Pattern 1: level keyword in square brackets or after a timestamp, e.g.
-    #   "2026-02-02 11:01:49,631 DEBUG [..."
+    #   "2026-02-02 11:01:49,631 DEBUG [... "
     #   "[INFO] some message"
-    #   "... INFO  [..."
+    #   "... INFO  [... "
     # We look for a standalone level token surrounded by whitespace, brackets,
     # or start/end of string.
     m = re.search(
@@ -163,7 +163,7 @@ def _infer_level_from_message(message: str) -> str:
         return "info"
 
     if _is_traceback_continuation(message):
-        return "debug"
+        return "error"  # CRITICAL FIX: Tracebacks are errors, not debug! Otherwise they vanish from error logs.
 
     if _is_django_template_lookup_noise(message):
         return "debug"
