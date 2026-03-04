@@ -116,7 +116,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
 
 _TRACEBACK_CONTINUATION_PREFIXES = (
     "during handling of the above exception",
-    '  file "',
+    'file "',
 )
 
 def _is_traceback_continuation(message: str) -> bool:
@@ -127,6 +127,18 @@ def _is_traceback_continuation(message: str) -> bool:
     if lowered.startswith(_TRACEBACK_CONTINUATION_PREFIXES):
         return True
     return lowered.startswith("valueerror:")
+
+
+def _is_django_template_lookup_noise(message: str) -> bool:
+    """Return True for Django template lookup diagnostics that are not runtime failures."""
+    if not message:
+        return False
+    lowered = message.strip().lower()
+    if "django.template.base.variabledoesnotexist:" not in lowered:
+        return False
+    if "failed lookup for key" not in lowered:
+        return False
+    return True
 
 def _is_redis_bloom_info(message: str) -> bool:
     """Return True for RedisBloom informational lines containing bf-error-rate."""
@@ -144,6 +156,9 @@ def _infer_level_from_message(message: str) -> str:
         return "info"
 
     if _is_traceback_continuation(message):
+        return "debug"
+
+    if _is_django_template_lookup_noise(message):
         return "debug"
 
     lowered = message.lower()

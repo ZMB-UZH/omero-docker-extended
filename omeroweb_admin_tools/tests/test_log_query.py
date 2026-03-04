@@ -106,3 +106,19 @@ def test_normalize_level_traceback_continuation_line_is_debug() -> None:
 def test_normalize_level_redis_bloom_error_rate_is_info() -> None:
     message = "1:M 04 Mar 2026 12:16:02.311 * <bf> 	{ bf-error-rate       :      0.01 }"
     assert _normalize_level("unknown", message) == "info"
+
+
+def test_normalize_level_traceback_file_line_is_debug() -> None:
+    message = (
+        '  File "/opt/omero/web/site-packages/django/core/handlers/exception.py", '
+        "line 55, in inner"
+    )
+    assert _normalize_level("", message) == "debug"
+
+
+def test_normalize_level_django_template_lookup_is_debug() -> None:
+    message = (
+        "django.template.base.VariableDoesNotExist: Failed lookup for key [name] "
+        "in <URLResolver <module 'omeroweb.webclient.urls'> (None:None) '^webclient/'>"
+    )
+    assert _normalize_level("unknown", message) == "debug"
