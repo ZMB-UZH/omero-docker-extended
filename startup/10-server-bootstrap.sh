@@ -189,6 +189,8 @@ validate_ldap_new_user_group_configuration() {
 
 validate_job_service_bootstrap_configuration() {
     local required_positive_integer_vars=(
+        "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
+        "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
         "OMERO_JOB_SERVICE_USER_ENSURE_RETRIES"
     )
 
@@ -314,6 +316,8 @@ schedule_job_service_bootstrap() {
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
     local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-10}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
+    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-300}"
+    local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-10}"
     local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
     local port="${OMERO_JOB_SERVICE_PORT:-4064}"
     local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
@@ -349,14 +353,20 @@ schedule_job_service_bootstrap() {
         # Log to file AND to container stdout (so it's visible via docker logs)
         exec > >(tee -a "${log_file}") 2>&1
 
-        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries})"
+        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait}s, poll=${poll_interval}s)"
 
         wait_for_server() {
-            if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
-                && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
-                && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
-                return 0
-            fi
+            local wait_seconds="$1"
+            local deadline=$(( $(date +%s) + wait_seconds ))
+
+            while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+                if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                    return 0
+                fi
+                sleep "${poll_interval}"
+            done
             return 1
         }
 
@@ -394,8 +404,9 @@ schedule_job_service_bootstrap() {
         }
 
         sync_once() {
-            if ! wait_for_server; then
-                echo "[$(date -u)] WARN: OMERO not ready"
+            local ready_wait="$1"
+            if ! wait_for_server "${ready_wait}"; then
+                echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s"
                 return 1
             fi
 
@@ -436,12 +447,21 @@ schedule_job_service_bootstrap() {
             return "${failed}"
         }
 
+        first_cycle=1
         while true; do
             start="$(date +%s)"
             ok=0
 
+            # First cycle: use full startup_wait so the server has time to initialize.
+            # Subsequent cycles: use a shorter window since the server should already be running.
+            if [[ "${first_cycle}" -eq 1 ]]; then
+                ready_wait="${startup_wait}"
+            else
+                ready_wait=$((poll_interval * 12))
+            fi
+
             for attempt in $(seq 1 "${max_retries}"); do
-                if sync_once; then
+                if sync_once "${ready_wait}"; then
                     ok=1
                     break
                 fi
@@ -449,9 +469,12 @@ schedule_job_service_bootstrap() {
                 if [[ "${attempt}" -lt "${max_retries}" ]]; then
                     sleep 60
                 fi
+                # After first attempt in first cycle, use shorter waits
+                ready_wait=$((poll_interval * 6))
             done
 
             [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: sync failed after ${max_retries} attempts; will wait until next interval"
+            first_cycle=0
 
             epoch_end="$(date +%s)"
             elapsed=$((epoch_end - start))
