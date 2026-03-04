@@ -18,7 +18,6 @@ from ..config import LogConfig
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass(frozen=True)
 class LogEntry:
     """Typed log entry returned from Loki."""
@@ -27,7 +26,6 @@ class LogEntry:
     container: str
     level: str
     message: str
-
 
 def _normalize_internal_service(service: str) -> str:
     """
@@ -39,7 +37,6 @@ def _normalize_internal_service(service: str) -> str:
         return service[: -len("_internal")]
     return service
 
-
 def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
     """Split a container string like 'omeroserver_internal/Blitz-0.log'."""
     if "_internal/" not in container:
@@ -48,7 +45,6 @@ def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
     if not service or not filename:
         return None
     return service, filename
-
 
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
@@ -68,12 +64,10 @@ def build_loki_query(containers: List[str]) -> str:
     selector = "|".join(re.escape(c) for c in containers)
     return f'{{compose_service=~"^({selector})$"}}'
 
-
 def _format_timestamp(value_ns: str) -> str:
     """Convert a Loki nanosecond timestamp to an ISO string."""
     timestamp = dt.datetime.fromtimestamp(int(value_ns) / 1e9, tz=dt.timezone.utc)
     return timestamp.isoformat()
-
 
 def _parse_level_from_message(message: str) -> Optional[str]:
     """Try to extract a log level from the message text.
@@ -120,11 +114,37 @@ def _parse_level_from_message(message: str) -> Optional[str]:
 
     return None
 
+_TRACEBACK_CONTINUATION_PREFIXES = (
+    "during handling of the above exception",
+    '  file "',
+)
+
+def _is_traceback_continuation(message: str) -> bool:
+    """Return True when the message is a traceback continuation line."""
+    if not message:
+        return False
+    lowered = message.strip().lower()
+    if lowered.startswith(_TRACEBACK_CONTINUATION_PREFIXES):
+        return True
+    return lowered.startswith("valueerror:")
+
+def _is_redis_bloom_info(message: str) -> bool:
+    """Return True for RedisBloom informational lines containing bf-error-rate."""
+    if not message:
+        return False
+    lowered = message.lower()
+    return "<bf>" in lowered and "bf-error-rate" in lowered
 
 def _infer_level_from_message(message: str) -> str:
     """Infer a severity when stream labels do not provide a trusted level."""
     if not message:
         return "info"
+
+    if _is_redis_bloom_info(message):
+        return "info"
+
+    if _is_traceback_continuation(message):
+        return "debug"
 
     lowered = message.lower()
 
@@ -157,7 +177,6 @@ def _infer_level_from_message(message: str) -> str:
 
     return "info"
 
-
 def _normalize_level(stream_level: str, message: str) -> str:
     """Normalize Loki stream level labels to canonical UI values."""
     aliases = {
@@ -185,7 +204,6 @@ def _normalize_level(stream_level: str, message: str) -> str:
         return trusted_level
 
     return _infer_level_from_message(message)
-
 
 def _execute_loki_query(
     config: LogConfig,
@@ -240,7 +258,6 @@ def _execute_loki_query(
 
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Loki request failed: {exc}") from exc
-
 
 def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
     """Extract LogEntry objects from a Loki query_range response payload."""
@@ -297,7 +314,6 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
                 )
             )
     return entries
-
 
 def fetch_loki_logs(
     config: LogConfig,
@@ -386,7 +402,6 @@ def fetch_loki_logs(
     )
     return result
 
-
 def _strip_message_prefix(message: str) -> str:
     """Remove duplicate timestamp/level prefixes from a log message."""
     if not message:
@@ -410,7 +425,6 @@ def _strip_message_prefix(message: str) -> str:
             return cleaned.lstrip()
     return message
 
-
 def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     """Extract the filename label for internal OMERO log streams."""
     for key in ("filename", "filepath", "__path__", "path", "file"):
@@ -419,7 +433,6 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
             return os.path.basename(value)
     return None
 
-
 def _build_internal_file_query(
     service: str, filename: str, label_key: str = "filepath"
 ) -> str:
@@ -427,7 +440,6 @@ def _build_internal_file_query(
     normalized = _normalize_internal_service(service)
     escaped = re.escape(filename)
     return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
-
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     """Limit entries per container/file to the most recent `limit` items."""
@@ -443,7 +455,6 @@ def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogE
         capped.extend(container_entries[:limit])
     return capped
 
-
 def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     """Apply a global cap on total entries, keeping the most recent ones."""
     if limit <= 0:
@@ -454,7 +465,6 @@ def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     sorted_entries = sorted(entries, key=_entry_sort_key, reverse=True)
     return sorted_entries[:limit]
 
-
 def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
     """Sort key for log entries based on timestamp."""
     try:
@@ -462,7 +472,6 @@ def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
         return int(timestamp.timestamp()), entry.timestamp
     except ValueError:
         return 0, entry.timestamp
-
 
 def fetch_internal_log_labels(
     config: LogConfig,
@@ -540,7 +549,6 @@ def fetch_internal_log_labels(
         result[:5],  # Log first 5 filenames
     )
     return result, label_key
-
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
     """Serialize LogEntry objects for JSON responses."""
