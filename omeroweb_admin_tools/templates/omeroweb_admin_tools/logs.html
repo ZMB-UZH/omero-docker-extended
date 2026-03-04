@@ -261,14 +261,12 @@
         let currentViewEntries = [];
         let loadedEntriesCount = 0;
         let shownEntriesCount = 0;
-        let renderToken = 0;
         let requestCounter = 0;
         let latestRequestId = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
         const internalLabelRefreshMs = 30000;
-        const renderChunkSize = 250;
         let internalLabelTimer = null;
 
         function setStatus(text) {
@@ -491,7 +489,6 @@
         async function loadInternalLabels(service, options = {}) {
             const state = internalState[service];
             const force = Boolean(options.force);
-            const fetchAfter = options.fetchAfter !== false;
             if (!state || state.loading || (!force && state.loaded)) {
                 return;
             }
@@ -531,9 +528,6 @@
                 renderInternalOptions(service);
                 updateInternalBadge(service);
                 persistState();
-                if (fetchAfter) {
-                    fetchLogs();
-                }
             }
         }
 
@@ -656,10 +650,6 @@
             return name;
         }
 
-        function cancelRender() {
-            renderToken += 1;
-        }
-
         function buildRowHtml(entry) {
             return `
                 <tr>
@@ -675,36 +665,21 @@
             if (!tableBody) {
                 return;
             }
-            cancelRender();
-            const token = renderToken;
-            const scrollContainer = document.querySelector('.log-table-scroll');
-            const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
             if (!entries.length) {
                 tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
                 return;
             }
-            tableBody.innerHTML = '';
-            const batch = Math.max(50, renderChunkSize);
-            let index = 0;
-
-            const appendChunk = () => {
-                if (token !== renderToken) {
-                    return;
-                }
-                const end = Math.min(index + batch, entries.length);
-                let html = '';
-                for (; index < end; index += 1) {
-                    html += buildRowHtml(entries[index]);
-                }
-                tableBody.insertAdjacentHTML('beforeend', html);
-                if (index < entries.length) {
-                    window.requestAnimationFrame(appendChunk);
-                } else if (scrollContainer && savedScrollTop > 0) {
-                    scrollContainer.scrollTop = savedScrollTop;
-                }
-            };
-
-            window.requestAnimationFrame(appendChunk);
+            
+            let html = '';
+            for (let i = 0; i < entries.length; i += 1) {
+                html += buildRowHtml(entries[i]);
+            }
+            tableBody.innerHTML = html;
+            
+            const scrollContainer = document.querySelector('.log-table-scroll');
+            if (scrollContainer) {
+                scrollContainer.scrollTop = 0;
+            }
         }
 
         function applyFilters() {
@@ -991,9 +966,8 @@
         }
 
         function refreshInternalLabels() {
-            const fetchAfter = Boolean(autoRefreshToggle?.checked);
             Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service, { force: true, fetchAfter });
+                loadInternalLabels(service, { force: true });
             });
         }
 
@@ -1006,8 +980,9 @@
 
         /* Auto-load internal labels on page load. */
         function initInternalLabels() {
-            Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service);
+            const promises = Object.keys(internalState).map((service) => loadInternalLabels(service));
+            Promise.all(promises).then(() => {
+                fetchLogs();
             });
         }
 
