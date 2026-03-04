@@ -1,10 +1,12 @@
 """
 File and path utility functions for upload management.
 """
+
 import stat
 import logging
 from pathlib import Path
 
+from omero_plugin_common.logging_utils import sanitize_log_value
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
@@ -32,20 +34,24 @@ def ensure_parent_dir(path: Path) -> bool:
             parent.mkdir(parents=True, exist_ok=True, mode=0o755)
         return True
     except Exception as e:
-        logger.error(f"Failed to create parent dir for {path}: {e}")
+        logger.error(
+            "Failed to create parent dir for %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(e),
+        )
         return False
 
 
 def initialize_directories():
     """Initialize upload and jobs directories."""
     global _UPLOAD_ROOT_CACHE, _JOBS_ROOT_CACHE, _DIRS_INITIALIZED
-    
+
     if _DIRS_INITIALIZED:
         return
-    
+
     upload_root = resolve_upload_root()
     jobs_root = resolve_jobs_root()
-    
+
     for root in (upload_root, jobs_root):
         try:
             if not root.exists():
@@ -53,8 +59,12 @@ def initialize_directories():
             else:
                 root.chmod(0o755)
         except Exception as e:
-            logger.error(f"Failed to initialize directory {root}: {e}")
-    
+            logger.error(
+                "Failed to initialize directory %s: %s",
+                sanitize_log_value(root),
+                sanitize_log_value(e),
+            )
+
     _UPLOAD_ROOT_CACHE = upload_root
     _JOBS_ROOT_CACHE = jobs_root
     _DIRS_INITIALIZED = True
@@ -83,7 +93,11 @@ def ensure_dir(path: Path) -> bool:
             path.mkdir(parents=True, exist_ok=True)
         return True
     except Exception as e:
-        logger.error(f"Failed to create directory {path}: {e}")
+        logger.error(
+            "Failed to create directory %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -96,17 +110,22 @@ def ensure_dir_with_permissions(path: Path, mode: int) -> bool:
             path.chmod(mode)
         return True
     except Exception as e:
-        logger.error(f"Failed to create/chmod directory {path}: {e}")
+        logger.error(
+            "Failed to create/chmod directory %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(e),
+        )
         return False
 
 
 def safe_relative_path(raw_name: str):
     """Sanitize filename to safe relative path."""
     import re
+
     name = raw_name.strip()
-    name = re.sub(r'[<>:"|?*]', '_', name)
-    name = re.sub(r'\.\.', '_', name)
-    name = name.lstrip('/\\')
+    name = re.sub(r'[<>:"|?*]', "_", name)
+    name = re.sub(r"\.\.", "_", name)
+    name = name.lstrip("/\\")
     return name if name else "unnamed"
 
 
@@ -122,11 +141,18 @@ def is_within_root(path: Path, root: Path) -> bool:
 def safe_remove_tree(path: Path, root: Path):
     """Safely remove directory tree if within root."""
     import shutil
+
     if not is_within_root(path, root):
-        logger.error(f"Path {path} is outside root {root}")
+        logger.error(
+            "Path %s is outside root %s",
+            sanitize_log_value(path),
+            sanitize_log_value(root),
+        )
         return
     try:
         if path.exists() and path.is_dir():
             shutil.rmtree(path)
     except Exception as e:
-        logger.error(f"Failed to remove {path}: {e}")
+        logger.error(
+            "Failed to remove %s: %s", sanitize_log_value(path), sanitize_log_value(e)
+        )
