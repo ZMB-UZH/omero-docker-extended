@@ -6,6 +6,8 @@ import time
 from math import ceil
 
 from django.core.cache import cache
+from omero_plugin_common.logging_utils import sanitize_log_value
+
 try:
     from django.core.cache.backends.dummy import DummyCache
 except Exception:  # pragma: no cover - fallback for unexpected cache setups
@@ -27,69 +29,71 @@ _CACHE_PREFIX = "omp_rate_limit"
 # Thread-safe implementation using threading.Lock
 # ============================================================================
 
+
 class InMemoryCache:
     """
     Thread-safe in-memory cache as fallback when Django cache is not configured.
-    
+
     This is more reliable and faster than file-based caching, and automatically
     handles cleanup of expired entries.
     """
-    
+
     def __init__(self):
         self._store = {}
         self._lock = threading.Lock()
         self._last_cleanup = time.time()
         self._cleanup_interval = 60  # Clean up expired entries every 60 seconds
-    
+
     def _cleanup_expired(self):
         """Remove expired entries to prevent memory bloat."""
         now = time.time()
-        
+
         # Only clean up periodically to avoid overhead
         if now - self._last_cleanup < self._cleanup_interval:
             return
-        
+
         expired_keys = [
-            key for key, (expires_at, _) in self._store.items()
+            key
+            for key, (expires_at, _) in self._store.items()
             if expires_at is not None and now > expires_at
         ]
-        
+
         for key in expired_keys:
             del self._store[key]
-        
+
         self._last_cleanup = now
-        
+
         if expired_keys:
-            logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
-    
+            logger.debug("Cleaned up %s expired cache entries", len(expired_keys))
+
     def get(self, key):
         """Get a value from cache, returns None if not found or expired."""
         with self._lock:
             self._cleanup_expired()
-            
+
             if key not in self._store:
                 return None
-            
+
             expires_at, value = self._store[key]
-            
+
             # Check if expired
             if expires_at is not None and time.time() > expires_at:
                 del self._store[key]
                 return None
-            
+
             return value
-    
+
     def set(self, key, value, timeout=None):
         """Set a value in cache with optional timeout in seconds."""
         with self._lock:
             expires_at = time.time() + timeout if timeout else None
             self._store[key] = (expires_at, value)
-            
+
             # Periodic cleanup
             self._cleanup_expired()
-            
+
             return True
-    
+
     def delete(self, key):
         """Delete a key from cache."""
         with self._lock:
@@ -97,7 +101,7 @@ class InMemoryCache:
                 del self._store[key]
                 return True
             return False
-    
+
     def clear(self):
         """Clear all cache entries."""
         with self._lock:
@@ -116,7 +120,7 @@ def _is_dummy_cache():
 
 def _cache_get(key):
     """
-    Get value from cache, using Django cache if available, 
+    Get value from cache, using Django cache if available,
     otherwise fall back to in-memory cache.
     """
     if _is_dummy_cache():
@@ -152,18 +156,18 @@ def _get_user_key(request, conn=None):
     """
     Generate a unique, collision-resistant cache key for rate limiting.
     ALL major actions share the SAME rate limit counter.
-    
+
     Priority order:
     1. OMERO connection username (most reliable)
     2. Django authenticated user
     3. IP address (fallback for anonymous users)
-    
+
     Returns:
         str: Cache key in format "omp_rate_limit:{type}:{identifier}"
     """
     identifier = None
     key_type = "ip"  # Default type
-    
+
     # Try to get OMERO username first (most reliable)
     if conn is not None:
         try:
@@ -175,7 +179,7 @@ def _get_user_key(request, conn=None):
                     identifier = username.strip()
                     key_type = "omero"
         except Exception as e:
-            logger.debug(f"Could not get OMERO user: {e}")
+            logger.debug("Could not get OMERO user: %s", sanitize_log_value(e))
             identifier = None
 
     # Fall back to Django authenticated user
@@ -208,15 +212,15 @@ def _get_user_key(request, conn=None):
 def build_rate_limit_message(remaining_seconds):
     """
     Build a user-friendly rate limit error message.
-    
+
     Args:
         remaining_seconds: Time until the user can make requests again
-        
+
     Returns:
         str: Formatted error message
     """
     remaining = max(0, int(ceil(remaining_seconds)))
-    
+
     if remaining > 60:
         minutes = remaining // 60
         seconds = remaining % 60
@@ -234,66 +238,71 @@ def build_rate_limit_message(remaining_seconds):
 def check_major_action_rate_limit(request, conn=None):
     """
     Check if the user has exceeded the rate limit for major actions.
-    
+
     This function implements a sliding window rate limiter:
     - Tracks timestamps of recent actions
     - Allows up to MAJOR_ACTION_LIMIT actions per MAJOR_ACTION_WINDOW_SECONDS
     - Blocks users for MAJOR_ACTION_BLOCK_SECONDS when limit is exceeded
-    
+
     ALL major actions (save, delete, preview) share the SAME counter.
-    
+
     Args:
         request: Django HttpRequest object
         conn: Optional OMERO connection object
-        
+
     Returns:
         tuple: (allowed: bool, remaining_seconds: float or None)
             - If allowed=True: User can proceed, remaining_seconds=None
             - If allowed=False: User is blocked, remaining_seconds=time until unblock
-    
+
     Thread-safety: Uses cache operations which are atomic. In-memory fallback
     uses threading.Lock for thread safety.
     """
     now = time.time()
     key = _get_user_key(request, conn=conn)
-    
-    logger.info(f"[RATE_LIMIT] Checking for key: {key}")
-    
+
+    safe_key = sanitize_log_value(key)
+    logger.info("[RATE_LIMIT] Checking for key: %s", safe_key)
+
     try:
         # Get current state from cache
         data = _cache_get(key) or {}
         actions = data.get("actions", [])
-        
+
         # Validate and clean actions list
         if not isinstance(actions, list):
             actions = []
-        
+
         # Remove actions outside the time window (sliding window algorithm)
         actions = [
             ts
             for ts in actions
-            if isinstance(ts, (int, float))
-            and now - ts <= MAJOR_ACTION_WINDOW_SECONDS
+            if isinstance(ts, (int, float)) and now - ts <= MAJOR_ACTION_WINDOW_SECONDS
         ]
-        
+
         # Get blocked status
         blocked_until = data.get("blocked_until", 0)
         if not isinstance(blocked_until, (int, float)):
             blocked_until = 0
 
-        
         logger.info(
-            f"[RATE_LIMIT] Current state: {len(actions)} actions in window, "
-            f"blocked_until={blocked_until:.2f}, now={now:.2f}"
+            "[RATE_LIMIT] Current state for %s: %s actions in window, "
+            "blocked_until=%.2f, now=%.2f",
+            safe_key,
+            len(actions),
+            blocked_until,
+            now,
         )
 
         # Check if user is currently in a blocked state
         if now < blocked_until:
             remaining = blocked_until - now
             logger.warning(
-                f"[RATE_LIMIT] BLOCKED: {key} blocked for {remaining:.1f} more seconds"
+                "[RATE_LIMIT] BLOCKED: %s blocked for %.1f more seconds",
+                safe_key,
+                remaining,
             )
-            
+
             # Update cache to maintain blocked state (but don't add action)
             _cache_set(
                 key,
@@ -304,21 +313,27 @@ def check_major_action_rate_limit(request, conn=None):
 
         # Add the current action FIRST, then check limit
         actions.append(now)
-        
-        logger.info(f"[RATE_LIMIT] After adding action: {len(actions)} total actions")
-        
+
+        logger.info(
+            "[RATE_LIMIT] After adding action for %s: %s total actions",
+            safe_key,
+            len(actions),
+        )
+
         # Check if we've now exceeded the limit (after adding current action)
         if len(actions) > MAJOR_ACTION_LIMIT:
             # User has exceeded the limit - block them
             blocked_until = now + MAJOR_ACTION_BLOCK_SECONDS
             remaining = MAJOR_ACTION_BLOCK_SECONDS
-            
+
             logger.warning(
-                f"[RATE_LIMIT] LIMIT EXCEEDED for {key}! "
-                f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT}. "
-                f"Blocking for {remaining:.0f}s"
+                "[RATE_LIMIT] LIMIT EXCEEDED for %s! Actions: %s/%s. Blocking for %.0fs",
+                safe_key,
+                len(actions),
+                MAJOR_ACTION_LIMIT,
+                remaining,
             )
-            
+
             # Save blocked state
             _cache_set(
                 key,
@@ -329,11 +344,13 @@ def check_major_action_rate_limit(request, conn=None):
 
         # User is within limits - allow the action
         logger.info(
-            f"[RATE_LIMIT] OK: {key} allowed. "
-            f"Actions: {len(actions)}/{MAJOR_ACTION_LIMIT} "
-            f"({MAJOR_ACTION_LIMIT - len(actions)} remaining)"
+            "[RATE_LIMIT] OK: %s allowed. Actions: %s/%s (%s remaining)",
+            safe_key,
+            len(actions),
+            MAJOR_ACTION_LIMIT,
+            MAJOR_ACTION_LIMIT - len(actions),
         )
-        
+
         # Save updated state
         _cache_set(
             key,
@@ -341,42 +358,46 @@ def check_major_action_rate_limit(request, conn=None):
             timeout=_cache_timeout_seconds(),
         )
         return True, None
-        
+
     except Exception as exc:
         # Log the error but fail closed (block on error for security)
-        logger.exception(f"[RATE_LIMIT] ERROR: Rate limit check failed for {key}: {exc}")
+        logger.exception(
+            "[RATE_LIMIT] ERROR: Rate limit check failed for %s: %s",
+            safe_key,
+            sanitize_log_value(exc),
+        )
         return False, MAJOR_ACTION_BLOCK_SECONDS
 
 
 def reset_rate_limit(request, conn=None):
     """
     Reset rate limit for a specific user (admin function).
-    
+
     Args:
         request: Django HttpRequest object
         conn: Optional OMERO connection object
-        
+
     Returns:
         bool: True if reset successful, False otherwise
     """
     try:
         key = _get_user_key(request, conn=conn)
         _cache_delete(key)
-        logger.info(f"Rate limit reset for {key}")
+        logger.info("Rate limit reset for %s", sanitize_log_value(key))
         return True
     except Exception as exc:
-        logger.exception(f"Failed to reset rate limit: {exc}")
+        logger.exception("Failed to reset rate limit: %s", sanitize_log_value(exc))
         return False
 
 
 def get_rate_limit_status(request, conn=None):
     """
     Get current rate limit status for a user (debugging/monitoring function).
-    
+
     Args:
         request: Django HttpRequest object
         conn: Optional OMERO connection object
-        
+
     Returns:
         dict: Status information including actions count and blocked status
     """
@@ -385,24 +406,24 @@ def get_rate_limit_status(request, conn=None):
         key = _get_user_key(request, conn=conn)
         data = _cache_get(key) or {}
         actions = data.get("actions", [])
-        
+
         if not isinstance(actions, list):
             actions = []
-        
+
         # Filter to current window
         actions = [
-            ts for ts in actions
-            if isinstance(ts, (int, float))
-            and now - ts <= MAJOR_ACTION_WINDOW_SECONDS
+            ts
+            for ts in actions
+            if isinstance(ts, (int, float)) and now - ts <= MAJOR_ACTION_WINDOW_SECONDS
         ]
-        
+
         blocked_until = data.get("blocked_until", 0)
         if not isinstance(blocked_until, (int, float)):
             blocked_until = 0
-        
+
         is_blocked = now < blocked_until
         remaining = max(0, blocked_until - now) if is_blocked else 0
-        
+
         return {
             "key": key,
             "actions_count": len(actions),
@@ -414,5 +435,5 @@ def get_rate_limit_status(request, conn=None):
             "remaining_block_time": remaining if is_blocked else 0,
         }
     except Exception as exc:
-        logger.exception(f"Failed to get rate limit status: {exc}")
+        logger.exception("Failed to get rate limit status: %s", sanitize_log_value(exc))
         return {"error": str(exc)}

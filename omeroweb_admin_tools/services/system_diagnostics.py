@@ -14,6 +14,8 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import urllib.error
 import urllib.request
 
+from omero_plugin_common.logging_utils import sanitize_log_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -503,7 +505,9 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             "checks": [asdict(item) for item in checks],
         }
     except Exception as exc:
-        logger.exception(f"Exception running diagnostic script {script_id}")
+        logger.exception(
+            "Exception running diagnostic script %s", sanitize_log_value(script_id)
+        )
         return {
             "script_id": script_id,
             "status": "fail",
