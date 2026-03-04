@@ -4,6 +4,31 @@ log() {
     echo "[server-bootstrap] $*"
 }
 
+require_positive_integer_env_var() {
+    local var_name="$1"
+    local value="${!var_name-}"
+
+    if [[ -z "${value+x}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is not set." >&2
+        exit 1
+    fi
+
+    if [[ -z "${value}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is empty." >&2
+        exit 1
+    fi
+
+    if ! [[ "${value}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Required environment variable '${var_name}' must be a positive integer, got '${value}'." >&2
+        exit 1
+    fi
+
+    if (( value <= 0 )); then
+        echo "ERROR: Required environment variable '${var_name}' must be greater than 0, got '${value}'." >&2
+        exit 1
+    fi
+}
+
 OMERO_DIR="${OMERO_DIR:-/OMERO}"
 CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
 SERVER_HOME="/opt/omero/server/OMERO.server"
@@ -162,6 +187,19 @@ validate_ldap_new_user_group_configuration() {
     fi
 }
 
+validate_job_service_bootstrap_configuration() {
+    local required_positive_integer_vars=(
+        "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
+        "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
+        "OMERO_JOB_SERVICE_USER_ENSURE_RETRIES"
+    )
+
+    local var_name
+    for var_name in "${required_positive_integer_vars[@]}"; do
+        require_positive_integer_env_var "${var_name}"
+    done
+}
+
 apply_ldap_runtime_configuration() {
     if [[ "${CONFIG_omero_ldap_config:-false}" != "true" ]]; then
         return
@@ -276,11 +314,11 @@ schedule_job_service_bootstrap() {
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
     local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
-    local startup_wait_seconds="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-1200}"
-    local readiness_poll_seconds="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-5}"
+    local startup_wait_seconds="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS}"
+    local readiness_poll_seconds="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS}"
     local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
     local port="${OMERO_JOB_SERVICE_PORT:-4064}"
-    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES}"
     local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
     local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
@@ -620,6 +658,7 @@ main() {
 
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
+    validate_job_service_bootstrap_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
