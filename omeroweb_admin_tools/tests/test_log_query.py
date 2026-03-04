@@ -11,21 +11,17 @@ from omeroweb_admin_tools.services.log_query import (
     build_loki_query,
 )
 
-
 def test_build_loki_query_requires_containers() -> None:
     with pytest.raises(ValueError):
         build_loki_query([])
-
 
 def test_build_loki_query_builds_regex() -> None:
     query = build_loki_query(["omeroserver", "omeroweb"])
     assert query == '{compose_service=~"^(omeroserver|omeroweb)$"}'
 
-
 def test_strip_message_prefix_removes_timestamp_and_level() -> None:
     message = "2026-02-02 14:52:58,266 INFO [omero.util] Started server"
     assert _strip_message_prefix(message) == "[omero.util] Started server"
-
 
 def test_cap_entries_per_container_keeps_most_recent() -> None:
     entries = [
@@ -52,14 +48,12 @@ def test_cap_entries_per_container_keeps_most_recent() -> None:
     capped = _cap_entries_per_container(entries, 1)
     assert {entry.message for entry in capped} == {"two", "other"}
 
-
 def test_build_internal_file_query_uses_filepath_label() -> None:
     query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log")
     assert (
         query
         == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)Blitz\\-0\\.log$"}'
     )
-
 
 def test_build_internal_file_query_handles_filename_label() -> None:
     query = _build_internal_file_query(
@@ -69,7 +63,6 @@ def test_build_internal_file_query_handles_filename_label() -> None:
         query
         == '{compose_service="omeroserver", log_type="internal", filename=~"(^|.*/)Blitz\\-0\\.log$"}'
     )
-
 
 def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
     entries = [
@@ -95,15 +88,21 @@ def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
     capped = _cap_entries_per_container(entries, 2)
     assert len(capped) == 3
 
-
-
 def test_normalize_level_maps_unknown_to_info() -> None:
     assert _normalize_level("unknown", "job-service sync loop starting") == "info"
-
 
 def test_normalize_level_uses_error_keywords() -> None:
     assert _normalize_level("unknown", "Failed to ensure job-service exists") == "error"
 
-
 def test_normalize_level_uses_fatal_traceback_detection() -> None:
     assert _normalize_level("", "Traceback (most recent call last):") == "fatal"
+
+def test_normalize_level_traceback_continuation_line_is_debug() -> None:
+    assert (
+        _normalize_level("", "During handling of the above exception, another exception occurred:")
+        == "debug"
+    )
+
+def test_normalize_level_redis_bloom_error_rate_is_info() -> None:
+    message = "1:M 04 Mar 2026 12:16:02.311 * <bf> 	{ bf-error-rate       :      0.01 }"
+    assert _normalize_level("unknown", message) == "info"
