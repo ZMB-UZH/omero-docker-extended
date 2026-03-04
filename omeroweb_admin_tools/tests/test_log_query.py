@@ -6,6 +6,7 @@ from omeroweb_admin_tools.services.log_query import (
     LogEntry,
     _build_internal_file_query,
     _cap_entries_per_container,
+    _normalize_level,
     _strip_message_prefix,
     build_loki_query,
 )
@@ -94,3 +95,15 @@ def test_cap_entries_per_container_does_not_apply_global_cap() -> None:
     capped = _cap_entries_per_container(entries, 2)
     assert len(capped) == 3
 
+
+
+def test_normalize_level_maps_unknown_to_info() -> None:
+    assert _normalize_level("unknown", "job-service sync loop starting") == "info"
+
+
+def test_normalize_level_uses_error_keywords() -> None:
+    assert _normalize_level("unknown", "Failed to ensure job-service exists") == "error"
+
+
+def test_normalize_level_uses_fatal_traceback_detection() -> None:
+    assert _normalize_level("", "Traceback (most recent call last):") == "fatal"
