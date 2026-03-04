@@ -1,7 +1,10 @@
 """
 OMERO image collection and retrieval services.
 """
+
 import logging
+from omero_plugin_common.logging_utils import sanitize_log_value
+
 from ...utils.omero_helpers import get_id, get_text, is_owned_by_user
 
 logger = logging.getLogger(__name__)
@@ -59,7 +62,7 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
         if prj is None:
             return out
 
-        for ds in prj.listChildren():   # dataset order preserved
+        for ds in prj.listChildren():  # dataset order preserved
             if not is_owned_by_user(ds, owner_id):
                 continue
             imgs = list(ds.listChildren())
@@ -84,7 +87,9 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
     return out
 
 
-def collect_images_by_selected_datasets(conn, project_id, dataset_ids, limit=None, owner_id=None):
+def collect_images_by_selected_datasets(
+    conn, project_id, dataset_ids, limit=None, owner_id=None
+):
     """
     Returns:
         [(dataset_obj, [image_obj_sorted_by_ID]), ...]
@@ -168,8 +173,16 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                     if orig_file:
                                         fmt = orig_file.getFormat()
                                         if fmt:
-                                            fmt_val = fmt.getValue() if hasattr(fmt, "getValue") else get_text(fmt)
-                                            if fmt_val and fmt_val not in ["text/plain", "Directory", "Companion/Unknown"]:
+                                            fmt_val = (
+                                                fmt.getValue()
+                                                if hasattr(fmt, "getValue")
+                                                else get_text(fmt)
+                                            )
+                                            if fmt_val and fmt_val not in [
+                                                "text/plain",
+                                                "Directory",
+                                                "Companion/Unknown",
+                                            ]:
                                                 fmt_val = fmt_val.strip()
                                                 if "/" in fmt_val:
                                                     fmt_val = fmt_val.split("/")[-1]
@@ -201,10 +214,15 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                 except Exception:
                                     continue
                     except Exception as exc:
-                        logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
+                        logger.debug(
+                            "Suppressed non-fatal exception in image_service.py",
+                            exc_info=exc,
+                        )
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
-        
+                logger.debug(
+                    "Suppressed non-fatal exception in image_service.py", exc_info=exc
+                )
+
         # METHOD 2: Extract from original filename extension
         if hasattr(img, "getFileset"):
             try:
@@ -218,7 +236,11 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                 if orig_file:
                                     orig_name = orig_file.getName()
                                     if orig_name:
-                                        name_str = orig_name.getValue() if hasattr(orig_name, "getValue") else str(orig_name)
+                                        name_str = (
+                                            orig_name.getValue()
+                                            if hasattr(orig_name, "getValue")
+                                            else str(orig_name)
+                                        )
                                         if name_str and "." in name_str:
                                             # Handle compound extensions like .ome.tiff
                                             parts = name_str.lower().split(".")
@@ -251,13 +273,19 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                             except Exception:
                                 continue
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
-        
+                logger.debug(
+                    "Suppressed non-fatal exception in image_service.py", exc_info=exc
+                )
+
         # METHOD 3: Fallback to image name extension
         if hasattr(img, "getName"):
             try:
                 img_name = img.getName()
-                name_str = img_name.getValue() if hasattr(img_name, "getValue") else get_text(img_name)
+                name_str = (
+                    img_name.getValue()
+                    if hasattr(img_name, "getValue")
+                    else get_text(img_name)
+                )
                 if name_str and "." in name_str:
                     parts = name_str.lower().split(".")
                     if len(parts) >= 3 and parts[-2] == "ome":
@@ -266,8 +294,10 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                     if ext and len(ext) <= 10:
                         return ext
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in image_service.py", exc_info=exc)
-        
+                logger.debug(
+                    "Suppressed non-fatal exception in image_service.py", exc_info=exc
+                )
+
         return "Unknown"
 
     try:
@@ -294,16 +324,18 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                     if fmt_name and fmt_name != "Unknown":
                         format_names.add(fmt_name)
                 except Exception as e:
-                    logger.debug(f"Error getting format for image {get_id(img)}: {e}")
+                    logger.debug(
+                        "Error getting format for image %s: %s",
+                        sanitize_log_value(get_id(img)),
+                        sanitize_log_value(e),
+                    )
                     continue
-            
+
             # If no formats detected, mark as Unknown
             if not format_names:
                 format_names.add("Unknown")
 
-            format_list = ", ".join(
-                sorted(format_names, key=lambda name: name.lower())
-            )
+            format_list = ", ".join(sorted(format_names, key=lambda name: name.lower()))
 
             summaries.append(
                 {
