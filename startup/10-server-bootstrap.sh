@@ -272,6 +272,7 @@ schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
     local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
     local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
@@ -283,6 +284,11 @@ schedule_job_service_bootstrap() {
         return
     fi
 
+    if [[ "${join_all}" != "1" ]]; then
+        log "Skipping job-service group sync (OMERO_JOB_SERVICE_JOIN_ALL_GROUPS != 1)."
+        return
+    fi
+
     (
         set -u -o pipefail
         umask 077
@@ -290,7 +296,6 @@ schedule_job_service_bootstrap() {
 
         # Prevent duplicate loops
         if [[ -f "${pidfile}" ]]; then
-            local oldpid=""
             oldpid="$(cat "${pidfile}" 2>/dev/null || true)"
             if [[ -n "${oldpid}" ]] && kill -0 "${oldpid}" 2>/dev/null; then
                 echo "[$(date -u)] job-service sync already running (pid=${oldpid}); exiting"
@@ -306,8 +311,8 @@ schedule_job_service_bootstrap() {
         echo "[$(date -u)] job-service sync loop starting (interval=${interval}s, retries=${max_retries})"
 
         wait_for_server() {
-            local i
-            for i in $(seq 1 60); do
+            local _attempt
+            for _attempt in $(seq 1 60); do
                 if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
@@ -330,7 +335,7 @@ schedule_job_service_bootstrap() {
             # Parse both "pipe table" and "whitespace table" formats
             if printf "%s" "${out}" | grep -q '|'; then
                 printf "%s\n" "${out}" \
-                  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
+                  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
                   | sort -u
             else
                 printf "%s\n" "${out}" \
@@ -383,7 +388,6 @@ schedule_job_service_bootstrap() {
         }
 
         while true; do
-            local start epoch_end elapsed sleep_for attempt ok jitter
             start="$(date +%s)"
             ok=0
 
@@ -413,7 +417,7 @@ schedule_job_service_bootstrap() {
             sleep $((sleep_for + jitter))
         done
     ) &
-    log "Scheduled background job-service bootstrap + hourly sync (interval=${interval}s)"
+    log "Scheduled background job-service bootstrap + hourly group sync (interval=${interval}s)"
 }
 
 schedule_ldap_group_bootstrap() {
