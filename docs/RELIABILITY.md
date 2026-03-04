@@ -6,7 +6,7 @@ Practices and invariants that keep the platform running predictably.
 
 - All startup scripts (`startup/*.sh`) run sequentially before the main process starts.
 - Scripts fail fast with descriptive error messages when required environment variables or paths are missing.
-- `10-server-bootstrap.sh` validates writable directories, explicitly prepares the OMERO CLI temp namespace (`${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`) before any OMERO CLI call, and attempts legacy OMERO lock-file temp-path preparation with warning-only fallback to `TMPDIR`, then configures certificates and schedules async operations (job-service user creation, script registration) that do not block server startup.
+- `10-server-bootstrap.sh` validates writable directories, auto-detects the OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares the OMERO CLI temp namespace (`${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`) before any OMERO CLI call, and attempts legacy OMERO lock-file temp-path preparation with warning-only fallback to `TMPDIR`, then configures certificates and schedules async operations (job-service user creation, script registration) that do not block server startup.
 - `10-web-bootstrap.sh` validates and repairs the OMERO.web `var/` runtime layout (including `var/omero/tmp` permissions and `var/django_secret_key` generation when missing), validates log directory write access, and configures Docker socket permissions before supervisord starts.
 - Bootstrap scripts are idempotent: re-running after a restart produces the same result.
 
