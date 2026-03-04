@@ -491,6 +491,7 @@
         async function loadInternalLabels(service, options = {}) {
             const state = internalState[service];
             const force = Boolean(options.force);
+            const fetchAfter = options.fetchAfter !== false;
             if (!state || state.loading || (!force && state.loaded)) {
                 return;
             }
@@ -530,7 +531,9 @@
                 renderInternalOptions(service);
                 updateInternalBadge(service);
                 persistState();
-                fetchLogs();
+                if (fetchAfter) {
+                    fetchLogs();
+                }
             }
         }
 
@@ -674,6 +677,8 @@
             }
             cancelRender();
             const token = renderToken;
+            const scrollContainer = document.querySelector('.log-table-scroll');
+            const savedScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
             if (!entries.length) {
                 tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
                 return;
@@ -694,6 +699,8 @@
                 tableBody.insertAdjacentHTML('beforeend', html);
                 if (index < entries.length) {
                     window.requestAnimationFrame(appendChunk);
+                } else if (scrollContainer && savedScrollTop > 0) {
+                    scrollContainer.scrollTop = savedScrollTop;
                 }
             };
 
@@ -984,8 +991,9 @@
         }
 
         function refreshInternalLabels() {
+            const fetchAfter = Boolean(autoRefreshToggle?.checked);
             Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service, { force: true });
+                loadInternalLabels(service, { force: true, fetchAfter });
             });
         }
 
