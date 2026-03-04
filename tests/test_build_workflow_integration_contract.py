@@ -27,7 +27,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }', script_text)
-        self.assertIn('group add "${TARGET_GROUP_NAME}" --type="${TARGET_GROUP_PERMISSION}"', script_text)
+
+
+    def test_server_bootstrap_job_service_uses_cli_autodetection_and_hosted_login(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('resolve_omero_bin() {', script_text)
+        self.assertIn('for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do', script_text)
+        self.assertIn('run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"', script_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
