@@ -189,14 +189,14 @@ validate_ldap_new_user_group_configuration() {
 
 validate_job_service_bootstrap_configuration() {
     local required_positive_integer_vars=(
-        "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
-        "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
         "OMERO_JOB_SERVICE_USER_ENSURE_RETRIES"
     )
 
     local var_name
     for var_name in "${required_positive_integer_vars[@]}"; do
-        require_positive_integer_env_var "${var_name}"
+        if [[ -n "${!var_name-}" ]]; then
+            require_positive_integer_env_var "${var_name}"
+        fi
     done
 }
 
@@ -312,13 +312,11 @@ schedule_job_service_bootstrap() {
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
     local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
-    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
+    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-10}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
-    local startup_wait_seconds="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS}"
-    local readiness_poll_seconds="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS}"
     local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
     local port="${OMERO_JOB_SERVICE_PORT:-4064}"
-    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
     local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
     local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
@@ -351,23 +349,14 @@ schedule_job_service_bootstrap() {
         # Log to file AND to container stdout (so it's visible via docker logs)
         exec > >(tee -a "${log_file}") 2>&1
 
-        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait_seconds}s)"
+        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries})"
 
         wait_for_server() {
-            local timeout_seconds="$1"
-            local deadline=0
-            deadline=$(( $(date +%s) + timeout_seconds ))
-
-            while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-                if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
-                    && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
-                    && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
-                    return 0
-                fi
-
-                sleep "${readiness_poll_seconds}"
-            done
-
+            if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                return 0
+            fi
             return 1
         }
 
@@ -405,14 +394,8 @@ schedule_job_service_bootstrap() {
         }
 
         sync_once() {
-            local current_attempt="$1"
-            local ready_wait="${startup_wait_seconds}"
-            if [[ "${first_cycle:-1}" -ne 1 ]]; then
-                ready_wait=$((readiness_poll_seconds * 12))
-            fi
-
-            if ! wait_for_server "${ready_wait}"; then
-                echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s; skipping this sync interval"
+            if ! wait_for_server; then
+                echo "[$(date -u)] WARN: OMERO not ready"
                 return 1
             fi
 
@@ -456,21 +439,19 @@ schedule_job_service_bootstrap() {
         while true; do
             start="$(date +%s)"
             ok=0
-            first_cycle="${first_cycle:-1}"
 
             for attempt in $(seq 1 "${max_retries}"); do
-                if sync_once "${attempt}"; then
+                if sync_once; then
                     ok=1
                     break
                 fi
-                echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} failed"
+                echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} failed; retrying in 60s"
                 if [[ "${attempt}" -lt "${max_retries}" ]]; then
-                    sleep $((20 * attempt))   # 20s, 40s between retries
+                    sleep 60
                 fi
             done
 
             [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: sync failed after ${max_retries} attempts; will wait until next interval"
-            first_cycle=0
 
             epoch_end="$(date +%s)"
             elapsed=$((epoch_end - start))
