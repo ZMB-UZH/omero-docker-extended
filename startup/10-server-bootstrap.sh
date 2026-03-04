@@ -272,7 +272,11 @@ schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
     local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
-    local sync_interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
+    local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
+    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
+    local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
+    local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
+    local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
     if [[ -z "${root_pass}" || -z "${job_pass}" ]]; then
         log "Skipping job-service bootstrap (ROOTPASS or OMERO_JOB_SERVICE_PASS missing)."
@@ -280,46 +284,136 @@ schedule_job_service_bootstrap() {
     fi
 
     (
-        set -eo pipefail
-        sleep 5
-        
-        # 1. Wait for OMERO
-        for _ in $(seq 1 180); do
-            if run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 2
-        done
+        set -u -o pipefail
+        umask 077
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
 
-        # 2. Infinite loop to keep job-service synced
+        # Prevent duplicate loops
+        if [[ -f "${pidfile}" ]]; then
+            local oldpid=""
+            oldpid="$(cat "${pidfile}" 2>/dev/null || true)"
+            if [[ -n "${oldpid}" ]] && kill -0 "${oldpid}" 2>/dev/null; then
+                echo "[$(date -u)] job-service sync already running (pid=${oldpid}); exiting"
+                exit 0
+            fi
+        fi
+        echo "$$" > "${pidfile}"
+        trap 'rm -f "${pidfile}"' EXIT
+
+        # Log to file AND to container stdout (so it's visible via docker logs)
+        exec > >(tee -a "${log_file}") 2>&1
+
+        echo "[$(date -u)] job-service sync loop starting (interval=${interval}s, retries=${max_retries})"
+
+        wait_for_server() {
+            local i
+            for i in $(seq 1 60); do
+                if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                    return 0
+                fi
+                sleep 2
+            done
+            return 1
+        }
+
+        ensure_user_exists() {
+            if run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                return 0
+            fi
+            run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
+        }
+
+        list_groups() {
+            local out=""
+            out="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" 2>/dev/null || true)"
+
+            # Parse both "pipe table" and "whitespace table" formats
+            if printf "%s" "${out}" | grep -q '|'; then
+                printf "%s\n" "${out}" \
+                  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
+                  | sort -u
+            else
+                printf "%s\n" "${out}" \
+                  | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}' \
+                  | sort -u
+            fi
+        }
+
+        sync_once() {
+            if ! wait_for_server; then
+                echo "[$(date -u)] ERROR: OMERO not ready (admin status failed)"
+                return 1
+            fi
+
+            if ! ensure_user_exists; then
+                echo "[$(date -u)] ERROR: Failed to ensure ${job_user} exists"
+                return 1
+            fi
+
+            local groups=""
+            groups="$(list_groups | grep -v -E '^(system|guest)$' || true)"
+            if [[ -z "${groups}" ]]; then
+                echo "[$(date -u)] ERROR: No groups found (or parsing failed)"
+                return 1
+            fi
+
+            local failed=0
+            while IFS= read -r g; do
+                [[ -z "${g}" ]] && continue
+                local out="" rc=0
+                out="$(run_omero user joingroup "${g}" --name="${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" 2>&1)"
+                rc=$?
+
+                if [[ "${rc}" -eq 0 ]]; then
+                    echo "[$(date -u)] OK: ensured ${job_user} in ${g}"
+                    continue
+                fi
+
+                # Accept common idempotency errors
+                if printf "%s" "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
+                    echo "[$(date -u)] OK: ${job_user} already in ${g}"
+                    continue
+                fi
+
+                echo "[$(date -u)] ERROR: joingroup failed for ${g} (rc=${rc}): ${out}"
+                failed=1
+            done <<< "${groups}"
+
+            return "${failed}"
+        }
+
         while true; do
-            # Ensure user exists
-            if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-                run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
-                echo "[$(date -u)] Created ${job_user} account."
-            fi
+            local start epoch_end elapsed sleep_for attempt ok jitter
+            start="$(date +%s)"
+            ok=0
 
-            # Sync user to all groups
-            # Use grep -v to skip system/guest/user groups if needed, but adding to all is safer.
-            local groups
-            groups="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" | awk -F'|' 'NR>2 {print $2}' | tr -d ' ' | grep -E '^.+$')"
-            
-            for grp in ${groups}; do
-                # Ignore system/guest groups to avoid internal permissions clashes, though OMERO usually prevents it
-                if [[ "${grp}" == "system" || "${grp}" == "guest" ]]; then continue; fi
-                
-                # Check if already a member, if not add
-                if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" | grep -q "Groups:.*${grp}"; then
-                    run_omero user joingroup "${grp}" --name="${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 || true
-                    echo "[$(date -u)] Added ${job_user} to group ${grp}"
+            for attempt in $(seq 1 "${max_retries}"); do
+                if sync_once; then
+                    ok=1
+                    break
+                fi
+                echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} failed"
+                if [[ "${attempt}" -lt "${max_retries}" ]]; then
+                    sleep $((20 * attempt))   # 20s, 40s between retries
                 fi
             done
-            
-            sleep "${sync_interval}"
-        done
-    ) >>"${SERVER_LOG_DIR}/job-service-bootstrap.log" 2>&1 &
 
-    log "Scheduled background job-service bootstrap and synchronization (every ${sync_interval} seconds)"
+            [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: sync failed after ${max_retries} attempts; will wait until next interval"
+
+            epoch_end="$(date +%s)"
+            elapsed=$((epoch_end - start))
+            sleep_for="${interval}"
+            if [[ "${elapsed}" -lt "${sleep_for}" ]]; then
+                sleep_for=$((sleep_for - elapsed))
+            else
+                sleep_for=0
+            fi
+
+            jitter=$((RANDOM % (jitter_max + 1)))
+            sleep $((sleep_for + jitter))
+        done
+    ) &
+    log "Scheduled background job-service bootstrap + hourly sync (interval=${interval}s)"
 }
 
 schedule_ldap_group_bootstrap() {
