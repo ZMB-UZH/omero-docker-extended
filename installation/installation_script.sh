@@ -1960,12 +1960,12 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
 fi
 
 warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
-warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
+warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
 warn_directory_not_empty "${OMERO_TMP_PATH}" "OMERO temp directory"
 
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then exit 1; fi
-if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_TMP_PATH}" "OMERO temp directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
@@ -2002,7 +2002,7 @@ fi
 
 echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
-log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (before docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (before docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (before docker compose down)"
 
@@ -2035,7 +2035,7 @@ fi
 
 echo "Recording post-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after docker compose down)"
-log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (after docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
 
@@ -2537,7 +2537,7 @@ if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor
 if ! chown_tree_or_die "${OMERO_TMP_PATH}" "OMERO temp directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! ensure_omero_server_tmp_namespace "${OMERO_TMP_PATH}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
