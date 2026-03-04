@@ -121,6 +121,72 @@ def _parse_level_from_message(message: str) -> Optional[str]:
     return None
 
 
+def _infer_level_from_message(message: str) -> str:
+    """Infer a severity when stream labels do not provide a trusted level."""
+    if not message:
+        return "info"
+
+    lowered = message.lower()
+
+    if "traceback (most recent call last):" in lowered:
+        return "fatal"
+
+    fatal_patterns = (r"\b(fatal|panic|critical)\b",)
+    for pattern in fatal_patterns:
+        if re.search(pattern, lowered):
+            return "fatal"
+
+    error_patterns = (
+        r"\b(error|exception|failed|failure|cannot|unable|denied|invalid)\b",
+    )
+    for pattern in error_patterns:
+        if re.search(pattern, lowered):
+            return "error"
+
+    warning_patterns = (
+        r"\b(warn|warning|deprecated|retry|timed?\s*out|timeout)\b",
+    )
+    for pattern in warning_patterns:
+        if re.search(pattern, lowered):
+            return "warn"
+
+    debug_patterns = (r"\b(debug|trace)\b",)
+    for pattern in debug_patterns:
+        if re.search(pattern, lowered):
+            return "debug"
+
+    return "info"
+
+
+def _normalize_level(stream_level: str, message: str) -> str:
+    """Normalize Loki stream level labels to canonical UI values."""
+    aliases = {
+        "trace": "debug",
+        "debug": "debug",
+        "info": "info",
+        "notice": "info",
+        "log": "info",
+        "warn": "warn",
+        "warning": "warn",
+        "error": "error",
+        "err": "error",
+        "severe": "error",
+        "fatal": "fatal",
+        "critical": "fatal",
+        "panic": "fatal",
+    }
+    trusted_level = aliases.get((stream_level or "").strip().lower())
+
+    parsed = _parse_level_from_message(message)
+    if parsed:
+        return parsed
+
+    if trusted_level:
+        return trusted_level
+
+    return _infer_level_from_message(message)
+
+
 def _execute_loki_query(
     config: LogConfig,
     query: str,
@@ -218,12 +284,7 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
             # Determine severity: prefer the stream-level label, but if
             # it is missing / generic "info" we try to parse a more
             # specific level from the log message content.
-            level = stream_level or "info"
-            parsed = _parse_level_from_message(message)
-            if parsed:
-                level = parsed
-            elif not stream_level:
-                level = "info"
+            level = _normalize_level(stream_level, message)
             cleaned_message = _strip_message_prefix(message)
             if cleaned_message:
                 message = cleaned_message

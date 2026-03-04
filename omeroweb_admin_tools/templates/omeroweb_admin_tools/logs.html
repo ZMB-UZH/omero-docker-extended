@@ -765,16 +765,32 @@
             return map[token] || null;
         }
 
+        function normalizeLevel(level, message) {
+            const aliases = {
+                trace: 'debug',
+                debug: 'debug',
+                info: 'info',
+                notice: 'info',
+                log: 'info',
+                warn: 'warn',
+                warning: 'warn',
+                error: 'error',
+                err: 'error',
+                severe: 'error',
+                fatal: 'fatal',
+                critical: 'fatal',
+                panic: 'fatal',
+            };
+            const normalized = aliases[String(level || '').toLowerCase().trim()] || null;
+            const parsed = parseLevelFromMessage(message);
+            if (parsed) return parsed;
+            return normalized || 'info';
+        }
+
         function normalizeEntries(entries) {
             return entries
                 .map((entry) => {
-                    let level = entry.level || 'info';
-                    /* If server sent generic "info", try to refine from
-                       message content (belt-and-suspenders with backend). */
-                    if (level === 'info') {
-                        const parsed = parseLevelFromMessage(entry.message);
-                        if (parsed) level = parsed;
-                    }
+                    const level = normalizeLevel(entry.level, entry.message);
                     return {
                         timestamp: entry.timestamp,
                         container: entry.container,
