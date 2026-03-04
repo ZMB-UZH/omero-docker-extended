@@ -1,10 +1,21 @@
 """Logging helpers shared across OMERO web plugins."""
 
 import logging
+from typing import Any
 
 
 _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
 _LOGGER_CONFIGURED = False
+
+
+def sanitize_log_value(value: Any) -> str:
+    """Return a single-line representation safe for structured log sinks.
+
+    Replaces carriage return and newline characters to prevent log injection
+    (forged extra log lines) when logging untrusted input.
+    """
+    text = str(value)
+    return text.replace("\r", r"\\r").replace("\n", r"\\n")
 
 
 def configure_omero_gateway_logging() -> None:
@@ -23,4 +34,3 @@ def configure_omero_gateway_logging() -> None:
 
     logging.getLogger(_OMERO_GATEWAY_UTILS_LOGGER).setLevel(logging.INFO)
     _LOGGER_CONFIGURED = True
-
