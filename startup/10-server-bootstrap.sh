@@ -276,6 +276,9 @@ schedule_job_service_bootstrap() {
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
     local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
+    local startup_wait_seconds="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-1200}"
+    local readiness_poll_seconds="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-5}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
     local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
     local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
@@ -308,24 +311,40 @@ schedule_job_service_bootstrap() {
         # Log to file AND to container stdout (so it's visible via docker logs)
         exec > >(tee -a "${log_file}") 2>&1
 
-        echo "[$(date -u)] job-service sync loop starting (interval=${interval}s, retries=${max_retries})"
+        echo "[$(date -u)] job-service sync loop starting (interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait_seconds}s)"
 
         wait_for_server() {
-            local _attempt
-            for _attempt in $(seq 1 60); do
-                if run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+            local timeout_seconds="$1"
+            local deadline=0
+            deadline=$(( $(date +%s) + timeout_seconds ))
+
+            while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+                if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
-                sleep 2
+
+                sleep "${readiness_poll_seconds}"
             done
+
             return 1
         }
 
         ensure_user_exists() {
-            if run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-                return 0
-            fi
-            run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
+            local _attempt
+            for _attempt in $(seq 1 "${user_ensure_retries}"); do
+                if run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                    return 0
+                fi
+
+                if run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                    return 0
+                fi
+
+                sleep $((2 * _attempt))
+            done
+
+            return 1
         }
 
         list_groups() {
@@ -345,8 +364,13 @@ schedule_job_service_bootstrap() {
         }
 
         sync_once() {
-            if ! wait_for_server; then
-                echo "[$(date -u)] ERROR: OMERO not ready (admin status failed)"
+            local ready_wait="${startup_wait_seconds}"
+            if [[ "${first_cycle:-1}" -ne 1 ]]; then
+                ready_wait=$((readiness_poll_seconds * 12))
+            fi
+
+            if ! wait_for_server "${ready_wait}"; then
+                echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s; skipping this sync interval"
                 return 1
             fi
 
@@ -390,6 +414,7 @@ schedule_job_service_bootstrap() {
         while true; do
             start="$(date +%s)"
             ok=0
+            first_cycle="${first_cycle:-1}"
 
             for attempt in $(seq 1 "${max_retries}"); do
                 if sync_once; then
@@ -403,6 +428,7 @@ schedule_job_service_bootstrap() {
             done
 
             [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: sync failed after ${max_retries} attempts; will wait until next interval"
+            first_cycle=0
 
             epoch_end="$(date +%s)"
             elapsed=$((epoch_end - start))
