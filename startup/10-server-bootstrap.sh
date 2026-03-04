@@ -48,9 +48,22 @@ run_omero() {
         exit 1
     fi
 
+    # Resolve HOME for the CLI user.  runuser without --login does NOT
+    # change HOME, so the OMERO CLI would inherit root's HOME (/root) and
+    # try to write session files to /root/omero/sessions/ — which the
+    # omero-server user cannot access.  The installation script avoids this
+    # by explicitly exporting HOME="/tmp".  We replicate that here so that
+    # runtime sync commands behave identically to installation-time ones.
+    local cli_home=""
+    cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || echo "/tmp")"
+    if [[ -z "${cli_home}" ]] || [[ ! -d "${cli_home}" ]]; then
+        cli_home="/tmp"
+    fi
+
     if [[ -n "${TMPDIR:-}" ]]; then
         # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
         runuser -u "${OMERO_CLI_USER}" -- env \
+            HOME="${cli_home}" \
             TMPDIR="${TMPDIR}" \
             OMERO_TMPDIR="${OMERO_TMPDIR:-}" \
             OMERO_TEMPDIR="${OMERO_TEMPDIR:-}" \
@@ -58,7 +71,9 @@ run_omero() {
         return
     fi
 
-    runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
+    runuser -u "${OMERO_CLI_USER}" -- env \
+        HOME="${cli_home}" \
+        "${OMERO_BIN}" "$@"
 }
 
 ensure_tmpdir_permissions() {
@@ -192,6 +207,8 @@ validate_job_service_bootstrap_configuration() {
         "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
         "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
         "OMERO_JOB_SERVICE_USER_ENSURE_RETRIES"
+        "OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS"
+        "OMERO_JOB_SERVICE_SYNC_MAX_RETRIES"
     )
 
     local var_name
@@ -200,6 +217,15 @@ validate_job_service_bootstrap_configuration() {
             require_positive_integer_env_var "${var_name}"
         fi
     done
+
+    # Jitter may be zero (disable jitter), so validate as non-negative integer
+    if [[ -n "${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS-}" ]]; then
+        local jitter_val="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS}"
+        if ! [[ "${jitter_val}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter_val}'" >&2
+            exit 1
+        fi
+    fi
 }
 
 apply_ldap_runtime_configuration() {
@@ -314,7 +340,7 @@ schedule_job_service_bootstrap() {
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
     local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
     local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
-    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-10}"
+    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
     local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-300}"
     local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-10}"
