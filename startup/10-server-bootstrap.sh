@@ -278,6 +278,8 @@ schedule_job_service_bootstrap() {
     local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
     local startup_wait_seconds="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-1200}"
     local readiness_poll_seconds="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-5}"
+    local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
+    local port="${OMERO_JOB_SERVICE_PORT:-4064}"
     local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
     local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
     local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
@@ -311,7 +313,7 @@ schedule_job_service_bootstrap() {
         # Log to file AND to container stdout (so it's visible via docker logs)
         exec > >(tee -a "${log_file}") 2>&1
 
-        echo "[$(date -u)] job-service sync loop starting (interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait_seconds}s)"
+        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait_seconds}s)"
 
         wait_for_server() {
             local timeout_seconds="$1"
@@ -319,8 +321,9 @@ schedule_job_service_bootstrap() {
             deadline=$(( $(date +%s) + timeout_seconds ))
 
             while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-                if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 \
-                    && run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
 
@@ -333,11 +336,11 @@ schedule_job_service_bootstrap() {
         ensure_user_exists() {
             local _attempt
             for _attempt in $(seq 1 "${user_ensure_retries}"); do
-                if run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                if run_omero user info --user-name "${job_user}" -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
 
-                if run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                if run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
 
@@ -349,7 +352,7 @@ schedule_job_service_bootstrap() {
 
         list_groups() {
             local out=""
-            out="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" 2>/dev/null || true)"
+            out="$(run_omero group list -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>/dev/null || true)"
 
             # Parse both "pipe table" and "whitespace table" formats
             if printf "%s" "${out}" | grep -q '|'; then
@@ -364,8 +367,9 @@ schedule_job_service_bootstrap() {
         }
 
         sync_once() {
+            local current_attempt="$1"
             local ready_wait="${startup_wait_seconds}"
-            if [[ "${first_cycle:-1}" -ne 1 ]]; then
+            if [[ "${first_cycle:-1}" -ne 1 || "${current_attempt}" -gt 1 ]]; then
                 ready_wait=$((readiness_poll_seconds * 12))
             fi
 
@@ -390,7 +394,7 @@ schedule_job_service_bootstrap() {
             while IFS= read -r g; do
                 [[ -z "${g}" ]] && continue
                 local out="" rc=0
-                out="$(run_omero user joingroup "${g}" --name="${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" 2>&1)"
+                out="$(run_omero user joingroup "${g}" --name="${job_user}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
                 rc=$?
 
                 if [[ "${rc}" -eq 0 ]]; then
@@ -417,7 +421,7 @@ schedule_job_service_bootstrap() {
             first_cycle="${first_cycle:-1}"
 
             for attempt in $(seq 1 "${max_retries}"); do
-                if sync_once; then
+                if sync_once "${attempt}"; then
                     ok=1
                     break
                 fi
