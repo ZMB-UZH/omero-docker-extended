@@ -94,8 +94,8 @@ def test_normalize_level_maps_unknown_to_info() -> None:
 def test_normalize_level_uses_error_keywords() -> None:
     assert _normalize_level("unknown", "Failed to ensure job-service exists") == "error"
 
-def test_normalize_level_uses_fatal_traceback_detection() -> None:
-    assert _normalize_level("", "Traceback (most recent call last):") == "fatal"
+def test_normalize_level_uses_error_traceback_detection() -> None:
+    assert _normalize_level("", "Traceback (most recent call last):") == "error"
 
 def test_normalize_level_traceback_continuation_line_is_debug() -> None:
     assert (
@@ -114,6 +114,12 @@ def test_normalize_level_traceback_file_line_is_debug() -> None:
         "line 55, in inner"
     )
     assert _normalize_level("", message) == "debug"
+
+
+def test_normalize_level_exception_line_is_error() -> None:
+    assert _normalize_level("", "KeyError: 'public_enabled'") == "error"
+    assert _normalize_level("", "AttributeError: type object 'RequestContext' has no attribute 'html'") == "error"
+    assert _normalize_level("", "ValueError: invalid literal for int()") == "error"
 
 
 def test_normalize_level_django_template_lookup_is_debug() -> None:
