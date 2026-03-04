@@ -69,9 +69,18 @@ discovery.relabel "omeroserver_internal_labels" {
   }
 }
 
+loki.process "omeroserver_multiline" {
+  stage.multiline {
+    firstline     = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"
+    max_wait_time = "3s"
+    max_lines     = 256
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
 loki.source.file "omeroserver_internal_logs" {
   targets        = discovery.relabel.omeroserver_internal_labels.output
-  forward_to     = [loki.write.local.receiver]
+  forward_to     = [loki.process.omeroserver_multiline.receiver]
   tail_from_end  = false
 }
 
@@ -119,9 +128,18 @@ discovery.relabel "omeroweb_internal_labels" {
   }
 }
 
+loki.process "omeroweb_multiline" {
+  stage.multiline {
+    firstline     = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"
+    max_wait_time = "3s"
+    max_lines     = 256
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
 loki.source.file "omeroweb_internal_logs" {
   targets        = discovery.relabel.omeroweb_internal_labels.output
-  forward_to     = [loki.write.local.receiver]
+  forward_to     = [loki.process.omeroweb_multiline.receiver]
   tail_from_end  = false
 }
 
