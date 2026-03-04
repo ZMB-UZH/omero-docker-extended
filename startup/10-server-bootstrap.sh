@@ -34,7 +34,35 @@ CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
 SERVER_HOME="/opt/omero/server/OMERO.server"
 SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
-OMERO_BIN="${SERVER_HOME}/bin/omero"
+resolve_omero_bin() {
+    local configured_bin="${OMERO_BIN:-}"
+    if [[ -n "${configured_bin}" ]]; then
+        if [[ -x "${configured_bin}" ]]; then
+            printf "%s\n" "${configured_bin}"
+            return 0
+        fi
+        echo "ERROR: OMERO_BIN is set but not executable: ${configured_bin}" >&2
+        exit 1
+    fi
+
+    local candidate=""
+    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+        if [[ -x "${candidate}" ]]; then
+            printf "%s\n" "${candidate}"
+            return 0
+        fi
+    done
+
+    if command -v omero >/dev/null 2>&1; then
+        command -v omero
+        return 0
+    fi
+
+    echo "ERROR: Could not auto-detect an executable OMERO CLI binary. Set OMERO_BIN explicitly." >&2
+    exit 1
+}
+
+OMERO_BIN="$(resolve_omero_bin)"
 OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
 
 run_omero() {
@@ -387,7 +415,7 @@ schedule_job_service_bootstrap() {
 
             while [[ "$(date +%s)" -lt "${deadline}" ]]; do
                 if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
-                    && run_omero -C login -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
                     && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
