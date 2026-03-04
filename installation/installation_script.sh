@@ -784,7 +784,7 @@ EOS_JOB_SERVICE
         return 0
     fi
 
-    echo "Job-service installation group membership completed."
+    echo "Job-service installation & group membership completed."
     return 0
 }
 
