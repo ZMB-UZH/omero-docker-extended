@@ -7,7 +7,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 ## Main capabilities
 
 - Log query via Loki (LogQL) with container filtering and internal log file browsing.
-- Log severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference.
+- Log severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference, with traceback-continuation and RedisBloom `bf-error-rate` lines treated as non-error noise.
 - Embedded/proxied Grafana dashboards and Prometheus query interface.
 - Docker container resource monitoring (stats, system info, process lists).
 - Storage usage analytics by user and group from OMERO API.
