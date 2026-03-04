@@ -407,7 +407,7 @@ schedule_job_service_bootstrap() {
         sync_once() {
             local current_attempt="$1"
             local ready_wait="${startup_wait_seconds}"
-            if [[ "${first_cycle:-1}" -ne 1 || "${current_attempt}" -gt 1 ]]; then
+            if [[ "${first_cycle:-1}" -ne 1 ]]; then
                 ready_wait=$((readiness_poll_seconds * 12))
             fi
 
