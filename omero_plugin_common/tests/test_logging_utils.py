@@ -38,3 +38,14 @@ def test_configure_omero_gateway_logging_is_idempotent() -> None:
     finally:
         logger.setLevel(previous_level)
         logging_utils._LOGGER_CONFIGURED = previous_flag
+
+
+def test_sanitize_log_value_escapes_newlines_and_carriage_returns() -> None:
+    assert (
+        logging_utils.sanitize_log_value("line1\nline2\rline3")
+        == "line1\\\\nline2\\\\rline3"
+    )
+
+
+def test_sanitize_log_value_handles_non_string_values() -> None:
+    assert logging_utils.sanitize_log_value(123) == "123"

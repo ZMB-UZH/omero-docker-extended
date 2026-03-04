@@ -35,6 +35,7 @@ from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+from omero_plugin_common.logging_utils import sanitize_log_value
 from omero_plugin_common.tmp_cleanup import safe_remove_job_data
 from .utils import current_username, json_error, load_json_body
 
@@ -404,9 +405,9 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
             # Parent directory must already exist
             try:
                 path.mkdir(mode=mode, exist_ok=True)
-                logger.info(f"Created directory: {path} with permissions {oct(mode)}")
+                logger.info("Created directory: %s with permissions %s", sanitize_log_value(path), oct(mode))
             except OSError as target_exc:
-                logger.error(f"Unable to create target directory {path}: {target_exc}")
+                logger.error("Unable to create target directory %s: %s", sanitize_log_value(path), sanitize_log_value(target_exc))
                 return False
             
             return True
@@ -417,12 +418,12 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                 current_perms = stat.S_IMODE(path.stat().st_mode)
                 if current_perms != mode:
                     path.chmod(mode)
-                    logger.warning(f"Fixed permissions for existing directory: {path} (was {oct(current_perms)}, now {oct(mode)})")
+                    logger.warning("Fixed permissions for existing directory: %s (was %s, now %s)", sanitize_log_value(path), oct(current_perms), oct(mode))
             except OSError as perm_exc:
-                logger.warning(f"Could not verify/fix permissions for {path}: {perm_exc}")
+                logger.warning("Could not verify/fix permissions for %s: %s", sanitize_log_value(path), sanitize_log_value(perm_exc))
             return True
     except OSError as exc:
-        logger.error(f"Unable to create/verify directory {path}: {exc}")
+        logger.error("Unable to create/verify directory %s: %s", sanitize_log_value(path), sanitize_log_value(exc))
         return False
 
 
