@@ -639,6 +639,86 @@ create_omero_groups_from_list() {
     return 0
 }
 
+add_job_service_to_install_groups() {
+    local compose_file="$1"
+    local raw_group_list="${2:-}"
+    local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
+    local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
+
+    if [ "${join_all}" != "1" ]; then
+        echo "Skipping job-service group membership (OMERO_JOB_SERVICE_JOIN_ALL_GROUPS != 1)."
+        return 0
+    fi
+
+    if [ -z "${job_pass}" ] || [ -z "${ROOTPASS:-}" ]; then
+        echo "Skipping job-service group membership (OMERO_JOB_SERVICE_PASS or ROOTPASS not set)."
+        return 0
+    fi
+
+    local normalized_group_list=""
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
+        echo "Skipping job-service group membership (no groups configured)."
+        return 0
+    fi
+
+    # Extract group names (strip :permission suffix)
+    local group_names=""
+    local entry=""
+    local -a entries=()
+    IFS="," read -r -a entries <<< "${normalized_group_list}"
+    for entry in "${entries[@]}"; do
+        local name="${entry%%:*}"
+        [ -z "${name}" ] && continue
+        group_names="${group_names:+${group_names} }${name}"
+    done
+
+    if [ -z "${group_names}" ]; then
+        return 0
+    fi
+
+    echo "Adding ${job_user} to installation groups: ${group_names}..."
+
+    local output=""
+    local exit_code=1
+    local retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-20}"
+    local retry_delay="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-3}"
+    local attempt=0
+
+    for attempt in $(seq 1 "${retry_limit}"); do
+        set +e
+        output="$(compose_with_installation_env "${compose_file}" exec -T \
+            -e HOME="/tmp" \
+            -e ROOTPASS="${ROOTPASS}" \
+            -e JOB_USER="${job_user}" \
+            -e JOB_PASS="${job_pass}" \
+            -e GROUP_NAMES="${group_names}" \
+            omeroserver bash -c 'set -uo pipefail; resolve_omero_bin() { local c=""; for c in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${c}" ] || continue; printf "%s" "${c}"; return 0; done; return 1; }; OMERO_BIN="$(resolve_omero_bin || true)"; if [ -z "${OMERO_BIN}" ]; then echo "OMERO CLI not found"; exit 127; fi; OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"; if [ -z "${OMERO_TMP_PATH:-}" ]; then OMERO_TMPDIR_VALUE="/tmp"; fi; mkdir -p "${OMERO_TMPDIR_VALUE}"; chmod 0777 "${OMERO_TMPDIR_VALUE}" || true; export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"; if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then echo "ICE not ready"; exit 1; fi; if ! su omero-server -c "\"${OMERO_BIN}\" user info --user-name \"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then su omero-server -c "\"${OMERO_BIN}\" user add \"${JOB_USER}\" Job Service --group-name user -P \"${JOB_PASS}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null || { echo "Failed to create ${JOB_USER}"; exit 1; }; echo "Created user ${JOB_USER}"; fi; failed=0; for g in ${GROUP_NAMES}; do out="$(su omero-server -c "\"${OMERO_BIN}\" user joingroup \"${g}\" --name=\"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)" && { echo "Added ${JOB_USER} to ${g}"; continue; }; echo "${out}" | grep -qiE "already.*(member|in group)|duplicate" && { echo "${JOB_USER} already in ${g}"; continue; }; echo "WARN: joingroup ${g} failed: ${out}"; failed=1; done; exit ${failed}' 2>&1)"
+        exit_code=$?
+        set -e
+
+        if [ "${exit_code}" -eq 0 ]; then
+            break
+        fi
+
+        if [ "${attempt}" -lt "${retry_limit}" ]; then
+            echo "WARNING: job-service group membership attempt ${attempt}/${retry_limit} failed. Retrying in ${retry_delay}s..." >&2
+            sleep "${retry_delay}"
+        fi
+    done
+
+    if [ "${exit_code}" -ne 0 ]; then
+        echo "WARNING: Could not add ${job_user} to all installation groups. The hourly runtime sync will retry." >&2
+        echo "WARNING: Last output: ${output}" >&2
+        # Non-fatal: the background sync in 10-server-bootstrap.sh will catch up
+        return 0
+    fi
+
+    echo "Job-service installation group membership completed."
+    return 0
+}
+
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -2581,6 +2661,8 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
         exit 1
     fi
+
+    add_job_service_to_install_groups "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi
