@@ -272,6 +272,7 @@ schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
     local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
+    local sync_interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
 
     if [[ -z "${root_pass}" || -z "${job_pass}" ]]; then
         log "Skipping job-service bootstrap (ROOTPASS or OMERO_JOB_SERVICE_PASS missing)."
@@ -281,6 +282,8 @@ schedule_job_service_bootstrap() {
     (
         set -eo pipefail
         sleep 5
+        
+        # 1. Wait for OMERO
         for _ in $(seq 1 180); do
             if run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
                 break
@@ -288,12 +291,35 @@ schedule_job_service_bootstrap() {
             sleep 2
         done
 
-        if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-            run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
-        fi
+        # 2. Infinite loop to keep job-service synced
+        while true; do
+            # Ensure user exists
+            if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+                run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
+                echo "[$(date -u)] Created ${job_user} account."
+            fi
+
+            # Sync user to all groups
+            # Use grep -v to skip system/guest/user groups if needed, but adding to all is safer.
+            local groups
+            groups="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" | awk -F'|' 'NR>2 {print $2}' | tr -d ' ' | grep -E '^.+$')"
+            
+            for grp in ${groups}; do
+                # Ignore system/guest groups to avoid internal permissions clashes, though OMERO usually prevents it
+                if [[ "${grp}" == "system" || "${grp}" == "guest" ]]; then continue; fi
+                
+                # Check if already a member, if not add
+                if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" | grep -q "Groups:.*${grp}"; then
+                    run_omero user joingroup "${grp}" --name="${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 || true
+                    echo "[$(date -u)] Added ${job_user} to group ${grp}"
+                fi
+            done
+            
+            sleep "${sync_interval}"
+        done
     ) >>"${SERVER_LOG_DIR}/job-service-bootstrap.log" 2>&1 &
 
-    log "Scheduled background job-service bootstrap"
+    log "Scheduled background job-service bootstrap and synchronization (every ${sync_interval} seconds)"
 }
 
 schedule_ldap_group_bootstrap() {
