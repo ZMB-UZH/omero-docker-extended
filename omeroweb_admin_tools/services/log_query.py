@@ -114,8 +114,7 @@ def _parse_level_from_message(message: str) -> Optional[str]:
 
     return None
 
-_TRACEBACK_CONTINUATION_PREFIXES = (
-    "traceback (most recent call last)",
+_TRACEBACK_FRAME_PREFIXES = (
     "during handling of the above exception",
     'file "',
 )
@@ -125,16 +124,11 @@ _EXCEPTION_LINE_RE = re.compile(
 )
 
 def _is_traceback_continuation(message: str) -> bool:
-    """Return True when the message is a traceback continuation line."""
+    """Return True for traceback frame/continuation lines (not the start or exception line)."""
     if not message:
         return False
-    stripped = message.strip()
-    lowered = stripped.lower()
-    if lowered.startswith(_TRACEBACK_CONTINUATION_PREFIXES):
-        return True
-    if _EXCEPTION_LINE_RE.match(stripped):
-        return True
-    return False
+    lowered = message.strip().lower()
+    return lowered.startswith(_TRACEBACK_FRAME_PREFIXES)
 
 def _is_django_template_lookup_noise(message: str) -> bool:
     """Return True for Django template lookup diagnostics that are not runtime failures."""
@@ -162,11 +156,16 @@ def _infer_level_from_message(message: str) -> str:
     if _is_redis_bloom_info(message):
         return "info"
 
-    if _is_traceback_continuation(message):
-        return "error"  # CRITICAL FIX: Tracebacks are errors, not debug! Otherwise they vanish from error logs.
-
     if _is_django_template_lookup_noise(message):
         return "debug"
+
+    if _is_traceback_continuation(message):
+        return "debug"
+
+    # Exception class lines (e.g., "KeyError: ...", "ValueError: ...") are errors
+    stripped = message.strip()
+    if _EXCEPTION_LINE_RE.match(stripped):
+        return "error"
 
     lowered = message.lower()
 
@@ -176,7 +175,7 @@ def _infer_level_from_message(message: str) -> str:
             return "fatal"
 
     error_patterns = (
-        r"\b(error|exception|failed|failure|cannot|unable|denied|invalid)\b",
+        r"\b(error|exception|failed|failure|cannot|unable|denied|invalid|traceback)\b",
     )
     for pattern in error_patterns:
         if re.search(pattern, lowered):
