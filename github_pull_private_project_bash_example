@@ -238,9 +238,11 @@ replace_working_tree_with_clone() {
     local clone_dir="$1"
     local current_repo_dir="$2"
     local preserve_logo_png=false
+    local -a active_protected_files=()
 
     if [ -f "${current_repo_dir}/logo/logo.png" ]; then
         preserve_logo_png=true
+        active_protected_files+=("logo/logo.png")
     fi
 
     # ── 1. Collect top-level data directories (direct exclusions) ─────
