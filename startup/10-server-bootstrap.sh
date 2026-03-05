@@ -390,7 +390,7 @@ schedule_job_service_bootstrap() {
 
     (
         set -u -o pipefail
-        umask 077
+        umask 022
         mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
 
         # Prevent duplicate loops robustly (pidfile alone can go stale)
@@ -725,7 +725,9 @@ acquire_lockdir() {
     local label="${3:-lock}"
     local existing_pid=""
 
+    # Important: Ensure lockdir is readable/executable by others so OMERO admin checks don't fail!
     if mkdir "${lockdir}" 2>/dev/null; then
+        chmod 0755 "${lockdir}" 2>/dev/null || true
         echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
         if [[ -n "${pidfile}" ]]; then
             echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
@@ -745,6 +747,7 @@ acquire_lockdir() {
         return 1
     fi
 
+    chmod 0755 "${lockdir}" 2>/dev/null || true
     echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
     if [[ -n "${pidfile}" ]]; then
         echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
