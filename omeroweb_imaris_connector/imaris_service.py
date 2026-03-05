@@ -238,6 +238,8 @@ def _get_script_services(conn):
 
 
 def _find_script_id(conn):
+    best_sid = None
+    best_is_official = False
     for svc in _get_script_services(conn):
         try:
             scripts = svc.getScripts()
@@ -252,7 +254,6 @@ def _find_script_id(conn):
                 if hasattr(getattr(s, "id", None), "val")
                 else _unwrap_rtype(getattr(s, "id", None))
             )
-            # some versions: s.id is omero.RLong
             if not sid:
                 try:
                     sid = s.id.val
@@ -261,6 +262,7 @@ def _find_script_id(conn):
             if not sid:
                 continue
 
+            is_match = False
             for candidate in (name, path):
                 if not candidate:
                     continue
@@ -274,8 +276,22 @@ def _find_script_id(conn):
                     or basename in {SCRIPT_NAME, SCRIPT_BASENAME}
                     or basename_no_ext in {SCRIPT_NAME, SCRIPT_BASENAME}
                 ):
-                    return int(sid)
-    return None
+                    is_match = True
+                    break
+            
+            if is_match:
+                sid_int = int(sid)
+                is_official = False
+                if path and ("omero/export" in str(path) or "official" in str(path)):
+                    is_official = True
+                    
+                if is_official and not best_is_official:
+                    best_sid = sid_int
+                    best_is_official = True
+                elif is_official == best_is_official:
+                    if best_sid is None or sid_int > best_sid:
+                        best_sid = sid_int
+    return best_sid
 
 
 def _is_process_handle(job):
@@ -791,19 +807,18 @@ def _get_job_state_and_outputs(conn, job_id):
                         jid = _unwrap_rtype(getattr(getattr(j, "id", None), "val", None))
                         if jid is None and hasattr(getattr(j, "id", None), "val"):
                             jid = j.id.val
-                        if str(jid) != str(job_id):
-                            continue
-                        status = _unwrap_rtype(getattr(getattr(j, "status", None), "val", None)) or _unwrap_rtype(getattr(j, "status", None))
-                        # Outputs usually via getJobOutputs, but if missing we return None
-                        outputs = None
-                        out_fn = getattr(svc, "getJobOutputs", None)
-                        if out_fn:
-                            try:
-                                outputs = out_fn(job_id)
-                            except Exception:
-                                outputs = None
-                        logger.debug("Job %s state via getJobs(): %s outputs=%s", job_id, status, _serialize_outputs(outputs))
-                        return str(status), outputs
+                        if str(jid) == str(job_id):
+                            status = _unwrap_rtype(getattr(getattr(j, "status", None), "val", None)) or _unwrap_rtype(getattr(j, "status", None))
+                            # Outputs usually via getJobOutputs, but if missing we return None
+                            outputs = None
+                            out_fn = getattr(svc, "getJobOutputs", None)
+                            if out_fn:
+                                try:
+                                    outputs = out_fn(job_id)
+                                except Exception:
+                                    outputs = None
+                            logger.debug("Job %s state via getJobs(): %s outputs=%s", job_id, status, _serialize_outputs(outputs))
+                            return str(status), outputs
                     except Exception:
                         continue
             except Exception as exc:
