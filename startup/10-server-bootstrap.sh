@@ -731,6 +731,7 @@ def sync_scripts(conn, script_dir):
         return
 
     # Create a map of filename -> list of existing Script/OriginalFile objects
+    # for duplicate cleanup and path normalization.
     script_map = {}
     for s in existing_scripts:
         name = s.name.val if hasattr(s.name, 'val') else s.name
@@ -742,6 +743,8 @@ def sync_scripts(conn, script_dir):
             script_map[basename] = []
         script_map[basename].append(s)
 
+    scripts_root = os.path.dirname(script_dir)
+
     # Walk the physical script directory
     for root, dirs, files in os.walk(script_dir):
         for file in files:
@@ -750,6 +753,7 @@ def sync_scripts(conn, script_dir):
             
             filepath = os.path.join(root, file)
             basename = file
+            desired_path = os.path.relpath(filepath, scripts_root).replace('\\', '/')
             
             # If duplicates exist (e.g. user uploaded test script), we delete them all and re-upload the official one
             # Alternatively, if there is exactly 1 and it's official, we leave it.
@@ -758,12 +762,18 @@ def sync_scripts(conn, script_dir):
             existing = script_map.get(basename, [])
             
             if len(existing) == 1:
-                # If exactly one exists, we can use omero script replace via CLI or just leave it
-                # For safety against duplicated DB entries, if it exists we skip. 
-                # If we really want to FORCE content sync, we would replace it.
-                # However, OMERO auto-syncs content of lib/scripts if the ID is the same!
-                print(f"[{basename}] exists exactly once. Assuming it is correct.")
-                continue
+                existing_path = existing[0].path.val if hasattr(existing[0].path, 'val') else existing[0].path
+                if existing_path == desired_path:
+                    # Expected path already present; nothing to fix.
+                    print(f"[{basename}] exists once with expected path ({desired_path}).")
+                    continue
+
+                # Path mismatch (e.g. legacy absolute /opt/... path). Replace to keep
+                # script UI hierarchy deterministic under a single `omero/` root.
+                print(
+                    f"[{basename}] path mismatch (existing={existing_path}, expected={desired_path}); replacing..."
+                )
+                existing = [existing[0]]
                 
             if len(existing) > 1:
                 # Duplicates detected! This causes the exact bug the user faced.
@@ -780,7 +790,11 @@ def sync_scripts(conn, script_dir):
             # If 0 or we just deleted all of them, upload exactly once
             if len(existing) != 1:
                 print(f"[{basename}] Uploading as official script...")
-                cmd = f"omero script upload --official --sudo root '{filepath}' -s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                cmd = (
+                    "omero script upload --official --sudo root "
+                    f"'{filepath}' --name '{desired_path}' "
+                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                )
                 os.system(cmd)
 
 if __name__ == "__main__":
