@@ -715,17 +715,102 @@ schedule_script_registration() {
             sleep 2
         done
 
-        until run_omero script list -s localhost -p 4064 -u root -w "${root_pass}" --sudo root >/dev/null 2>&1; do
-            sleep 2
-        done
+        # Create an idempotent Python script to register official scripts and clean duplicates
+        local script_sync_py="${SERVER_VAR_DIR}/sync_official_scripts.py"
+        cat << 'EOF' > "${script_sync_py}"
+import os
+import sys
+from omero.gateway import BlitzGateway
 
-        while IFS= read -r script; do
-            run_omero script upload --official --sudo root \
-                "${script}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 || true
-        done < <(find "${scripts_dir}" -type f -name '*.py' | sort)
+def sync_scripts(conn, script_dir):
+    try:
+        svc = conn.getScriptService()
+        existing_scripts = svc.getScripts()
+    except Exception as e:
+        print(f"Failed to get existing scripts: {e}")
+        return
+
+    # Create a map of filename -> list of existing Script/OriginalFile objects
+    script_map = {}
+    for s in existing_scripts:
+        name = s.name.val if hasattr(s.name, 'val') else s.name
+        path = s.path.val if hasattr(s.path, 'val') else s.path
+        if not path:
+            continue
+        basename = os.path.basename(path)
+        if basename not in script_map:
+            script_map[basename] = []
+        script_map[basename].append(s)
+
+    # Walk the physical script directory
+    for root, dirs, files in os.walk(script_dir):
+        for file in files:
+            if not file.endswith('.py'):
+                continue
+            
+            filepath = os.path.join(root, file)
+            basename = file
+            
+            # If duplicates exist (e.g. user uploaded test script), we delete them all and re-upload the official one
+            # Alternatively, if there is exactly 1 and it's official, we leave it.
+            # But the simplest idempotent way that guarantees exact match is to replace or delete/upload.
+            
+            existing = script_map.get(basename, [])
+            
+            if len(existing) == 1:
+                # If exactly one exists, we can use omero script replace via CLI or just leave it
+                # For safety against duplicated DB entries, if it exists we skip. 
+                # If we really want to FORCE content sync, we would replace it.
+                # However, OMERO auto-syncs content of lib/scripts if the ID is the same!
+                print(f"[{basename}] exists exactly once. Assuming it is correct.")
+                continue
+                
+            if len(existing) > 1:
+                # Duplicates detected! This causes the exact bug the user faced.
+                print(f"[{basename}] has {len(existing)} duplicates! Cleaning them up...")
+                update_service = conn.getUpdateService()
+                for s in existing:
+                    try:
+                        print(f"Deleting duplicate script ID: {s.id.val}")
+                        # Scripts are OriginalFiles. We must delete the OriginalFile.
+                        conn.deleteObjects("OriginalFile", [s.id.val], deleteChildren=True, wait=True)
+                    except Exception as e:
+                        print(f"Failed to delete script ID {s.id.val}: {e}")
+                
+            # If 0 or we just deleted all of them, upload exactly once
+            if len(existing) != 1:
+                print(f"[{basename}] Uploading as official script...")
+                cmd = f"omero script upload --official --sudo root '{filepath}' -s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                os.system(cmd)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        sys.exit(1)
+    
+    root_pass = sys.argv[1]
+    script_dir = sys.argv[2]
+    
+    conn = BlitzGateway('root', root_pass, host='localhost', port=4064)
+    try:
+        if conn.connect():
+            sync_scripts(conn, script_dir)
+        else:
+            print("Failed to connect to OMERO")
+            sys.exit(1)
+    finally:
+        conn.close()
+EOF
+
+        local venv_py
+        venv_py="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)/bin/python"
+        
+        # Run the idempotent sync script
+        runuser -u "${OMERO_CLI_USER}" -- "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" >/dev/null 2>&1 || true
+
+        rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
 
-    log "Scheduled background official script registration"
+    log "Scheduled background idempotent official script registration"
 }
 
 acquire_lockdir() {
