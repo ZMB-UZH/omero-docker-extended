@@ -401,7 +401,7 @@ schedule_job_service_bootstrap() {
                 exit 0
             fi
         fi
-        echo "$$" > "${pidfile}"
+        echo "${BASHPID}" > "${pidfile}"
         trap 'rm -f "${pidfile}"' EXIT
 
         # Log to file AND to container stdout (so it's visible via docker logs)
@@ -414,7 +414,7 @@ schedule_job_service_bootstrap() {
             local deadline=$(( $(date +%s) + wait_seconds ))
 
             while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-                if run_omero admin status -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1 \
+                if run_omero admin status >/dev/null 2>&1 \
                     && run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
                     && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
@@ -576,7 +576,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if run_omero admin status >/dev/null 2>&1; then
                 break
             fi
             sleep "${retry_delay_seconds}"
@@ -686,7 +686,7 @@ schedule_script_registration() {
         set -eo pipefail
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; do
+        until run_omero admin status >/dev/null 2>&1; do
             sleep 2
         done
 
