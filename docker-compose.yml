@@ -354,7 +354,6 @@ services:
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
     environment:
-      CONFIG_omero_scripts_python: "/opt/omero/server/venv3/bin/python"
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
       OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
       OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
