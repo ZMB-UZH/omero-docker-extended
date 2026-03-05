@@ -210,14 +210,10 @@ collect_sentinel_dir_names() {
 replace_working_tree_with_clone() {
     local clone_dir="$1"
     local current_repo_dir="$2"
-    local preserved_logo_tmp=""
+    local preserve_logo_png=false
 
-    # Preserve only the site-specific logo asset if it exists locally.
-    # The logo/ directory itself must still be refreshed from the clone so
-    # tracked templates such as logo_example.png are not pinned locally.
     if [ -f "${current_repo_dir}/logo/logo.png" ]; then
-        preserved_logo_tmp="$(mktemp "${current_repo_dir%/}/.project-logo.XXXXXX")"
-        cp "${current_repo_dir}/logo/logo.png" "${preserved_logo_tmp}"
+        preserve_logo_png=true
     fi
 
     # ── 1. Collect top-level data directories (direct exclusions) ─────
@@ -261,6 +257,11 @@ replace_working_tree_with_clone() {
     for _name in "${protected_data_dirs[@]}"; do
         find_args+=( ! -name "${_name}" )
     done
+
+    # Exclude logo/ entirely when a site-local logo.png exists.
+    if [ "${preserve_logo_png}" = true ]; then
+        find_args+=( ! -name 'logo' )
+    fi
 
     # ── 4. Deep-scan each remaining candidate for sentinel names ──────
     #
@@ -312,8 +313,9 @@ replace_working_tree_with_clone() {
     echo "  - installation_paths.env (local installation paths source of truth)"
     echo "  - .env (docker compose runtime paths)"
     echo "  - env/ (credential and service env files)"
-    if [ -n "${preserved_logo_tmp}" ]; then
-        echo "  - logo/logo.png (site-specific branding asset)"
+    if [ ${#active_protected_files[@]} -gt 0 ]; then
+        echo "  Preserved files (local file kept, sibling templates refreshed):"
+        printf '    - %s\n' "${active_protected_files[@]}"
     fi
     echo "  - .project-pull.*"
     echo "  - github_pull_project_bash"
@@ -352,17 +354,24 @@ replace_working_tree_with_clone() {
     # Move fresh files from the clone into place, but skip .git,
     # installation_paths.env, and env/ so we never overwrite preserved
     # local configuration or credentials.
-    find "${clone_dir}" -mindepth 1 -maxdepth 1 \
-        ! -name '.git' \
-        ! -name 'installation_paths.env' \
-        ! -name 'env' \
-        -exec mv {} "${current_repo_dir}" \;
+    # If logo.png exists locally, also skip wholesale replacement of logo/.
+    local -a clone_move_find_args=()
+    clone_move_find_args+=( "${clone_dir}" -mindepth 1 -maxdepth 1 )
+    clone_move_find_args+=( ! -name '.git' )
+    clone_move_find_args+=( ! -name 'installation_paths.env' )
+    clone_move_find_args+=( ! -name 'env' )
+    if [ "${preserve_logo_png}" = true ]; then
+        clone_move_find_args+=( ! -name 'logo' )
+    fi
+    find "${clone_move_find_args[@]}" -exec mv {} "${current_repo_dir}" \;
 
-    # Restore only logo/logo.png after the tree refresh.
-    if [ -n "${preserved_logo_tmp}" ]; then
+    # Keep site-local logo/logo.png untouched while still refreshing
+    # repository-managed template files inside logo/.
+    if [ "${preserve_logo_png}" = true ] && [ -d "${clone_dir}/logo" ]; then
         mkdir -p "${current_repo_dir}/logo"
-        cp "${preserved_logo_tmp}" "${current_repo_dir}/logo/logo.png"
-        rm -f "${preserved_logo_tmp}"
+        if [ -f "${clone_dir}/logo/logo_example.png" ]; then
+            cp "${clone_dir}/logo/logo_example.png" "${current_repo_dir}/logo/logo_example.png"
+        fi
     fi
 
     # ── 7. Refresh *_example.env files inside the protected env/ dir ───
