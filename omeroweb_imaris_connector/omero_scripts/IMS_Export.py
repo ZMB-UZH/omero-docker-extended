@@ -1,1 +1,387 @@
-#!/usr/bin/env python\n# -*- coding: utf-8 -*-\nimport logging\n\nlogger = logging.getLogger(__name__)\n\nfrom omero.gateway import BlitzGateway\nfrom omero.rtypes import rstring\nfrom omero import scripts\nimport omero.rtypes\nimport os\nimport subprocess\nimport shutil\nimport re\nimport urllib.request\nimport urllib.error\nfrom datetime import datetime\n\nfrom omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env\n\nIMARISCONVERT_INSTALL_DIR = \"/opt/omero/imarisconvert\"\nBIOFORMATS_SUBDIR = \"bioformats\"\nBIOFORMATS_JAR_NAME = \"bioformats_package.jar\"\n# Keep this in sync with startup/51-install-imarisconvert.sh\nBIOFORMATS_URL = \"https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar\"\nDEFAULT_TIMEOUT_SECONDS = 600\ntry:\n    EXPORT_ROOT = get_env(\n        \"OMERO_IMS_EXPORT_DIR\",\n        env_file=ENV_FILE_OMERO_CELERY,\n    )\nexcept RuntimeError as e:\n    # Some OMERO script runners do not propagate all container env vars reliably.\n    # Fall back to the default path under the mounted /OMERO volume.\n    EXPORT_ROOT = \"/OMERO/ImarisExports\"\n    print(f\"WARNING: {e}\")\n    print(f\"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={EXPORT_ROOT}\")\ndef _safe_filename(name, fallback=\"image\"):\n    \"\"\"Create a filesystem-safe filename (no path separators, no control chars).\"\"\"\n    if name is None:\n        name = \"\"\n    name = str(name)\n    name = name.replace(\"\\x00\", \"\")\n    name = name.strip()\n    if not name:\n        name = fallback\n    # Replace path separators and other risky chars.\n    name = name.replace(os.sep, \"_\")\n    if os.altsep:\n        name = name.replace(os.altsep, \"_\")\n    # Keep a conservative whitelist.\n    name = re.sub(r\"[^A-Za-z0-9._ -]+\", \"_\", name)\n    name = re.sub(r\"\\s+\", \" \", name).strip()\n    # Limit length to avoid filesystem/path issues.\n    if len(name) > 200:\n        name = name[:200].rstrip()\n    if not name:\n        name = fallback\n    return name\n# Ensure export root exists\nos.makedirs(EXPORT_ROOT, exist_ok=True)\n\n\n\ndef _ensure_bioformats_jar(install_dir):\n    \"\"\"Ensure Bio-Formats jar exists where ImarisConvertBioformats expects it.\"\"\"\n    jar_dir = os.path.join(install_dir, BIOFORMATS_SUBDIR)\n    jar_path = os.path.join(jar_dir, BIOFORMATS_JAR_NAME)\n\n    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:\n        return jar_path\n\n    os.makedirs(jar_dir, exist_ok=True)\n    tmp_path = jar_path + \".download\"\n\n    print(f\"Bio-Formats jar missing. Downloading to: {jar_path}\")\n    print(f\"Source: {BIOFORMATS_URL}\")\n    try:\n        with urllib.request.urlopen(BIOFORMATS_URL, timeout=60) as r, open(tmp_path, \"wb\") as f:\n            shutil.copyfileobj(r, f)\n        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:\n            print(\"ERROR: Downloaded Bio-Formats jar is empty\")\n            try:\n                if os.path.exists(tmp_path):\n                    os.remove(tmp_path)\n            except Exception as exc:\n                logger.debug(\"Suppressed non-fatal exception in IMS_Export.py\", exc_info=exc)\n            return None\n        os.replace(tmp_path, jar_path)\n        os.chmod(jar_path, 0o644)\n    except (urllib.error.URLError, urllib.error.HTTPError) as e:\n        print(f\"ERROR: Failed to download Bio-Formats jar: {e}\")\n        try:\n            if os.path.exists(tmp_path):\n                os.remove(tmp_path)\n        except Exception as exc:\n            logger.debug(\"Suppressed non-fatal exception in IMS_Export.py\", exc_info=exc)\n        return None\n    except Exception as e:\n        print(f\"ERROR: Unexpected error downloading Bio-Formats jar: {e}\")\n        try:\n            if os.path.exists(tmp_path):\n                os.remove(tmp_path)\n        except Exception as exc:\n            logger.debug(\"Suppressed non-fatal exception in IMS_Export.py\", exc_info=exc)\n        return None\n\n    if not os.path.exists(jar_path) or os.path.getsize(jar_path) == 0:\n        print(\"ERROR: Bio-Formats jar download resulted in an empty or missing file\")\n        return None\n\n    return jar_path\n\n\ndef _get_voxel_size_from_image(image):\n    \"\"\"\n    Return voxel sizes (vx, vy, vz) in micrometers as floats.\n    ImarisConvert fails if any axis has voxel size <= 0, so we ensure safe defaults.\n\n    Fallback policy (minimal, safe):\n      - If X missing/<=0 -> 1.0\n      - If Y missing/<=0 -> X\n      - If Z missing/<=0 -> X  (common for single-plane / missing Z metadata)\n    \"\"\"\n    vx = None\n    vy = None\n    vz = None\n\n    try:\n        px = image.getPrimaryPixels()\n        if px:\n            psx = px.getPhysicalSizeX()\n            psy = px.getPhysicalSizeY()\n            psz = px.getPhysicalSizeZ()\n\n            if psx is not None:\n                try:\n                    vx = float(psx.getValue())\n                except Exception:\n                    vx = None\n            if psy is not None:\n                try:\n                    vy = float(psy.getValue())\n                except Exception:\n                    vy = None\n            if psz is not None:\n                try:\n                    vz = float(psz.getValue())\n                except Exception:\n                    vz = None\n    except Exception:\n        vx = vy = vz = None\n\n    if vx is None or vx <= 0:\n        vx = 1.0\n    if vy is None or vy <= 0:\n        vy = vx\n    if vz is None or vz <= 0:\n        vz = vx\n\n    return vx, vy, vz\n\n\ndef get_original_file_path(conn, image):\n    try:\n        fileset = image.getFileset()\n        if not fileset:\n            return None\n        files = list(fileset.listFiles())\n        if not files:\n            return None\n        original_file = files[0]\n        managed_repo_path = \"/OMERO/ManagedRepository\"\n        file_path = original_file.getPath()\n        file_name = original_file.getName()\n        full_path = os.path.join(managed_repo_path, file_path, file_name)\n        return full_path\n    except Exception as e:\n        print(f\"Error getting original file path: {e}\")\n        return None\n\n\ndef convert_to_ims(image, input_file, output_file):\n    try:\n        # Prefer the binary installed by startup/51-install-imarisconvert.sh\n        converter = shutil.which(\"imarisconvert\")\n        if converter and os.path.exists(converter):\n            # IMPORTANT: /usr/local/bin/imarisconvert may be a symlink or wrapper.\n            # Resolve to the real binary so ImarisConvertBioformats can find its runtime files.\n            converter_path = os.path.realpath(converter)\n        else:\n            converter_path = os.path.join(IMARISCONVERT_INSTALL_DIR, \"ImarisConvertBioformats\")\n\n        if not os.path.exists(converter_path):\n            print(f\"ERROR: ImarisConvertBioformats not found at: {converter_path}\")\n            return False\n\n        # Ensure Bio-Formats jar exists at the location expected by ImarisConvertBioformats.\n        jar_path = _ensure_bioformats_jar(IMARISCONVERT_INSTALL_DIR)\n        if not jar_path:\n            print(\"ERROR: Bio-Formats jar could not be ensured. Aborting conversion.\")\n            return False\n\n        # Ensure voxel size is valid for ImarisConvert (it fails if any axis is 0).\n        vsx, vsy, vsz = _get_voxel_size_from_image(image)\n\n        cmd = [\n            converter_path,\n            \"-i\", input_file,\n            \"-o\", output_file,\n            \"-vsx\", str(vsx),\n            \"-vsy\", str(vsy),\n            \"-vsz\", str(vsz),\n        ]\n\n        print(f\"Running: {' '.join(cmd)}\")\n\n        # Ensure shared libraries can be found.\n        env = os.environ.copy()\n        ld_parts = []\n        if env.get(\"LD_LIBRARY_PATH\"):\n            ld_parts.append(env[\"LD_LIBRARY_PATH\"])\n        ld_parts.append(IMARISCONVERT_INSTALL_DIR)\n        env[\"LD_LIBRARY_PATH\"] = \":\".join([p for p in ld_parts if p])\n\n        # Force Bio-Formats onto the Java classpath (covers launchers that rely on CLASSPATH).\n        # Preserve any existing CLASSPATH by appending.\n        if env.get(\"CLASSPATH\"):\n            env[\"CLASSPATH\"] = jar_path + os.pathsep + env[\"CLASSPATH\"]\n        else:\n            env[\"CLASSPATH\"] = jar_path\n\n        # Run from the REAL binary directory (not /usr/local/bin) to match any internal\n        # \"find files relative to executable\" logic.\n        converter_dir = os.path.dirname(converter_path)\n\n        result = subprocess.run(\n            cmd,\n            capture_output=True,\n            text=True,\n            timeout=DEFAULT_TIMEOUT_SECONDS,\n            env=env,\n            cwd=converter_dir\n        )\n\n        if result.returncode != 0:\n            print(\"Conversion failed!\")\n            print(f\"STDOUT: {result.stdout}\")\n            print(f\"STDERR: {result.stderr}\")\n            return False\n\n        print(\"Conversion successful!\")\n        return os.path.exists(output_file)\n\n    except Exception as e:\n        print(f\"Conversion error: {e}\")\n        return False\n\n\ndef _build_export_path(image, image_id):\n    safe_name = _safe_filename(image.getName(), fallback=f\"omero_image_{image_id}\")\n    timestamp = datetime.utcnow().strftime(\"%Y%m%dT%H%M%SZ\")\n    output_dir = os.path.join(EXPORT_ROOT, f\"image_{image_id}\")\n    os.makedirs(output_dir, exist_ok=True)\n    return os.path.join(output_dir, f\"{safe_name}_{timestamp}.ims\")\n\n\ndef run_conversion(conn, image_id):\n    image = conn.getObject(\"Image\", image_id)\n    if not image:\n        return (False, f\"Image {image_id} not found\", None)\n\n    print(f\"Converting image: {image.getName()} (ID: {image_id})\")\n\n    input_file = get_original_file_path(conn, image)\n    if not input_file:\n        return (False, \"Could not get original file path\", None)\n    if not os.path.exists(input_file):\n        return (False, f\"Original file not found: {input_file}\", None)\n\n    print(f\"Input file: {input_file}\")\n\n    output_file = _build_export_path(image, image_id)\n\n    success = convert_to_ims(image, input_file, output_file)\n    if not success:\n        return (False, \"Conversion to IMS failed\", None)\n\n    return (True, f\"Successfully exported IMS: {output_file}\", output_file)\n\n\ndef run_script():\n    client = scripts.client(\n        \"IMS_Export.py\",\n        \"\"\"Export an OMERO image to IMS format using ImarisConvertBioformats.\"\"\",\n        scripts.Long(\n            \"Image_ID\",\n            optional=False,\n            grouping=\"1\",\n            description=\"ID of the image to export to IMS format\"\n        ),\n        namespaces=[\"omero.export\"],\n        version=\"1.0.0\",\n        authors=[\"Efstratios Mitridis\"],\n        institutions=[\"ZMB/UZH\"],\n        contact=\"mitridisefstratios@gmail.com\",\n    )\n    try:\n        params = client.getInputs(unwrap=True)\n        image_id = params.get(\"Image_ID\")\n        conn = BlitzGateway(client_obj=client)\n        conn.SERVICE_OPTS.setOmeroGroup(-1)  # Enable cross-group access\n        success, message, export_path = run_conversion(conn, image_id)\n        client.setOutput(\"Message\", rstring(message))\n        \n        if success and export_path and os.path.exists(export_path):\n            # Attach the IMS file as a FileAnnotation to the image\n            # This makes it downloadable from the Activities panel\n            try:\n                from omero.model import FileAnnotationI, OriginalFileI\n                from omero.gateway import FileAnnotationWrapper\n                \n                image = conn.getObject(\"Image\", image_id)\n                if image:\n                    # Switch to the image's group for write operations\n                    image_group = image.getDetails().getGroup().getId()\n                    conn.SERVICE_OPTS.setOmeroGroup(image_group)\n                    \n                    # Create file annotation\n                    file_ann = conn.createFileAnnfromLocalFile(\n                        export_path,\n                        mimetype=\"application/octet-stream\",\n                        ns=\"omero.export.ims\",\n                        desc=f\"IMS export of {image.getName()}\"\n                    )\n                    \n                    # Link to image\n                    image.linkAnnotation(file_ann)\n                    \n                    # Return the file annotation object so OMERO.web shows a download button\n                    try:\n                        client.setOutput(\"File_Annotation\", omero.rtypes.robject(file_ann._obj))\n                    except Exception as output_error:\n                        print(f\"WARNING: Failed to set File_Annotation output: {output_error}\")\n                    # Also return the ID for clients that only parse numeric outputs\n                    client.setOutput(\"File_Annotation_Id\", omero.rtypes.rlong(file_ann.getId()))\n                    client.setOutput(\"Export_Path\", rstring(export_path))\n                    client.setOutput(\"Export_Name\", rstring(os.path.basename(export_path)))\n                    \n                    print(f\"Attached file annotation {file_ann.getId()} to image {image_id}\")\n                else:\n                    print(f\"WARNING: Could not retrieve image {image_id} to attach file\")\n                    client.setOutput(\"Export_Path\", rstring(export_path))\n                    client.setOutput(\"Export_Name\", rstring(os.path.basename(export_path)))\n            except Exception as e:\n                print(f\"WARNING: Failed to attach file annotation: {e}\")\n                import traceback\n                traceback.print_exc()\n                # Still return the path even if attachment fails\n                client.setOutput(\"Export_Path\", rstring(export_path))\n                client.setOutput(\"Export_Name\", rstring(os.path.basename(export_path)))\n        \n    except Exception as e:\n        client.setOutput(\"Message\", rstring(f\"Script error: {e}\"))\n        import traceback\n        traceback.print_exc()\n    finally:\n        client.closeSession()\n\n\nif __name__ == \"__main__\":\n    run_script()\n
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+
+from omero.gateway import BlitzGateway
+from omero.rtypes import rstring
+from omero import scripts
+import omero.rtypes
+import os
+import subprocess
+import shutil
+import re
+import urllib.request
+import urllib.error
+from datetime import datetime
+
+from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
+
+IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
+BIOFORMATS_SUBDIR = "bioformats"
+BIOFORMATS_JAR_NAME = "bioformats_package.jar"
+# Keep this in sync with startup/51-install-imarisconvert.sh
+BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
+DEFAULT_TIMEOUT_SECONDS = 600
+
+
+def _get_export_root():
+    """Resolve the IMS export root directory, with a safe fallback.
+
+    This function is intentionally NOT called at module level so that the
+    OMERO processor can parse script parameters without triggering side
+    effects (filesystem access, env-file reads) that would crash parameter
+    discovery and cause the 'Can't find params for <id>' ValidationException.
+    """
+    try:
+        return get_env(
+            "OMERO_IMS_EXPORT_DIR",
+            env_file=ENV_FILE_OMERO_CELERY,
+        )
+    except RuntimeError as e:
+        fallback = "/OMERO/ImarisExports"
+        print(f"WARNING: {e}")
+        print(f"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={fallback}")
+        return fallback
+
+
+def _safe_filename(name, fallback="image"):
+    """Create a filesystem-safe filename (no path separators, no control chars)."""
+    if name is None:
+        name = ""
+    name = str(name)
+    name = name.replace("\x00", "")
+    name = name.strip()
+    if not name:
+        name = fallback
+    # Replace path separators and other risky chars.
+    name = name.replace(os.sep, "_")
+    if os.altsep:
+        name = name.replace(os.altsep, "_")
+    # Keep a conservative whitelist.
+    name = re.sub(r"[^A-Za-z0-9._ -]+", "_", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    # Limit length to avoid filesystem/path issues.
+    if len(name) > 200:
+        name = name[:200].rstrip()
+    if not name:
+        name = fallback
+    return name
+
+
+def _ensure_bioformats_jar(install_dir):
+    """Ensure Bio-Formats jar exists where ImarisConvertBioformats expects it."""
+    jar_dir = os.path.join(install_dir, BIOFORMATS_SUBDIR)
+    jar_path = os.path.join(jar_dir, BIOFORMATS_JAR_NAME)
+
+    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+        return jar_path
+
+    os.makedirs(jar_dir, exist_ok=True)
+    tmp_path = jar_path + ".download"
+
+    print(f"Bio-Formats jar missing. Downloading to: {jar_path}")
+    print(f"Source: {BIOFORMATS_URL}")
+    try:
+        with urllib.request.urlopen(BIOFORMATS_URL, timeout=60) as r, open(tmp_path, "wb") as f:
+            shutil.copyfileobj(r, f)
+        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+            print("ERROR: Downloaded Bio-Formats jar is empty")
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception as exc:
+                logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
+            return None
+        os.replace(tmp_path, jar_path)
+        os.chmod(jar_path, 0o644)
+    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        print(f"ERROR: Failed to download Bio-Formats jar: {e}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
+        return None
+    except Exception as e:
+        print(f"ERROR: Unexpected error downloading Bio-Formats jar: {e}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception as exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
+        return None
+
+    if not os.path.exists(jar_path) or os.path.getsize(jar_path) == 0:
+        print("ERROR: Bio-Formats jar download resulted in an empty or missing file")
+        return None
+
+    return jar_path
+
+
+def _get_voxel_size_from_image(image):
+    """
+    Return voxel sizes (vx, vy, vz) in micrometers as floats.
+    ImarisConvert fails if any axis has voxel size <= 0, so we ensure safe defaults.
+
+    Fallback policy (minimal, safe):
+      - If X missing/<=0 -> 1.0
+      - If Y missing/<=0 -> X
+      - If Z missing/<=0 -> X  (common for single-plane / missing Z metadata)
+    """
+    vx = None
+    vy = None
+    vz = None
+
+    try:
+        px = image.getPrimaryPixels()
+        if px:
+            psx = px.getPhysicalSizeX()
+            psy = px.getPhysicalSizeY()
+            psz = px.getPhysicalSizeZ()
+
+            if psx is not None:
+                try:
+                    vx = float(psx.getValue())
+                except Exception:
+                    vx = None
+            if psy is not None:
+                try:
+                    vy = float(psy.getValue())
+                except Exception:
+                    vy = None
+            if psz is not None:
+                try:
+                    vz = float(psz.getValue())
+                except Exception:
+                    vz = None
+    except Exception:
+        vx = vy = vz = None
+
+    if vx is None or vx <= 0:
+        vx = 1.0
+    if vy is None or vy <= 0:
+        vy = vx
+    if vz is None or vz <= 0:
+        vz = vx
+
+    return vx, vy, vz
+
+
+def get_original_file_path(conn, image):
+    try:
+        fileset = image.getFileset()
+        if not fileset:
+            return None
+        files = list(fileset.listFiles())
+        if not files:
+            return None
+        original_file = files[0]
+        managed_repo_path = "/OMERO/ManagedRepository"
+        file_path = original_file.getPath()
+        file_name = original_file.getName()
+        full_path = os.path.join(managed_repo_path, file_path, file_name)
+        return full_path
+    except Exception as e:
+        print(f"Error getting original file path: {e}")
+        return None
+
+
+def convert_to_ims(image, input_file, output_file):
+    try:
+        # Prefer the binary installed by startup/51-install-imarisconvert.sh
+        converter = shutil.which("imarisconvert")
+        if converter and os.path.exists(converter):
+            # IMPORTANT: /usr/local/bin/imarisconvert may be a symlink or wrapper.
+            # Resolve to the real binary so ImarisConvertBioformats can find its runtime files.
+            converter_path = os.path.realpath(converter)
+        else:
+            converter_path = os.path.join(IMARISCONVERT_INSTALL_DIR, "ImarisConvertBioformats")
+
+        if not os.path.exists(converter_path):
+            print(f"ERROR: ImarisConvertBioformats not found at: {converter_path}")
+            return False
+
+        # Ensure Bio-Formats jar exists at the location expected by ImarisConvertBioformats.
+        jar_path = _ensure_bioformats_jar(IMARISCONVERT_INSTALL_DIR)
+        if not jar_path:
+            print("ERROR: Bio-Formats jar could not be ensured. Aborting conversion.")
+            return False
+
+        # Ensure voxel size is valid for ImarisConvert (it fails if any axis is 0).
+        vsx, vsy, vsz = _get_voxel_size_from_image(image)
+
+        cmd = [
+            converter_path,
+            "-i", input_file,
+            "-o", output_file,
+            "-vsx", str(vsx),
+            "-vsy", str(vsy),
+            "-vsz", str(vsz),
+        ]
+
+        print(f"Running: {' '.join(cmd)}")
+
+        # Ensure shared libraries can be found.
+        env = os.environ.copy()
+        ld_parts = []
+        if env.get("LD_LIBRARY_PATH"):
+            ld_parts.append(env["LD_LIBRARY_PATH"])
+        ld_parts.append(IMARISCONVERT_INSTALL_DIR)
+        env["LD_LIBRARY_PATH"] = ":".join([p for p in ld_parts if p])
+
+        # Force Bio-Formats onto the Java classpath (covers launchers that rely on CLASSPATH).
+        # Preserve any existing CLASSPATH by appending.
+        if env.get("CLASSPATH"):
+            env["CLASSPATH"] = jar_path + os.pathsep + env["CLASSPATH"]
+        else:
+            env["CLASSPATH"] = jar_path
+
+        # Run from the REAL binary directory (not /usr/local/bin) to match any internal
+        # "find files relative to executable" logic.
+        converter_dir = os.path.dirname(converter_path)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            env=env,
+            cwd=converter_dir
+        )
+
+        if result.returncode != 0:
+            print("Conversion failed!")
+            print(f"STDOUT: {result.stdout}")
+            print(f"STDERR: {result.stderr}")
+            return False
+
+        print("Conversion successful!")
+        return os.path.exists(output_file)
+
+    except Exception as e:
+        print(f"Conversion error: {e}")
+        return False
+
+
+def _build_export_path(export_root, image, image_id):
+    safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    output_dir = os.path.join(export_root, f"image_{image_id}")
+    os.makedirs(output_dir, exist_ok=True)
+    return os.path.join(output_dir, f"{safe_name}_{timestamp}.ims")
+
+
+def run_conversion(conn, image_id, export_root):
+    image = conn.getObject("Image", image_id)
+    if not image:
+        return (False, f"Image {image_id} not found", None)
+
+    print(f"Converting image: {image.getName()} (ID: {image_id})")
+
+    input_file = get_original_file_path(conn, image)
+    if not input_file:
+        return (False, "Could not get original file path", None)
+    if not os.path.exists(input_file):
+        return (False, f"Original file not found: {input_file}", None)
+
+    print(f"Input file: {input_file}")
+
+    output_file = _build_export_path(export_root, image, image_id)
+
+    success = convert_to_ims(image, input_file, output_file)
+    if not success:
+        return (False, "Conversion to IMS failed", None)
+
+    return (True, f"Successfully exported IMS: {output_file}", output_file)
+
+
+def run_script():
+    # Resolve export root and ensure directory exists here (inside run_script),
+    # NOT at module level, so the OMERO processor can parse parameters without
+    # triggering filesystem side-effects that cause ValidationException:
+    # 'Can't find params for <id>'.
+    export_root = _get_export_root()
+    os.makedirs(export_root, exist_ok=True)
+
+    client = scripts.client(
+        "IMS_Export.py",
+        """Export an OMERO image to IMS format using ImarisConvertBioformats.""",
+        scripts.Long(
+            "Image_ID",
+            optional=False,
+            grouping="1",
+            description="ID of the image to export to IMS format"
+        ),
+        namespaces=["omero.export"],
+        version="1.0.0",
+        authors=["Efstratios Mitridis"],
+        institutions=["ZMB/UZH"],
+        contact="mitridisefstratios@gmail.com",
+    )
+    try:
+        params = client.getInputs(unwrap=True)
+        image_id = params.get("Image_ID")
+        conn = BlitzGateway(client_obj=client)
+        conn.SERVICE_OPTS.setOmeroGroup(-1)  # Enable cross-group access
+        success, message, export_path = run_conversion(conn, image_id, export_root)
+        client.setOutput("Message", rstring(message))
+
+        if success and export_path and os.path.exists(export_path):
+            # Attach the IMS file as a FileAnnotation to the image
+            # This makes it downloadable from the Activities panel
+            try:
+                from omero.model import FileAnnotationI, OriginalFileI
+                from omero.gateway import FileAnnotationWrapper
+
+                image = conn.getObject("Image", image_id)
+                if image:
+                    # Switch to the image's group for write operations
+                    image_group = image.getDetails().getGroup().getId()
+                    conn.SERVICE_OPTS.setOmeroGroup(image_group)
+
+                    # Create file annotation
+                    file_ann = conn.createFileAnnfromLocalFile(
+                        export_path,
+                        mimetype="application/octet-stream",
+                        ns="omero.export.ims",
+                        desc=f"IMS export of {image.getName()}"
+                    )
+
+                    # Link to image
+                    image.linkAnnotation(file_ann)
+
+                    # Return the file annotation object so OMERO.web shows a download button
+                    try:
+                        client.setOutput("File_Annotation", omero.rtypes.robject(file_ann._obj))
+                    except Exception as output_error:
+                        print(f"WARNING: Failed to set File_Annotation output: {output_error}")
+                    # Also return the ID for clients that only parse numeric outputs
+                    client.setOutput("File_Annotation_Id", omero.rtypes.rlong(file_ann.getId()))
+                    client.setOutput("Export_Path", rstring(export_path))
+                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+
+                    print(f"Attached file annotation {file_ann.getId()} to image {image_id}")
+                else:
+                    print(f"WARNING: Could not retrieve image {image_id} to attach file")
+                    client.setOutput("Export_Path", rstring(export_path))
+                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+            except Exception as e:
+                print(f"WARNING: Failed to attach file annotation: {e}")
+                import traceback
+                traceback.print_exc()
+                # Still return the path even if attachment fails
+                client.setOutput("Export_Path", rstring(export_path))
+                client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+
+    except Exception as e:
+        client.setOutput("Message", rstring(f"Script error: {e}"))
+        import traceback
+        traceback.print_exc()
+    finally:
+        client.closeSession()
+
+
+if __name__ == "__main__":
+    run_script()
