@@ -527,7 +527,7 @@ schedule_job_service_bootstrap() {
                 ready_wait=$((poll_interval * 6))
             done
 
-            [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: sync failed after ${max_retries} attempts; will wait until next interval"
+            [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: Job-service group sync failed after ${max_retries} attempts; will wait until next interval"
             first_cycle=0
 
             epoch_end="$(date +%s)"
