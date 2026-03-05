@@ -332,7 +332,7 @@ services:
     volumes:
       - ${OMERO_DATABASE_PATH:?Set OMERO_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \\"$$POSTGRES_USER\\" -d \\"$$POSTGRES_DB\\" -h 127.0.0.1 -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5432"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -378,10 +378,11 @@ services:
         hard: 15000
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "runuser -p -m -u omero-server -- sh -c 'HOME=/tmp /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \\"$$ROOTPASS\\"'"
-        ]
+        - CMD-SHELL
+        - >-
+          runuser -p -m -u omero-server -- sh -c
+          'HOME=/tmp /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w
+          "$$ROOTPASS"'
       interval: 10s
       timeout: 10s
       retries: 30
@@ -499,7 +500,7 @@ services:
     volumes:
       - ${OMERO_PLUGIN_DATABASE_PATH:?Set OMERO_PLUGIN_DATABASE_PATH (run installation/installation_script.sh)}:/var/lib/postgresql/data:rw
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \\"$$POSTGRES_USER\\" -d \\"$$POSTGRES_DB\\" -h 127.0.0.1 -p 5433"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -h 127.0.0.1 -p 5433"]
       interval: 10s
       timeout: 10s
       retries: 30
