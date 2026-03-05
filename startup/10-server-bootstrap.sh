@@ -422,16 +422,25 @@ schedule_job_service_bootstrap() {
         ensure_user_exists() {
             local _attempt
             for _attempt in $(seq 1 "${user_ensure_retries}"); do
-                if run_omero user info --user-name "${job_user}" -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                # Note: 'omero user info' does not accept global arguments (-s -p -u -w) after 'info'.
+                # They MUST be placed BEFORE the subcommand, unlike 'omero user add'.
+                if run_omero -s "${host}" -p "${port}" -u root -w "${root_pass}" user info --user-name "${job_user}" >/dev/null 2>&1; then
                     return 0
                 fi
 
                 local out="" rc=0
                 out="$(run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
                 rc=$?
+                
                 if [[ "${rc}" -eq 0 ]]; then
                     return 0
                 fi
+                
+                # If OMERO tells us the user exists but exited with an error code, it means it was already created. Treat as success.
+                if printf "%s" "${out}" | grep -qi "User exists:"; then
+                    return 0
+                fi
+
                 echo "[$(date -u)] WARN: Failed to add user ${job_user} (rc=${rc}): ${out}"
 
                 sleep $((2 * _attempt))
