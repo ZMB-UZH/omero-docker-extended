@@ -393,16 +393,12 @@ schedule_job_service_bootstrap() {
         umask 077
         mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
 
-        # Prevent duplicate loops
-        if [[ -f "${pidfile}" ]]; then
-            oldpid="$(cat "${pidfile}" 2>/dev/null || true)"
-            if [[ -n "${oldpid}" ]] && kill -0 "${oldpid}" 2>/dev/null; then
-                echo "[$(date -u)] job-service sync already running (pid=${oldpid}); exiting"
-                exit 0
-            fi
+        # Prevent duplicate loops robustly (pidfile alone can go stale)
+        local lockdir="${pidfile}.lock"
+        if ! acquire_lockdir "${lockdir}" "${pidfile}" "job-service sync"; then
+            exit 0
         fi
-        echo "${BASHPID}" > "${pidfile}"
-        trap 'rm -f "${pidfile}"' EXIT
+        trap 'release_lockdir "${lockdir}" "${pidfile}"' EXIT
 
         # Log to file AND to container stdout (so it's visible via docker logs)
         exec > >(tee -a "${log_file}") 2>&1
@@ -414,8 +410,7 @@ schedule_job_service_bootstrap() {
             local deadline=$(( $(date +%s) + wait_seconds ))
 
             while [[ "$(date +%s)" -lt "${deadline}" ]]; do
-                if run_omero admin status >/dev/null 2>&1 \
-                    && run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
+                if run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
                     && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
                     return 0
                 fi
@@ -431,9 +426,13 @@ schedule_job_service_bootstrap() {
                     return 0
                 fi
 
-                if run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                local out="" rc=0
+                out="$(run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
+                rc=$?
+                if [[ "${rc}" -eq 0 ]]; then
                     return 0
                 fi
+                echo "[$(date -u)] WARN: Failed to add user ${job_user} (rc=${rc}): ${out}"
 
                 sleep $((2 * _attempt))
             done
@@ -459,15 +458,20 @@ schedule_job_service_bootstrap() {
 
         sync_once() {
             local ready_wait="$1"
+            
+            # Print debug info
+            echo "[$(date -u)] DEBUG: Checking OMERO readiness..."
             if ! wait_for_server "${ready_wait}"; then
                 echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s"
                 return 1
             fi
+            echo "[$(date -u)] DEBUG: OMERO is ready. Ensuring user exists..."
 
             if ! ensure_user_exists; then
                 echo "[$(date -u)] ERROR: Failed to ensure ${job_user} exists"
                 return 1
             fi
+            echo "[$(date -u)] DEBUG: User ${job_user} exists. Listing groups..."
 
             local groups=""
             groups="$(list_groups | grep -v -E '^(root|system|user)$' || true)"
@@ -569,6 +573,12 @@ schedule_ldap_group_bootstrap() {
 
     (
         set -eo pipefail
+        local lockdir="${SERVER_VAR_DIR}/ldap-group-bootstrap.lock"
+        if ! acquire_lockdir "${lockdir}" "" "ldap-group-bootstrap"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
         local add_output=""
         local add_exit_code=1
         local retry_limit="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRIES:-180}"
@@ -576,7 +586,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero admin status >/dev/null 2>&1; then
+            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
                 break
             fi
             sleep "${retry_delay_seconds}"
@@ -684,9 +694,15 @@ schedule_script_registration() {
 
     (
         set -eo pipefail
+        local lockdir="${SERVER_VAR_DIR}/register-official-scripts.lock"
+        if ! acquire_lockdir "${lockdir}" "" "register-official-scripts"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero admin status >/dev/null 2>&1; do
+        until run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; do
             sleep 2
         done
 
@@ -703,10 +719,61 @@ schedule_script_registration() {
     log "Scheduled background official script registration"
 }
 
+acquire_lockdir() {
+    local lockdir="$1"
+    local pidfile="${2:-}"
+    local label="${3:-lock}"
+    local existing_pid=""
+
+    if mkdir "${lockdir}" 2>/dev/null; then
+        echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
+        if [[ -n "${pidfile}" ]]; then
+            echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    existing_pid="$(cat "${lockdir}/pid" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
+        log "${label} already running (pid=${existing_pid}); skipping"
+        return 1
+    fi
+
+    rm -rf "${lockdir}" 2>/dev/null || true
+    if ! mkdir "${lockdir}" 2>/dev/null; then
+        log "ERROR: could not acquire ${label} lock (${lockdir})"
+        return 1
+    fi
+
+    echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
+    if [[ -n "${pidfile}" ]]; then
+        echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
+    fi
+    return 0
+}
+
+release_lockdir() {
+    local lockdir="$1"
+    local pidfile="${2:-}"
+    rm -rf "${lockdir}" 2>/dev/null || true
+    if [[ -n "${pidfile}" ]]; then
+        rm -f "${pidfile}" 2>/dev/null || true
+    fi
+}
+
+
 main() {
     log "Starting consolidated startup flow"
 
     mkdir -p "${CERTS_DIR}" "${SERVER_LOG_DIR}"
+
+    # Prevent accidental double-execution (entrypoint ordering bugs, etc.)
+    mkdir -p "${SERVER_VAR_DIR}"
+    local main_lockdir="${SERVER_VAR_DIR}/server-bootstrap.lock"
+    if ! acquire_lockdir "${main_lockdir}" "" "server-bootstrap"; then
+        exit 0
+    fi
+    trap 'release_lockdir "${main_lockdir}" ""' EXIT
 
     check_writable_dir "${OMERO_DIR}" "OMERO data"
     check_writable_dir "${CERTS_DIR}" "OMERO certificates"
