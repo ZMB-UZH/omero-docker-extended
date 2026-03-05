@@ -377,9 +377,10 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         '#!/bin/bash' \
         'set -eu' \
-        'omero=/opt/omero/server/venv3/bin/omero' \
+        'omero=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero' \
         'if [ ! -x "$omero" ]; then' \
-        '    omero="$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero"' \
+        '    echo "FATAL: OMERO CLI executable not found at $omero" >&2' \
+        '    exit 127' \
         'fi' \
         'cd /opt/omero/server' \
         'echo "Starting OMERO.server as omero-server"' \
@@ -394,7 +395,12 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         '#!/bin/bash' \
         'set -e' \
-        'source /opt/omero/server/venv3/bin/activate' \
+        'VENV_ACTIVATE=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/activate' \
+        'if [ ! -f "$VENV_ACTIVATE" ]; then' \
+        '    echo "FATAL: OMERO virtualenv activate script not found at $VENV_ACTIVATE" >&2' \
+        '    exit 127' \
+        'fi' \
+        'source "$VENV_ACTIVATE"' \
         'for f in /startup/*; do' \
         '    if [ -f "$f" -a -x "$f" ]; then' \
         '        echo "Running $f $@"' \
@@ -414,7 +420,7 @@ RUN set -euo pipefail; \
 # We must redefine it to drop to the omero-server user.
 # --------------------------------------------------------------------------------------
 HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
-    CMD runuser -p -m -u omero-server -- /opt/omero/server/venv3/bin/omero admin diagnostics
+    CMD runuser -p -m -u omero-server -- sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; exec "${omero_bin}" admin diagnostics'
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts

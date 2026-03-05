@@ -381,8 +381,7 @@ services:
         - CMD-SHELL
         - >-
           runuser -p -m -u omero-server -- sh -c
-          'HOME=/tmp /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w
-          "$$ROOTPASS"'
+          'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; HOME=/tmp "${omero_bin}" -s 127.0.0.1 -p 4064 login -u root -w "$$ROOTPASS"'
       interval: 10s
       timeout: 10s
       retries: 30
