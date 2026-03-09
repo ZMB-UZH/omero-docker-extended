@@ -21,6 +21,7 @@ DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
+DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
@@ -592,6 +593,10 @@ build_target_overrides() {
             printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_staging_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
         fi
 
+        if [ "${DOCKER_BUILD_SQUASH}" = "1" ]; then
+            printf -- "--set\n%s.squash=true\n" "${target}"
+        fi
+
         if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
             # Registry push: apply full compression settings.
             # force-compression=true is intentional here — it ensures all
@@ -744,6 +749,7 @@ main() {
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
     validate_toggle "DOCKER_BUILD_LOCAL_CACHE_ENABLED" "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
+    validate_toggle "DOCKER_BUILD_SQUASH" "${DOCKER_BUILD_SQUASH}"
     validate_local_cache_mode
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
@@ -797,6 +803,7 @@ main() {
     echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
     echo "  Local cache export   : ${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
     echo "  Local cache mode     : ${DOCKER_BUILD_LOCAL_CACHE_MODE}"
+    echo "  Squash layers        : ${DOCKER_BUILD_SQUASH}"
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"

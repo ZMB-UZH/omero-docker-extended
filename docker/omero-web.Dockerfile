@@ -32,29 +32,23 @@ ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Locate OMERO.web venv and fail fast if path or layout changes
-# -------------------------------------------------------------
+# Locate OMERO.web venv, validate layout, and ensure stable OMERO.web symlink
+# ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
-    fi
-
-# Ensure stable OMERO.web path points at the versioned installation
-# -----------------------------------------------------------------
-RUN set -euo pipefail; \
+    fi; \
     WEB_DIR="$(find /opt/omero -maxdepth 4 -type d -name 'OMERO.web*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -n "${WEB_DIR}" ]]; then \
         mkdir -p /opt/omero/web; \
         if [[ ! -e /opt/omero/web/OMERO.web ]]; then \
             ln -s "${WEB_DIR}" /opt/omero/web/OMERO.web; \
         fi; \
-    else \
-        if [[ ! -d /opt/omero/web/OMERO.web ]]; then \
-            echo "ERROR: Could not find OMERO.web directory under /opt/omero or fallback /opt/omero/web/OMERO.web." >&2; \
-            exit 1; \
-        fi; \
+    elif [[ ! -d /opt/omero/web/OMERO.web ]]; then \
+        echo "ERROR: Could not find OMERO.web directory under /opt/omero or fallback /opt/omero/web/OMERO.web." >&2; \
+        exit 1; \
     fi
 
 # Optional (off by default): vulnerability-testing updates for OS packages
@@ -306,9 +300,8 @@ RUN set -euo pipefail; \
 #  1. Delete 99-run.sh — supervisord manages gunicorn instead.
 #  2. Replace entrypoint with one that exec's "$@" after startup scripts.
 # -----------------------------------------------------------------------
-RUN rm -f /startup/99-run.sh
-
 RUN set -euo pipefail; \
+    rm -f /startup/99-run.sh; \
     printf '%s\n' \
         '#!/usr/local/bin/dumb-init /bin/bash' \
         'set -e' \

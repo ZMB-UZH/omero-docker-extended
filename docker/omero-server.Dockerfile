@@ -33,35 +33,17 @@ ARG DNF_MAX_ATTEMPTS=3
 ARG DNF_RETRY_SLEEP_SECONDS=0
 ARG DNF_USE_ROCKY_MIRRORLIST=1
 
-# Locate OMERO.server venv and fail fast if layout changes
-# --------------------------------------------------------
-RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO server venv" >&2; \
-        exit 1; \
-    fi
-
-# Ensure stable OMERO.server path points at the versioned installation
-# --------------------------------------------------------------------
-RUN set -euo pipefail; \
-    SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${SERVER_DIR}" ]]; then \
-        echo "ERROR: Could not find versioned OMERO.server directory." >&2; \
-        exit 1; \
-    fi; \
-    if [[ ! -e /opt/omero/server/OMERO.server ]]; then \
-        ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
-    fi
-
-# Create Python symlink in OMERO.server/bin for bootstrap script
-# --------------------------------------------------------------
+# Locate OMERO.server venv and directories, then prepare stable symlinks
+# ----------------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || -z "${SERVER_DIR}" ]]; then \
         echo "ERROR: Could not find venv or OMERO.server directory" >&2; \
         exit 1; \
+    fi; \
+    if [[ ! -e /opt/omero/server/OMERO.server ]]; then \
+        ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
     fi; \
     mkdir -p "${SERVER_DIR}/bin"; \
     ln -sf "${VENV_DIR}/bin/python" "${SERVER_DIR}/bin/python"; \
@@ -299,23 +281,16 @@ RUN set -euo pipefail; \
 # Consolidated OMERO.server startup flow
 # --------------------------------------
 COPY startup/10-server-bootstrap.sh /startup/10-server-bootstrap.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/10-server-bootstrap.sh; \
-    chmod 0555 /startup/10-server-bootstrap.sh
-
-# Install OMERO downloader
-# ------------------------
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/50-install-omero-downloader.sh; \
-    chmod 0555 /startup/50-install-omero-downloader.sh
-
-# Install ImarisConvertBioformats
-# -------------------------------
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
-    chown root:root /startup/51-install-imarisconvert.sh; \
-    chmod 0555 /startup/51-install-imarisconvert.sh
+    for startup_script in \
+        /startup/10-server-bootstrap.sh \
+        /startup/50-install-omero-downloader.sh \
+        /startup/51-install-imarisconvert.sh; do \
+        chown root:root "${startup_script}"; \
+        chmod 0555 "${startup_script}"; \
+    done
 
 # Pre-configure library path for ImarisConvertBioformats
 # ------------------------------------------------------
