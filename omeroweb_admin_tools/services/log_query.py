@@ -7,6 +7,7 @@ import logging
 import re
 import json
 import os
+import socket
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -232,17 +233,22 @@ def _execute_loki_query(
     query: str,
     lookback_seconds: int,
     max_entries: int,
+    since_ns: Optional[int] = None,
 ) -> dict:
     """Execute a single Loki query_range request and return the parsed JSON payload."""
     end_time = dt.datetime.now(tz=dt.timezone.utc)
     start_time = end_time - dt.timedelta(seconds=lookback_seconds)
+    start_ns = int(start_time.timestamp() * 1e9)
+    end_ns = int(end_time.timestamp() * 1e9)
+    if since_ns is not None:
+        start_ns = max(start_ns, since_ns + 1)
     params = urllib.parse.urlencode(
         {
             "query": query,
             "direction": "backward",
             "limit": max_entries,
-            "start": str(int(start_time.timestamp() * 1e9)),
-            "end": str(int(end_time.timestamp() * 1e9)),
+            "start": str(start_ns),
+            "end": str(end_ns),
         }
     )
     url = f"{config.loki_url}/loki/api/v1/query_range?{params}"
@@ -280,6 +286,8 @@ def _execute_loki_query(
 
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Loki request failed: {exc}") from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise RuntimeError(f"Loki request timed out: {exc}") from exc
 
 def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
     """Extract LogEntry objects from a Loki query_range response payload."""
@@ -343,6 +351,7 @@ def fetch_loki_logs(
     lookback_seconds: int,
     max_entries: int,
     internal_files: Optional[Dict[str, set[str]]] = None,
+    since_ns: Optional[int] = None,
 ) -> List[LogEntry]:
     """Fetch logs from Loki for the selected containers and time window.
 
@@ -379,33 +388,75 @@ def fetch_loki_logs(
             query = f'{{compose_service="{container}"}}'
 
         try:
-            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            payload = _execute_loki_query(
+                config,
+                query,
+                lookback_seconds,
+                max_entries,
+                since_ns=since_ns,
+            )
             entries = _parse_entries_from_payload(payload)
             logger.debug("Docker query for %s: got %d entries", container, len(entries))
             all_entries.extend(entries)
         except RuntimeError as exc:
             logger.warning("Docker log query failed for %s: %s", container, exc)
 
-    # ── Internal logs: one query per service ──
-    # Query all internal logs for each service. File-level filtering is done
-    # on the frontend based on user's checkbox selections.
+    # ── Internal logs: query by service and selected file filters ──
     for service in internal_services:
         normalized = _normalize_internal_service(service)
+        selected_files = sorted(internal_files.get(service, set())) if internal_files else []
+        if selected_files:
+            service_entries: List[LogEntry] = []
+            for filename in selected_files:
+                query = _build_internal_file_query(service, filename, label_key="filepath")
+                try:
+                    payload = _execute_loki_query(
+                        config,
+                        query,
+                        lookback_seconds,
+                        max_entries,
+                        since_ns=since_ns,
+                    )
+                    entries = _parse_entries_from_payload(payload)
+                    for entry in entries:
+                        parsed = _split_internal_container(entry.container)
+                        if not parsed:
+                            continue
+                        entry_service, entry_filename = parsed
+                        if entry_service == service and entry_filename == filename:
+                            service_entries.append(entry)
+                except RuntimeError as exc:
+                    logger.warning(
+                        "Internal log query failed for %s/%s: %s",
+                        service,
+                        filename,
+                        exc,
+                    )
+            # Preserve historical semantics: internal selections are still
+            # capped per service to max_entries, even when queried per file.
+            if len(service_entries) > max_entries:
+                service_entries.sort(key=_entry_sort_key, reverse=True)
+                service_entries = service_entries[:max_entries]
+            logger.debug(
+                "Internal query for %s (normalized=%s, files=%d): got %d entries",
+                service,
+                normalized,
+                len(selected_files),
+                len(service_entries),
+            )
+            all_entries.extend(service_entries)
+            continue
+
         query = f'{{compose_service="{normalized}", log_type="internal"}}'
         try:
-            payload = _execute_loki_query(config, query, lookback_seconds, max_entries)
+            payload = _execute_loki_query(
+                config,
+                query,
+                lookback_seconds,
+                max_entries,
+                since_ns=since_ns,
+            )
             entries = _parse_entries_from_payload(payload)
-            selected_files = internal_files.get(service) if internal_files else None
-            if selected_files:
-                filtered_entries: List[LogEntry] = []
-                for entry in entries:
-                    parsed = _split_internal_container(entry.container)
-                    if not parsed:
-                        continue
-                    entry_service, filename = parsed
-                    if entry_service == service and filename in selected_files:
-                        filtered_entries.append(entry)
-                entries = filtered_entries
             logger.debug(
                 "Internal query for %s (normalized=%s): got %d entries",
                 service,
@@ -460,7 +511,9 @@ def _build_internal_file_query(
 ) -> str:
     """Build a Loki query for a specific internal log file."""
     normalized = _normalize_internal_service(service)
-    escaped = re.escape(filename)
+    # LogQL label matcher strings use backslash escapes, so regex escapes must
+    # be doubled to survive string parsing (e.g., "\." -> "\\.").
+    escaped = re.escape(filename).replace("\\", "\\\\")
     return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
 
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
@@ -541,7 +594,7 @@ def fetch_internal_log_labels(
                 # Keep return type consistent (Tuple[List[str], str]) to avoid
                 # a ValueError during unpacking in the Django view.
                 return [], "filepath"
-    except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, socket.timeout) as exc:
         logger.warning("fetch_internal_log_labels: request failed: %s", exc)
         return [], "filepath"
 
