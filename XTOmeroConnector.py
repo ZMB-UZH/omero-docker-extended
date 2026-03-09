@@ -196,6 +196,64 @@ class OMEROWebClient:
             return True
         return False
 
+    def _looks_like_login_page(self, raw_body):
+        """Best-effort detection for HTML login content returned with 200."""
+        if not raw_body:
+            return False
+        try:
+            text = raw_body[:4096].decode("utf-8", errors="ignore").lower()
+        except Exception:
+            return False
+        return (
+            "csrfmiddlewaretoken" in text
+            and "name=\"username\"" in text
+            and "/webclient/login/" in text
+        )
+
+    def _with_all_groups(self, endpoint):
+        """Ensure API endpoints query all groups accessible to the user."""
+        if "group=" in endpoint:
+            return endpoint
+        separator = "&" if "?" in endpoint else "?"
+        return f"{endpoint}{separator}group=-1"
+
+    def _extract_items(self, payload, collection_keys=None):
+        """Extract list payloads from common API response wrappers."""
+        if collection_keys is None:
+            collection_keys = ("data", "results", "items", "objects")
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+
+        for key in collection_keys:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict):
+                nested = self._extract_items(value, collection_keys=collection_keys)
+                if nested:
+                    return nested
+        return []
+
+    def _build_named_entities(self, rows, default_prefix):
+        """Normalize API rows into [{'id': ..., 'name': ...}] objects."""
+        out = []
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            entity_id = row.get("@id") or row.get("id") or row.get("Id") or row.get("ID")
+            if entity_id is None:
+                continue
+            name = (
+                row.get("Name")
+                or row.get("name")
+                or row.get("label")
+                or f"{default_prefix} {entity_id}"
+            )
+            out.append({"id": entity_id, "name": name})
+        return out
+
     def _attempt_reauth(self, context):
         """Attempt to re-authenticate and return True on success."""
         _xt_debug(f"Attempting to re-authenticate during {context}")
@@ -238,6 +296,7 @@ class OMEROWebClient:
                 return False
             
             # POST login credentials
+            pre_auth_session = self.session_id
             data = urllib.parse.urlencode({
                 'username': self.username,
                 'password': self.password,
@@ -256,16 +315,33 @@ class OMEROWebClient:
             
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
+            raw_body = response.read()
+            post_url = getattr(response, "geturl", lambda: "")()
+            if post_url:
+                _xt_debug(f"Login POST final url={post_url}")
             
             # Extract session cookie from response
             self._extract_cookies_from_jar()
             
-            if self.session_id:
-                _xt_debug(f"Login succeeded; session cookie received (sessionid={self.session_id[:8]}...)")
-                return True
-            
-            _xt_debug("Login failed: session cookie missing after POST")
-            return False
+            if self._check_login_redirect(response, "login POST") or self._looks_like_login_page(raw_body):
+                _xt_debug("Login failed: still on login page after POST")
+                return False
+
+            if not self.session_id:
+                _xt_debug("Login failed: session cookie missing after POST")
+                return False
+
+            if pre_auth_session and self.session_id == pre_auth_session:
+                _xt_debug("Login warning: session cookie unchanged after POST")
+
+            # Verify authenticated JSON API access; do not require actual project data.
+            probe = self._api_request(self._with_all_groups("m/projects/?limit=1"))
+            if probe is None:
+                _xt_debug("Login failed: authenticated API probe did not return JSON")
+                return False
+
+            _xt_debug(f"Login succeeded; session cookie received (sessionid={self.session_id[:8]}...)")
+            return True
             
         except urllib.error.HTTPError as e:
             _xt_debug(f"Login HTTP error {e.code}: {e.reason}")
@@ -299,7 +375,15 @@ class OMEROWebClient:
                 return None
             
             _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
-            return json.loads(response.read().decode('utf-8'))
+            content_type = (response.headers.get("Content-Type") or "").lower()
+            raw = response.read()
+            if "text/html" in content_type and self._looks_like_login_page(raw):
+                _xt_debug("API request returned login HTML instead of JSON")
+                return None
+            return json.loads(raw.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            _xt_debug(f"API error: invalid JSON response ({e})")
+            return None
         except urllib.error.HTTPError as e:
             _xt_debug(f"API error ({e.code}): {e.reason}")
             return None
@@ -348,20 +432,20 @@ class OMEROWebClient:
 
     def get_image_metadata(self, image_id):
         """Get image metadata including original filename."""
-        data = self._api_request(f"m/images/{image_id}/")
+        data = self._api_request(self._with_all_groups(f"m/images/{image_id}/"))
         if not data:
             return {}
         
         result = {
             'id': image_id,
-            'name': data.get('Name', ''),
+            'name': data.get('Name') or data.get('name') or '',
             'original_file': None,
         }
         
-        fileset = data.get("Fileset") or {}
-        files = fileset.get("Files") or []
+        fileset = data.get("Fileset") or data.get("fileset") or {}
+        files = fileset.get("Files") or fileset.get("files") or []
         if files:
-            result['original_file'] = files[0].get("Name")
+            result['original_file'] = files[0].get("Name") or files[0].get("name")
         
         return result
 
@@ -430,44 +514,66 @@ class OMEROWebClient:
 
     def list_projects(self):
         """List all projects."""
-        data = self._api_request("m/projects/")
+        data = self._api_request(self._with_all_groups("m/projects/"))
         if not data:
             return []
-        projects = data.get('data') or []
-        return [{'id': p['@id'], 'name': p['Name']} for p in projects]
+        projects = self._extract_items(
+            data,
+            collection_keys=("data", "projects", "results", "items", "objects"),
+        )
+        return self._build_named_entities(projects, default_prefix="Project")
 
     def list_datasets(self, project_id):
         """List datasets in a project."""
-        data = self._api_request(f"m/projects/{project_id}/datasets/")
-        if data:
-            datasets = data.get('data') or []
-            if datasets:
-                return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
-        data = self._api_request(f"m/projects/{project_id}/")
+        data = self._api_request(self._with_all_groups(f"m/projects/{project_id}/datasets/"))
+        datasets = self._extract_items(
+            data,
+            collection_keys=("data", "datasets", "results", "items", "objects"),
+        )
+        if datasets:
+            return self._build_named_entities(datasets, default_prefix="Dataset")
+
+        data = self._api_request(self._with_all_groups(f"m/projects/{project_id}/"))
         if not data:
             return []
+
+        details = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(details, dict):
+            details = data if isinstance(data, dict) else {}
         datasets = (
-            data.get('data', {}).get('Datasets')
-            or data.get('data', {}).get('datasets')
-            or []
+            details.get("Datasets")
+            or details.get("datasets")
+            or self._extract_items(details, collection_keys=("data", "datasets"))
         )
-        return [{'id': d['@id'], 'name': d['Name']} for d in datasets]
+        return self._build_named_entities(datasets, default_prefix="Dataset")
 
     def list_images(self, dataset_id):
         """List images in a dataset."""
-        data = self._api_request(f"m/datasets/{dataset_id}/images/")
+        data = self._api_request(self._with_all_groups(f"m/datasets/{dataset_id}/images/"))
         if not data:
             return []
-        images = data.get('data') or []
-        return [{
-            'id': img['@id'],
-            'name': img['Name'],
-            'sizeX': img.get('Pixels', {}).get('SizeX', 0),
-            'sizeY': img.get('Pixels', {}).get('SizeY', 0),
-            'sizeZ': img.get('Pixels', {}).get('SizeZ', 1),
-            'sizeC': img.get('Pixels', {}).get('SizeC', 1),
-            'sizeT': img.get('Pixels', {}).get('SizeT', 1),
-        } for img in images]
+        images = self._extract_items(
+            data,
+            collection_keys=("data", "images", "results", "items", "objects"),
+        )
+        out = []
+        for img in images:
+            if not isinstance(img, dict):
+                continue
+            image_id = img.get("@id") or img.get("id")
+            if image_id is None:
+                continue
+            pixels = img.get("Pixels") or img.get("pixels") or {}
+            out.append({
+                'id': image_id,
+                'name': img.get("Name") or img.get("name") or f"Image {image_id}",
+                'sizeX': pixels.get('SizeX', pixels.get('sizeX', 0)),
+                'sizeY': pixels.get('SizeY', pixels.get('sizeY', 0)),
+                'sizeZ': pixels.get('SizeZ', pixels.get('sizeZ', 1)),
+                'sizeC': pixels.get('SizeC', pixels.get('sizeC', 1)),
+                'sizeT': pixels.get('SizeT', pixels.get('sizeT', 1)),
+            })
+        return out
 
 
     def download_ims_export(
