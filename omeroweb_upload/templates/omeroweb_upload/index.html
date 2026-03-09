@@ -469,6 +469,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         let suppressProjectDropdownOpenOnFocusOnce = false;
         let suppressSpecialUploadDropdownOpenOnFocusOnce = false;
         let uploadTotalBytes = 0;
+        let uploadCompletedBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
         const currentUserId = {{ user_id|default:"null"|safe }};
@@ -806,16 +807,30 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         function registerActiveRequest(xhr) {
             activeUploadRequests.add(xhr);
+            xhr.__uploadProgressCompleted = false;
+            xhr.__uploadProgressFinalized = false;
             const cleanup = () => {
                 activeUploadRequests.delete(xhr);
-                if (uploadProgressEntries && uploadProgressEntries.has(xhr)) {
-                    uploadProgressEntries.delete(xhr);
+                if (!xhr.__uploadProgressFinalized) {
+                    finalizeUploadProgressEntry(xhr, xhr.__uploadProgressCompleted === true);
+                    xhr.__uploadProgressFinalized = true;
                 }
             };
             xhr.addEventListener('loadend', cleanup, { once: true });
             xhr.addEventListener('abort', cleanup, { once: true });
             xhr.addEventListener('error', cleanup, { once: true });
             xhr.addEventListener('timeout', cleanup, { once: true });
+        }
+
+        function abortActiveUploadRequests() {
+            activeUploadRequests.forEach((xhr) => {
+                try {
+                    xhr.abort();
+                } catch (error) {
+                    // Ignore abort failures.
+                }
+            });
+            activeUploadRequests.clear();
         }
 
         function updateCompatibilityOverlayProgress() {
@@ -857,10 +872,23 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         function resetUploadProgress() {
             uploadTotalBytes = 0;
+            uploadCompletedBytes = 0;
             uploadProgressEntries.clear();
             if (uploadOverlay) {
                 uploadOverlay.textContent = 'UPLOADING';
             }
+        }
+
+        function finalizeUploadProgressEntry(key, countCompleted = false) {
+            const entry = uploadProgressEntries.get(key);
+            if (!entry) {
+                return;
+            }
+            if (countCompleted) {
+                uploadCompletedBytes += normalizeByteSize(entry.total || entry.loaded);
+            }
+            uploadProgressEntries.delete(key);
+            updateUploadOverlayProgress();
         }
 
         function updateUploadOverlayProgress() {
@@ -872,7 +900,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             const totalBytes = Number.isFinite(uploadTotalBytes) && uploadTotalBytes > 0
                 ? uploadTotalBytes
-                : Array.from(uploadProgressEntries.values()).reduce(
+                : uploadCompletedBytes + Array.from(uploadProgressEntries.values()).reduce(
                     (acc, entry) => acc + normalizeByteSize(entry.total),
                     0
                 );
@@ -880,11 +908,12 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 uploadOverlay.textContent = 'UPLOADING';
                 return;
             }
-            const loaded = Array.from(uploadProgressEntries.values()).reduce((acc, entry) => {
+            const activeLoaded = Array.from(uploadProgressEntries.values()).reduce((acc, entry) => {
                 const loadedBytes = normalizeByteSize(entry.loaded);
                 const entryTotal = normalizeByteSize(entry.total);
                 return acc + (entryTotal ? Math.min(loadedBytes, entryTotal) : loadedBytes);
             }, 0);
+            const loaded = Math.min(totalBytes, uploadCompletedBytes + activeLoaded);
             const percent = Math.min(100, Math.floor((loaded / totalBytes) * 100));
             uploadOverlay.textContent = `UPLOADING (${percent}%)`;
         }
@@ -2407,6 +2436,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 const label = document.createElement('span');
                 label.classList.add('tree-name');
                 label.textContent = child.name;
+                label.title = child.name;
 
                 const itemCount = child.totalFiles;
                 const meta = document.createElement('span');
@@ -2491,6 +2521,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     const label = document.createElement('span');
                     label.classList.add('tree-file-name');
                     label.textContent = file.name;
+                    label.title = file.name;
                     
                     const size = document.createElement('span');
                     size.classList.add('tree-size');
@@ -4002,7 +4033,8 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                         reject(new Error('Invalid file entry: missing file object'));
                         return;
                     }
-                    formData.append('files', entry.file, relativePath);
+                    const uploadFilename = entry.file.name || (relativePath.split('/').pop() || relativePath);
+                    formData.append('files', entry.file, uploadFilename);
                     formData.append('relative_paths', relativePath);
                 });
 
@@ -4052,6 +4084,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                         reject(new Error(responseData.error || 'Upload failed.'));
                         return;
                     }
+                    xhr.__uploadProgressCompleted = true;
                     setUploadProgressEntry(xhr, batchTotalBytes, batchTotalBytes);
                     resolve(responseData);
                 };
@@ -4064,7 +4097,8 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         async function uploadFiles(uploadUrl, entries = pendingFiles) {
             const batches = createUploadBatches(entries);
-            const concurrency = Math.min(uploadConcurrency, batches.length);
+            const concurrency = Math.max(1, Math.min(uploadConcurrency, batches.length));
+            let firstError = null;
 
             const tasks = batches.map((batch, index) => async () => {
                 await uploadBatch(uploadUrl, batch);
@@ -4073,15 +4107,27 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             let taskIndex = 0;
             const workers = new Array(concurrency).fill(null).map(async () => {
                 while (taskIndex < tasks.length) {
-                    if (cancelUploadRequested) {
+                    if (cancelUploadRequested || firstError) {
                         return;
                     }
                     const currentIndex = taskIndex;
                     taskIndex += 1;
-                    await tasks[currentIndex]();
+                    try {
+                        await tasks[currentIndex]();
+                    } catch (error) {
+                        if (!firstError) {
+                            firstError = error instanceof Error ? error : new Error(String(error));
+                            abortActiveUploadRequests();
+                        }
+                        throw firstError;
+                    }
                 }
             });
-            await Promise.all(workers);
+            try {
+                await Promise.all(workers);
+            } catch (error) {
+                throw firstError || error;
+            }
         }
 
         function escapeHtml(value) {
@@ -4576,14 +4622,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 return;
             }
             cancelUploadRequested = true;
-            activeUploadRequests.forEach((xhr) => {
-                try {
-                    xhr.abort();
-                } catch (error) {
-                    // Ignore abort failures.
-                }
-            });
-            activeUploadRequests.clear();
+            abortActiveUploadRequests();
             setUploadingState(false);
             setStatus('Upload canceled. You can start a new upload when ready.', 'success');
         });
