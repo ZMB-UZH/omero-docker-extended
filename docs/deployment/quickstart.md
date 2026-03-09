@@ -81,6 +81,7 @@ Notes:
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
+- `DOCKER_BUILD_SQUASH` defaults to `1` and enables layer squashing by default (Buildx uses `target.squash=true`; Compose uses `--squash` when supported by the local Docker/Compose binary). Set `DOCKER_BUILD_SQUASH=0` to preserve unsquashed layers for maximum cache reuse.
 - The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
