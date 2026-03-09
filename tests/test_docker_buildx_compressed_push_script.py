@@ -42,6 +42,9 @@ fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "use" ]; then
   exit 0
 fi
+if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "rm" ]; then
+  exit 0
+fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "bake" ]; then
   exit 0
 fi
@@ -82,6 +85,13 @@ if [ "${1:-}" = "image" ] && [ "${2:-}" = "rm" ]; then
   exit 0
 fi
 if [ "${1:-}" = "image" ] && [ "${2:-}" = "push" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "volume" ] && [ "${2:-}" = "ls" ]; then
+  printf '%s\n' "${FAKE_DOCKER_VOLUME_LS_OUTPUT:-}"
+  exit 0
+fi
+if [ "${1:-}" = "volume" ] && [ "${2:-}" = "rm" ]; then
   exit 0
 fi
 exit 0
@@ -253,8 +263,8 @@ exit 0
                     "DOCKER_BUILD_TARGETS": "omeroserver",
                     "DOCKER_BUILD_PUSH_IMAGES": "0",
                     "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
-                    "DOCKER_BUILD_SQUASH": "1",
                     "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_PROVENANCE": "0",
                     "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
                     "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
                 }
@@ -280,6 +290,10 @@ exit 0
                 joined_log,
             )
             self.assertIn(
+                "--provenance false",
+                joined_log,
+            )
+            self.assertIn(
                 "omeroserver.output=type=docker",
                 joined_log,
             )
@@ -288,7 +302,7 @@ exit 0
                 joined_log,
             )
             self.assertIn(
-                "build --file",
+                "build --provenance false --file",
                 joined_log,
             )
             self.assertIn(
@@ -317,6 +331,10 @@ exit 0
             )
             self.assertIn(
                 "container rm -f flatten-omeroserver-",
+                joined_log,
+            )
+            self.assertIn(
+                "buildx rm -f omero-builder",
                 joined_log,
             )
 
@@ -366,8 +384,8 @@ exit 0
                     "DOCKER_BUILD_PUSH_IMAGES": "0",
                     "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
                     "DOCKER_BUILD_FLATTEN_ONLY": "1",
-                    "DOCKER_BUILD_SQUASH": "0",
                     "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_PROVENANCE": "0",
                     "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
                     "COMPOSE_FILE": str(self.repo_root / "docker-compose.yml"),
                 }
@@ -391,8 +409,177 @@ exit 0
             self.assertIn("config", joined_log)
             self.assertIn("image inspect omeroserver:custom", joined_log)
             self.assertIn("image tag omeroserver:custom omeroserver:custom__flatten_source_", joined_log)
-            self.assertIn("build --file", joined_log)
+            self.assertIn("build --provenance false --file", joined_log)
             self.assertIn("image import", joined_log)
+
+    def test_script_discovers_only_active_compose_build_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            inspect_json = '{"Config":{"Env":[],"Labels":{},"OnBuild":[]}}'
+            compose_config_output = (
+                "services:\n"
+                "  omeroserver:\n"
+                "    image: omeroserver:custom\n"
+                "    build:\n"
+                "      context: /opt/omero\n"
+                "  omeroweb:\n"
+                "    image: omeroweb:custom\n"
+                "    build:\n"
+                "      context: /opt/omero\n"
+            )
+            compose_file = temp_path / "docker-compose.yml"
+            compose_file.write_text(
+                "services:\n"
+                "  omeroserver:\n"
+                "    image: omeroserver:custom\n"
+                "    build:\n"
+                "      context: .\n"
+                "  redis-sysctl-init:\n"
+                "    image: redis-sysctl-init:custom\n"
+                "    build:\n"
+                "      context: .\n"
+                "    profiles:\n"
+                "      - init\n",
+                encoding="utf-8",
+            )
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": inspect_json,
+                    "FAKE_DOCKER_COMPOSE_CONFIG_OUTPUT": compose_config_output,
+                    "DOCKER_IMAGE_TAG": "flattencheck",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_FLATTEN_ONLY": "1",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_PROVENANCE": "0",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "COMPOSE_FILE": str(compose_file),
+                }
+            )
+            env.pop("DOCKER_BUILD_TARGETS", None)
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Build targets        : omeroserver omeroweb", result.stdout)
+            joined_log = fake_log_path.read_text(encoding="utf-8")
+            self.assertIn("image inspect omeroserver:custom", joined_log)
+            self.assertIn("image inspect omeroweb:custom", joined_log)
+            self.assertNotIn("image inspect redis-sysctl-init:custom", joined_log)
+
+    def test_script_removes_builder_volumes_when_cleanup_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_VOLUME_LS_OUTPUT": "buildx_buildkit_omero-builder0_state\n",
+                    "DOCKER_IMAGE_TAG": "cleanupcheck",
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "0",
+                    "DOCKER_BUILD_PROVENANCE": "0",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
+                }
+            )
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            joined_log = fake_log_path.read_text(encoding="utf-8")
+            self.assertIn("buildx rm -f omero-builder", joined_log)
+            self.assertIn("volume ls -q --filter name=buildx_buildkit_omero-builder", joined_log)
+            self.assertIn("volume rm -f buildx_buildkit_omero-builder0_state", joined_log)
+
+    def test_script_buildx_uses_compose_declared_local_image_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            inspect_json = '{"Config":{"Env":[],"Labels":{},"OnBuild":[]}}'
+            compose_config_output = (
+                "services:\n"
+                "  app:\n"
+                "    image: testflatten:custom\n"
+                "    build:\n"
+                "      context: /opt/omero\n"
+            )
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": inspect_json,
+                    "FAKE_DOCKER_COMPOSE_CONFIG_OUTPUT": compose_config_output,
+                    "DOCKER_IMAGE_TAG": "custom",
+                    "DOCKER_BUILD_TARGETS": "app",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_PROVENANCE": "0",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "COMPOSE_FILE": str(self.repo_root / "docker-compose.yml"),
+                }
+            )
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            joined_log = fake_log_path.read_text(encoding="utf-8")
+            self.assertIn(
+                "app.tags=testflatten:custom__flatten_source_",
+                joined_log,
+            )
+            self.assertNotIn(
+                "app.tags=app:custom__flatten_source_",
+                joined_log,
+            )
 
 
 if __name__ == "__main__":
