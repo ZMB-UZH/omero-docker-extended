@@ -1,4 +1,8 @@
 import logging
+import os
+import re
+import shutil
+import subprocess
 import time
 from typing import Any
 
@@ -11,6 +15,7 @@ from .config import get_job_service_credentials, use_job_service_session
 from .imaris_service import (
     EXPORT_TIMEOUT,
     _find_script_id,
+    _is_no_processor_available,
     _normalize_job_state,
     _run_script,
     _serialize_outputs,
@@ -29,6 +34,115 @@ def _build_failure_meta(exc: Exception) -> dict[str, str]:
         "exc_message": exc_message,
         "error": exc_message,
     }
+
+
+def _resolve_omero_cli() -> str:
+    """Resolve OMERO CLI path inside the OMERO.web container."""
+    candidates = [
+        "/opt/omero/web/venv-3.12/bin/omero",
+        "/opt/omero/web/venv/bin/omero",
+        shutil.which("omero"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    raise RuntimeError("OMERO CLI binary not found in OMERO.web container.")
+
+
+def _extract_cli_outputs(text: str) -> dict[str, str]:
+    """Extract key output parameters from `omero script launch` text output."""
+    allowed = {"Message", "Export_Path", "Export_Name", "File_Annotation_Id"}
+    outputs: dict[str, str] = {}
+    for line in text.splitlines():
+        match = re.match(r"^\s*\*\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$", line)
+        if not match:
+            continue
+        key = match.group(1).strip()
+        if key not in allowed:
+            continue
+        value = match.group(2).strip()
+        if key:
+            outputs[key] = value
+    return outputs
+
+
+def _run_script_via_omero_cli(
+    script_id: int,
+    image_id: int,
+    host: str,
+    port: int,
+    session_key: str | None = None,
+    username: str | None = None,
+    password: str | None = None,
+) -> dict[str, str]:
+    """Launch IMS export with OMERO CLI as a fallback for runScript() failures."""
+    omero_cli = _resolve_omero_cli()
+
+    cmd = [
+        omero_cli,
+        "-q",
+        "script",
+        "launch",
+        str(int(script_id)),
+        f"Image_ID={int(image_id)}",
+        "-s",
+        str(host),
+        "-p",
+        str(int(port)),
+    ]
+
+    if session_key:
+        cmd.extend(["-k", str(session_key)])
+    else:
+        if not username or not password:
+            raise RuntimeError(
+                "OMERO CLI fallback requires either session_key or username/password."
+            )
+        cmd.extend(["-u", str(username), "-w", str(password)])
+
+    logger.warning(
+        "Using OMERO CLI fallback for IMS export script_id=%s image_id=%s",
+        script_id,
+        image_id,
+    )
+    env = os.environ.copy()
+    # Keep OMERO CLI session/cache files in a writable location for the worker.
+    omero_userdir = "/tmp/omero-cli"
+    os.makedirs(omero_userdir, exist_ok=True)
+    env["HOME"] = "/tmp"
+    env["OMERO_USERDIR"] = omero_userdir
+    env["OMERO_SESSIONDIR"] = os.path.join(omero_userdir, "sessions")
+    env["OMERO_TMPDIR"] = os.path.join(omero_userdir, "tmp")
+    os.makedirs(env["OMERO_SESSIONDIR"], exist_ok=True)
+    os.makedirs(env["OMERO_TMPDIR"], exist_ok=True)
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=EXPORT_TIMEOUT + 120,
+        check=False,
+        env=env,
+    )
+
+    combined = (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or "")
+    outputs = _extract_cli_outputs(combined)
+
+    if result.returncode != 0:
+        snippet = combined[-2000:] if combined else ""
+        raise RuntimeError(
+            "OMERO CLI fallback failed with exit code "
+            f"{result.returncode}. Output tail:\n{snippet}"
+        )
+
+    if outputs.get("Export_Path"):
+        return outputs
+
+    snippet = combined[-2000:] if combined else ""
+    raise RuntimeError(
+        "OMERO CLI fallback did not return Export_Path output. "
+        f"Output tail:\n{snippet}"
+    )
 
 
 def _open_session_connection(session_key, host, port, secure=None):
@@ -138,6 +252,7 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     script execution for IMS conversion.
     """
     conn = None
+    script_id = None
     start_time = time.time()
 
     def _update_task_state(status: str, extra_meta: dict[str, Any] | None = None) -> None:
@@ -187,37 +302,70 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
         def _script_status_callback(status: str, details: dict) -> None:
             _update_task_state(status, details)
 
-        proc = _run_script(
-            conn,
-            script_id,
-            image_id,
-            wait_secs=0,
-            status_callback=_script_status_callback,
-        )
-        if not proc:
-            raise RuntimeError("Failed to start IMS export job.")
-
-        # _run_script always returns a ScriptProcess handle.
-        # Poll via proc.poll(), collect via proc.getResults(),
-        # _wait_for_process detaches in its finally block (frees Processor slot).
-        logger.debug("IMS export polling process handle for image_id=%s", image_id)
-        last_state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
-        logger.debug(
-            "IMS export process completed image_id=%s state=%s outputs=%s",
-            image_id,
-            last_state,
-            _serialize_outputs(outputs),
-        )
-
-        if not last_state:
-            raise RuntimeError("Could not determine IMS export job status.")
-
-        normalized_state = _normalize_job_state(last_state) or "UNKNOWN"
-        if normalized_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-            raise RuntimeError(
-                "IMS export job did not complete successfully "
-                f"(state: {normalized_state})"
+        try:
+            proc = _run_script(
+                conn,
+                script_id,
+                image_id,
+                wait_secs=0,
+                status_callback=_script_status_callback,
             )
+            if not proc:
+                raise RuntimeError("Failed to start IMS export job.")
+
+            # _run_script always returns a ScriptProcess handle.
+            # Poll via proc.poll(), collect via proc.getResults(),
+            # _wait_for_process detaches in its finally block (frees Processor slot).
+            logger.debug("IMS export polling process handle for image_id=%s", image_id)
+            last_state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
+            logger.debug(
+                "IMS export process completed image_id=%s state=%s outputs=%s",
+                image_id,
+                last_state,
+                _serialize_outputs(outputs),
+            )
+
+            if not last_state:
+                raise RuntimeError("Could not determine IMS export job status.")
+
+            normalized_state = _normalize_job_state(last_state) or "UNKNOWN"
+            if normalized_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
+                raise RuntimeError(
+                    "IMS export job did not complete successfully "
+                    f"(state: {normalized_state})"
+                )
+        except Exception as exc:
+            if not _is_no_processor_available(exc):
+                raise
+
+            logger.warning(
+                "ScriptService.runScript path unavailable (NoProcessorAvailable). "
+                "Falling back to `omero script launch`."
+            )
+            _update_task_state("running_script_cli_fallback")
+
+            cli_outputs = None
+            if use_job_service_session():
+                username, password = get_job_service_credentials()
+                cli_outputs = _run_script_via_omero_cli(
+                    script_id=script_id,
+                    image_id=image_id,
+                    host=host,
+                    port=port,
+                    username=username,
+                    password=password,
+                )
+            else:
+                cli_outputs = _run_script_via_omero_cli(
+                    script_id=script_id,
+                    image_id=image_id,
+                    host=host,
+                    port=port,
+                    session_key=session_key,
+                )
+
+            normalized_state = "FINISHED"
+            outputs = cli_outputs
 
         logger.info(
             "IMS export task completed image_id=%s state=%s task_id=%s",
