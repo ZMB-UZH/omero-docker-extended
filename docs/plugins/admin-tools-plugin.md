@@ -7,6 +7,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 ## Main capabilities
 
 - Log query via Loki (LogQL) with container filtering and internal log file browsing.
+- Log retrieval is optimized for large log volumes: the UI applies text/severity filters locally after load, auto-refresh uses incremental fetches, repeated identical requests are served from process-local RAM cache, and internal log file selections are batched to avoid one-Loki-query-per-file fan-out.
 - Log severity normalization maps mixed Loki/source labels (including missing/`unknown`) to canonical severities (`debug`, `info`, `warn`, `error`, `fatal`) using stream labels plus message-pattern inference, with traceback-continuation and RedisBloom `bf-error-rate` lines treated as non-error noise.
 - Embedded/proxied Grafana dashboards and Prometheus query interface.
 - Docker container resource monitoring (stats, system info, process lists).
@@ -70,6 +71,7 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_LOG_LOOKBACK_SECONDS` | Default log query time range | `3600` |
 | `ADMIN_TOOLS_LOG_MAX_ENTRIES` | Maximum log entries per query | `5000` |
 | `ADMIN_TOOLS_LOG_REQUEST_TIMEOUT_SECONDS` | HTTP timeout for Loki requests | `30` |
+| `ADMIN_TOOLS_LOG_CACHE_MAX_MB` | Process-local RAM budget for cached log query results | `512` |
 | `ADMIN_TOOLS_QUOTA_STATE_PATH` | JSON state file for persisted quotas and logs | `/tmp/omero-admin-tools/group-quotas.json` |
 | `ADMIN_TOOLS_MIN_QUOTA_GB` | Minimum accepted quota value (GB) used by UI validation, backend validation, and ext4 enforcer script | `0.10` |
 | `ADMIN_TOOLS_DEFAULT_GROUP_QUOTA_GB` | Default quota value (GB) auto-assigned to newly created OMERO groups when auto mode is enabled | `0.10` |
@@ -91,7 +93,6 @@ To prevent quotas from affecting unrelated directories, enforcement is blocked u
 Quota reconciliation responses include explicit path-access diagnostics for the managed group root (`managed_group_root_access`) and the resolved enforcer marker file path (`quota_enforcer_marker_path`) so operators can quickly diagnose UID/GID ownership and mode mismatches.
 
 Quota reconciliation and the host enforcer intentionally do **not** create missing ManagedRepository group directories. OMERO.server must create/register those directories first; creating them externally can trigger import failures such as `Directory exists but is not registered`.
-
 
 Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
@@ -120,7 +121,6 @@ Quota state writes are atomic by default and include a compatibility fallback fo
 - Review Grafana dashboard provisioning files after monitoring configuration changes.
 - Keep query timeouts and entry caps aligned with cluster scale.
 - Verify Docker socket is accessible (check `docker compose logs omeroweb` for socket permission errors).
-
 
 ### ext4 project-quota enforcement behavior
 

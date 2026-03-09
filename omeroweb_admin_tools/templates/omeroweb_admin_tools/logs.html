@@ -269,7 +269,7 @@
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
-        const internalLabelRefreshMs = 30000;
+        const internalLabelRefreshMs = 300000;
         const incrementalOverlapMs = 5000;
         let internalLabelTimer = null;
 
@@ -690,8 +690,23 @@
         }
 
         function applyFilters() {
-            currentViewEntries = activeEntries;
-            loadedEntriesCount = currentViewEntries.length;
+            const query = (filterInput?.value || '').trim().toLowerCase();
+            const selectedLevel = (levelSelect?.value || '').trim().toLowerCase();
+
+            currentViewEntries = activeEntries.filter((entry) => {
+                if (selectedLevel && entry.level !== selectedLevel) {
+                    return false;
+                }
+                if (!query) {
+                    return true;
+                }
+                return (
+                    String(entry.message || '').toLowerCase().includes(query) ||
+                    String(entry.container || '').toLowerCase().includes(query) ||
+                    String(entry.level || '').toLowerCase().includes(query)
+                );
+            });
+            loadedEntriesCount = activeEntries.length;
             const shownEntries = currentViewEntries.slice(0, tableRowCap);
             shownEntriesCount = shownEntries.length;
             renderTable(shownEntries);
@@ -869,6 +884,7 @@
                 activeEntries = [];
                 currentViewEntries = [];
                 loadedEntriesCount = 0;
+                shownEntriesCount = 0;
                 latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
@@ -881,7 +897,9 @@
             const containers = getSelectedContainers();
             if (!containers.length) {
                 activeEntries = [];
+                currentViewEntries = [];
                 loadedEntriesCount = 0;
+                shownEntriesCount = 0;
                 latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 setStatus('No log sources selected.');
@@ -898,8 +916,6 @@
             }
             const lookbackSeconds = getLookbackSeconds();
             const limit = logConfig.max_entries || 5000;
-            const query = filterInput?.value.trim() || '';
-            const level = levelSelect?.value || '';
             const params = new URLSearchParams({
                 lookback: String(lookbackSeconds),
                 limit: String(limit),
@@ -909,12 +925,6 @@
             if (useIncrementalFetch) {
                 const sinceMs = Math.max(0, latestEntryTimestampMs - incrementalOverlapMs);
                 params.set('since', String(Math.floor(sinceMs * 1e6)));
-            }
-            if (query) {
-                params.set('query', query);
-            }
-            if (level) {
-                params.set('level', level);
             }
             containers.forEach((container) => params.append('container', container));
             const internalFiles = getSelectedInternalFiles();
@@ -930,6 +940,10 @@
                     const message = payload?.error || 'Unable to load logs.';
                     setStatus(message);
                     activeEntries = [];
+                    currentViewEntries = [];
+                    loadedEntriesCount = 0;
+                    shownEntriesCount = 0;
+                    latestEntryTimestampMs = 0;
                     renderTable(activeEntries);
                     updateDownloadState();
                     setLoading(false);
@@ -953,6 +967,9 @@
                 }
                 setStatus('Failed to fetch logs from backend.');
                 activeEntries = [];
+                currentViewEntries = [];
+                loadedEntriesCount = 0;
+                shownEntriesCount = 0;
                 latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
@@ -982,21 +999,21 @@
             }, 10000);
         }
 
-        function scheduleFilterFetch() {
+        function scheduleFilterApply() {
             if (filterTimer) {
                 window.clearTimeout(filterTimer);
             }
             filterTimer = window.setTimeout(() => {
                 persistState();
-                fetchLogs({ forceFull: true, reason: 'filter' });
+                applyFilters();
             }, filterDebounceMs);
         }
 
         function setupHandlers() {
-            filterInput?.addEventListener('input', scheduleFilterFetch);
+            filterInput?.addEventListener('input', scheduleFilterApply);
             levelSelect?.addEventListener('change', () => {
                 persistState();
-                fetchLogs({ forceFull: true, reason: 'filter' });
+                applyFilters();
             });
             timeRangeSelect?.addEventListener('change', () => {
                 persistState();
@@ -1076,7 +1093,10 @@
 
         function refreshInternalLabels() {
             Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service, { force: true });
+                const state = internalState[service];
+                if (state?.panel?.classList.contains('is-visible')) {
+                    loadInternalLabels(service, { force: true });
+                }
             });
         }
 
