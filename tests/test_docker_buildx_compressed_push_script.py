@@ -27,6 +27,7 @@ class DockerBuildxCompressedPushScriptTests(unittest.TestCase):
 set -euo pipefail
 log_path="${FAKE_DOCKER_LOG_PATH:?}"
 printf '%s\n' "$*" >> "${log_path}"
+inspect_json="${FAKE_DOCKER_IMAGE_INSPECT_JSON:-}"
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "version" ]; then
   exit 0
 fi
@@ -41,6 +42,36 @@ if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "use" ]; then
   exit 0
 fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "bake" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "inspect" ]; then
+  if [ -n "${inspect_json}" ]; then
+    printf '%s\n' "${inspect_json}"
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "build" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "container" ] && [ "${2:-}" = "create" ]; then
+  printf 'fake-container-id\n'
+  exit 0
+fi
+if [ "${1:-}" = "container" ] && [ "${2:-}" = "rm" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "export" ]; then
+  printf 'fake-tar-stream'
+  exit 0
+fi
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "import" ]; then
+  cat >/dev/null
+  exit 0
+fi
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "rm" ]; then
+  exit 0
+fi
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "push" ]; then
   exit 0
 fi
 exit 0
@@ -172,6 +203,110 @@ exit 0
             self.assertIn(
                 "omeroserver.output=type=image,name=registry.example.com/omero/omeroserver:2026.02.1,push=true,compression=estargz,compression-level=9,force-compression=true,oci-mediatypes=true",
                 joined_bake_lines,
+            )
+
+    def test_script_runs_flatten_flow_with_metadata_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            inspect_json = (
+                '{"Config":{"Env":["PATH=/usr/local/bin","FOO=bar baz"],'
+                '"Labels":{"test.label":"value with space"},'
+                '"ExposedPorts":{"8080/tcp":{}},'
+                '"Volumes":{"/data":{}},'
+                '"WorkingDir":"/work",'
+                '"User":"123:456",'
+                '"StopSignal":"SIGTERM",'
+                '"Entrypoint":["/hello.txt"],'
+                '"Cmd":["--serve"],'
+                '"OnBuild":[],'
+                '"Shell":["/bin/sh","-c"],'
+                '"Healthcheck":{"Test":["CMD","/hello.txt"],'
+                '"Interval":5000000000,'
+                '"Timeout":3000000000,'
+                '"Retries":2}}}'
+            )
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": inspect_json,
+                    "DOCKER_IMAGE_TAG": "flattencheck",
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_SQUASH": "1",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "BUILDX_DATA_PATH": str(temp_path / "buildx_cache"),
+                }
+            )
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Flatten final image  : 1", result.stdout)
+
+            log_lines = fake_log_path.read_text(encoding="utf-8").splitlines()
+            joined_log = "\n".join(log_lines)
+
+            self.assertIn(
+                "buildx bake --file",
+                joined_log,
+            )
+            self.assertIn(
+                "omeroserver.output=type=docker",
+                joined_log,
+            )
+            self.assertNotIn(
+                "omeroserver.squash=true",
+                joined_log,
+            )
+            self.assertIn(
+                "build --file",
+                joined_log,
+            )
+            self.assertIn(
+                "container create --name flatten-omeroserver-",
+                joined_log,
+            )
+            self.assertIn(
+                "--change ENV FOO=\"bar baz\"",
+                joined_log,
+            )
+            self.assertIn(
+                "--change ENTRYPOINT [\"/hello.txt\"]",
+                joined_log,
+            )
+            self.assertIn(
+                "--change HEALTHCHECK --interval=5000000000ns --timeout=3000000000ns --retries=2 CMD [\"/hello.txt\"]",
+                joined_log,
+            )
+            self.assertIn(
+                "image rm -f omeroserver:flattencheck__flatten_source_",
+                joined_log,
+            )
+            self.assertIn(
+                "image rm -f omeroserver:flattencheck__flatten_fs_",
+                joined_log,
+            )
+            self.assertIn(
+                "container rm -f flatten-omeroserver-",
+                joined_log,
             )
 
 
