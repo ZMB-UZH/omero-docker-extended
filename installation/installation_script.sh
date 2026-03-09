@@ -229,6 +229,29 @@ resolve_buildx_inline_cache_setting() {
     return 0
 }
 
+compose_build_supports_squash() {
+    local help_output=""
+
+    if ! command -v docker >/dev/null 2>&1; then
+        return 1
+    fi
+
+    set +e
+    help_output="$(docker compose build --help 2>/dev/null)"
+    local status=$?
+    set -e
+
+    if [ "${status}" -ne 0 ]; then
+        return 1
+    fi
+
+    if printf '%s' "${help_output}" | grep -q -- '--squash'; then
+        return 0
+    fi
+
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # run_image_build
 #
@@ -244,12 +267,23 @@ run_image_build() {
         echo "Building OMERO images via docker compose build workflow..."
         echo "  Compose file   : ${COMPOSE_FILE}"
         echo "  Cache enabled  : ${USE_CACHE_BUILD}"
+        echo "  Squash layers  : ${DOCKER_BUILD_SQUASH:-1}"
 
+        local -a compose_build_args=(build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
-            compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
-        else
-            compose_with_installation_env "${COMPOSE_FILE}" build
+            compose_build_args+=(--no-cache)
         fi
+
+        if [ "${DOCKER_BUILD_SQUASH:-1}" = "1" ]; then
+            if compose_build_supports_squash; then
+                compose_build_args+=(--squash)
+            else
+                echo "WARNING: docker compose build --squash is not supported by this Docker/Compose installation; continuing without squash for compose workflow." >&2
+                echo "WARNING: Buildx workflow still uses squash by default." >&2
+            fi
+        fi
+
+        compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"
         return 0
     fi
 
@@ -264,6 +298,7 @@ run_image_build() {
     echo "Building OMERO images via Buildx compressed (zstd) workflow..."
     echo "  Helper script : ${buildx_helper_path}"
     echo "  Cache enabled : ${inline_cache_setting}"
+    echo "  Squash layers : ${DOCKER_BUILD_SQUASH:-1}"
 
     # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
     local no_cache_setting="0"
@@ -276,6 +311,7 @@ run_image_build() {
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
+        DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}" \
         "${buildx_helper_path}"
     return $?
 }
