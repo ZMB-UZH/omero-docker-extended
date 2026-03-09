@@ -16,12 +16,12 @@ DOCKER_BUILD_USE_OCI_MEDIATYPES="${DOCKER_BUILD_USE_OCI_MEDIATYPES:-1}"
 DOCKER_BUILD_PUSH_IMAGES="${DOCKER_BUILD_PUSH_IMAGES:-}"
 DOCKER_BUILD_INLINE_CACHE="${DOCKER_BUILD_INLINE_CACHE:-1}"
 DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-0}"
+DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}"
 DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
 DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
-DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}"
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}"
 DOCKER_BUILD_FLATTEN_ONLY="${DOCKER_BUILD_FLATTEN_ONLY:-0}"
 # Named docker-container driver builder. The docker (default) driver does NOT
@@ -30,6 +30,7 @@ DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
 DOCKER_BUILDX_DRIVER="${DOCKER_BUILDX_DRIVER:-docker-container}"
 DOCKER_BUILDX_DRIVER_OPTS="${DOCKER_BUILDX_DRIVER_OPTS:-}"
 DOCKER_BUILDX_FORCE_RECREATE_BUILDER="${DOCKER_BUILDX_FORCE_RECREATE_BUILDER:-0}"
+DOCKER_BUILDX_KEEP_BUILDER="${DOCKER_BUILDX_KEEP_BUILDER:-0}"
 # Buildx/BuildKit bootstrap can hang indefinitely when the docker-container
 # driver builder is in a broken state. Enforce a timeout and recreate the
 # builder on failure.
@@ -46,6 +47,7 @@ LOCAL_CACHE_ROTATION_TOKEN=""
 FLATTEN_TEMP_IMAGES=()
 FLATTEN_TEMP_DIRS=()
 FLATTEN_TEMP_CONTAINERS=()
+BUILDX_RUNTIME_CLEANUP_ARMED=0
 
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
@@ -168,6 +170,7 @@ run_buildx_bake_with_retries() {
         set +e
         docker buildx bake \
             --file "${COMPOSE_FILE}" \
+            --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
             ${DOCKER_BUILD_TARGETS} \
             "${TARGET_OVERRIDES[@]}" 2>&1 | tee "${output_file}"
         local build_exit_code=${PIPESTATUS[0]}
@@ -291,7 +294,7 @@ resolve_target_image_name_from_compose() {
 
     set +e
     rendered_image="$(
-        docker compose -f "${COMPOSE_FILE}" config 2>/dev/null | awk -v service_name="${target}" '
+        render_active_compose_config | awk -v service_name="${target}" '
             /^services:[[:space:]]*$/ { in_services=1; current_service=""; next }
             in_services == 1 && /^[^[:space:]]/ { exit }
             in_services == 1 {
@@ -324,12 +327,12 @@ resolve_target_image_name_from_compose() {
 resolve_target_final_image_name() {
     local target="${1:?BUG: resolve_target_final_image_name requires a target}"
 
-    if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ]; then
-        resolve_target_image_name_from_compose "${target}"
+    if [ -n "${DOCKER_REGISTRY_PREFIX}" ]; then
+        compose_target_image_name "${target}"
         return 0
     fi
 
-    compose_target_image_name "${target}"
+    resolve_target_image_name_from_compose "${target}"
     return 0
 }
 
@@ -436,10 +439,15 @@ prepare_flatten_source_images_from_existing_tags() {
     return 0
 }
 
+render_active_compose_config() {
+    docker compose -f "${COMPOSE_FILE}" config 2>/dev/null
+    return $?
+}
+
 resolve_build_targets_from_compose() {
     local discovered_targets=""
 
-    discovered_targets="$(awk '
+    discovered_targets="$(render_active_compose_config | awk '
         /^services:[[:space:]]*$/ { in_services=1; current_service=""; service_has_build=0; next }
         in_services == 1 && /^[^[:space:]]/ {
             if (current_service != "" && service_has_build == 1) { printf "%s\n", current_service }
@@ -458,10 +466,10 @@ resolve_build_targets_from_compose() {
             if (current_service != "" && $0 ~ /^    build:[[:space:]]*$/) { service_has_build=1; next }
         }
         END { if (in_services == 1 && current_service != "" && service_has_build == 1) { printf "%s\n", current_service } }
-    ' "${COMPOSE_FILE}" | paste -sd' ' -)"
+    ' | paste -sd' ' -)"
 
     if [ -z "${discovered_targets}" ]; then
-        echo "ERROR (${SCRIPT_NAME}): Could not auto-discover build targets from ${COMPOSE_FILE}." >&2
+        echo "ERROR (${SCRIPT_NAME}): Could not auto-discover active build targets from ${COMPOSE_FILE}." >&2
         echo "Set DOCKER_BUILD_TARGETS explicitly (space-separated service names) and retry." >&2
         return 1
     fi
@@ -699,7 +707,11 @@ flatten_target_image() {
     generate_flatten_filesystem_dockerfile "${source_image_name}" "${flatten_dockerfile}"
 
     echo "INFO (${SCRIPT_NAME}): Flattening '${target}' into single-layer image '${final_image_name}'." >&2
-    docker build --file "${flatten_dockerfile}" --tag "${flatten_filesystem_image_name}" "${flatten_context_dir}" >/dev/null
+    docker build \
+        --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
+        --file "${flatten_dockerfile}" \
+        --tag "${flatten_filesystem_image_name}" \
+        "${flatten_context_dir}" >/dev/null
 
     while IFS= read -r change_line; do
         if [ -n "${change_line}" ]; then
@@ -775,6 +787,30 @@ cleanup_buildx_builder() {
         docker rm -f ${ids} >/dev/null 2>&1 || true
     fi
 
+    return 0
+}
+
+cleanup_buildx_builder_volumes() {
+    local builder_name="${1:?BUG: cleanup_buildx_builder_volumes requires a builder name}"
+    local ids=""
+
+    ids="$(docker volume ls -q --filter "name=buildx_buildkit_${builder_name}" 2>/dev/null || true)"
+    if [ -n "${ids}" ]; then
+        # shellcheck disable=SC2086
+        docker volume rm -f ${ids} >/dev/null 2>&1 || true
+    fi
+
+    return 0
+}
+
+cleanup_buildx_runtime_artifacts() {
+    if [ "${BUILDX_RUNTIME_CLEANUP_ARMED}" != "1" ]; then
+        return 0
+    fi
+
+    cleanup_buildx_builder "${DOCKER_BUILDX_BUILDER_NAME}" || true
+    cleanup_buildx_builder_volumes "${DOCKER_BUILDX_BUILDER_NAME}" || true
+    BUILDX_RUNTIME_CLEANUP_ARMED=0
     return 0
 }
 
@@ -898,10 +934,6 @@ build_target_overrides() {
             target_cache_staging_dir="$(resolve_target_cache_staging_dir "${target_cache_dir}" "${LOCAL_CACHE_ROTATION_TOKEN}")"
             prepare_target_cache_staging_dir "${target_cache_staging_dir}"
             printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_staging_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
-        fi
-
-        if [ "${DOCKER_BUILD_SQUASH}" = "1" ] && [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
-            printf -- "--set\n%s.squash=true\n" "${target}"
         fi
 
         if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
@@ -1061,8 +1093,8 @@ main() {
     validate_toggle "DOCKER_BUILD_PUSH_IMAGES" "${DOCKER_BUILD_PUSH_IMAGES}"
     validate_toggle "DOCKER_BUILD_INLINE_CACHE" "${DOCKER_BUILD_INLINE_CACHE}"
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
+    validate_toggle "DOCKER_BUILD_PROVENANCE" "${DOCKER_BUILD_PROVENANCE}"
     validate_toggle "DOCKER_BUILD_LOCAL_CACHE_ENABLED" "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
-    validate_toggle "DOCKER_BUILD_SQUASH" "${DOCKER_BUILD_SQUASH}"
     validate_toggle "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
     validate_toggle "DOCKER_BUILD_FLATTEN_ONLY" "${DOCKER_BUILD_FLATTEN_ONLY}"
     validate_local_cache_mode
@@ -1070,6 +1102,7 @@ main() {
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     validate_buildx_driver
     validate_toggle "DOCKER_BUILDX_FORCE_RECREATE_BUILDER" "${DOCKER_BUILDX_FORCE_RECREATE_BUILDER}"
+    validate_toggle "DOCKER_BUILDX_KEEP_BUILDER" "${DOCKER_BUILDX_KEEP_BUILDER}"
     validate_serial_mode
 
     if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ] && [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
@@ -1096,6 +1129,7 @@ main() {
         echo "Running image flatten-only workflow with settings:"
         echo "  Compose file         : ${COMPOSE_FILE}"
         echo "  Build targets        : ${DOCKER_BUILD_TARGETS}"
+        echo "  Provenance           : $(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")"
         echo "  Flatten final image  : ${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
         echo "  Push                 : $(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
         flatten_final_images_if_requested
@@ -1109,6 +1143,10 @@ main() {
     fi
 
     ensure_builder
+    if [ "${DOCKER_BUILDX_KEEP_BUILDER}" != "1" ]; then
+        BUILDX_RUNTIME_CLEANUP_ARMED=1
+        trap 'cleanup_buildx_runtime_artifacts; cleanup_flatten_artifacts' EXIT
+    fi
 
     push_bool="$(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
     oci_mediatypes_bool="$(as_bool_literal "${DOCKER_BUILD_USE_OCI_MEDIATYPES}")"
@@ -1143,9 +1181,9 @@ main() {
     fi
     echo "  Inline cache         : ${DOCKER_BUILD_INLINE_CACHE}"
     echo "  No-cache             : ${DOCKER_BUILD_NO_CACHE}"
+    echo "  Provenance           : $(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")"
     echo "  Local cache export   : ${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
     echo "  Local cache mode     : ${DOCKER_BUILD_LOCAL_CACHE_MODE}"
-    echo "  Squash layers        : ${DOCKER_BUILD_SQUASH}"
     echo "  Flatten final image  : ${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
@@ -1167,11 +1205,13 @@ main() {
     if should_run_serial_mode; then
         echo "INFO (${SCRIPT_NAME}): Running Buildx bake in serial mode to reduce cache export lock contention." >&2
         run_buildx_bake_serial_fallback
+        cleanup_buildx_runtime_artifacts || true
         return $?
     fi
 
     if run_buildx_bake_with_retries; then
         finalize_build_outputs
+        cleanup_buildx_runtime_artifacts || true
         return 0
     fi
 
@@ -1179,14 +1219,17 @@ main() {
 
     if [ "${LAST_BUILDX_FAILURE_TRANSIENT_LOCK}" = "1" ] && [ "$(count_build_targets)" -gt 1 ]; then
         run_buildx_bake_serial_fallback
+        cleanup_buildx_runtime_artifacts || true
         return $?
     fi
 
     if [ "${LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT}" = "1" ] && [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
         run_buildx_bake_without_local_cache_fallback
+        cleanup_buildx_runtime_artifacts || true
         return $?
     fi
 
+    cleanup_buildx_runtime_artifacts || true
     return 1
 }
 

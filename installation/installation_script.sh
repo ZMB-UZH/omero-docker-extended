@@ -229,59 +229,45 @@ resolve_buildx_inline_cache_setting() {
     return 0
 }
 
-compose_build_supports_squash() {
-    local help_output=""
+resolve_build_provenance_setting() {
+    if [ -n "${DOCKER_BUILD_PROVENANCE:-}" ]; then
+        if [ "${DOCKER_BUILD_PROVENANCE}" = "1" ]; then
+            printf 'true'
+            return 0
+        fi
 
-    if ! command -v docker >/dev/null 2>&1; then
-        return 1
-    fi
-
-    set +e
-    help_output="$(docker compose build --help 2>/dev/null)"
-    local status=$?
-    set -e
-
-    if [ "${status}" -ne 0 ]; then
-        return 1
-    fi
-
-    if printf '%s' "${help_output}" | grep -q -- '--squash'; then
+        printf 'false'
         return 0
     fi
 
-    return 1
+    printf 'false'
+    return 0
 }
 
 # ---------------------------------------------------------------------------
 # run_image_build
 #
-# Buildx compressed build (zstd) is always used - fully automatic.
 # Cache is controlled by USE_CACHE_BUILD (from the "Use cache?" prompt),
 # which applies to both buildx inline cache and docker build cache.
 # ---------------------------------------------------------------------------
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
+    local provenance_setting=""
+
+    provenance_setting="$(resolve_build_provenance_setting)"
 
     if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "0" ]; then
         echo "Building OMERO images via docker compose build workflow..."
         echo "  Compose file   : ${COMPOSE_FILE}"
         echo "  Cache enabled  : ${USE_CACHE_BUILD}"
-        echo "  Squash layers  : ${DOCKER_BUILD_SQUASH:-1}"
+        echo "  Provenance     : ${provenance_setting}"
 
         local -a compose_build_args=(build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
             compose_build_args+=(--no-cache)
         fi
-
-        if [ "${DOCKER_BUILD_SQUASH:-1}" = "1" ]; then
-            if compose_build_supports_squash; then
-                compose_build_args+=(--squash)
-            else
-                echo "WARNING: docker compose build --squash is not supported by this Docker/Compose installation; continuing without squash for compose workflow." >&2
-                echo "WARNING: Buildx workflow still uses squash by default." >&2
-            fi
-        fi
+        compose_build_args+=(--provenance "${provenance_setting}")
 
         compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"
 
@@ -294,6 +280,7 @@ run_image_build() {
 
             echo "Flattening compose-built images into single-layer outputs..."
             COMPOSE_FILE="${COMPOSE_FILE}" \
+                DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
                 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="1" \
                 DOCKER_BUILD_FLATTEN_ONLY="1" \
                 DOCKER_BUILD_PUSH_IMAGES="0" \
@@ -313,7 +300,7 @@ run_image_build() {
     echo "Building OMERO images via Buildx compressed (zstd) workflow..."
     echo "  Helper script : ${buildx_helper_path}"
     echo "  Cache enabled : ${inline_cache_setting}"
-    echo "  Squash layers : ${DOCKER_BUILD_SQUASH:-1}"
+    echo "  Provenance    : ${provenance_setting}"
 
     # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
     local no_cache_setting="0"
@@ -326,7 +313,7 @@ run_image_build() {
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
-        DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}" \
+        DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
         DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}" \
         "${buildx_helper_path}"
     return $?
