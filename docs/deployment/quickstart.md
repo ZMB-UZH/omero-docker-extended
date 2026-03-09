@@ -82,6 +82,7 @@ Notes:
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
 - `DOCKER_BUILD_SQUASH` defaults to `1` and enables layer squashing by default (Buildx uses `target.squash=true`; Compose uses `--squash` when supported by the local Docker/Compose binary). Set `DOCKER_BUILD_SQUASH=0` to preserve unsquashed layers for maximum cache reuse.
+- `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` adds an explicit post-build flattening step: each target is rebuilt from `scratch` with a single filesystem `COPY --from=source / /`, preserving runtime metadata such as `ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, and `HEALTHCHECK`. This produces a true single-layer final image for the local Docker daemon. The setting is opt-in, defaults to `0`, and cleans its temporary source tags/build contexts automatically.
 - The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
@@ -92,7 +93,8 @@ Notes:
 - Set `DOCKER_BUILD_LOCAL_CACHE_MODE=max` only when you explicitly need full cache graph export despite the higher risk of long export phases.
 - If retries still fail with cache-export transport errors, the helper automatically performs one fallback build with local cache export disabled for that run (compression remains enabled).
 - Image compression settings (`DOCKER_BUILD_COMPRESSION_TYPE`, `DOCKER_BUILD_COMPRESSION_LEVEL`, `force-compression=true`) are unchanged by local cache mode; compressed image output remains enabled.
-- The installation workflow enables this compressed Buildx mode by default, and prompts whether to keep Buildx enabled during each interactive run (question 2). If you disable it, the script falls back to `docker compose build`. Run:
+- When `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` and `DOCKER_BUILD_PUSH_IMAGES=1`, the helper pushes the flattened final images via `docker push` after the flatten step. This preserves the single-layer result, but Buildx-specific output compression settings do not apply to that final publish step.
+- The installation workflow prompts whether to enable this compressed Buildx mode during each interactive run (question 2, default: `No`). If you disable it, the script falls back to `docker compose build`. Run:
 - If you answer **No** to the installation prompt `Use build cache?`, the installer now performs deterministic local cache cleanup before rebuilding:
   - always prunes Docker builder cache (`docker builder prune -a -f`),
   - and, when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`).
