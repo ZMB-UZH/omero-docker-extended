@@ -728,6 +728,21 @@ def _build_log_sources() -> List[Dict[str, str]]:
     ]
 
 
+def _parse_since_ns(raw_value: str) -> int:
+    """Parse a `since` query value into epoch nanoseconds."""
+    value = raw_value.strip()
+    if not value:
+        raise ValueError("empty since value")
+    if value.isdigit():
+        return int(value)
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return int(parsed.timestamp() * 1e9)
+
+
 @login_required()
 @require_root_user
 def logs_view(request, conn=None, url=None, **kwargs):
@@ -768,6 +783,13 @@ def logs_data(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
     query = request.GET.get("query", "").strip()
     level = request.GET.get("level", "").strip().lower()
+    since_ns = None
+    since_raw = request.GET.get("since", "").strip()
+    if since_raw:
+        try:
+            since_ns = _parse_since_ns(since_raw)
+        except ValueError:
+            return JsonResponse({"error": "Invalid since value."}, status=400)
     if level and level not in {"debug", "info", "warn", "error", "fatal"}:
         return JsonResponse({"error": "Invalid log level."}, status=400)
     try:
@@ -786,6 +808,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
             lookback_seconds,
             max_entries,
             internal_files=internal_files,
+            since_ns=since_ns,
         )
     except RuntimeError as exc:  # pragma: no cover - network errors
         return JsonResponse(

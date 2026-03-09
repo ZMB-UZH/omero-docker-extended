@@ -263,10 +263,14 @@
         let shownEntriesCount = 0;
         let requestCounter = 0;
         let latestRequestId = 0;
+        let fetchInProgress = false;
+        let pendingFetchOptions = null;
+        let latestEntryTimestampMs = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
         const internalLabelRefreshMs = 30000;
+        const incrementalOverlapMs = 5000;
         let internalLabelTimer = null;
 
         function setStatus(text) {
@@ -457,7 +461,7 @@
                     }
                     updateInternalBadge(service);
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
 
                 const text = document.createElement('span');
@@ -471,11 +475,12 @@
             });
         }
 
-        function setInternalSelectAll(service, selectAll) {
+        function setInternalSelectAll(service, selectAll, options = {}) {
             const state = internalState[service];
             if (!state) {
                 return;
             }
+            const triggerFetch = options.triggerFetch !== false;
             state.selected.clear();
             if (selectAll) {
                 state.labels.forEach((label) => state.selected.add(label));
@@ -483,7 +488,9 @@
             renderInternalOptions(service);
             updateInternalBadge(service);
             persistState();
-            fetchLogs();
+            if (triggerFetch) {
+                fetchLogs({ forceFull: true, reason: 'selection' });
+            }
         }
 
         async function loadInternalLabels(service, options = {}) {
@@ -783,14 +790,90 @@
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         }
 
-        async function fetchLogs() {
+        function toTimestampMs(value) {
+            const timestampMs = Date.parse(value);
+            return Number.isNaN(timestampMs) ? 0 : timestampMs;
+        }
+
+        function entryIdentity(entry) {
+            return `${entry.timestamp}\u0001${entry.container}\u0001${entry.level}\u0001${entry.message}`;
+        }
+
+        function mergeFetchOptions(base, next) {
+            const baseOptions = base || { forceFull: false, reason: 'manual' };
+            const nextOptions = next || { forceFull: false, reason: 'manual' };
+            return {
+                forceFull: Boolean(baseOptions.forceFull || nextOptions.forceFull),
+                reason: nextOptions.reason || baseOptions.reason || 'manual',
+            };
+        }
+
+        function mergeIncrementalEntries(existing, incoming, lookbackSeconds) {
+            const deduped = new Map();
+            const cutoffMs = Date.now() - (Math.max(1, lookbackSeconds) * 1000);
+
+            const addEntry = (entry) => {
+                const timestampMs = toTimestampMs(entry.timestamp);
+                if (timestampMs > 0 && timestampMs < cutoffMs) {
+                    return;
+                }
+                deduped.set(entryIdentity(entry), entry);
+            };
+
+            incoming.forEach(addEntry);
+            existing.forEach(addEntry);
+
+            return Array.from(deduped.values()).sort(
+                (a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp)
+            );
+        }
+
+        function updateLatestEntryTimestamp(entries) {
+            let maxTimestampMs = 0;
+            entries.forEach((entry) => {
+                const current = toTimestampMs(entry.timestamp);
+                if (current > maxTimestampMs) {
+                    maxTimestampMs = current;
+                }
+            });
+            latestEntryTimestampMs = maxTimestampMs;
+        }
+
+        function drainPendingFetchQueue() {
+            if (!pendingFetchOptions) {
+                return;
+            }
+            const queuedOptions = pendingFetchOptions;
+            pendingFetchOptions = null;
+            fetchLogs(queuedOptions);
+        }
+
+        function fetchLogs(options = {}) {
+            const normalizedOptions = {
+                forceFull: Boolean(options.forceFull),
+                reason: options.reason || 'manual',
+            };
+            if (fetchInProgress) {
+                pendingFetchOptions = mergeFetchOptions(pendingFetchOptions, normalizedOptions);
+                return;
+            }
+            void performFetchLogs(normalizedOptions);
+        }
+
+        async function performFetchLogs(options = {}) {
+            const forceFull = Boolean(options.forceFull);
+            const reason = options.reason || 'manual';
+            fetchInProgress = true;
             if (!logConfig) {
                 setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
                 activeEntries = [];
                 currentViewEntries = [];
                 loadedEntriesCount = 0;
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
+                fetchInProgress = false;
+                drainPendingFetchQueue();
                 return;
             }
             const requestId = ++requestCounter;
@@ -799,9 +882,12 @@
             if (!containers.length) {
                 activeEntries = [];
                 loadedEntriesCount = 0;
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 setStatus('No log sources selected.');
                 updateDownloadState();
+                fetchInProgress = false;
+                drainPendingFetchQueue();
                 return;
             }
             setLoading(true);
@@ -818,6 +904,12 @@
                 lookback: String(lookbackSeconds),
                 limit: String(limit),
             });
+            const useIncrementalFetch =
+                !forceFull && reason === 'auto' && latestEntryTimestampMs > 0;
+            if (useIncrementalFetch) {
+                const sinceMs = Math.max(0, latestEntryTimestampMs - incrementalOverlapMs);
+                params.set('since', String(Math.floor(sinceMs * 1e6)));
+            }
             if (query) {
                 params.set('query', query);
             }
@@ -843,7 +935,17 @@
                     setLoading(false);
                     return;
                 }
-                activeEntries = normalizeEntries(payload.entries || []);
+                const incomingEntries = normalizeEntries(payload.entries || []);
+                if (useIncrementalFetch) {
+                    activeEntries = mergeIncrementalEntries(
+                        activeEntries,
+                        incomingEntries,
+                        lookbackSeconds,
+                    );
+                } else {
+                    activeEntries = incomingEntries;
+                }
+                updateLatestEntryTimestamp(activeEntries);
                 applyFilters();
             } catch (error) {
                 if (requestId !== latestRequestId) {
@@ -851,12 +953,15 @@
                 }
                 setStatus('Failed to fetch logs from backend.');
                 activeEntries = [];
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
             } finally {
                 if (requestId === latestRequestId) {
                     setLoading(false);
                 }
+                fetchInProgress = false;
+                drainPendingFetchQueue();
             }
         }
 
@@ -872,7 +977,9 @@
             if (!autoRefreshToggle?.checked) {
                 return;
             }
-            refreshTimer = window.setInterval(fetchLogs, 10000);
+            refreshTimer = window.setInterval(() => {
+                fetchLogs({ forceFull: false, reason: 'auto' });
+            }, 10000);
         }
 
         function scheduleFilterFetch() {
@@ -881,7 +988,7 @@
             }
             filterTimer = window.setTimeout(() => {
                 persistState();
-                fetchLogs();
+                fetchLogs({ forceFull: true, reason: 'filter' });
             }, filterDebounceMs);
         }
 
@@ -889,26 +996,28 @@
             filterInput?.addEventListener('input', scheduleFilterFetch);
             levelSelect?.addEventListener('change', () => {
                 persistState();
-                fetchLogs();
+                fetchLogs({ forceFull: true, reason: 'filter' });
             });
             timeRangeSelect?.addEventListener('change', () => {
                 persistState();
-                fetchLogs();
+                fetchLogs({ forceFull: true, reason: 'filter' });
             });
             autoRefreshToggle?.addEventListener('change', () => {
                 persistState();
                 if (autoRefreshToggle?.checked) {
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'toggle' });
                 }
                 scheduleRefresh();
             });
-            refreshBtn?.addEventListener('click', fetchLogs);
+            refreshBtn?.addEventListener('click', () => {
+                fetchLogs({ forceFull: true, reason: 'manual' });
+            });
             downloadBtn?.addEventListener('click', downloadCurrentEntries);
             document.querySelectorAll('.log-source-pill input').forEach((input) => {
                 input.addEventListener('change', () => {
                     updateDockerSourcePillStyles();
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
             document.querySelectorAll('[data-docker-action]').forEach((button) => {
@@ -919,17 +1028,17 @@
                     });
                     updateDockerSourcePillStyles();
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
             document.querySelectorAll('[data-internal-action]').forEach((button) => {
                 button.addEventListener('click', () => {
                     const selectAll = button.dataset.internalAction === 'all';
                     Object.keys(internalState).forEach((service) => {
-                        setInternalSelectAll(service, selectAll);
+                        setInternalSelectAll(service, selectAll, { triggerFetch: false });
                     });
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
         }
@@ -982,7 +1091,7 @@
         function initInternalLabels() {
             const promises = Object.keys(internalState).map((service) => loadInternalLabels(service));
             Promise.all(promises).then(() => {
-                fetchLogs();
+                fetchLogs({ forceFull: true, reason: 'initial' });
             });
         }
 
