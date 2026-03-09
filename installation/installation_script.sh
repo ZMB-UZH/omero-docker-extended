@@ -284,6 +284,21 @@ run_image_build() {
         fi
 
         compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"
+
+        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}" = "1" ]; then
+            if [ ! -x "${buildx_helper_path}" ]; then
+                echo "ERROR: Flatten helper is missing or not executable: ${buildx_helper_path}" >&2
+                echo "ERROR: Re-run the pull/update script and ensure installation/docker_buildx_compressed_push.sh exists." >&2
+                return 1
+            fi
+
+            echo "Flattening compose-built images into single-layer outputs..."
+            COMPOSE_FILE="${COMPOSE_FILE}" \
+                DOCKER_BUILD_FLATTEN_FINAL_IMAGE="1" \
+                DOCKER_BUILD_FLATTEN_ONLY="1" \
+                DOCKER_BUILD_PUSH_IMAGES="0" \
+                "${buildx_helper_path}"
+        fi
         return 0
     fi
 
@@ -312,6 +327,7 @@ run_image_build() {
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
         DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}" \
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}" \
         "${buildx_helper_path}"
     return $?
 }

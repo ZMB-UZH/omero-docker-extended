@@ -28,6 +28,7 @@ set -euo pipefail
 log_path="${FAKE_DOCKER_LOG_PATH:?}"
 printf '%s\n' "$*" >> "${log_path}"
 inspect_json="${FAKE_DOCKER_IMAGE_INSPECT_JSON:-}"
+compose_config_output="${FAKE_DOCKER_COMPOSE_CONFIG_OUTPUT:-}"
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "version" ]; then
   exit 0
 fi
@@ -44,10 +45,19 @@ fi
 if [ "${1:-}" = "buildx" ] && [ "${2:-}" = "bake" ]; then
   exit 0
 fi
+if [ "${1:-}" = "compose" ] && [ "${4:-}" = "config" ]; then
+  if [ -n "${compose_config_output}" ]; then
+    printf '%s\n' "${compose_config_output}"
+  fi
+  exit 0
+fi
 if [ "${1:-}" = "image" ] && [ "${2:-}" = "inspect" ]; then
   if [ -n "${inspect_json}" ]; then
     printf '%s\n' "${inspect_json}"
   fi
+  exit 0
+fi
+if [ "${1:-}" = "image" ] && [ "${2:-}" = "tag" ]; then
   exit 0
 fi
 if [ "${1:-}" = "build" ]; then
@@ -171,6 +181,7 @@ exit 0
                     "DOCKER_BUILD_PUSH_IMAGES": "1",
                     "DOCKER_BUILD_USE_OCI_MEDIATYPES": "1",
                     "DOCKER_BUILD_INLINE_CACHE": "1",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "0",
                 }
             )
 
@@ -308,6 +319,80 @@ exit 0
                 "container rm -f flatten-omeroserver-",
                 joined_log,
             )
+
+    def test_script_runs_flatten_only_flow_for_compose_built_images(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fake_bin_dir = temp_path / "bin"
+            fake_bin_dir.mkdir(parents=True, exist_ok=True)
+            fake_log_path = temp_path / "docker.log"
+            fake_log_path.write_text("", encoding="utf-8")
+            self._create_fake_docker(fake_bin_dir, fake_log_path)
+
+            inspect_json = (
+                '{"Config":{"Env":["PATH=/usr/local/bin","FOO=bar"],'
+                '"Labels":{"test.label":"value"},'
+                '"ExposedPorts":{"8080/tcp":{}},'
+                '"Volumes":{"/data":{}},'
+                '"WorkingDir":"/work",'
+                '"User":"123:456",'
+                '"StopSignal":"SIGTERM",'
+                '"Entrypoint":["/hello.txt"],'
+                '"Cmd":["--serve"],'
+                '"OnBuild":[],' 
+                '"Shell":["/bin/sh","-c"],'
+                '"Healthcheck":{"Test":["CMD","/hello.txt"],'
+                '"Interval":5000000000,'
+                '"Timeout":3000000000,'
+                '"Retries":2}}}'
+            )
+            compose_config_output = (
+                "services:\n"
+                "  omeroserver:\n"
+                "    image: omeroserver:custom\n"
+                "  omeroweb:\n"
+                "    image: omeroweb:custom\n"
+            )
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "PATH": f"{fake_bin_dir}:{env.get('PATH', '')}",
+                    "FAKE_DOCKER_LOG_PATH": str(fake_log_path),
+                    "FAKE_DOCKER_IMAGE_INSPECT_JSON": inspect_json,
+                    "FAKE_DOCKER_COMPOSE_CONFIG_OUTPUT": compose_config_output,
+                    "DOCKER_IMAGE_TAG": "flattencheck",
+                    "DOCKER_BUILD_TARGETS": "omeroserver",
+                    "DOCKER_BUILD_PUSH_IMAGES": "0",
+                    "DOCKER_BUILD_FLATTEN_FINAL_IMAGE": "1",
+                    "DOCKER_BUILD_FLATTEN_ONLY": "1",
+                    "DOCKER_BUILD_SQUASH": "0",
+                    "DOCKER_BUILD_NO_CACHE": "1",
+                    "DOCKER_BUILD_LOCAL_CACHE_ENABLED": "0",
+                    "COMPOSE_FILE": str(self.repo_root / "docker-compose.yml"),
+                }
+            )
+
+            result = subprocess.run(
+                [str(self.script_path)],
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("Running image flatten-only workflow with settings:", result.stdout)
+
+            joined_log = fake_log_path.read_text(encoding="utf-8")
+            self.assertNotIn("buildx bake", joined_log)
+            self.assertIn("compose -f", joined_log)
+            self.assertIn("config", joined_log)
+            self.assertIn("image inspect omeroserver:custom", joined_log)
+            self.assertIn("image tag omeroserver:custom omeroserver:custom__flatten_source_", joined_log)
+            self.assertIn("build --file", joined_log)
+            self.assertIn("image import", joined_log)
 
 
 if __name__ == "__main__":

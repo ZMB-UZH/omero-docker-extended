@@ -20,6 +20,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("USE_BUILDX_COMPRESSED_BUILD", script_text)
         self.assertIn("run_image_build()", script_text)
         self.assertIn("docker_buildx_compressed_push.sh", script_text)
+        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}"', script_text)
+        self.assertIn('DOCKER_BUILD_FLATTEN_ONLY="1"', script_text)
 
 
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(self) -> None:

@@ -22,7 +22,8 @@ DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
 DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}"
-DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"
+DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}"
+DOCKER_BUILD_FLATTEN_ONLY="${DOCKER_BUILD_FLATTEN_ONLY:-0}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
@@ -284,11 +285,59 @@ compose_target_image_name() {
     return 0
 }
 
+resolve_target_image_name_from_compose() {
+    local target="${1:?BUG: resolve_target_image_name_from_compose requires a target}"
+    local rendered_image=""
+
+    set +e
+    rendered_image="$(
+        docker compose -f "${COMPOSE_FILE}" config 2>/dev/null | awk -v service_name="${target}" '
+            /^services:[[:space:]]*$/ { in_services=1; current_service=""; next }
+            in_services == 1 && /^[^[:space:]]/ { exit }
+            in_services == 1 {
+                if ($0 ~ /^  [A-Za-z0-9_.-]+:[[:space:]]*$/) {
+                    current_service=$0
+                    sub(/^  /, "", current_service)
+                    sub(/:.*/, "", current_service)
+                    next
+                }
+                if (current_service == service_name && $0 ~ /^    image:[[:space:]]*/) {
+                    image_line=$0
+                    sub(/^    image:[[:space:]]*/, "", image_line)
+                    print image_line
+                    exit
+                }
+            }
+        '
+    )"
+    set -e
+
+    if [ -n "${rendered_image}" ]; then
+        printf '%s' "${rendered_image}"
+        return 0
+    fi
+
+    compose_target_image_name "${target}"
+    return 0
+}
+
+resolve_target_final_image_name() {
+    local target="${1:?BUG: resolve_target_final_image_name requires a target}"
+
+    if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ]; then
+        resolve_target_image_name_from_compose "${target}"
+        return 0
+    fi
+
+    compose_target_image_name "${target}"
+    return 0
+}
+
 compose_flatten_source_image_name() {
     local target="${1:?BUG: compose_flatten_source_image_name requires a target}"
     local final_image_name=""
 
-    final_image_name="$(compose_target_image_name "${target}")"
+    final_image_name="$(resolve_target_final_image_name "${target}")"
     printf '%s__flatten_source_%s' "${final_image_name}" "${LOCAL_CACHE_ROTATION_TOKEN}"
     return 0
 }
@@ -359,6 +408,31 @@ cleanup_flatten_artifacts() {
 register_flatten_temp_container() {
     local container_name="${1:?BUG: register_flatten_temp_container requires a container name}"
     FLATTEN_TEMP_CONTAINERS+=("${container_name}")
+    return 0
+}
+
+prepare_flatten_source_images_from_existing_tags() {
+    local target=""
+    local source_image_name=""
+    local final_image_name=""
+
+    if [ "${DOCKER_BUILD_FLATTEN_ONLY}" != "1" ]; then
+        return 0
+    fi
+
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        final_image_name="$(resolve_target_final_image_name "${target}")"
+        source_image_name="$(compose_flatten_source_image_name "${target}")"
+
+        if ! docker image inspect "${final_image_name}" >/dev/null 2>&1; then
+            echo "ERROR (${SCRIPT_NAME}): Cannot flatten '${target}' because the source image is missing: ${final_image_name}" >&2
+            return 1
+        fi
+
+        docker image tag "${final_image_name}" "${source_image_name}"
+        register_flatten_temp_image "${source_image_name}"
+    done
+
     return 0
 }
 
@@ -613,7 +687,7 @@ flatten_target_image() {
     local change_line=""
 
     source_image_name="$(compose_flatten_source_image_name "${target}")"
-    final_image_name="$(compose_target_image_name "${target}")"
+    final_image_name="$(resolve_target_final_image_name "${target}")"
     flatten_context_dir="$(mktemp -d)"
     register_flatten_temp_dir "${flatten_context_dir}"
     flatten_dockerfile="${flatten_context_dir}/Dockerfile"
@@ -990,12 +1064,18 @@ main() {
     validate_toggle "DOCKER_BUILD_LOCAL_CACHE_ENABLED" "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
     validate_toggle "DOCKER_BUILD_SQUASH" "${DOCKER_BUILD_SQUASH}"
     validate_toggle "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
+    validate_toggle "DOCKER_BUILD_FLATTEN_ONLY" "${DOCKER_BUILD_FLATTEN_ONLY}"
     validate_local_cache_mode
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
     validate_buildx_driver
     validate_toggle "DOCKER_BUILDX_FORCE_RECREATE_BUILDER" "${DOCKER_BUILDX_FORCE_RECREATE_BUILDER}"
     validate_serial_mode
+
+    if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ] && [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
+        echo "ERROR (${SCRIPT_NAME}): DOCKER_BUILD_FLATTEN_ONLY=1 requires DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1." >&2
+        return 1
+    fi
 
     now_epoch="$(date +%s)"
     LOCAL_CACHE_ROTATION_TOKEN="${now_epoch}.$$"
@@ -1005,7 +1085,21 @@ main() {
     if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
         require_binary jq
         trap cleanup_flatten_artifacts EXIT
-        register_flatten_temp_source_images
+        if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ]; then
+            prepare_flatten_source_images_from_existing_tags
+        else
+            register_flatten_temp_source_images
+        fi
+    fi
+
+    if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ]; then
+        echo "Running image flatten-only workflow with settings:"
+        echo "  Compose file         : ${COMPOSE_FILE}"
+        echo "  Build targets        : ${DOCKER_BUILD_TARGETS}"
+        echo "  Flatten final image  : ${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
+        echo "  Push                 : $(as_bool_literal "${DOCKER_BUILD_PUSH_IMAGES}")"
+        flatten_final_images_if_requested
+        return $?
     fi
 
     if ! docker buildx version >/dev/null 2>&1; then
