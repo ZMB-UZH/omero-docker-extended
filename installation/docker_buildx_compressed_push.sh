@@ -22,6 +22,7 @@ DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
 DOCKER_BUILD_SQUASH="${DOCKER_BUILD_SQUASH:-1}"
+DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
 DOCKER_BUILDX_BUILDER_NAME="${DOCKER_BUILDX_BUILDER_NAME:-omero-builder}"
@@ -41,6 +42,9 @@ readonly REPO_ROOT_DIR
 LAST_BUILDX_FAILURE_TRANSIENT_LOCK=0
 LAST_BUILDX_FAILURE_TRANSIENT_CACHE_EXPORT=0
 LOCAL_CACHE_ROTATION_TOKEN=""
+FLATTEN_TEMP_IMAGES=()
+FLATTEN_TEMP_DIRS=()
+FLATTEN_TEMP_CONTAINERS=()
 
 require_binary() {
     local binary_name="${1:?BUG: require_binary requires a binary name}"
@@ -280,6 +284,84 @@ compose_target_image_name() {
     return 0
 }
 
+compose_flatten_source_image_name() {
+    local target="${1:?BUG: compose_flatten_source_image_name requires a target}"
+    local final_image_name=""
+
+    final_image_name="$(compose_target_image_name "${target}")"
+    printf '%s__flatten_source_%s' "${final_image_name}" "${LOCAL_CACHE_ROTATION_TOKEN}"
+    return 0
+}
+
+compose_build_output_image_name() {
+    local target="${1:?BUG: compose_build_output_image_name requires a target}"
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+        compose_flatten_source_image_name "${target}"
+        return 0
+    fi
+
+    compose_target_image_name "${target}"
+    return 0
+}
+
+register_flatten_temp_image() {
+    local image_name="${1:?BUG: register_flatten_temp_image requires an image name}"
+    FLATTEN_TEMP_IMAGES+=("${image_name}")
+    return 0
+}
+
+register_flatten_temp_dir() {
+    local dir_path="${1:?BUG: register_flatten_temp_dir requires a directory path}"
+    FLATTEN_TEMP_DIRS+=("${dir_path}")
+    return 0
+}
+
+register_flatten_temp_source_images() {
+    local target=""
+
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
+        return 0
+    fi
+
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        register_flatten_temp_image "$(compose_flatten_source_image_name "${target}")"
+    done
+
+    return 0
+}
+
+cleanup_flatten_artifacts() {
+    local image_name=""
+    local dir_path=""
+    local container_name=""
+
+    for container_name in "${FLATTEN_TEMP_CONTAINERS[@]:-}"; do
+        if [ -n "${container_name}" ]; then
+            docker container rm -f "${container_name}" >/dev/null 2>&1 || true
+        fi
+    done
+
+    for image_name in "${FLATTEN_TEMP_IMAGES[@]:-}"; do
+        if [ -n "${image_name}" ]; then
+            docker image rm -f "${image_name}" >/dev/null 2>&1 || true
+        fi
+    done
+
+    for dir_path in "${FLATTEN_TEMP_DIRS[@]:-}"; do
+        if [ -n "${dir_path}" ]; then
+            rm -rf "${dir_path}" >/dev/null 2>&1 || true
+        fi
+    done
+
+    return 0
+}
+
+register_flatten_temp_container() {
+    local container_name="${1:?BUG: register_flatten_temp_container requires a container name}"
+    FLATTEN_TEMP_CONTAINERS+=("${container_name}")
+    return 0
+}
+
 resolve_build_targets_from_compose() {
     local discovered_targets=""
 
@@ -434,6 +516,157 @@ cleanup_local_cache_staging_dirs() {
     return 0
 }
 
+generate_flatten_filesystem_dockerfile() {
+    local source_image_name="${1:?BUG: generate_flatten_filesystem_dockerfile requires a source image name}"
+    local dockerfile_path="${2:?BUG: generate_flatten_filesystem_dockerfile requires a dockerfile path}"
+
+    jq -rn \
+        --arg source_image "${source_image_name}" '
+        [
+            "FROM " + $source_image + " AS source",
+            "FROM scratch",
+            "COPY --from=source / /"
+        ]
+        | map(select(. != ""))
+        | .[]
+    ' >"${dockerfile_path}"
+
+    return 0
+}
+
+build_flatten_import_changes() {
+    local source_image_name="${1:?BUG: build_flatten_import_changes requires a source image name}"
+    local image_metadata_json=""
+
+    image_metadata_json="$(docker image inspect "${source_image_name}" --format '{{json .}}')"
+
+    jq -rn \
+        --argjson image "${image_metadata_json}" '
+        def ns_duration($value): ($value | tostring) + "ns";
+        def health_options:
+            [
+                if (($image.Config.Healthcheck.Interval // 0) > 0) then "--interval=" + ns_duration($image.Config.Healthcheck.Interval) else empty end,
+                if (($image.Config.Healthcheck.Timeout // 0) > 0) then "--timeout=" + ns_duration($image.Config.Healthcheck.Timeout) else empty end,
+                if (($image.Config.Healthcheck.StartPeriod // 0) > 0) then "--start-period=" + ns_duration($image.Config.Healthcheck.StartPeriod) else empty end,
+                if (($image.Config.Healthcheck.StartInterval // 0) > 0) then "--start-interval=" + ns_duration($image.Config.Healthcheck.StartInterval) else empty end,
+                if (($image.Config.Healthcheck.Retries // 0) > 0) then "--retries=" + (($image.Config.Healthcheck.Retries | tostring)) else empty end
+            ] | join(" ");
+        def health_command:
+            if ($image.Config.Healthcheck // null) == null then empty
+            elif (($image.Config.Healthcheck.Test // []) | length) == 0 then empty
+            elif $image.Config.Healthcheck.Test[0] == "NONE" then "NONE"
+            elif $image.Config.Healthcheck.Test[0] == "CMD" then "CMD " + (($image.Config.Healthcheck.Test[1:] // []) | tojson)
+            elif $image.Config.Healthcheck.Test[0] == "CMD-SHELL" then "CMD " + ((($image.Config.Shell // ["/bin/sh", "-c"]) + [(($image.Config.Healthcheck.Test[1:] // []) | join(" "))]) | tojson)
+            else empty
+            end;
+        [
+            (($image.Config.Env // [])
+                | map(
+                    capture("^(?<key>[^=]+)=(?<value>.*)$")
+                    | "ENV " + .key + "=" + (.value | tojson)
+                )[]?),
+            (($image.Config.Labels // {})
+                | to_entries
+                | sort_by(.key)
+                | map("LABEL " + .key + "=" + (.value | tojson))[]?),
+            (($image.Config.ExposedPorts // {})
+                | keys
+                | sort
+                | map("EXPOSE " + .)[]?),
+            ((($image.Config.Volumes // {}) | keys | sort) as $volumes
+                | if ($volumes | length) > 0 then "VOLUME " + ($volumes | tojson) else empty end),
+            (if (($image.Config.WorkingDir // "") | length) > 0 then "WORKDIR " + $image.Config.WorkingDir else empty end),
+            (if (($image.Config.User // "") | length) > 0 then "USER " + $image.Config.User else empty end),
+            (if (($image.Config.StopSignal // "") | length) > 0 then "STOPSIGNAL " + $image.Config.StopSignal else empty end),
+            (
+                (health_command) as $health_command
+                | if $health_command == "" then empty
+                  elif $health_command == "NONE" then "HEALTHCHECK NONE"
+                  else
+                    (health_options) as $health_options
+                    | "HEALTHCHECK "
+                        + (if ($health_options | length) > 0 then $health_options + " " else "" end)
+                        + $health_command
+                  end
+            ),
+            (if ($image.Config.Entrypoint // null) != null then "ENTRYPOINT " + (($image.Config.Entrypoint // []) | tojson) else empty end),
+            (if ($image.Config.Cmd // null) != null then "CMD " + (($image.Config.Cmd // []) | tojson) else empty end),
+            (($image.Config.OnBuild // [])
+                | map("ONBUILD " + .)[]?)
+        ]
+        | map(select(. != ""))
+        | .[]
+    '
+
+    return 0
+}
+
+flatten_target_image() {
+    local target="${1:?BUG: flatten_target_image requires a target}"
+    local source_image_name=""
+    local final_image_name=""
+    local flatten_context_dir=""
+    local flatten_dockerfile=""
+    local flatten_filesystem_image_name=""
+    local flatten_container_name=""
+    local -a import_change_args=()
+    local change_line=""
+
+    source_image_name="$(compose_flatten_source_image_name "${target}")"
+    final_image_name="$(compose_target_image_name "${target}")"
+    flatten_context_dir="$(mktemp -d)"
+    register_flatten_temp_dir "${flatten_context_dir}"
+    flatten_dockerfile="${flatten_context_dir}/Dockerfile"
+    flatten_filesystem_image_name="${final_image_name}__flatten_fs_${LOCAL_CACHE_ROTATION_TOKEN}"
+    flatten_container_name="flatten-${target//[^a-zA-Z0-9_.-]/-}-${LOCAL_CACHE_ROTATION_TOKEN}"
+    register_flatten_temp_image "${flatten_filesystem_image_name}"
+    register_flatten_temp_container "${flatten_container_name}"
+
+    generate_flatten_filesystem_dockerfile "${source_image_name}" "${flatten_dockerfile}"
+
+    echo "INFO (${SCRIPT_NAME}): Flattening '${target}' into single-layer image '${final_image_name}'." >&2
+    docker build --file "${flatten_dockerfile}" --tag "${flatten_filesystem_image_name}" "${flatten_context_dir}" >/dev/null
+
+    while IFS= read -r change_line; do
+        if [ -n "${change_line}" ]; then
+            import_change_args+=(--change "${change_line}")
+        fi
+    done < <(build_flatten_import_changes "${source_image_name}")
+
+    docker container create --name "${flatten_container_name}" "${flatten_filesystem_image_name}" /bin/sh >/dev/null
+    docker export "${flatten_container_name}" | docker image import "${import_change_args[@]}" - "${final_image_name}" >/dev/null
+
+    if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+        echo "INFO (${SCRIPT_NAME}): Pushing flattened image '${final_image_name}' via docker push." >&2
+        docker image push "${final_image_name}"
+    fi
+
+    docker container rm -f "${flatten_container_name}" >/dev/null 2>&1 || true
+    docker image rm -f "${flatten_filesystem_image_name}" >/dev/null 2>&1 || true
+    docker image rm -f "${source_image_name}" >/dev/null 2>&1 || true
+    return 0
+}
+
+flatten_final_images_if_requested() {
+    local target=""
+
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
+        return 0
+    fi
+
+    for target in ${DOCKER_BUILD_TARGETS}; do
+        flatten_target_image "${target}"
+    done
+
+    return 0
+}
+
+finalize_build_outputs() {
+    commit_local_cache_staging_dirs
+    flatten_final_images_if_requested
+    return 0
+}
+
 has_timeout() {
     command -v timeout >/dev/null 2>&1
 }
@@ -568,7 +801,7 @@ build_target_overrides() {
     fi
 
     for target in ${DOCKER_BUILD_TARGETS}; do
-        target_image_name="$(compose_target_image_name "${target}")"
+        target_image_name="$(compose_build_output_image_name "${target}")"
 
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
@@ -593,11 +826,16 @@ build_target_overrides() {
             printf -- '--set\n%s.cache-to=type=local,dest=%s,mode=%s\n' "${target}" "${target_cache_staging_dir}" "${DOCKER_BUILD_LOCAL_CACHE_MODE}"
         fi
 
-        if [ "${DOCKER_BUILD_SQUASH}" = "1" ]; then
+        if [ "${DOCKER_BUILD_SQUASH}" = "1" ] && [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
             printf -- "--set\n%s.squash=true\n" "${target}"
         fi
 
-        if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+            # Flattening requires local source images so a follow-up docker build
+            # can reconstruct a scratch-based single-layer final image.
+            printf -- '--set\n%s.output=type=docker\n' \
+                "${target}"
+        elif [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
             # Registry push: apply full compression settings.
             # force-compression=true is intentional here — it ensures all
             # layers in the pushed manifest use the target codec regardless
@@ -662,6 +900,7 @@ run_buildx_bake_serial_fallback() {
     done
 
     DOCKER_BUILD_TARGETS="${original_targets}"
+    flatten_final_images_if_requested
     return 0
 }
 
@@ -687,7 +926,7 @@ run_buildx_bake_without_local_cache_fallback() {
     fi
 
     if run_buildx_bake_with_retries; then
-        commit_local_cache_staging_dirs
+        finalize_build_outputs
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${original_local_cache_enabled}"
         return 0
     fi
@@ -750,6 +989,7 @@ main() {
     validate_toggle "DOCKER_BUILD_NO_CACHE" "${DOCKER_BUILD_NO_CACHE}"
     validate_toggle "DOCKER_BUILD_LOCAL_CACHE_ENABLED" "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
     validate_toggle "DOCKER_BUILD_SQUASH" "${DOCKER_BUILD_SQUASH}"
+    validate_toggle "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
     validate_local_cache_mode
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_COUNT" "${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     validate_positive_integer "DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS" "${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
@@ -761,6 +1001,12 @@ main() {
     LOCAL_CACHE_ROTATION_TOKEN="${now_epoch}.$$"
 
     require_binary docker
+
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+        require_binary jq
+        trap cleanup_flatten_artifacts EXIT
+        register_flatten_temp_source_images
+    fi
 
     if ! docker buildx version >/dev/null 2>&1; then
         echo "ERROR (${SCRIPT_NAME}): docker buildx is required but not available." >&2
@@ -792,10 +1038,12 @@ main() {
         echo "  Registry prefix      : (not set; building local images only)"
     fi
     echo "  Image tag            : ${DOCKER_IMAGE_TAG}"
-    if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+    if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ] && [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" != "1" ]; then
         echo "  Compression type     : ${DOCKER_BUILD_COMPRESSION_TYPE}"
         echo "  Compression level    : ${DOCKER_BUILD_COMPRESSION_LEVEL}"
         echo "  OCI mediatypes       : ${oci_mediatypes_bool}"
+    elif [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+        echo "  Compression          : bypassed for final flattened publish (docker push)"
     else
         echo "  Compression          : disabled for local build (only applies on registry push)"
     fi
@@ -804,6 +1052,7 @@ main() {
     echo "  Local cache export   : ${DOCKER_BUILD_LOCAL_CACHE_ENABLED}"
     echo "  Local cache mode     : ${DOCKER_BUILD_LOCAL_CACHE_MODE}"
     echo "  Squash layers        : ${DOCKER_BUILD_SQUASH}"
+    echo "  Flatten final image  : ${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"
     echo "  Push                 : ${push_bool}"
     echo "  Retry attempts       : ${DOCKER_BUILD_BAKE_RETRY_COUNT}"
     echo "  Retry delay (sec)    : ${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS}"
@@ -813,6 +1062,9 @@ main() {
         echo "  Buildx driver opts   : ${DOCKER_BUILDX_DRIVER_OPTS}"
     else
         echo "  Buildx driver opts   : (none)"
+    fi
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ] && [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
+        echo "  Push note            : flattened images are pushed via docker push; buildx compression settings do not apply to the final publish step"
     fi
 
 
@@ -825,7 +1077,7 @@ main() {
     fi
 
     if run_buildx_bake_with_retries; then
-        commit_local_cache_staging_dirs
+        finalize_build_outputs
         return 0
     fi
 
