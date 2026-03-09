@@ -649,6 +649,7 @@ body {
             border: 1px solid #e5e7eb;
             border-radius: 10px;
             overflow-y: auto;
+            overflow-x: hidden;
             scrollbar-gutter: stable;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
             display: flex;
@@ -870,7 +871,7 @@ body {
         .tree-header,
         .tree-row {
             display: grid;
-            grid-template-columns: minmax(240px, 1fr) 120px 170px 32px;
+            grid-template-columns: minmax(0, 1fr) 120px 170px 32px;
             column-gap: 16px;
             align-items: center;
         }
@@ -898,6 +899,7 @@ body {
             gap: 8px;
             padding-left: calc(var(--depth, 0) * 18px);
             position: relative;
+            min-width: 0;
         }
         .tree-toggle {
             width: 22px;
@@ -926,9 +928,9 @@ body {
             display: inline-block;
         }
         .tree-children {
-            margin-left: 16px;
-            padding-left: 12px;
-            border-left: 1px solid #e2e8f0;
+            margin-left: 0;
+            padding-left: 0;
+            border-left: none;
         }
         .tree-children[hidden] {
             display: none;
@@ -936,14 +938,23 @@ body {
         .tree-name {
             font-weight: 600;
             color: #1f2937;
+            min-width: 0;
+            flex: 1 1 auto;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         .tree-file-name {
             font-weight: 500;
             color: #111827;
+            min-width: 0;
+            flex: 1 1 auto;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         .tree-meta {
             font-size: 0.85rem;
             color: #64748b;
+            flex: 0 0 auto;
         }
         .tree-row.is-incompatible .tree-file-name {
             color: #dc2626;
