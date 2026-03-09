@@ -14,6 +14,7 @@ import subprocess
 import shutil
 import threading
 import time
+import tempfile
 import uuid
 import omero
 
@@ -119,6 +120,7 @@ __all__ = [
     '_link_dataset_to_project',
     '_load_job',
     '_normalize_job_batch_size',
+    '_normalize_upload_relative_path',
     '_normalize_sem_edx_associations',
     '_normalize_sem_edx_settings',
     '_open_service_connection',
@@ -144,6 +146,7 @@ __all__ = [
     '_start_import_thread',
     '_update_job',
     '_validate_session',
+    '_validate_staged_target_path',
     '_verify_import',
     'as_completed',
     'current_username',
@@ -184,6 +187,9 @@ UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
 MAX_IMPORT_LOG_LINES = 1000
+MAX_UPLOAD_PATH_COMPONENT_BYTES = 255
+MAX_UPLOAD_RELATIVE_PATH_BYTES = 2048
+MAX_UPLOAD_STAGED_TARGET_BYTES = 4096
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
@@ -551,30 +557,39 @@ def _load_job(job_id: str):
     path = _job_path(job_id)
     if not path.exists():
         return None
-    try:
-        with portalocker.Lock(path, "r", timeout=1) as handle:
-            return json.load(handle)
-    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to lock or read job file %s: %s", path, exc)
-    try:
-        with path.open("r") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to read job file %s without lock: %s", path, exc)
+    lock_path = _job_lock_path(job_id)
+    for attempt in range(5):
+        if attempt:
+            time.sleep(random.uniform(0.05, 0.2))
+        try:
+            with portalocker.Lock(lock_path, "a+", timeout=1):
+                if not path.exists():
+                    return None
+                return _read_job_file(path)
+        except json.JSONDecodeError as exc:
+            logger.error("Job file %s is corrupt: %s", path, exc)
+            return None
+        except (portalocker.exceptions.LockException, OSError) as exc:
+            logger.warning(
+                "Unable to lock or read job file %s (attempt %s/%s): %s",
+                path,
+                attempt + 1,
+                5,
+                exc,
+            )
     return None
 
 
 def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
     path = _job_path(job_dict["job_id"])
+    lock_path = _job_lock_path(job_dict["job_id"])
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
         try:
-            with portalocker.Lock(path, "w", timeout=timeout) as handle:
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+            with portalocker.Lock(lock_path, "a+", timeout=timeout):
+                _write_job_file(path, job_dict)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
@@ -590,18 +605,18 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
 
 def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
     path = _job_path(job_id)
+    lock_path = _job_lock_path(job_id)
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
         try:
-            with portalocker.Lock(path, "r+", timeout=timeout) as handle:
-                job_dict = json.load(handle)
+            with portalocker.Lock(lock_path, "a+", timeout=timeout):
+                if not path.exists():
+                    logger.warning("Job file %s not found for update.", path)
+                    return None
+                job_dict = _read_job_file(path)
                 job_dict = update_fn(job_dict)
-                handle.seek(0)
-                handle.truncate()
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+                _write_job_file(path, job_dict)
             return job_dict
         except json.JSONDecodeError as exc:
             logger.error("Job file %s is corrupt: %s", path, exc)
@@ -633,6 +648,32 @@ def _safe_relative_path(raw_name: str):
     if not parts:
         return None
     return "/".join(parts)
+
+
+def _validate_relative_path_lengths(rel_path: str):
+    if len(os.fsencode(rel_path)) > MAX_UPLOAD_RELATIVE_PATH_BYTES:
+        return errors.file_path_too_long(rel_path, MAX_UPLOAD_RELATIVE_PATH_BYTES)
+    for part in PurePosixPath(rel_path).parts:
+        if len(os.fsencode(part)) > MAX_UPLOAD_PATH_COMPONENT_BYTES:
+            return errors.filename_too_long(part, MAX_UPLOAD_PATH_COMPONENT_BYTES)
+    return None
+
+
+def _normalize_upload_relative_path(raw_name: str):
+    rel_path = _safe_relative_path(raw_name)
+    if rel_path is None:
+        return None, errors.invalid_filename(raw_name)
+    length_error = _validate_relative_path_lengths(rel_path)
+    if length_error:
+        return None, length_error
+    return rel_path, None
+
+
+def _validate_staged_target_path(upload_root: Path, staged_path: str):
+    target = upload_root / staged_path
+    if len(os.fsencode(str(target))) > MAX_UPLOAD_STAGED_TARGET_BYTES:
+        return errors.file_path_too_long(staged_path, MAX_UPLOAD_STAGED_TARGET_BYTES)
+    return None
 
 
 def _should_auto_skip_import(relative_path: str) -> bool:
@@ -1639,6 +1680,53 @@ def _get_import_lock(username: str):
 
 def _safe_job_id(value: str) -> bool:
     return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
+
+
+def _job_lock_path(job_id: str) -> Path:
+    return _get_jobs_root() / f".{job_id}.lock"
+
+
+def _fsync_directory(path: Path):
+    try:
+        dir_fd = os.open(path, os.O_DIRECTORY)
+    except (AttributeError, OSError):
+        return
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def _read_job_file(path: Path):
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _write_job_file(path: Path, job_dict):
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            json.dump(job_dict, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
+        tmp_path = None
+        return True
+    finally:
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
@@ -2718,7 +2806,9 @@ def _start_import_thread(job_id: str):
         return
 
     job["import_thread_started"] = True
-    _save_job(job)
+    if not _save_job(job):
+        logger.error("Unable to persist import_thread_started for job %s.", job_id)
+        return
     worker = threading.Thread(target=_process_import_job, args=(job_id,), daemon=True)
     worker.start()
 

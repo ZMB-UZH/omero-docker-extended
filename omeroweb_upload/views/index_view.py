@@ -129,9 +129,9 @@ def _start_upload(request, conn):
             continue
         raw_name = entry.get("relative_path") or entry.get("name")
         size = entry.get("size")
-        rel_path = _safe_relative_path(raw_name or "")
-        if rel_path is None:
-            invalid.append(raw_name)
+        rel_path, rel_error = _normalize_upload_relative_path(raw_name or "")
+        if rel_error:
+            invalid.append(rel_error)
             continue
         try:
             size = int(size)
@@ -157,6 +157,10 @@ def _start_upload(request, conn):
             compatibility_skip = True
 
         staged_path = f"_staged/{upload_id}/{filename}"
+        staged_error = _validate_staged_target_path(upload_root / ("0" * 32), staged_path)
+        if staged_error:
+            invalid.append(staged_error)
+            continue
 
         total_bytes += size
         if total_bytes > MAX_UPLOAD_BATCH_BYTES:
@@ -247,7 +251,9 @@ def _start_upload(request, conn):
         "sem_edx_associations": sem_edx_associations,
         "sem_edx_settings": sem_edx_settings,
     }
-    _save_job(job)
+    if not _save_job(job):
+        logger.error("Unable to persist upload job %s for user %s.", job_id, username)
+        return json_error(errors.unable_update_upload_job_state(), status=500)
 
     logger.info(
         "Upload job %s created for user %s with %d files (%d bytes).",
@@ -317,9 +323,9 @@ def _upload_files(request, job_id):
 
     for index, upload in enumerate(files):
         raw_name = relative_paths[index] if relative_paths else upload.name
-        rel_path = _safe_relative_path(raw_name)
-        if rel_path is None:
-            upload_errors.append(errors.invalid_filename(raw_name))
+        rel_path, rel_error = _normalize_upload_relative_path(raw_name)
+        if rel_error:
+            upload_errors.append(rel_error)
             continue
 
         entry_queue = entries_by_path.get(rel_path) or []
@@ -330,6 +336,16 @@ def _upload_files(request, job_id):
 
         staged_path = entry.get("staged_path") or rel_path
         target = job_root / staged_path
+        staged_error = _validate_staged_target_path(job_root, staged_path)
+        if staged_error:
+            logger.warning("Rejected staged upload target for %s: %s", rel_path, staged_error)
+            upload_errors.append(staged_error)
+            entry["status"] = "error"
+            entry.setdefault("errors", []).append(staged_error)
+            updates.append(
+                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [staged_error]}
+            )
+            continue
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("wb") as handle:
@@ -422,7 +438,9 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     job["compatibility_thread_active"] = False
     job["status"] = "ready"
     job["updated"] = time.time()
-    _save_job(job)
+    if not _save_job(job):
+        logger.error("Unable to persist confirmation state for upload job %s.", job_id)
+        return json_error(errors.unable_update_upload_job_state(), status=500)
     _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": "ready"})
