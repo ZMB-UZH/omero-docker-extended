@@ -55,6 +55,14 @@ def invalid_filename(name):
     return f"Invalid filename: {name}"
 
 
+def filename_too_long(name, max_bytes):
+    return f"Filename is too long ({max_bytes} byte limit): {name}"
+
+
+def file_path_too_long(path, max_bytes):
+    return f"File path is too long ({max_bytes} byte limit): {path}"
+
+
 def unexpected_file(path):
     return f"Unexpected file: {path}"
 
