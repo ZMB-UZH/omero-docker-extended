@@ -161,6 +161,7 @@ COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
 COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
 COPY docs/help /tmp/omero_plugin_help_docs
+COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
@@ -196,6 +197,18 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+
+# Patch OMERO.web to keep optional top-logo context keys defined when unset.
+# This preserves the documented login-logo path while avoiding noisy debug
+# log entries from missing ome.logo_src / ome.logo_href lookups.
+RUN set -euo pipefail; \
+    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    DECORATORS_PY="${SITE_PACKAGES}/omeroweb/webclient/decorators.py"; \
+    "${VENV_DIR}/bin/python" /tmp/patch_omeroweb_logo_context.py "${DECORATORS_PY}"; \
+    chown omero-web:omero-web "${DECORATORS_PY}"; \
+    rm -f /tmp/patch_omeroweb_logo_context.py
 
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
 # --------------------------------------------------------------------------------------------
