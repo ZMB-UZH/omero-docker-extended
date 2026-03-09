@@ -20,11 +20,25 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("USE_BUILDX_COMPRESSED_BUILD", script_text)
         self.assertIn("run_image_build()", script_text)
         self.assertIn("docker_buildx_compressed_push.sh", script_text)
-        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}"', script_text)
+        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"', script_text)
+        self.assertIn("resolve_flatten_final_image_choice()", script_text)
+        self.assertIn("Flatten final images into single-layer outputs?", script_text)
         self.assertIn('DOCKER_BUILD_FLATTEN_ONLY="1"', script_text)
         self.assertIn('resolve_build_provenance_setting()', script_text)
         self.assertIn('--provenance "${provenance_setting}"', script_text)
         self.assertNotIn("DOCKER_BUILD_SQUASH", script_text)
+
+    def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"; then',
+            script_text,
+        )
+        self.assertIn("ERROR: docker compose build workflow failed.", script_text)
+        self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
+        self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
 
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(self) -> None:
@@ -48,6 +62,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn("exec env", script_text)
         self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"', script_text)
+        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"', script_text)
         self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
 
     def test_public_pull_script_defaults_to_public_repo(self) -> None:
