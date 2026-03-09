@@ -1790,7 +1790,7 @@ resolve_cache_build_choice() {
 resolve_flatten_final_image_choice() {
     local reply=""
     local prompt_message=""
-    local prompt_hint="y/N"
+    local prompt_hint="Y/n"
     local prompt_default="n"
     local default_choice="no"
 
