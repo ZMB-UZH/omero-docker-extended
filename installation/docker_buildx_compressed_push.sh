@@ -22,7 +22,7 @@ DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}"
 DOCKER_BUILD_BAKE_RETRY_COUNT="${DOCKER_BUILD_BAKE_RETRY_COUNT:-3}"
 DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS="${DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS:-2}"
 DOCKER_BUILD_BAKE_SERIAL_MODE="${DOCKER_BUILD_BAKE_SERIAL_MODE:-auto}"
-DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}"
+DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"
 DOCKER_BUILD_FLATTEN_ONLY="${DOCKER_BUILD_FLATTEN_ONLY:-0}"
 # Named docker-container driver builder. The docker (default) driver does NOT
 # support cache-to=type=local; only the docker-container driver does.
@@ -290,11 +290,16 @@ compose_target_image_name() {
 
 resolve_target_image_name_from_compose() {
     local target="${1:?BUG: resolve_target_image_name_from_compose requires a target}"
+    local rendered_compose=""
     local rendered_image=""
 
-    set +e
+    if ! rendered_compose="$(render_active_compose_config)"; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to render active docker compose config from ${COMPOSE_FILE} while resolving image for target '${target}'." >&2
+        return 1
+    fi
+
     rendered_image="$(
-        render_active_compose_config | awk -v service_name="${target}" '
+        printf '%s\n' "${rendered_compose}" | awk -v service_name="${target}" '
             /^services:[[:space:]]*$/ { in_services=1; current_service=""; next }
             in_services == 1 && /^[^[:space:]]/ { exit }
             in_services == 1 {
@@ -313,7 +318,6 @@ resolve_target_image_name_from_compose() {
             }
         '
     )"
-    set -e
 
     if [ -n "${rendered_image}" ]; then
         printf '%s' "${rendered_image}"
@@ -440,14 +444,20 @@ prepare_flatten_source_images_from_existing_tags() {
 }
 
 render_active_compose_config() {
-    docker compose -f "${COMPOSE_FILE}" config 2>/dev/null
+    docker compose -f "${COMPOSE_FILE}" config
     return $?
 }
 
 resolve_build_targets_from_compose() {
+    local rendered_compose=""
     local discovered_targets=""
 
-    discovered_targets="$(render_active_compose_config | awk '
+    if ! rendered_compose="$(render_active_compose_config)"; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to render active docker compose config from ${COMPOSE_FILE} while discovering build targets." >&2
+        return 1
+    fi
+
+    discovered_targets="$(printf '%s\n' "${rendered_compose}" | awk '
         /^services:[[:space:]]*$/ { in_services=1; current_service=""; service_has_build=0; next }
         in_services == 1 && /^[^[:space:]]/ {
             if (current_service != "" && service_has_build == 1) { printf "%s\n", current_service }
@@ -602,7 +612,7 @@ generate_flatten_filesystem_dockerfile() {
     local source_image_name="${1:?BUG: generate_flatten_filesystem_dockerfile requires a source image name}"
     local dockerfile_path="${2:?BUG: generate_flatten_filesystem_dockerfile requires a dockerfile path}"
 
-    jq -rn \
+    if ! jq -rn \
         --arg source_image "${source_image_name}" '
         [
             "FROM " + $source_image + " AS source",
@@ -611,7 +621,10 @@ generate_flatten_filesystem_dockerfile() {
         ]
         | map(select(. != ""))
         | .[]
-    ' >"${dockerfile_path}"
+    ' >"${dockerfile_path}"; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to generate flatten Dockerfile for source image '${source_image_name}'." >&2
+        return 1
+    fi
 
     return 0
 }
@@ -620,9 +633,17 @@ build_flatten_import_changes() {
     local source_image_name="${1:?BUG: build_flatten_import_changes requires a source image name}"
     local image_metadata_json=""
 
-    image_metadata_json="$(docker image inspect "${source_image_name}" --format '{{json .}}')"
+    if ! image_metadata_json="$(docker image inspect "${source_image_name}" --format '{{json .}}')"; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to inspect metadata for source image '${source_image_name}' during flattening." >&2
+        return 1
+    fi
 
-    jq -rn \
+    if [ -z "${image_metadata_json}" ]; then
+        echo "ERROR (${SCRIPT_NAME}): Flatten metadata inspection returned empty output for source image '${source_image_name}'." >&2
+        return 1
+    fi
+
+    if ! jq -rn \
         --argjson image "${image_metadata_json}" '
         def ns_duration($value): ($value | tostring) + "ns";
         def health_options:
@@ -678,7 +699,10 @@ build_flatten_import_changes() {
         ]
         | map(select(. != ""))
         | .[]
-    '
+    '; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to derive flatten import metadata for source image '${source_image_name}'." >&2
+        return 1
+    fi
 
     return 0
 }
@@ -691,6 +715,7 @@ flatten_target_image() {
     local flatten_dockerfile=""
     local flatten_filesystem_image_name=""
     local flatten_container_name=""
+    local flatten_import_changes_file=""
     local -a import_change_args=()
     local change_line=""
 
@@ -701,32 +726,58 @@ flatten_target_image() {
     flatten_dockerfile="${flatten_context_dir}/Dockerfile"
     flatten_filesystem_image_name="${final_image_name}__flatten_fs_${LOCAL_CACHE_ROTATION_TOKEN}"
     flatten_container_name="flatten-${target//[^a-zA-Z0-9_.-]/-}-${LOCAL_CACHE_ROTATION_TOKEN}"
+    flatten_import_changes_file="${flatten_context_dir}/import-changes.txt"
     register_flatten_temp_image "${flatten_filesystem_image_name}"
     register_flatten_temp_container "${flatten_container_name}"
 
-    generate_flatten_filesystem_dockerfile "${source_image_name}" "${flatten_dockerfile}"
+    if ! docker image inspect "${source_image_name}" >/dev/null 2>&1; then
+        echo "ERROR (${SCRIPT_NAME}): Flatten source image is missing for target '${target}': ${source_image_name}" >&2
+        return 1
+    fi
+
+    if ! generate_flatten_filesystem_dockerfile "${source_image_name}" "${flatten_dockerfile}"; then
+        return 1
+    fi
 
     echo "INFO (${SCRIPT_NAME}): Flattening '${target}' into single-layer image '${final_image_name}'." >&2
-    docker build \
+    if ! docker build \
         --provenance "$(as_bool_literal "${DOCKER_BUILD_PROVENANCE}")" \
         --file "${flatten_dockerfile}" \
         --tag "${flatten_filesystem_image_name}" \
-        "${flatten_context_dir}" >/dev/null
+        "${flatten_context_dir}" >/dev/null; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to build temporary flatten filesystem image for target '${target}'." >&2
+        return 1
+    fi
+
+    if ! build_flatten_import_changes "${source_image_name}" >"${flatten_import_changes_file}"; then
+        return 1
+    fi
 
     while IFS= read -r change_line; do
         if [ -n "${change_line}" ]; then
             import_change_args+=(--change "${change_line}")
         fi
-    done < <(build_flatten_import_changes "${source_image_name}")
+    done < "${flatten_import_changes_file}"
 
-    docker container create --name "${flatten_container_name}" "${flatten_filesystem_image_name}" /bin/sh >/dev/null
-    docker export "${flatten_container_name}" | docker image import "${import_change_args[@]}" - "${final_image_name}" >/dev/null
+    if ! docker container create --name "${flatten_container_name}" "${flatten_filesystem_image_name}" /bin/sh >/dev/null; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to create temporary flatten container for target '${target}'." >&2
+        return 1
+    fi
+
+    if ! docker export "${flatten_container_name}" | docker image import "${import_change_args[@]}" - "${final_image_name}" >/dev/null; then
+        echo "ERROR (${SCRIPT_NAME}): Failed to import flattened single-layer image for target '${target}'." >&2
+        return 1
+    fi
 
     if [ "${DOCKER_BUILD_PUSH_IMAGES}" = "1" ]; then
         echo "INFO (${SCRIPT_NAME}): Pushing flattened image '${final_image_name}' via docker push." >&2
-        docker image push "${final_image_name}"
+        if ! docker image push "${final_image_name}"; then
+            echo "ERROR (${SCRIPT_NAME}): Failed to push flattened image '${final_image_name}'." >&2
+            return 1
+        fi
     fi
 
+    echo "INFO (${SCRIPT_NAME}): Flattened '${target}' successfully." >&2
     docker container rm -f "${flatten_container_name}" >/dev/null 2>&1 || true
     docker image rm -f "${flatten_filesystem_image_name}" >/dev/null 2>&1 || true
     docker image rm -f "${source_image_name}" >/dev/null 2>&1 || true
