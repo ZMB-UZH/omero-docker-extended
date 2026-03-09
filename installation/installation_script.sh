@@ -122,37 +122,10 @@ bootstrap_env_files_from_examples() {
     done
 }
 
-ensure_omeroweb_logo_defaults() {
-    local omeroweb_env="${REPO_ROOT_DIR}/env/omeroweb.env"
-    local login_logo=""
-
-    if [ ! -f "${omeroweb_env}" ]; then
-        return 0
-    fi
-
-    if grep -Eq '^[[:space:]]*CONFIG_omero_web_login__logo=' "${omeroweb_env}"; then
-        login_logo="$(awk -F= '/^[[:space:]]*CONFIG_omero_web_login__logo=/{sub(/^[^=]*=/,""); print; exit}' "${omeroweb_env}")"
-    fi
-    if [ -z "${login_logo}" ]; then
-        login_logo="/static/branding/logo.png"
-    fi
-
-    if ! grep -Eq '^[[:space:]]*CONFIG_omero_web_top__logo=' "${omeroweb_env}"; then
-        printf '\nCONFIG_omero_web_top__logo=%s\n' "${login_logo}" >> "${omeroweb_env}"
-        echo "Added missing CONFIG_omero_web_top__logo to ${omeroweb_env}"
-    fi
-
-    if ! grep -Eq '^[[:space:]]*CONFIG_omero_web_top__logo__link=' "${omeroweb_env}"; then
-        printf 'CONFIG_omero_web_top__logo__link=/webclient/\n' >> "${omeroweb_env}"
-        echo "Added missing CONFIG_omero_web_top__logo__link to ${omeroweb_env}"
-    fi
-}
-
 resolve_script_env_file() {
     local default_env_file="${REPO_ROOT_DIR}/installation_paths.env"
 
     bootstrap_env_files_from_examples
-    ensure_omeroweb_logo_defaults
 
     if [ ! -f "${default_env_file}" ]; then
         echo "ERROR: Missing required installation paths file: ${default_env_file}" >&2

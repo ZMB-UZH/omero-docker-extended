@@ -41,22 +41,27 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
-    def test_installation_script_backfills_missing_omeroweb_logo_defaults(self) -> None:
+    def test_installation_script_does_not_inject_top_logo_defaults(self) -> None:
         script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("ensure_omeroweb_logo_defaults()", script_text)
-        self.assertIn('CONFIG_omero_web_top__logo=', script_text)
-        self.assertIn('CONFIG_omero_web_top__logo__link=/webclient/', script_text)
-        self.assertIn("CONFIG_omero_web_login__logo", script_text)
+        self.assertNotIn("ensure_omeroweb_logo_defaults()", script_text)
+        self.assertNotIn('CONFIG_omero_web_top__logo=', script_text)
+        self.assertNotIn('CONFIG_omero_web_top__logo__link=/webclient/', script_text)
 
-    def test_omeroweb_example_env_defines_login_and_top_logo_defaults(self) -> None:
+    def test_omeroweb_example_env_defines_only_login_logo_default(self) -> None:
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
         self.assertIn("CONFIG_omero_web_login__logo=/static/branding/logo.png", env_text)
-        self.assertIn("CONFIG_omero_web_top__logo=/static/branding/logo.png", env_text)
-        self.assertIn("CONFIG_omero_web_top__logo__link=/webclient/", env_text)
+        self.assertNotIn("CONFIG_omero_web_top__logo=", env_text)
+        self.assertNotIn("CONFIG_omero_web_top__logo__link=", env_text)
+
+    def test_omeroweb_dockerfile_applies_logo_context_patch(self) -> None:
+        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("patch_omeroweb_logo_context.py", dockerfile_text)
 
 
     def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(self) -> None:

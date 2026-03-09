@@ -8,7 +8,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 
 - `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions.
 - `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
-- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, and default login/top-logo settings. During installation, missing `CONFIG_omero_web_top__logo` / `CONFIG_omero_web_top__logo__link` entries are appended non-destructively to older `env/omeroweb.env` files so OMERO.web does not emit template lookup noise for `logo_src` / `logo_href`.
+- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, and the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`). When `logo/logo.png` exists in the repository, the `omeroweb` image build copies it into that static path.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
