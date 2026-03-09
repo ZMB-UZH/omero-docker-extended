@@ -72,7 +72,7 @@ Notes:
 - When push mode is disabled (`DOCKER_BUILD_PUSH_IMAGES=0`, the default without `DOCKER_REGISTRY_PREFIX`), the helper builds local images without `force-compression=true` to avoid unnecessary BuildKit recompression/memory pressure.
 - When `DOCKER_REGISTRY_PREFIX` is set, `DOCKER_BUILD_PUSH_IMAGES` defaults to `1` (push enabled).
 - When `DOCKER_REGISTRY_PREFIX` is unset, `DOCKER_BUILD_PUSH_IMAGES` defaults to `0` (local images only).
-- By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
+- By default, build targets are auto-discovered from the active rendered `docker compose config` output (services with a `build:` block in the currently enabled profile set).
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
@@ -81,11 +81,12 @@ Notes:
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
-- `DOCKER_BUILD_SQUASH` defaults to `1` and enables layer squashing by default (Buildx uses `target.squash=true`; Compose uses `--squash` when supported by the local Docker/Compose binary). Set `DOCKER_BUILD_SQUASH=0` to preserve unsquashed layers for maximum cache reuse.
+- `DOCKER_BUILD_PROVENANCE` defaults to `0`, so compose, Buildx, and flatten-rebuild steps all pass `--provenance=false` by default. Set `DOCKER_BUILD_PROVENANCE=1` only if you explicitly need BuildKit provenance attestations and accept the extra metadata export time.
 - `DOCKER_BUILD_FLATTEN_FINAL_IMAGE` now defaults to `1` and enables an explicit post-build flattening step for both build workflows. Buildx builds flatten their temporary source images after `buildx bake`; plain `docker compose build` runs the same flatten helper immediately afterward against the compose-built local images. In both cases, each target is rebuilt from `scratch` with a single filesystem `COPY --from=source / /`, then metadata is restored (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`, `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via `docker image import --change ...`. This produces a true single-layer final image for the local Docker daemon. Set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0` to opt out. Temporary source tags/build contexts are cleaned automatically.
 - The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
+- `DOCKER_BUILDX_KEEP_BUILDER` defaults to `0`, so the installation/build helper removes the temporary Buildx builder, any BuildKit containers, and builder-owned volumes after a Buildx run. Set `DOCKER_BUILDX_KEEP_BUILDER=1` only if you explicitly want to preserve that state between runs.
 - In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
 - Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
 - Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
