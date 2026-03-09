@@ -8,6 +8,7 @@ REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
+DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -257,6 +258,10 @@ run_image_build() {
 
     provenance_setting="$(resolve_build_provenance_setting)"
 
+    # This function is called from `if ! run_image_build; then`, which disables
+    # Bash errexit semantics inside the function body. Check critical commands
+    # explicitly so build or flatten failures cannot fall through as success.
+
     if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "0" ]; then
         echo "Building OMERO images via docker compose build workflow..."
         echo "  Compose file   : ${COMPOSE_FILE}"
@@ -269,9 +274,12 @@ run_image_build() {
         fi
         compose_build_args+=(--provenance "${provenance_setting}")
 
-        compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"
+        if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"; then
+            echo "ERROR: docker compose build workflow failed." >&2
+            return 1
+        fi
 
-        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}" = "1" ]; then
+        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
             if [ ! -x "${buildx_helper_path}" ]; then
                 echo "ERROR: Flatten helper is missing or not executable: ${buildx_helper_path}" >&2
                 echo "ERROR: Re-run the pull/update script and ensure installation/docker_buildx_compressed_push.sh exists." >&2
@@ -279,12 +287,15 @@ run_image_build() {
             fi
 
             echo "Flattening compose-built images into single-layer outputs..."
-            COMPOSE_FILE="${COMPOSE_FILE}" \
+            if ! COMPOSE_FILE="${COMPOSE_FILE}" \
                 DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
-                DOCKER_BUILD_FLATTEN_FINAL_IMAGE="1" \
+                DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" \
                 DOCKER_BUILD_FLATTEN_ONLY="1" \
                 DOCKER_BUILD_PUSH_IMAGES="0" \
-                "${buildx_helper_path}"
+                "${buildx_helper_path}"; then
+                echo "ERROR: Compose image flatten workflow failed." >&2
+                return 1
+            fi
         fi
         return 0
     fi
@@ -308,15 +319,18 @@ run_image_build() {
         no_cache_setting="1"
     fi
 
-    COMPOSE_FILE="${COMPOSE_FILE}" \
+    if ! COMPOSE_FILE="${COMPOSE_FILE}" \
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
         DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
-        DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-1}" \
-        "${buildx_helper_path}"
-    return $?
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" \
+        "${buildx_helper_path}"; then
+        echo "ERROR: Buildx compressed build workflow failed." >&2
+        return 1
+    fi
+    return 0
 }
 
 resolve_buildx_local_cache_dir() {
@@ -1773,6 +1787,34 @@ resolve_cache_build_choice() {
     return 0
 }
 
+resolve_flatten_final_image_choice() {
+    local reply=""
+    local prompt_message=""
+    local prompt_hint="y/N"
+    local prompt_default="n"
+    local default_choice="no"
+
+    if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"; then
+        return 1
+    fi
+
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+        prompt_hint="Y/n"
+        prompt_default="Y"
+        default_choice="yes"
+    fi
+
+    prompt_message="Flatten final images into single-layer outputs? (slower; rebuilds each image) ${prompt_hint} (Default: ${prompt_default})"
+    reply="$(prompt_yes_no "${prompt_message}" "${default_choice}")"
+    if [ "${reply}" = "yes" ]; then
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1
+    else
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
+    fi
+
+    return 0
+}
+
 resolve_buildx_compressed_build_choice() {
     local reply=""
     local override_choice="${USE_BUILDX_CHOICE:-}"
@@ -1853,6 +1895,10 @@ if ! resolve_cache_build_choice; then
     exit 1
 fi
 
+if ! resolve_flatten_final_image_choice; then
+    exit 1
+fi
+
 if ! resolve_start_containers_choice; then
     exit 1
 fi
@@ -1862,6 +1908,10 @@ if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOM
 fi
 
 if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
+    exit 1
+fi
+
+if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"; then
     exit 1
 fi
 
