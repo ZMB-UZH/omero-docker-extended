@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import datetime as dt
+import glob
+import hashlib
 import logging
 import re
 import json
 import os
 import socket
+import threading
+import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import urllib.error
 import urllib.parse
@@ -18,6 +23,205 @@ import urllib.request
 from ..config import LogConfig
 
 logger = logging.getLogger(__name__)
+
+_LOG_RESULT_CACHE_TTL_SECONDS = 5.0
+_LABEL_CACHE_TTL_SECONDS = 60.0
+_DEFAULT_LOG_CACHE_MAX_BYTES = 512 * 1024 * 1024
+_DEFAULT_LABEL_CACHE_MAX_BYTES = 8 * 1024 * 1024
+_CACHE_MAX_ITEMS = 128
+_MAX_PARALLEL_LOKI_QUERIES = 4
+_INTERNAL_FILE_QUERY_BATCH_SIZE = 12
+
+_INTERNAL_LOG_GLOB_PATTERNS = {
+    "omeroserver": (
+        "/opt/omero/server/OMERO.server/var/log/*.log",
+        "/opt/omero/server/OMERO.server/var/log/*.out",
+        "/opt/omero/server/OMERO.server/var/log/*.err",
+        "/opt/omero/server/OMERO.server/var/log/*/*.log",
+        "/opt/omero/server/OMERO.server/var/log/*/*.out",
+        "/opt/omero/server/OMERO.server/var/log/*/*.err",
+    ),
+    "omeroweb": (
+        "/opt/omero/web/OMERO.web/var/log/*.log",
+        "/opt/omero/web/OMERO.web/var/log/*.out",
+        "/opt/omero/web/OMERO.web/var/log/*.err",
+        "/opt/omero/web/OMERO.web/var/log/*/*.log",
+        "/opt/omero/web/OMERO.web/var/log/*/*.out",
+        "/opt/omero/web/OMERO.web/var/log/*/*.err",
+        "/opt/omero/web/logs/*.log",
+        "/opt/omero/web/logs/*.out",
+        "/opt/omero/web/logs/*.err",
+        "/opt/omero/web/logs/*/*.log",
+        "/opt/omero/web/logs/*/*.out",
+        "/opt/omero/web/logs/*/*.err",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _QueryJob:
+    """Single Loki query task."""
+
+    query: str
+    source_type: str
+    source_name: str
+    selected_files: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _CacheRecord:
+    """Stored cached value with expiry metadata."""
+
+    value: object
+    expires_at: float
+    size_bytes: int
+
+
+class _InMemoryTTLCache:
+    """Small process-local TTL cache with in-flight request coalescing."""
+
+    def __init__(
+        self,
+        ttl_seconds: float,
+        max_items: int,
+        max_bytes: int,
+        size_estimator: Callable[[object], int],
+    ):
+        self._ttl_seconds = ttl_seconds
+        self._max_items = max_items
+        self._max_bytes = max_bytes
+        self._size_estimator = size_estimator
+        self._values: Dict[object, _CacheRecord] = {}
+        self._inflight: Dict[object, concurrent.futures.Future] = {}
+        self._total_size_bytes = 0
+        self._lock = threading.Lock()
+
+    def get_or_load(self, key: object, loader: Callable[[], object]) -> object:
+        now = time.monotonic()
+        owner = False
+
+        with self._lock:
+            self._prune_locked(now)
+            cached = self._values.get(key)
+            if cached and cached.expires_at > now:
+                return cached.value
+
+            future = self._inflight.get(key)
+            if future is None:
+                future = concurrent.futures.Future()
+                self._inflight[key] = future
+                owner = True
+
+        if owner:
+            try:
+                value = loader()
+            except Exception as exc:
+                with self._lock:
+                    pending = self._inflight.pop(key, None)
+                if pending is not None and not pending.done():
+                    pending.set_exception(exc)
+                raise
+
+            size_bytes = max(0, self._size_estimator(value))
+            expires_at = time.monotonic() + self._ttl_seconds
+            with self._lock:
+                if size_bytes <= self._max_bytes:
+                    previous = self._values.pop(key, None)
+                    if previous is not None:
+                        self._total_size_bytes = max(
+                            0,
+                            self._total_size_bytes - previous.size_bytes,
+                        )
+                    self._values[key] = _CacheRecord(
+                        value=value,
+                        expires_at=expires_at,
+                        size_bytes=size_bytes,
+                    )
+                    self._total_size_bytes += size_bytes
+                pending = self._inflight.pop(key, None)
+                self._prune_locked(time.monotonic())
+            if pending is not None and not pending.done():
+                pending.set_result(value)
+            return value
+
+        return future.result()
+
+    def _prune_locked(self, now: float) -> None:
+        expired = [key for key, record in self._values.items() if record.expires_at <= now]
+        for key in expired:
+            record = self._values.pop(key, None)
+            if record is not None:
+                self._total_size_bytes = max(0, self._total_size_bytes - record.size_bytes)
+        if len(self._values) <= self._max_items and self._total_size_bytes <= self._max_bytes:
+            return
+        overflow_items = max(0, len(self._values) - self._max_items)
+        oldest = sorted(
+            self._values.items(),
+            key=lambda item: item[1].expires_at,
+        )
+        while oldest and (
+            overflow_items > 0 or self._total_size_bytes > self._max_bytes
+        ):
+            key, record = oldest.pop(0)
+            removed = self._values.pop(key, None)
+            if removed is None:
+                continue
+            overflow_items = max(0, overflow_items - 1)
+            self._total_size_bytes = max(0, self._total_size_bytes - record.size_bytes)
+            if len(self._values) <= self._max_items and self._total_size_bytes <= self._max_bytes:
+                break
+
+    def reconfigure(self, *, max_bytes: Optional[int] = None) -> None:
+        """Update cache sizing without discarding live entries."""
+        with self._lock:
+            if max_bytes is not None and max_bytes > 0:
+                self._max_bytes = max_bytes
+            self._prune_locked(time.monotonic())
+
+
+def _estimate_log_entries_size(value: object) -> int:
+    """Estimate cache size for a sequence of LogEntry values."""
+    if not isinstance(value, tuple):
+        return 0
+    total = 0
+    for entry in value:
+        if not isinstance(entry, LogEntry):
+            continue
+        total += (
+            len(entry.timestamp)
+            + len(entry.container)
+            + len(entry.level)
+            + len(entry.message)
+            + 160
+        )
+    return total
+
+
+def _estimate_label_cache_size(value: object) -> int:
+    """Estimate cache size for filesystem-discovered label tuples."""
+    if not isinstance(value, tuple) or len(value) != 2:
+        return 0
+    labels, label_key = value
+    if not isinstance(labels, tuple):
+        return 0
+    total = len(label_key) + 64
+    for label in labels:
+        total += len(label) + 48
+    return total
+
+
+_LOG_RESULT_CACHE = _InMemoryTTLCache(
+    ttl_seconds=_LOG_RESULT_CACHE_TTL_SECONDS,
+    max_items=_CACHE_MAX_ITEMS,
+    max_bytes=_DEFAULT_LOG_CACHE_MAX_BYTES,
+    size_estimator=_estimate_log_entries_size,
+)
+_INTERNAL_LABELS_CACHE = _InMemoryTTLCache(
+    ttl_seconds=_LABEL_CACHE_TTL_SECONDS,
+    max_items=_CACHE_MAX_ITEMS,
+    max_bytes=_DEFAULT_LABEL_CACHE_MAX_BYTES,
+    size_estimator=_estimate_label_cache_size,
+)
 
 @dataclass(frozen=True)
 class LogEntry:
@@ -46,6 +250,16 @@ def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
     if not service or not filename:
         return None
     return service, filename
+
+
+def _chunks(values: Sequence[str], chunk_size: int) -> List[Tuple[str, ...]]:
+    """Split a sequence into fixed-size tuples."""
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    return [
+        tuple(values[index : index + chunk_size])
+        for index in range(0, len(values), chunk_size)
+    ]
 
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
@@ -353,119 +567,215 @@ def fetch_loki_logs(
     internal_files: Optional[Dict[str, set[str]]] = None,
     since_ns: Optional[int] = None,
 ) -> List[LogEntry]:
-    """Fetch logs from Loki for the selected containers and time window.
-
-    Docker container sources and internal log files are queried independently
-    so that each source can receive up to ``max_entries`` entries without
-    starving other selections.
-    """
-    docker_containers = [c for c in containers if not c.endswith("_internal")]
-    internal_services = [c for c in containers if c.endswith("_internal")]
-
-    logger.debug(
-        "fetch_loki_logs called: docker=%s, internal=%s, lookback=%d, max=%d",
-        docker_containers,
-        internal_services,
+    """Fetch logs from Loki for the selected containers and time window."""
+    _LOG_RESULT_CACHE.reconfigure(max_bytes=config.cache_max_bytes)
+    cache_key = _build_logs_cache_key(
+        config,
+        containers,
         lookback_seconds,
         max_entries,
+        internal_files=internal_files,
+        since_ns=since_ns,
     )
+    cached_entries = _LOG_RESULT_CACHE.get_or_load(
+        cache_key,
+        lambda: tuple(
+            _fetch_loki_logs_uncached(
+                config,
+                containers,
+                lookback_seconds,
+                max_entries,
+                internal_files=internal_files,
+                since_ns=since_ns,
+            )
+        ),
+    )
+    return list(cached_entries)
 
-    all_entries: List[LogEntry] = []
 
-    # ── Docker container logs: query each container independently ──
-    # For containers that also have internal file logs (omeroserver, omeroweb),
-    # we use the container_id label to filter to ONLY Docker container logs.
-    # Docker logs have container_id set, internal file logs do not.
-    # For other containers (database, redis), we query normally.
-    containers_with_internal_logs = {"omeroserver", "omeroweb"}
+def _build_docker_query(container: str) -> str:
+    """Build a Loki selector for a Docker container stream."""
+    if container in {"omeroserver", "omeroweb"}:
+        return f'{{compose_service="{container}", container_id=~".+"}}'
+    return f'{{compose_service="{container}"}}'
+
+
+def _prepare_query_jobs(
+    containers: List[str],
+    internal_files: Optional[Dict[str, set[str]]] = None,
+) -> List[_QueryJob]:
+    """Build the minimal set of Loki queries required for the request."""
+    docker_containers = [c for c in containers if not c.endswith("_internal")]
+    internal_services = [c for c in containers if c.endswith("_internal")]
+    jobs: List[_QueryJob] = []
 
     for container in docker_containers:
-        if container in containers_with_internal_logs:
-            # Use container_id=~".+" to match only Docker logs (which have container_id)
-            # Internal file logs don't have container_id label, so they won't match
-            query = f'{{compose_service="{container}", container_id=~".+"}}'
-        else:
-            query = f'{{compose_service="{container}"}}'
-
-        try:
-            payload = _execute_loki_query(
-                config,
-                query,
-                lookback_seconds,
-                max_entries,
-                since_ns=since_ns,
+        jobs.append(
+            _QueryJob(
+                query=_build_docker_query(container),
+                source_type="docker",
+                source_name=container,
             )
-            entries = _parse_entries_from_payload(payload)
-            logger.debug("Docker query for %s: got %d entries", container, len(entries))
-            all_entries.extend(entries)
-        except RuntimeError as exc:
-            logger.warning("Docker log query failed for %s: %s", container, exc)
+        )
 
-    # ── Internal logs: query by service and selected file filters ──
     for service in internal_services:
-        normalized = _normalize_internal_service(service)
-        selected_files = sorted(internal_files.get(service, set())) if internal_files else []
+        selected_files = sorted((internal_files or {}).get(service, set()))
         if selected_files:
-            service_entries: List[LogEntry] = []
-            for filename in selected_files:
-                query = _build_internal_file_query(service, filename, label_key="filepath")
-                try:
-                    payload = _execute_loki_query(
-                        config,
-                        query,
-                        lookback_seconds,
-                        max_entries,
-                        since_ns=since_ns,
+            for batch in _chunks(selected_files, _INTERNAL_FILE_QUERY_BATCH_SIZE):
+                jobs.append(
+                    _QueryJob(
+                        query=_build_internal_files_query(
+                            service,
+                            batch,
+                            label_key="filepath",
+                        ),
+                        source_type="internal_batch",
+                        source_name=service,
+                        selected_files=batch,
                     )
-                    entries = _parse_entries_from_payload(payload)
-                    for entry in entries:
-                        parsed = _split_internal_container(entry.container)
-                        if not parsed:
-                            continue
-                        entry_service, entry_filename = parsed
-                        if entry_service == service and entry_filename == filename:
-                            service_entries.append(entry)
-                except RuntimeError as exc:
-                    logger.warning(
-                        "Internal log query failed for %s/%s: %s",
-                        service,
-                        filename,
-                        exc,
-                    )
-            # Preserve historical semantics: internal selections are still
-            # capped per service to max_entries, even when queried per file.
-            if len(service_entries) > max_entries:
-                service_entries.sort(key=_entry_sort_key, reverse=True)
-                service_entries = service_entries[:max_entries]
-            logger.debug(
-                "Internal query for %s (normalized=%s, files=%d): got %d entries",
-                service,
-                normalized,
-                len(selected_files),
-                len(service_entries),
-            )
-            all_entries.extend(service_entries)
+                )
             continue
 
-        query = f'{{compose_service="{normalized}", log_type="internal"}}'
-        try:
-            payload = _execute_loki_query(
+        normalized = _normalize_internal_service(service)
+        jobs.append(
+            _QueryJob(
+                query=f'{{compose_service="{normalized}", log_type="internal"}}',
+                source_type="internal_all",
+                source_name=service,
+            )
+        )
+
+    return jobs
+
+
+def _execute_query_job(
+    config: LogConfig,
+    job: _QueryJob,
+    lookback_seconds: int,
+    max_entries: int,
+    since_ns: Optional[int],
+) -> Tuple[_QueryJob, List[LogEntry]]:
+    """Run a single Loki query job and parse the payload."""
+    payload = _execute_loki_query(
+        config,
+        job.query,
+        lookback_seconds,
+        max_entries,
+        since_ns=since_ns,
+    )
+    return job, _parse_entries_from_payload(payload)
+
+
+def _filter_internal_batch_entries(
+    service: str,
+    selected_files: Sequence[str],
+    entries: List[LogEntry],
+) -> List[LogEntry]:
+    """Keep only entries that belong to the requested internal files."""
+    selected = set(selected_files)
+    filtered: List[LogEntry] = []
+    for entry in entries:
+        parsed = _split_internal_container(entry.container)
+        if not parsed:
+            continue
+        entry_service, entry_filename = parsed
+        if entry_service == service and entry_filename in selected:
+            filtered.append(entry)
+    return filtered
+
+
+def _fetch_loki_logs_uncached(
+    config: LogConfig,
+    containers: List[str],
+    lookback_seconds: int,
+    max_entries: int,
+    internal_files: Optional[Dict[str, set[str]]] = None,
+    since_ns: Optional[int] = None,
+) -> List[LogEntry]:
+    """Fetch logs without using the process-local cache."""
+    jobs = _prepare_query_jobs(containers, internal_files=internal_files)
+    logger.debug(
+        "fetch_loki_logs called: jobs=%d, lookback=%d, max=%d, since_ns=%s",
+        len(jobs),
+        lookback_seconds,
+        max_entries,
+        since_ns,
+    )
+    if not jobs:
+        return []
+
+    all_entries: List[LogEntry] = []
+    internal_entries_by_service: Dict[str, List[LogEntry]] = {}
+    worker_count = max(1, min(len(jobs), _MAX_PARALLEL_LOKI_QUERIES))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_to_job = {
+            executor.submit(
+                _execute_query_job,
                 config,
-                query,
+                job,
                 lookback_seconds,
                 max_entries,
-                since_ns=since_ns,
-            )
-            entries = _parse_entries_from_payload(payload)
+                since_ns,
+            ): job
+            for job in jobs
+        }
+
+        for future in concurrent.futures.as_completed(future_to_job):
+            job = future_to_job[future]
+            try:
+                _resolved_job, entries = future.result()
+            except Exception as exc:
+                if job.source_type == "internal_batch" and job.selected_files:
+                    logger.warning(
+                        "Internal log query failed for %s/%s: %s",
+                        job.source_name,
+                        ",".join(job.selected_files),
+                        exc,
+                    )
+                else:
+                    logger.warning(
+                        "%s log query failed for %s: %s",
+                        "Internal" if job.source_type.startswith("internal") else "Docker",
+                        job.source_name,
+                        exc,
+                    )
+                continue
+
+            if job.source_type == "docker":
+                logger.debug(
+                    "Docker query for %s: got %d entries",
+                    job.source_name,
+                    len(entries),
+                )
+                all_entries.extend(entries)
+                continue
+
+            if job.source_type == "internal_batch":
+                entries = _filter_internal_batch_entries(
+                    job.source_name,
+                    job.selected_files,
+                    entries,
+                )
+
             logger.debug(
-                "Internal query for %s (normalized=%s): got %d entries",
-                service,
-                normalized,
+                "Internal query for %s (%s): got %d entries",
+                job.source_name,
+                job.source_type,
                 len(entries),
             )
-            all_entries.extend(entries)
-        except RuntimeError as exc:
-            logger.warning("Internal log query failed for %s: %s", service, exc)
+            internal_entries_by_service.setdefault(job.source_name, []).extend(entries)
+
+    for service, service_entries in internal_entries_by_service.items():
+        if len(service_entries) > max_entries:
+            service_entries.sort(key=_entry_sort_key, reverse=True)
+            service_entries = service_entries[:max_entries]
+        all_entries.extend(service_entries)
+        logger.debug(
+            "Internal query aggregate for %s: returning %d entries",
+            service,
+            len(service_entries),
+        )
 
     result = _cap_entries_per_container(all_entries, max_entries)
     logger.debug(
@@ -516,6 +826,70 @@ def _build_internal_file_query(
     escaped = re.escape(filename).replace("\\", "\\\\")
     return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
 
+
+def _build_internal_files_query(
+    service: str, filenames: Sequence[str], label_key: str = "filepath"
+) -> str:
+    """Build a Loki query that matches any of the selected internal log files."""
+    if not filenames:
+        raise ValueError("At least one filename is required for an internal log query.")
+    normalized = _normalize_internal_service(service)
+    escaped_parts = [
+        re.escape(filename).replace("\\", "\\\\")
+        for filename in sorted(set(filenames))
+    ]
+    pattern = "|".join(escaped_parts)
+    return (
+        f'{{compose_service="{normalized}", log_type="internal", '
+        f'{label_key}=~"(^|.*/)({pattern})$"}}'
+    )
+
+
+def _discover_internal_log_labels_from_filesystem(
+    compose_service: str,
+) -> Optional[Tuple[List[str], str]]:
+    """Discover internal log filenames from the locally mounted log directories."""
+    normalized = _normalize_internal_service(compose_service)
+    patterns = _INTERNAL_LOG_GLOB_PATTERNS.get(normalized)
+    if not patterns:
+        return None
+
+    filenames: set[str] = set()
+    for pattern in patterns:
+        for path in glob.glob(pattern):
+            if os.path.isfile(path):
+                filenames.add(os.path.basename(path))
+    return sorted(filenames), "filepath"
+
+
+def _build_logs_cache_key(
+    config: LogConfig,
+    containers: List[str],
+    lookback_seconds: int,
+    max_entries: int,
+    internal_files: Optional[Dict[str, set[str]]] = None,
+    since_ns: Optional[int] = None,
+) -> str:
+    """Build a stable cache key for log result caching."""
+    normalized_internal = tuple(
+        (service, tuple(sorted(files)))
+        for service, files in sorted((internal_files or {}).items())
+        if files
+    )
+    raw = json.dumps(
+        {
+            "loki_url": config.loki_url,
+            "containers": sorted(containers),
+            "lookback_seconds": lookback_seconds,
+            "max_entries": max_entries,
+            "internal_files": normalized_internal,
+            "since_ns": since_ns,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     """Limit entries per container/file to the most recent `limit` items."""
     if limit <= 0:
@@ -556,74 +930,36 @@ def fetch_internal_log_labels(
 
     Returns a sorted list of base filenames (e.g. ``["Blitz-0.log", "master.err"]``).
     """
+    del config
+    cache_key = f"internal-labels:{_normalize_internal_service(compose_service)}"
+    cached = _INTERNAL_LABELS_CACHE.get_or_load(
+        cache_key,
+        lambda: _fetch_internal_log_labels_uncached(compose_service),
+    )
+    labels, label_key = cached
+    return list(labels), label_key
+
+
+def _fetch_internal_log_labels_uncached(compose_service: str) -> Tuple[Tuple[str, ...], str]:
+    """Discover internal log filenames from the mounted filesystem."""
+    discovered = _discover_internal_log_labels_from_filesystem(compose_service)
+    if discovered is None:
+        return tuple(), "filepath"
+    labels, label_key = discovered
     normalized = _normalize_internal_service(compose_service)
-    selector = f'{{compose_service="{normalized}", log_type="internal"}}'
-    end_time = dt.datetime.now(tz=dt.timezone.utc)
-    label_lookback_seconds = max(config.lookback_seconds, 7 * 24 * 60 * 60)
-    start_time = end_time - dt.timedelta(seconds=label_lookback_seconds)
-    # The Loki /series endpoint requires the parameter name ``match[]``,
-    # NOT ``query`` (which is for /query_range).  Using the wrong name
-    # causes Loki to silently ignore the selector and return ALL series.
-    params = urllib.parse.urlencode(
-        {
-            "match[]": selector,
-            "start": str(int(start_time.timestamp() * 1e9)),
-            "end": str(int(end_time.timestamp() * 1e9)),
-        }
-    )
-    url = f"{config.loki_url}/loki/api/v1/series?{params}"
-
-    # FIX: Validate URL against config to prevent SSRF (CodeQL #91)
-    base_parsed = urllib.parse.urlparse(config.loki_url)
-    url_parsed = urllib.parse.urlparse(url)
-    if (url_parsed.scheme != base_parsed.scheme or 
-        url_parsed.netloc != base_parsed.netloc):
-            raise RuntimeError("Invalid Loki URL (SSRF protection)")
-
-    logger.debug("fetch_internal_log_labels: querying %s", url)
-    request = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(
-            request, timeout=config.timeout_seconds
-        ) as response:
-            raw = response.read()
-            try:
-                payload = json.loads(raw.decode("utf-8", errors="replace"))
-            except json.JSONDecodeError as exc:
-                logger.warning("fetch_internal_log_labels: JSON decode error: %s", exc)
-                # Keep return type consistent (Tuple[List[str], str]) to avoid
-                # a ValueError during unpacking in the Django view.
-                return [], "filepath"
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, socket.timeout) as exc:
-        logger.warning("fetch_internal_log_labels: request failed: %s", exc)
-        return [], "filepath"
-
-    filenames: set[str] = set()
-    label_key = "filepath"
-    label_candidates = ("filepath", "filename", "__path__", "path", "file")
-    series_data = payload.get("data", [])
-    logger.debug("fetch_internal_log_labels: got %d series from Loki", len(series_data))
-    for series in series_data:
-        # Double-check labels match, in case Loki returns broader results than expected.
-        if series.get("compose_service") != normalized:
-            continue
-        if series.get("log_type") != "internal":
-            continue
-        for candidate in label_candidates:
-            if candidate in series:
-                label_key = candidate
-                break
-        fname = _extract_filename(series)
-        if fname:
-            filenames.add(fname)
-    result = sorted(filenames)
     logger.debug(
-        "fetch_internal_log_labels: found %d files for %s: %s",
-        len(result),
+        "fetch_internal_log_labels: found %d files for %s via filesystem: %s",
+        len(labels),
         compose_service,
-        result[:5],  # Log first 5 filenames
+        labels[:5],
     )
-    return result, label_key
+    if not labels:
+        logger.debug(
+            "fetch_internal_log_labels: no files discovered for %s (normalized=%s)",
+            compose_service,
+            normalized,
+        )
+    return tuple(labels), label_key
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
     """Serialize LogEntry objects for JSON responses."""
