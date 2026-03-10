@@ -1232,7 +1232,6 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
     combined = "\n".join(part for part in (stdout, stderr) if part).lower()
     if (
         "proxy keep alive failed" in combined
-        or "ice.objectnotexistexception" in combined
         or "exception while executing ping()" in combined
         or 'operation = "keepallalive"' in combined
     ):
@@ -2558,11 +2557,13 @@ def _process_import_job(job_id: str):
                     "Import thread: processing batch %d-%d of %d for job %s",
                     start, start + len(batch), len(entries_to_import), job_id,
                 )
-                with ThreadPoolExecutor(max_workers=min(batch_size, len(batch))) as executor:
-                    futures = [
-                        executor.submit(
-                            _import_job_entry,
-                            entry,
+                # Serialize live imports through a single CLI process.
+                # The live stack shows intermittent OMERO.java/import-init failures when
+                # several imports start at once against the shared CLI home/session.
+                for entry_payload in batch:
+                    try:
+                        result = _import_job_entry(
+                            entry_payload,
                             upload_root,
                             session_key,
                             host,
@@ -2570,49 +2571,44 @@ def _process_import_job(job_id: str):
                             dataset_map,
                             orphan_dataset_name,
                         )
-                        for entry in batch
-                    ]
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                        except Exception:
-                            logger.exception("Import future raised unexpected error")
-                            continue
-                        if not result or result.get("skip"):
-                            continue
-                        entry_index = result.get("index")
-                        if entry_index is None:
-                            continue
-                        entry = job.get("files", [])[entry_index]
+                    except Exception:
+                        logger.exception("Import future raised unexpected error")
+                        continue
+                    if not result or result.get("skip"):
+                        continue
+                    entry_index = result.get("index")
+                    if entry_index is None:
+                        continue
+                    entry = job.get("files", [])[entry_index]
 
-                        if result.get("status") == "error":
-                            entry["status"] = "error"
-                            entry_error = result.get("entry_error")
-                            if entry_error:
-                                entry.setdefault("errors", []).append(entry_error)
-                            if result.get("job_error"):
-                                _append_job_error(job, result["job_error"])
-                            if result.get("job_message"):
-                                _append_job_message(job, result["job_message"])
-                            # Count errored files as processed so the progress
-                            # bar reflects that the file has been attempted.
-                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                            _save_job(job)
-                            continue
+                    if result.get("status") == "error":
+                        entry["status"] = "error"
+                        entry_error = result.get("entry_error")
+                        if entry_error:
+                            entry.setdefault("errors", []).append(entry_error)
+                        if result.get("job_error"):
+                            _append_job_error(job, result["job_error"])
+                        if result.get("job_message"):
+                            _append_job_message(job, result["job_message"])
+                        # Count errored files as processed so the progress
+                        # bar reflects that the file has been attempted.
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        _save_job(job)
+                        continue
 
-                        if result.get("status") == "imported":
-                            rel_path = result.get("rel_path") or entry.get("relative_path")
-                            entry["status"] = "imported"
-                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                            if rel_path:
-                                _append_job_message(job, messages.imported_file(rel_path))
-                            file_path = result.get("file_path")
-                            if file_path:
-                                try:
-                                    file_path.unlink()
-                                except OSError as exc:
-                                    logger.warning("Failed to remove staged file %s: %s", file_path, exc)
-                            _save_job(job)
+                    if result.get("status") == "imported":
+                        rel_path = result.get("rel_path") or entry.get("relative_path")
+                        entry["status"] = "imported"
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        if rel_path:
+                            _append_job_message(job, messages.imported_file(rel_path))
+                        file_path = result.get("file_path")
+                        if file_path:
+                            try:
+                                file_path.unlink()
+                            except OSError as exc:
+                                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                        _save_job(job)
 
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
