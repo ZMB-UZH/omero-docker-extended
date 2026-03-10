@@ -51,8 +51,45 @@ def unable_initialize_upload_folder():
     return "Unable to initialize upload folder."
 
 
+def upload_chunk_missing_file():
+    return "Chunk upload request missing file payload."
+
+
+def upload_chunk_metadata_invalid(detail):
+    return f"Invalid chunk upload metadata: {detail}."
+
+
+def upload_chunk_offset_mismatch(path, expected_offset, actual_offset):
+    return (
+        f"Chunk upload offset mismatch for {path}: "
+        f"server has {expected_offset} bytes, request started at {actual_offset}."
+    )
+
+
+def upload_chunk_size_mismatch(path, expected_size, actual_size):
+    return (
+        f"Chunk upload size mismatch for {path}: "
+        f"expected {expected_size} bytes, received {actual_size}."
+    )
+
+
+def upload_chunk_incomplete(path, expected_size, actual_size):
+    return (
+        f"Chunk upload incomplete for {path}: "
+        f"expected {expected_size} bytes, saved {actual_size}."
+    )
+
+
 def invalid_filename(name):
     return f"Invalid filename: {name}"
+
+
+def filename_too_long(name, max_bytes):
+    return f"Filename is too long ({max_bytes} byte limit): {name}"
+
+
+def file_path_too_long(path, max_bytes):
+    return f"File path is too long ({max_bytes} byte limit): {path}"
 
 
 def unexpected_file(path):
@@ -93,6 +130,10 @@ def missing_staged_file(path):
 
 def import_failed():
     return "Import failed."
+
+
+def import_session_expired():
+    return "Import failed because the OMERO session expired during a long-running import."
 
 
 def unexpected_import_failure(detail):

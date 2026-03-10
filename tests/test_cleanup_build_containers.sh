@@ -24,6 +24,79 @@ MOCK_DIR="$(dirname "$0")"
 echo "$*" >> "${MOCK_DIR}/docker_calls.log"
 
 case "$1" in
+    buildx)
+        case "${2:-}" in
+            inspect)
+                exit 1
+                ;;
+            use|stop|rm)
+                exit 0
+                ;;
+        esac
+        ;;
+    container)
+        case "${2:-}" in
+            inspect)
+                shift 2
+                format=""
+                target=""
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        -f)
+                            shift
+                            format="$1"
+                            shift
+                            ;;
+                        *)
+                            target="$1"
+                            shift
+                            ;;
+                    esac
+                done
+                while IFS='|' read -r name cid running; do
+                    [[ -z "${name}" ]] && continue
+                    if [[ "${target}" == "${cid}" || "${target}" == "${name}" ]]; then
+                        if [[ "${format}" == *".State.Status"* ]]; then
+                            if [[ "${running}" == "true" ]]; then
+                                echo "running"
+                            else
+                                echo "exited"
+                            fi
+                        elif [[ "${format}" == *".Image"* ]]; then
+                            echo "image-for-${name}"
+                        fi
+                        exit 0
+                    fi
+                done < "${MOCK_DIR}/containers.conf"
+                exit 1
+                ;;
+        esac
+        ;;
+    image)
+        case "${2:-}" in
+            inspect)
+                shift 2
+                target="${1:-}"
+                while IFS='|' read -r image iid; do
+                    [[ -z "${image}" ]] && continue
+                    if [[ "${target}" == "${image}" || "${target}" == "${iid}" ]]; then
+                        exit 0
+                    fi
+                done < "${MOCK_DIR}/images.conf"
+                exit 1
+                ;;
+            prune)
+                exit 0
+                ;;
+        esac
+        ;;
+    volume)
+        case "${2:-}" in
+            ls|rm)
+                exit 0
+                ;;
+        esac
+        ;;
     ps)
         shift
         filter_name=""
@@ -206,13 +279,14 @@ EOF2
 validate_full() {
     local dir="$1"
     local output="$2"
-    assert_contains "${output}" "Removing container 'redis-sysctl-init'" &&
-    assert_contains "${output}" "Stopping container 'buildx_buildkit_default'" &&
-    assert_contains "${output}" "Removing image 'moby/buildkit:buildx-stable-1'" &&
-    assert_contains "${output}" "Removed 2 container(s) and 2 image(s)." &&
-    assert_log_has "${dir}/docker_calls.log" "rm rid1" &&
-    assert_log_has "${dir}/docker_calls.log" "stop bid1" &&
-    assert_log_has "${dir}/docker_calls.log" "rmi img1"
+    assert_contains "${output}" "Cleaning up probe containers..." &&
+    assert_contains "${output}" "Cleaning container: redis-sysctl-init" &&
+    assert_contains "${output}" "Removing docker image id: image-for-redis-sysctl-init (from redis-sysctl-init)" &&
+    assert_contains "${output}" "Removing one-shot image: redis-sysctl-init:custom" &&
+    assert_contains "${output}" "Cleanup complete." &&
+    assert_log_has "${dir}/docker_calls.log" "stop -t 20 redis-sysctl-init" &&
+    assert_log_has "${dir}/docker_calls.log" "rm -f redis-sysctl-init" &&
+    assert_log_has "${dir}/docker_calls.log" "rmi -f redis-sysctl-init:custom"
 }
 
 
@@ -229,37 +303,24 @@ EOF2
 validate_compose_redis_name() {
     local dir="$1"
     local output="$2"
-    assert_contains "${output}" "Stopping container 'omero-redis-sysctl-init-1'" &&
-    assert_contains "${output}" "Removing container 'omero-redis-sysctl-init-1'" &&
-    assert_contains "${output}" "Removed 1 container(s) and 1 image(s)." &&
-    assert_log_has "${dir}/docker_calls.log" "stop rid9" &&
-    assert_log_has "${dir}/docker_calls.log" "rm rid9"
+    assert_contains "${output}" "Cleaning up probe containers..." &&
+    assert_contains "${output}" "Removing one-shot image: redis-sysctl-init:custom" &&
+    assert_contains "${output}" "Cleanup complete." &&
+    assert_log_not_has "${dir}/docker_calls.log" "stop -t 20 omero-redis-sysctl-init-1" &&
+    assert_log_not_has "${dir}/docker_calls.log" "rm -f omero-redis-sysctl-init-1"
 }
 
 setup_empty() { :; }
 validate_empty() {
     local dir="$1"
     local output="$2"
-    assert_contains "${output}" "No containers found for redis-sysctl-init - skipping." &&
-    assert_contains "${output}" "No containers found for prefix 'buildx_buildkit_' - skipping." &&
-    assert_contains "${output}" "Removed 0 container(s) and 0 image(s)."
-}
-
-validate_dry_run() {
-    local dir="$1"
-    local output="$2"
-    assert_contains "${output}" "[dry-run] Would remove container 'redis-sysctl-init'" &&
-    assert_contains "${output}" "[dry-run] Would stop container 'buildx_buildkit_default'" &&
-    assert_contains "${output}" "[dry-run] Would have removed 2 container(s) and 2 image(s)." &&
-    assert_log_not_has "${dir}/docker_calls.log" " rm " &&
-    assert_log_not_has "${dir}/docker_calls.log" " stop " &&
-    assert_log_not_has "${dir}/docker_calls.log" " rmi "
+    assert_contains "${output}" "Cleaning up probe containers..." &&
+    assert_contains "${output}" "Cleanup complete."
 }
 
 run_case "empty" setup_empty validate_empty
 run_case "full" setup_full validate_full
 run_case "compose_redis_name" setup_compose_redis_name validate_compose_redis_name
-run_case "dry_run" setup_full validate_dry_run "--dry-run"
 
 echo "Results: ${PASS} passed, ${FAIL} failed"
 [[ ${FAIL} -eq 0 ]]

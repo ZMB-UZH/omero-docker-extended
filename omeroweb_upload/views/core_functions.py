@@ -14,6 +14,7 @@ import subprocess
 import shutil
 import threading
 import time
+import tempfile
 import uuid
 import omero
 
@@ -35,16 +36,14 @@ from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+from omero_plugin_common.logging_utils import sanitize_log_value
+from omero_plugin_common.tmp_cleanup import safe_remove_job_data
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
     'BlitzGateway',
     'DatasetI',
     'DEFAULT_UPLOAD_BATCH_FILES',
-    'DEFAULT_UPLOAD_CLEANUP_INTERVAL',
-    'DEFAULT_UPLOAD_CLEANUP_MAX_AGE',
-    'DEFAULT_UPLOAD_CLEANUP_MAX_DELETE',
-    'DEFAULT_UPLOAD_CLEANUP_STALE_AGE',
     'DEFAULT_UPLOAD_CONCURRENCY',
     'INT_SANITIZER',
     'JOB_ID_SANITIZER',
@@ -69,19 +68,12 @@ __all__ = [
     'SEM_EDX_FILEANNOTATION_NS',
     'ThreadPoolExecutor',
     'UPLOAD_BATCH_FILES_ENV',
-    'UPLOAD_CLEANUP_INTERVAL_ENV',
-    'UPLOAD_CLEANUP_MAX_AGE_ENV',
-    'UPLOAD_CLEANUP_MAX_DELETE_ENV',
-    'UPLOAD_CLEANUP_STALE_AGE_ENV',
     'UPLOAD_CONCURRENCY_ENV',
-    '_CLEANUP_IN_PROGRESS',
     '_CLI_ID_PATTERN',
     '_DIRS_INITIALIZED',
     '_IMPORT_LOCKS',
     '_IMPORT_LOCKS_GUARD',
     '_JOBS_ROOT_CACHE',
-    '_LAST_UPLOAD_CLEANUP_TIME',
-    '_UPLOAD_CLEANUP_GUARD',
     '_UPLOAD_ROOT_CACHE',
     '_append_job_error',
     '_append_job_message',
@@ -93,7 +85,6 @@ __all__ = [
     '_build_sem_edx_associations_from_entries',
     '_check_import_compatibility',
     '_classify_compatibility_output',
-    '_cleanup_upload_artifacts',
     '_collect_project_payload',
     '_compatibility_pending_entries',
     '_current_user_id',
@@ -124,12 +115,12 @@ __all__ = [
     '_import_job_entry',
     '_initialize_directories',
     '_is_owned_by_user',
-    '_is_within_root',
     '_iter_accessible_projects',
     '_job_path',
     '_link_dataset_to_project',
     '_load_job',
     '_normalize_job_batch_size',
+    '_normalize_upload_relative_path',
     '_normalize_sem_edx_associations',
     '_normalize_sem_edx_settings',
     '_open_service_connection',
@@ -147,16 +138,15 @@ __all__ = [
     '_run_omero_cli',
     '_safe_job_id',
     '_safe_relative_path',
-    '_safe_remove_tree',
     '_save_job',
     '_special_methods_enabled',
     '_should_auto_skip_import',
-    '_should_run_cleanup',
     '_should_start_compatibility_check',
     '_start_compatibility_check_thread',
     '_start_import_thread',
     '_update_job',
     '_validate_session',
+    '_validate_staged_target_path',
     '_verify_import',
     'as_completed',
     'current_username',
@@ -190,24 +180,16 @@ logger = logging.getLogger(__name__)
 
 _IMPORT_LOCKS = {}
 _IMPORT_LOCKS_GUARD = threading.Lock()
-_UPLOAD_CLEANUP_GUARD = threading.Lock()
-_LAST_UPLOAD_CLEANUP_TIME = 0.0
-_CLEANUP_IN_PROGRESS = False
 
 UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
 DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
-UPLOAD_CLEANUP_INTERVAL_ENV = "OMERO_WEB_UPLOAD_CLEANUP_INTERVAL"
-DEFAULT_UPLOAD_CLEANUP_INTERVAL = 300
-UPLOAD_CLEANUP_MAX_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_AGE"
-DEFAULT_UPLOAD_CLEANUP_MAX_AGE = 12 * 60 * 60
-UPLOAD_CLEANUP_STALE_AGE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_STALE_AGE"
-DEFAULT_UPLOAD_CLEANUP_STALE_AGE = 48 * 60 * 60
-UPLOAD_CLEANUP_MAX_DELETE_ENV = "OMERO_WEB_UPLOAD_CLEANUP_MAX_DELETE"
-DEFAULT_UPLOAD_CLEANUP_MAX_DELETE = 25
 MAX_IMPORT_LOG_LINES = 1000
+MAX_UPLOAD_PATH_COMPONENT_BYTES = 255
+MAX_UPLOAD_RELATIVE_PATH_BYTES = 2048
+MAX_UPLOAD_STAGED_TARGET_BYTES = 4096
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
@@ -429,9 +411,9 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
             # Parent directory must already exist
             try:
                 path.mkdir(mode=mode, exist_ok=True)
-                logger.info(f"Created directory: {path} with permissions {oct(mode)}")
+                logger.info("Created directory: %s with permissions %s", sanitize_log_value(path), oct(mode))
             except OSError as target_exc:
-                logger.error(f"Unable to create target directory {path}: {target_exc}")
+                logger.error("Unable to create target directory %s: %s", sanitize_log_value(path), sanitize_log_value(target_exc))
                 return False
             
             return True
@@ -442,12 +424,12 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                 current_perms = stat.S_IMODE(path.stat().st_mode)
                 if current_perms != mode:
                     path.chmod(mode)
-                    logger.warning(f"Fixed permissions for existing directory: {path} (was {oct(current_perms)}, now {oct(mode)})")
+                    logger.warning("Fixed permissions for existing directory: %s (was %s, now %s)", sanitize_log_value(path), oct(current_perms), oct(mode))
             except OSError as perm_exc:
-                logger.warning(f"Could not verify/fix permissions for {path}: {perm_exc}")
+                logger.warning("Could not verify/fix permissions for %s: %s", sanitize_log_value(path), sanitize_log_value(perm_exc))
             return True
     except OSError as exc:
-        logger.error(f"Unable to create/verify directory {path}: {exc}")
+        logger.error("Unable to create/verify directory %s: %s", sanitize_log_value(path), sanitize_log_value(exc))
         return False
 
 
@@ -575,30 +557,39 @@ def _load_job(job_id: str):
     path = _job_path(job_id)
     if not path.exists():
         return None
-    try:
-        with portalocker.Lock(path, "r", timeout=1) as handle:
-            return json.load(handle)
-    except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to lock or read job file %s: %s", path, exc)
-    try:
-        with path.open("r") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to read job file %s without lock: %s", path, exc)
+    lock_path = _job_lock_path(job_id)
+    for attempt in range(5):
+        if attempt:
+            time.sleep(random.uniform(0.05, 0.2))
+        try:
+            with portalocker.Lock(lock_path, "a+", timeout=1):
+                if not path.exists():
+                    return None
+                return _read_job_file(path)
+        except json.JSONDecodeError as exc:
+            logger.error("Job file %s is corrupt: %s", path, exc)
+            return None
+        except (portalocker.exceptions.LockException, OSError) as exc:
+            logger.warning(
+                "Unable to lock or read job file %s (attempt %s/%s): %s",
+                path,
+                attempt + 1,
+                5,
+                exc,
+            )
     return None
 
 
 def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
     path = _job_path(job_dict["job_id"])
+    lock_path = _job_lock_path(job_dict["job_id"])
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
         try:
-            with portalocker.Lock(path, "w", timeout=timeout) as handle:
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+            with portalocker.Lock(lock_path, "a+", timeout=timeout):
+                _write_job_file(path, job_dict)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
@@ -614,18 +605,18 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
 
 def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
     path = _job_path(job_id)
+    lock_path = _job_lock_path(job_id)
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
         try:
-            with portalocker.Lock(path, "r+", timeout=timeout) as handle:
-                job_dict = json.load(handle)
+            with portalocker.Lock(lock_path, "a+", timeout=timeout):
+                if not path.exists():
+                    logger.warning("Job file %s not found for update.", path)
+                    return None
+                job_dict = _read_job_file(path)
                 job_dict = update_fn(job_dict)
-                handle.seek(0)
-                handle.truncate()
-                json.dump(job_dict, handle)
-                handle.flush()
-                os.fsync(handle.fileno())
+                _write_job_file(path, job_dict)
             return job_dict
         except json.JSONDecodeError as exc:
             logger.error("Job file %s is corrupt: %s", path, exc)
@@ -657,6 +648,32 @@ def _safe_relative_path(raw_name: str):
     if not parts:
         return None
     return "/".join(parts)
+
+
+def _validate_relative_path_lengths(rel_path: str):
+    if len(os.fsencode(rel_path)) > MAX_UPLOAD_RELATIVE_PATH_BYTES:
+        return errors.file_path_too_long(rel_path, MAX_UPLOAD_RELATIVE_PATH_BYTES)
+    for part in PurePosixPath(rel_path).parts:
+        if len(os.fsencode(part)) > MAX_UPLOAD_PATH_COMPONENT_BYTES:
+            return errors.filename_too_long(part, MAX_UPLOAD_PATH_COMPONENT_BYTES)
+    return None
+
+
+def _normalize_upload_relative_path(raw_name: str):
+    rel_path = _safe_relative_path(raw_name)
+    if rel_path is None:
+        return None, errors.invalid_filename(raw_name)
+    length_error = _validate_relative_path_lengths(rel_path)
+    if length_error:
+        return None, length_error
+    return rel_path, None
+
+
+def _validate_staged_target_path(upload_root: Path, staged_path: str):
+    target = upload_root / staged_path
+    if len(os.fsencode(str(target))) > MAX_UPLOAD_STAGED_TARGET_BYTES:
+        return errors.file_path_too_long(staged_path, MAX_UPLOAD_STAGED_TARGET_BYTES)
+    return None
 
 
 def _should_auto_skip_import(relative_path: str) -> bool:
@@ -1099,7 +1116,7 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
@@ -1116,6 +1133,65 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
 
 IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microscopy files can be slow)
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
+CLI_KEEPALIVE_SECONDS_DEFAULT = 30
+CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
+
+
+def _get_cli_keepalive_seconds() -> int:
+    return _get_env_int(
+        CLI_KEEPALIVE_SECONDS_ENV,
+        CLI_KEEPALIVE_SECONDS_DEFAULT,
+        0,
+        3600,
+    )
+
+
+def _write_cli_ice_config(cli_home: Path, keepalive_seconds: int, base_config_path: str = "") -> Optional[Path]:
+    if keepalive_seconds <= 0:
+        return None
+
+    config_lines = []
+    if base_config_path:
+        try:
+            base_text = Path(base_config_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Failed to read base ICE_CONFIG %s: %s", base_config_path, exc)
+        else:
+            stripped = base_text.rstrip()
+            if stripped:
+                config_lines.append(stripped)
+
+    config_lines.append(f"omero.keep_alive={keepalive_seconds}")
+    config_text = "\n".join(config_lines) + "\n"
+
+    target_path = cli_home / "omero-cli-ice.config"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=cli_home,
+        prefix="ice-config-",
+        suffix=".tmp",
+        delete=False,
+    ) as tmp_file:
+        tmp_file.write(config_text)
+        tmp_name = tmp_file.name
+
+    tmp_path = Path(tmp_name)
+    tmp_path.chmod(0o600)
+    tmp_path.replace(target_path)
+    return target_path
+
+
+def _classify_import_failure(stdout: str, stderr: str) -> str:
+    combined = "\n".join(part for part in (stdout, stderr) if part).lower()
+    if (
+        "proxy keep alive failed" in combined
+        or "ice.objectnotexistexception" in combined
+        or "exception while executing ping()" in combined
+        or 'operation = "keepallalive"' in combined
+    ):
+        return errors.import_session_expired()
+    return errors.import_failed()
 
 
 def _run_omero_cli(cmd, timeout=None):
@@ -1133,6 +1209,13 @@ def _run_omero_cli(cmd, timeout=None):
 
     cli_env["HOME"] = str(cli_home)
     cli_env["XDG_CACHE_HOME"] = str(cli_cache)
+    cli_ice_config = _write_cli_ice_config(
+        cli_home,
+        _get_cli_keepalive_seconds(),
+        cli_env.get("ICE_CONFIG", ""),
+    )
+    if cli_ice_config is not None:
+        cli_env["ICE_CONFIG"] = str(cli_ice_config)
 
     return subprocess.run(
         cmd,
@@ -1665,195 +1748,51 @@ def _safe_job_id(value: str) -> bool:
     return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
 
 
-def _is_within_root(path: Path, root: Path) -> bool:
+def _job_lock_path(job_id: str) -> Path:
+    return _get_jobs_root() / f".{job_id}.lock"
+
+
+def _fsync_directory(path: Path):
     try:
-        resolved_path = path.resolve()
-        resolved_root = root.resolve()
-    except OSError:
-        return False
-    if resolved_root == resolved_path:
-        return True
-    return resolved_root in resolved_path.parents
-
-
-def _should_run_cleanup(interval: int) -> bool:
-    global _LAST_UPLOAD_CLEANUP_TIME, _CLEANUP_IN_PROGRESS
-    now = time.time()
-    with _UPLOAD_CLEANUP_GUARD:
-        if _CLEANUP_IN_PROGRESS:
-            return False
-        if now - _LAST_UPLOAD_CLEANUP_TIME < interval:
-            return False
-        _CLEANUP_IN_PROGRESS = True
-        _LAST_UPLOAD_CLEANUP_TIME = now
-    return True
-
-
-def _safe_remove_tree(path: Path, root: Path):
-    if not path.exists():
-        return False
-    if path.is_symlink():
-        return False
-    if not _is_within_root(path, root):
-        return False
-    try:
-        for root_dir, dirnames, filenames in os.walk(path, followlinks=False):
-            for name in dirnames:
-                candidate = Path(root_dir) / name
-                if candidate.is_symlink():
-                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
-                    return False
-            for name in filenames:
-                candidate = Path(root_dir) / name
-                if candidate.is_symlink():
-                    logger.warning("Skipping cleanup for symlinked path %s.", candidate)
-                    return False
-    except OSError:
-        return False
-    try:
-        for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=False):
-            for name in filenames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.unlink()
-                except OSError:
-                    return False
-            for name in dirnames:
-                candidate = Path(root_dir) / name
-                try:
-                    candidate.rmdir()
-                except OSError:
-                    return False
-        path.rmdir()
-        return True
-    except OSError:
-        return False
-
-
-def _cleanup_upload_artifacts():
-    interval = _get_env_int(
-        UPLOAD_CLEANUP_INTERVAL_ENV,
-        60,
-        10,
-        6 * 60 * 60,
-    )
-    if not _should_run_cleanup(interval):
+        dir_fd = os.open(path, os.O_DIRECTORY)
+    except (AttributeError, OSError):
         return
-
     try:
-        upload_root = _get_upload_root()
-        jobs_root = _get_jobs_root()
-        if not upload_root.exists() or not jobs_root.exists():
-            return
-
-        max_age = _get_env_int(
-            UPLOAD_CLEANUP_MAX_AGE_ENV,
-            15 * 60,
-            60,
-            14 * 24 * 60 * 60,
-        )
-        stale_age = _get_env_int(
-            UPLOAD_CLEANUP_STALE_AGE_ENV,
-            max_age,
-            max_age,
-            30 * 24 * 60 * 60,
-        )
-        max_delete = _get_env_int(
-            UPLOAD_CLEANUP_MAX_DELETE_ENV,
-            DEFAULT_UPLOAD_CLEANUP_MAX_DELETE,
-            1,
-            500,
-        )
-        now = time.time()
-
-        deleted = 0
-        seen_job_ids = set()
-
-        try:
-            for entry in os.scandir(jobs_root):
-                if deleted >= max_delete:
-                    break
-                if not entry.name.endswith(".json"):
-                    continue
-                job_id = entry.name[:-5]
-                if not _safe_job_id(job_id):
-                    continue
-                seen_job_ids.add(job_id)
-                job_path = Path(entry.path)
-
-                try:
-                    with portalocker.Lock(job_path, "r", timeout=0) as handle:
-                        try:
-                            job = json.load(handle)
-                        except json.JSONDecodeError:
-                            job = None
-                except (portalocker.exceptions.LockException, OSError):
-                    continue
-
-                job_status = job.get("status") if isinstance(job, dict) else None
-                updated = None
-                if isinstance(job, dict):
-                    updated = job.get("updated") or job.get("created")
-                if updated is None:
-                    try:
-                        updated = entry.stat(follow_symlinks=False).st_mtime
-                    except OSError:
-                        continue
-                age = now - float(updated)
-
-                should_delete = False
-                if job_status in ("done", "error") and age > max_age:
-                    should_delete = True
-                elif job_status in ("uploading", "ready", "importing") and age > stale_age:
-                    should_delete = True
-                elif job_status is None and age > stale_age:
-                    should_delete = True
-
-                if not should_delete:
-                    continue
-
-                job_dir = upload_root / job_id
-                if job_dir.exists():
-                    if not _safe_remove_tree(job_dir, upload_root):
-                        continue
-                try:
-                    job_path.unlink()
-                except OSError:
-                    continue
-                deleted += 1
-        except OSError as exc:
-            logger.warning("Upload cleanup failed while scanning jobs: %s", exc)
-
-        if deleted >= max_delete:
-            return
-
-        try:
-            for entry in os.scandir(upload_root):
-                if deleted >= max_delete:
-                    break
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-                job_id = entry.name
-                if not _safe_job_id(job_id):
-                    continue
-                if job_id in seen_job_ids:
-                    continue
-                try:
-                    mtime = entry.stat(follow_symlinks=False).st_mtime
-                except OSError:
-                    continue
-                if now - mtime <= stale_age:
-                    continue
-                job_dir = Path(entry.path)
-                if _safe_remove_tree(job_dir, upload_root):
-                    deleted += 1
-        except OSError as exc:
-            logger.warning("Upload cleanup failed while scanning upload root: %s", exc)
-
+        os.fsync(dir_fd)
     finally:
-        global _CLEANUP_IN_PROGRESS
-        with _UPLOAD_CLEANUP_GUARD:
-            _CLEANUP_IN_PROGRESS = False
+        os.close(dir_fd)
+
+
+def _read_job_file(path: Path):
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _write_job_file(path: Path, job_dict):
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            json.dump(job_dict, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        _fsync_directory(path.parent)
+        tmp_path = None
+        return True
+    finally:
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
@@ -2385,7 +2324,7 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
             str(stdout).strip(),
             str(stderr).strip(),
         )
-        error_msg = errors.import_failed()
+        error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "index": entry.get("index"),
@@ -2906,6 +2845,12 @@ def _process_import_job(job_id: str):
                     len(job.get("messages", [])),
                 )
             _save_job(job)
+            try:
+                # Immediately delete large temporary upload payloads after successful import.
+                # Keep the job JSON so the UI can still display final status/messages.
+                safe_remove_job_data(job_id, _get_upload_root())
+            except Exception as exc:
+                logger.warning("Post-success cleanup failed for job %s: %s", job_id, exc)
         finally:
             lock.release()
             logger.info("Import thread: lock released for job %s", job_id)
@@ -2927,7 +2872,9 @@ def _start_import_thread(job_id: str):
         return
 
     job["import_thread_started"] = True
-    _save_job(job)
+    if not _save_job(job):
+        logger.error("Unable to persist import_thread_started for job %s.", job_id)
+        return
     worker = threading.Thread(target=_process_import_job, args=(job_id,), daemon=True)
     worker.start()
 

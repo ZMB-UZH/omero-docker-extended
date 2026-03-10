@@ -4,12 +4,65 @@ log() {
     echo "[server-bootstrap] $*"
 }
 
+require_positive_integer_env_var() {
+    local var_name="$1"
+    local value="${!var_name-}"
+
+    if [[ -z "${value+x}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is not set." >&2
+        exit 1
+    fi
+
+    if [[ -z "${value}" ]]; then
+        echo "ERROR: Required environment variable '${var_name}' is empty." >&2
+        exit 1
+    fi
+
+    if ! [[ "${value}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Required environment variable '${var_name}' must be a positive integer, got '${value}'." >&2
+        exit 1
+    fi
+
+    if (( value <= 0 )); then
+        echo "ERROR: Required environment variable '${var_name}' must be greater than 0, got '${value}'." >&2
+        exit 1
+    fi
+}
+
 OMERO_DIR="${OMERO_DIR:-/OMERO}"
 CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
 SERVER_HOME="/opt/omero/server/OMERO.server"
 SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
-OMERO_BIN="${SERVER_HOME}/bin/omero"
+resolve_omero_bin() {
+    local configured_bin="${OMERO_BIN:-}"
+    if [[ -n "${configured_bin}" ]]; then
+        if [[ -x "${configured_bin}" ]]; then
+            printf "%s\n" "${configured_bin}"
+            return 0
+        fi
+        echo "ERROR: OMERO_BIN is set but not executable: ${configured_bin}" >&2
+        exit 1
+    fi
+
+    local candidate=""
+    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+        if [[ -x "${candidate}" ]]; then
+            printf "%s\n" "${candidate}"
+            return 0
+        fi
+    done
+
+    if command -v omero >/dev/null 2>&1; then
+        command -v omero
+        return 0
+    fi
+
+    echo "ERROR: Could not auto-detect an executable OMERO CLI binary. Set OMERO_BIN explicitly." >&2
+    exit 1
+}
+
+OMERO_BIN="$(resolve_omero_bin)"
 OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
 
 run_omero() {
@@ -23,9 +76,22 @@ run_omero() {
         exit 1
     fi
 
+    # Resolve HOME for the CLI user.  runuser without --login does NOT
+    # change HOME, so the OMERO CLI would inherit root's HOME (/root) and
+    # try to write session files to /root/omero/sessions/ — which the
+    # omero-server user cannot access.  The installation script avoids this
+    # by explicitly exporting HOME="/tmp".  We replicate that here so that
+    # runtime sync commands behave identically to installation-time ones.
+    local cli_home=""
+    cli_home="$(getent passwd "${OMERO_CLI_USER}" | cut -d: -f6 2>/dev/null || echo "/tmp")"
+    if [[ -z "${cli_home}" ]] || [[ ! -d "${cli_home}" ]]; then
+        cli_home="/tmp"
+    fi
+
     if [[ -n "${TMPDIR:-}" ]]; then
         # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
         runuser -u "${OMERO_CLI_USER}" -- env \
+            HOME="${cli_home}" \
             TMPDIR="${TMPDIR}" \
             OMERO_TMPDIR="${OMERO_TMPDIR:-}" \
             OMERO_TEMPDIR="${OMERO_TEMPDIR:-}" \
@@ -33,7 +99,9 @@ run_omero() {
         return
     fi
 
-    runuser -u "${OMERO_CLI_USER}" -- "${OMERO_BIN}" "$@"
+    runuser -u "${OMERO_CLI_USER}" -- env \
+        HOME="${cli_home}" \
+        "${OMERO_BIN}" "$@"
 }
 
 ensure_tmpdir_permissions() {
@@ -84,11 +152,39 @@ ensure_tmpdir_permissions() {
 
     local omero_py_dir="${expected_tmp_dir}/omero"
     local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
-    
-    # CRITICAL: Always try to remove these if they exist, to prevent OMERO python from 
-    # hitting a permission error if they were left over from a previous root execution.
-    # Since expected_tmp_dir is writable (checked above), we can remove them even if owned by root.
+
+    # CRITICAL: Always try to remove stale OMERO temp subdirs to prevent Python
+    # TempFileManager from hitting PermissionError on .lock files left by previous
+    # container runs (PID-based subdirs like omero_omero-server/1530/.lock).
+    #
+    # Strategy: try as root first, then fall back to the target user.
+    # Root cleanup can fail silently on NFS with root_squash (root is mapped to
+    # nobody and cannot delete files owned by omero-server).  Running as the
+    # target user handles that case.
     rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${expected_tmp_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+
+    # If the root cleanup failed (e.g. NFS root_squash), retry as the target user.
+    if [[ -d "${omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+        log "WARN: Root cleanup of ${omero_py_user_dir} incomplete (NFS root_squash?). Retrying as ${requested_owner}."
+        runuser -u "${requested_owner}" -- rm -rf "${omero_py_user_dir}" 2>/dev/null || true
+    fi
+    if [[ -d "${omero_py_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+        log "WARN: Root cleanup of ${omero_py_dir} incomplete. Retrying as ${requested_owner}."
+        runuser -u "${requested_owner}" -- rm -rf "${omero_py_dir}" 2>/dev/null || true
+    fi
+
+    # Final check: if stale dirs still exist, log a clear error so it's diagnosable.
+    if [[ -d "${omero_py_user_dir}" ]]; then
+        log "WARN: Could not fully remove stale temp dir: ${omero_py_user_dir}"
+        ls -la "${omero_py_user_dir}" >&2 || true
+        # As a last resort, try to fix ownership of stale .lock files in-place
+        # so TempFileManager can at least open them.
+        if [[ "$(id -u)" -eq 0 ]]; then
+            find "${omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
+        fi
+    fi
 
     # Pre-emptively create the specific omero temp dirs to avoid Python locking errors.
     mkdir -p "${omero_py_dir}" "${omero_py_user_dir}"
@@ -159,6 +255,32 @@ validate_ldap_new_user_group_configuration() {
     if ! [[ "${ldap_group_setting}" =~ ^[A-Za-z0-9_.-]+$ ]]; then
         echo "ERROR: CONFIG_omero_ldap_new__user__group contains invalid OMERO group name '${ldap_group_setting}'. Allowed pattern: [A-Za-z0-9_.-]+" >&2
         exit 1
+    fi
+}
+
+validate_job_service_bootstrap_configuration() {
+    local required_positive_integer_vars=(
+        "OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS"
+        "OMERO_JOB_SERVICE_READINESS_POLL_SECONDS"
+        "OMERO_JOB_SERVICE_USER_ENSURE_RETRIES"
+        "OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS"
+        "OMERO_JOB_SERVICE_SYNC_MAX_RETRIES"
+    )
+
+    local var_name
+    for var_name in "${required_positive_integer_vars[@]}"; do
+        if [[ -n "${!var_name-}" ]]; then
+            require_positive_integer_env_var "${var_name}"
+        fi
+    done
+
+    # Jitter may be zero (disable jitter), so validate as non-negative integer
+    if [[ -n "${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS-}" ]]; then
+        local jitter_val="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS}"
+        if ! [[ "${jitter_val}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter_val}'" >&2
+            exit 1
+        fi
     fi
 }
 
@@ -272,28 +394,197 @@ schedule_job_service_bootstrap() {
     local root_pass="${ROOTPASS:-}"
     local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
     local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
+    local interval="${OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS:-3600}"
+    local max_retries="${OMERO_JOB_SERVICE_SYNC_MAX_RETRIES:-3}"
+    local jitter_max="${OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS:-20}"
+    local startup_wait="${OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS:-300}"
+    local poll_interval="${OMERO_JOB_SERVICE_READINESS_POLL_SECONDS:-10}"
+    local host="${OMERO_JOB_SERVICE_HOST:-localhost}"
+    local port="${OMERO_JOB_SERVICE_PORT:-4064}"
+    local user_ensure_retries="${OMERO_JOB_SERVICE_USER_ENSURE_RETRIES:-3}"
+    local log_file="${SERVER_LOG_DIR}/job-service-bootstrap.log"
+    local pidfile="${SERVER_VAR_DIR}/job-service-sync.pid"
 
     if [[ -z "${root_pass}" || -z "${job_pass}" ]]; then
         log "Skipping job-service bootstrap (ROOTPASS or OMERO_JOB_SERVICE_PASS missing)."
         return
     fi
 
+    if [[ "${join_all}" != "1" ]]; then
+        log "Skipping job-service group sync (OMERO_JOB_SERVICE_JOIN_ALL_GROUPS != 1)."
+        return
+    fi
+
     (
-        set -eo pipefail
-        sleep 5
-        for _ in $(seq 1 180); do
-            if run_omero user list -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 2
-        done
+        set -u -o pipefail
+        umask 022
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
 
-        if ! run_omero user info --user-name "${job_user}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
-            run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s localhost -p 4064 -u root -w "${root_pass}"
+        # Prevent duplicate loops robustly (pidfile alone can go stale)
+        local lockdir="${pidfile}.lock"
+        if ! acquire_lockdir "${lockdir}" "${pidfile}" "job-service sync"; then
+            exit 0
         fi
-    ) >>"${SERVER_LOG_DIR}/job-service-bootstrap.log" 2>&1 &
+        trap 'release_lockdir "${lockdir}" "${pidfile}"' EXIT
 
-    log "Scheduled background job-service bootstrap"
+        # Log to file AND to container stdout (so it's visible via docker logs)
+        exec > >(tee -a "${log_file}") 2>&1
+
+        echo "[$(date -u)] job-service sync loop starting (host=${host}, port=${port}, interval=${interval}s, retries=${max_retries}, startup_wait=${startup_wait}s, poll=${poll_interval}s)"
+
+        wait_for_server() {
+            local wait_seconds="$1"
+            local deadline=$(( $(date +%s) + wait_seconds ))
+
+            while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+                if run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}" >/dev/null 2>&1 \
+                    && run_omero user list -s "${host}" -p "${port}" -u root -w "${root_pass}" >/dev/null 2>&1; then
+                    return 0
+                fi
+                sleep "${poll_interval}"
+            done
+            return 1
+        }
+
+        ensure_user_exists() {
+            local _attempt
+            for _attempt in $(seq 1 "${user_ensure_retries}"); do
+                # Note: 'omero user info' does not accept global arguments (-s -p -u -w) after 'info'.
+                # They MUST be placed BEFORE the subcommand, unlike 'omero user add'.
+                if run_omero -s "${host}" -p "${port}" -u root -w "${root_pass}" user info --user-name "${job_user}" >/dev/null 2>&1; then
+                    return 0
+                fi
+
+                local out="" rc=0
+                out="$(run_omero user add "${job_user}" Job Service --group-name user -P "${job_pass}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
+                rc=$?
+                
+                if [[ "${rc}" -eq 0 ]]; then
+                    return 0
+                fi
+                
+                # If OMERO tells us the user exists but exited with an error code, it means it was already created. Treat as success.
+                if printf "%s" "${out}" | grep -qi "User exists:"; then
+                    return 0
+                fi
+
+                echo "[$(date -u)] WARN: Failed to add user ${job_user} (rc=${rc}): ${out}"
+
+                sleep $((2 * _attempt))
+            done
+
+            return 1
+        }
+
+        list_groups() {
+            local out=""
+            out="$(run_omero group list -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>/dev/null || true)"
+
+            # Parse both "pipe table" and "whitespace table" formats
+            if printf "%s" "${out}" | grep -q '|'; then
+                printf "%s\n" "${out}" \
+                  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
+                  | sort -u
+            else
+                printf "%s\n" "${out}" \
+                  | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}' \
+                  | sort -u
+            fi
+        }
+
+        sync_once() {
+            local ready_wait="$1"
+            
+            # Print debug info
+            echo "[$(date -u)] DEBUG: Checking OMERO readiness..."
+            if ! wait_for_server "${ready_wait}"; then
+                echo "[$(date -u)] WARN: OMERO not ready after ${ready_wait}s"
+                return 1
+            fi
+            echo "[$(date -u)] DEBUG: OMERO is ready. Ensuring user exists..."
+
+            if ! ensure_user_exists; then
+                echo "[$(date -u)] ERROR: Failed to ensure ${job_user} exists"
+                return 1
+            fi
+            echo "[$(date -u)] DEBUG: User ${job_user} exists. Listing groups..."
+
+            local groups=""
+            groups="$(list_groups | grep -v -E '^(root|system|user)$' || true)"
+            if [[ -z "${groups}" ]]; then
+                echo "[$(date -u)] ERROR: No groups found (or parsing failed)"
+                return 1
+            fi
+
+            local failed=0
+            while IFS= read -r g; do
+                [[ -z "${g}" ]] && continue
+                local out="" rc=0
+                out="$(run_omero user joingroup "${g}" --name="${job_user}" -s "${host}" -p "${port}" -u root -w "${root_pass}" 2>&1)"
+                rc=$?
+
+                if [[ "${rc}" -eq 0 ]]; then
+                    echo "[$(date -u)] OK: ensured ${job_user} in ${g}"
+                    continue
+                fi
+
+                # Accept common idempotency errors
+                if printf "%s" "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
+                    echo "[$(date -u)] OK: ${job_user} already in ${g}"
+                    continue
+                fi
+
+                echo "[$(date -u)] ERROR: joingroup failed for ${g} (rc=${rc}): ${out}"
+                failed=1
+            done <<< "${groups}"
+
+            return "${failed}"
+        }
+
+        first_cycle=1
+        while true; do
+            start="$(date +%s)"
+            ok=0
+
+            # First cycle: use full startup_wait so the server has time to initialize.
+            # Subsequent cycles: use a shorter window since the server should already be running.
+            if [[ "${first_cycle}" -eq 1 ]]; then
+                ready_wait="${startup_wait}"
+            else
+                ready_wait=$((poll_interval * 12))
+            fi
+
+            for attempt in $(seq 1 "${max_retries}"); do
+                if sync_once "${ready_wait}"; then
+                    ok=1
+                    break
+                fi
+                echo "[$(date -u)] WARN: sync attempt ${attempt}/${max_retries} failed; retrying in 60s"
+                if [[ "${attempt}" -lt "${max_retries}" ]]; then
+                    sleep 60
+                fi
+                # After first attempt in first cycle, use shorter waits
+                ready_wait=$((poll_interval * 6))
+            done
+
+            [[ "${ok}" -eq 1 ]] || echo "[$(date -u)] ERROR: Job-service group sync failed after ${max_retries} attempts; will wait until next interval"
+            first_cycle=0
+
+            epoch_end="$(date +%s)"
+            elapsed=$((epoch_end - start))
+            sleep_for="${interval}"
+            if [[ "${elapsed}" -lt "${sleep_for}" ]]; then
+                sleep_for=$((sleep_for - elapsed))
+            else
+                sleep_for=0
+            fi
+
+            jitter=$((RANDOM % (jitter_max + 1)))
+            sleep $((sleep_for + jitter))
+        done
+    ) &
+    log "Scheduled background job-service bootstrap + hourly group sync (interval=${interval}s)"
 }
 
 schedule_ldap_group_bootstrap() {
@@ -319,6 +610,12 @@ schedule_ldap_group_bootstrap() {
 
     (
         set -eo pipefail
+        local lockdir="${SERVER_VAR_DIR}/ldap-group-bootstrap.lock"
+        if ! acquire_lockdir "${lockdir}" "" "ldap-group-bootstrap"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
         local add_output=""
         local add_exit_code=1
         local retry_limit="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRIES:-180}"
@@ -326,7 +623,7 @@ schedule_ldap_group_bootstrap() {
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; then
+            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
                 break
             fi
             sleep "${retry_delay_seconds}"
@@ -382,14 +679,17 @@ install_figure_script() {
             log "OMERO.Figure script already present (version ${current_version})"
             return
         fi
-        log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); reinstalling"
-        rm -f "${script_path}"
+        log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); attempting upgrade"
     fi
 
     rm -rf "${tmp_dir}"
     mkdir -p "${tmp_dir}"
 
-    log "Installing OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
+    # Download the requested version into a staging file.
+    # CRITICAL: Do NOT delete the existing script until the new one is confirmed.
+    local staged_script="${tmp_dir}/Figure_To_Pdf.py"
+
+    log "Downloading OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
     if command -v git >/dev/null 2>&1; then
         git clone --depth 1 --branch "v${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
             || git clone --depth 1 --branch "${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
@@ -397,18 +697,27 @@ install_figure_script() {
     fi
 
     if [[ -f "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
-        cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+        cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${staged_script}"
     else
         local url="https://github.com/ome/omero-figure/archive/refs/tags/v${figure_version}.tar.gz"
-        curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz"
-        tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}"
+        if curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz" 2>/dev/null; then
+            tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}" 2>/dev/null || true
+        fi
         local extracted
         extracted="$(find "${tmp_dir}" -maxdepth 1 -type d -name "omero-figure-*${figure_version}*" | head -n 1 || true)"
-        if [[ -z "${extracted}" || ! -f "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
-            echo "ERROR: Failed to obtain Figure_To_Pdf.py for OMERO.Figure ${figure_version}" >&2
-            exit 1
+        if [[ -n "${extracted}" && -f "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
+            cp "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${staged_script}"
         fi
-        cp "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+    fi
+
+    # Only replace the existing script if the download succeeded.
+    if [[ -f "${staged_script}" ]]; then
+        cp -f "${staged_script}" "${script_path}"
+        log "Installed OMERO.Figure script at ${script_path} (version ${figure_version})"
+    elif [[ -f "${script_path}" ]]; then
+        log "WARN: Could not download OMERO.Figure ${figure_version}; keeping existing script at ${script_path}"
+    else
+        log "ERROR: No Figure_To_Pdf.py available and download of version ${figure_version} failed"
     fi
 
     rm -rf "${tmp_dir}"
@@ -417,8 +726,6 @@ install_figure_script() {
         chown -R "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
     fi
     chmod -R a+rX "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
-
-    log "Installed OMERO.Figure script at ${script_path}"
 }
 
 schedule_script_registration() {
@@ -434,29 +741,187 @@ schedule_script_registration() {
 
     (
         set -eo pipefail
+        local lockdir="${SERVER_VAR_DIR}/register-official-scripts.lock"
+        if ! acquire_lockdir "${lockdir}" "" "register-official-scripts"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
         local scripts_dir="${SERVER_HOME}/lib/scripts/omero"
 
-        until run_omero admin status -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1; do
+        until run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; do
             sleep 2
         done
 
-        until run_omero script list -s localhost -p 4064 -u root -w "${root_pass}" --sudo root >/dev/null 2>&1; do
-            sleep 2
-        done
+        # Create an idempotent Python script to register official scripts and clean duplicates
+        local script_sync_py="${SERVER_VAR_DIR}/sync_official_scripts.py"
+        cat << 'EOF' > "${script_sync_py}"
+import os
+import sys
+from omero.gateway import BlitzGateway
 
-        while IFS= read -r script; do
-            run_omero script upload --official --sudo root \
-                "${script}" -s localhost -p 4064 -u root -w "${root_pass}" >/dev/null 2>&1 || true
-        done < <(find "${scripts_dir}" -type f -name '*.py' | sort)
+def sync_scripts(conn, script_dir):
+    try:
+        svc = conn.getScriptService()
+        existing_scripts = svc.getScripts()
+    except Exception as e:
+        print(f"Failed to get existing scripts: {e}")
+        return
+
+    # Build a map of filename -> list of (OriginalFile, full_db_path) tuples.
+    # OriginalFile.name is the filename, OriginalFile.path is the directory.
+    script_map = {}
+    for s in existing_scripts:
+        fname = s.name.val if hasattr(s.name, 'val') else str(s.name)
+        dirpath = s.path.val if hasattr(s.path, 'val') else str(s.path)
+        full_db_path = (dirpath.rstrip("/") + "/" + fname).lstrip("/")
+        if fname not in script_map:
+            script_map[fname] = []
+        script_map[fname].append((s, full_db_path))
+
+    scripts_root = os.path.dirname(script_dir)
+
+    # Walk the physical script directory
+    for root, dirs, files in os.walk(script_dir):
+        for file in files:
+            if not file.endswith('.py'):
+                continue
+
+            filepath = os.path.join(root, file)
+            desired_path = os.path.relpath(filepath, scripts_root).replace('\\', '/')
+
+            existing = script_map.get(file, [])
+
+            if len(existing) == 1:
+                _, db_path = existing[0]
+                if db_path == desired_path:
+                    print(f"[{file}] OK (path={desired_path})")
+                    continue
+
+                # Path mismatch (e.g. legacy absolute path). Delete and re-upload.
+                print(f"[{file}] path mismatch (db={db_path}, expected={desired_path}); will replace")
+                # Fall through to duplicate cleanup which handles deletion + re-upload
+
+            if len(existing) >= 1 and not (len(existing) == 1 and existing[0][1] == desired_path):
+                # Delete all copies so we can re-upload with the correct path
+                print(f"[{file}] removing {len(existing)} stale/duplicate DB entries")
+                for s_obj, db_path in existing:
+                    try:
+                        sid = s_obj.id.val
+                        print(f"  Deleting script ID {sid} (path={db_path})")
+                        conn.deleteObjects("OriginalFile", [sid], deleteChildren=True, wait=True)
+                    except Exception as e:
+                        print(f"  Failed to delete script ID {sid}: {e}")
+
+                # Upload the correct version
+                print(f"[{file}] uploading as official script: {desired_path}")
+                cmd = (
+                    f"omero script upload --official --sudo root "
+                    f"'{filepath}' "
+                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                )
+                rc = os.system(cmd)
+                if rc != 0:
+                    print(f"  WARN: upload returned exit code {rc}")
+            elif len(existing) == 0:
+                print(f"[{file}] not registered; uploading as official script: {desired_path}")
+                cmd = (
+                    f"omero script upload --official --sudo root "
+                    f"'{filepath}' "
+                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                )
+                rc = os.system(cmd)
+                if rc != 0:
+                    print(f"  WARN: upload returned exit code {rc}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        sys.exit(1)
+
+    root_pass = sys.argv[1]
+    script_dir = sys.argv[2]
+
+    conn = BlitzGateway('root', root_pass, host='localhost', port=4064)
+    try:
+        if conn.connect():
+            sync_scripts(conn, script_dir)
+        else:
+            print("Failed to connect to OMERO")
+            sys.exit(1)
+    finally:
+        conn.close()
+EOF
+
+        local venv_py
+        venv_py="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)/bin/python"
+        
+        # Run the idempotent sync script (output goes to the log file via the subshell redirect)
+        runuser -u "${OMERO_CLI_USER}" -- "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
+
+        rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
 
-    log "Scheduled background official script registration"
+    log "Scheduled background idempotent official script registration"
 }
+
+acquire_lockdir() {
+    local lockdir="$1"
+    local pidfile="${2:-}"
+    local label="${3:-lock}"
+    local existing_pid=""
+
+    # Important: Ensure lockdir is readable/executable by others so OMERO admin checks don't fail!
+    if mkdir "${lockdir}" 2>/dev/null; then
+        chmod 0755 "${lockdir}" 2>/dev/null || true
+        echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
+        if [[ -n "${pidfile}" ]]; then
+            echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
+        fi
+        return 0
+    fi
+
+    existing_pid="$(cat "${lockdir}/pid" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
+        log "${label} already running (pid=${existing_pid}); skipping"
+        return 1
+    fi
+
+    rm -rf "${lockdir}" 2>/dev/null || true
+    if ! mkdir "${lockdir}" 2>/dev/null; then
+        log "ERROR: could not acquire ${label} lock (${lockdir})"
+        return 1
+    fi
+
+    chmod 0755 "${lockdir}" 2>/dev/null || true
+    echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
+    if [[ -n "${pidfile}" ]]; then
+        echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
+    fi
+    return 0
+}
+
+release_lockdir() {
+    local lockdir="$1"
+    local pidfile="${2:-}"
+    rm -rf "${lockdir}" 2>/dev/null || true
+    if [[ -n "${pidfile}" ]]; then
+        rm -f "${pidfile}" 2>/dev/null || true
+    fi
+}
+
 
 main() {
     log "Starting consolidated startup flow"
 
     mkdir -p "${CERTS_DIR}" "${SERVER_LOG_DIR}"
+
+    # Prevent accidental double-execution (entrypoint ordering bugs, etc.)
+    mkdir -p "${SERVER_VAR_DIR}"
+    local main_lockdir="${SERVER_VAR_DIR}/server-bootstrap.lock"
+    if ! acquire_lockdir "${main_lockdir}" "" "server-bootstrap"; then
+        exit 0
+    fi
+    trap 'release_lockdir "${main_lockdir}" ""' EXIT
 
     check_writable_dir "${OMERO_DIR}" "OMERO data"
     check_writable_dir "${CERTS_DIR}" "OMERO certificates"
@@ -466,6 +931,7 @@ main() {
 
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
+    validate_job_service_bootstrap_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
