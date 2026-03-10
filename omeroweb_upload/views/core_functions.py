@@ -1133,6 +1133,65 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
 
 IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microscopy files can be slow)
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
+CLI_KEEPALIVE_SECONDS_DEFAULT = 60
+CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
+
+
+def _get_cli_keepalive_seconds() -> int:
+    return _get_env_int(
+        CLI_KEEPALIVE_SECONDS_ENV,
+        CLI_KEEPALIVE_SECONDS_DEFAULT,
+        0,
+        3600,
+    )
+
+
+def _write_cli_ice_config(cli_home: Path, keepalive_seconds: int, base_config_path: str = "") -> Optional[Path]:
+    if keepalive_seconds <= 0:
+        return None
+
+    config_lines = []
+    if base_config_path:
+        try:
+            base_text = Path(base_config_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Failed to read base ICE_CONFIG %s: %s", base_config_path, exc)
+        else:
+            stripped = base_text.rstrip()
+            if stripped:
+                config_lines.append(stripped)
+
+    config_lines.append(f"omero.keep_alive={keepalive_seconds}")
+    config_text = "\n".join(config_lines) + "\n"
+
+    target_path = cli_home / "omero-cli-ice.config"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=cli_home,
+        prefix="ice-config-",
+        suffix=".tmp",
+        delete=False,
+    ) as tmp_file:
+        tmp_file.write(config_text)
+        tmp_name = tmp_file.name
+
+    tmp_path = Path(tmp_name)
+    tmp_path.chmod(0o600)
+    tmp_path.replace(target_path)
+    return target_path
+
+
+def _classify_import_failure(stdout: str, stderr: str) -> str:
+    combined = "\n".join(part for part in (stdout, stderr) if part).lower()
+    if (
+        "proxy keep alive failed" in combined
+        or "ice.objectnotexistexception" in combined
+        or "exception while executing ping()" in combined
+        or 'operation = "keepallalive"' in combined
+    ):
+        return errors.import_session_expired()
+    return errors.import_failed()
 
 
 def _run_omero_cli(cmd, timeout=None):
@@ -1150,6 +1209,13 @@ def _run_omero_cli(cmd, timeout=None):
 
     cli_env["HOME"] = str(cli_home)
     cli_env["XDG_CACHE_HOME"] = str(cli_cache)
+    cli_ice_config = _write_cli_ice_config(
+        cli_home,
+        _get_cli_keepalive_seconds(),
+        cli_env.get("ICE_CONFIG", ""),
+    )
+    if cli_ice_config is not None:
+        cli_env["ICE_CONFIG"] = str(cli_ice_config)
 
     return subprocess.run(
         cmd,
@@ -2258,7 +2324,7 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
             str(stdout).strip(),
             str(stderr).strip(),
         )
-        error_msg = errors.import_failed()
+        error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "index": entry.get("index"),

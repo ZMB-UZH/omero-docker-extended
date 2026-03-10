@@ -132,6 +132,10 @@ def import_failed():
     return "Import failed."
 
 
+def import_session_expired():
+    return "Import failed because the OMERO session expired during a long-running import."
+
+
 def unexpected_import_failure(detail):
     return f"Unexpected import failure: {detail}"
 

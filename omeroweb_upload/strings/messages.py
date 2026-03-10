@@ -4,6 +4,8 @@ def imported_file(path):
 
 
 def job_error_with_path(path, detail):
+    if detail:
+        return f"Import failure: {path} - {detail}"
     return f"Import failure: {path}"
 
 
