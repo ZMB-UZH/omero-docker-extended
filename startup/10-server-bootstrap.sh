@@ -152,11 +152,39 @@ ensure_tmpdir_permissions() {
 
     local omero_py_dir="${expected_tmp_dir}/omero"
     local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
-    
-    # CRITICAL: Always try to remove these if they exist, to prevent OMERO python from 
-    # hitting a permission error if they were left over from a previous root execution.
-    # Since expected_tmp_dir is writable (checked above), we can remove them even if owned by root.
+
+    # CRITICAL: Always try to remove stale OMERO temp subdirs to prevent Python
+    # TempFileManager from hitting PermissionError on .lock files left by previous
+    # container runs (PID-based subdirs like omero_omero-server/1530/.lock).
+    #
+    # Strategy: try as root first, then fall back to the target user.
+    # Root cleanup can fail silently on NFS with root_squash (root is mapped to
+    # nobody and cannot delete files owned by omero-server).  Running as the
+    # target user handles that case.
     rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${expected_tmp_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+
+    # If the root cleanup failed (e.g. NFS root_squash), retry as the target user.
+    if [[ -d "${omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+        log "WARN: Root cleanup of ${omero_py_user_dir} incomplete (NFS root_squash?). Retrying as ${requested_owner}."
+        runuser -u "${requested_owner}" -- rm -rf "${omero_py_user_dir}" 2>/dev/null || true
+    fi
+    if [[ -d "${omero_py_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+        log "WARN: Root cleanup of ${omero_py_dir} incomplete. Retrying as ${requested_owner}."
+        runuser -u "${requested_owner}" -- rm -rf "${omero_py_dir}" 2>/dev/null || true
+    fi
+
+    # Final check: if stale dirs still exist, log a clear error so it's diagnosable.
+    if [[ -d "${omero_py_user_dir}" ]]; then
+        log "WARN: Could not fully remove stale temp dir: ${omero_py_user_dir}"
+        ls -la "${omero_py_user_dir}" >&2 || true
+        # As a last resort, try to fix ownership of stale .lock files in-place
+        # so TempFileManager can at least open them.
+        if [[ "$(id -u)" -eq 0 ]]; then
+            find "${omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
+        fi
+    fi
 
     # Pre-emptively create the specific omero temp dirs to avoid Python locking errors.
     mkdir -p "${omero_py_dir}" "${omero_py_user_dir}"
