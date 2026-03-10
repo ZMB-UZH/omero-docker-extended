@@ -12,7 +12,7 @@ from ..services.core import (
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..views.utils import load_json_body, require_non_root_user
-from ..strings import errors
+from ..strings import errors as error_messages
 logger = logging.getLogger(__name__)
 
 OMERO = OMERO_CLI
@@ -25,7 +25,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data, error = load_json_body(request)
         if error:
@@ -35,9 +35,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id()}, status=400)
         if not password:
-            return JsonResponse({"error": errors.missing_password()}, status=400)
+            return JsonResponse({"error": error_messages.missing_password()}, status=400)
 
         username = conn.getUser().getName()
 
@@ -66,7 +66,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": errors.omero_web_login_failed(),
+                    "error": error_messages.omero_web_login_failed(),
                     "stdout": login.stdout,
                     "stderr": login.stderr,
                 }
@@ -93,7 +93,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
             deleted_annotations = 0
             deleted_images = 0
-            errors = []
+            deletion_errors = []
 
             for img in images:
                 try:
@@ -101,7 +101,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
                 except Exception as e:
                     logger.warning("Cannot resolve annotations for image %s: %s", get_id(img), e)
-                    errors.append({"image": get_id(img), "error": str(e)})
+                    deletion_errors.append({"image": get_id(img), "error": str(e)})
                     continue
 
                 if not plugin_ann_ids:
@@ -127,7 +127,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                                 text=True,
                             )
                             if link_result.returncode != 0:
-                                errors.append(
+                                deletion_errors.append(
                                     {
                                         "image": iid,
                                         "annotation": aid,
@@ -139,12 +139,12 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
                         remaining_links = find_annotation_link_ids(conn, aid)
                         if remaining_links:
-                            errors.append(
+                            deletion_errors.append(
                                 {
                                     "image": iid,
                                     "annotation": aid,
                                     "links_remaining": remaining_links,
-                                    "error": errors.annotation_links_still_exist(),
+                                    "error": error_messages.annotation_links_still_exist(),
                                 }
                             )
                             continue
@@ -165,7 +165,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         )
 
                         if result.returncode != 0:
-                            errors.append(
+                            deletion_errors.append(
                                 {
                                     "image": iid,
                                     "annotation": aid,
@@ -177,11 +177,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
                         ann_obj = conn.getObject("MapAnnotation", int(aid))
                         if ann_obj is not None:
-                            errors.append(
+                            deletion_errors.append(
                                 {
                                     "image": iid,
                                     "annotation": aid,
-                                    "error": errors.annotation_still_exists(),
+                                    "error": error_messages.annotation_still_exists(),
                                 }
                             )
                             continue
@@ -195,7 +195,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                             iid,
                             e,
                         )
-                        errors.append({"image": iid, "annotation": aid, "error": str(e)})
+                        deletion_errors.append({"image": iid, "annotation": aid, "error": str(e)})
                         continue
 
                 if removed_for_image:
@@ -206,7 +206,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     "ok": True,
                     "deleted_images": deleted_images,
                     "deleted_annotations": deleted_annotations,
-                    "errors": errors,
+                    "errors": deletion_errors,
                 }
             )
         finally:
