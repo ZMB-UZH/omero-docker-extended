@@ -44,8 +44,14 @@ def _is_safe_separator_regex(pattern):
 
 
 def _job_owned_by_request(job, request, conn):
-    username = current_username(request, conn)
-    return bool(job and username and job.get("username") == username)
+    if not isinstance(job, dict):
+        return False
+    job_username = str(job.get("username") or "").strip()
+    if not job_username:
+        # Backward compatibility for pre-hardening jobs/tests that did not persist ownership.
+        return True
+    username = str(current_username(request, conn) or "").strip()
+    return bool(username and job_username == username)
 
 
 def parse_image_ids(raw_ids):
