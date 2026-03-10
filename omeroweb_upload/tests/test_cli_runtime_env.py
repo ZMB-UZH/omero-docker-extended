@@ -80,3 +80,13 @@ def test_classify_import_failure_detects_session_expiry():
 
 def test_classify_import_failure_defaults_to_generic_error():
     assert core_functions._classify_import_failure("", "plain failure") == errors.import_failed()
+
+
+def test_classify_import_failure_does_not_treat_generic_object_not_exist_as_session_expiry():
+    stderr = """
+    java.lang.RuntimeException: Failure response on import!
+    Caused by: Ice.ObjectNotExistException
+    operation = "findAll"
+    """
+
+    assert core_functions._classify_import_failure("", stderr) == errors.import_failed()
