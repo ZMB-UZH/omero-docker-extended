@@ -272,8 +272,8 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     try:
         temp_path.write_text(serialized, encoding="utf-8")
         
-        # Ensure the final file maintains readability for the host enforcer (root)
-        os.chmod(temp_path, 0o666)
+        # Keep host readability without making the state file world-writable.
+        os.chmod(temp_path, 0o660)
         
         # os.replace is atomic on POSIX
         os.replace(temp_path, path)

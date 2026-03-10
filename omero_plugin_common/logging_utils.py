@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 _OMERO_GATEWAY_UTILS_LOGGER = "omero.gateway.utils"
@@ -16,6 +17,48 @@ def sanitize_log_value(value: Any) -> str:
     """
     text = str(value)
     return text.replace("\r", r"\\r").replace("\n", r"\\n")
+
+
+_SENSITIVE_QUERY_KEYS = {
+    "api_key",
+    "apikey",
+    "key",
+    "password",
+    "passwd",
+    "token",
+    "session",
+    "session_key",
+}
+
+
+def sanitize_url_for_logging(url: Any) -> str:
+    """Return a URL with obvious credentials redacted for logging."""
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = urlsplit(raw)
+    except Exception:
+        return sanitize_log_value(raw)
+
+    hostname = parsed.hostname or ""
+    port = f":{parsed.port}" if parsed.port else ""
+    if parsed.username:
+        netloc = f"{parsed.username}:***@{hostname}{port}"
+    else:
+        netloc = f"{hostname}{port}"
+
+    redacted_query = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key.lower() in _SENSITIVE_QUERY_KEYS:
+            redacted_query.append((key, "***"))
+        else:
+            redacted_query.append((key, value))
+
+    sanitized = urlunsplit(
+        (parsed.scheme, netloc, parsed.path, urlencode(redacted_query), parsed.fragment)
+    )
+    return sanitize_log_value(sanitized)
 
 
 def configure_omero_gateway_logging() -> None:
