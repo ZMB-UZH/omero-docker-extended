@@ -129,9 +129,11 @@ __all__ = [
     '_process_import_job',
     '_reconnect_session',
     '_refresh_job_status',
+    '_resolve_root_relative_path',
     '_resolve_job_batch_size',
     '_resolve_jobs_root',
     '_resolve_omero_host_port',
+    '_resolve_staged_target_path',
     '_resolve_upload_root',
     '_robust_update_job',
     '_run_compatibility_check',
@@ -434,6 +436,8 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
+    if not _safe_job_id(job_id):
+        raise ValueError(f"Invalid job id: {job_id}")
     return _get_jobs_root() / f"{job_id}.json"
 
 
@@ -554,6 +558,9 @@ def _refresh_job_status(job_dict):
 
 
 def _load_job(job_id: str):
+    if not _safe_job_id(job_id):
+        logger.warning("Upload job id rejected as invalid: %s", job_id)
+        return None
     path = _job_path(job_id)
     if not path.exists():
         return None
@@ -565,7 +572,7 @@ def _load_job(job_id: str):
             with portalocker.Lock(lock_path, "a+", timeout=1):
                 if not path.exists():
                     return None
-                return _read_job_file(path)
+                return _read_job_file(job_id)
         except json.JSONDecodeError as exc:
             logger.error("Job file %s is corrupt: %s", path, exc)
             return None
@@ -581,15 +588,19 @@ def _load_job(job_id: str):
 
 
 def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
-    path = _job_path(job_dict["job_id"])
-    lock_path = _job_lock_path(job_dict["job_id"])
+    job_id = job_dict.get("job_id")
+    if not _safe_job_id(job_id):
+        logger.warning("Refusing to save upload job with invalid id: %s", job_id)
+        return False
+    path = _job_path(job_id)
+    lock_path = _job_lock_path(job_id)
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
-                _write_job_file(path, job_dict)
+                _write_job_file(job_id, job_dict)
             return True
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
@@ -604,6 +615,9 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
 
 
 def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
+    if not _safe_job_id(job_id):
+        logger.warning("Refusing to update upload job with invalid id: %s", job_id)
+        return None
     path = _job_path(job_id)
     lock_path = _job_lock_path(job_id)
     for attempt in range(retries):
@@ -614,9 +628,9 @@ def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float 
                 if not path.exists():
                     logger.warning("Job file %s not found for update.", path)
                     return None
-                job_dict = _read_job_file(path)
+                job_dict = _read_job_file(job_id)
                 job_dict = update_fn(job_dict)
-                _write_job_file(path, job_dict)
+                _write_job_file(job_id, job_dict)
             return job_dict
         except json.JSONDecodeError as exc:
             logger.error("Job file %s is corrupt: %s", path, exc)
@@ -669,11 +683,36 @@ def _normalize_upload_relative_path(raw_name: str):
     return rel_path, None
 
 
+def _resolve_root_relative_path(root: Path, relative_path: str, *, max_bytes: int = None):
+    normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
+    if normalize_error:
+        return None, normalize_error
+
+    target = root / normalized_path
+    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
+        return None, errors.file_path_too_long(relative_path, max_bytes)
+
+    try:
+        root_resolved = root.resolve(strict=False)
+        target_resolved = target.resolve(strict=False)
+        target_resolved.relative_to(root_resolved)
+    except (OSError, ValueError):
+        return None, errors.invalid_filename(relative_path)
+
+    return target, None
+
+
+def _resolve_staged_target_path(upload_root: Path, staged_path: str):
+    return _resolve_root_relative_path(
+        upload_root,
+        staged_path,
+        max_bytes=MAX_UPLOAD_STAGED_TARGET_BYTES,
+    )
+
+
 def _validate_staged_target_path(upload_root: Path, staged_path: str):
-    target = upload_root / staged_path
-    if len(os.fsencode(str(target))) > MAX_UPLOAD_STAGED_TARGET_BYTES:
-        return errors.file_path_too_long(staged_path, MAX_UPLOAD_STAGED_TARGET_BYTES)
-    return None
+    _, error = _resolve_staged_target_path(upload_root, staged_path)
+    return error
 
 
 def _should_auto_skip_import(relative_path: str) -> bool:
@@ -1749,10 +1788,13 @@ def _safe_job_id(value: str) -> bool:
 
 
 def _job_lock_path(job_id: str) -> Path:
+    if not _safe_job_id(job_id):
+        raise ValueError(f"Invalid job id: {job_id}")
     return _get_jobs_root() / f".{job_id}.lock"
 
 
-def _fsync_directory(path: Path):
+def _fsync_jobs_directory():
+    path = _get_jobs_root()
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):
@@ -1763,12 +1805,14 @@ def _fsync_directory(path: Path):
         os.close(dir_fd)
 
 
-def _read_job_file(path: Path):
+def _read_job_file(job_id: str):
+    path = _job_path(job_id)
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _write_job_file(path: Path, job_dict):
+def _write_job_file(job_id: str, job_dict):
+    path = _job_path(job_id)
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -1784,7 +1828,7 @@ def _write_job_file(path: Path, job_dict):
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
-        _fsync_directory(path.parent)
+        _fsync_jobs_directory()
         tmp_path = None
         return True
     finally:
@@ -2165,7 +2209,25 @@ def _run_compatibility_check(job_id: str):
             staged_path = entry.get("staged_path") or entry.get("relative_path")
             if not staged_path:
                 continue
-            file_path = upload_root / staged_path
+            file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+            if staged_error:
+                logger.warning(
+                    "Compatibility check rejected staged path for job %s: relative_path=%s staged_path=%s error=%s",
+                    job_id,
+                    entry.get("relative_path"),
+                    staged_path,
+                    staged_error,
+                )
+                results.append(
+                    {
+                        "index": entry_index,
+                        "upload_id": entry.get("upload_id"),
+                        "relative_path": entry.get("relative_path"),
+                        "status": "error",
+                        "details": staged_error,
+                    }
+                )
+                continue
             dataset_name = _dataset_name_for_path(entry.get("relative_path"), job.get("orphan_dataset_name"))
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
@@ -2285,7 +2347,15 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
         return {"skip": True}
 
     staged_path = entry.get("staged_path") or rel_path
-    file_path = upload_root / staged_path
+    file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+    if staged_error:
+        return {
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": staged_error,
+            "job_error": staged_error,
+            "job_message": staged_error,
+        }
     if not file_path.exists():
         error_msg = errors.missing_staged_file(rel_path)
         return {
@@ -2699,7 +2769,18 @@ def _process_import_job(job_id: str):
                                         continue
 
                                     staged_path = txt_entry.get("staged_path") or txt_rel
-                                    txt_path = upload_root / staged_path
+                                    txt_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+                                    if staged_error:
+                                        logger.warning(
+                                            "Rejected SEM-EDX text staged path for job %s: txt=%s staged=%s error=%s",
+                                            job_id,
+                                            txt_rel,
+                                            staged_path,
+                                            staged_error,
+                                        )
+                                        _append_job_error(job, staged_error)
+                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        continue
 
                                     if not txt_path.exists():
                                         logger.warning("Text file not found at %s, skipping", txt_path)
@@ -2726,7 +2807,20 @@ def _process_import_job(job_id: str):
                                             )
                                         )
 
-                                        staged_plot_path = upload_root / plot_import_rel
+                                        staged_plot_path, staged_plot_error = _resolve_staged_target_path(
+                                            upload_root,
+                                            plot_import_rel,
+                                        )
+                                        if staged_plot_error:
+                                            logger.warning(
+                                                "Rejected SEM-EDX plot staged path for job %s: rel=%s error=%s",
+                                                job_id,
+                                                plot_import_rel,
+                                                staged_plot_error,
+                                            )
+                                            _append_job_error(job, staged_plot_error)
+                                            imported_plots.add(txt_rel)
+                                            continue
                                         try:
                                             staged_plot_path.parent.mkdir(parents=True, exist_ok=True)
                                             shutil.copy2(plot_path, staged_plot_path)
