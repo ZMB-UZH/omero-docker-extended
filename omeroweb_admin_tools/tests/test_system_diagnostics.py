@@ -80,3 +80,16 @@ def test_run_diagnostic_script_optional_pg_skip_is_warning(monkeypatch) -> None:
     assert pg_check["status"] == "warn"
     assert pg_check["summary"] == "Optional Docker compose check skipped"
     assert "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE" not in pg_check["details"]
+
+
+def test_run_diagnostic_script_hides_internal_exception_text(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.services.system_diagnostics._run_omero_server_core",
+        lambda: (_ for _ in ()).throw(RuntimeError("sensitive backend details")),
+    )
+
+    payload = run_diagnostic_script("omero_server_core")
+
+    assert payload["status"] == "fail"
+    assert payload["checks"] == []
+    assert payload["error"] == "Failed to execute check due to an internal server error."
