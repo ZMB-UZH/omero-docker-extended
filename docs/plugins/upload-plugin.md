@@ -6,7 +6,8 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 
 ## Main capabilities
 
-- Upload session creation and multipart file transfer.
+- Upload session creation and browser-to-server file transfer.
+- Automatic chunked transfer for large files so multi-GB uploads do not depend on a single oversized HTTP request.
 - OMERO CLI-based import with configurable batching and concurrency.
 - Automatic detection and skipping of non-importable files (OS metadata, companion XML in metadata directories) to match OMERO Insight behaviour.
 - Job lifecycle: start, upload, import, confirm, prune.
@@ -109,6 +110,13 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_UPLOAD_PATH` | Host path for temporary upload storage |
 
 The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_UPLOAD_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
+
+## Large-file behavior
+
+- Small files continue to upload as normal multipart requests.
+- Files larger than the browser-side request ceiling are sliced into bounded chunks before they are sent to `/omeroweb_upload/upload/<job_id>/`.
+- The upload endpoint validates chunk offsets and file sizes and returns JSON errors for server-side failures, avoiding raw HTML error pages in the UI when possible.
+- This reduces exposure to reverse-proxy and app-server request-body limits for large microscopy datasets, but operators should still review any external proxy size and timeout settings used in front of OMERO.web.
 
 ## Operator checklist
 

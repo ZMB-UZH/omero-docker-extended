@@ -133,6 +133,7 @@ RUN set -euo pipefail; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
             pip \
+            pytest==7.4.4 \
             "setuptools==${SETUPTOOLS_VERSION}" \
             wheel; \
         SITE_PACKAGES="$("${VENV_DIR}/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \

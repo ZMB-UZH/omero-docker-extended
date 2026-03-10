@@ -51,6 +51,35 @@ def unable_initialize_upload_folder():
     return "Unable to initialize upload folder."
 
 
+def upload_chunk_missing_file():
+    return "Chunk upload request missing file payload."
+
+
+def upload_chunk_metadata_invalid(detail):
+    return f"Invalid chunk upload metadata: {detail}."
+
+
+def upload_chunk_offset_mismatch(path, expected_offset, actual_offset):
+    return (
+        f"Chunk upload offset mismatch for {path}: "
+        f"server has {expected_offset} bytes, request started at {actual_offset}."
+    )
+
+
+def upload_chunk_size_mismatch(path, expected_size, actual_size):
+    return (
+        f"Chunk upload size mismatch for {path}: "
+        f"expected {expected_size} bytes, received {actual_size}."
+    )
+
+
+def upload_chunk_incomplete(path, expected_size, actual_size):
+    return (
+        f"Chunk upload incomplete for {path}: "
+        f"expected {expected_size} bytes, saved {actual_size}."
+    )
+
+
 def invalid_filename(name):
     return f"Invalid filename: {name}"
 

@@ -10,6 +10,7 @@ from omeroweb_upload.views import core_functions
 def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch):
     """CLI calls should run with HOME/XDG_CACHE_HOME under upload root."""
     upload_root = tmp_path / "upload-root"
+    upload_root.mkdir()
 
     monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
 

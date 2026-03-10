@@ -180,6 +180,7 @@ RUN set -euo pipefail; \
     cp -a /tmp/omero_plugin_help_docs "${SITE_PACKAGES}/docs/help"; \
     "${VENV_DIR}/bin/python" -m pip install --no-cache-dir \
         matplotlib \
+        pytest==7.4.4 \
         psycopg2-binary \
         celery==5.3.6 \
         redis==5.0.8 \
