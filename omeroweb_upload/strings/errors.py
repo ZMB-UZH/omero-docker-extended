@@ -80,6 +80,10 @@ def upload_chunk_incomplete(path, expected_size, actual_size):
     )
 
 
+def upload_file_save_failed(path):
+    return f"Failed to save upload: {path}."
+
+
 def invalid_filename(name):
     return f"Invalid filename: {name}"
 
@@ -189,6 +193,14 @@ def user_settings_save_failed():
 
 def special_method_settings_save_failed():
     return "Could not save special method settings."
+
+
+def special_method_settings_load_failed():
+    return "Could not load special method settings."
+
+
+def upload_file_save_failed(path):
+    return f"Failed to save uploaded file: {path}."
 
 
 def unexpected_error():

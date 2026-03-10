@@ -51,6 +51,7 @@ from .utils import current_username, require_root_user
 
 logger = logging.getLogger(__name__)
 LOG_TABLE_ROW_CAP = 5000
+_SAFE_REDIRECT_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _to_int_env(name: str, default: int) -> int:
@@ -290,15 +291,24 @@ def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
     return urls
 
 
+def _safe_redirect_segment(value: str, default: str) -> str:
+    candidate = str(value or "").strip().strip("/")
+    if not candidate or not _SAFE_REDIRECT_SEGMENT_RE.fullmatch(candidate):
+        return default
+    return candidate
+
+
 def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     """Redirect Grafana root requests to the configured default dashboard."""
     normalized_prefix = str(proxy_prefix or "").rstrip("/")
-    dashboard_uid = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
-    ).strip()
-    dashboard_slug = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
-    ).strip()
+    dashboard_uid = _safe_redirect_segment(
+        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"),
+        "omero-infrastructure",
+    )
+    dashboard_slug = _safe_redirect_segment(
+        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"),
+        "server-infrastructure",
+    )
     dashboard_path = f"{normalized_prefix}/d/{dashboard_uid}/{dashboard_slug}"
 
     return HttpResponseRedirect(dashboard_path)
@@ -811,8 +821,9 @@ def logs_data(request, conn=None, url=None, **kwargs):
             since_ns=since_ns,
         )
     except RuntimeError as exc:  # pragma: no cover - network errors
+        logger.warning("Failed to fetch logs from Loki: %s", exc)
         return JsonResponse(
-            {"error": f"Failed to fetch logs: {exc}"},
+            {"error": "Failed to fetch logs."},
             status=502,
         )
     if level:
@@ -1800,7 +1811,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
             full_name_by_user.setdefault(username, "")
     except Exception as exc:
         logger.exception("Failed to compute storage distribution")
-        return JsonResponse({"error": f"Storage query failed: {exc}"}, status=500)
+        return JsonResponse({"error": "Storage query failed."}, status=500)
 
     data_root = os.environ.get("OMERO_DATA_DIR", "/OMERO")
     data_total = data_used = data_free = None
@@ -1955,12 +1966,13 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
     except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
         logger.warning(
-            "Invalid quota update payload (content_type=%s, content_length=%s)",
+            "Invalid quota update payload (content_type=%s, content_length=%s): %s",
             request.META.get("CONTENT_TYPE", ""),
             request.META.get("CONTENT_LENGTH", ""),
+            exc,
         )
         return JsonResponse(
-            {"error": f"Invalid quota update payload: {exc}"}, status=400
+            {"error": "Invalid quota update payload."}, status=400
         )
 
     # ---- persist and reconcile ----
@@ -1970,7 +1982,7 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
         reconciled = reconcile_quotas(known_groups)
     except Exception as exc:
         logger.exception("Failed to update quotas")
-        return JsonResponse({"error": f"Quota update failed: {exc}"}, status=500)
+        return JsonResponse({"error": "Quota update failed."}, status=500)
 
     return JsonResponse(
         {
@@ -1999,7 +2011,8 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
     try:
         content = csv_file.read().decode("utf-8")
     except UnicodeDecodeError as exc:
-        return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
+        logger.warning("Invalid CSV import encoding: %s", exc)
+        return JsonResponse({"error": "Invalid CSV import."}, status=400)
 
     # ---- persist and reconcile ----
     try:
@@ -2007,10 +2020,11 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
     except (QuotaError, CsvError) as exc:
-        return JsonResponse({"error": f"Invalid CSV import: {exc}"}, status=400)
+        logger.warning("Invalid CSV import payload: %s", exc)
+        return JsonResponse({"error": "Invalid CSV import."}, status=400)
     except Exception as exc:
         logger.exception("Failed to import quotas")
-        return JsonResponse({"error": f"Quota import failed: {exc}"}, status=500)
+        return JsonResponse({"error": "Quota import failed."}, status=500)
 
     return JsonResponse(
         {

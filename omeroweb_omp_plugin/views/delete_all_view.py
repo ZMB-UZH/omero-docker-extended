@@ -67,12 +67,17 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         )
 
         if login.returncode != 0:
+            logger.warning(
+                "OMERO CLI login failed for delete_all_keyvaluepairs user %s: rc=%s stdout=%r stderr=%r",
+                username,
+                login.returncode,
+                login.stdout,
+                login.stderr,
+            )
             return JsonResponse(
                 {
                     "ok": False,
                     "error": error_messages.omero_web_login_failed(),
-                    "stdout": login.stdout,
-                    "stderr": login.stderr,
                 }
             )
 
@@ -128,11 +133,17 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 )
 
                 if result.returncode != 0:
+                    logger.warning(
+                        "Failed to delete map annotations for image chunk %s: rc=%s stdout=%r stderr=%r",
+                        chunk_ids,
+                        result.returncode,
+                        result.stdout,
+                        result.stderr,
+                    )
                     deletion_errors.append(
                         {
                             "ids": chunk_ids,
-                            "stdout": result.stdout,
-                            "stderr": result.stderr,
+                            "error": error_messages.unable_delete_annotations(),
                         }
                     )
                     continue
@@ -167,4 +178,4 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("delete_all_keyvaluepairs failed: %s", e)
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)

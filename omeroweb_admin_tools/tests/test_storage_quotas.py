@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -23,6 +24,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
     upsert_quotas,
 )
 from omeroweb_admin_tools.views.index_view import (
+    storage_data,
     storage_quota_import,
     storage_quota_template,
     storage_quota_update,
@@ -485,7 +487,7 @@ def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> No
 
     assert response.status_code == 500
     body = json.loads(response.content)
-    assert "Quota update failed" in body["error"]
+    assert body["error"] == "Quota update failed."
 
 
 def _raises(exc):
@@ -564,6 +566,83 @@ def test_storage_quota_import_and_template_endpoints(monkeypatch) -> None:
     assert response.status_code == 200
     assert template_response.status_code == 200
     assert b"Group,Quota [GB]" in template_response.content
+
+
+def test_storage_quota_update_invalid_payload_is_sanitized(monkeypatch) -> None:
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data=json.dumps({"updates": {"group": "demo"}}),
+        content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    response = storage_quota_update(request, conn=None)
+    body = json.loads(response.content)
+
+    assert response.status_code == 400
+    assert body["error"] == "Invalid quota update payload."
+
+
+def test_storage_quota_import_invalid_errors_are_sanitized(monkeypatch) -> None:
+    file_payload = b"Group,Quota [GB]\ndemo,broken\n"
+    upload = SimpleUploadedFile("quotas.csv", file_payload, content_type="text/csv")
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/import/",
+        data={"file": upload},
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.import_quotas_csv",
+        _raises(QuotaError("line 2 leaked details")),
+    )
+
+    response = storage_quota_import(request, conn=None)
+    body = json.loads(response.content)
+
+    assert response.status_code == 400
+    assert body["error"] == "Invalid CSV import."
+
+
+def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
+    request = RequestFactory().get("/omeroweb_admin_tools/storage/data/")
+    conn = SimpleNamespace(
+        SERVICE_OPTS=SimpleNamespace(setOmeroGroup=lambda value: None),
+        getQueryService=lambda: SimpleNamespace(
+            projection=lambda query, params, opts: (_ for _ in ()).throw(
+                RuntimeError("storage backend leaked details")
+            )
+        ),
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    response = storage_data(request, conn=conn)
+    body = json.loads(response.content)
+
+    assert response.status_code == 500
+    assert body["error"] == "Storage query failed."
 
 
 def test_managed_repository_compatibility_requires_group_user_prefix(

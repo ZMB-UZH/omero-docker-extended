@@ -208,8 +208,8 @@ def list_credentials(request, conn=None, url=None, **kwargs):
     try:
         providers = list_ai_credentials(username)
         return JsonResponse({"providers": providers})
-    except AiCredentialStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except AiCredentialStoreError:
+        return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error listing AI credentials: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
@@ -267,8 +267,8 @@ def save_credentials(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": message}, status=400)
         save_ai_credentials(username, provider, api_key)
         return JsonResponse({"message": messages.api_key_saved_status()})
-    except AiCredentialStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except AiCredentialStoreError:
+        return JsonResponse({"error": errors.ai_credentials_save_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error saving AI credentials: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
@@ -291,8 +291,8 @@ def list_models(request, conn=None, url=None, **kwargs):
 
     try:
         api_key = (get_ai_credential(username, provider) or "").strip()
-    except AiCredentialStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except AiCredentialStoreError:
+        return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
     if not api_key:
         return JsonResponse({"error": errors.ai_api_key_required()}, status=400)

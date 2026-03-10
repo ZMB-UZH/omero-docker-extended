@@ -163,8 +163,8 @@ def start_job(request, conn=None, url=None, **kwargs):
         if separator_mode in ("regex", "ai_regex"):
             try:
                 re.compile(raw_seps)
-            except re.error as e:
-                return JsonResponse({"error": error_messages.invalid_regex_pattern(e)}, status=400)
+            except re.error:
+                return JsonResponse({"error": error_messages.invalid_regex_pattern()}, status=400)
 
         if delete_mode not in ("keep", "all", "plugin"):
             delete_mode = "keep"
@@ -204,7 +204,7 @@ def start_job(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("start_job() error: %s", e)
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 @csrf_exempt
 @login_required()
@@ -262,7 +262,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("start_acq_job() error")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
 @csrf_exempt
@@ -327,7 +327,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("start_delete_all_job() error")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
 @csrf_exempt
@@ -392,7 +392,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("start_delete_plugin_job() error")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
 # ==============================================================================
@@ -498,7 +498,15 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                                 "because deletions could not be confirmed."
                             )
                     except Exception as e:
-                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs: {e}")
+                        logger.exception(
+                            "Delete-all batch processing failed for image %s in job %s: %s",
+                            iid,
+                            job_id,
+                            e,
+                        )
+                        batch_logs.append(
+                            f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs."
+                        )
                     continue
 
                 if job.get("type") == "del_plugin":
@@ -530,7 +538,15 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                                 "because deletions could not be confirmed."
                             )
                     except Exception as e:
-                        batch_logs.append(f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs: {e}")
+                        logger.exception(
+                            "Delete-plugin batch processing failed for image %s in job %s: %s",
+                            iid,
+                            job_id,
+                            e,
+                        )
+                        batch_logs.append(
+                            f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs."
+                        )
                     continue
 
                 # ---------------------------------------------------------
@@ -618,7 +634,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     batch_logs.append(f"Image {iid} ({filename}): no variables.")
 
             except Exception as e:
-                batch_logs.append(f"Image {iid}: ERROR {e}")
+                batch_logs.append(f"Image {iid}: ERROR processing image.")
                 logger.exception("Error processing image %s in job %s: %s", iid, job_id, e)
 
         job["index"] = end
