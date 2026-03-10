@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 import urllib.parse
 from collections import Counter
+from omero_plugin_common.logging_utils import sanitize_url_for_logging
 from .filename_utils import (
     build_hyphen_protection_pattern,
     detect_label_value_pairs,
@@ -162,7 +163,11 @@ def _clean_regex(text):
 
 
 def _post_json(url, headers, payload, timeout=15):
+    parsed = urllib.parse.urlparse(str(url or ""))
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise AiAssistError(errors.provider_unreachable())
     data = json.dumps(payload).encode("utf-8")
+    safe_url = sanitize_url_for_logging(url)
     request = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -173,7 +178,7 @@ def _post_json(url, headers, payload, timeout=15):
         logger.warning(
             "AI provider HTTP error %s from %s (detail=%s)",
             exc.code,
-            url,
+            safe_url,
             detail or "n/a",
         )
         message = errors.provider_http_status(exc.code)
@@ -183,7 +188,11 @@ def _post_json(url, headers, payload, timeout=15):
             message = errors.provider_http_retry_after(message, retry_after)
         raise AiAssistError(message)
     except urllib.error.URLError as exc:
-        logger.warning("AI provider connection error for %s: %s", url, exc)
+        logger.warning(
+            "AI provider connection error for %s: %s",
+            safe_url,
+            exc,
+        )
         raise AiAssistError(errors.provider_unreachable())
 
 

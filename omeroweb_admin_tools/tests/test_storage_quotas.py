@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,6 +14,7 @@ from omeroweb_admin_tools.services.storage_quotas import (
     AUTO_GROUP_QUOTA_ENV,
     DEFAULT_GROUP_QUOTA_ENV,
     MIN_GROUP_QUOTA_ENV,
+    _write_state,
     detect_filesystem,
     managed_group_root,
     managed_repository_compatibility,
@@ -65,6 +68,26 @@ def test_upsert_writes_schema_version(tmp_path, monkeypatch) -> None:
 
     payload = json.loads(state_path.read_text(encoding="utf-8"))
     assert payload[STATE_SCHEMA_VERSION_KEY] == STATE_SCHEMA_VERSION
+
+
+def test_write_state_temp_file_is_not_world_writable(tmp_path) -> None:
+    state_path = tmp_path / "quotas.json"
+    seen_modes = []
+
+    real_replace = os.replace
+
+    def _capturing_replace(src: Path, dst: Path) -> None:
+        seen_modes.append(stat.S_IMODE(Path(src).stat().st_mode))
+        real_replace(src, dst)
+
+    with patch(
+        "omeroweb_admin_tools.services.storage_quotas.os.replace",
+        _capturing_replace,
+    ):
+        _write_state(state_path, {"quotas_gb": {}, "logs": []})
+
+    assert seen_modes
+    assert seen_modes[0] == 0o660
 
 
 def test_reconcile_rejects_unknown_schema_version(tmp_path, monkeypatch) -> None:
@@ -490,6 +513,28 @@ def test_storage_quota_update_returns_500_on_state_file_error(monkeypatch) -> No
     assert body["error"] == "Quota update failed."
 
 
+def test_storage_quota_update_hides_payload_parse_details(monkeypatch) -> None:
+    request = RequestFactory().post(
+        "/omeroweb_admin_tools/storage/quota/update/",
+        data=json.dumps({"updates": "not-a-list"}),
+        content_type="application/json",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+
+    response = storage_quota_update(request, conn=None)
+
+    assert response.status_code == 400
+    body = json.loads(response.content)
+    assert body["error"] == "Invalid quota update payload."
+
+
 def _raises(exc):
     """Return a callable that raises the given exception."""
     def _fn(*_a, **_kw):
@@ -643,8 +688,6 @@ def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
 
     assert response.status_code == 500
     assert body["error"] == "Storage query failed."
-
-
 def test_managed_repository_compatibility_requires_group_user_prefix(
     monkeypatch,
 ) -> None:

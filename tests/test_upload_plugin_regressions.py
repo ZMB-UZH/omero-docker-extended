@@ -129,6 +129,7 @@ def _install_import_stubs():
 _install_import_stubs()
 
 from omeroweb_upload.views import core_functions
+from omeroweb_upload.views import index_view
 
 
 class UploadPluginRegressionTests(unittest.TestCase):
@@ -206,6 +207,62 @@ class UploadPluginRegressionTests(unittest.TestCase):
                 loaded = core_functions._load_job(job_id)
                 self.assertIsNotNone(loaded)
                 self.assertEqual(100, loaded["counter"])
+
+    def test_resolve_managed_child_path_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            with self.assertRaises(ValueError):
+                core_functions._resolve_managed_child_path(root, "../escape.txt")
+
+    def test_load_owned_job_rejects_invalid_job_id_before_disk_access(self):
+        request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
+
+        with mock.patch.object(index_view, "_load_job") as load_job_mock:
+            job, error_response = index_view._load_owned_job(
+                request,
+                conn=None,
+                job_id="../bad",
+                missing_error="Upload job not found.",
+            )
+
+        self.assertIsNone(job)
+        self.assertEqual({"ok": False, "error": "Upload job not found."}, error_response["payload"])
+        load_job_mock.assert_not_called()
+
+    def test_load_owned_job_rejects_cross_user_job_access(self):
+        request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
+        job_payload = {"job_id": "a" * 32, "username": "bob"}
+
+        with mock.patch.object(index_view, "_load_job", return_value=job_payload), mock.patch.object(
+            index_view, "current_username", return_value="alice"
+        ):
+            job, error_response = index_view._load_owned_job(
+                request,
+                conn=None,
+                job_id="a" * 32,
+                missing_error="Upload job not found.",
+            )
+
+        self.assertIsNone(job)
+        self.assertEqual({"ok": False, "error": "Upload job not found."}, error_response["payload"])
+
+    def test_load_owned_job_allows_matching_owner(self):
+        request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
+        job_payload = {"job_id": "a" * 32, "username": "alice"}
+
+        with mock.patch.object(index_view, "_load_job", return_value=job_payload), mock.patch.object(
+            index_view, "current_username", return_value="alice"
+        ):
+            job, error_response = index_view._load_owned_job(
+                request,
+                conn=None,
+                job_id="a" * 32,
+                missing_error="Upload job not found.",
+            )
+
+        self.assertEqual(job_payload, job)
+        self.assertIsNone(error_response)
 
     def test_start_import_thread_does_not_spawn_when_save_fails(self):
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
