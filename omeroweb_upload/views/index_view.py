@@ -282,7 +282,7 @@ def _start_upload(request, conn):
 @require_non_root_user
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
     try:
-        return _upload_files(request, job_id)
+        return _upload_files(request, job_id, conn)
     except Exception:
         logger.exception("Unhandled error while uploading files for job %s.", job_id)
         return json_error(errors.unexpected_server_error_uploading_files(), status=500)
@@ -293,6 +293,23 @@ def _find_job_upload_entry(job, rel_path):
         if entry.get("relative_path") == rel_path and entry.get("status") in ("pending", "error"):
             return entry
     return None
+
+
+def _job_owned_by_request(job, request, conn):
+    if not isinstance(job, dict):
+        return False
+    job_username = str(job.get("username") or "").strip()
+    request_username = str(current_username(request, conn) or "").strip()
+    return bool(job_username and request_username and job_username == request_username)
+
+
+def _load_owned_job(request, conn, job_id, missing_error):
+    if not _safe_job_id(job_id):
+        return None, json_error(missing_error)
+    job = _load_job(job_id)
+    if not job or not _job_owned_by_request(job, request, conn):
+        return None, json_error(missing_error)
+    return job, None
 
 
 def _parse_chunk_int(raw_value, field_name):
@@ -379,15 +396,15 @@ def _handle_chunk_upload(request, job_id, job, job_root):
                 bytes_written += len(chunk)
     except OSError as exc:
         logger.warning("Failed to save chunk for %s: %s", rel_path, exc)
-        save_error = errors.upload_file_save_failed(rel_path)
+        generic_error = errors.unexpected_server_error_uploading_files()
         updated_job = _apply_upload_updates(
             job_id,
-            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}],
-            [save_error],
+            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [generic_error]}],
+            [generic_error],
         )
         if not updated_job:
             return json_error(errors.unable_update_upload_job_state(), status=500)
-        return json_error(save_error, status=500)
+        return json_error(generic_error, status=500)
 
     expected_chunk_size = chunk_end - chunk_start
     if bytes_written != expected_chunk_size:
@@ -454,7 +471,7 @@ def _handle_chunk_upload(request, job_id, job, job_root):
     )
 
 
-def _upload_files(request, job_id):
+def _upload_files(request, job_id, conn):
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
 
@@ -463,10 +480,15 @@ def _upload_files(request, job_id):
         logger.warning("Upload root not writable for job %s.", job_id)
         return json_error(errors.upload_folder_not_writable())
 
-    job = _load_job(job_id)
-    if not job:
+    job, error_response = _load_owned_job(
+        request,
+        conn,
+        job_id,
+        errors.upload_job_not_found(),
+    )
+    if error_response:
         logger.warning("Upload job %s not found.", job_id)
-        return json_error(errors.upload_job_not_found())
+        return error_response
 
     job_root = upload_root / job_id
     if not _ensure_dir(job_root):
@@ -528,12 +550,12 @@ def _upload_files(request, job_id):
             updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
         except OSError as exc:
             logger.warning("Failed to save upload %s: %s", rel_path, exc)
-            save_error = errors.upload_file_save_failed(rel_path)
-            upload_errors.append(save_error)
+            generic_error = errors.unexpected_server_error_uploading_files()
+            upload_errors.append(generic_error)
             entry["status"] = "error"
-            entry.setdefault("errors", []).append(save_error)
+            entry.setdefault("errors", []).append(generic_error)
             updates.append(
-                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}
+                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [generic_error]}
             )
 
 
@@ -565,20 +587,25 @@ def _upload_files(request, job_id):
 @require_non_root_user
 def import_step(request, job_id, conn=None, url=None, **kwargs):
     try:
-        return _import_step(request, job_id)
+        return _import_step(request, job_id, conn)
     except Exception:
         logger.exception("Unhandled error while importing job %s.", job_id)
         return json_error(errors.unexpected_server_error_importing(), status=500)
 
 
-def _import_step(request, job_id):
+def _import_step(request, job_id, conn):
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
 
-    job = _load_job(job_id)
-    if not job:
+    job, error_response = _load_owned_job(
+        request,
+        conn,
+        job_id,
+        errors.import_job_not_found(),
+    )
+    if error_response:
         logger.warning("Import job %s not found.", job_id)
-        return json_error(errors.import_job_not_found())
+        return error_response
 
     if job.get("status") == "ready":
         _start_import_thread(job_id)
@@ -602,9 +629,14 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
-    job = _load_job(job_id)
-    if not job:
-        return json_error(errors.upload_job_not_found())
+    job, error_response = _load_owned_job(
+        request,
+        conn,
+        job_id,
+        errors.upload_job_not_found(),
+    )
+    if error_response:
+        return error_response
 
     if job.get("status") != "awaiting_confirmation":
         return JsonResponse({"ok": True, "status": job.get("status")})
@@ -627,9 +659,14 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
     if request.method != "POST":
         return json_error(errors.method_post_required())
 
-    job = _load_job(job_id)
-    if not job:
-        return json_error(errors.upload_job_not_found())
+    job, error_response = _load_owned_job(
+        request,
+        conn,
+        job_id,
+        errors.upload_job_not_found(),
+    )
+    if error_response:
+        return error_response
 
     payload = load_json_body(request)
     if not isinstance(payload, dict):
@@ -663,7 +700,7 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
                 continue
             file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
             if staged_error:
-                logger.warning("Refusing to remove unsafe staged file %s: %s", staged_path, staged_error)
+                logger.warning("Rejected staged prune target for job %s.", job_id)
                 continue
             try:
                 if file_path.exists():
@@ -709,9 +746,14 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_status(request, job_id, conn=None, url=None, **kwargs):
-    job = _load_job(job_id)
-    if not job:
-        return json_error(errors.upload_job_not_found())
+    job, error_response = _load_owned_job(
+        request,
+        conn,
+        job_id,
+        errors.upload_job_not_found(),
+    )
+    if error_response:
+        return error_response
 
     return JsonResponse(
         {

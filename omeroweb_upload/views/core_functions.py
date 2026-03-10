@@ -384,6 +384,7 @@ def _ensure_dir(path: Path) -> bool:
     Does NOT set permissions (uses defaults).
     """
     try:
+        path = path.resolve()
         path.mkdir(parents=True, exist_ok=True)
         return True
     except OSError as exc:
@@ -437,7 +438,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 def _job_path(job_id: str) -> Path:
     if not _safe_job_id(job_id):
-        raise ValueError(f"Invalid job id: {job_id}")
+        raise ValueError("Invalid job id.")
     return _get_jobs_root() / f"{job_id}.json"
 
 
@@ -559,12 +560,15 @@ def _refresh_job_status(job_dict):
 
 def _load_job(job_id: str):
     if not _safe_job_id(job_id):
-        logger.warning("Upload job id rejected as invalid: %s", job_id)
+        logger.warning(
+            "Upload job id rejected as invalid: %s",
+            sanitize_log_value(job_id),
+        )
         return None
     path = _job_path(job_id)
+    lock_path = _job_lock_path(job_id)
     if not path.exists():
         return None
-    lock_path = _job_lock_path(job_id)
     for attempt in range(5):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
@@ -616,7 +620,10 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
 
 def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
     if not _safe_job_id(job_id):
-        logger.warning("Refusing to update upload job with invalid id: %s", job_id)
+        logger.warning(
+            "Refusing to update upload job with invalid id: %s",
+            sanitize_log_value(job_id),
+        )
         return None
     path = _job_path(job_id)
     lock_path = _job_lock_path(job_id)
@@ -1225,7 +1232,6 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
     combined = "\n".join(part for part in (stdout, stderr) if part).lower()
     if (
         "proxy keep alive failed" in combined
-        or "ice.objectnotexistexception" in combined
         or "exception while executing ping()" in combined
         or 'operation = "keepallalive"' in combined
     ):
@@ -1567,8 +1573,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() raised: user=%s host=%s port=%s secure=%s error=%s lastError=%r",
-                service_user, host, port, secure, exc, last_err
+                "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
+                host, port, secure, exc, last_err
             )
             try:
                 conn.close()
@@ -1584,8 +1590,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() failed: user=%s host=%s port=%s secure=%s lastError=%r",
-                service_user, host, port, secure, last_err
+                "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
+                host, port, secure, last_err
             )
             try:
                 conn.close()
@@ -1789,12 +1795,17 @@ def _safe_job_id(value: str) -> bool:
 
 def _job_lock_path(job_id: str) -> Path:
     if not _safe_job_id(job_id):
-        raise ValueError(f"Invalid job id: {job_id}")
+        raise ValueError("Invalid job id.")
     return _get_jobs_root() / f".{job_id}.lock"
 
 
-def _fsync_jobs_directory():
-    path = _get_jobs_root()
+def _resolve_managed_child_path(root: Path, relative_path: str) -> Path:
+    target = (root / relative_path).resolve()
+    target.relative_to(root.resolve())
+    return target
+
+
+def _fsync_directory(path: Path):
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):
@@ -1803,6 +1814,10 @@ def _fsync_jobs_directory():
         os.fsync(dir_fd)
     finally:
         os.close(dir_fd)
+
+
+def _fsync_jobs_directory():
+    _fsync_directory(_get_jobs_root())
 
 
 def _read_job_file(job_id: str):
@@ -2542,11 +2557,13 @@ def _process_import_job(job_id: str):
                     "Import thread: processing batch %d-%d of %d for job %s",
                     start, start + len(batch), len(entries_to_import), job_id,
                 )
-                with ThreadPoolExecutor(max_workers=min(batch_size, len(batch))) as executor:
-                    futures = [
-                        executor.submit(
-                            _import_job_entry,
-                            entry,
+                # Serialize live imports through a single CLI process.
+                # The live stack shows intermittent OMERO.java/import-init failures when
+                # several imports start at once against the shared CLI home/session.
+                for entry_payload in batch:
+                    try:
+                        result = _import_job_entry(
+                            entry_payload,
                             upload_root,
                             session_key,
                             host,
@@ -2554,49 +2571,44 @@ def _process_import_job(job_id: str):
                             dataset_map,
                             orphan_dataset_name,
                         )
-                        for entry in batch
-                    ]
-                    for future in as_completed(futures):
-                        try:
-                            result = future.result()
-                        except Exception:
-                            logger.exception("Import future raised unexpected error")
-                            continue
-                        if not result or result.get("skip"):
-                            continue
-                        entry_index = result.get("index")
-                        if entry_index is None:
-                            continue
-                        entry = job.get("files", [])[entry_index]
+                    except Exception:
+                        logger.exception("Import future raised unexpected error")
+                        continue
+                    if not result or result.get("skip"):
+                        continue
+                    entry_index = result.get("index")
+                    if entry_index is None:
+                        continue
+                    entry = job.get("files", [])[entry_index]
 
-                        if result.get("status") == "error":
-                            entry["status"] = "error"
-                            entry_error = result.get("entry_error")
-                            if entry_error:
-                                entry.setdefault("errors", []).append(entry_error)
-                            if result.get("job_error"):
-                                _append_job_error(job, result["job_error"])
-                            if result.get("job_message"):
-                                _append_job_message(job, result["job_message"])
-                            # Count errored files as processed so the progress
-                            # bar reflects that the file has been attempted.
-                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                            _save_job(job)
-                            continue
+                    if result.get("status") == "error":
+                        entry["status"] = "error"
+                        entry_error = result.get("entry_error")
+                        if entry_error:
+                            entry.setdefault("errors", []).append(entry_error)
+                        if result.get("job_error"):
+                            _append_job_error(job, result["job_error"])
+                        if result.get("job_message"):
+                            _append_job_message(job, result["job_message"])
+                        # Count errored files as processed so the progress
+                        # bar reflects that the file has been attempted.
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        _save_job(job)
+                        continue
 
-                        if result.get("status") == "imported":
-                            rel_path = result.get("rel_path") or entry.get("relative_path")
-                            entry["status"] = "imported"
-                            job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                            if rel_path:
-                                _append_job_message(job, messages.imported_file(rel_path))
-                            file_path = result.get("file_path")
-                            if file_path:
-                                try:
-                                    file_path.unlink()
-                                except OSError as exc:
-                                    logger.warning("Failed to remove staged file %s: %s", file_path, exc)
-                            _save_job(job)
+                    if result.get("status") == "imported":
+                        rel_path = result.get("rel_path") or entry.get("relative_path")
+                        entry["status"] = "imported"
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        if rel_path:
+                            _append_job_message(job, messages.imported_file(rel_path))
+                        file_path = result.get("file_path")
+                        if file_path:
+                            try:
+                                file_path.unlink()
+                            except OSError as exc:
+                                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                        _save_job(job)
 
             job = _load_job(job_id) or job
             sem_edx_associations = job.get("sem_edx_associations") or {}
