@@ -99,13 +99,14 @@ def _resolve_hostname(check_id: str, label: str, host: str) -> DiagnosticCheckRe
     try:
         addresses = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
+        logger.warning("Failed to resolve hostname %s: %s", host, exc)
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status="fail",
             duration_ms=_elapsed_ms(start),
             summary=f"Unable to resolve host {host}",
-            details=str(exc),
+            details="DNS resolution failed.",
         )
     unique_ips = sorted({entry[4][0] for entry in addresses if entry and entry[4]})
     return DiagnosticCheckResult(
@@ -133,13 +134,14 @@ def _tcp_connect(
                 details="Socket opened and closed successfully.",
             )
     except OSError as exc:
+        logger.warning("TCP connection failed for %s:%s: %s", host, port, exc)
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status="fail",
             duration_ms=_elapsed_ms(start),
             summary=f"TCP connection failed ({host}:{port})",
-            details=str(exc),
+            details="Socket connection failed.",
         )
 
 
@@ -162,13 +164,14 @@ def _http_probe(
             details=f"{url} returned HTTP {status_code}",
         )
     except urllib.error.URLError as exc:
+        logger.warning("HTTP probe failed for %s: %s", url, exc)
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status="fail",
             duration_ms=_elapsed_ms(start),
             summary="HTTP probe failed",
-            details=f"{url}: {exc.reason}",
+            details="HTTP probe could not reach the target.",
         )
     status = "pass" if 200 <= status_code < 400 else "warn"
     return DiagnosticCheckResult(
@@ -248,13 +251,14 @@ def _compose_ps_health(
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
+        logger.warning("Failed to parse docker compose output for %s: %s", service, exc)
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status="warn",
             duration_ms=_elapsed_ms(start),
             summary=f"Failed to parse compose output for {service}",
-            details=f"JSON Decode Error: {exc}\nOutput: {stdout[:280]}",
+            details="Docker compose output was not valid JSON.",
         )
     records = payload if isinstance(payload, list) else [payload]
     if not records:
@@ -511,7 +515,7 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
         return {
             "script_id": script_id,
             "status": "fail",
-            "error": f"Failed to execute check: {exc}",
+            "error": "Failed to execute check due to an internal server error.",
             "checks": [],
         }
 

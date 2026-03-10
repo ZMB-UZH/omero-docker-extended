@@ -821,9 +821,7 @@ def _build_internal_file_query(
 ) -> str:
     """Build a Loki query for a specific internal log file."""
     normalized = _normalize_internal_service(service)
-    # LogQL label matcher strings use backslash escapes, so regex escapes must
-    # be doubled to survive string parsing (e.g., "\." -> "\\.").
-    escaped = re.escape(filename).replace("\\", "\\\\")
+    escaped = re.escape(filename)
     return f'{{compose_service="{normalized}", log_type="internal", {label_key}=~"(^|.*/){escaped}$"}}'
 
 
@@ -834,10 +832,7 @@ def _build_internal_files_query(
     if not filenames:
         raise ValueError("At least one filename is required for an internal log query.")
     normalized = _normalize_internal_service(service)
-    escaped_parts = [
-        re.escape(filename).replace("\\", "\\\\")
-        for filename in sorted(set(filenames))
-    ]
+    escaped_parts = [re.escape(filename) for filename in sorted(set(filenames))]
     pattern = "|".join(escaped_parts)
     return (
         f'{{compose_service="{normalized}", log_type="internal", '
