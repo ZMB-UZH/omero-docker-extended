@@ -443,7 +443,6 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 "last_log": ""
             })
 
-        seps_escaped = "".join(re.escape(c) for c in raw_seps)
         if separator_mode in ("regex", "ai_regex"):
             sep_pattern = raw_seps
         else:
