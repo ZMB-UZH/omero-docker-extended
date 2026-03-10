@@ -413,7 +413,6 @@ def index(request, conn=None, url=None, **kwargs):
     """
 
     try:
-        username = current_username(request, conn)
         user_id = _current_user_id(conn)
 
         def build_index_context(extra=None):

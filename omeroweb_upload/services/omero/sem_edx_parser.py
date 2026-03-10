@@ -314,8 +314,6 @@ class GeneticLabelPlacer:
         """
         Calculate fitness score (LOWER is better)
         """
-        score = 0.0
-        
         # Build bboxes
         bboxes = []
         for gene in chromosome.genes:
@@ -392,8 +390,7 @@ class GeneticLabelPlacer:
             if dist > 300:
                 bounds_penalty += (dist - 300) * 50
         
-        score = overlap_penalty + crossing_penalty + distance_penalty + bounds_penalty
-        return score
+        return overlap_penalty + crossing_penalty + distance_penalty + bounds_penalty
     
     def tournament_selection(self, population: List[Chromosome], tournament_size: int = 3) -> Chromosome:
         """Select parent using tournament selection"""
@@ -723,7 +720,7 @@ def create_edx_spectrum_plot(
             if nearest:
                 peak_x, peak_y = nearest
                 
-                annotation = ax.annotate(
+                ax.annotate(
                     '',
                     xy=(peak_x, peak_y),
                     xytext=(label_x, label_y),
@@ -738,7 +735,7 @@ def create_edx_spectrum_plot(
                 )
         
         # Draw the label box
-        annotation = ax.annotate(
+        ax.annotate(
             symbol,
             xy=(center_energy, spectrum_y),
             xytext=(label_x, label_y),
