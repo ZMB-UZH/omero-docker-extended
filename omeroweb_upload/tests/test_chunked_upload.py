@@ -155,6 +155,60 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
     assert staged_target.read_bytes() == b"abc"
 
 
+def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    job_id = "6c5e44cf71ab4836962b0fe2665783f4"
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/big.bin",
+                "staged_path": "../escape.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+
+    apply_upload_updates_called = []
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda *args, **kwargs: apply_upload_updates_called.append((args, kwargs)),
+    )
+
+    factory = RequestFactory()
+    request = factory.post(
+        f"/omeroweb_upload/upload/{job_id}/",
+        data={
+            "upload_mode": "chunked",
+            "relative_path": "folder/big.bin",
+            "chunk_start": "0",
+            "chunk_end": "5",
+            "file_size": "5",
+            "is_last_chunk": "1",
+            "file": SimpleUploadedFile("big.bin", b"hello"),
+        },
+    )
+
+    response = index_view._upload_files(request, job_id)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 400
+    assert payload["ok"] is False
+    assert "Invalid" in payload["error"]
+    assert apply_upload_updates_called == []
+    assert not (tmp_path / "escape.bin").exists()
+    assert not (upload_root / job_id / "folder/big.bin").exists()
+
+
 def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypatch):
     request = RequestFactory().post("/omeroweb_upload/upload/test-job/")
 
