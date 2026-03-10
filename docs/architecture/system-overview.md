@@ -13,6 +13,7 @@ Stateful backend providing the OMERO API, image storage, script execution, and d
 - Custom Dockerfile (`docker/omero-server.Dockerfile`) based on `openmicroscopy/omero-server`.
 - Installs CLI plugins: omero-cli-render, omero-metadata, omero-cli-duplicate, omero-rdf.
 - Installs OMERO.Figure PDF export support (reportlab, markdown).
+- Installs pinned `pytest` in the OMERO.server virtualenv for in-container regression checks.
 - Clones official OME scripts and BIOP scripts during build.
 - Bootstrap script (`startup/10-server-bootstrap.sh`) configures Python path, TLS certificates, job-service user, OMERO.Figure scripts, and registers official scripts.
 - Optional runtime installations: OMERO.downloader (`startup/50-install-omero-downloader.sh`) and ImarisConvertBioformats (`startup/51-install-imarisconvert.sh`).
@@ -25,7 +26,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 
 - Custom Dockerfile (`docker/omero-web.Dockerfile`) based on `openmicroscopy/omero-web-standalone`.
 - Installs all four plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
-- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export).
+- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export), and pinned `pytest` for in-container plugin regression tests.
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web and the Imaris Celery worker as two supervised processes.
 - Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.

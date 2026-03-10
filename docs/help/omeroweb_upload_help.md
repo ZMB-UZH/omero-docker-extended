@@ -25,6 +25,7 @@ The Upload plugin provides staged browser-based upload into server-side storage,
 
 - Upload and import are separate phases.
 - This improves error isolation and operational visibility.
+- Large files are transferred in smaller chunks rather than one oversized browser request.
 
 ### Project targeting
 
@@ -54,7 +55,7 @@ Recommendations:
 ## Troubleshooting
 
 - **Project list unavailable**: verify OMERO session and permissions.
-- **Upload stalls/fails**: retry smaller batches and check network/session state.
+- **Upload stalls/fails**: check OMERO.web logs and any reverse proxy in front of OMERO.web; large files now use chunked transfer, so repeated failures usually indicate server-side limits or storage problems rather than browser batching.
 - **Import failures**: inspect status log details; retry failed subsets.
 - **Unexpected auto-skip**: review compatibility rules and file naming/content assumptions.
 
