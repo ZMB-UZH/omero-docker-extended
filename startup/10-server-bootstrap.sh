@@ -679,14 +679,17 @@ install_figure_script() {
             log "OMERO.Figure script already present (version ${current_version})"
             return
         fi
-        log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); reinstalling"
-        rm -f "${script_path}"
+        log "OMERO.Figure script version mismatch (${current_version} != ${figure_version}); attempting upgrade"
     fi
 
     rm -rf "${tmp_dir}"
     mkdir -p "${tmp_dir}"
 
-    log "Installing OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
+    # Download the requested version into a staging file.
+    # CRITICAL: Do NOT delete the existing script until the new one is confirmed.
+    local staged_script="${tmp_dir}/Figure_To_Pdf.py"
+
+    log "Downloading OMERO.Figure Figure_To_Pdf.py (version ${figure_version})"
     if command -v git >/dev/null 2>&1; then
         git clone --depth 1 --branch "v${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
             || git clone --depth 1 --branch "${figure_version}" https://github.com/ome/omero-figure.git "${tmp_dir}/repo" >/dev/null 2>&1 \
@@ -694,18 +697,27 @@ install_figure_script() {
     fi
 
     if [[ -f "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
-        cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+        cp "${tmp_dir}/repo/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${staged_script}"
     else
         local url="https://github.com/ome/omero-figure/archive/refs/tags/v${figure_version}.tar.gz"
-        curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz"
-        tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}"
+        if curl -fsSL "${url}" -o "${tmp_dir}/figure.tar.gz" 2>/dev/null; then
+            tar -xzf "${tmp_dir}/figure.tar.gz" -C "${tmp_dir}" 2>/dev/null || true
+        fi
         local extracted
         extracted="$(find "${tmp_dir}" -maxdepth 1 -type d -name "omero-figure-*${figure_version}*" | head -n 1 || true)"
-        if [[ -z "${extracted}" || ! -f "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
-            echo "ERROR: Failed to obtain Figure_To_Pdf.py for OMERO.Figure ${figure_version}" >&2
-            exit 1
+        if [[ -n "${extracted}" && -f "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" ]]; then
+            cp "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${staged_script}"
         fi
-        cp "${extracted}/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py" "${script_path}"
+    fi
+
+    # Only replace the existing script if the download succeeded.
+    if [[ -f "${staged_script}" ]]; then
+        cp -f "${staged_script}" "${script_path}"
+        log "Installed OMERO.Figure script at ${script_path} (version ${figure_version})"
+    elif [[ -f "${script_path}" ]]; then
+        log "WARN: Could not download OMERO.Figure ${figure_version}; keeping existing script at ${script_path}"
+    else
+        log "ERROR: No Figure_To_Pdf.py available and download of version ${figure_version} failed"
     fi
 
     rm -rf "${tmp_dir}"
@@ -714,8 +726,6 @@ install_figure_script() {
         chown -R "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
     fi
     chmod -R a+rX "${SERVER_HOME}/lib/scripts" 2>/dev/null || true
-
-    log "Installed OMERO.Figure script at ${script_path}"
 }
 
 schedule_script_registration() {
@@ -758,18 +768,16 @@ def sync_scripts(conn, script_dir):
         print(f"Failed to get existing scripts: {e}")
         return
 
-    # Create a map of filename -> list of existing Script/OriginalFile objects
-    # for duplicate cleanup and path normalization.
+    # Build a map of filename -> list of (OriginalFile, full_db_path) tuples.
+    # OriginalFile.name is the filename, OriginalFile.path is the directory.
     script_map = {}
     for s in existing_scripts:
-        name = s.name.val if hasattr(s.name, 'val') else s.name
-        path = s.path.val if hasattr(s.path, 'val') else s.path
-        if not path:
-            continue
-        basename = os.path.basename(path)
-        if basename not in script_map:
-            script_map[basename] = []
-        script_map[basename].append(s)
+        fname = s.name.val if hasattr(s.name, 'val') else str(s.name)
+        dirpath = s.path.val if hasattr(s.path, 'val') else str(s.path)
+        full_db_path = (dirpath.rstrip("/") + "/" + fname).lstrip("/")
+        if fname not in script_map:
+            script_map[fname] = []
+        script_map[fname].append((s, full_db_path))
 
     scripts_root = os.path.dirname(script_dir)
 
@@ -778,60 +786,61 @@ def sync_scripts(conn, script_dir):
         for file in files:
             if not file.endswith('.py'):
                 continue
-            
+
             filepath = os.path.join(root, file)
-            basename = file
             desired_path = os.path.relpath(filepath, scripts_root).replace('\\', '/')
-            
-            # If duplicates exist (e.g. user uploaded test script), we delete them all and re-upload the official one
-            # Alternatively, if there is exactly 1 and it's official, we leave it.
-            # But the simplest idempotent way that guarantees exact match is to replace or delete/upload.
-            
-            existing = script_map.get(basename, [])
-            
+
+            existing = script_map.get(file, [])
+
             if len(existing) == 1:
-                existing_path = existing[0].path.val if hasattr(existing[0].path, 'val') else existing[0].path
-                if existing_path == desired_path:
-                    # Expected path already present; nothing to fix.
-                    print(f"[{basename}] exists once with expected path ({desired_path}).")
+                _, db_path = existing[0]
+                if db_path == desired_path:
+                    print(f"[{file}] OK (path={desired_path})")
                     continue
 
-                # Path mismatch (e.g. legacy absolute /opt/... path). Replace to keep
-                # script UI hierarchy deterministic under a single `omero/` root.
-                print(
-                    f"[{basename}] path mismatch (existing={existing_path}, expected={desired_path}); replacing..."
-                )
-                existing = [existing[0]]
-                
-            if len(existing) > 1:
-                # Duplicates detected! This causes the exact bug the user faced.
-                print(f"[{basename}] has {len(existing)} duplicates! Cleaning them up...")
-                update_service = conn.getUpdateService()
-                for s in existing:
+                # Path mismatch (e.g. legacy absolute path). Delete and re-upload.
+                print(f"[{file}] path mismatch (db={db_path}, expected={desired_path}); will replace")
+                # Fall through to duplicate cleanup which handles deletion + re-upload
+
+            if len(existing) >= 1 and not (len(existing) == 1 and existing[0][1] == desired_path):
+                # Delete all copies so we can re-upload with the correct path
+                print(f"[{file}] removing {len(existing)} stale/duplicate DB entries")
+                for s_obj, db_path in existing:
                     try:
-                        print(f"Deleting duplicate script ID: {s.id.val}")
-                        # Scripts are OriginalFiles. We must delete the OriginalFile.
-                        conn.deleteObjects("OriginalFile", [s.id.val], deleteChildren=True, wait=True)
+                        sid = s_obj.id.val
+                        print(f"  Deleting script ID {sid} (path={db_path})")
+                        conn.deleteObjects("OriginalFile", [sid], deleteChildren=True, wait=True)
                     except Exception as e:
-                        print(f"Failed to delete script ID {s.id.val}: {e}")
-                
-            # If 0 or we just deleted all of them, upload exactly once
-            if len(existing) != 1:
-                print(f"[{basename}] Uploading as official script...")
+                        print(f"  Failed to delete script ID {sid}: {e}")
+
+                # Upload the correct version
+                print(f"[{file}] uploading as official script: {desired_path}")
                 cmd = (
-                    "omero script upload --official --sudo root "
-                    f"'{filepath}' --name '{desired_path}' "
+                    f"omero script upload --official --sudo root "
+                    f"'{filepath}' "
                     f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
                 )
-                os.system(cmd)
+                rc = os.system(cmd)
+                if rc != 0:
+                    print(f"  WARN: upload returned exit code {rc}")
+            elif len(existing) == 0:
+                print(f"[{file}] not registered; uploading as official script: {desired_path}")
+                cmd = (
+                    f"omero script upload --official --sudo root "
+                    f"'{filepath}' "
+                    f"-s localhost -p 4064 -u root -w '{sys.argv[1]}'"
+                )
+                rc = os.system(cmd)
+                if rc != 0:
+                    print(f"  WARN: upload returned exit code {rc}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         sys.exit(1)
-    
+
     root_pass = sys.argv[1]
     script_dir = sys.argv[2]
-    
+
     conn = BlitzGateway('root', root_pass, host='localhost', port=4064)
     try:
         if conn.connect():
@@ -846,8 +855,8 @@ EOF
         local venv_py
         venv_py="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)/bin/python"
         
-        # Run the idempotent sync script
-        runuser -u "${OMERO_CLI_USER}" -- "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" >/dev/null 2>&1 || true
+        # Run the idempotent sync script (output goes to the log file via the subshell redirect)
+        runuser -u "${OMERO_CLI_USER}" -- "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
 
         rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
