@@ -28,10 +28,30 @@ from ..services.core import (
     extract_acquisition_metadata,
 )
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_request_data, require_non_root_user
+from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
+_UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
+
+
+def _is_safe_separator_regex(pattern):
+    if not isinstance(pattern, str):
+        return False
+    if not pattern or len(pattern) > 128:
+        return False
+    return _UNSAFE_SEPARATOR_REGEX_RE.search(pattern) is None
+
+
+def _job_owned_by_request(job, request, conn):
+    if not isinstance(job, dict):
+        return False
+    job_username = str(job.get("username") or "").strip()
+    if not job_username:
+        # Backward compatibility for pre-hardening jobs/tests that did not persist ownership.
+        return True
+    username = str(current_username(request, conn) or "").strip()
+    return bool(username and job_username == username)
 
 
 def parse_image_ids(raw_ids):
@@ -161,9 +181,15 @@ def start_job(request, conn=None, url=None, **kwargs):
             separator_mode = "chars"
 
         if separator_mode in ("regex", "ai_regex"):
+            if not _is_safe_separator_regex(raw_seps):
+                return JsonResponse(
+                    {"error": error_messages.invalid_regex_pattern_title()},
+                    status=400,
+                )
             try:
                 re.compile(raw_seps)
-            except re.error:
+            except re.error as e:
+                logger.warning("Rejected invalid regex pattern for job start: %s", e)
                 return JsonResponse({"error": error_messages.invalid_regex_pattern()}, status=400)
 
         if delete_mode not in ("keep", "all", "plugin"):
@@ -186,6 +212,7 @@ def start_job(request, conn=None, url=None, **kwargs):
         # *** FIXED: DO NOT OVERRIDE separator / var_names / delete_mode ***
         job = {
             "job_id": job_id,
+            "username": current_username(request, conn),
             "project_id": int(project_id),
             "separator": raw_seps,
             "var_names": var_names,
@@ -243,6 +270,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 
         job = {
             "job_id": job_id,
+            "username": current_username(request, conn),
             "type": "acq",       # <-- DO NOT CHANGE THIS
             "project_id": int(project_id),
             "image_ids": image_ids,
@@ -308,6 +336,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 
         job = {
             "job_id": job_id,
+            "username": current_username(request, conn),
             "type": "del_all",
             "project_id": int(project_id),
             "image_ids": image_ids,
@@ -373,6 +402,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 
         job = {
             "job_id": job_id,
+            "username": current_username(request, conn),
             "type": "del_plugin",
             "project_id": int(project_id),
             "image_ids": image_ids,
@@ -402,9 +432,12 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def job_progress(request, job_id, conn=None, url=None, **kwargs):
+    lk = None
     try:
         job = load_job(job_id)
         if job is None:
+            return JsonResponse({"error": error_messages.unknown_job(), "finished": True}, status=404)
+        if not _job_owned_by_request(job, request, conn):
             return JsonResponse({"error": error_messages.unknown_job(), "finished": True}, status=404)
 
         lockfile = _job_lock_path(job_id)
@@ -444,6 +477,11 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             })
 
         if separator_mode in ("regex", "ai_regex"):
+            if not _is_safe_separator_regex(raw_seps):
+                return JsonResponse(
+                    {"error": error_messages.invalid_regex_pattern_title(), "finished": True},
+                    status=400,
+                )
             sep_pattern = raw_seps
         else:
             seps_escaped = "".join(re.escape(c) for c in raw_seps)
@@ -657,6 +695,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
     finally:
         try:
-            lk.release()
+            if lk is not None:
+                lk.release()
         except Exception as exc:
             logger.debug("Suppressed non-fatal exception in job_view.py", exc_info=exc)

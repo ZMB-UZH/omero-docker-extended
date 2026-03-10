@@ -27,12 +27,11 @@ logger = logging.getLogger(__name__)
 
 def _build_failure_meta(exc: Exception) -> dict[str, str]:
     """Build metadata dictionary for failed tasks."""
-    exc_message = str(exc)
     return {
         "exc_type": exc.__class__.__name__,
         "exc_module": exc.__class__.__module__,
-        "exc_message": exc_message,
-        "error": exc_message,
+        "exc_message": "IMS export job failed.",
+        "error": "IMS export job failed.",
     }
 
 
@@ -64,6 +63,31 @@ def _extract_cli_outputs(text: str) -> dict[str, str]:
         if key:
             outputs[key] = value
     return outputs
+
+
+def _get_connection_session_key(conn) -> str | None:
+    """Return the current OMERO session key from a connected gateway."""
+    if conn is None:
+        return None
+    for attr_name in ("getSessionId",):
+        getter = getattr(conn, attr_name, None)
+        if callable(getter):
+            try:
+                session_id = getter()
+                if session_id:
+                    return str(session_id)
+            except Exception:
+                pass
+    client = getattr(conn, "c", None)
+    getter = getattr(client, "getSessionId", None)
+    if callable(getter):
+        try:
+            session_id = getter()
+            if session_id:
+                return str(session_id)
+        except Exception:
+            pass
+    return None
 
 
 def _run_script_via_omero_cli(
@@ -130,18 +154,29 @@ def _run_script_via_omero_cli(
 
     if result.returncode != 0:
         snippet = combined[-2000:] if combined else ""
+        logger.error(
+            "OMERO CLI fallback failed script_id=%s image_id=%s exit_code=%s output_tail=%s",
+            script_id,
+            image_id,
+            result.returncode,
+            snippet,
+        )
         raise RuntimeError(
-            "OMERO CLI fallback failed with exit code "
-            f"{result.returncode}. Output tail:\n{snippet}"
+            "IMS export CLI fallback failed."
         )
 
     if outputs.get("Export_Path"):
         return outputs
 
     snippet = combined[-2000:] if combined else ""
+    logger.error(
+        "OMERO CLI fallback returned no export path script_id=%s image_id=%s output_tail=%s",
+        script_id,
+        image_id,
+        snippet,
+    )
     raise RuntimeError(
-        "OMERO CLI fallback did not return Export_Path output. "
-        f"Output tail:\n{snippet}"
+        "IMS export CLI fallback returned no export path."
     )
 
 
@@ -237,11 +272,11 @@ def _open_job_service_connection(host, port, secure=None):
         if not conn.connect():
             raise RuntimeError("Failed to connect to OMERO with job-service credentials.")
         conn.SERVICE_OPTS.setOmeroGroup("-1")
-        logger.debug("Successfully connected to OMERO as job-service=%s", username)
+        logger.debug("Successfully connected to OMERO using the job-service account.")
         return conn
     except Exception as e:
         logger.error("Failed to open OMERO job-service session: %s", e)
-        raise RuntimeError(f"Failed to open OMERO job-service session: {e}") from e
+        raise RuntimeError("Failed to open OMERO job-service session.") from e
 
 
 @app.task(bind=True, name="omeroweb_imaris_connector.run_ims_export_task")
@@ -346,14 +381,15 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
 
             cli_outputs = None
             if use_job_service_session():
-                username, password = get_job_service_credentials()
+                session_key = _get_connection_session_key(conn)
+                if not session_key:
+                    raise RuntimeError("IMS export job-service session key unavailable.")
                 cli_outputs = _run_script_via_omero_cli(
                     script_id=script_id,
                     image_id=image_id,
                     host=host,
                     port=port,
-                    username=username,
-                    password=password,
+                    session_key=session_key,
                 )
             else:
                 cli_outputs = _run_script_via_omero_cli(
