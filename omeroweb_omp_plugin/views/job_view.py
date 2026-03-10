@@ -29,7 +29,7 @@ from ..services.core import (
 )
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..views.utils import load_request_data, require_non_root_user
-from ..strings import errors
+from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def _resolve_omero_host_port(conn):
 
 def _validate_user_password(conn, password):
     if not password:
-        return False, errors.missing_password()
+        return False, error_messages.missing_password()
 
     username = conn.getUser().getName()
     host, port = _resolve_omero_host_port(conn)
@@ -82,14 +82,14 @@ def _validate_user_password(conn, password):
             host,
             port,
         )
-        return False, errors.validation_unavailable()
+        return False, error_messages.validation_unavailable()
 
     client = omero.client(host=host, port=port)
     try:
         client.createSession(username, password)
     except Exception as exc:
         logger.warning("Password validation failed for user %s: %s", username, exc)
-        return False, errors.wrong_password()
+        return False, error_messages.wrong_password()
     finally:
         try:
             client.closeSession()
@@ -137,7 +137,7 @@ def _save_annotation_link(update, link):
 def start_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data = load_request_data(request)
 
@@ -164,13 +164,13 @@ def start_job(request, conn=None, url=None, **kwargs):
             try:
                 re.compile(raw_seps)
             except re.error as e:
-                return JsonResponse({"error": errors.invalid_regex_pattern(e)}, status=400)
+                return JsonResponse({"error": error_messages.invalid_regex_pattern(e)}, status=400)
 
         if delete_mode not in ("keep", "all", "plugin"):
             delete_mode = "keep"
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id_lower()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
@@ -212,7 +212,7 @@ def start_job(request, conn=None, url=None, **kwargs):
 def start_acq_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data = load_request_data(request)
 
@@ -229,7 +229,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id_lower()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         allowed, remaining = check_major_action_rate_limit(request, conn)
@@ -271,7 +271,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 def start_delete_all_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data = load_request_data(request)
 
@@ -289,7 +289,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id_lower()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
 
         valid, error = _validate_user_password(conn, password)
         if not valid:
@@ -336,7 +336,7 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data = load_request_data(request)
 
@@ -354,7 +354,7 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id_lower()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
 
         valid, error = _validate_user_password(conn, password)
         if not valid:
@@ -405,7 +405,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
     try:
         job = load_job(job_id)
         if job is None:
-            return JsonResponse({"error": errors.unknown_job(), "finished": True}, status=404)
+            return JsonResponse({"error": error_messages.unknown_job(), "finished": True}, status=404)
 
         lockfile = _job_lock_path(job_id)
         try:
