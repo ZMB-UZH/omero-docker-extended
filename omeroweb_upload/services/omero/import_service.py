@@ -391,8 +391,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() raised: user=%s host=%s port=%s secure=%s error=%s lastError=%r",
-                service_user, host, port, secure, exc, last_err
+                "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
+                host, port, secure, exc, last_err
             )
             try:
                 conn.close()
@@ -408,8 +408,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() failed: user=%s host=%s port=%s secure=%s lastError=%r",
-                service_user, host, port, secure, last_err
+                "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
+                host, port, secure, last_err
             )
             try:
                 conn.close()

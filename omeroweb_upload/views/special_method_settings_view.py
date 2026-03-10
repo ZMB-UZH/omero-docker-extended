@@ -52,6 +52,7 @@ def save_settings(request, conn=None, url=None, **kwargs):
             "settings": normalized,
         })
     except UserSettingsStoreError:
+        logger.exception("Special method settings store failure on save.")
         return JsonResponse({"error": errors.special_method_settings_save_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error saving special method settings: %s", e)
@@ -81,6 +82,7 @@ def load_settings(request, conn=None, url=None, **kwargs):
             "settings": settings,
         })
     except UserSettingsStoreError:
+        logger.exception("Special method settings store failure on load.")
         return JsonResponse({"error": errors.special_method_settings_load_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error loading special method settings: %s", e)

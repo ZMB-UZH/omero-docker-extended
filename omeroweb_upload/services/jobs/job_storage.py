@@ -16,10 +16,13 @@ logger = logging.getLogger(__name__)
 INT_SANITIZER = re.compile(r"[^0-9]")
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
+JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
 
 
 def get_job_path(job_id: str, jobs_root: Path) -> Path:
     """Get filesystem path for job file."""
+    if not safe_job_id(job_id):
+        raise ValueError("Invalid job id.")
     return jobs_root / f"{job_id}.json"
 
 
@@ -122,7 +125,10 @@ def refresh_job_status(job_dict):
 
 def load_job(job_id: str, jobs_root: Path):
     """Load job data from filesystem."""
-    path = get_job_path(job_id, jobs_root)
+    try:
+        path = get_job_path(job_id, jobs_root)
+    except ValueError:
+        return None
     if not path.exists():
         return None
     try:
@@ -165,7 +171,10 @@ def save_job(job_dict, jobs_root: Path, retries: int = 5, timeout: float = 2.0):
 
 def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = 5, timeout: float = 2.0):
     """Atomically update job with function."""
-    path = get_job_path(job_id, jobs_root)
+    try:
+        path = get_job_path(job_id, jobs_root)
+    except ValueError:
+        return None
     for attempt in range(retries):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
@@ -196,8 +205,6 @@ def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = 5,
 
 def safe_job_id(value: str) -> bool:
     """Validate job ID format."""
-    import re
-    JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
     return bool(value and JOB_ID_SANITIZER.match(value))
 
 

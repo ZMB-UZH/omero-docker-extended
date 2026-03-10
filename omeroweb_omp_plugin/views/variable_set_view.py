@@ -34,6 +34,7 @@ def list_sets(request, conn=None, url=None, **kwargs):
         sets = list_variable_sets(username)
         return JsonResponse({"sets": sets})
     except VariableStoreError:
+        logger.exception("Variable store failure while listing sets.")
         return JsonResponse({"error": errors.variable_sets_fetch_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error listing sets: %s", e)
@@ -92,6 +93,7 @@ def save_set(request, conn=None, url=None, **kwargs):
         return JsonResponse({"message": messages.variable_set_saved_response()})
 
     except VariableStoreError:
+        logger.exception("Variable store failure while saving set.")
         return JsonResponse({"error": errors.variable_set_save_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error saving set: %s", e)
@@ -124,6 +126,7 @@ def load_set(request, conn=None, url=None, **kwargs):
 
         return JsonResponse({"var_names": var_names})
     except VariableStoreError:
+        logger.exception("Variable store failure while loading set.")
         return JsonResponse({"error": errors.variable_set_load_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error loading set: %s", e)
@@ -153,6 +156,7 @@ def delete_set(request, conn=None, url=None, **kwargs):
         return JsonResponse({"ok": True})
 
     except VariableStoreError:
+        logger.exception("Variable store failure while deleting set.")
         return JsonResponse({"error": errors.variable_set_delete_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error deleting set: %s", e)

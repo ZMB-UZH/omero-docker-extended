@@ -5,6 +5,7 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
+_UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
 
 
 def parse_filename(filename, sep_pattern):
@@ -29,5 +30,11 @@ def parse_filename(filename, sep_pattern):
         else:
             base_name = filename.rsplit(".", 1)[0]
 
+    if (
+        not isinstance(sep_pattern, str)
+        or len(sep_pattern) > 128
+        or _UNSAFE_SEPARATOR_REGEX_RE.search(sep_pattern)
+    ):
+        raise ValueError("Invalid separator regex.")
     parts = [p for p in re.split(sep_pattern, base_name) if p]
     return parts

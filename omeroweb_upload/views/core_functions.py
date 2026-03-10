@@ -384,6 +384,7 @@ def _ensure_dir(path: Path) -> bool:
     Does NOT set permissions (uses defaults).
     """
     try:
+        path = path.resolve()
         path.mkdir(parents=True, exist_ok=True)
         return True
     except OSError as exc:
@@ -437,7 +438,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 def _job_path(job_id: str) -> Path:
     if not _safe_job_id(job_id):
-        raise ValueError(f"Invalid job id: {job_id}")
+        raise ValueError("Invalid job id.")
     return _get_jobs_root() / f"{job_id}.json"
 
 
@@ -562,9 +563,9 @@ def _load_job(job_id: str):
         logger.warning("Upload job id rejected as invalid: %s", job_id)
         return None
     path = _job_path(job_id)
+    lock_path = _job_lock_path(job_id)
     if not path.exists():
         return None
-    lock_path = _job_lock_path(job_id)
     for attempt in range(5):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
@@ -1567,8 +1568,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() raised: user=%s host=%s port=%s secure=%s error=%s lastError=%r",
-                service_user, host, port, secure, exc, last_err
+                "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
+                host, port, secure, exc, last_err
             )
             try:
                 conn.close()
@@ -1584,8 +1585,8 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
                 last_err = None
 
             logger.error(
-                "job-service connect() failed: user=%s host=%s port=%s secure=%s lastError=%r",
-                service_user, host, port, secure, last_err
+                "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
+                host, port, secure, last_err
             )
             try:
                 conn.close()
@@ -1789,12 +1790,17 @@ def _safe_job_id(value: str) -> bool:
 
 def _job_lock_path(job_id: str) -> Path:
     if not _safe_job_id(job_id):
-        raise ValueError(f"Invalid job id: {job_id}")
+        raise ValueError("Invalid job id.")
     return _get_jobs_root() / f".{job_id}.lock"
 
 
-def _fsync_jobs_directory():
-    path = _get_jobs_root()
+def _resolve_managed_child_path(root: Path, relative_path: str) -> Path:
+    target = (root / relative_path).resolve()
+    target.relative_to(root.resolve())
+    return target
+
+
+def _fsync_directory(path: Path):
     try:
         dir_fd = os.open(path, os.O_DIRECTORY)
     except (AttributeError, OSError):
@@ -1803,6 +1809,10 @@ def _fsync_jobs_directory():
         os.fsync(dir_fd)
     finally:
         os.close(dir_fd)
+
+
+def _fsync_jobs_directory():
+    _fsync_directory(_get_jobs_root())
 
 
 def _read_job_file(job_id: str):

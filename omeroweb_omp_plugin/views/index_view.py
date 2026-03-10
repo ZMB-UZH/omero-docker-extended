@@ -530,7 +530,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
-            except AiCredentialStoreError:
+            except AiCredentialStoreError as e:
+                logger.exception("AI credential lookup failed for regex generation: %s", e)
                 return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
@@ -541,7 +542,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 result = generate_ai_regex(provider, api_key, filenames, model=model or None)
-            except AiAssistError:
+            except AiAssistError as e:
+                logger.warning("AI regex request rejected: %s", e)
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
                 logger.exception("AI regex provider failure: %s", e)
@@ -625,7 +627,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
-            except AiCredentialStoreError:
+            except AiCredentialStoreError as e:
+                logger.exception("AI credential lookup failed for AI parse: %s", e)
                 return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
@@ -633,7 +636,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None, custom_instructions=custom_instructions)
-            except AiAssistError:
+            except AiAssistError as e:
+                logger.warning("AI parse request rejected: %s", e)
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
                 logger.exception("AI parse provider failure: %s", e)
@@ -758,7 +762,8 @@ def index(request, conn=None, url=None, **kwargs):
 
                 try:
                     parsed_rows = json.loads(raw_ai_parsed)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.warning("Invalid AI parsing data payload: %s", e)
                     return HttpResponse(
                         "<h2 style='color:red;'>Invalid AI parsing data</h2>"
                         f"<p>{errors.invalid_ai_parsing_data()}</p>"
@@ -786,7 +791,8 @@ def index(request, conn=None, url=None, **kwargs):
 
                 try:
                     re.compile(sep_pattern)
-                except re.error:
+                except re.error as e:
+                    logger.warning("Rejected invalid regex pattern: %s", e)
                     return HttpResponse(
                         f"<h2 style='color:red;'>{errors.invalid_regex_pattern_title()}</h2>"
                         f"<p>{errors.invalid_regex_pattern()}</p>"

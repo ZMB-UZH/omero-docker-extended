@@ -12,6 +12,7 @@ from html import escape
 from http.cookies import SimpleCookie
 from http.client import HTTPConnection
 from http.client import HTTPMessage
+from urllib.parse import quote
 from urllib.parse import urlparse
 from urllib.parse import urlencode
 from dataclasses import asdict
@@ -29,6 +30,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitize_url_for_logging
 
 from ..config import optional_log_config
 from ..services.log_query import (
@@ -51,7 +53,7 @@ from .utils import current_username, require_root_user
 
 logger = logging.getLogger(__name__)
 LOG_TABLE_ROW_CAP = 5000
-_SAFE_REDIRECT_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def _to_int_env(name: str, default: int) -> int:
@@ -78,6 +80,36 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
         return {"ok": False, "status": 0, "error": "Connection failed"}
 
 
+def _normalize_proxy_prefix(proxy_prefix: str) -> str:
+    stripped = str(proxy_prefix or "").strip().strip("/")
+    return f"/{stripped}" if stripped else ""
+
+
+def _safe_redirect_segment(value: str, default: str) -> str:
+    cleaned = _SAFE_REDIRECT_SEGMENT_RE.sub("-", str(value or "").strip()).strip(".-")
+    return cleaned or default
+
+
+def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
+    raw_target = str(subpath or "").strip()
+    forwarded_query = ""
+    if raw_target.startswith(("http://", "https://")):
+        parsed = urlparse(raw_target)
+        raw_target = parsed.path
+        forwarded_query = parsed.query
+    decoded = urllib.parse.unquote(raw_target or "")
+    if "\x00" in decoded:
+        raise ValueError("Invalid proxy target")
+    segments = []
+    for segment in decoded.split("/"):
+        if not segment or segment == ".":
+            continue
+        if segment == "..":
+            raise ValueError("Invalid proxy target")
+        segments.append(segment)
+    return "/".join(segments), forwarded_query
+
+
 def _proxy_http_request(
     django_request,
     base_url: str,
@@ -88,18 +120,17 @@ def _proxy_http_request(
     rewrite_origin_headers: bool = False,
 ) -> HttpResponse:
     """Proxy an HTTP request to a backend URL and return the response body."""
-    target_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-    if query:
-        target_url = f"{target_url}?{query}"
-
-    # FIX: Validate that the constructed target_url matches the base_url's scheme and netloc (CodeQL #90)
-    # This prevents SSRF where path traversal or scheme injection might redirect requests.
     try:
+        normalized_path, _ignored_query = _normalize_proxy_request_target(path)
         base_parsed = urllib.parse.urlparse(base_url)
+        if base_parsed.scheme not in {"http", "https"} or not base_parsed.netloc:
+            return JsonResponse({"error": "Invalid proxy target"}, status=400)
+        target_url = f"{base_url.rstrip('/')}/{normalized_path}" if normalized_path else base_url.rstrip("/") + "/"
+        if query:
+            target_url = f"{target_url}?{query}"
         target_parsed = urllib.parse.urlparse(target_url)
-        if (target_parsed.scheme != base_parsed.scheme or 
-            target_parsed.netloc != base_parsed.netloc):
-             return JsonResponse({"error": "Invalid proxy target"}, status=400)
+        if target_parsed.scheme != base_parsed.scheme or target_parsed.netloc != base_parsed.netloc:
+            return JsonResponse({"error": "Invalid proxy target"}, status=400)
     except Exception:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
@@ -156,8 +187,13 @@ def _proxy_http_request(
             proxy_prefix=proxy_prefix,
         )
     except urllib.error.URLError as exc:
+        logger.warning(
+            "Proxy backend unreachable target=%s reason=%s",
+            sanitize_url_for_logging(target_url),
+            sanitize_log_value(exc.reason),
+        )
         return JsonResponse(
-            {"error": f"Backend unreachable for {target_url}: {exc.reason}"},
+            {"error": "Backend unreachable."},
             status=502,
         )
 
@@ -209,16 +245,7 @@ def _build_proxied_response(
     _copy_set_cookie_headers(headers, proxied, proxy_prefix)
     location = headers.get("Location")
     if location:
-        if location.startswith(base_url.rstrip("/")):
-            proxied["Location"] = location.replace(
-                base_url.rstrip("/"), proxy_prefix, 1
-            )
-        elif location.startswith("/") and proxy_prefix:
-            proxied["Location"] = f"{proxy_prefix}{location}"
-        elif not urlparse(location).scheme and proxy_prefix:
-            proxied["Location"] = f"{proxy_prefix}/{location.lstrip('/')}"
-        else:
-            proxied["Location"] = location
+        proxied["Location"] = _rewrite_proxied_location(location, base_url, proxy_prefix)
     return proxied
 
 
@@ -242,6 +269,33 @@ def _origin_from_url(url: str) -> str:
     if not parsed.scheme or not parsed.netloc:
         return ""
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _rewrite_proxied_location(location: str, base_url: str, proxy_prefix: str) -> str:
+    normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
+    parsed_location = urlparse(str(location or ""))
+    parsed_base = urlparse(base_url.rstrip("/"))
+
+    if (
+        parsed_location.scheme
+        and parsed_location.netloc
+        and (
+            parsed_location.scheme != parsed_base.scheme
+            or parsed_location.netloc != parsed_base.netloc
+        )
+    ):
+        return f"{normalized_prefix}/" if normalized_prefix else "/"
+    if location.startswith(base_url.rstrip("/")):
+        return location.replace(base_url.rstrip("/"), normalized_prefix, 1)
+    if location.startswith("/"):
+        return f"{normalized_prefix}{location}" if normalized_prefix else location
+    if not parsed_location.scheme:
+        return (
+            f"{normalized_prefix}/{location.lstrip('/')}"
+            if normalized_prefix
+            else f"/{location.lstrip('/')}"
+        )
+    return location
 
 
 def _copy_set_cookie_headers(
@@ -292,27 +346,28 @@ def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
     return urls
 
 
-def _safe_redirect_segment(value: str, default: str) -> str:
-    candidate = str(value or "").strip().strip("/")
-    if not candidate or not _SAFE_REDIRECT_SEGMENT_RE.fullmatch(candidate):
-        return default
-    return candidate
-
-
 def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     """Redirect Grafana root requests to the configured default dashboard."""
-    normalized_prefix = str(proxy_prefix or "").rstrip("/")
+    normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
     dashboard_uid = _safe_redirect_segment(
-        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"),
+        os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+    ).strip(),
         "omero-infrastructure",
     )
     dashboard_slug = _safe_redirect_segment(
-        os.environ.get("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"),
+        os.environ.get(
+        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+    ).strip(),
         "server-infrastructure",
     )
-    dashboard_path = f"{normalized_prefix}/d/{dashboard_uid}/{dashboard_slug}"
+    dashboard_path = (
+        f"{normalized_prefix}/d/{quote(dashboard_uid, safe='')}/{quote(dashboard_slug, safe='')}"
+    )
 
-    return HttpResponseRedirect(dashboard_path)
+    response = HttpResponse(status=302)
+    response["Location"] = dashboard_path
+    return response
 
 
 def _grafana_unavailable_response(
@@ -1640,12 +1695,10 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "")
     backend_urls = _build_proxy_backend_urls(grafana_base_url, grafana_public_url)
 
-    if subpath.startswith(("http://", "https://")):
-        parsed = urlparse(subpath)
-        subpath = parsed.path.lstrip("/")
-        forwarded_query = parsed.query
-    else:
-        forwarded_query = ""
+    try:
+        subpath, forwarded_query = _normalize_proxy_request_target(subpath)
+    except ValueError:
+        return JsonResponse({"error": "Invalid proxy target"}, status=400)
 
     request_query = request.META.get("QUERY_STRING", "")
     merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
@@ -1674,8 +1727,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
     if getattr(last_response, "status_code", 502) in {500, 502, 503, 504}:
         logger.warning(
             "Grafana proxy unavailable for path=%s after checking backends=%s",
-            subpath,
-            ", ".join(backend_urls),
+            sanitize_log_value(subpath),
+            ", ".join(sanitize_url_for_logging(url) for url in backend_urls),
         )
         return _grafana_unavailable_response(
             proxy_prefix=proxy_prefix,
@@ -1703,12 +1756,10 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         prometheus_public_url,
     )
 
-    if subpath.startswith(("http://", "https://")):
-        parsed = urlparse(subpath)
-        subpath = parsed.path.lstrip("/")
-        forwarded_query = parsed.query
-    else:
-        forwarded_query = ""
+    try:
+        subpath, forwarded_query = _normalize_proxy_request_target(subpath)
+    except ValueError:
+        return JsonResponse({"error": "Invalid proxy target"}, status=400)
 
     request_query = request.META.get("QUERY_STRING", "")
     merged_query = "&".join(part for part in (forwarded_query, request_query) if part)
@@ -1970,10 +2021,9 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
     except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
         logger.warning(
-            "Invalid quota update payload (content_type=%s, content_length=%s): %s",
-            request.META.get("CONTENT_TYPE", ""),
-            request.META.get("CONTENT_LENGTH", ""),
-            exc,
+            "Invalid quota update payload (content_type=%s, content_length=%s)",
+            sanitize_log_value(request.META.get("CONTENT_TYPE", "")),
+            sanitize_log_value(request.META.get("CONTENT_LENGTH", "")),
         )
         return JsonResponse(
             {"error": "Invalid quota update payload."}, status=400
@@ -2100,8 +2150,8 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
     logger.info(
         "[%s] Running diagnostics scripts requested by %s: %s",
         request_id,
-        username,
-        ", ".join(normalized_script_ids),
+        sanitize_log_value(username),
+        ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
     )
     try:
         results = [
@@ -2111,8 +2161,8 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
         logger.error(
             "[%s] Failed to run diagnostics scripts %s: %s\n%s",
             request_id,
-            ", ".join(normalized_script_ids),
-            exc,
+            ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
+            sanitize_log_value(exc),
             traceback.format_exc(),
         )
         return JsonResponse(
@@ -2126,6 +2176,6 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
     logger.info(
         "[%s] Diagnostics scripts completed successfully. scripts=%s",
         request_id,
-        ", ".join(normalized_script_ids),
+        ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
     )
     return JsonResponse({"results": results, "request_id": request_id})

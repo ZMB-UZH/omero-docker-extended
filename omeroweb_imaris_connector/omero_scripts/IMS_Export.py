@@ -95,7 +95,7 @@ def _ensure_bioformats_jar(install_dir):
                 logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
             return None
         os.replace(tmp_path, jar_path)
-        os.chmod(jar_path, 0o644)
+        os.chmod(jar_path, 0o640)
     except (urllib.error.URLError, urllib.error.HTTPError) as e:
         print(f"ERROR: Failed to download Bio-Formats jar: {e}")
         try:

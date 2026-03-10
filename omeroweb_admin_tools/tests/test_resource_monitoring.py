@@ -13,10 +13,13 @@ from omeroweb_admin_tools.views.index_view import (
     _is_internal_hostname,
     _is_behind_reverse_proxy,
     _load_compose_service_names,
+    _normalize_proxy_request_target,
     _proxy_http_request,
     _build_proxy_backend_urls,
     _cookie_path_for_proxy,
     _origin_from_url,
+    _grafana_proxy_home_fallback_response,
+    _rewrite_proxied_location,
 )
 
 
@@ -291,6 +294,24 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
     )
 
 
+def test_normalize_proxy_request_target_rejects_traversal() -> None:
+    try:
+        _normalize_proxy_request_target("../api/admin")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected traversal target to be rejected")
+
+
+def test_normalize_proxy_request_target_strips_absolute_url_to_safe_path() -> None:
+    path, query = _normalize_proxy_request_target(
+        "https://grafana.example.org//api/../api/search?orgId=1"
+    )
+
+    assert path == "api/search"
+    assert query == "orgId=1"
+
+
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
     class DummyResponse:
         status = 302
@@ -326,6 +347,16 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
         response["Location"]
         == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure"
     )
+
+
+def test_rewrite_proxied_location_blocks_external_redirects() -> None:
+    location = _rewrite_proxied_location(
+        "https://evil.example.org/steal",
+        "http://grafana:3000",
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert location == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
 
 
 def test_proxy_http_request_rewrites_non_root_relative_location_header(
@@ -364,6 +395,44 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
     assert (
         response["Location"]
         == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/login"
+    )
+
+
+def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("urlopen should not run")),
+    )
+
+    class DummyDjangoRequest:
+        method = "GET"
+        body = b""
+        headers = {}
+
+    response = _proxy_http_request(
+        DummyDjangoRequest(),
+        "http://grafana:3000",
+        "../api/admin",
+        proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
+    )
+
+    assert response.status_code == 400
+
+
+def test_grafana_proxy_home_fallback_response_sanitizes_dashboard_segments(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "../../bad uid")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server dashboard")
+
+    response = _grafana_proxy_home_fallback_response(
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy"
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == (
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/"
+        "d/bad-uid/server-dashboard"
     )
 
 
