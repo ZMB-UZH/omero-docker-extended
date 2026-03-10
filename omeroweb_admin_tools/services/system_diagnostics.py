@@ -14,7 +14,24 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import urllib.error
 import urllib.request
 
+from omero_plugin_common.logging_utils import sanitize_log_value
+
 logger = logging.getLogger(__name__)
+
+
+_COMPOSE_OPTIONAL_SKIP_SUMMARY = "Optional Docker compose check skipped"
+_COMPOSE_OPTIONAL_SKIP_DETAILS = (
+    "docker compose is unavailable in this runtime environment."
+)
+_COMPOSE_REQUIRED_SKIP_SUMMARY = "Docker compose command unavailable"
+_COMPOSE_REQUIRED_SKIP_DETAILS = (
+    "Cannot inspect Docker compose state from this environment. "
+    "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=0 to allow optional skips."
+)
+_COMPOSE_REQUIRED_PG_SKIP_DETAILS = (
+    "Cannot execute in-container PostgreSQL checks from this environment. "
+    "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=0 to allow optional skips."
+)
 
 
 @dataclass(frozen=True)
@@ -189,16 +206,22 @@ def _compose_ps_health(
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
-        status = "warn" if _compose_required() else "pass"
+        compose_required = _compose_required()
+        status = "warn"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable (skipped)",
+            summary=(
+                _COMPOSE_REQUIRED_SKIP_SUMMARY
+                if compose_required
+                else _COMPOSE_OPTIONAL_SKIP_SUMMARY
+            ),
             details=(
-                "Cannot inspect container state from this environment. "
-                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+                _COMPOSE_REQUIRED_SKIP_DETAILS
+                if compose_required
+                else _COMPOSE_OPTIONAL_SKIP_DETAILS
             ),
         )
     ok, stdout, stderr = _run_command(
@@ -266,16 +289,22 @@ def _compose_pg_test(check_id: str, label: str, service: str) -> DiagnosticCheck
     start = time.monotonic()
     compose_cmd = _docker_compose_command()
     if compose_cmd is None:
-        status = "warn" if _compose_required() else "pass"
+        compose_required = _compose_required()
+        status = "warn"
         return DiagnosticCheckResult(
             check_id=check_id,
             label=label,
             status=status,
             duration_ms=_elapsed_ms(start),
-            summary="Docker compose command unavailable (skipped)",
+            summary=(
+                _COMPOSE_REQUIRED_SKIP_SUMMARY
+                if compose_required
+                else _COMPOSE_OPTIONAL_SKIP_SUMMARY
+            ),
             details=(
-                "Cannot execute in-container PostgreSQL checks. "
-                "Set ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1 to enforce this check."
+                _COMPOSE_REQUIRED_PG_SKIP_DETAILS
+                if compose_required
+                else _COMPOSE_OPTIONAL_SKIP_DETAILS
             ),
         )
     shell_cmd = (
@@ -439,7 +468,11 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
     try:
         if script_id == "platform_end_to_end":
             checks: List[DiagnosticCheckResult] = []
-            for child_script in ("omero_server_core", "omero_database", "plugin_database"):
+            for child_script in (
+                "omero_server_core",
+                "omero_database",
+                "plugin_database",
+            ):
                 checks.extend(script_map[child_script]())
         elif script_id in script_map:
             checks = script_map[script_id]()
@@ -472,7 +505,9 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             "checks": [asdict(item) for item in checks],
         }
     except Exception as exc:
-        logger.exception(f"Exception running diagnostic script {script_id}")
+        logger.exception(
+            "Exception running diagnostic script %s", sanitize_log_value(script_id)
+        )
         return {
             "script_id": script_id,
             "status": "fail",

@@ -261,14 +261,16 @@
         let currentViewEntries = [];
         let loadedEntriesCount = 0;
         let shownEntriesCount = 0;
-        let renderToken = 0;
         let requestCounter = 0;
         let latestRequestId = 0;
+        let fetchInProgress = false;
+        let pendingFetchOptions = null;
+        let latestEntryTimestampMs = 0;
         const defaultTableHeight = 600;
         const minTableHeight = 600;
         const filterDebounceMs = 300;
-        const internalLabelRefreshMs = 30000;
-        const renderChunkSize = 250;
+        const internalLabelRefreshMs = 300000;
+        const incrementalOverlapMs = 5000;
         let internalLabelTimer = null;
 
         function setStatus(text) {
@@ -459,7 +461,7 @@
                     }
                     updateInternalBadge(service);
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
 
                 const text = document.createElement('span');
@@ -473,11 +475,12 @@
             });
         }
 
-        function setInternalSelectAll(service, selectAll) {
+        function setInternalSelectAll(service, selectAll, options = {}) {
             const state = internalState[service];
             if (!state) {
                 return;
             }
+            const triggerFetch = options.triggerFetch !== false;
             state.selected.clear();
             if (selectAll) {
                 state.labels.forEach((label) => state.selected.add(label));
@@ -485,7 +488,9 @@
             renderInternalOptions(service);
             updateInternalBadge(service);
             persistState();
-            fetchLogs();
+            if (triggerFetch) {
+                fetchLogs({ forceFull: true, reason: 'selection' });
+            }
         }
 
         async function loadInternalLabels(service, options = {}) {
@@ -530,7 +535,6 @@
                 renderInternalOptions(service);
                 updateInternalBadge(service);
                 persistState();
-                fetchLogs();
             }
         }
 
@@ -653,10 +657,6 @@
             return name;
         }
 
-        function cancelRender() {
-            renderToken += 1;
-        }
-
         function buildRowHtml(entry) {
             return `
                 <tr>
@@ -672,37 +672,41 @@
             if (!tableBody) {
                 return;
             }
-            cancelRender();
-            const token = renderToken;
             if (!entries.length) {
                 tableBody.innerHTML = '<tr><td colspan="4" class="log-empty">No log entries found.</td></tr>';
                 return;
             }
-            tableBody.innerHTML = '';
-            const batch = Math.max(50, renderChunkSize);
-            let index = 0;
-
-            const appendChunk = () => {
-                if (token !== renderToken) {
-                    return;
-                }
-                const end = Math.min(index + batch, entries.length);
-                let html = '';
-                for (; index < end; index += 1) {
-                    html += buildRowHtml(entries[index]);
-                }
-                tableBody.insertAdjacentHTML('beforeend', html);
-                if (index < entries.length) {
-                    window.requestAnimationFrame(appendChunk);
-                }
-            };
-
-            window.requestAnimationFrame(appendChunk);
+            
+            let html = '';
+            for (let i = 0; i < entries.length; i += 1) {
+                html += buildRowHtml(entries[i]);
+            }
+            tableBody.innerHTML = html;
+            
+            const scrollContainer = document.querySelector('.log-table-scroll');
+            if (scrollContainer) {
+                scrollContainer.scrollTop = 0;
+            }
         }
 
         function applyFilters() {
-            currentViewEntries = activeEntries;
-            loadedEntriesCount = currentViewEntries.length;
+            const query = (filterInput?.value || '').trim().toLowerCase();
+            const selectedLevel = (levelSelect?.value || '').trim().toLowerCase();
+
+            currentViewEntries = activeEntries.filter((entry) => {
+                if (selectedLevel && entry.level !== selectedLevel) {
+                    return false;
+                }
+                if (!query) {
+                    return true;
+                }
+                return (
+                    String(entry.message || '').toLowerCase().includes(query) ||
+                    String(entry.container || '').toLowerCase().includes(query) ||
+                    String(entry.level || '').toLowerCase().includes(query)
+                );
+            });
+            loadedEntriesCount = activeEntries.length;
             const shownEntries = currentViewEntries.slice(0, tableRowCap);
             shownEntriesCount = shownEntries.length;
             renderTable(shownEntries);
@@ -765,16 +769,32 @@
             return map[token] || null;
         }
 
+        function normalizeLevel(level, message) {
+            const aliases = {
+                trace: 'debug',
+                debug: 'debug',
+                info: 'info',
+                notice: 'info',
+                log: 'info',
+                warn: 'warn',
+                warning: 'warn',
+                error: 'error',
+                err: 'error',
+                severe: 'error',
+                fatal: 'fatal',
+                critical: 'fatal',
+                panic: 'fatal',
+            };
+            const normalized = aliases[String(level || '').toLowerCase().trim()] || null;
+            const parsed = parseLevelFromMessage(message);
+            if (parsed) return parsed;
+            return normalized || 'info';
+        }
+
         function normalizeEntries(entries) {
             return entries
                 .map((entry) => {
-                    let level = entry.level || 'info';
-                    /* If server sent generic "info", try to refine from
-                       message content (belt-and-suspenders with backend). */
-                    if (level === 'info') {
-                        const parsed = parseLevelFromMessage(entry.message);
-                        if (parsed) level = parsed;
-                    }
+                    const level = normalizeLevel(entry.level, entry.message);
                     return {
                         timestamp: entry.timestamp,
                         container: entry.container,
@@ -785,14 +805,91 @@
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         }
 
-        async function fetchLogs() {
+        function toTimestampMs(value) {
+            const timestampMs = Date.parse(value);
+            return Number.isNaN(timestampMs) ? 0 : timestampMs;
+        }
+
+        function entryIdentity(entry) {
+            return `${entry.timestamp}\u0001${entry.container}\u0001${entry.level}\u0001${entry.message}`;
+        }
+
+        function mergeFetchOptions(base, next) {
+            const baseOptions = base || { forceFull: false, reason: 'manual' };
+            const nextOptions = next || { forceFull: false, reason: 'manual' };
+            return {
+                forceFull: Boolean(baseOptions.forceFull || nextOptions.forceFull),
+                reason: nextOptions.reason || baseOptions.reason || 'manual',
+            };
+        }
+
+        function mergeIncrementalEntries(existing, incoming, lookbackSeconds) {
+            const deduped = new Map();
+            const cutoffMs = Date.now() - (Math.max(1, lookbackSeconds) * 1000);
+
+            const addEntry = (entry) => {
+                const timestampMs = toTimestampMs(entry.timestamp);
+                if (timestampMs > 0 && timestampMs < cutoffMs) {
+                    return;
+                }
+                deduped.set(entryIdentity(entry), entry);
+            };
+
+            incoming.forEach(addEntry);
+            existing.forEach(addEntry);
+
+            return Array.from(deduped.values()).sort(
+                (a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp)
+            );
+        }
+
+        function updateLatestEntryTimestamp(entries) {
+            let maxTimestampMs = 0;
+            entries.forEach((entry) => {
+                const current = toTimestampMs(entry.timestamp);
+                if (current > maxTimestampMs) {
+                    maxTimestampMs = current;
+                }
+            });
+            latestEntryTimestampMs = maxTimestampMs;
+        }
+
+        function drainPendingFetchQueue() {
+            if (!pendingFetchOptions) {
+                return;
+            }
+            const queuedOptions = pendingFetchOptions;
+            pendingFetchOptions = null;
+            fetchLogs(queuedOptions);
+        }
+
+        function fetchLogs(options = {}) {
+            const normalizedOptions = {
+                forceFull: Boolean(options.forceFull),
+                reason: options.reason || 'manual',
+            };
+            if (fetchInProgress) {
+                pendingFetchOptions = mergeFetchOptions(pendingFetchOptions, normalizedOptions);
+                return;
+            }
+            void performFetchLogs(normalizedOptions);
+        }
+
+        async function performFetchLogs(options = {}) {
+            const forceFull = Boolean(options.forceFull);
+            const reason = options.reason || 'manual';
+            fetchInProgress = true;
             if (!logConfig) {
                 setStatus('Logging backend not configured. Please set ADMIN_TOOLS_LOKI_URL.');
                 activeEntries = [];
                 currentViewEntries = [];
                 loadedEntriesCount = 0;
+                shownEntriesCount = 0;
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
+                fetchInProgress = false;
+                drainPendingFetchQueue();
                 return;
             }
             const requestId = ++requestCounter;
@@ -800,10 +897,15 @@
             const containers = getSelectedContainers();
             if (!containers.length) {
                 activeEntries = [];
+                currentViewEntries = [];
                 loadedEntriesCount = 0;
+                shownEntriesCount = 0;
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 setStatus('No log sources selected.');
                 updateDownloadState();
+                fetchInProgress = false;
+                drainPendingFetchQueue();
                 return;
             }
             setLoading(true);
@@ -814,17 +916,15 @@
             }
             const lookbackSeconds = getLookbackSeconds();
             const limit = logConfig.max_entries || 5000;
-            const query = filterInput?.value.trim() || '';
-            const level = levelSelect?.value || '';
             const params = new URLSearchParams({
                 lookback: String(lookbackSeconds),
                 limit: String(limit),
             });
-            if (query) {
-                params.set('query', query);
-            }
-            if (level) {
-                params.set('level', level);
+            const useIncrementalFetch =
+                !forceFull && reason === 'auto' && latestEntryTimestampMs > 0;
+            if (useIncrementalFetch) {
+                const sinceMs = Math.max(0, latestEntryTimestampMs - incrementalOverlapMs);
+                params.set('since', String(Math.floor(sinceMs * 1e6)));
             }
             containers.forEach((container) => params.append('container', container));
             const internalFiles = getSelectedInternalFiles();
@@ -840,12 +940,26 @@
                     const message = payload?.error || 'Unable to load logs.';
                     setStatus(message);
                     activeEntries = [];
+                    currentViewEntries = [];
+                    loadedEntriesCount = 0;
+                    shownEntriesCount = 0;
+                    latestEntryTimestampMs = 0;
                     renderTable(activeEntries);
                     updateDownloadState();
                     setLoading(false);
                     return;
                 }
-                activeEntries = normalizeEntries(payload.entries || []);
+                const incomingEntries = normalizeEntries(payload.entries || []);
+                if (useIncrementalFetch) {
+                    activeEntries = mergeIncrementalEntries(
+                        activeEntries,
+                        incomingEntries,
+                        lookbackSeconds,
+                    );
+                } else {
+                    activeEntries = incomingEntries;
+                }
+                updateLatestEntryTimestamp(activeEntries);
                 applyFilters();
             } catch (error) {
                 if (requestId !== latestRequestId) {
@@ -853,12 +967,18 @@
                 }
                 setStatus('Failed to fetch logs from backend.');
                 activeEntries = [];
+                currentViewEntries = [];
+                loadedEntriesCount = 0;
+                shownEntriesCount = 0;
+                latestEntryTimestampMs = 0;
                 renderTable(activeEntries);
                 updateDownloadState();
             } finally {
                 if (requestId === latestRequestId) {
                     setLoading(false);
                 }
+                fetchInProgress = false;
+                drainPendingFetchQueue();
             }
         }
 
@@ -874,43 +994,47 @@
             if (!autoRefreshToggle?.checked) {
                 return;
             }
-            refreshTimer = window.setInterval(fetchLogs, 10000);
+            refreshTimer = window.setInterval(() => {
+                fetchLogs({ forceFull: false, reason: 'auto' });
+            }, 10000);
         }
 
-        function scheduleFilterFetch() {
+        function scheduleFilterApply() {
             if (filterTimer) {
                 window.clearTimeout(filterTimer);
             }
             filterTimer = window.setTimeout(() => {
                 persistState();
-                fetchLogs();
+                applyFilters();
             }, filterDebounceMs);
         }
 
         function setupHandlers() {
-            filterInput?.addEventListener('input', scheduleFilterFetch);
+            filterInput?.addEventListener('input', scheduleFilterApply);
             levelSelect?.addEventListener('change', () => {
                 persistState();
-                fetchLogs();
+                applyFilters();
             });
             timeRangeSelect?.addEventListener('change', () => {
                 persistState();
-                fetchLogs();
+                fetchLogs({ forceFull: true, reason: 'filter' });
             });
             autoRefreshToggle?.addEventListener('change', () => {
                 persistState();
                 if (autoRefreshToggle?.checked) {
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'toggle' });
                 }
                 scheduleRefresh();
             });
-            refreshBtn?.addEventListener('click', fetchLogs);
+            refreshBtn?.addEventListener('click', () => {
+                fetchLogs({ forceFull: true, reason: 'manual' });
+            });
             downloadBtn?.addEventListener('click', downloadCurrentEntries);
             document.querySelectorAll('.log-source-pill input').forEach((input) => {
                 input.addEventListener('change', () => {
                     updateDockerSourcePillStyles();
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
             document.querySelectorAll('[data-docker-action]').forEach((button) => {
@@ -921,17 +1045,17 @@
                     });
                     updateDockerSourcePillStyles();
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
             document.querySelectorAll('[data-internal-action]').forEach((button) => {
                 button.addEventListener('click', () => {
                     const selectAll = button.dataset.internalAction === 'all';
                     Object.keys(internalState).forEach((service) => {
-                        setInternalSelectAll(service, selectAll);
+                        setInternalSelectAll(service, selectAll, { triggerFetch: false });
                     });
                     persistState();
-                    fetchLogs();
+                    fetchLogs({ forceFull: true, reason: 'selection' });
                 });
             });
         }
@@ -969,7 +1093,10 @@
 
         function refreshInternalLabels() {
             Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service, { force: true });
+                const state = internalState[service];
+                if (state?.panel?.classList.contains('is-visible')) {
+                    loadInternalLabels(service, { force: true });
+                }
             });
         }
 
@@ -982,8 +1109,9 @@
 
         /* Auto-load internal labels on page load. */
         function initInternalLabels() {
-            Object.keys(internalState).forEach((service) => {
-                loadInternalLabels(service);
+            const promises = Object.keys(internalState).map((service) => loadInternalLabels(service));
+            Promise.all(promises).then(() => {
+                fetchLogs({ forceFull: true, reason: 'initial' });
             });
         }
 

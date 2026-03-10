@@ -1,8 +1,9 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import logging
 
 logger = logging.getLogger(__name__)
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+
 from omero.gateway import BlitzGateway
 from omero.rtypes import rstring
 from omero import scripts
@@ -23,17 +24,28 @@ BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
 BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 DEFAULT_TIMEOUT_SECONDS = 600
-try:
-    EXPORT_ROOT = get_env(
-        "OMERO_IMS_EXPORT_DIR",
-        env_file=ENV_FILE_OMERO_CELERY,
-    )
-except RuntimeError as e:
-    # Some OMERO script runners do not propagate all container env vars reliably.
-    # Fall back to the default path under the mounted /OMERO volume.
-    EXPORT_ROOT = "/OMERO/ImarisExports"
-    print(f"WARNING: {e}")
-    print(f"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={EXPORT_ROOT}")
+
+
+def _get_export_root():
+    """Resolve the IMS export root directory, with a safe fallback.
+
+    This function is intentionally NOT called at module level so that the
+    OMERO processor can parse script parameters without triggering side
+    effects (filesystem access, env-file reads) that would crash parameter
+    discovery and cause the 'Can't find params for <id>' ValidationException.
+    """
+    try:
+        return get_env(
+            "OMERO_IMS_EXPORT_DIR",
+            env_file=ENV_FILE_OMERO_CELERY,
+        )
+    except RuntimeError as e:
+        fallback = "/OMERO/ImarisExports"
+        print(f"WARNING: {e}")
+        print(f"WARNING: Falling back to default OMERO_IMS_EXPORT_DIR={fallback}")
+        return fallback
+
+
 def _safe_filename(name, fallback="image"):
     """Create a filesystem-safe filename (no path separators, no control chars)."""
     if name is None:
@@ -56,9 +68,6 @@ def _safe_filename(name, fallback="image"):
     if not name:
         name = fallback
     return name
-# Ensure export root exists
-os.makedirs(EXPORT_ROOT, exist_ok=True)
-
 
 
 def _ensure_bioformats_jar(install_dir):
@@ -256,15 +265,15 @@ def convert_to_ims(image, input_file, output_file):
         return False
 
 
-def _build_export_path(image, image_id):
+def _build_export_path(export_root, image, image_id):
     safe_name = _safe_filename(image.getName(), fallback=f"omero_image_{image_id}")
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    output_dir = os.path.join(EXPORT_ROOT, f"image_{image_id}")
+    output_dir = os.path.join(export_root, f"image_{image_id}")
     os.makedirs(output_dir, exist_ok=True)
     return os.path.join(output_dir, f"{safe_name}_{timestamp}.ims")
 
 
-def run_conversion(conn, image_id):
+def run_conversion(conn, image_id, export_root):
     image = conn.getObject("Image", image_id)
     if not image:
         return (False, f"Image {image_id} not found", None)
@@ -279,7 +288,7 @@ def run_conversion(conn, image_id):
 
     print(f"Input file: {input_file}")
 
-    output_file = _build_export_path(image, image_id)
+    output_file = _build_export_path(export_root, image, image_id)
 
     success = convert_to_ims(image, input_file, output_file)
     if not success:
@@ -289,6 +298,13 @@ def run_conversion(conn, image_id):
 
 
 def run_script():
+    # Resolve export root and ensure directory exists here (inside run_script),
+    # NOT at module level, so the OMERO processor can parse parameters without
+    # triggering filesystem side-effects that cause ValidationException:
+    # 'Can't find params for <id>'.
+    export_root = _get_export_root()
+    os.makedirs(export_root, exist_ok=True)
+
     client = scripts.client(
         "IMS_Export.py",
         """Export an OMERO image to IMS format using ImarisConvertBioformats.""",
@@ -309,22 +325,22 @@ def run_script():
         image_id = params.get("Image_ID")
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup(-1)  # Enable cross-group access
-        success, message, export_path = run_conversion(conn, image_id)
+        success, message, export_path = run_conversion(conn, image_id, export_root)
         client.setOutput("Message", rstring(message))
-        
+
         if success and export_path and os.path.exists(export_path):
             # Attach the IMS file as a FileAnnotation to the image
             # This makes it downloadable from the Activities panel
             try:
                 from omero.model import FileAnnotationI, OriginalFileI
                 from omero.gateway import FileAnnotationWrapper
-                
+
                 image = conn.getObject("Image", image_id)
                 if image:
                     # Switch to the image's group for write operations
                     image_group = image.getDetails().getGroup().getId()
                     conn.SERVICE_OPTS.setOmeroGroup(image_group)
-                    
+
                     # Create file annotation
                     file_ann = conn.createFileAnnfromLocalFile(
                         export_path,
@@ -332,10 +348,10 @@ def run_script():
                         ns="omero.export.ims",
                         desc=f"IMS export of {image.getName()}"
                     )
-                    
+
                     # Link to image
                     image.linkAnnotation(file_ann)
-                    
+
                     # Return the file annotation object so OMERO.web shows a download button
                     try:
                         client.setOutput("File_Annotation", omero.rtypes.robject(file_ann._obj))
@@ -345,7 +361,7 @@ def run_script():
                     client.setOutput("File_Annotation_Id", omero.rtypes.rlong(file_ann.getId()))
                     client.setOutput("Export_Path", rstring(export_path))
                     client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
-                    
+
                     print(f"Attached file annotation {file_ann.getId()} to image {image_id}")
                 else:
                     print(f"WARNING: Could not retrieve image {image_id} to attach file")
@@ -358,7 +374,7 @@ def run_script():
                 # Still return the path even if attachment fails
                 client.setOutput("Export_Path", rstring(export_path))
                 client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
-        
+
     except Exception as e:
         client.setOutput("Message", rstring(f"Script error: {e}"))
         import traceback
