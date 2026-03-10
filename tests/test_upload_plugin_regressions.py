@@ -28,11 +28,14 @@ def _install_import_stubs():
         django_shortcuts.render = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
         django_urls = types.ModuleType("django.urls")
         django_urls.reverse = lambda name, *args, **kwargs: f"/{name}/"
+        django_csrf = types.ModuleType("django.views.decorators.csrf")
+        django_csrf.csrf_exempt = lambda view: view
         sys.modules["django"] = django_module
         sys.modules["django.conf"] = django_conf
         sys.modules["django.http"] = django_http
         sys.modules["django.shortcuts"] = django_shortcuts
         sys.modules["django.urls"] = django_urls
+        sys.modules["django.views.decorators.csrf"] = django_csrf
 
     if "omero" not in sys.modules:
         omero_module = types.ModuleType("omero")
@@ -99,11 +102,27 @@ def _install_import_stubs():
         request_utils.current_username = lambda request, conn: "stub-user"
         request_utils.load_request_data = lambda request: {}
         request_utils.parse_json_body = lambda request: ({}, None)
+        env_utils = types.ModuleType("omero_plugin_common.env_utils")
+        env_utils.ENV_FILE_OMEROWEB = ""
+        env_utils.get_env = lambda key, env_file=None: ""
         sys.modules["omero_plugin_common"] = common_module
         sys.modules["omero_plugin_common.logging_utils"] = logging_utils
         sys.modules["omero_plugin_common.tmp_utils"] = tmp_utils
         sys.modules["omero_plugin_common.tmp_cleanup"] = tmp_cleanup
         sys.modules["omero_plugin_common.request_utils"] = request_utils
+        sys.modules["omero_plugin_common.env_utils"] = env_utils
+
+    if "omeroweb_upload.services.data_store" not in sys.modules:
+        data_store = types.ModuleType("omeroweb_upload.services.data_store")
+
+        class UserSettingsStoreError(Exception):
+            pass
+
+        data_store.UserSettingsStoreError = UserSettingsStoreError
+        data_store.save_user_settings = lambda username, settings: None
+        data_store.save_special_method_settings = lambda username, method_key, settings: None
+        data_store.load_special_method_settings = lambda username, method_key: {}
+        sys.modules["omeroweb_upload.services.data_store"] = data_store
 
 
 _install_import_stubs()
@@ -193,6 +212,45 @@ class UploadPluginRegressionTests(unittest.TestCase):
             core_functions._start_import_thread(job["job_id"])
 
         thread_cls.assert_not_called()
+
+    def test_upload_user_settings_view_hides_store_exception_details(self):
+        from omeroweb_upload.views import user_settings_view
+        from omeroweb_upload.services import data_store
+
+        request = types.SimpleNamespace(method="POST", body=b"{}")
+        with mock.patch.object(user_settings_view, "load_request_data", return_value={"settings": {}}), mock.patch.object(
+            user_settings_view,
+            "save_user_settings",
+            side_effect=data_store.UserSettingsStoreError("db secret"),
+        ):
+            response = user_settings_view.save_settings(request, conn=object())
+
+        self.assertEqual(500, response["status"])
+        self.assertEqual("Could not save user settings.", response["payload"]["error"])
+        self.assertNotIn("secret", response["payload"]["error"])
+
+    def test_upload_special_method_load_hides_store_exception_details(self):
+        from omeroweb_upload.views import special_method_settings_view
+        from omeroweb_upload.services import data_store
+
+        request = types.SimpleNamespace(method="POST", body=b"{}")
+        with mock.patch.object(
+            special_method_settings_view,
+            "load_request_data",
+            return_value={"method": "sem_edx"},
+        ), mock.patch.object(
+            special_method_settings_view,
+            "load_special_method_settings",
+            side_effect=data_store.UserSettingsStoreError("db secret"),
+        ):
+            response = special_method_settings_view.load_settings(request, conn=object())
+
+        self.assertEqual(500, response["status"])
+        self.assertEqual(
+            "Could not load special method settings.",
+            response["payload"]["error"],
+        )
+        self.assertNotIn("secret", response["payload"]["error"])
 
     def test_upload_template_keeps_completed_bytes_and_aborts_parallel_failures(self):
         template = (REPO_ROOT / "omeroweb_upload/templates/omeroweb_upload/index.html").read_text()

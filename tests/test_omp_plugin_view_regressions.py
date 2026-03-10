@@ -77,25 +77,24 @@ def _install_import_stubs() -> None:
     )
     decorators_module.login_required = lambda *args, **kwargs: (lambda view: view)
 
-    if "portalocker" not in sys.modules:
-        portalocker_module = types.ModuleType("portalocker")
+    portalocker_module = types.ModuleType("portalocker")
 
-        class Lock:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            def acquire(self):
-                return None
-
-            def release(self):
-                return None
-
-        class LockException(Exception):
+    class Lock:
+        def __init__(self, *args, **kwargs):
             pass
 
-        portalocker_module.Lock = Lock
-        portalocker_module.exceptions = types.SimpleNamespace(LockException=LockException)
-        sys.modules["portalocker"] = portalocker_module
+        def acquire(self):
+            return None
+
+        def release(self):
+            return None
+
+    class LockException(Exception):
+        pass
+
+    portalocker_module.Lock = Lock
+    portalocker_module.exceptions = types.SimpleNamespace(LockException=LockException)
+    sys.modules["portalocker"] = portalocker_module
 
     if "omero" not in sys.modules:
         omero_module = types.ModuleType("omero")
