@@ -346,11 +346,9 @@ def _handle_chunk_upload(request, job_id, job, job_root):
         return json_error(errors.unexpected_file(rel_path), status=400)
 
     staged_path = entry.get("staged_path") or rel_path
-    staged_error = _validate_staged_target_path(job_root, staged_path)
+    target, staged_error = _resolve_staged_target_path(job_root, staged_path)
     if staged_error:
         return json_error(staged_error, status=400)
-
-    target = job_root / staged_path
     target.parent.mkdir(parents=True, exist_ok=True)
 
     if chunk_start == 0 and target.exists():
@@ -509,8 +507,7 @@ def _upload_files(request, job_id):
         entry = entry_queue.pop(0)
 
         staged_path = entry.get("staged_path") or rel_path
-        target = job_root / staged_path
-        staged_error = _validate_staged_target_path(job_root, staged_path)
+        target, staged_error = _resolve_staged_target_path(job_root, staged_path)
         if staged_error:
             logger.warning("Rejected staged upload target for %s: %s", rel_path, staged_error)
             upload_errors.append(staged_error)
@@ -662,7 +659,10 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
             staged_path = entry.get("staged_path") or entry.get("relative_path")
             if not staged_path:
                 continue
-            file_path = upload_root / staged_path
+            file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+            if staged_error:
+                logger.warning("Refusing to remove unsafe staged file %s: %s", staged_path, staged_error)
+                continue
             try:
                 if file_path.exists():
                     file_path.unlink()

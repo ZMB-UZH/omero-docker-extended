@@ -128,6 +128,34 @@ class UploadPluginRegressionTests(unittest.TestCase):
 
         self.assertIn("File path is too long", error)
 
+    def test_resolve_staged_target_path_rejects_traversal(self):
+        upload_root = Path("/tmp/upload-root")
+
+        target, error = core_functions._resolve_staged_target_path(upload_root, "../escape.bin")
+
+        self.assertIsNone(target)
+        self.assertIn("Invalid", error)
+
+    def test_load_job_rejects_invalid_job_id_without_touching_jobs_root(self):
+        with mock.patch.object(
+            core_functions,
+            "_get_jobs_root",
+            side_effect=AssertionError("jobs root should not be resolved"),
+        ):
+            loaded = core_functions._load_job("../escape")
+
+        self.assertIsNone(loaded)
+
+    def test_save_job_rejects_invalid_job_id_without_touching_jobs_root(self):
+        with mock.patch.object(
+            core_functions,
+            "_get_jobs_root",
+            side_effect=AssertionError("jobs root should not be resolved"),
+        ):
+            saved = core_functions._save_job({"job_id": "../escape"})
+
+        self.assertFalse(saved)
+
     def test_job_updates_remain_atomic_under_concurrency(self):
         job_id = "a" * 32
         job = {"job_id": job_id, "counter": 0, "files": []}
