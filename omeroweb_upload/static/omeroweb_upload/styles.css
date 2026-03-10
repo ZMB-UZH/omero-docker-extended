@@ -875,6 +875,9 @@ body {
             column-gap: 16px;
             align-items: center;
         }
+        .tree-row {
+            align-items: start;
+        }
         .tree-header {
             font-size: 0.7rem;
             text-transform: uppercase;
@@ -978,16 +981,19 @@ body {
             font-variant-numeric: tabular-nums;
             font-size: 0.85rem;
             text-align: right;
+            padding-top: 1px;
         }
         .tree-date {
             color: #475569;
             font-variant-numeric: tabular-nums;
             font-size: 0.85rem;
+            padding-top: 1px;
         }
         .tree-delete-cell {
             display: flex;
             justify-content: flex-end;
-            align-items: center;
+            align-items: flex-start;
+            padding-top: 2px;
         }
         .tree-icon {
             width: 16px;
