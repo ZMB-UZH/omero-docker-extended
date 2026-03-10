@@ -379,14 +379,15 @@ def _handle_chunk_upload(request, job_id, job, job_root):
                 bytes_written += len(chunk)
     except OSError as exc:
         logger.warning("Failed to save chunk for %s: %s", rel_path, exc)
+        save_error = errors.upload_file_save_failed(rel_path)
         updated_job = _apply_upload_updates(
             job_id,
-            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [str(exc)]}],
-            [f"{rel_path}: {exc}"],
+            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}],
+            [save_error],
         )
         if not updated_job:
             return json_error(errors.unable_update_upload_job_state(), status=500)
-        return json_error(f"{rel_path}: {exc}", status=500)
+        return json_error(save_error, status=500)
 
     expected_chunk_size = chunk_end - chunk_start
     if bytes_written != expected_chunk_size:
@@ -527,11 +528,12 @@ def _upload_files(request, job_id):
             updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
         except OSError as exc:
             logger.warning("Failed to save upload %s: %s", rel_path, exc)
-            upload_errors.append(f"{rel_path}: {exc}")
+            save_error = errors.upload_file_save_failed(rel_path)
+            upload_errors.append(save_error)
             entry["status"] = "error"
-            entry.setdefault("errors", []).append(str(exc))
+            entry.setdefault("errors", []).append(save_error)
             updates.append(
-                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [str(exc)]}
+                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}
             )
 
 

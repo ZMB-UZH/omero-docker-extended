@@ -209,6 +209,76 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
     assert not (upload_root / job_id / "folder/big.bin").exists()
 
 
+def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    job_id = "6f8b38d693784615be4d07b39841459f"
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/big.bin",
+                "staged_path": "_staged/u1/big.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+
+    class _DummyParent:
+        def mkdir(self, parents=True, exist_ok=True):
+            return None
+
+    class _DummyTarget:
+        parent = _DummyParent()
+
+        def exists(self):
+            return False
+
+        def open(self, *_args, **_kwargs):
+            raise OSError("sensitive filesystem path")
+
+    apply_calls = []
+
+    def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        apply_calls.append((current_job_id, updates, upload_errors))
+        return job
+
+    monkeypatch.setattr(
+        index_view,
+        "_resolve_staged_target_path",
+        lambda root, staged_path: (_DummyTarget(), None),
+    )
+    monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
+
+    request = RequestFactory().post(
+        f"/omeroweb_upload/upload/{job_id}/",
+        data={
+            "upload_mode": "chunked",
+            "relative_path": "folder/big.bin",
+            "chunk_start": "0",
+            "chunk_end": "5",
+            "file_size": "5",
+            "is_last_chunk": "1",
+            "file": SimpleUploadedFile("big.bin", b"hello"),
+        },
+    )
+
+    response = index_view._upload_files(request, job_id)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 500
+    assert payload["error"] == errors.upload_file_save_failed("folder/big.bin")
+    assert "sensitive filesystem path" not in payload["error"]
+    assert apply_calls[0][2] == [errors.upload_file_save_failed("folder/big.bin")]
+
+
 def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypatch):
     request = RequestFactory().post("/omeroweb_upload/upload/test-job/")
 
@@ -225,3 +295,56 @@ def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypat
     assert response.status_code == 500
     assert payload["ok"] is False
     assert payload["error"] == errors.unexpected_server_error_uploading_files()
+
+
+def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    job_id = "f28cb8e9da774d4688cc38b208de160f"
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/file.bin",
+                "staged_path": "_staged/u1/file.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(index_view, "_apply_upload_updates", lambda current_job_id, updates, upload_errors: {"status": "uploading"})
+
+    class BrokenTarget:
+        def __init__(self, path: Path):
+            self.parent = path.parent
+
+        def open(self, *_args, **_kwargs):
+            raise OSError("permission denied: /tmp/secret-path")
+
+    monkeypatch.setattr(
+        index_view,
+        "_resolve_staged_target_path",
+        lambda root, staged_path: (BrokenTarget(root / staged_path), None),
+    )
+
+    request = RequestFactory().post(
+        f"/omeroweb_upload/upload/{job_id}/",
+        data={
+            "relative_paths": ["folder/file.bin"],
+            "files": [SimpleUploadedFile("file.bin", b"hello")],
+        },
+    )
+
+    response = index_view._upload_files(request, job_id)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload["ok"] is False
+    assert payload["error"] == errors.upload_file_save_failed("folder/file.bin")
+    assert "secret-path" not in payload["error"]

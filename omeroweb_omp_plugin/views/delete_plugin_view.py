@@ -63,12 +63,17 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         )
 
         if login.returncode != 0:
+            logger.warning(
+                "OMERO CLI login failed for delete_plugin_keyvaluepairs user %s: rc=%s stdout=%r stderr=%r",
+                username,
+                login.returncode,
+                login.stdout,
+                login.stderr,
+            )
             return JsonResponse(
                 {
                     "ok": False,
                     "error": error_messages.omero_web_login_failed(),
-                    "stdout": login.stdout,
-                    "stderr": login.stderr,
                 }
             )
 
@@ -101,7 +106,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
                 except Exception as e:
                     logger.warning("Cannot resolve annotations for image %s: %s", get_id(img), e)
-                    deletion_errors.append({"image": get_id(img), "error": str(e)})
+                    deletion_errors.append(
+                        {"image": get_id(img), "error": error_messages.unexpected_error()}
+                    )
                     continue
 
                 if not plugin_ann_ids:
@@ -127,13 +134,21 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                                 text=True,
                             )
                             if link_result.returncode != 0:
+                                logger.warning(
+                                    "Failed to delete annotation link %s for image %s annotation %s: rc=%s stdout=%r stderr=%r",
+                                    lid,
+                                    iid,
+                                    aid,
+                                    link_result.returncode,
+                                    link_result.stdout,
+                                    link_result.stderr,
+                                )
                                 deletion_errors.append(
                                     {
                                         "image": iid,
                                         "annotation": aid,
                                         "link": lid,
-                                        "stdout": link_result.stdout,
-                                        "stderr": link_result.stderr,
+                                        "error": error_messages.unable_delete_plugin_annotations(),
                                     }
                                 )
 
@@ -165,12 +180,19 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         )
 
                         if result.returncode != 0:
+                            logger.warning(
+                                "Failed to delete plugin annotation %s for image %s: rc=%s stdout=%r stderr=%r",
+                                aid,
+                                iid,
+                                result.returncode,
+                                result.stdout,
+                                result.stderr,
+                            )
                             deletion_errors.append(
                                 {
                                     "image": iid,
                                     "annotation": aid,
-                                    "stdout": result.stdout,
-                                    "stderr": result.stderr,
+                                    "error": error_messages.unable_delete_plugin_annotations(),
                                 }
                             )
                             continue
@@ -195,7 +217,13 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                             iid,
                             e,
                         )
-                        deletion_errors.append({"image": iid, "annotation": aid, "error": str(e)})
+                        deletion_errors.append(
+                            {
+                                "image": iid,
+                                "annotation": aid,
+                                "error": error_messages.unexpected_error(),
+                            }
+                        )
                         continue
 
                 if removed_for_image:
@@ -219,4 +247,4 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("delete_plugin_keyvaluepairs failed: %s", e)
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
