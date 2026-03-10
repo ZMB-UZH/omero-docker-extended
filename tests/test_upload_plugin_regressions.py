@@ -131,6 +131,11 @@ from omeroweb_upload.views import core_functions
 
 
 class UploadPluginRegressionTests(unittest.TestCase):
+    def _json_status_and_payload(self, response):
+        if isinstance(response, dict):
+            return response["status"], response["payload"]
+        return response.status_code, json.loads(response.content)
+
     def test_normalize_upload_relative_path_rejects_overlong_component_by_utf8_bytes(self):
         raw_name = f"{'ä' * 130}.tif"
 
@@ -225,9 +230,10 @@ class UploadPluginRegressionTests(unittest.TestCase):
         ):
             response = user_settings_view.save_settings(request, conn=object())
 
-        self.assertEqual(500, response["status"])
-        self.assertEqual("Could not save user settings.", response["payload"]["error"])
-        self.assertNotIn("secret", response["payload"]["error"])
+        status, payload = self._json_status_and_payload(response)
+        self.assertEqual(500, status)
+        self.assertEqual("Could not save user settings.", payload["error"])
+        self.assertNotIn("secret", payload["error"])
 
     def test_upload_special_method_load_hides_store_exception_details(self):
         from omeroweb_upload.views import special_method_settings_view
@@ -245,12 +251,10 @@ class UploadPluginRegressionTests(unittest.TestCase):
         ):
             response = special_method_settings_view.load_settings(request, conn=object())
 
-        self.assertEqual(500, response["status"])
-        self.assertEqual(
-            "Could not load special method settings.",
-            response["payload"]["error"],
-        )
-        self.assertNotIn("secret", response["payload"]["error"])
+        status, payload = self._json_status_and_payload(response)
+        self.assertEqual(500, status)
+        self.assertEqual("Could not load special method settings.", payload["error"])
+        self.assertNotIn("secret", payload["error"])
 
     def test_upload_template_keeps_completed_bytes_and_aborts_parallel_failures(self):
         template = (REPO_ROOT / "omeroweb_upload/templates/omeroweb_upload/index.html").read_text()
