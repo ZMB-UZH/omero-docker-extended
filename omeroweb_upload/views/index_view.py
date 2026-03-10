@@ -51,7 +51,9 @@ def root_status(request, conn=None, url=None, **kwargs):
 @login_required()
 @require_non_root_user
 def start_upload(request, conn=None, url=None, **kwargs):
+    try:
         return _start_upload(request, conn)
+    except Exception:
         logger.exception("Unhandled error while starting upload job.")
         return json_error(errors.unexpected_server_error_start_upload(), status=500)
 
@@ -279,9 +281,178 @@ def _start_upload(request, conn):
 @login_required()
 @require_non_root_user
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
+    try:
         return _upload_files(request, job_id)
+    except Exception:
         logger.exception("Unhandled error while uploading files for job %s.", job_id)
         return json_error(errors.unexpected_server_error_uploading_files(), status=500)
+
+
+def _find_job_upload_entry(job, rel_path):
+    for entry in job.get("files", []):
+        if entry.get("relative_path") == rel_path and entry.get("status") in ("pending", "error"):
+            return entry
+    return None
+
+
+def _parse_chunk_int(raw_value, field_name):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return None, errors.upload_chunk_metadata_invalid(f"{field_name} must be an integer")
+    if value < 0:
+        return None, errors.upload_chunk_metadata_invalid(f"{field_name} must be non-negative")
+    return value, None
+
+
+def _as_bool(raw_value):
+    return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _handle_chunk_upload(request, job_id, job, job_root):
+    upload = request.FILES.get("file")
+    if upload is None:
+        return json_error(errors.upload_chunk_missing_file(), status=400)
+
+    rel_path, rel_error = _normalize_upload_relative_path(request.POST.get("relative_path") or "")
+    if rel_error:
+        return json_error(rel_error, status=400)
+
+    chunk_start, start_error = _parse_chunk_int(request.POST.get("chunk_start"), "chunk_start")
+    if start_error:
+        return json_error(start_error, status=400)
+
+    chunk_end, end_error = _parse_chunk_int(request.POST.get("chunk_end"), "chunk_end")
+    if end_error:
+        return json_error(end_error, status=400)
+
+    file_size, size_error = _parse_chunk_int(request.POST.get("file_size"), "file_size")
+    if size_error:
+        return json_error(size_error, status=400)
+
+    if chunk_end < chunk_start:
+        return json_error(
+            errors.upload_chunk_metadata_invalid("chunk_end must be greater than or equal to chunk_start"),
+            status=400,
+        )
+    if chunk_end > file_size:
+        return json_error(
+            errors.upload_chunk_metadata_invalid("chunk_end cannot exceed file_size"),
+            status=400,
+        )
+
+    entry = _find_job_upload_entry(job, rel_path)
+    if not entry:
+        return json_error(errors.unexpected_file(rel_path), status=400)
+
+    staged_path = entry.get("staged_path") or rel_path
+    staged_error = _validate_staged_target_path(job_root, staged_path)
+    if staged_error:
+        return json_error(staged_error, status=400)
+
+    target = job_root / staged_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if chunk_start == 0 and target.exists():
+        try:
+            target.unlink()
+        except OSError as exc:
+            logger.warning("Failed to reset staged upload %s for chunked retry: %s", rel_path, exc)
+
+    existing_size = target.stat().st_size if target.exists() else 0
+    if existing_size != chunk_start:
+        logger.warning(
+            "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
+            rel_path,
+            job_id,
+            existing_size,
+            chunk_start,
+        )
+        return json_error(
+            errors.upload_chunk_offset_mismatch(rel_path, existing_size, chunk_start),
+            status=409,
+        )
+
+    bytes_written = 0
+    try:
+        with target.open("ab") as handle:
+            for chunk in upload.chunks():
+                handle.write(chunk)
+                bytes_written += len(chunk)
+    except OSError as exc:
+        logger.warning("Failed to save chunk for %s: %s", rel_path, exc)
+        updated_job = _apply_upload_updates(
+            job_id,
+            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [str(exc)]}],
+            [f"{rel_path}: {exc}"],
+        )
+        if not updated_job:
+            return json_error(errors.unable_update_upload_job_state(), status=500)
+        return json_error(f"{rel_path}: {exc}", status=500)
+
+    expected_chunk_size = chunk_end - chunk_start
+    if bytes_written != expected_chunk_size:
+        logger.warning(
+            "Chunk size mismatch for %s in job %s: expected=%s wrote=%s",
+            rel_path,
+            job_id,
+            expected_chunk_size,
+            bytes_written,
+        )
+        return json_error(
+            errors.upload_chunk_size_mismatch(rel_path, expected_chunk_size, bytes_written),
+            status=400,
+        )
+
+    saved_size = target.stat().st_size if target.exists() else 0
+    is_last_chunk = _as_bool(request.POST.get("is_last_chunk")) or saved_size >= file_size
+    if not is_last_chunk:
+        return JsonResponse(
+            {
+                "ok": True,
+                "complete": False,
+                "saved": [],
+                "errors": [],
+                "error": None,
+                "relative_path": rel_path,
+                "uploaded_bytes_for_file": saved_size,
+            }
+        )
+
+    if saved_size != file_size:
+        logger.warning(
+            "Final chunk saved unexpected size for %s in job %s: expected=%s actual=%s",
+            rel_path,
+            job_id,
+            file_size,
+            saved_size,
+        )
+        return json_error(errors.upload_chunk_incomplete(rel_path, file_size, saved_size), status=400)
+
+    updated_job = _apply_upload_updates(job_id, [{"upload_id": entry.get("upload_id"), "status": "uploaded"}], [])
+    if not updated_job:
+        return json_error(errors.unable_update_upload_job_state(), status=500)
+
+    if _should_start_compatibility_check(updated_job):
+        _start_compatibility_check_thread(job_id)
+        logger.info("Upload job %s checking compatibility after chunked upload.", job_id)
+    if updated_job["status"] == "ready":
+        _start_import_thread(job_id)
+        logger.info("Upload job %s ready after chunked upload; import thread started.", job_id)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "complete": True,
+            "saved": [rel_path],
+            "errors": [],
+            "error": None,
+            "relative_path": rel_path,
+            "uploaded_bytes": updated_job.get("uploaded_bytes", 0),
+            "total_bytes": updated_job.get("total_bytes", 0),
+            "ready": updated_job.get("status") == "ready",
+        }
+    )
 
 
 def _upload_files(request, job_id):
@@ -298,6 +469,14 @@ def _upload_files(request, job_id):
         logger.warning("Upload job %s not found.", job_id)
         return json_error(errors.upload_job_not_found())
 
+    job_root = upload_root / job_id
+    if not _ensure_dir(job_root):
+        logger.warning("Unable to initialize upload folder for job %s.", job_id)
+        return json_error(errors.unable_initialize_upload_folder())
+
+    if request.POST.get("upload_mode") == "chunked":
+        return _handle_chunk_upload(request, job_id, job, job_root)
+
     files = request.FILES.getlist("files")
     if not files:
         logger.info("Upload job %s received no files.", job_id)
@@ -307,11 +486,6 @@ def _upload_files(request, job_id):
     if relative_paths and len(relative_paths) != len(files):
         logger.warning("Upload payload mismatch for job %s.", job_id)
         return json_error(errors.upload_payload_mismatch())
-
-    job_root = upload_root / job_id
-    if not _ensure_dir(job_root):
-        logger.warning("Unable to initialize upload folder for job %s.", job_id)
-        return json_error(errors.unable_initialize_upload_folder())
 
     saved = []
     upload_errors = []
@@ -391,7 +565,9 @@ def _upload_files(request, job_id):
 @login_required()
 @require_non_root_user
 def import_step(request, job_id, conn=None, url=None, **kwargs):
+    try:
         return _import_step(request, job_id)
+    except Exception:
         logger.exception("Unhandled error while importing job %s.", job_id)
         return json_error(errors.unexpected_server_error_importing(), status=500)
 
