@@ -74,7 +74,8 @@ def _probe_http_url(url: str, timeout_seconds: float = 2.5) -> Dict[str, object]
     except urllib.error.HTTPError as exc:
         return {"ok": False, "status": int(exc.code), "error": f"HTTP {exc.code}"}
     except urllib.error.URLError as exc:
-        return {"ok": False, "status": 0, "error": str(exc.reason)}
+        logger.warning("HTTP probe failed for %s: %s", url, exc.reason)
+        return {"ok": False, "status": 0, "error": "Connection failed"}
 
 
 def _proxy_http_request(
@@ -1075,7 +1076,8 @@ def _diagnose_docker_health() -> Dict[str, object]:
         except KeyError:
             diag["current_user"] = f"uid={os.getuid()}"
     except Exception as exc:
-        diag["current_user"] = f"error: {exc}"
+        logger.warning("Unable to resolve current user for Docker diagnostics: %s", exc)
+        diag["current_user"] = "error"
 
     # Socket file ownership
     if diag["socket_exists"]:
@@ -1090,7 +1092,8 @@ def _diagnose_docker_health() -> Dict[str, object]:
                 int(gid) for gid in list(diag.get("current_gids", []))
             }
         except Exception as exc:
-            diag["socket_stat"] = f"stat error: {exc}"
+            logger.warning("Unable to stat Docker socket %s: %s", docker_socket, exc)
+            diag["socket_stat"] = "stat unavailable"
 
     # Try the actual API call
     try:
@@ -1125,7 +1128,8 @@ def _diagnose_docker_health() -> Dict[str, object]:
             diag["containers_with_health"] = health_count
             diag["sample_statuses"] = samples
     except Exception as exc:
-        diag["api_error"] = f"{type(exc).__name__}: {exc}"
+        logger.warning("Docker API diagnostics failed: %s", exc)
+        diag["api_error"] = "Docker API request failed"
 
     return diag
 
