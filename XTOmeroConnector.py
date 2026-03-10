@@ -21,7 +21,7 @@ import sys
 import os
 import json
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 import threading
 import re
 import tempfile
