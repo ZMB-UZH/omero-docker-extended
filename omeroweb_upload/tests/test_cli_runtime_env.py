@@ -39,7 +39,7 @@ def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch)
     assert env["ICE_CONFIG"] == str(expected_ice_config)
     assert expected_home.is_dir()
     assert expected_cache.is_dir()
-    assert expected_ice_config.read_text(encoding="utf-8") == "omero.keep_alive=60\n"
+    assert expected_ice_config.read_text(encoding="utf-8") == "omero.keep_alive=30\n"
 
 
 def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
@@ -64,7 +64,7 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
     merged_config = Path(captured["kwargs"]["env"]["ICE_CONFIG"])
     assert merged_config.read_text(encoding="utf-8") == (
         "Ice.Default.Router=test-router\n"
-        "omero.keep_alive=60\n"
+        "omero.keep_alive=30\n"
     )
 
 

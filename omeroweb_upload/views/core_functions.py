@@ -1133,7 +1133,7 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
 
 IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microscopy files can be slow)
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
-CLI_KEEPALIVE_SECONDS_DEFAULT = 60
+CLI_KEEPALIVE_SECONDS_DEFAULT = 30
 CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
 
 
