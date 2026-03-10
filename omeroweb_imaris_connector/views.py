@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 CELERY_JOB_PREFIX = "celery-"
 CELERY_QUEUE = get_celery_queue()
+INVALID_BASE_URL_MESSAGE = "Invalid base_url parameter."
+INVALID_OMERO_PORT_MESSAGE = "Invalid OMERO port parameter."
+IMS_EXPORT_FAILED_MESSAGE = "IMS export failed."
+IMS_EXPORT_JOB_FAILED_MESSAGE = "IMS export job failed."
 
 
 def _parse_base_url(value):
@@ -78,8 +82,8 @@ def imaris_export(request, conn=None, **kwargs):
     if "base_url" in request.GET:
         try:
             base_url_override = _parse_base_url(request.GET.get("base_url"))
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
+        except ValueError:
+            return HttpResponseBadRequest(INVALID_BASE_URL_MESSAGE)
 
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
@@ -155,8 +159,8 @@ def imaris_export(request, conn=None, **kwargs):
         if port_param is not None and str(port_param).strip():
             try:
                 port_override = _parse_port_param(port_param)
-            except ValueError as exc:
-                return HttpResponseBadRequest(str(exc))
+            except ValueError:
+                return HttpResponseBadRequest(INVALID_OMERO_PORT_MESSAGE)
 
         secure_override = None
         secure_param = request.GET.get("omero_secure")
@@ -216,10 +220,13 @@ def imaris_export(request, conn=None, **kwargs):
             if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                 break
             if last_state in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
-                return HttpResponse(
-                    f"IMS export job failed: {last_error or 'unknown error'}",
-                    status=500,
+                logger.warning(
+                    "IMS export job %s failed for image %s: %s",
+                    celery_job_id,
+                    image_id,
+                    last_error or "unknown error",
                 )
+                return HttpResponse(IMS_EXPORT_JOB_FAILED_MESSAGE, status=500)
             time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
@@ -233,7 +240,7 @@ def imaris_export(request, conn=None, **kwargs):
 
     except Exception as exc:
         logger.exception("IMS export failed: %s", exc)
-        return HttpResponse(f"IMS export failed: {exc}", status=500)
+        return HttpResponse(IMS_EXPORT_FAILED_MESSAGE, status=500)
 
 
 def _poll_celery_job(job_id):

@@ -37,8 +37,8 @@ def save_settings(request, conn=None, url=None, **kwargs):
             "message": messages.user_settings_saved(),
             "settings": settings_payload,
         })
-    except UserSettingsStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except UserSettingsStoreError:
+        return JsonResponse({"error": errors.user_settings_save_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error saving user settings: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)

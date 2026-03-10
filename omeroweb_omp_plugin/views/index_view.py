@@ -530,8 +530,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
-            except AiCredentialStoreError as e:
-                return JsonResponse({"error": str(e)}, status=500)
+            except AiCredentialStoreError:
+                return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
                 return JsonResponse(
@@ -541,8 +541,8 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 result = generate_ai_regex(provider, api_key, filenames, model=model or None)
-            except AiAssistError as e:
-                return JsonResponse({"error": str(e)}, status=400)
+            except AiAssistError:
+                return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
                 logger.exception("AI regex provider failure: %s", e)
                 return JsonResponse(
@@ -625,16 +625,16 @@ def index(request, conn=None, url=None, **kwargs):
 
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
-            except AiCredentialStoreError as e:
-                return JsonResponse({"error": str(e)}, status=500)
+            except AiCredentialStoreError:
+                return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
                 return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
             try:
                 result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None, custom_instructions=custom_instructions)
-            except AiAssistError as e:
-                return JsonResponse({"error": str(e)}, status=400)
+            except AiAssistError:
+                return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
                 logger.exception("AI parse provider failure: %s", e)
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=500)
@@ -758,10 +758,10 @@ def index(request, conn=None, url=None, **kwargs):
 
                 try:
                     parsed_rows = json.loads(raw_ai_parsed)
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     return HttpResponse(
                         "<h2 style='color:red;'>Invalid AI parsing data</h2>"
-                        f"<p>{e}</p>"
+                        f"<p>{errors.invalid_ai_parsing_data()}</p>"
                         "<a href='.'>Back</a>"
                     )
 
@@ -786,10 +786,10 @@ def index(request, conn=None, url=None, **kwargs):
 
                 try:
                     re.compile(sep_pattern)
-                except re.error as e:
+                except re.error:
                     return HttpResponse(
                         f"<h2 style='color:red;'>{errors.invalid_regex_pattern_title()}</h2>"
-                        f"<p>{e}</p>"
+                        f"<p>{errors.invalid_regex_pattern()}</p>"
                         "<a href='.'>Back</a>"
                     )
 
@@ -945,7 +945,10 @@ def index(request, conn=None, url=None, **kwargs):
 
     except Exception as e:
         logger.exception("Unhandled error in index(): %s", e)
-        return HttpResponse(f"<h2>Error: {e}</h2>")
+        return HttpResponse(
+            f"<h2>Error</h2><p>{errors.unexpected_error()}</p>",
+            status=500,
+        )
 
 
 @login_required()
