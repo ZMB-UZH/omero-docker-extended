@@ -33,8 +33,8 @@ def list_sets(request, conn=None, url=None, **kwargs):
     try:
         sets = list_variable_sets(username)
         return JsonResponse({"sets": sets})
-    except VariableStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except VariableStoreError:
+        return JsonResponse({"error": errors.variable_sets_fetch_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error listing sets: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
@@ -91,8 +91,8 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         return JsonResponse({"message": messages.variable_set_saved_response()})
 
-    except VariableStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except VariableStoreError:
+        return JsonResponse({"error": errors.variable_set_save_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error saving set: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
@@ -123,8 +123,8 @@ def load_set(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": errors.variable_set_not_found()}, status=404)
 
         return JsonResponse({"var_names": var_names})
-    except VariableStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except VariableStoreError:
+        return JsonResponse({"error": errors.variable_set_load_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error loading set: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
@@ -152,8 +152,8 @@ def delete_set(request, conn=None, url=None, **kwargs):
 
         return JsonResponse({"ok": True})
 
-    except VariableStoreError as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except VariableStoreError:
+        return JsonResponse({"error": errors.variable_set_delete_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error deleting set: %s", e)
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
