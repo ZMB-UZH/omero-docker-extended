@@ -94,8 +94,12 @@ def invalid_user_settings_payload():
 def unknown_job():
     return "unknown job"
 
-def invalid_regex_pattern(detail):
-    return f"Invalid regex pattern: {detail}"
+def invalid_regex_pattern(detail=None):
+    return "Invalid regex pattern."
+
+
+def invalid_ai_parsing_data():
+    return "Invalid AI parsing data."
 
 def invalid_regex_pattern_title():
     return "Invalid regex pattern."
@@ -194,6 +198,12 @@ def variable_set_delete_unconfirmed():
 
 def variable_set_delete_failed():
     return "Unable to delete variable set."
+
+def unable_delete_plugin_annotations():
+    return "Unable to delete plugin annotations."
+
+def unable_delete_annotations():
+    return "Unable to delete annotations."
 
 def ai_credentials_fetch_failed():
     return "Unable to fetch saved AI credentials."

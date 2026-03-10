@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from http.client import HTTPMessage
+from types import SimpleNamespace
 from django.test import RequestFactory
 
 from omeroweb_admin_tools.views.index_view import (
+    logs_data,
     resource_monitoring_data,
     _build_public_service_url,
     _build_target_service_status,
@@ -1141,6 +1144,53 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
     assert response["Location"].startswith(
         "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/"
     )
+
+
+def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
+    from omeroweb_admin_tools.views.index_view import _grafana_proxy_home_fallback_response
+
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
+
+    response = _grafana_proxy_home_fallback_response(
+        "/omeroweb_admin_tools/resource-monitoring/grafana-proxy"
+    )
+
+    assert response.status_code == 302
+    assert (
+        response["Location"]
+        == "/omeroweb_admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure"
+    )
+
+
+def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
+    request = RequestFactory().get(
+        "/omeroweb_admin_tools/logs/data/",
+        data={"container": ["omero-omeroweb-1"]},
+    )
+
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.utils.current_username",
+        lambda request, conn: "root",
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view._require_root_user",
+        lambda request, conn: None,
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.optional_log_config",
+        lambda: SimpleNamespace(lookback_seconds=60, max_entries=50),
+    )
+    monkeypatch.setattr(
+        "omeroweb_admin_tools.views.index_view.fetch_loki_logs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("secret loki details")),
+    )
+
+    response = logs_data(request, conn=None)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 502
+    assert payload["error"] == "Failed to fetch logs."
 
 
 def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -> None:
