@@ -11,7 +11,6 @@ import re
 from ..services.core import (
     get_id,
     get_text,
-    collect_images_by_dataset_sorted,
     collect_images_by_selected_datasets,
     collect_dataset_summaries,
     parse_filename,

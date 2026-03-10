@@ -9,7 +9,6 @@ from .filename_utils import (
     build_hyphen_protection_pattern,
     detect_label_value_pairs,
     extract_base_name,
-    regex_for_separators,
     suggest_separator_regex,
 )
 from .http_utils import extract_error_details

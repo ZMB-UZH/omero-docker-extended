@@ -1,5 +1,3 @@
-import hashlib
-import json
 import logging
 import threading
 import time
