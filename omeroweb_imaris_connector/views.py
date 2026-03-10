@@ -5,7 +5,7 @@ import urllib.parse
 from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
-from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, ENV_FILE_OMERO_CELERY, get_env
+from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 
 from .celery_app import app as celery_app
 from .config import get_celery_queue, use_celery
