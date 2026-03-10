@@ -560,7 +560,10 @@ def _refresh_job_status(job_dict):
 
 def _load_job(job_id: str):
     if not _safe_job_id(job_id):
-        logger.warning("Upload job id rejected as invalid: %s", job_id)
+        logger.warning(
+            "Upload job id rejected as invalid: %s",
+            sanitize_log_value(job_id),
+        )
         return None
     path = _job_path(job_id)
     lock_path = _job_lock_path(job_id)
@@ -617,7 +620,10 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
 
 def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
     if not _safe_job_id(job_id):
-        logger.warning("Refusing to update upload job with invalid id: %s", job_id)
+        logger.warning(
+            "Refusing to update upload job with invalid id: %s",
+            sanitize_log_value(job_id),
+        )
         return None
     path = _job_path(job_id)
     lock_path = _job_lock_path(job_id)
