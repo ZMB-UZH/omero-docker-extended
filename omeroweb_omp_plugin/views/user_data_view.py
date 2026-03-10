@@ -34,6 +34,7 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
         deleted = delete_all_ai_credentials(username)
         return JsonResponse({"ok": True, "deleted": deleted})
     except AiCredentialStoreError:
+        logger.exception("AI credential store failure while deleting API keys.")
         return JsonResponse({"error": errors.ai_credentials_delete_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error deleting API keys: %s", e)
@@ -55,6 +56,7 @@ def delete_variable_sets(request, conn=None, url=None, **kwargs):
         deleted = delete_all_variable_sets(username)
         return JsonResponse({"ok": True, "deleted": deleted})
     except VariableStoreError:
+        logger.exception("Variable store failure while deleting variable sets.")
         return JsonResponse({"error": errors.variable_sets_delete_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error deleting variable sets: %s", e)
@@ -76,6 +78,7 @@ def delete_all_data(request, conn=None, url=None, **kwargs):
         deleted = delete_all_user_data(username)
         return JsonResponse({"ok": True, "deleted": deleted})
     except UserDataStoreError:
+        logger.exception("User data store failure while deleting all data.")
         return JsonResponse({"error": errors.user_data_delete_failed()}, status=500)
     except Exception as e:
         logger.exception("Unexpected error deleting all user data: %s", e)
