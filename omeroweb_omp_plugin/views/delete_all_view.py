@@ -8,7 +8,7 @@ from ..services.core import collect_images_in_project, find_map_annotation_ids, 
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
 from ..views.utils import load_json_body, require_non_root_user
-from ..strings import errors
+from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
     try:
         if request.method != "POST":
-            return JsonResponse({"error": errors.method_post_required()}, status=400)
+            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
 
         data, error = load_json_body(request)
         if error:
@@ -35,9 +35,9 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": errors.missing_project_id()}, status=400)
+            return JsonResponse({"error": error_messages.missing_project_id()}, status=400)
         if not password:
-            return JsonResponse({"error": errors.missing_password()}, status=400)
+            return JsonResponse({"error": error_messages.missing_password()}, status=400)
 
         # OMERO.web username from current web session
         username = conn.getUser().getName()
@@ -70,7 +70,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": errors.omero_web_login_failed(),
+                    "error": error_messages.omero_web_login_failed(),
                     "stdout": login.stdout,
                     "stderr": login.stderr,
                 }
@@ -87,7 +87,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                         "ok": True,
                         "deleted_count": 0,
                         "errors": [],
-                        "note": errors.no_images_found(),
+                        "note": error_messages.no_images_found(),
                     }
                 )
 
@@ -99,7 +99,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 )
 
             deleted_count = 0
-            errors = []
+            deletion_errors = []
 
             # 3) Delete in batches using a single CLI call per chunk
             # DO NOT increase CHUNK too much else the users might be tempted to interrupt the process
@@ -128,7 +128,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 )
 
                 if result.returncode != 0:
-                    errors.append(
+                    deletion_errors.append(
                         {
                             "ids": chunk_ids,
                             "stdout": result.stdout,
@@ -140,10 +140,10 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 for image_id in chunk_ids:
                     remaining = find_map_annotation_ids(conn, image_id)
                     if remaining:
-                        errors.append(
+                        deletion_errors.append(
                             {
                                 "ids": [image_id],
-                                "error": errors.map_annotations_still_present(),
+                                "error": error_messages.map_annotations_still_present(),
                                 "remaining": remaining,
                             }
                         )
@@ -154,7 +154,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 {
                     "ok": True,
                     "deleted_count": deleted_count,
-                    "errors": errors,
+                    "errors": deletion_errors,
                 }
             )
         finally:
