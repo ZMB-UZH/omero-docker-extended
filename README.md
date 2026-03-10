@@ -16,16 +16,16 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details open>
 <summary><h2>Current development state</h2></summary>
 
-### ✅ Working great
+### ✅ Works great
 
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
+- Upload plugin (`omeroweb_upload`)
 
-### 🛠️ Working partially / under active development
+### 🛠️ Works partially / under active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
-- Upload plugin (`omeroweb_upload`)
 - Admin tools (`omeroweb_admin_tools`, root user only per design)
 - Unofficial and helper scripts specific to this repository
 
