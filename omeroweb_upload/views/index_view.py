@@ -396,15 +396,15 @@ def _handle_chunk_upload(request, job_id, job, job_root):
                 bytes_written += len(chunk)
     except OSError as exc:
         logger.warning("Failed to save chunk for %s: %s", rel_path, exc)
-        save_error = errors.upload_file_save_failed(rel_path)
+        generic_error = errors.unexpected_server_error_uploading_files()
         updated_job = _apply_upload_updates(
             job_id,
-            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}],
-            [save_error],
+            [{"upload_id": entry.get("upload_id"), "status": "error", "errors": [generic_error]}],
+            [generic_error],
         )
         if not updated_job:
             return json_error(errors.unable_update_upload_job_state(), status=500)
-        return json_error(save_error, status=500)
+        return json_error(generic_error, status=500)
 
     expected_chunk_size = chunk_end - chunk_start
     if bytes_written != expected_chunk_size:
@@ -541,17 +541,6 @@ def _upload_files(request, job_id, conn):
             )
             continue
         try:
-            target = _resolve_managed_child_path(job_root, staged_path)
-        except ValueError:
-            logger.warning("Rejected staged upload target for %s: %s", rel_path, staged_error)
-            upload_errors.append(staged_error)
-            entry["status"] = "error"
-            entry.setdefault("errors", []).append(staged_error)
-            updates.append(
-                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [staged_error]}
-            )
-            continue
-        try:
             target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("wb") as handle:
                 for chunk in upload.chunks():
@@ -561,12 +550,12 @@ def _upload_files(request, job_id, conn):
             updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
         except OSError as exc:
             logger.warning("Failed to save upload %s: %s", rel_path, exc)
-            save_error = errors.upload_file_save_failed(rel_path)
-            upload_errors.append(save_error)
+            generic_error = errors.unexpected_server_error_uploading_files()
+            upload_errors.append(generic_error)
             entry["status"] = "error"
-            entry.setdefault("errors", []).append(save_error)
+            entry.setdefault("errors", []).append(generic_error)
             updates.append(
-                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [save_error]}
+                {"upload_id": entry.get("upload_id"), "status": "error", "errors": [generic_error]}
             )
 
 
@@ -711,7 +700,7 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
                 continue
             file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
             if staged_error:
-                logger.warning("Refusing to remove unsafe staged file %s: %s", staged_path, staged_error)
+                logger.warning("Rejected staged prune target for job %s.", job_id)
                 continue
             try:
                 if file_path.exists():

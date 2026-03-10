@@ -2064,8 +2064,8 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
     # ---- parse CSV ----
     try:
         content = csv_file.read().decode("utf-8")
-    except UnicodeDecodeError as exc:
-        logger.warning("Invalid CSV import encoding: %s", exc)
+    except UnicodeDecodeError:
+        logger.warning("Invalid CSV import encoding.")
         return JsonResponse({"error": "Invalid CSV import."}, status=400)
 
     # ---- persist and reconcile ----
@@ -2073,8 +2073,8 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
         state = import_quotas_csv(content)
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
-    except (QuotaError, CsvError) as exc:
-        logger.warning("Invalid CSV import payload: %s", exc)
+    except (QuotaError, CsvError):
+        logger.warning("Invalid CSV import payload.")
         return JsonResponse({"error": "Invalid CSV import."}, status=400)
     except Exception as exc:
         logger.exception("Failed to import quotas")
