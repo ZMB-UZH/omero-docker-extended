@@ -8,11 +8,8 @@ Longer-term cleanup (e.g. deleting remnants older than 24h) is performed
 by the host-side systemd timer installed by scripts/install-tmp-cleaner.sh.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
-from typing import Optional
 
 
 def is_within_root(path: Path, root: Path) -> bool:

@@ -1,7 +1,6 @@
 """
 OMERO CLI import operations and verification.
 """
-import json
 import os
 import re
 import time
@@ -12,11 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Optional
 import omero
-import portalocker
 from omero.gateway import BlitzGateway
 from ...constants import OMERO_CLI
-from ...utils.file_helpers import resolve_upload_root, resolve_jobs_root
-from ...utils.omero_helpers import get_id
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,7 @@ import hashlib
 import hmac
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
-from omero.model import MapAnnotationI, ImageAnnotationLinkI
+from omero.model import ImageAnnotationLinkI
 from omero.rtypes import rstring, rlong
 from omero.sys import ParametersI
 

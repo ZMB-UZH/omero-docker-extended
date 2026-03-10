@@ -3,9 +3,10 @@ OMERO connection and session management.
 """
 import os
 import logging
+import re
 from typing import Optional
 from omero.gateway import BlitzGateway
-from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
+from omero.model import FileAnnotationI, OriginalFileI
 from omero.rtypes import rstring
 from pathlib import Path
 

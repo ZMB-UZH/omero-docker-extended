@@ -2,13 +2,11 @@
 Upload workflow orchestration - compatibility checking and import processing.
 """
 import os
-import json
 import logging
 import threading
 import time
 import subprocess
 import shutil
-import re
 import uuid
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed

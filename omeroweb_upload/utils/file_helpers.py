@@ -2,7 +2,6 @@
 File and path utility functions for upload management.
 """
 
-import stat
 import logging
 from pathlib import Path
 

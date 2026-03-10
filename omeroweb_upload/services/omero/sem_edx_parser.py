@@ -8,7 +8,6 @@ one OMERO Table containing the spectrum X,Y data.
 """
 import logging
 import re
-import time
 from bisect import bisect_left
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
@@ -18,8 +17,6 @@ import matplotlib
 matplotlib.use("Agg")
 
 from matplotlib import pyplot as plt
-from matplotlib.patches import FancyBboxPatch
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -665,7 +662,7 @@ def create_edx_spectrum_plot(
     ax.set_ylim(0, y_max_plot * 1.05)
 
     # IMPROVEMENT 2: Denser ticks (2x more frequent)
-    from matplotlib.ticker import MaxNLocator, AutoMinorLocator
+    from matplotlib.ticker import MaxNLocator
     ax.xaxis.set_major_locator(MaxNLocator(nbins=20))  # 2x density
     ax.yaxis.set_major_locator(MaxNLocator(nbins=10))  # 2x density
     

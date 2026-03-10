@@ -2,9 +2,9 @@
 Dataset management for OMERO upload workflow.
 """
 import logging
+import re
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
-from ...utils.omero_helpers import get_id
 
 logger = logging.getLogger(__name__)
 
@@ -217,4 +217,3 @@ def _iter_accessible_projects(conn):
     except Exception as e:
         logger.warning("Failed to list projects: %s", e)
         return
-
