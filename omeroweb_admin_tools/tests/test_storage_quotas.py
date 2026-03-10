@@ -497,11 +497,12 @@ def _raises(exc):
 
 def test_storage_quota_update_endpoint_multipart_form(monkeypatch) -> None:
     """Multipart form-encoded request with updates field should be accepted."""
-    request = RequestFactory().post(
+    multipart_request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
         content_type="multipart/form-data; boundary=BoUnDaRyStRiNg",
     )
+    assert multipart_request.content_type.startswith("multipart/form-data")
     # Django RequestFactory with multipart sends data differently.
     # Use the standard form POST approach.
     request = RequestFactory().post(
