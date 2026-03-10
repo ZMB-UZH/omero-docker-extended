@@ -378,10 +378,10 @@ services:
         hard: 15000
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "runuser -p -m -u omero-server -- sh -c 'HOME=/tmp /opt/omero/server/venv3/bin/omero -s 127.0.0.1 -p 4064 login -u root -w \"$$ROOTPASS\"'"
-        ]
+        - CMD-SHELL
+        - >-
+          runuser -p -m -u omero-server -- sh -c
+          'set -eu; resolve_omero_bin() { for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "$${candidate}" ] || continue; printf "%s" "$${candidate}"; return 0; done; return 1; }; omero_bin="$$(resolve_omero_bin || true)"; [ -n "$${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero" >&2; exit 127; }; HOME=/tmp "$${omero_bin}" -s 127.0.0.1 -p 4064 login -u root -w "$$ROOTPASS"'
       interval: 10s
       timeout: 10s
       retries: 30

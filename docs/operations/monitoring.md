@@ -83,13 +83,14 @@ Quick operator check after any change:
 - All exporters (node, postgres x2, redis, blackbox)
 - Portainer (`/api/system/status`)
 - CrowdSec (`/health`)
-- OMERO.server (port 4064 via HTTP)
 - OMERO.web (port 4090)
+- Alloy (`/metrics`)
 
 **TCP probes** (verify connectivity):
 - `database:5432` (OMERO PostgreSQL)
 - `database-plugin:5433` (plugin PostgreSQL)
 - `redis:6379` (Redis)
+- `omeroserver:4063` (OMERO.server SSL)
 - `omeroserver:4064` (OMERO.server)
 
 ## Grafana dashboards
@@ -114,6 +115,25 @@ All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
 
 - `No matching files for pattern /var/log/auth.log` and `/var/log/syslog` is expected on hosts that do not expose those files (for example journald-only systems). Docker log acquisition still starts normally via `source: docker`.
 - The CrowdSec healthcheck is HTTP-based (`/health`) and should not generate repeated `POST /v1/watchers/login` entries by itself.
+
+## CrowdSec firewall bouncer
+
+The firewall bouncer runs inside the CrowdSec container (not as a separate host package) and manipulates the **host's** firewall rules directly via `network_mode: host` and `NET_ADMIN` capability.
+
+At startup the entrypoint auto-detects the host firewall backend:
+
+| Host OS | Backend detected | Bouncer mode | Protection scope |
+|---|---|---|---|
+| Ubuntu 24.04+, Debian 13+ (Trixie) | nftables | `mode: nftables` | INPUT-hook (host) + FORWARD-hook (Docker bridge) via dedicated `crowdsec`/`crowdsec6` tables at priority -10 |
+| Older distributions with iptables-legacy | iptables | `mode: iptables` | `INPUT` + `DOCKER-USER` chains |
+
+For nftables mode the entrypoint adds supplementary FORWARD-hook chains referencing the bouncer's banned-IP sets so that Docker-bridged containers are also protected — the bouncer's built-in nftables mode only creates INPUT-hook chains.
+
+Expected startup log lines:
+- `Detected host firewall backend: nftables` (or `iptables`)
+- `Validated: nftables kernel access OK (NET_ADMIN + host network)`
+- `Added IPv4 FORWARD chain in table 'ip crowdsec' (set=...)`
+- `Added IPv6 FORWARD chain in table 'ip6 crowdsec6' (set=...)`
 
 ## Operational baseline checks
 
@@ -184,9 +204,43 @@ docker compose pull grafana
 docker compose up -d grafana
 ```
 
+### 6) Diagnose `Swap usage` panel showing `No swap configured`
+
+The `Server Infrastructure -> Swap usage` stat intentionally shows `No swap configured` when the host reports zero swap capacity. This is not a dashboard failure by itself.
+
+Panel query (from `monitoring/grafana/dashboards/omero-infrastructure.json`):
+
+```promql
+((node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"} - node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}) / node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}) and on(instance) (node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"} > 0)
+```
+
+Direct checks:
+
+```bash
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapTotal_bytes{job=~"node-exporter|node_exporter"}'
+curl -sG http://127.0.0.1:9090/api/v1/query --data-urlencode 'query=node_memory_SwapFree_bytes{job=~"node-exporter|node_exporter"}'
+```
+
+Interpretation:
+
+- If `SwapTotal` is `0`, Grafana displays `No swap configured` by design.
+- If `SwapTotal` is greater than `0` and the panel is still empty, check node-exporter scrape health and label matching (`job=~"node-exporter|node_exporter"`).
+
+### 7) Compare current panel behavior vs one week ago (repo-level)
+
+Use git history to verify whether dashboard logic changed recently:
+
+```bash
+git log --since='14 days ago' --oneline -- monitoring/grafana/dashboards/omero-infrastructure.json
+git rev-list -1 --before='7 days ago' HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json
+git diff "$(git rev-list -1 --before='7 days ago' HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json)"..HEAD -- monitoring/grafana/dashboards/omero-infrastructure.json
+```
+
+For the `Swap usage` panel specifically, only presentation options (for example graph mode/description text) should differ across recent revisions; the PromQL logic and `noValue` fallback are expected to remain unchanged unless intentionally updated.
+
 ## Recommended alerts (minimum)
 
-- OMERO.server unavailable (blackbox HTTP/TCP probe failure).
+- OMERO.server unavailable (blackbox TCP probe failure).
 - OMERO.web unavailable (blackbox HTTP probe failure).
 - Database unavailable (blackbox TCP probe failure or postgres-exporter down).
 - Redis unavailable (blackbox TCP probe failure or redis-exporter down).

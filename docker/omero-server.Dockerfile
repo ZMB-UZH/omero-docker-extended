@@ -33,35 +33,17 @@ ARG DNF_MAX_ATTEMPTS=3
 ARG DNF_RETRY_SLEEP_SECONDS=0
 ARG DNF_USE_ROCKY_MIRRORLIST=1
 
-# Locate OMERO.server venv and fail fast if layout changes
-# --------------------------------------------------------
-RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO server venv" >&2; \
-        exit 1; \
-    fi
-
-# Ensure stable OMERO.server path points at the versioned installation
-# --------------------------------------------------------------------
-RUN set -euo pipefail; \
-    SERVER_DIR="$(ls -d /opt/omero/server/OMERO.server-* 2>/dev/null | sort -V | tail -n 1)"; \
-    if [[ -z "${SERVER_DIR}" ]]; then \
-        echo "ERROR: Could not find versioned OMERO.server directory." >&2; \
-        exit 1; \
-    fi; \
-    if [[ ! -e /opt/omero/server/OMERO.server ]]; then \
-        ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
-    fi
-
-# Create Python symlink in OMERO.server/bin for bootstrap script
-# --------------------------------------------------------------
+# Locate OMERO.server venv and directories, then prepare stable symlinks
+# ----------------------------------------------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || -z "${SERVER_DIR}" ]]; then \
         echo "ERROR: Could not find venv or OMERO.server directory" >&2; \
         exit 1; \
+    fi; \
+    if [[ ! -e /opt/omero/server/OMERO.server ]]; then \
+        ln -s "${SERVER_DIR}" /opt/omero/server/OMERO.server; \
     fi; \
     mkdir -p "${SERVER_DIR}/bin"; \
     ln -sf "${VENV_DIR}/bin/python" "${SERVER_DIR}/bin/python"; \
@@ -151,6 +133,7 @@ RUN set -euo pipefail; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
             pip \
+            pytest==7.4.4 \
             "setuptools==${SETUPTOOLS_VERSION}" \
             wheel; \
         SITE_PACKAGES="$("${VENV_DIR}/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"; \
@@ -299,23 +282,16 @@ RUN set -euo pipefail; \
 # Consolidated OMERO.server startup flow
 # --------------------------------------
 COPY startup/10-server-bootstrap.sh /startup/10-server-bootstrap.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/10-server-bootstrap.sh; \
-    chmod 0555 /startup/10-server-bootstrap.sh
-
-# Install OMERO downloader
-# ------------------------
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
-RUN set -euo pipefail; \
-    chown root:root /startup/50-install-omero-downloader.sh; \
-    chmod 0555 /startup/50-install-omero-downloader.sh
-
-# Install ImarisConvertBioformats
-# -------------------------------
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
-    chown root:root /startup/51-install-imarisconvert.sh; \
-    chmod 0555 /startup/51-install-imarisconvert.sh
+    for startup_script in \
+        /startup/10-server-bootstrap.sh \
+        /startup/50-install-omero-downloader.sh \
+        /startup/51-install-imarisconvert.sh; do \
+        chown root:root "${startup_script}"; \
+        chmod 0555 "${startup_script}"; \
+    done
 
 # Pre-configure library path for ImarisConvertBioformats
 # ------------------------------------------------------
@@ -377,9 +353,10 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         '#!/bin/bash' \
         'set -eu' \
-        'omero=/opt/omero/server/venv3/bin/omero' \
+        'omero=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero' \
         'if [ ! -x "$omero" ]; then' \
-        '    omero="$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero"' \
+        '    echo "FATAL: OMERO CLI executable not found at $omero" >&2' \
+        '    exit 127' \
         'fi' \
         'cd /opt/omero/server' \
         'echo "Starting OMERO.server as omero-server"' \
@@ -394,7 +371,12 @@ RUN set -euo pipefail; \
     printf '%s\n' \
         '#!/bin/bash' \
         'set -e' \
-        'source /opt/omero/server/venv3/bin/activate' \
+        'VENV_ACTIVATE=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/activate' \
+        'if [ ! -f "$VENV_ACTIVATE" ]; then' \
+        '    echo "FATAL: OMERO virtualenv activate script not found at $VENV_ACTIVATE" >&2' \
+        '    exit 127' \
+        'fi' \
+        'source "$VENV_ACTIVATE"' \
         'for f in /startup/*; do' \
         '    if [ -f "$f" -a -x "$f" ]; then' \
         '        echo "Running $f $@"' \
@@ -414,7 +396,7 @@ RUN set -euo pipefail; \
 # We must redefine it to drop to the omero-server user.
 # --------------------------------------------------------------------------------------
 HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
-    CMD runuser -p -m -u omero-server -- /opt/omero/server/venv3/bin/omero admin diagnostics
+    CMD runuser -p -m -u omero-server -- sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; exec "${omero_bin}" admin diagnostics'
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts

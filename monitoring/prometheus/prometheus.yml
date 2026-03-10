@@ -62,7 +62,6 @@ scrape_configs:
           - http://blackbox-exporter:9115/-/healthy
           - http://portainer:9000/api/system/status
           - http://crowdsec:8080/health
-          - http://omeroserver:4064
           - http://omeroweb:4090/webgateway/
           - http://alloy:12345/metrics
     relabel_configs:
@@ -82,6 +81,7 @@ scrape_configs:
           - database:5432
           - database-plugin:5433
           - redis:6379
+          - omeroserver:4063
           - omeroserver:4064
     relabel_configs:
       - source_labels: [__address__]

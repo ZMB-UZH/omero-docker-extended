@@ -8,6 +8,7 @@ REPO_ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
+DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -229,26 +230,72 @@ resolve_buildx_inline_cache_setting() {
     return 0
 }
 
+resolve_build_provenance_setting() {
+    if [ -n "${DOCKER_BUILD_PROVENANCE:-}" ]; then
+        if [ "${DOCKER_BUILD_PROVENANCE}" = "1" ]; then
+            printf 'true'
+            return 0
+        fi
+
+        printf 'false'
+        return 0
+    fi
+
+    printf 'false'
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # run_image_build
 #
-# Buildx compressed build (zstd) is always used - fully automatic.
 # Cache is controlled by USE_CACHE_BUILD (from the "Use cache?" prompt),
 # which applies to both buildx inline cache and docker build cache.
 # ---------------------------------------------------------------------------
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
+    local provenance_setting=""
+
+    provenance_setting="$(resolve_build_provenance_setting)"
+
+    # This function is called from `if ! run_image_build; then`, which disables
+    # Bash errexit semantics inside the function body. Check critical commands
+    # explicitly so build or flatten failures cannot fall through as success.
 
     if [ "${USE_BUILDX_COMPRESSED_BUILD}" = "0" ]; then
         echo "Building OMERO images via docker compose build workflow..."
         echo "  Compose file   : ${COMPOSE_FILE}"
         echo "  Cache enabled  : ${USE_CACHE_BUILD}"
+        echo "  Provenance     : ${provenance_setting}"
 
+        local -a compose_build_args=(build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
-            compose_with_installation_env "${COMPOSE_FILE}" build --no-cache
-        else
-            compose_with_installation_env "${COMPOSE_FILE}" build
+            compose_build_args+=(--no-cache)
+        fi
+        compose_build_args+=(--provenance "${provenance_setting}")
+
+        if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"; then
+            echo "ERROR: docker compose build workflow failed." >&2
+            return 1
+        fi
+
+        if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+            if [ ! -x "${buildx_helper_path}" ]; then
+                echo "ERROR: Flatten helper is missing or not executable: ${buildx_helper_path}" >&2
+                echo "ERROR: Re-run the pull/update script and ensure installation/docker_buildx_compressed_push.sh exists." >&2
+                return 1
+            fi
+
+            echo "Flattening compose-built images into single-layer outputs..."
+            if ! COMPOSE_FILE="${COMPOSE_FILE}" \
+                DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
+                DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" \
+                DOCKER_BUILD_FLATTEN_ONLY="1" \
+                DOCKER_BUILD_PUSH_IMAGES="0" \
+                "${buildx_helper_path}"; then
+                echo "ERROR: Compose image flatten workflow failed." >&2
+                return 1
+            fi
         fi
         return 0
     fi
@@ -264,6 +311,7 @@ run_image_build() {
     echo "Building OMERO images via Buildx compressed (zstd) workflow..."
     echo "  Helper script : ${buildx_helper_path}"
     echo "  Cache enabled : ${inline_cache_setting}"
+    echo "  Provenance    : ${provenance_setting}"
 
     # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
     local no_cache_setting="0"
@@ -271,13 +319,18 @@ run_image_build() {
         no_cache_setting="1"
     fi
 
-    COMPOSE_FILE="${COMPOSE_FILE}" \
+    if ! COMPOSE_FILE="${COMPOSE_FILE}" \
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
         DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
-        "${buildx_helper_path}"
-    return $?
+        DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" \
+        "${buildx_helper_path}"; then
+        echo "ERROR: Buildx compressed build workflow failed." >&2
+        return 1
+    fi
+    return 0
 }
 
 resolve_buildx_local_cache_dir() {
@@ -639,6 +692,155 @@ create_omero_groups_from_list() {
     return 0
 }
 
+add_job_service_to_install_groups() {
+    local compose_file="$1"
+    local raw_group_list="${2:-}"
+    local job_user="${OMERO_JOB_SERVICE_USERNAME:-job-service}"
+    local job_pass="${OMERO_JOB_SERVICE_PASS:-}"
+    local join_all="${OMERO_JOB_SERVICE_JOIN_ALL_GROUPS:-0}"
+
+    if [ "${join_all}" != "1" ]; then
+        echo "Skipping job-service group membership (OMERO_JOB_SERVICE_JOIN_ALL_GROUPS != 1)."
+        return 0
+    fi
+
+    if [ -z "${job_pass}" ] || [ -z "${ROOTPASS:-}" ]; then
+        echo "Skipping job-service group membership (OMERO_JOB_SERVICE_PASS or ROOTPASS not set)."
+        return 0
+    fi
+
+    local normalized_group_list=""
+    normalized_group_list="$(normalize_omero_install_group_list "${raw_group_list}")"
+    if [ -z "${normalized_group_list}" ]; then
+        echo "OMERO_INSTALL_GROUP_LIST is empty/commented; continuing with full group discovery for job-service membership sync."
+    fi
+
+    echo "Adding ${job_user} to all OMERO groups (excluding: root, system, user)..."
+
+    local output=""
+    local exit_code=1
+    local retry_limit="${OMERO_GROUP_BOOTSTRAP_RETRIES:-20}"
+    local retry_delay="${OMERO_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-3}"
+    local attempt=0
+
+    for attempt in $(seq 1 "${retry_limit}"); do
+        set +e
+        output="$(compose_with_installation_env "${compose_file}" exec -T \
+            -e HOME="/tmp" \
+            -e ROOTPASS="${ROOTPASS}" \
+            -e JOB_USER="${job_user}" \
+            -e JOB_PASS="${job_pass}" \
+            omeroserver bash -s <<'EOS_JOB_SERVICE'
+set -uo pipefail
+
+resolve_omero_bin() {
+    local candidate=""
+    for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
+        [ -x "${candidate}" ] || continue
+        printf "%s" "${candidate}"
+        return 0
+    done
+    return 1
+}
+
+parse_group_names() {
+    local output_text="$1"
+    if printf '%s' "${output_text}" | grep -q '|'; then
+        printf '%s\n' "${output_text}" \
+            | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}'
+    else
+        printf '%s\n' "${output_text}" \
+            | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}'
+    fi
+}
+
+omero_user_exists() {
+    local users_out=""
+    users_out="$(su omero-server -c "\"${OMERO_BIN}\" user list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>/dev/null || true)"
+    printf '%s\n' "${users_out}" \
+        | awk '{for (i = 1; i <= NF; i++) if ($i == ENVIRON["JOB_USER"]) found = 1} END {exit(found ? 0 : 1)}'
+}
+
+OMERO_BIN="$(resolve_omero_bin || true)"
+if [ -z "${OMERO_BIN}" ]; then
+    echo "OMERO CLI not found"
+    exit 127
+fi
+
+OMERO_TMPDIR_VALUE="${OMERO_TMP_PATH%/}/omero-server/tmp"
+if [ -z "${OMERO_TMP_PATH:-}" ]; then
+    OMERO_TMPDIR_VALUE="/tmp"
+fi
+mkdir -p "${OMERO_TMPDIR_VALUE}"
+chmod 0777 "${OMERO_TMPDIR_VALUE}" || true
+export HOME="/tmp" TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TMPDIR="${OMERO_TMPDIR_VALUE}" OMERO_TEMPDIR="${OMERO_TMPDIR_VALUE}"
+
+if ! su omero-server -c "\"${OMERO_BIN}\" -C -s localhost -p 4064 login -u root -w \"${ROOTPASS}\"" </dev/null >/dev/null 2>&1; then
+    echo "ICE not ready"
+    exit 1
+fi
+
+if ! omero_user_exists >/dev/null 2>&1; then
+    create_out="$(su omero-server -c "\"${OMERO_BIN}\" user add \"${JOB_USER}\" Job Service --group-name user -P \"${JOB_PASS}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)"
+    create_rc=$?
+    if [ "${create_rc}" -ne 0 ] && ! printf '%s' "${create_out}" | grep -qiE 'already exists|User exists|name already in use'; then
+        echo "Failed to create ${JOB_USER}: ${create_out}"
+        exit 1
+    fi
+    echo "Ensured user ${JOB_USER} exists"
+fi
+
+group_out="$(su omero-server -c "\"${OMERO_BIN}\" group list -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1 || true)"
+eligible_groups="$(parse_group_names "${group_out}" | grep -v -E '^(root|system|user)$' | sort -u || true)"
+if [ -z "${eligible_groups}" ]; then
+    echo "No eligible groups found"
+    exit 1
+fi
+
+failed=0
+for group_name in ${eligible_groups}; do
+    [ -z "${group_name}" ] && continue
+    out="$(su omero-server -c "\"${OMERO_BIN}\" user joingroup \"${group_name}\" --name=\"${JOB_USER}\" -s localhost -p 4064 -u root -w \"${ROOTPASS}\"" </dev/null 2>&1)" && {
+        echo "Added ${JOB_USER} to ${group_name}"
+        continue
+    }
+
+    if printf '%s' "${out}" | grep -qiE 'already.*(member|in group)|duplicate'; then
+        echo "${JOB_USER} already in ${group_name}"
+        continue
+    fi
+
+    echo "WARN: joingroup ${group_name} failed: ${out}"
+    failed=1
+done
+
+exit "${failed}"
+EOS_JOB_SERVICE
+        2>&1)"
+        exit_code=$?
+        set -e
+
+        if [ "${exit_code}" -eq 0 ]; then
+            break
+        fi
+
+        if [ "${attempt}" -lt "${retry_limit}" ]; then
+            echo "WARNING: job-service group membership attempt ${attempt}/${retry_limit} failed. Retrying in ${retry_delay}s..." >&2
+            sleep "${retry_delay}"
+        fi
+    done
+
+    if [ "${exit_code}" -ne 0 ]; then
+        echo "WARNING: Could not add ${job_user} to all eligible groups during installation. The hourly runtime sync will retry." >&2
+        echo "WARNING: Last output: ${output}" >&2
+        # Non-fatal: the background sync in 10-server-bootstrap.sh will catch up
+        return 0
+    fi
+
+    echo "Job-service installation & group membership completed."
+    return 0
+}
+
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -705,7 +907,7 @@ OLD_DOTENV
     for fixed_name in portainer redis-sysctl-init pg-maintenance; do
         if docker container inspect "${fixed_name}" >/dev/null 2>&1; then
             echo "Force-removing leftover container with fixed name: ${fixed_name}"
-            docker rm -f "${fixed_name}" 2>/dev/null || true
+            docker rm -fv "${fixed_name}" 2>/dev/null || true
         fi
     done
 
@@ -1585,6 +1787,34 @@ resolve_cache_build_choice() {
     return 0
 }
 
+resolve_flatten_final_image_choice() {
+    local reply=""
+    local prompt_message=""
+    local prompt_hint="Y/n"
+    local prompt_default="n"
+    local default_choice="no"
+
+    if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"; then
+        return 1
+    fi
+
+    if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
+        prompt_hint="Y/n"
+        prompt_default="Y"
+        default_choice="yes"
+    fi
+
+    prompt_message="Flatten final images into single-layer outputs? (slower; rebuilds each image) ${prompt_hint} (Default: ${prompt_default})"
+    reply="$(prompt_yes_no "${prompt_message}" "${default_choice}")"
+    if [ "${reply}" = "yes" ]; then
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1
+    else
+        DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
+    fi
+
+    return 0
+}
+
 resolve_buildx_compressed_build_choice() {
     local reply=""
     local override_choice="${USE_BUILDX_CHOICE:-}"
@@ -1665,6 +1895,10 @@ if ! resolve_cache_build_choice; then
     exit 1
 fi
 
+if ! resolve_flatten_final_image_choice; then
+    exit 1
+fi
+
 if ! resolve_start_containers_choice; then
     exit 1
 fi
@@ -1674,6 +1908,10 @@ if ! validate_toggle_config "INSTALLATION_AUTOMATION_MODE" "${INSTALLATION_AUTOM
 fi
 
 if ! validate_toggle_config "USE_BUILDX_COMPRESSED_BUILD" "${USE_BUILDX_COMPRESSED_BUILD}"; then
+    exit 1
+fi
+
+if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"; then
     exit 1
 fi
 
@@ -1811,12 +2049,12 @@ if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
 fi
 
 warn_directory_not_empty "${OMERO_DATABASE_PATH}" "OMERO database directory"
-warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"
+warn_directory_not_empty "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"
 warn_directory_not_empty "${OMERO_DATA_PATH}" "OMERO data directory"
 warn_directory_not_empty "${OMERO_TMP_PATH}" "OMERO temp directory"
 
 if ! ensure_data_path "${OMERO_DATABASE_PATH}" "OMERO database directory"; then exit 1; fi
-if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory"; then exit 1; fi
+if ! ensure_data_path "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_DATA_PATH}" "OMERO data directory"; then exit 1; fi
 if ! ensure_data_path "${OMERO_TMP_PATH}" "OMERO temp directory"; then exit 1; fi
 if ! ensure_container_writable_path "${OMERO_USER_DATA_PATH}" "OMERO user data directory"; then exit 1; fi
@@ -1853,7 +2091,7 @@ fi
 
 echo "Recording pre-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (before docker compose down)"
-log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (before docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (before docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (before docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (before docker compose down)"
 
@@ -1886,7 +2124,7 @@ fi
 
 echo "Recording post-stop data path snapshots..."
 log_path_snapshot "${OMERO_DATABASE_PATH}" "OMERO database directory (after docker compose down)"
-log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory (after docker compose down)"
+log_path_snapshot "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory (after docker compose down)"
 log_path_snapshot "${OMERO_DATA_PATH}" "OMERO data directory (after docker compose down)"
 log_path_snapshot "${OMERO_TMP_PATH}" "OMERO temp directory (after docker compose down)"
 
@@ -1926,7 +2164,7 @@ discover_first_existing_user_or_die() {
                 break
             fi
         fi
-        docker rm -f "omero-install-probe-user-*" >/dev/null 2>&1 || true
+        docker rm -fv "omero-install-probe-user-*" >/dev/null 2>&1 || true
     done
 
     if [ -z "${found}" ]; then
@@ -1936,7 +2174,7 @@ discover_first_existing_user_or_die() {
         echo "DEBUG: Listing passwd entries containing 'omero' from image '${image}':" >&2
         local probe_name="omero-install-probe-users-$RANDOM"
         docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "getent passwd | grep -i omero || true" >&2 || true
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
         echo "" >&2
         return 1
     fi
@@ -1954,14 +2192,14 @@ discover_uid_gid_or_die() {
     local out=""
 
     if ! out="$(docker run --rm --name "${probe_name}" --entrypoint "" "${image}" sh -c "id ${id_flag} '${user_name}'" 2>/dev/null)"; then
-        docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
         echo "ERROR: Failed to discover id ${id_flag} for user '${user_name}' from image '${image}'." >&2
         local pass_probe="omero-install-probe-passwd-$RANDOM"
         docker run --rm --name "${pass_probe}" --entrypoint "" "${image}" sh -c "getent passwd '${user_name}' || true" >&2 || true
-        docker rm -f "${pass_probe}" >/dev/null 2>&1 || true
+        docker rm -fv "${pass_probe}" >/dev/null 2>&1 || true
         return 1
     fi
-    docker rm -f "${probe_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${probe_name}" >/dev/null 2>&1 || true
 
     if ! [[ "${out}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: Discovered non-numeric id (${id_flag})='${out}' for user '${user_name}' in image '${image}'" >&2
@@ -2028,7 +2266,7 @@ discover_uid_gid_from_passwd_or_die() {
     passwd_file="$(mktemp)"
     if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
         echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${user_name}'." >&2
-        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${container_name}" >/dev/null 2>&1 || true
         rm -f "${passwd_file}" || true
         return 1
     fi
@@ -2036,7 +2274,7 @@ discover_uid_gid_from_passwd_or_die() {
     uid="$(awk -F: -v user="${user_name}" '$1==user {print $3; exit}' "${passwd_file}")"
     gid="$(awk -F: -v user="${user_name}" '$1==user {print $4; exit}' "${passwd_file}")"
 
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${container_name}" >/dev/null 2>&1 || true
     rm -f "${passwd_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
@@ -2090,13 +2328,13 @@ discover_container_default_id_or_die() {
         fi
 
         if ! docker start "${probe_container}" >/dev/null 2>&1; then
-            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
             rm -f "${proc_status_file}" || true
             return 1
         fi
 
         if ! docker cp "${probe_container}:/proc/1/status" "${proc_status_file}" >/dev/null 2>&1; then
-            docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+            docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
             rm -f "${proc_status_file}" || true
             return 1
         fi
@@ -2104,7 +2342,7 @@ discover_container_default_id_or_die() {
         proc_uid="$(awk '/^Uid:/ {print $2; exit}' "${proc_status_file}")"
         proc_gid="$(awk '/^Gid:/ {print $2; exit}' "${proc_status_file}")"
 
-        docker rm -f "${probe_container}" >/dev/null 2>&1 || true
+        docker rm -fv "${probe_container}" >/dev/null 2>&1 || true
         rm -f "${proc_status_file}" || true
 
         if [[ "${proc_uid}" =~ ^[0-9]+$ ]] && [[ "${proc_gid}" =~ ^[0-9]+$ ]]; then
@@ -2214,7 +2452,7 @@ discover_container_default_id_or_die() {
 
     if ! docker cp "${container_name}:/etc/passwd" "${passwd_file}" >/dev/null 2>&1; then
         echo "ERROR: Unable to read /etc/passwd from image '${image}' while resolving user '${configured_account}'." >&2
-        docker rm -f "${container_name}" >/dev/null 2>&1 || true
+        docker rm -fv "${container_name}" >/dev/null 2>&1 || true
         rm -f "${passwd_file}" "${group_file}" || true
         return 1
     fi
@@ -2241,7 +2479,7 @@ discover_container_default_id_or_die() {
         fi
     fi
 
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    docker rm -fv "${container_name}" >/dev/null 2>&1 || true
     rm -f "${passwd_file}" "${group_file}" || true
 
     if [ "${id_flag}" = "-u" ]; then
@@ -2388,7 +2626,7 @@ if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor
 if ! chown_tree_or_die "${OMERO_TMP_PATH}" "OMERO temp directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! ensure_omero_server_tmp_namespace "${OMERO_TMP_PATH}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMP plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
+if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${GRAFANA_DATA_PATH}" "Grafana data directory" "${GRAFANA_UID}" "${GRAFANA_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${LOKI_DATA_PATH}" "Loki data directory" "${LOKI_UID}" "${LOKI_GID}"; then exit 1; fi
@@ -2520,6 +2758,58 @@ else
     echo "Created .admin-tools directory with write permissions for omeroweb container (mode 0777, no sticky bit)."
 fi
 
+# =====================================================
+# Tmp artifact cleaner installation (non-blocking)
+#
+# Installs a host-side systemd timer that periodically deletes temporary
+# artifacts under OMERO_TMP_PATH that are older than 24 hours.
+#
+# IMPORTANT:
+# - This replaces all previous "cleanup on page load" mechanisms in plugins.
+# - Immediate cleanup after successful jobs is handled inside the plugins.
+# =====================================================
+install_tmp_cleaner_if_available() {
+    local omero_tmp_dir="$1"
+    local installer_path="${OMERO_INSTALLATION_PATH%/}/scripts/install-tmp-cleaner.sh"
+
+    echo "=============================================="
+    echo "Installing host-side tmp artifact cleaner"
+    echo "=============================================="
+
+    if [ ! -f "${installer_path}" ]; then
+        echo "INFO: Tmp cleaner installer not found at ${installer_path}."
+        echo "INFO: Skipping tmp cleaner installation."
+        return 0
+    fi
+
+    if [ -z "${omero_tmp_dir}" ] || [ ! -d "${omero_tmp_dir}" ]; then
+        echo "INFO: OMERO_TMP_PATH is not a directory (${omero_tmp_dir:-unset})."
+        echo "INFO: Skipping tmp cleaner installation."
+        return 0
+    fi
+
+    chmod +x "${installer_path}"
+    if ! "${installer_path}" "${omero_tmp_dir}"; then
+        echo ""
+        echo "WARNING: Tmp cleaner installation encountered errors (non-blocking)." >&2
+        echo "WARNING: You can install it manually later with:" >&2
+        echo "  sudo ${installer_path} ${omero_tmp_dir}" >&2
+        echo ""
+        return 0
+    fi
+
+    echo ""
+    echo "✔ Tmp cleaner installed successfully."
+    echo ""
+    echo "Useful commands:"
+    echo "  systemctl status omero-tmp-cleaner.timer"
+    echo "  journalctl -u omero-tmp-cleaner.service"
+    echo "  sudo /usr/local/sbin/omero-tmp-cleaner --tmp-dir ${omero_tmp_dir}"
+    echo ""
+    return 0
+}
+
+install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
 
@@ -2529,6 +2819,8 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
         exit 1
     fi
+
+    add_job_service_to_install_groups "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
 fi

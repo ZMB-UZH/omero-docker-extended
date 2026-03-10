@@ -13,6 +13,7 @@ Stateful backend providing the OMERO API, image storage, script execution, and d
 - Custom Dockerfile (`docker/omero-server.Dockerfile`) based on `openmicroscopy/omero-server`.
 - Installs CLI plugins: omero-cli-render, omero-metadata, omero-cli-duplicate, omero-rdf.
 - Installs OMERO.Figure PDF export support (reportlab, markdown).
+- Installs pinned `pytest` in the OMERO.server virtualenv for in-container regression checks.
 - Clones official OME scripts and BIOP scripts during build.
 - Bootstrap script (`startup/10-server-bootstrap.sh`) configures Python path, TLS certificates, job-service user, OMERO.Figure scripts, and registers official scripts.
 - Optional runtime installations: OMERO.downloader (`startup/50-install-omero-downloader.sh`) and ImarisConvertBioformats (`startup/51-install-imarisconvert.sh`).
@@ -25,7 +26,7 @@ Django-based web frontend with all registered plugin apps and a co-located Celer
 
 - Custom Dockerfile (`docker/omero-web.Dockerfile`) based on `openmicroscopy/omero-web-standalone`.
 - Installs all four plugin packages, `omero_plugin_common`, plus third-party OMERO.web plugins (gallery, figure, fpbioimage, iviewer, mapr, parade, web-zarr, autotag, tagsearch).
-- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export).
+- Installs matplotlib (SEM-EDX visualization), psycopg2-binary (plugin database), celery+redis (Imaris export), and pinned `pytest` for in-container plugin regression tests.
 - Managed by supervisord (`supervisord.conf`): runs OMERO.web and the Imaris Celery worker as two supervised processes.
 - Bootstrap script (`startup/10-web-bootstrap.sh`) validates/repairs the OMERO.web `var/` runtime layout, guarantees `var/django_secret_key` exists, validates log-directory access, and configures Docker socket GID.
 - Exposed on port 4090, health check: `curl` to `/webgateway/`.
@@ -61,7 +62,7 @@ Cache backend and Celery message broker:
 - **Postgres exporters** (v0.19.0, x2): one per PostgreSQL instance.
 - **Redis exporter** (v1.81.0): Redis metrics.
 - **Path usage exporter** (custom Python 3.12 image): reads OMERO data/database paths from `installation_paths.env` every 30 seconds and runs host `df -P -B1` checks for those paths to measure actual filesystem usage (including symlink-resolved targets). Writes Prometheus textfile-collector metrics (`omero_path_used_ratio`, `omero_path_bytes_total`, `omero_path_bytes_used`) consumed by node-exporter.
-- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog, SSH auth logs, and Docker container logs. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`. The service is not run in Docker `privileged` mode by default; it operates through read-only host log, host-root, and Docker-socket mounts.
+- **CrowdSec** (v1.7.6): host-wide cybersecurity engine analyzing host syslog, SSH auth logs, and Docker container logs. The firewall bouncer auto-detects the host's firewall backend at startup: on Ubuntu 24.04+ and Debian 13+ (Trixie) it uses `mode: nftables` with dedicated `crowdsec`/`crowdsec6` tables, INPUT-hook chains (host protection) and supplementary FORWARD-hook chains (Docker bridge traffic protection) at priority -10. On older hosts it falls back to `mode: iptables` with `INPUT` and `DOCKER-USER` chains. The bouncer binary and both firewall backends (nftables, iptables, ipset) are pre-installed at image build time. Runs with `network_mode: host` and `NET_ADMIN`+`NET_RAW` capabilities so firewall commands operate directly on the host's network stack — without Docker `privileged` mode. Integrated into the UID/GID auto-detection mechanism for host directory ownership. Acquisition sources configured via `monitoring/crowdsec/acquis.yaml`. Console enrollment via `CROWDSEC_ENROLL_KEY` in `env/omero_secrets.env`.
 
 ### Maintenance sidecar (`pg-maintenance`)
 

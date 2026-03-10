@@ -422,7 +422,11 @@
           ],
           "fields": ""
         },
-        "orientation": "horizontal"
+        "orientation": "horizontal",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
       },
       "description": "Number of healthy Prometheus targets compared with total discovered targets."
     },

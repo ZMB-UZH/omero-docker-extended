@@ -72,7 +72,7 @@ Notes:
 - When push mode is disabled (`DOCKER_BUILD_PUSH_IMAGES=0`, the default without `DOCKER_REGISTRY_PREFIX`), the helper builds local images without `force-compression=true` to avoid unnecessary BuildKit recompression/memory pressure.
 - When `DOCKER_REGISTRY_PREFIX` is set, `DOCKER_BUILD_PUSH_IMAGES` defaults to `1` (push enabled).
 - When `DOCKER_REGISTRY_PREFIX` is unset, `DOCKER_BUILD_PUSH_IMAGES` defaults to `0` (local images only).
-- By default, build targets are auto-discovered from `docker-compose.yml` (all services with a `build:` block).
+- By default, build targets are auto-discovered from the active rendered `docker compose config` output (services with a `build:` block in the currently enabled profile set).
 - Override `DOCKER_BUILD_TARGETS` only if you explicitly want a subset of services.
 - `DOCKER_REGISTRY_PREFIX` is only required when push mode is enabled.
 - Transient Buildx export failures are retried automatically, including layer-lock contention (`(*service).Write failed ... ref layer-sha256:... locked ... unavailable`) and cache-export transport failures (`failed to receive status ... Unavailable ... EOF`).
@@ -81,9 +81,12 @@ Notes:
 - During `pg-maintenance` image builds on Debian-based images, `invoke-rc.d`/`policy-rc.d` and `sysctl: permission denied on key ...` messages can appear while package post-install scripts run in an unprivileged build container; these are expected build-time warnings when the layer still completes successfully.
 - Retry behavior is configurable via `DOCKER_BUILD_BAKE_RETRY_COUNT` (default: `3`) and `DOCKER_BUILD_BAKE_RETRY_SLEEP_SECONDS` (default: `2`).
 - `DOCKER_BUILD_BAKE_SERIAL_MODE` controls execution strategy: `auto` (default), `always`, or `never`.
+- `DOCKER_BUILD_PROVENANCE` defaults to `0`, so compose, Buildx, and flatten-rebuild steps all pass `--provenance=false` by default. Set `DOCKER_BUILD_PROVENANCE=1` only if you explicitly need BuildKit provenance attestations and accept the extra metadata export time.
+- `DOCKER_BUILD_FLATTEN_FINAL_IMAGE` now defaults to `0`, so flattening is opt-in for both build workflows. When enabled, Buildx builds flatten their temporary source images after `buildx bake`; plain `docker compose build` runs the same flatten helper immediately afterward against the compose-built local images. In both cases, each target is rebuilt from `scratch` with a single filesystem `COPY --from=source / /`, then metadata is restored (`ENV`, `ENTRYPOINT`, `CMD`, `EXPOSE`, `VOLUME`, `WORKDIR`, `USER`, `STOPSIGNAL`, `HEALTHCHECK`, `LABEL`, `ONBUILD`) via `docker image import --change ...`. This produces a true single-layer final image for the local Docker daemon, but it is intentionally slower because every selected image is exported and re-imported. Set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` to enable it. Temporary source tags/build contexts are cleaned automatically, and flatten metadata generation now fails fast if source-image inspection or metadata restoration cannot be completed.
 - The helper enforces `DOCKER_BUILDX_DRIVER=docker-container` and will fail fast if another driver is requested (local cache export requires the containerized BuildKit driver).
 - Optional `DOCKER_BUILDX_DRIVER_OPTS` (comma-separated `key=value` values) are passed through to `docker buildx create --driver-opt` for deterministic BuildKit sizing/tuning.
 - Set `DOCKER_BUILDX_FORCE_RECREATE_BUILDER=1` to force builder recreation when testing driver/driver-opt changes.
+- `DOCKER_BUILDX_KEEP_BUILDER` defaults to `0`, so the installation/build helper removes the temporary Buildx builder, any BuildKit containers, and builder-owned volumes after a Buildx run. Set `DOCKER_BUILDX_KEEP_BUILDER=1` only if you explicitly want to preserve that state between runs.
 - In `auto` mode, multi-target cached builds run serially up front when local cache export is enabled (to avoid known BuildKit local-cache lock contention); if lock contention still appears in parallel mode, the helper falls back to serial per-target `buildx bake` execution.
 - Root cause note: observed hangs occur during BuildKit local cache export (`exporting cache to client directory`) and are amplified by `cache-to mode=max` on large multi-stage images.
 - Local cache export remains enabled by default (`DOCKER_BUILD_LOCAL_CACHE_ENABLED=1`), but now uses `DOCKER_BUILD_LOCAL_CACHE_MODE=min` by default to reduce cache-export pressure while keeping deterministic cache reuse.
@@ -91,7 +94,9 @@ Notes:
 - Set `DOCKER_BUILD_LOCAL_CACHE_MODE=max` only when you explicitly need full cache graph export despite the higher risk of long export phases.
 - If retries still fail with cache-export transport errors, the helper automatically performs one fallback build with local cache export disabled for that run (compression remains enabled).
 - Image compression settings (`DOCKER_BUILD_COMPRESSION_TYPE`, `DOCKER_BUILD_COMPRESSION_LEVEL`, `force-compression=true`) are unchanged by local cache mode; compressed image output remains enabled.
-- The installation workflow enables this compressed Buildx mode by default, and prompts whether to keep Buildx enabled during each interactive run (question 2). If you disable it, the script falls back to `docker compose build`. Run:
+- When `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` and `DOCKER_BUILD_PUSH_IMAGES=1`, the helper pushes the flattened final images via `docker push` after the flatten step. This preserves the single-layer result, but Buildx-specific output compression settings do not apply to that final publish step.
+- The installation workflow prompts whether to enable the compressed Buildx mode during each interactive run (default: `No`). If you disable it, the script falls back to `docker compose build`.
+- Immediately after the `Use build cache?` prompt, the installation workflow asks whether to flatten final images into single-layer outputs (default: `No`). In unattended automation, the same default applies unless you explicitly set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1`. Run:
 - If you answer **No** to the installation prompt `Use build cache?`, the installer now performs deterministic local cache cleanup before rebuilding:
   - always prunes Docker builder cache (`docker builder prune -a -f`),
   - and, when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`).

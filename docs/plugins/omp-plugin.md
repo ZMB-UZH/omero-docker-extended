@@ -75,7 +75,6 @@ omeroweb_omp_plugin/
 │   ├── filename_utils.py      # Separator detection and regex generation
 │   ├── http_utils.py          # HTTP client helpers
 │   ├── rate_limit.py          # Per-user rate limiting
-│   ├── job_cleanup.py         # Stale job file cleanup
 │   ├── jobs/job_storage.py    # Job file I/O with portalocker
 │   ├── omero/annotation_service.py  # MapAnnotation creation/deletion
 │   ├── omero/image_service.py       # Image and filename retrieval

@@ -282,7 +282,7 @@ Create deployment-local runtime files by copying these templates and removing `_
 - All `*_example*` files in this repository are the templates for configuration and operational helper scripts.
 - For AI-assisted analysis and maintenance, AI agents are instructed to always assume the corresponding non-example runtime files are present on the target system and structurally aligned with their `*_example*` versions.
 - This split exists so update flows (including `github_pull_project_bash_example`) can pull repository changes without replacing site-local runtime files that admins manage outside git, including pull-launcher runtime files (`github_pull_project_bash` / `github_pull_private_project_bash`) that operators manage locally.
-- The pull/update workflow preserves only `logo/logo.png` by backing it up and restoring it after replacement; `logo/logo_example.png` continues to be refreshed from upstream templates.
+- The pull/update workflow preserves only existing site-local `logo/logo.png` in place (no backup/restore copy), while still refreshing sibling template assets such as `logo/logo_example.png` from upstream.
 
 ### Lifecycle commands
 
@@ -328,9 +328,9 @@ The observability stack provides:
 The `pg-maintenance` sidecar runs automated maintenance against both PostgreSQL databases:
 
 - **Weekly** (Sunday 03:00): `VACUUM ANALYZE` -- reclaims dead tuples, updates query planner statistics.
-- **Monthly** (first Sunday 04:00): `REINDEX CONCURRENTLY` -- rebuilds indexes online without locking.
+- **Monthly** (first Sunday 04:00): `REINDEX CONCURRENTLY` -- rebuilds indexes online with short lock phases.
 
-Both operations are safe for production and do not require downtime.
+Both operations are designed for online use. They may briefly acquire locks; the maintenance scripts are configured to fail fast instead of waiting on locks.
 
 </details>
 
