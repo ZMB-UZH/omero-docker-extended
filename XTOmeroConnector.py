@@ -40,6 +40,7 @@ EXPORT_POLL_INTERVAL = 2.0  # seconds
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 _XT_LOG_PATH = None
+_XT_DLL_DIR_HANDLES = []
 
 
 def _xt_debug(message):
@@ -219,17 +220,21 @@ def _prepend_unique_path(values, candidate):
 
 
 def _prepare_imaris_xt_environment():
-    """Add bundled Imaris XT Python paths so ImarisLib/IcePy can load without system installs."""
+    """Add bundled Imaris XT Python paths and DLL directories so ImarisLib/IcePy can load."""
     if os.name != "nt":
-        return []
+        return {"paths": [], "dll_dirs": []}
 
     path_parts = os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
     added = []
+    dll_dirs = []
+    add_dll_directory = getattr(os, "add_dll_directory", None)
     for install_root in _iter_imaris_install_roots():
         candidates = [
             install_root,
             os.path.join(install_root, "XT"),
             os.path.join(install_root, "XT", "python3"),
+            os.path.join(install_root, "XT", "python3", "DLLs"),
+            os.path.join(install_root, "XT", "bin"),
             os.path.join(install_root, "XT", "python3", "Lib"),
             os.path.join(install_root, "XT", "python3", "Lib", "site-packages"),
             os.path.join(install_root, "XT", "python"),
@@ -243,10 +248,17 @@ def _prepare_imaris_xt_environment():
                 sys.path.insert(0, normalized)
                 added.append(normalized)
             _prepend_unique_path(path_parts, normalized)
+            if callable(add_dll_directory):
+                try:
+                    handle = add_dll_directory(normalized)
+                    _XT_DLL_DIR_HANDLES.append(handle)
+                    dll_dirs.append(normalized)
+                except Exception:
+                    pass
 
     if path_parts:
         os.environ["PATH"] = os.pathsep.join(path_parts)
-    return added
+    return {"paths": added, "dll_dirs": dll_dirs}
 
 
 def _safe_path_exists(path_value):
@@ -296,6 +308,7 @@ def _collect_imaris_xt_diagnostics():
             {"path": candidate, "exists": _safe_path_exists(candidate)}
             for candidate in deduped_xt_paths
         ],
+        "has_add_dll_directory": callable(getattr(os, "add_dll_directory", None)),
         "imarislib_import": _probe_module_import("ImarisLib"),
         "icepy_import": _probe_module_import("IcePy"),
     }
@@ -323,6 +336,7 @@ def _log_imaris_xt_diagnostics():
         )
     _xt_debug(
         "XT diagnostics imports: "
+        f"has_add_dll_directory={diagnostics['has_add_dll_directory']} "
         f"ImarisLib_ok={diagnostics['imarislib_import']['ok']} "
         f"ImarisLib_error={diagnostics['imarislib_import']['error'] or '<none>'} "
         f"IcePy_ok={diagnostics['icepy_import']['ok']} "
@@ -367,11 +381,18 @@ def _resolve_imaris_application(
     attempts = max(1, int(retries or 1))
     for attempt in range(attempts):
         try:
-            added_paths = _prepare_imaris_xt_environment()
+            prepared = _prepare_imaris_xt_environment()
+            added_paths = prepared.get("paths", [])
+            added_dll_dirs = prepared.get("dll_dirs", [])
             if added_paths:
                 _xt_debug(
                     "Prepared Imaris XT environment paths: "
                     + "; ".join(added_paths)
+                )
+            if added_dll_dirs:
+                _xt_debug(
+                    "Prepared Imaris XT DLL directories: "
+                    + "; ".join(added_dll_dirs)
                 )
             import ImarisLib
 
@@ -394,8 +415,7 @@ def _resolve_imaris_application(
             _xt_debug(
                 "Imaris XT bridge import failed: "
                 f"{exc}. Current Python={version_info}. "
-                "Official Imaris XT support requires Python 2.7 or 3.7, "
-                "and launching Python directly is not automatically connected to Imaris."
+                "The live Imaris session handle is unavailable, so same-session open cannot work."
             )
             break
 
