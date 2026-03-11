@@ -12,6 +12,7 @@ repository. Use it before attempting speculative code changes.
 | Export job starts but no file ever appears | OMERO CLI launch path or ImarisConvert failure | Launch `IMS_Export.py` directly with `omero script launch` |
 | Job fails immediately with script-not-found | Script registration/bootstrap problem | Check `omero script list` and bootstrap logs |
 | Export succeeds but attachment/annotation fails | Group permissions issue during post-export attachment | Check script output and server logs for `ReadOnlyGroupSecurityViolation` |
+| Export/download succeeds but the file does not open in the existing Imaris window | Windows-side XT runtime mismatch; no live Imaris handle was provided back to the standalone connector | Check the XT log for Python version and `ImarisLib` / `IcePy` import failures |
 
 ## Failure History Captured Here
 
@@ -137,6 +138,27 @@ Fix:
 - prefer the requesting user's OMERO session key for `omero script launch`
   whenever one is available,
 - fall back to the job-service session only if no user session key was provided.
+
+### 6. IMS downloaded successfully but standalone XT still could not open it in the current Imaris session
+
+Observed behavior:
+
+- the standalone connector logged successful OMERO login, export, and IMS download,
+- the XT log then showed `Imaris application handle is not available`,
+- Windows-side logs also showed `Imaris XT bridge import failed ... IcePy ...`,
+- when a direct executable fallback was temporarily enabled, it opened a new Imaris session instead of reusing the running one.
+
+Root cause:
+
+- opening an `.ims` file is native in Imaris,
+- opening it in the already running Imaris session from the standalone XT connector requires a live XT handle,
+- that handle depends on the official Imaris XT Python bridge,
+- the affected Windows host was running the connector under Python `3.9.1`, while official Imaris XT support is restricted to Python `2.7` or `3.7`.
+
+Operational rule:
+
+- the standalone connector must not launch a second Imaris session as a fallback,
+- if no live XT handle is available, fail explicitly and fix the local Imaris XT runtime instead.
 
 ## Standard Diagnostic Flow
 

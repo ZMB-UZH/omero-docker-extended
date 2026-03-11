@@ -119,22 +119,9 @@ def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkey
     assert module._resolve_imaris_application(17) is None
 
 
-def test_open_file_in_imaris_falls_back_to_imaris_executable(monkeypatch):
+def test_open_file_in_imaris_returns_false_without_handle():
     module = _load_xt_module()
-    launched = {}
-
-    monkeypatch.setattr(module, "_find_imaris_executable", lambda: r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe")
-
-    def _fake_popen(args):
-        launched["args"] = args
-        return object()
-
-    monkeypatch.setattr(module.subprocess, "Popen", _fake_popen)
-    assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is True
-    assert launched["args"] == [
-        r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe",
-        "C:\\temp\\demo.ims",
-    ]
+    assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is False
 
 
 def test_find_imaris_executable_prefers_env_override(monkeypatch):
