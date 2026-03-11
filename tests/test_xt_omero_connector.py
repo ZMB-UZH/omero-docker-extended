@@ -146,15 +146,26 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
         r"C:\Program Files\Bitplane\Imaris 11.0.0",
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT",
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs",
         r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\Lib",
     }
     monkeypatch.setattr(module.os.path, "isdir", lambda path: module.os.path.normpath(path) in existing_dirs)
+    added_dll_dirs = []
+    monkeypatch.setattr(
+        module.os,
+        "add_dll_directory",
+        lambda path: added_dll_dirs.append(module.os.path.normpath(path)) or f"handle:{path}",
+        raising=False,
+    )
 
-    added = module._prepare_imaris_xt_environment()
+    prepared = module._prepare_imaris_xt_environment()
+    added_paths = prepared["paths"]
 
-    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in added
-    assert module.sys.path[0] in added
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in added_paths
+    assert module.sys.path[0] in added_paths
     assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in module.os.environ["PATH"]
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs" in prepared["dll_dirs"]
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\DLLs" in added_dll_dirs
     module.sys.path[:] = original_sys_path
     monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
 
@@ -180,6 +191,7 @@ def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
 
     assert diagnostics["python_version_short"]
     assert diagnostics["imaris_executable_exists"] is True
+    assert "has_add_dll_directory" in diagnostics
     assert diagnostics["imarislib_import"]["ok"] is False
     assert diagnostics["icepy_import"]["ok"] is False
 
