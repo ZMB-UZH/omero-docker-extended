@@ -31,6 +31,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
+import subprocess
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -81,8 +82,8 @@ def is_ims_file(file_path):
 def open_file_in_imaris(file_path, imaris_app):
     """Attempt to open a file in Imaris using available API methods."""
     if imaris_app is None:
-        if _open_file_with_windows_shell(file_path):
-            print("Opened IMS via Windows shell association.")
+        if _open_file_via_imaris_executable(file_path):
+            print("Opened IMS by launching Imaris directly.")
             return True
         print("Imaris application handle is not available.")
         return False
@@ -107,13 +108,13 @@ def open_file_in_imaris(file_path, imaris_app):
 
     if last_error:
         print(f"Imaris open failed: {last_error}")
-        if _open_file_with_windows_shell(file_path):
-            print("Opened IMS via Windows shell association after automation failure.")
+        if _open_file_via_imaris_executable(file_path):
+            print("Opened IMS by launching Imaris directly after automation failure.")
             return True
     else:
         print("Imaris open failed: no supported API method found.")
-        if _open_file_with_windows_shell(file_path):
-            print("Opened IMS via Windows shell association after automation lookup failure.")
+        if _open_file_via_imaris_executable(file_path):
+            print("Opened IMS by launching Imaris directly after automation lookup failure.")
             return True
     return False
 
@@ -128,13 +129,84 @@ def _looks_like_imaris_application(candidate):
     return False
 
 
-def _open_file_with_windows_shell(file_path):
-    """Ask Windows to open the file via the registered .ims association."""
-    startfile = getattr(os, "startfile", None)
-    if os.name != "nt" or not callable(startfile):
+def _iter_imaris_executable_candidates():
+    """Yield plausible Imaris executable paths without requiring admin access."""
+    seen = set()
+
+    def _yield_candidate(path):
+        normalized = os.path.normpath(path)
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        yield normalized
+
+    env_candidate = os.environ.get("IMARIS_EXE", "").strip()
+    if env_candidate:
+        yield from _yield_candidate(env_candidate)
+
+    try:
+        import winreg
+    except Exception:
+        winreg = None
+
+    if winreg is not None:
+        reg_locations = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
+        ]
+        for hive, subkey in reg_locations:
+            try:
+                with winreg.OpenKey(hive, subkey) as key:
+                    value, _ = winreg.QueryValueEx(key, None)
+                if value:
+                    yield from _yield_candidate(value)
+            except Exception:
+                continue
+
+    base_dirs = [
+        os.environ.get("ProgramW6432", r"C:\Program Files"),
+        os.environ.get("ProgramFiles", r"C:\Program Files"),
+        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+    ]
+    vendor_dirs = [
+        "Bitplane",
+        "Oxford Instruments",
+    ]
+    for base_dir in base_dirs:
+        if not base_dir:
+            continue
+        for vendor_dir in vendor_dirs:
+            vendor_root = os.path.join(base_dir, vendor_dir)
+            if not os.path.isdir(vendor_root):
+                continue
+            try:
+                entries = sorted(os.listdir(vendor_root), reverse=True)
+            except Exception:
+                entries = []
+            for entry in entries:
+                if not entry.lower().startswith("imaris"):
+                    continue
+                candidate = os.path.join(vendor_root, entry, "Imaris.exe")
+                yield from _yield_candidate(candidate)
+
+
+def _find_imaris_executable():
+    """Return a launchable Imaris.exe path if present."""
+    if os.name != "nt":
+        return None
+    for candidate in _iter_imaris_executable_candidates():
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _open_file_via_imaris_executable(file_path):
+    """Launch Imaris.exe directly with the IMS path to avoid shell association installers."""
+    exe_path = _find_imaris_executable()
+    if not exe_path:
         return False
     try:
-        startfile(file_path)
+        subprocess.Popen([exe_path, file_path])
         return True
     except Exception:
         return False
