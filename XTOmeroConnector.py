@@ -81,6 +81,9 @@ def is_ims_file(file_path):
 def open_file_in_imaris(file_path, imaris_app):
     """Attempt to open a file in Imaris using available API methods."""
     if imaris_app is None:
+        if _open_file_with_windows_shell(file_path):
+            print("Opened IMS via Windows shell association.")
+            return True
         print("Imaris application handle is not available.")
         return False
 
@@ -104,8 +107,14 @@ def open_file_in_imaris(file_path, imaris_app):
 
     if last_error:
         print(f"Imaris open failed: {last_error}")
+        if _open_file_with_windows_shell(file_path):
+            print("Opened IMS via Windows shell association after automation failure.")
+            return True
     else:
         print("Imaris open failed: no supported API method found.")
+        if _open_file_with_windows_shell(file_path):
+            print("Opened IMS via Windows shell association after automation lookup failure.")
+            return True
     return False
 
 
@@ -117,6 +126,18 @@ def _looks_like_imaris_application(candidate):
         if callable(getattr(candidate, method_name, None)):
             return True
     return False
+
+
+def _open_file_with_windows_shell(file_path):
+    """Ask Windows to open the file via the registered .ims association."""
+    startfile = getattr(os, "startfile", None)
+    if os.name != "nt" or not callable(startfile):
+        return False
+    try:
+        startfile(file_path)
+        return True
+    except Exception:
+        return False
 
 
 def _coerce_imaris_id(aImarisId):
@@ -140,6 +161,43 @@ def _coerce_imaris_id(aImarisId):
         return None
 
 
+def _resolve_imaris_application_via_com():
+    """Best-effort COM fallback when ImarisLib/IcePy is unavailable."""
+    clients = []
+    try:
+        import win32com.client as win32_client
+        clients.append(win32_client)
+    except Exception:
+        pass
+    try:
+        import comtypes.client as comtypes_client
+        clients.append(comtypes_client)
+    except Exception:
+        pass
+
+    for client in clients:
+        get_active = getattr(client, "GetActiveObject", None)
+        if callable(get_active):
+            try:
+                app = get_active("Imaris.Application")
+                if app is not None:
+                    return app
+            except Exception:
+                pass
+
+        for factory_name in ("Dispatch", "CreateObject"):
+            factory = getattr(client, factory_name, None)
+            if callable(factory):
+                try:
+                    app = factory("Imaris.Application")
+                    if app is not None:
+                        return app
+                except Exception:
+                    pass
+
+    return None
+
+
 def _resolve_imaris_application(
     aImarisId,
     retries=1,
@@ -153,27 +211,36 @@ def _resolve_imaris_application(
     if app_id is None:
         return None
 
-    import ImarisLib
-
     attempts = max(1, int(retries or 1))
     for attempt in range(attempts):
-        lib_factory = getattr(ImarisLib, "ImarisLib", None)
-        if callable(lib_factory):
-            lib = lib_factory()
-            get_application = getattr(lib, "GetApplication", None)
+        try:
+            import ImarisLib
+
+            lib_factory = getattr(ImarisLib, "ImarisLib", None)
+            if callable(lib_factory):
+                lib = lib_factory()
+                get_application = getattr(lib, "GetApplication", None)
+                if callable(get_application):
+                    app = get_application(app_id)
+                    if app is not None:
+                        return app
+
+            get_application = getattr(ImarisLib, "GetApplication", None)
             if callable(get_application):
                 app = get_application(app_id)
                 if app is not None:
                     return app
-
-        get_application = getattr(ImarisLib, "GetApplication", None)
-        if callable(get_application):
-            app = get_application(app_id)
+        except Exception:
+            app = _resolve_imaris_application_via_com()
             if app is not None:
                 return app
 
         if attempt + 1 < attempts:
             time.sleep(max(0.0, float(retry_interval)))
+
+    app = _resolve_imaris_application_via_com()
+    if app is not None:
+        return app
 
     return None
 

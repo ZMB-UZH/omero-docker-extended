@@ -102,6 +102,37 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     assert module._resolve_imaris_application("17") is expected
 
 
+def test_resolve_imaris_application_falls_back_to_win32com(monkeypatch):
+    module = _load_xt_module()
+    expected = object()
+
+    class _FakeWin32Client:
+        @staticmethod
+        def GetActiveObject(prog_id):
+            assert prog_id == "Imaris.Application"
+            return expected
+
+    monkeypatch.delitem(sys.modules, "ImarisLib", raising=False)
+    monkeypatch.setitem(sys.modules, "win32com", types.ModuleType("win32com"))
+    monkeypatch.setitem(sys.modules, "win32com.client", _FakeWin32Client)
+
+    assert module._resolve_imaris_application(17) is expected
+
+
+def test_open_file_in_imaris_falls_back_to_windows_shell(monkeypatch):
+    module = _load_xt_module()
+    called = {}
+
+    def _fake_startfile(path):
+        called["path"] = path
+
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(module.os, "startfile", _fake_startfile, raising=False)
+
+    assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is True
+    assert called["path"] == "C:\\temp\\demo.ims"
+
+
 def test_resolve_imaris_application_returns_direct_handle():
     module = _load_xt_module()
     direct_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)
