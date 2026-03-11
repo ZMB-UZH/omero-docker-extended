@@ -134,41 +134,21 @@ class OMEROWebClient:
             return host.rstrip("/")
         return f"{scheme}://{host}:{port}"
 
-    def _build_cookie_header(self):
-        """Build Cookie header string from stored session credentials.
-        
-        This ensures cookies are always sent, regardless of cookie jar matching issues.
-        """
-        cookies = []
-        if self.session_id:
-            cookies.append(f'sessionid={self.session_id}')
-        if self.csrf_token:
-            cookies.append(f'csrftoken={self.csrf_token}')
-        return '; '.join(cookies) if cookies else None
-
     def _create_request_with_cookies(self, url, data=None, method=None):
-        """Create a request with explicit cookie headers.
-        
-        This bypasses potential issues with automatic cookie jar matching.
-        """
+        """Create a request and let urllib's cookie jar manage session cookies."""
         req = urllib.request.Request(url, data=data, method=method)
-        
-        # Always add cookies explicitly
-        cookie_header = self._build_cookie_header()
-        if cookie_header:
-            req.add_header('Cookie', cookie_header)
-        
+
         # Add CSRF token header for POST requests
         if method == 'POST' or data is not None:
             if self.csrf_token:
                 req.add_header('X-CSRFToken', self.csrf_token)
             req.add_header('Referer', self.base_url)
-        
+
         # Add common headers to prevent caching issues
         req.add_header('Cache-Control', 'no-cache')
         req.add_header('Pragma', 'no-cache')
         req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
-        
+
         return req
 
     def _extract_cookies_from_jar(self):
@@ -308,10 +288,6 @@ class OMEROWebClient:
             req.add_header('Referer', login_url)
             req.add_header('X-CSRFToken', self.csrf_token)
             req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
-            # Also add existing cookies explicitly
-            cookie_header = self._build_cookie_header()
-            if cookie_header:
-                req.add_header('Cookie', cookie_header)
             
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
