@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import builtins
+import ntpath
 import sys
 import types
 
@@ -143,6 +144,32 @@ def test_find_imaris_executable_prefers_env_override(monkeypatch):
     monkeypatch.setattr(module.os.path, "isfile", lambda path: path == r"C:\Custom\Imaris.exe")
 
     assert module._find_imaris_executable() == r"C:\Custom\Imaris.exe"
+
+
+def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
+    module = _load_xt_module()
+    original_sys_path = list(module.sys.path)
+    original_os_path = module.os.path
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(module.os, "path", ntpath, raising=False)
+    monkeypatch.setenv("IMARIS_HOME", r"C:\Program Files\Bitplane\Imaris 11.0.0")
+    monkeypatch.setenv("PATH", r"C:\Windows\System32")
+
+    existing_dirs = {
+        r"C:\Program Files\Bitplane\Imaris 11.0.0",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3",
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3\Lib",
+    }
+    monkeypatch.setattr(module.os.path, "isdir", lambda path: module.os.path.normpath(path) in existing_dirs)
+
+    added = module._prepare_imaris_xt_environment()
+
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in added
+    assert module.sys.path[0] in added
+    assert r"C:\Program Files\Bitplane\Imaris 11.0.0\XT\python3" in module.os.environ["PATH"]
+    module.sys.path[:] = original_sys_path
+    monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
 
 
 def test_resolve_imaris_application_returns_direct_handle():

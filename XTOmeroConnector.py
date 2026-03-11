@@ -200,6 +200,65 @@ def _find_imaris_executable():
     return None
 
 
+def _iter_imaris_install_roots():
+    """Yield plausible Imaris installation roots."""
+    seen = set()
+
+    env_root = os.environ.get("IMARIS_HOME", "").strip()
+    if env_root:
+        normalized = os.path.normpath(env_root)
+        if normalized not in seen:
+            seen.add(normalized)
+            yield normalized
+
+    exe_path = _find_imaris_executable()
+    if exe_path:
+        install_root = os.path.dirname(exe_path)
+        normalized = os.path.normpath(install_root)
+        if normalized not in seen:
+            seen.add(normalized)
+            yield normalized
+
+
+def _prepend_unique_path(values, candidate):
+    normalized = os.path.normpath(candidate)
+    if normalized in values:
+        return False
+    values.insert(0, normalized)
+    return True
+
+
+def _prepare_imaris_xt_environment():
+    """Add bundled Imaris XT Python paths so ImarisLib/IcePy can load without system installs."""
+    if os.name != "nt":
+        return []
+
+    path_parts = os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
+    added = []
+    for install_root in _iter_imaris_install_roots():
+        candidates = [
+            install_root,
+            os.path.join(install_root, "XT"),
+            os.path.join(install_root, "XT", "python3"),
+            os.path.join(install_root, "XT", "python3", "Lib"),
+            os.path.join(install_root, "XT", "python3", "Lib", "site-packages"),
+            os.path.join(install_root, "XT", "python"),
+            os.path.join(install_root, "XT", "lib"),
+        ]
+        for candidate in candidates:
+            if not os.path.isdir(candidate):
+                continue
+            normalized = os.path.normpath(candidate)
+            if normalized not in sys.path:
+                sys.path.insert(0, normalized)
+                added.append(normalized)
+            _prepend_unique_path(path_parts, normalized)
+
+    if path_parts:
+        os.environ["PATH"] = os.pathsep.join(path_parts)
+    return added
+
+
 def _open_file_via_imaris_executable(file_path):
     """Launch Imaris.exe directly with the IMS path to avoid shell association installers."""
     exe_path = _find_imaris_executable()
@@ -249,6 +308,12 @@ def _resolve_imaris_application(
     attempts = max(1, int(retries or 1))
     for attempt in range(attempts):
         try:
+            added_paths = _prepare_imaris_xt_environment()
+            if added_paths:
+                _xt_debug(
+                    "Prepared Imaris XT environment paths: "
+                    + "; ".join(added_paths)
+                )
             import ImarisLib
 
             lib_factory = getattr(ImarisLib, "ImarisLib", None)
@@ -266,9 +331,11 @@ def _resolve_imaris_application(
                 if app is not None:
                     return app
         except Exception as exc:
+            version_info = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
             _xt_debug(
                 "Imaris XT bridge import failed: "
-                f"{exc}. Official Imaris XT support requires Python 2.7 or 3.7, "
+                f"{exc}. Current Python={version_info}. "
+                "Official Imaris XT support requires Python 2.7 or 3.7, "
                 "and launching Python directly is not automatically connected to Imaris."
             )
             break
