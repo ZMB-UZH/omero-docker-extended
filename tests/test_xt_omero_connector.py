@@ -119,18 +119,31 @@ def test_resolve_imaris_application_falls_back_to_win32com(monkeypatch):
     assert module._resolve_imaris_application(17) is expected
 
 
-def test_open_file_in_imaris_falls_back_to_windows_shell(monkeypatch):
+def test_open_file_in_imaris_falls_back_to_imaris_executable(monkeypatch):
     module = _load_xt_module()
-    called = {}
+    launched = {}
 
-    def _fake_startfile(path):
-        called["path"] = path
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe")
 
-    monkeypatch.setattr(module.os, "name", "nt", raising=False)
-    monkeypatch.setattr(module.os, "startfile", _fake_startfile, raising=False)
+    def _fake_popen(args):
+        launched["args"] = args
+        return object()
 
+    monkeypatch.setattr(module.subprocess, "Popen", _fake_popen)
     assert module.open_file_in_imaris("C:\\temp\\demo.ims", None) is True
-    assert called["path"] == "C:\\temp\\demo.ims"
+    assert launched["args"] == [
+        r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe",
+        "C:\\temp\\demo.ims",
+    ]
+
+
+def test_find_imaris_executable_prefers_env_override(monkeypatch):
+    module = _load_xt_module()
+    monkeypatch.setattr(module.os, "name", "nt", raising=False)
+    monkeypatch.setenv("IMARIS_EXE", r"C:\Custom\Imaris.exe")
+    monkeypatch.setattr(module.os.path, "isfile", lambda path: path == r"C:\Custom\Imaris.exe")
+
+    assert module._find_imaris_executable() == r"C:\Custom\Imaris.exe"
 
 
 def test_resolve_imaris_application_returns_direct_handle():
