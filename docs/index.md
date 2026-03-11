@@ -17,7 +17,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `plugins/omp-plugin.md` -- filename parsing, metadata annotation, AI-assisted regex, variable sets
 - `plugins/upload-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
-- `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, script processor retry
+- `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, OMERO CLI launch path
 
 ## 4. Plugin Help
 
@@ -48,7 +48,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 7. Troubleshooting
 
 - `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker
-- `troubleshooting/imaris-export.md` -- Celery config, worker activity, script processors, recovery
+- `troubleshooting/imaris-export.md` -- auth regressions, processor diagnostics, CLI validation, recovery
 
 ## 8. Reference
 

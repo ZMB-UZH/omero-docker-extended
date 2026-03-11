@@ -6,7 +6,7 @@ Practices and invariants that keep the platform running predictably.
 
 - All startup scripts (`startup/*.sh`) run sequentially before the main process starts.
 - Scripts fail fast with descriptive error messages when required environment variables or paths are missing.
-- `10-server-bootstrap.sh` validates writable directories, auto-detects the OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares the OMERO CLI temp namespace (`${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`) before any OMERO CLI call, and attempts legacy OMERO lock-file temp-path preparation with warning-only fallback to `TMPDIR`, then configures certificates and schedules async operations (job-service user creation, script registration) that do not block server startup.
+- `10-server-bootstrap.sh` validates writable directories, auto-detects the OMERO CLI binary (with optional `OMERO_BIN` override), explicitly prepares a clean OMERO CLI runtime temp namespace under `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp/runtime*` before any OMERO CLI call, and repoints the legacy OMERO lock-file path to that clean runtime slot so stale lock files from older runs cannot disable `Processor-0`, then configures certificates and schedules async operations (job-service user creation, script registration) that do not block server startup.
 - `10-web-bootstrap.sh` validates and repairs the OMERO.web `var/` runtime layout (including `var/omero/tmp` permissions and `var/django_secret_key` generation when missing), validates log directory write access, and configures Docker socket permissions before supervisord starts.
 - Bootstrap scripts are idempotent: re-running after a restart produces the same result.
 
@@ -46,7 +46,7 @@ Both processes have dedicated log files with rotation (20MB max, 3 backups).
 ## Failure patterns and mitigation
 
 - **Celery task timeout**: Imaris export tasks have configurable time limits (`OMERO_IMS_CELERY_TIME_LIMIT`). Timed-out tasks are reported as failures.
-- **Script processor unavailable**: The Imaris connector retries with backoff when no OMERO script processor is available, and fails fast if processors are explicitly disabled (`omero.scripts.processors=0`).
+- **Imaris export startup failures**: The Imaris connector launches `IMS_Export.py` through the OMERO CLI inside the `omeroweb` container. If exports stall, first verify `Processor-0` is active in `omero admin diagnostics`, then validate direct `omero script launch` from both `omeroserver` and `omeroweb`.
 - **Upload cleanup**: The Upload plugin prunes stale temporary files based on configurable age thresholds to prevent disk growth.
 - **Job file locking**: OMP and Upload plugins use `portalocker` for safe concurrent access to job JSON files on tmpfs.
 - **Rate limiting**: OMP plugin enforces per-user rate limits on major actions (6 actions / 60 seconds) to prevent misuse.
@@ -55,4 +55,4 @@ Both processes have dedicated log files with rotation (20MB max, 3 backups).
 
 Capture recurring incident classes in `docs/troubleshooting/` and link mitigation steps. Current troubleshooting guides:
 - `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker socket
-- `troubleshooting/imaris-export.md` -- Celery config, worker activity, script processors, recovery actions
+- `troubleshooting/imaris-export.md` -- auth regressions, `waiting_for_processor`, processor startup failures, CLI validation, recovery actions

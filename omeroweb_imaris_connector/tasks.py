@@ -15,11 +15,8 @@ from .config import get_job_service_credentials, use_job_service_session
 from .imaris_service import (
     EXPORT_TIMEOUT,
     _find_script_id,
-    _is_no_processor_available,
     _normalize_job_state,
-    _run_script,
     _serialize_outputs,
-    _wait_for_process,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,10 +93,8 @@ def _run_script_via_omero_cli(
     host: str,
     port: int,
     session_key: str | None = None,
-    username: str | None = None,
-    password: str | None = None,
 ) -> dict[str, str]:
-    """Launch IMS export with OMERO CLI as a fallback for runScript() failures."""
+    """Launch IMS export with OMERO CLI inside the OMERO.web container."""
     omero_cli = _resolve_omero_cli()
 
     cmd = [
@@ -115,17 +110,12 @@ def _run_script_via_omero_cli(
         str(int(port)),
     ]
 
-    if session_key:
-        cmd.extend(["-k", str(session_key)])
-    else:
-        if not username or not password:
-            raise RuntimeError(
-                "OMERO CLI fallback requires either session_key or username/password."
-            )
-        cmd.extend(["-u", str(username), "-w", str(password)])
+    if not session_key:
+        raise RuntimeError("OMERO CLI launch requires a live OMERO session key.")
+    cmd.extend(["-k", str(session_key)])
 
-    logger.warning(
-        "Using OMERO CLI fallback for IMS export script_id=%s image_id=%s",
+    logger.info(
+        "Launching IMS export via OMERO CLI script_id=%s image_id=%s",
         script_id,
         image_id,
     )
@@ -155,29 +145,25 @@ def _run_script_via_omero_cli(
     if result.returncode != 0:
         snippet = combined[-2000:] if combined else ""
         logger.error(
-            "OMERO CLI fallback failed script_id=%s image_id=%s exit_code=%s output_tail=%s",
+            "OMERO CLI launch failed script_id=%s image_id=%s exit_code=%s output_tail=%s",
             script_id,
             image_id,
             result.returncode,
             snippet,
         )
-        raise RuntimeError(
-            "IMS export CLI fallback failed."
-        )
+        raise RuntimeError("IMS export CLI launch failed.")
 
     if outputs.get("Export_Path"):
         return outputs
 
     snippet = combined[-2000:] if combined else ""
     logger.error(
-        "OMERO CLI fallback returned no export path script_id=%s image_id=%s output_tail=%s",
+        "OMERO CLI launch returned no export path script_id=%s image_id=%s output_tail=%s",
         script_id,
         image_id,
         snippet,
     )
-    raise RuntimeError(
-        "IMS export CLI fallback returned no export path."
-    )
+    raise RuntimeError("IMS export CLI launch returned no export path.")
 
 
 def _open_session_connection(session_key, host, port, secure=None):
@@ -331,77 +317,24 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
             self.request.id,
         )
 
-        # Run the script
+        # Run the script through OMERO CLI. This path is the live-validated
+        # execution path in the OMERO.web container and avoids brittle
+        # ScriptService callback/process-handle behavior.
         _update_task_state("running_script")
+        cli_session_key = session_key
+        if not cli_session_key and use_job_service_session():
+            cli_session_key = _get_connection_session_key(conn)
+            if not cli_session_key:
+                raise RuntimeError("IMS export job-service session key unavailable.")
 
-        def _script_status_callback(status: str, details: dict) -> None:
-            _update_task_state(status, details)
-
-        try:
-            proc = _run_script(
-                conn,
-                script_id,
-                image_id,
-                wait_secs=0,
-                status_callback=_script_status_callback,
-            )
-            if not proc:
-                raise RuntimeError("Failed to start IMS export job.")
-
-            # _run_script always returns a ScriptProcess handle.
-            # Poll via proc.poll(), collect via proc.getResults(),
-            # _wait_for_process detaches in its finally block (frees Processor slot).
-            logger.debug("IMS export polling process handle for image_id=%s", image_id)
-            last_state, outputs = _wait_for_process(proc, EXPORT_TIMEOUT)
-            logger.debug(
-                "IMS export process completed image_id=%s state=%s outputs=%s",
-                image_id,
-                last_state,
-                _serialize_outputs(outputs),
-            )
-
-            if not last_state:
-                raise RuntimeError("Could not determine IMS export job status.")
-
-            normalized_state = _normalize_job_state(last_state) or "UNKNOWN"
-            if normalized_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
-                raise RuntimeError(
-                    "IMS export job did not complete successfully "
-                    f"(state: {normalized_state})"
-                )
-        except Exception as exc:
-            if not _is_no_processor_available(exc):
-                raise
-
-            logger.warning(
-                "ScriptService.runScript path unavailable (NoProcessorAvailable). "
-                "Falling back to `omero script launch`."
-            )
-            _update_task_state("running_script_cli_fallback")
-
-            cli_outputs = None
-            if use_job_service_session():
-                session_key = _get_connection_session_key(conn)
-                if not session_key:
-                    raise RuntimeError("IMS export job-service session key unavailable.")
-                cli_outputs = _run_script_via_omero_cli(
-                    script_id=script_id,
-                    image_id=image_id,
-                    host=host,
-                    port=port,
-                    session_key=session_key,
-                )
-            else:
-                cli_outputs = _run_script_via_omero_cli(
-                    script_id=script_id,
-                    image_id=image_id,
-                    host=host,
-                    port=port,
-                    session_key=session_key,
-                )
-
-            normalized_state = "FINISHED"
-            outputs = cli_outputs
+        outputs = _run_script_via_omero_cli(
+            script_id=script_id,
+            image_id=image_id,
+            host=host,
+            port=port,
+            session_key=cli_session_key,
+        )
+        normalized_state = "FINISHED"
 
         logger.info(
             "IMS export task completed image_id=%s state=%s task_id=%s",

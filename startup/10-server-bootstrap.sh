@@ -109,6 +109,7 @@ ensure_tmpdir_permissions() {
     local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
     local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
+    local runtime_tmp_dir=""
     if [[ -z "${tmp_root}" ]]; then
         echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
         exit 1
@@ -146,12 +147,74 @@ ensure_tmpdir_permissions() {
         exit 1
     fi
 
-    export TMPDIR="${expected_tmp_dir}"
-    export OMERO_TEMPDIR="${expected_tmp_dir}"
-    export OMERO_TMPDIR="${expected_tmp_dir}"
+    prepare_runtime_tmp_dir() {
+        local candidate_dir="$1"
+        local candidate_omero_py_dir="${candidate_dir}/omero"
+        local candidate_omero_py_user_dir="${candidate_dir}/omero_${requested_owner}"
 
-    local omero_py_dir="${expected_tmp_dir}/omero"
-    local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
+        mkdir -p "${candidate_dir}" || return 1
+
+        if [[ "$(id -u)" -eq 0 ]]; then
+            chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_dir}" 2>/dev/null || true
+            chmod 0777 "${candidate_dir}" 2>/dev/null || true
+        fi
+
+        if [[ ! -w "${candidate_dir}" ]]; then
+            log "WARN: Candidate runtime temp directory is not writable: ${candidate_dir}"
+            ls -ld "${candidate_dir}" >&2 || true
+            return 1
+        fi
+
+        rm -rf "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" "${candidate_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+
+        if [[ -d "${candidate_omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+            log "WARN: Root cleanup of ${candidate_omero_py_user_dir} incomplete. Retrying as ${requested_owner}."
+            runuser -u "${requested_owner}" -- rm -rf "${candidate_omero_py_user_dir}" 2>/dev/null || true
+        fi
+        if [[ -d "${candidate_omero_py_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+            log "WARN: Root cleanup of ${candidate_omero_py_dir} incomplete. Retrying as ${requested_owner}."
+            runuser -u "${requested_owner}" -- rm -rf "${candidate_omero_py_dir}" 2>/dev/null || true
+        fi
+
+        if [[ -d "${candidate_omero_py_user_dir}" || -d "${candidate_omero_py_dir}" ]]; then
+            log "WARN: Candidate runtime temp directory still contains stale OMERO lock state: ${candidate_dir}"
+            ls -la "${candidate_dir}" >&2 || true
+            return 1
+        fi
+
+        mkdir -p "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" || return 1
+        if [[ "$(id -u)" -eq 0 ]]; then
+            chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
+            chmod 0777 "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
+        fi
+
+        return 0
+    }
+
+    local candidate_dir=""
+    for candidate_dir in \
+        "${expected_tmp_dir}/runtime" \
+        "${expected_tmp_dir}/runtime-1" \
+        "${expected_tmp_dir}/runtime-2" \
+        "${expected_tmp_dir}/runtime-3"
+    do
+        if prepare_runtime_tmp_dir "${candidate_dir}"; then
+            runtime_tmp_dir="${candidate_dir}"
+            break
+        fi
+    done
+
+    if [[ -z "${runtime_tmp_dir}" ]]; then
+        echo "ERROR: Could not prepare a clean OMERO runtime temp directory under ${expected_tmp_dir}" >&2
+        exit 1
+    fi
+
+    export TMPDIR="${runtime_tmp_dir}"
+    export OMERO_TEMPDIR="${runtime_tmp_dir}"
+    export OMERO_TMPDIR="${runtime_tmp_dir}"
+
+    local omero_py_dir="${runtime_tmp_dir}/omero"
+    local omero_py_user_dir="${runtime_tmp_dir}/omero_${requested_owner}"
 
     # CRITICAL: Always try to remove stale OMERO temp subdirs to prevent Python
     # TempFileManager from hitting PermissionError on .lock files left by previous
@@ -200,7 +263,7 @@ ensure_tmpdir_permissions() {
     fi
     if [[ ! -e "${legacy_tmp_dir}" ]]; then
         mkdir -p "$(dirname "${legacy_tmp_dir}")"
-        ln -sf "${expected_tmp_dir}" "${legacy_tmp_dir}"
+        ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"
     fi
     if [[ "$(id -u)" -eq 0 ]]; then
         chown -h "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true

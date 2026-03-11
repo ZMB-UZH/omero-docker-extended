@@ -10,8 +10,10 @@ This plugin provides OMERO image export to Imaris-compatible (.ims) format throu
 - Asynchronous job mode with status polling URL (`job_id` + `status_url`).
 - Synchronous wait mode with configurable timeout.
 - Export artifact download response.
-- OMERO script processor availability detection with retry and backoff.
-- Fast-fail when script processors are explicitly disabled (`omero.scripts.processors=0`).
+- OMERO CLI-based export launch from the `omeroweb` container.
+- OMERO CLI launch prefers the requesting user's OMERO session key and falls
+  back to the job-service session only when no user session key is available.
+- Direct validation path with `omero script launch` for incident debugging.
 - Job-service account support for background execution without user session dependency.
 - Optional OMERO connection overrides (host, port, secure) for advanced routing.
 
@@ -42,9 +44,7 @@ omeroweb_imaris_connector/tasks.py   (Celery task: run_ims_export_task)
     │
     ├─► _find_script_id()            (locate IMS_Export.py in OMERO script service)
     │
-    ├─► _run_script()                (execute with retry on NoProcessorAvailable)
-    │
-    └─► _wait_for_process()          (poll until completion, detach process handle)
+    └─► _run_script_via_omero_cli()  (`omero script launch` inside `omeroweb`)
 ```
 
 The Celery worker runs inside the `omeroweb` container, managed by supervisord alongside OMERO.web.
@@ -75,8 +75,6 @@ Defined in `env/omero-celery.env`:
 | `OMERO_IMS_EXPORT_TIMEOUT` | Sync mode timeout in seconds | `3600` |
 | `OMERO_IMS_EXPORT_POLL_INTERVAL` | Status poll interval in seconds | `2.0` |
 | `OMERO_IMS_SCRIPT_NAME` | Export script name | `IMS_Export.py` |
-| `OMERO_IMS_SCRIPT_START_TIMEOUT` | Timeout for finding a free processor | `180` |
-| `OMERO_IMS_SCRIPT_START_RETRY_INTERVAL` | Retry interval for processor search | `5` |
 
 Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env`):
 - `OMERO_WEB_JOB_SERVICE_USERNAME` / `OMERO_JOB_SERVICE_USERNAME`
@@ -87,7 +85,8 @@ Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env
 - Confirm Celery worker process health: `docker compose logs omeroweb | grep celery`
 - Confirm queue name consistency across producer (`env/omero-celery.env`) and consumer (`startup/40-start-imaris-celery-worker.sh`).
 - Confirm script availability: `docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero script list`
-- Confirm script processor count is >0: `docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero config get omero.scripts.processors`
+- Confirm `Processor-0 active`: `docker compose exec omeroserver /opt/omero/server/OMERO.server/bin/omero admin diagnostics`
+- Validate direct CLI export from both `omeroserver` and `omeroweb`
 - Validate end-to-end export and download from a sample image.
 - If using job-service mode, verify the job-service account exists in OMERO and credentials are correct.
 - See `docs/troubleshooting/imaris-export.md` for diagnostic procedures.

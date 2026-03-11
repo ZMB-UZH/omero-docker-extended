@@ -256,7 +256,7 @@ def test_build_failure_meta_uses_generic_error_message(
     assert "password leaked" not in json.dumps(payload)
 
 
-def test_run_ims_export_task_cli_fallback_uses_session_key_for_job_service(
+def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_service_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tasks, _views = _import_modules(monkeypatch)
@@ -273,8 +273,6 @@ def test_run_ims_export_task_cli_fallback_uses_session_key_for_job_service(
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
     monkeypatch.setattr(tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn)
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 99)
-    monkeypatch.setattr(tasks, "_run_script", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("no processor")))
-    monkeypatch.setattr(tasks, "_is_no_processor_available", lambda exc: True)
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
@@ -291,6 +289,79 @@ def test_run_ims_export_task_cli_fallback_uses_session_key_for_job_service(
     )
 
     assert result["state"] == "FINISHED"
-    assert captured["session_key"] == "job-service-session"
+    assert captured["session_key"] == "user-session"
     assert "username" not in captured
     assert "password" not in captured
+
+
+def test_run_ims_export_task_uses_cli_with_user_session_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks, _views = _import_modules(monkeypatch)
+    captured = {}
+    dummy_conn = types.SimpleNamespace(close=lambda: None)
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-2"),
+        update_state=lambda *args, **kwargs: None,
+    )
+
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
+    monkeypatch.setattr(tasks, "_open_session_connection", lambda *args, **kwargs: dummy_conn)
+    monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 101)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **kwargs: captured.update(kwargs) or {"Export_Path": "/tmp/export.ims"},
+    )
+
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=6,
+        session_key="user-session",
+        host="omero.internal",
+        port=4064,
+        secure=True,
+    )
+
+    assert result["state"] == "FINISHED"
+    assert captured["session_key"] == "user-session"
+    assert captured["script_id"] == 101
+    assert captured["image_id"] == 6
+
+
+def test_run_ims_export_task_uses_job_service_session_key_when_user_session_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks, _views = _import_modules(monkeypatch)
+    captured = {}
+    dummy_conn = types.SimpleNamespace(
+        getSessionId=lambda: "job-service-session",
+        close=lambda: None,
+    )
+    task_self = types.SimpleNamespace(
+        request=types.SimpleNamespace(id="task-3"),
+        update_state=lambda *args, **kwargs: None,
+    )
+
+    monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
+    monkeypatch.setattr(tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn)
+    monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 202)
+    monkeypatch.setattr(
+        tasks,
+        "_run_script_via_omero_cli",
+        lambda **kwargs: captured.update(kwargs) or {"Export_Path": "/tmp/export.ims"},
+    )
+
+    result = tasks.run_ims_export_task(
+        task_self,
+        image_id=7,
+        session_key=None,
+        host="omero.internal",
+        port=4064,
+        secure=True,
+    )
+
+    assert result["state"] == "FINISHED"
+    assert captured["session_key"] == "job-service-session"
+    assert captured["script_id"] == 202
+    assert captured["image_id"] == 7

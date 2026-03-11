@@ -170,9 +170,10 @@ OMERO image export to Imaris (.ims) format.
 
 - Celery-based async job execution with Redis broker
 - Synchronous and asynchronous request modes with status polling
-- OMERO script processor availability detection and retry logic
+- OMERO CLI-based script launch from the `omeroweb` container
 - Job-service account support for background execution
 - ImarisConvertBioformats integration (compiled from source in server image)
+- Container package inspection helper: `helper_scripts_debian/docker_image_analysis.sh`
 
 ### Shared Library (`omero_plugin_common`)
 
