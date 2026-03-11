@@ -290,7 +290,55 @@ Expected behavior after this fix:
 
 - Installer assigns `OMERO_WEB_VAR_PATH` ownership to OMERO.web UID/GID.
 - `startup/10-web-bootstrap.sh` repairs missing `var/omero/tmp`, enforces writable permissions, and auto-generates `var/django_secret_key` when missing.
-## 14. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
+
+## 14. Uploads fail for some LDAP users with `No annotate access for parent directory`
+
+Symptom:
+
+- `OMEROweb.log` shows upload imports failing immediately with lines similar to:
+  - `Current group: users_ldap`
+  - `No annotate access for parent directory: 227`
+- `Blitz-0.log` shows the server failing in `RepositoryDaoImpl.makeDirs` while creating a path such as `users_ldap/<username>`.
+- The same upload plugin can still work for non-LDAP users or for one specific LDAP user.
+
+Verified diagnosis pattern:
+
+- The upload reaches OMERO successfully and joins the LDAP user's session.
+- The target Dataset is writable by the LDAP user.
+- The failure happens earlier, while OMERO tries to create the managed-repository directory tree for the import.
+- In the confirmed failing case on March 11, 2026:
+  - the top-level repository directory object for `users_ldap` was `OriginalFile:227`
+  - that object was owned by `j.mateos`
+  - the failing uploader was `e.mitridis`
+- In the working comparison, the top-level directory object for the working private group was owned by the same user who was importing.
+
+Cause:
+
+- The failure is not LDAP authentication.
+- It is a managed-repository ownership mismatch on the already-created top-level group directory object.
+- With a template such as `%group%/%user%/%year%-%month%-%day%/%time%`, OMERO must create `<group>/<user>/...`.
+- If the existing top-level `<group>` directory object is owned by another user and OMERO refuses writes beneath it, later users in that group can fail before any image import occurs.
+
+Validation:
+
+```bash
+rg -n "No annotate access for parent directory|Current group:" /disks/omero_data/omero_web_logs/OMEROweb.log
+
+rg -n "RepositoryDaoImpl.makeDirs|No annotate access for parent directory" /disks/omero_data/omero_server_logs/Blitz-0.log
+```
+
+Expected result:
+
+- `OMEROweb.log` shows the user's group and the parent-directory denial.
+- `Blitz-0.log` shows the failure while creating the managed-repository path, not while authenticating or writing metadata to the Dataset.
+
+Next step:
+
+- Restart `omeroserver` after deploying the repository patch from this repo.
+- `startup/10-server-bootstrap.sh` now auto-normalizes the shared managed-repository prefixes before `%user%` by discovering OMERO groups, creating any missing shared prefix directories, and reassigning their OMERO ownership metadata to `root`.
+- The repair is non-destructive: it does not change the configured repository template and does not delete repository payload files.
+
+## 15. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
 
 Symptom:
 
@@ -318,7 +366,7 @@ Expected result:
 - `omeroserver` healthcheck passes and the service stays `healthy`.
 - Bootstrap logs proceed past temp-dir validation without `OMERO_TMP_PATH` errors.
 
-## 15. `omeroserver` logs `WARNING: Legacy OMERO temp directory is not writable` during bootstrap
+## 16. `omeroserver` logs `WARNING: Legacy OMERO temp directory is not writable` during bootstrap
 
 Symptom:
 

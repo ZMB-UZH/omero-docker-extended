@@ -140,6 +140,16 @@ def import_session_expired():
     return "Import failed because the OMERO session expired during a long-running import."
 
 
+def import_parent_directory_not_writable(group_name=None, parent_id=None):
+    detail = "Import failed because OMERO denied write access to the managed repository parent directory"
+    if group_name:
+        detail += f" for group '{group_name}'"
+    if parent_id:
+        detail += f" (directory id {parent_id})"
+    detail += ". This usually means the group-level repository folder already exists but is owned by a different user."
+    return detail
+
+
 def unexpected_import_failure(detail):
     return f"Unexpected import failure: {detail}"
 
