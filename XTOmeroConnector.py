@@ -37,6 +37,8 @@ import http.cookiejar
 # because this script runs inside Imaris on the user's machine.
 EXPORT_TIMEOUT = 3600       # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
+IMARIS_HANDLE_RETRY_ATTEMPTS = 10
+IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 _XT_LOG_PATH = None
 
 
@@ -105,6 +107,75 @@ def open_file_in_imaris(file_path, imaris_app):
     else:
         print("Imaris open failed: no supported API method found.")
     return False
+
+
+def _looks_like_imaris_application(candidate):
+    """Return True when the object looks like a live Imaris application handle."""
+    if candidate is None:
+        return False
+    for method_name in ("FileOpen", "OpenFile", "LoadFile"):
+        if callable(getattr(candidate, method_name, None)):
+            return True
+    return False
+
+
+def _coerce_imaris_id(aImarisId):
+    """Normalize XT entrypoint values to an integer application id when possible."""
+    if aImarisId is None or _looks_like_imaris_application(aImarisId):
+        return None
+    if isinstance(aImarisId, int):
+        return aImarisId
+    try:
+        text_value = str(aImarisId).strip()
+    except Exception:
+        text_value = ""
+    if text_value.isdigit():
+        try:
+            return int(text_value)
+        except Exception:
+            return None
+    try:
+        return int(aImarisId)
+    except Exception:
+        return None
+
+
+def _resolve_imaris_application(
+    aImarisId,
+    retries=1,
+    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+):
+    """Resolve the live Imaris application handle from the XT entrypoint value."""
+    if _looks_like_imaris_application(aImarisId):
+        return aImarisId
+
+    app_id = _coerce_imaris_id(aImarisId)
+    if app_id is None:
+        return None
+
+    import ImarisLib
+
+    attempts = max(1, int(retries or 1))
+    for attempt in range(attempts):
+        lib_factory = getattr(ImarisLib, "ImarisLib", None)
+        if callable(lib_factory):
+            lib = lib_factory()
+            get_application = getattr(lib, "GetApplication", None)
+            if callable(get_application):
+                app = get_application(app_id)
+                if app is not None:
+                    return app
+
+        get_application = getattr(ImarisLib, "GetApplication", None)
+        if callable(get_application):
+            app = get_application(app_id)
+            if app is not None:
+                return app
+
+        if attempt + 1 < attempts:
+            time.sleep(max(0.0, float(retry_interval)))
+
+    return None
 
 # =============================================================================
 # OMERO WEB CLIENT
@@ -802,8 +873,9 @@ class OMEROWebClient:
 class OMEROBrowserDialog:
     """UI dialog for browsing OMERO data and loading IMS into Imaris."""
 
-    def __init__(self, imaris):
+    def __init__(self, imaris, imaris_id=None):
         self.imaris = imaris
+        self.imaris_id = imaris_id
         self.client = None
         self.projects_data = []
         self.datasets_data = []
@@ -933,6 +1005,49 @@ class OMEROBrowserDialog:
 
     def _show_info(self, title, message):
         self.root.after(0, lambda: messagebox.showinfo(title, message))
+
+    def _invoke_on_ui_thread(self, callback, wait=True):
+        """Run a callback on Tk's UI thread and optionally wait for the result."""
+        result = {"value": None, "error": None}
+        completed = threading.Event()
+
+        def runner():
+            try:
+                result["value"] = callback()
+            except Exception as exc:
+                result["error"] = exc
+            finally:
+                completed.set()
+
+        self.root.after(0, runner)
+        if not wait:
+            return None
+        completed.wait()
+        if result["error"] is not None:
+            raise result["error"]
+        return result["value"]
+
+    def _open_downloaded_file_in_imaris(self, downloaded_file):
+        """Resolve the Imaris handle on the UI thread and open the IMS file."""
+        self._set_status("Opening IMS in Imaris...", "#fff3cd")
+
+        if self.imaris is None:
+            _xt_debug("Imaris handle missing before open; attempting UI-thread re-acquisition")
+            try:
+                self.imaris = _resolve_imaris_application(
+                    self.imaris_id,
+                    retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+                )
+            except Exception as exc:
+                _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
+
+        if self.imaris is None:
+            _xt_debug("Imaris handle is still unavailable after re-acquisition attempts")
+        else:
+            _xt_debug(f"Using Imaris handle type={type(self.imaris).__name__} for file open")
+
+        return open_file_in_imaris(downloaded_file, self.imaris)
     
     def _connect(self):
         h = self.host_entry.get().strip()
@@ -1054,10 +1169,11 @@ class OMEROBrowserDialog:
             
             self.temp_files.append(downloaded_file)
             
-            # Open in Imaris
-            self._set_status("Opening IMS in Imaris...", "#fff3cd")
-            
-            success = open_file_in_imaris(downloaded_file, self.imaris)
+            # Open in Imaris on the UI thread so the XT handle stays in the
+            # same thread/apartment as the original dialog.
+            success = self._invoke_on_ui_thread(
+                lambda: self._open_downloaded_file_in_imaris(downloaded_file)
+            )
             
             if success:
                 self._set_status("✓ Opened in Imaris", "#d4edda")
@@ -1074,7 +1190,7 @@ class OMEROBrowserDialog:
             traceback.print_exc()
             _xt_debug(f"Load worker failed: {e}")
         finally:
-            self.load_btn.config(state=tk.NORMAL)
+            self._invoke_on_ui_thread(lambda: self.load_btn.config(state=tk.NORMAL), wait=False)
     
     def show(self):
         self.root.mainloop()
@@ -1123,13 +1239,24 @@ def XTOmeroConnector(aImarisId):
 
         vImaris = None
         try:
-            import ImarisLib
-            vImaris = ImarisLib.GetApplication(aImarisId)
+            vImaris = _resolve_imaris_application(
+                aImarisId,
+                retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+            )
         except Exception:
             # When run outside Imaris (manual debug), aImarisId may be None or already an app object.
-            vImaris = aImarisId if not isinstance(aImarisId, int) else None
+            vImaris = aImarisId if _looks_like_imaris_application(aImarisId) else None
 
-        dialog = OMEROBrowserDialog(vImaris)
+        if vImaris is None:
+            _xt_write_log(log_path, f"Imaris handle resolution returned None for entrypoint={aImarisId!r}")
+        else:
+            _xt_write_log(
+                log_path,
+                f"Resolved Imaris handle type={type(vImaris).__name__} for entrypoint={aImarisId!r}",
+            )
+
+        dialog = OMEROBrowserDialog(vImaris, imaris_id=aImarisId)
         dialog.show()
 
     except Exception as e:
