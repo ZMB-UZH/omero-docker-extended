@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import builtins
 import sys
 import types
 
@@ -102,21 +103,19 @@ def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
     assert module._resolve_imaris_application("17") is expected
 
 
-def test_resolve_imaris_application_falls_back_to_win32com(monkeypatch):
+def test_resolve_imaris_application_returns_none_when_bridge_import_fails(monkeypatch):
     module = _load_xt_module()
-    expected = object()
 
-    class _FakeWin32Client:
-        @staticmethod
-        def GetActiveObject(prog_id):
-            assert prog_id == "Imaris.Application"
-            return expected
+    real_import = builtins.__import__
 
-    monkeypatch.delitem(sys.modules, "ImarisLib", raising=False)
-    monkeypatch.setitem(sys.modules, "win32com", types.ModuleType("win32com"))
-    monkeypatch.setitem(sys.modules, "win32com.client", _FakeWin32Client)
+    def _raising_import(name, *args, **kwargs):
+        if name == "ImarisLib":
+            raise ImportError("IcePy missing")
+        return real_import(name, *args, **kwargs)
 
-    assert module._resolve_imaris_application(17) is expected
+    monkeypatch.setattr(builtins, "__import__", _raising_import)
+
+    assert module._resolve_imaris_application(17) is None
 
 
 def test_open_file_in_imaris_falls_back_to_imaris_executable(monkeypatch):

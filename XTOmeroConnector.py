@@ -233,43 +233,6 @@ def _coerce_imaris_id(aImarisId):
         return None
 
 
-def _resolve_imaris_application_via_com():
-    """Best-effort COM fallback when ImarisLib/IcePy is unavailable."""
-    clients = []
-    try:
-        import win32com.client as win32_client
-        clients.append(win32_client)
-    except Exception:
-        pass
-    try:
-        import comtypes.client as comtypes_client
-        clients.append(comtypes_client)
-    except Exception:
-        pass
-
-    for client in clients:
-        get_active = getattr(client, "GetActiveObject", None)
-        if callable(get_active):
-            try:
-                app = get_active("Imaris.Application")
-                if app is not None:
-                    return app
-            except Exception:
-                pass
-
-        for factory_name in ("Dispatch", "CreateObject"):
-            factory = getattr(client, factory_name, None)
-            if callable(factory):
-                try:
-                    app = factory("Imaris.Application")
-                    if app is not None:
-                        return app
-                except Exception:
-                    pass
-
-    return None
-
-
 def _resolve_imaris_application(
     aImarisId,
     retries=1,
@@ -302,17 +265,16 @@ def _resolve_imaris_application(
                 app = get_application(app_id)
                 if app is not None:
                     return app
-        except Exception:
-            app = _resolve_imaris_application_via_com()
-            if app is not None:
-                return app
+        except Exception as exc:
+            _xt_debug(
+                "Imaris XT bridge import failed: "
+                f"{exc}. Official Imaris XT support requires Python 2.7 or 3.7, "
+                "and launching Python directly is not automatically connected to Imaris."
+            )
+            break
 
         if attempt + 1 < attempts:
             time.sleep(max(0.0, float(retry_interval)))
-
-    app = _resolve_imaris_application_via_com()
-    if app is not None:
-        return app
 
     return None
 
