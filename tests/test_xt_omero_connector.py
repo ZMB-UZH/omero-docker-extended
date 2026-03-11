@@ -49,3 +49,61 @@ def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override()
     assert request.get_header("Cookie") is None
     assert request.get_header("X-csrftoken") == "csrf-123"
     assert request.get_header("Referer") == client.base_url
+
+
+def test_resolve_imaris_application_uses_imarislib_factory(monkeypatch):
+    module = _load_xt_module()
+    expected = object()
+
+    class _FakeImarisLibFactory:
+        def GetApplication(self, app_id):
+            assert app_id == 17
+            return expected
+
+    fake_module = types.SimpleNamespace(ImarisLib=lambda: _FakeImarisLibFactory())
+    monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
+
+    assert module._resolve_imaris_application(17) is expected
+
+
+def test_resolve_imaris_application_retries_until_handle_available(monkeypatch):
+    module = _load_xt_module()
+    expected = object()
+    calls = {"count": 0}
+
+    class _RetryingImarisLibFactory:
+        def GetApplication(self, app_id):
+            assert app_id == 17
+            calls["count"] += 1
+            if calls["count"] < 3:
+                return None
+            return expected
+
+    fake_module = types.SimpleNamespace(ImarisLib=lambda: _RetryingImarisLibFactory())
+    monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    assert module._resolve_imaris_application(17, retries=3, retry_interval=0.01) is expected
+    assert calls["count"] == 3
+
+
+def test_resolve_imaris_application_accepts_numeric_string(monkeypatch):
+    module = _load_xt_module()
+    expected = object()
+
+    class _FakeImarisLibFactory:
+        def GetApplication(self, app_id):
+            assert app_id == 17
+            return expected
+
+    fake_module = types.SimpleNamespace(ImarisLib=lambda: _FakeImarisLibFactory())
+    monkeypatch.setitem(sys.modules, "ImarisLib", fake_module)
+
+    assert module._resolve_imaris_application("17") is expected
+
+
+def test_resolve_imaris_application_returns_direct_handle():
+    module = _load_xt_module()
+    direct_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)
+
+    assert module._resolve_imaris_application(direct_handle) is direct_handle

@@ -65,7 +65,7 @@ def test_build_internal_file_query_uses_filepath_label() -> None:
     query = _build_internal_file_query("omeroserver_internal", "Blitz-0.log")
     assert (
         query
-        == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)Blitz\\-0\\.log$"}'
+        == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)Blitz\\\\-0\\\\.log$"}'
     )
 
 
@@ -75,7 +75,7 @@ def test_build_internal_file_query_handles_filename_label() -> None:
     )
     assert (
         query
-        == '{compose_service="omeroserver", log_type="internal", filename=~"(^|.*/)Blitz\\-0\\.log$"}'
+        == '{compose_service="omeroserver", log_type="internal", filename=~"(^|.*/)Blitz\\\\-0\\\\.log$"}'
     )
 
 
@@ -86,7 +86,7 @@ def test_build_internal_files_query_combines_multiple_files() -> None:
     )
     assert (
         query
-        == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)(Blitz\\-0\\.log|DropBox\\.err)$"}'
+        == '{compose_service="omeroserver", log_type="internal", filepath=~"(^|.*/)(Blitz\\\\-0\\\\.log|DropBox\\\\.err)$"}'
     )
 
 
