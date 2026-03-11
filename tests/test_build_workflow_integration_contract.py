@@ -79,6 +79,14 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do', script_text)
         self.assertIn('run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"', script_text)
 
+    def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"${expected_tmp_dir}/runtime"', script_text)
+        self.assertIn('export TMPDIR="${runtime_tmp_dir}"', script_text)
+        self.assertIn('ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"', script_text)
+
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"

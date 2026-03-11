@@ -39,7 +39,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - **`omeroweb_omp_plugin/`** -- filename parsing, metadata annotation, AI-assisted regex, variable sets, job execution
 - **`omeroweb_upload/`** -- staged upload, OMERO CLI import, SEM-EDX spectrum parsing, file attachment
 - **`omeroweb_admin_tools/`** -- log query (Loki), resource monitoring, Grafana/Prometheus proxy, storage analytics
-- **`omeroweb_imaris_connector/`** -- Imaris export via Celery tasks, script processor retry, job-service account
+- **`omeroweb_imaris_connector/`** -- Imaris export via Celery tasks, OMERO CLI launch from `omeroweb`, job-service account
 - **`omero_plugin_common/`** -- shared env_utils, logging_utils, omero_helpers, request_utils, string_utils
 
 ### Databases
@@ -54,6 +54,7 @@ It is intentionally short. Deep context lives in the files it points to.
 ### Maintenance
 - PostgreSQL: `maintenance/postgres/pg-maintenance.sh` (VACUUM ANALYZE weekly, REINDEX monthly)
 - Deployment: `installation/installation_script.sh`, `github_pull_project_bash_example`
+- Container package/version inspection: `helper_scripts_debian/docker_image_analysis.sh` (use this first when debugging stripped images or missing runtime packages)
 
 ## Plugin structure pattern
 

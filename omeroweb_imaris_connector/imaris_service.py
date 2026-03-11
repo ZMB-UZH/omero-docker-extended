@@ -565,8 +565,9 @@ def _run_script(
 
                 raise RuntimeError(
                     "Could not start IMS export: No script processor slot available "
-                    f"after waiting {elapsed:.1f}s. (This usually means leaked ScriptProcess "
-                    "handles or too many concurrent starts.)"
+                    f"after waiting {elapsed:.1f}s. (This usually means the Processor "
+                    "service is not running, the Processor failed to start, leaked "
+                    "ScriptProcess handles, or too many concurrent starts.)"
                 ) from exc
 
             raise
