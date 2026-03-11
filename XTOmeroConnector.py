@@ -249,6 +249,87 @@ def _prepare_imaris_xt_environment():
     return added
 
 
+def _safe_path_exists(path_value):
+    try:
+        return bool(path_value) and os.path.exists(path_value)
+    except Exception:
+        return False
+
+
+def _probe_module_import(module_name):
+    try:
+        __import__(module_name)
+        return {"ok": True, "error": ""}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _collect_imaris_xt_diagnostics():
+    """Collect host-side diagnostics for the Imaris XT runtime."""
+    exe_path = _find_imaris_executable()
+    install_roots = list(_iter_imaris_install_roots())
+    xt_paths = []
+    for install_root in install_roots:
+        xt_paths.append(os.path.join(install_root, "XT"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib", "site-packages"))
+    deduped_xt_paths = []
+    seen = set()
+    for candidate in xt_paths:
+        normalized = os.path.normpath(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped_xt_paths.append(normalized)
+
+    return {
+        "python_executable": sys.executable,
+        "python_version": sys.version.replace("\n", " "),
+        "python_version_short": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "imaris_exe_env": os.environ.get("IMARIS_EXE", ""),
+        "imaris_home_env": os.environ.get("IMARIS_HOME", ""),
+        "imaris_executable": exe_path or "",
+        "imaris_executable_exists": _safe_path_exists(exe_path),
+        "install_roots": install_roots,
+        "xt_candidate_paths": [
+            {"path": candidate, "exists": _safe_path_exists(candidate)}
+            for candidate in deduped_xt_paths
+        ],
+        "imarislib_import": _probe_module_import("ImarisLib"),
+        "icepy_import": _probe_module_import("IcePy"),
+    }
+
+
+def _log_imaris_xt_diagnostics():
+    diagnostics = _collect_imaris_xt_diagnostics()
+    _xt_debug(
+        "XT diagnostics: "
+        f"python_executable={diagnostics['python_executable']} "
+        f"python_version={diagnostics['python_version_short']} "
+        f"imaris_exe={diagnostics['imaris_executable'] or '<not found>'} "
+        f"imaris_exe_exists={diagnostics['imaris_executable_exists']}"
+    )
+    _xt_debug(
+        "XT diagnostics env: "
+        f"IMARIS_HOME={diagnostics['imaris_home_env'] or '<unset>'} "
+        f"IMARIS_EXE={diagnostics['imaris_exe_env'] or '<unset>'}"
+    )
+    for install_root in diagnostics["install_roots"]:
+        _xt_debug(f"XT diagnostics install_root={install_root}")
+    for entry in diagnostics["xt_candidate_paths"]:
+        _xt_debug(
+            f"XT diagnostics path={entry['path']} exists={entry['exists']}"
+        )
+    _xt_debug(
+        "XT diagnostics imports: "
+        f"ImarisLib_ok={diagnostics['imarislib_import']['ok']} "
+        f"ImarisLib_error={diagnostics['imarislib_import']['error'] or '<none>'} "
+        f"IcePy_ok={diagnostics['icepy_import']['ok']} "
+        f"IcePy_error={diagnostics['icepy_import']['error'] or '<none>'}"
+    )
+
+
 def _coerce_imaris_id(aImarisId):
     """Normalize XT entrypoint values to an integer application id when possible."""
     if aImarisId is None or _looks_like_imaris_application(aImarisId):
@@ -1382,6 +1463,7 @@ def XTOmeroConnector(aImarisId):
         _xt_write_log(log_path, f"Python: {sys.version}")
         _xt_write_log(log_path, f"argv: {sys.argv}")
         _xt_write_log(log_path, f"cwd: {os.getcwd()}")
+        _log_imaris_xt_diagnostics()
 
         vImaris = None
         try:
