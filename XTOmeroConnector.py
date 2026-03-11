@@ -31,7 +31,6 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import http.cookiejar
-import subprocess
 
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
@@ -82,9 +81,6 @@ def is_ims_file(file_path):
 def open_file_in_imaris(file_path, imaris_app):
     """Attempt to open a file in Imaris using available API methods."""
     if imaris_app is None:
-        if _open_file_via_imaris_executable(file_path):
-            print("Opened IMS by launching Imaris directly.")
-            return True
         print("Imaris application handle is not available.")
         return False
 
@@ -108,14 +104,8 @@ def open_file_in_imaris(file_path, imaris_app):
 
     if last_error:
         print(f"Imaris open failed: {last_error}")
-        if _open_file_via_imaris_executable(file_path):
-            print("Opened IMS by launching Imaris directly after automation failure.")
-            return True
     else:
         print("Imaris open failed: no supported API method found.")
-        if _open_file_via_imaris_executable(file_path):
-            print("Opened IMS by launching Imaris directly after automation lookup failure.")
-            return True
     return False
 
 
@@ -257,18 +247,6 @@ def _prepare_imaris_xt_environment():
     if path_parts:
         os.environ["PATH"] = os.pathsep.join(path_parts)
     return added
-
-
-def _open_file_via_imaris_executable(file_path):
-    """Launch Imaris.exe directly with the IMS path to avoid shell association installers."""
-    exe_path = _find_imaris_executable()
-    if not exe_path:
-        return False
-    try:
-        subprocess.Popen([exe_path, file_path])
-        return True
-    except Exception:
-        return False
 
 
 def _coerce_imaris_id(aImarisId):
