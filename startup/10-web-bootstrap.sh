@@ -168,15 +168,47 @@ echo "[web-bootstrap] ✓ OMERO.web log directory is ready and writable: ${log_d
 # ── Ensure .admin-tools directory is writable for quota state persistence ──
 omero_data_dir="${OMERO_DATA_DIR:-/OMERO}"
 admin_tools_dir="${omero_data_dir}/.admin-tools"
-if [[ -d "${admin_tools_dir}" ]]; then
-    if [[ ! -w "${admin_tools_dir}" ]]; then
-        echo "[web-bootstrap] WARNING: ${admin_tools_dir} is not writable; attempting chmod 0777"
-        chmod 0777 "${admin_tools_dir}" 2>/dev/null || \
-            echo "[web-bootstrap] WARNING: Could not fix permissions on ${admin_tools_dir}. Quota state persistence may fail." >&2
+quota_state_path="${ADMIN_TOOLS_QUOTA_STATE_PATH:-${admin_tools_dir}/group-quotas.json}"
+quota_projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-${admin_tools_dir}/quota/projects}"
+quota_projid_file="${ADMIN_TOOLS_QUOTA_PROJID_FILE:-${admin_tools_dir}/quota/projid}"
+quota_marker_path="${ADMIN_TOOLS_QUOTA_ENFORCER_MARKER_PATH:-${admin_tools_dir}/quota-enforcer-installed}"
+quota_runtime_user="${OMERO_WEB_RUN_USER:-omero-web}"
+quota_runtime_group="${OMERO_WEB_RUN_GROUP:-omero-web}"
+
+normalize_quota_path() {
+    local target_path="$1"
+    local target_dir
+    target_dir="$(dirname "${target_path}")"
+
+    mkdir -p "${target_dir}" 2>/dev/null || \
+        echo "[web-bootstrap] WARNING: Could not create quota metadata directory ${target_dir}" >&2
+
+    if [[ -d "${target_dir}" && ! -w "${target_dir}" ]]; then
+        echo "[web-bootstrap] WARNING: ${target_dir} is not writable; attempting chmod 0777"
+        chmod 0777 "${target_dir}" 2>/dev/null || \
+            echo "[web-bootstrap] WARNING: Could not fix permissions on ${target_dir}. Quota state persistence may fail." >&2
     fi
-else
-    echo "[web-bootstrap] ${admin_tools_dir} does not exist yet; it will be created when the quota enforcer is installed"
-fi
+
+    if [[ ! -e "${target_path}" ]]; then
+        return 0
+    fi
+
+    if id "${quota_runtime_user}" >/dev/null 2>&1; then
+        chown "${quota_runtime_user}:${quota_runtime_group}" "${target_path}" 2>/dev/null || \
+            echo "[web-bootstrap] WARNING: Could not chown quota metadata file ${target_path} to ${quota_runtime_user}:${quota_runtime_group}" >&2
+    fi
+
+    if [[ ! -r "${target_path}" || ! -w "${target_path}" ]]; then
+        chmod 0664 "${target_path}" 2>/dev/null || \
+            chmod 0666 "${target_path}" 2>/dev/null || \
+            echo "[web-bootstrap] WARNING: Could not fix permissions on quota metadata file ${target_path}" >&2
+    fi
+}
+
+normalize_quota_path "${quota_state_path}"
+normalize_quota_path "${quota_projects_file}"
+normalize_quota_path "${quota_projid_file}"
+normalize_quota_path "${quota_marker_path}"
 
 configure_docker_socket_access
 
