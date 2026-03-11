@@ -159,6 +159,31 @@ def test_prepare_imaris_xt_environment_adds_bundled_paths(monkeypatch):
     monkeypatch.setattr(module.os, "path", original_os_path, raising=False)
 
 
+def test_collect_imaris_xt_diagnostics_reports_import_failures(monkeypatch):
+    module = _load_xt_module()
+    monkeypatch.setattr(module, "_find_imaris_executable", lambda: r"C:\Program Files\Bitplane\Imaris 11.0.0\Imaris.exe")
+    monkeypatch.setattr(module, "_iter_imaris_install_roots", lambda: [r"C:\Program Files\Bitplane\Imaris 11.0.0"])
+    monkeypatch.setattr(module, "_safe_path_exists", lambda path: path.endswith("Imaris.exe") or path.endswith(r"\XT"))
+
+    original_import = builtins.__import__
+
+    def _raising_import(name, *args, **kwargs):
+        if name == "ImarisLib":
+            raise ImportError("ImarisLib missing")
+        if name == "IcePy":
+            raise ImportError("IcePy missing")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _raising_import)
+
+    diagnostics = module._collect_imaris_xt_diagnostics()
+
+    assert diagnostics["python_version_short"]
+    assert diagnostics["imaris_executable_exists"] is True
+    assert diagnostics["imarislib_import"]["ok"] is False
+    assert diagnostics["icepy_import"]["ok"] is False
+
+
 def test_resolve_imaris_application_returns_direct_handle():
     module = _load_xt_module()
     direct_handle = types.SimpleNamespace(FileOpen=lambda *_args: None)
