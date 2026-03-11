@@ -75,9 +75,32 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
+        self.assertIn('SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"', script_text)
         self.assertIn('resolve_omero_bin() {', script_text)
+        self.assertIn('server_root="${SERVER_HOME%/*}"', script_text)
+        self.assertIn('for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do', script_text)
         self.assertIn('for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do', script_text)
         self.assertIn('run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"', script_text)
+
+    def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("list_repo_root_bootstrap_groups()", script_text)
+        self.assertIn('mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")', script_text)
+        self.assertIn('path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"', script_text)
+        self.assertIn('path_list="$(collect_repo_root_bootstrap_paths)"', script_text)
+        self.assertIn('run_omero fs mkdir --parents "${repo_dir_path}"', script_text)
+        self.assertIn('run_omero chown root "OriginalFile:${root_dir_id}" --force', script_text)
+        self.assertIn("schedule_repo_root_bootstrap", script_text)
+
+    def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('venv_py="$(resolve_server_venv_python)"', script_text)
+        self.assertIn('resolve_cli_home()', script_text)
+        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"', script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
