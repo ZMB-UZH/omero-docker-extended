@@ -91,6 +91,16 @@ repository import parent-directory template.
 OMERO expands supported terms automatically when written with surrounding `%`
 characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).
 
+At runtime, `startup/10-server-bootstrap.sh` now also normalizes the shared
+managed-repository path prefixes that appear before `%user%` (for example the
+group-level `users_ldap` directory in `%group%/%user%/...`). The bootstrap
+discovers current OMERO groups live from the server first, falls back to the
+environment-defined group list when necessary, creates any missing shared
+prefix directories with `omero fs mkdir --parents`, and non-destructively
+reassigns their OMERO ownership metadata to `root` when an earlier uploader
+created them under a personal account. This keeps older installations and
+drifted deployments compatible without changing the path template itself.
+
 If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
 without trailing `%`), OMERO treats those strings literally and creates
 directories named with `%...` segments.
