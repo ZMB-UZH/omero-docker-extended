@@ -5,6 +5,7 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import json
 import logging
 import re
@@ -169,13 +170,19 @@ def _iter_accessible_projects(conn):
                 yield proj
             return
         except Exception as exc:
-            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", exc)
+            logger.warning(
+                "Failed to query projects across all groups with SERVICE_OPTS: %s",
+                sanitize_log_value(exc),
+            )
         try:
             for proj in conn.getObjects("Project", opts={"group": "-1"}):
                 yield proj
             return
         except Exception as exc:
-            logger.warning("Failed to query projects with opts group=-1: %s", exc)
+            logger.warning(
+                "Failed to query projects with opts group=-1: %s",
+                sanitize_log_value(exc),
+            )
     finally:
         if current_group is not None:
             try:
@@ -187,12 +194,12 @@ def _iter_accessible_projects(conn):
             yield proj
         return
     except Exception as exc:
-        logger.warning("Failed to query projects in current group: %s", exc)
+        logger.warning("Failed to query projects in current group: %s", sanitize_log_value(exc))
     try:
         for proj in conn.listProjects():
             yield proj
     except Exception as exc:
-        logger.warning("Failed to list projects: %s", exc)
+        logger.warning("Failed to list projects: %s", sanitize_log_value(exc))
         return
 
 
@@ -368,7 +375,11 @@ def _collect_project_payload(conn, user_id):
             # else: private or read-only group, skip
                 
     except Exception as exc:
-        logger.exception("Error listing projects: %s", exc)
+        logger.error(
+            "Error listing projects: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
     return {
         "owned": owned_projects,
         "collab": collab_projects,
@@ -531,7 +542,11 @@ def index(request, conn=None, url=None, **kwargs):
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
             except AiCredentialStoreError as e:
-                logger.exception("AI credential lookup failed for regex generation: %s", e)
+                logger.error(
+                    "AI credential lookup failed for regex generation: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
                 return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
@@ -543,10 +558,14 @@ def index(request, conn=None, url=None, **kwargs):
             try:
                 result = generate_ai_regex(provider, api_key, filenames, model=model or None)
             except AiAssistError as e:
-                logger.warning("AI regex request rejected: %s", e)
+                logger.warning("AI regex request rejected: %s", sanitize_log_value(e))
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
-                logger.exception("AI regex provider failure: %s", e)
+                logger.error(
+                    "AI regex provider failure: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
                 return JsonResponse(
                     {"error": errors.unable_to_process_filenames()},
                     status=500,
@@ -628,7 +647,11 @@ def index(request, conn=None, url=None, **kwargs):
             try:
                 api_key = (get_ai_credential(username, provider) or "").strip()
             except AiCredentialStoreError as e:
-                logger.exception("AI credential lookup failed for AI parse: %s", e)
+                logger.error(
+                    "AI credential lookup failed for AI parse: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
                 return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
             if not api_key:
@@ -637,10 +660,14 @@ def index(request, conn=None, url=None, **kwargs):
             try:
                 result = generate_ai_parsed_values(provider, api_key, filenames, model=model or None, custom_instructions=custom_instructions)
             except AiAssistError as e:
-                logger.warning("AI parse request rejected: %s", e)
+                logger.warning("AI parse request rejected: %s", sanitize_log_value(e))
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=400)
             except Exception as e:
-                logger.exception("AI parse provider failure: %s", e)
+                logger.error(
+                    "AI parse provider failure: %s",
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
                 return JsonResponse({"error": errors.unable_to_process_filenames()}, status=500)
 
             rows_with_ids = []
@@ -763,7 +790,7 @@ def index(request, conn=None, url=None, **kwargs):
                 try:
                     parsed_rows = json.loads(raw_ai_parsed)
                 except json.JSONDecodeError as e:
-                    logger.warning("Invalid AI parsing data payload: %s", e)
+                    logger.warning("Invalid AI parsing data payload: %s", sanitize_log_value(e))
                     return HttpResponse(
                         "<h2 style='color:red;'>Invalid AI parsing data</h2>"
                         f"<p>{errors.invalid_ai_parsing_data()}</p>"
@@ -792,7 +819,7 @@ def index(request, conn=None, url=None, **kwargs):
                 try:
                     re.compile(sep_pattern)
                 except re.error as e:
-                    logger.warning("Rejected invalid regex pattern: %s", e)
+                    logger.warning("Rejected invalid regex pattern: %s", sanitize_log_value(e))
                     return HttpResponse(
                         f"<h2 style='color:red;'>{errors.invalid_regex_pattern_title()}</h2>"
                         f"<p>{errors.invalid_regex_pattern()}</p>"
@@ -950,7 +977,11 @@ def index(request, conn=None, url=None, **kwargs):
         )
 
     except Exception as e:
-        logger.exception("Unhandled error in index(): %s", e)
+        logger.error(
+            "Unhandled error in index(): %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return HttpResponse(
             f"<h2>Error</h2><p>{errors.unexpected_error()}</p>",
             status=500,

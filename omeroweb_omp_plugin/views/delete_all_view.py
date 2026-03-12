@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import subprocess
 import logging
 
@@ -177,5 +178,9 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
             )
 
     except Exception as e:
-        logger.exception("delete_all_keyvaluepairs failed: %s", e)
+        logger.error(
+            "delete_all_keyvaluepairs failed: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
