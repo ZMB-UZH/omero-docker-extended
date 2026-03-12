@@ -3,10 +3,10 @@ Job cleanup for RAM-based job storage (redis).
 This module handles automatic cleanup of old job files to prevent RAM accumulation in the tmpfs-mounted job directory.
 """
 
+import logging
 import os
 import time
-import logging
-from omero_plugin_common.logging_utils import sanitize_log_value
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..constants import JOBS_DIR, JOB_MAX_AGE_SECONDS, JOB_CLEANUP_INTERVAL
 
@@ -78,4 +78,8 @@ def cleanup_old_jobs():
             logger.warning("Encountered %s error(s) during job cleanup", error_count)
 
     except Exception as e:
-        logger.exception("Job cleanup failed: %s", sanitize_log_value(e))
+        logger.error(
+            "Job cleanup failed: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )

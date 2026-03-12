@@ -3,6 +3,7 @@ import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..services.data_store import (
     VariableStoreError,
@@ -33,11 +34,18 @@ def list_sets(request, conn=None, url=None, **kwargs):
     try:
         sets = list_variable_sets(username)
         return JsonResponse({"sets": sets})
-    except VariableStoreError:
-        logger.exception("Variable store failure while listing sets.")
+    except VariableStoreError as exc:
+        logger.error(
+            "Variable store failure while listing sets.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.variable_sets_fetch_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error listing sets: %s", e)
+        logger.error(
+            "Unexpected error listing sets: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -92,11 +100,18 @@ def save_set(request, conn=None, url=None, **kwargs):
 
         return JsonResponse({"message": messages.variable_set_saved_response()})
 
-    except VariableStoreError:
-        logger.exception("Variable store failure while saving set.")
+    except VariableStoreError as exc:
+        logger.error(
+            "Variable store failure while saving set.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.variable_set_save_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error saving set: %s", e)
+        logger.error(
+            "Unexpected error saving set: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -125,11 +140,18 @@ def load_set(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": errors.variable_set_not_found()}, status=404)
 
         return JsonResponse({"var_names": var_names})
-    except VariableStoreError:
-        logger.exception("Variable store failure while loading set.")
+    except VariableStoreError as exc:
+        logger.error(
+            "Variable store failure while loading set.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.variable_set_load_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error loading set: %s", e)
+        logger.error(
+            "Unexpected error loading set: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -155,9 +177,16 @@ def delete_set(request, conn=None, url=None, **kwargs):
 
         return JsonResponse({"ok": True})
 
-    except VariableStoreError:
-        logger.exception("Variable store failure while deleting set.")
+    except VariableStoreError as exc:
+        logger.error(
+            "Variable store failure while deleting set.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.variable_set_delete_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error deleting set: %s", e)
+        logger.error(
+            "Unexpected error deleting set: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)

@@ -1,6 +1,7 @@
 """
 Upload plugin views.
 """
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 # Import all helper functions from core_functions
 from .core_functions import *
 from .utils import require_non_root_user
@@ -53,8 +54,11 @@ def root_status(request, conn=None, url=None, **kwargs):
 def start_upload(request, conn=None, url=None, **kwargs):
     try:
         return _start_upload(request, conn)
-    except Exception:
-        logger.exception("Unhandled error while starting upload job.")
+    except Exception as exc:
+        logger.error(
+            "Unhandled error while starting upload job.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return json_error(errors.unexpected_server_error_start_upload(), status=500)
 
 
@@ -169,7 +173,7 @@ def _start_upload(request, conn):
             logger.info(
                 "Upload start rejected batch exceeding %d GB for user %s.",
                 MAX_UPLOAD_BATCH_GB,
-                current_username(request, conn),
+                sanitize_log_value(current_username(request, conn)),
             )
             return json_error(errors.upload_batch_too_large(MAX_UPLOAD_BATCH_GB))
         normalized.append(
@@ -186,7 +190,7 @@ def _start_upload(request, conn):
         )
 
     if invalid:
-        logger.info("Upload start rejected invalid paths: %s", invalid)
+        logger.info("Upload start rejected invalid paths: %s", sanitize_log_value(invalid))
         return json_error(errors.invalid_file_paths(invalid))
 
     sem_edx_associations = _normalize_sem_edx_associations(raw_sem_edx_associations, normalized)
@@ -218,9 +222,13 @@ def _start_upload(request, conn):
         # The -1 group causes OptimisticLockException when job-service tries to save annotations
         event_context = conn.getEventContext()
         current_group_id = event_context.groupId
-        logger.debug("Captured user's group_id: %s for user: %s", current_group_id, username)
+        logger.debug(
+            "Captured user's group_id: %s for user: %s",
+            current_group_id,
+            sanitize_log_value(username),
+        )
     except Exception as exc:
-        logger.warning("Unable to get user's group context: %s", exc)
+        logger.warning("Unable to get user's group context: %s", sanitize_log_value(exc))
         current_group_id = None
     job = {
         "job_id": job_id,
@@ -254,13 +262,17 @@ def _start_upload(request, conn):
         "sem_edx_settings": sem_edx_settings,
     }
     if not _save_job(job):
-        logger.error("Unable to persist upload job %s for user %s.", job_id, username)
+        logger.error(
+            "Unable to persist upload job %s for user %s.",
+            sanitize_log_value(job_id),
+            sanitize_log_value(username),
+        )
         return json_error(errors.unable_update_upload_job_state(), status=500)
 
     logger.info(
         "Upload job %s created for user %s with %d files (%d bytes).",
-        job_id,
-        username,
+        sanitize_log_value(job_id),
+        sanitize_log_value(username),
         len(normalized),
         total_bytes,
     )
@@ -283,8 +295,12 @@ def _start_upload(request, conn):
 def upload_files(request, job_id, conn=None, url=None, **kwargs):
     try:
         return _upload_files(request, job_id, conn)
-    except Exception:
-        logger.exception("Unhandled error while uploading files for job %s.", job_id)
+    except Exception as exc:
+        logger.error(
+            "Unhandled error while uploading files for job %s.",
+            sanitize_log_value(job_id),
+            exc_info=sanitized_exc_info(exc),
+        )
         return json_error(errors.unexpected_server_error_uploading_files(), status=500)
 
 
@@ -372,14 +388,18 @@ def _handle_chunk_upload(request, job_id, job, job_root):
         try:
             target.unlink()
         except OSError as exc:
-            logger.warning("Failed to reset staged upload %s for chunked retry: %s", rel_path, exc)
+            logger.warning(
+                "Failed to reset staged upload %s for chunked retry: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+            )
 
     existing_size = target.stat().st_size if target.exists() else 0
     if existing_size != chunk_start:
         logger.warning(
             "Chunk offset mismatch for %s in job %s: existing=%s request_start=%s",
-            rel_path,
-            job_id,
+            sanitize_log_value(rel_path),
+            sanitize_log_value(job_id),
             existing_size,
             chunk_start,
         )
@@ -395,7 +415,11 @@ def _handle_chunk_upload(request, job_id, job, job_root):
                 handle.write(chunk)
                 bytes_written += len(chunk)
     except OSError as exc:
-        logger.warning("Failed to save chunk for %s: %s", rel_path, exc)
+        logger.warning(
+            "Failed to save chunk for %s: %s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(exc),
+        )
         generic_error = errors.unexpected_server_error_uploading_files()
         updated_job = _apply_upload_updates(
             job_id,
@@ -410,8 +434,8 @@ def _handle_chunk_upload(request, job_id, job, job_root):
     if bytes_written != expected_chunk_size:
         logger.warning(
             "Chunk size mismatch for %s in job %s: expected=%s wrote=%s",
-            rel_path,
-            job_id,
+            sanitize_log_value(rel_path),
+            sanitize_log_value(job_id),
             expected_chunk_size,
             bytes_written,
         )
@@ -438,8 +462,8 @@ def _handle_chunk_upload(request, job_id, job, job_root):
     if saved_size != file_size:
         logger.warning(
             "Final chunk saved unexpected size for %s in job %s: expected=%s actual=%s",
-            rel_path,
-            job_id,
+            sanitize_log_value(rel_path),
+            sanitize_log_value(job_id),
             file_size,
             saved_size,
         )
@@ -451,10 +475,13 @@ def _handle_chunk_upload(request, job_id, job, job_root):
 
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
-        logger.info("Upload job %s checking compatibility after chunked upload.", job_id)
+        logger.info("Upload job %s checking compatibility after chunked upload.", sanitize_log_value(job_id))
     if updated_job["status"] == "ready":
         _start_import_thread(job_id)
-        logger.info("Upload job %s ready after chunked upload; import thread started.", job_id)
+        logger.info(
+            "Upload job %s ready after chunked upload; import thread started.",
+            sanitize_log_value(job_id),
+        )
 
     return JsonResponse(
         {
@@ -472,12 +499,13 @@ def _handle_chunk_upload(request, job_id, job, job_root):
 
 
 def _upload_files(request, job_id, conn):
+    safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.upload_endpoint_post_required())
 
     upload_root = _get_upload_root()
     if not _ensure_dir(upload_root):
-        logger.warning("Upload root not writable for job %s.", job_id)
+        logger.warning("Upload root not writable for job %s.", safe_job_id)
         return json_error(errors.upload_folder_not_writable())
 
     job, error_response = _load_owned_job(
@@ -487,12 +515,12 @@ def _upload_files(request, job_id, conn):
         errors.upload_job_not_found(),
     )
     if error_response:
-        logger.warning("Upload job %s not found.", job_id)
+        logger.warning("Upload job %s not found.", safe_job_id)
         return error_response
 
     job_root = upload_root / job_id
     if not _ensure_dir(job_root):
-        logger.warning("Unable to initialize upload folder for job %s.", job_id)
+        logger.warning("Unable to initialize upload folder for job %s.", safe_job_id)
         return json_error(errors.unable_initialize_upload_folder())
 
     if request.POST.get("upload_mode") == "chunked":
@@ -500,12 +528,12 @@ def _upload_files(request, job_id, conn):
 
     files = request.FILES.getlist("files")
     if not files:
-        logger.info("Upload job %s received no files.", job_id)
+        logger.info("Upload job %s received no files.", safe_job_id)
         return json_error(errors.no_files_provided())
 
     relative_paths = request.POST.getlist("relative_paths")
     if relative_paths and len(relative_paths) != len(files):
-        logger.warning("Upload payload mismatch for job %s.", job_id)
+        logger.warning("Upload payload mismatch for job %s.", safe_job_id)
         return json_error(errors.upload_payload_mismatch())
 
     saved = []
@@ -532,7 +560,11 @@ def _upload_files(request, job_id, conn):
         staged_path = entry.get("staged_path") or rel_path
         target, staged_error = _resolve_staged_target_path(job_root, staged_path)
         if staged_error:
-            logger.warning("Rejected staged upload target for %s: %s", rel_path, staged_error)
+            logger.warning(
+                "Rejected staged upload target for %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(staged_error),
+            )
             upload_errors.append(staged_error)
             entry["status"] = "error"
             entry.setdefault("errors", []).append(staged_error)
@@ -549,7 +581,11 @@ def _upload_files(request, job_id, conn):
             entry["status"] = "uploaded"
             updates.append({"upload_id": entry.get("upload_id"), "status": "uploaded"})
         except OSError as exc:
-            logger.warning("Failed to save upload %s: %s", rel_path, exc)
+            logger.warning(
+                "Failed to save upload %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+            )
             generic_error = errors.unexpected_server_error_uploading_files()
             upload_errors.append(generic_error)
             entry["status"] = "error"
@@ -565,10 +601,10 @@ def _upload_files(request, job_id, conn):
 
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
-        logger.info("Upload job %s checking compatibility.", job_id)
+        logger.info("Upload job %s checking compatibility.", safe_job_id)
     if updated_job["status"] == "ready":
         _start_import_thread(job_id)
-        logger.info("Upload job %s ready; import thread started.", job_id)
+        logger.info("Upload job %s ready; import thread started.", safe_job_id)
 
     return JsonResponse(
         {
@@ -588,12 +624,17 @@ def _upload_files(request, job_id, conn):
 def import_step(request, job_id, conn=None, url=None, **kwargs):
     try:
         return _import_step(request, job_id, conn)
-    except Exception:
-        logger.exception("Unhandled error while importing job %s.", job_id)
+    except Exception as exc:
+        logger.error(
+            "Unhandled error while importing job %s.",
+            sanitize_log_value(job_id),
+            exc_info=sanitized_exc_info(exc),
+        )
         return json_error(errors.unexpected_server_error_importing(), status=500)
 
 
 def _import_step(request, job_id, conn):
+    safe_job_id = sanitize_log_value(job_id)
     if request.method != "POST":
         return json_error(errors.import_endpoint_post_required())
 
@@ -604,7 +645,7 @@ def _import_step(request, job_id, conn):
         errors.import_job_not_found(),
     )
     if error_response:
-        logger.warning("Import job %s not found.", job_id)
+        logger.warning("Import job %s not found.", safe_job_id)
         return error_response
 
     if job.get("status") == "ready":
@@ -646,7 +687,10 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     job["status"] = "ready"
     job["updated"] = time.time()
     if not _save_job(job):
-        logger.error("Unable to persist confirmation state for upload job %s.", job_id)
+        logger.error(
+            "Unable to persist confirmation state for upload job %s.",
+            sanitize_log_value(job_id),
+        )
         return json_error(errors.unable_update_upload_job_state(), status=500)
     _start_import_thread(job_id)
 
@@ -700,13 +744,20 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
                 continue
             file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
             if staged_error:
-                logger.warning("Rejected staged prune target for job %s.", job_id)
+                logger.warning(
+                    "Rejected staged prune target for job %s.",
+                    sanitize_log_value(job_id),
+                )
                 continue
             try:
                 if file_path.exists():
                     file_path.unlink()
             except OSError as exc:
-                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                logger.warning(
+                    "Failed to remove staged file %s: %s",
+                    sanitize_log_value(file_path),
+                    sanitize_log_value(exc),
+                )
 
         job_dict["files"] = kept_entries
         job_dict["total_bytes"] = sum(entry.get("size", 0) for entry in kept_entries)

@@ -36,7 +36,7 @@ from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
-from omero_plugin_common.logging_utils import sanitize_log_value
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 from omero_plugin_common.tmp_cleanup import safe_remove_job_data
 from .utils import current_username, json_error, load_json_body
 
@@ -2413,8 +2413,13 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
             path=file_path,
             dataset_id=dataset_id,
         )
-    except Exception:
-        logger.exception("Import failed for %s.", rel_path)
+    except Exception as exc:
+        logger.error(
+            "Import failed for %s: %s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         success = False
         stdout = ""
         stderr = ""
@@ -2422,9 +2427,9 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     if not success:
         logger.warning(
             "Import failed for %s (stdout=%r, stderr=%r).",
-            rel_path,
-            str(stdout).strip(),
-            str(stderr).strip(),
+            sanitize_log_value(rel_path),
+            sanitize_log_value(str(stdout).strip()),
+            sanitize_log_value(str(stderr).strip()),
         )
         error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
         job_error = messages.job_error_with_path(rel_path, error_msg)
@@ -2445,24 +2450,26 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
 
 
 def _process_import_job(job_id: str):
-    logger.info("Import thread started for job %s", job_id)
+    safe_job_id = sanitize_log_value(job_id)
+    logger.info("Import thread started for job %s", safe_job_id)
     job = _load_job(job_id)
     if not job:
-        logger.error("Import thread: job %s not found, aborting", job_id)
+        logger.error("Import thread: job %s not found, aborting", safe_job_id)
         return
 
     try:
         username = job.get("username") or ""
         lock = _get_import_lock(username)
+        safe_username = sanitize_log_value(username)
 
         LOCK_TIMEOUT = 900  # 15 minutes max wait for another import to finish
-        logger.info("Import thread: acquiring lock for user %s (job %s)", username, job_id)
+        logger.info("Import thread: acquiring lock for user %s (job %s)", safe_username, safe_job_id)
         acquired = lock.acquire(timeout=LOCK_TIMEOUT)
         if not acquired:
             logger.error(
                 "Import lock timeout for user %s after %ds - a previous import may be stuck. "
                 "Restart the OMERO-web container to clear stale locks.",
-                username, LOCK_TIMEOUT,
+                safe_username, LOCK_TIMEOUT,
             )
             job = _load_job(job_id) or {"job_id": job_id}
             _append_job_error(job, "Import could not start: another import is stuck. Please restart OMERO-web.")
@@ -2470,7 +2477,7 @@ def _process_import_job(job_id: str):
             _save_job(job)
             return
 
-        logger.info("Import thread: lock acquired for user %s (job %s)", username, job_id)
+        logger.info("Import thread: lock acquired for user %s (job %s)", safe_username, safe_job_id)
         try:
             job = _load_job(job_id)
             if not job:
@@ -2541,7 +2548,7 @@ def _process_import_job(job_id: str):
             if skipped_count or incompatible_skipped:
                 logger.info(
                     "Import thread: pre-skipped %d non-importable + %d incompatible files for job %s",
-                    skipped_count, incompatible_skipped, job_id,
+                    skipped_count, incompatible_skipped, safe_job_id,
                 )
                 _save_job(job)
 
@@ -2563,7 +2570,7 @@ def _process_import_job(job_id: str):
 
             logger.info(
                 "Import thread: %d entries to import for job %s (batch_size=%d)",
-                len(entries_to_import), job_id, batch_size,
+                len(entries_to_import), safe_job_id, batch_size,
             )
 
             for start in range(0, len(entries_to_import), batch_size):
@@ -2572,7 +2579,7 @@ def _process_import_job(job_id: str):
                     continue
                 logger.info(
                     "Import thread: processing batch %d-%d of %d for job %s",
-                    start, start + len(batch), len(entries_to_import), job_id,
+                    start, start + len(batch), len(entries_to_import), safe_job_id,
                 )
                 # Serialize live imports through a single CLI process.
                 # The live stack shows intermittent OMERO.java/import-init failures when
@@ -2588,8 +2595,12 @@ def _process_import_job(job_id: str):
                             dataset_map,
                             orphan_dataset_name,
                         )
-                    except Exception:
-                        logger.exception("Import future raised unexpected error")
+                    except Exception as exc:
+                        logger.error(
+                            "Import future raised unexpected error: %s",
+                            sanitize_log_value(exc),
+                            exc_info=sanitized_exc_info(exc),
+                        )
                         continue
                     if not result or result.get("skip"):
                         continue
@@ -2624,7 +2635,11 @@ def _process_import_job(job_id: str):
                             try:
                                 file_path.unlink()
                             except OSError as exc:
-                                logger.warning("Failed to remove staged file %s: %s", file_path, exc)
+                                logger.warning(
+                                    "Failed to remove staged file %s: %s",
+                                    sanitize_log_value(file_path),
+                                    sanitize_log_value(exc),
+                                )
                         _save_job(job)
 
             job = _load_job(job_id) or job
@@ -2648,7 +2663,7 @@ def _process_import_job(job_id: str):
                 else:
                     logger.info(
                         "SEM EDX mode enabled for job %s but no TXT/image associations could be derived; skipping TXT attachments",
-                        job_id,
+                        safe_job_id,
                     )
                     _append_job_message(job, "SEM EDX: no TXT/image associations found; skipping TXT attachments")
                     _save_job(job)
@@ -2671,7 +2686,11 @@ def _process_import_job(job_id: str):
                                 if isinstance(txt_paths, list)
                             )
                             
-                            logger.info("Processing %d SEM EDX text attachments for job %s", total_attachments, job_id)
+                            logger.info(
+                                "Processing %d SEM EDX text attachments for job %s",
+                                total_attachments,
+                                safe_job_id,
+                            )
                             
                             # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
                             logger.info("Pre-loading image cache for %d images", len(sem_edx_associations))
@@ -2720,8 +2739,13 @@ def _process_import_job(job_id: str):
                                 
                                 # Progress logging
                                 progress_pct = (attachment_idx / len(sem_edx_associations)) * 100
-                                logger.info("Processing image %d/%d (%.1f%%) - %s", 
-                                          attachment_idx + 1, len(sem_edx_associations), progress_pct, image_rel)
+                                logger.info(
+                                    "Processing image %d/%d (%.1f%%) - %s",
+                                    attachment_idx + 1,
+                                    len(sem_edx_associations),
+                                    progress_pct,
+                                    sanitize_log_value(image_rel),
+                                )
 
                                 image_name = PurePosixPath(image_rel).name if image_rel else ""
 
@@ -2734,7 +2758,10 @@ def _process_import_job(job_id: str):
                                             try:
                                                 conn.close()
                                             except Exception as close_exc:
-                                                logger.debug("Failed to close expired job-service connection: %s", close_exc)
+                                                logger.debug(
+                                                    "Failed to close expired job-service connection: %s",
+                                                    sanitize_log_value(close_exc),
+                                                )
                                             conn = _open_service_connection(host, port, group_id=job.get("group_id"))
                                         except Exception:
                                             conn = None
@@ -2772,7 +2799,11 @@ def _process_import_job(job_id: str):
 
                                     image_id = _get_id(image_obj)
                                     if not image_id:
-                                        logger.warning("Could not get image ID for %s, skipping %s", image_name, txt_name)
+                                        logger.warning(
+                                            "Could not get image ID for %s, skipping %s",
+                                            sanitize_log_value(image_name),
+                                            sanitize_log_value(txt_name),
+                                        )
                                         _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
                                         continue
 
@@ -2793,7 +2824,10 @@ def _process_import_job(job_id: str):
 
                                     txt_entry = entries_by_path.get(txt_rel)
                                     if not txt_entry:
-                                        logger.warning("Text entry not found for %s, skipping", txt_rel)
+                                        logger.warning(
+                                            "Text entry not found for %s, skipping",
+                                            sanitize_log_value(txt_rel),
+                                        )
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
 
@@ -2802,17 +2836,20 @@ def _process_import_job(job_id: str):
                                     if staged_error:
                                         logger.warning(
                                             "Rejected SEM-EDX text staged path for job %s: txt=%s staged=%s error=%s",
-                                            job_id,
-                                            txt_rel,
-                                            staged_path,
-                                            staged_error,
+                                            safe_job_id,
+                                            sanitize_log_value(txt_rel),
+                                            sanitize_log_value(staged_path),
+                                            sanitize_log_value(staged_error),
                                         )
                                         _append_job_error(job, staged_error)
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
 
                                     if not txt_path.exists():
-                                        logger.warning("Text file not found at %s, skipping", txt_path)
+                                        logger.warning(
+                                            "Text file not found at %s, skipping",
+                                            sanitize_log_value(txt_path),
+                                        )
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
                                         continue
 
@@ -2843,9 +2880,9 @@ def _process_import_job(job_id: str):
                                         if staged_plot_error:
                                             logger.warning(
                                                 "Rejected SEM-EDX plot staged path for job %s: rel=%s error=%s",
-                                                job_id,
-                                                plot_import_rel,
-                                                staged_plot_error,
+                                                safe_job_id,
+                                                sanitize_log_value(plot_import_rel),
+                                                sanitize_log_value(staged_plot_error),
                                             )
                                             _append_job_error(job, staged_plot_error)
                                             imported_plots.add(txt_rel)
@@ -2854,11 +2891,12 @@ def _process_import_job(job_id: str):
                                             staged_plot_path.parent.mkdir(parents=True, exist_ok=True)
                                             shutil.copy2(plot_path, staged_plot_path)
                                         except Exception as exc:
-                                            logger.exception(
+                                            logger.error(
                                                 "Failed to stage SEM-EDX plot PNG for import: src=%s dst=%s error=%s",
-                                                plot_path,
-                                                staged_plot_path,
-                                                exc,
+                                                sanitize_log_value(plot_path),
+                                                sanitize_log_value(staged_plot_path),
+                                                sanitize_log_value(exc),
+                                                exc_info=sanitized_exc_info(exc),
                                             )
                                             _append_job_error(
                                                 job,
@@ -2869,8 +2907,8 @@ def _process_import_job(job_id: str):
 
                                         logger.info(
                                             "SEM-EDX: plot staged for import: rel=%s staged=%s exists=%s",
-                                            plot_import_rel,
-                                            staged_plot_path,
+                                            sanitize_log_value(plot_import_rel),
+                                            sanitize_log_value(staged_plot_path),
                                             staged_plot_path.exists(),
                                         )
 
@@ -2895,22 +2933,27 @@ def _process_import_job(job_id: str):
                                                 _append_job_message(job, import_result["job_message"])
                                             logger.error(
                                                 "Failed to import SEM EDX plot %s (dataset_id=%s staged=%s)",
-                                                plot_import_rel,
+                                                sanitize_log_value(plot_import_rel),
                                                 sem_dataset_id,
-                                                str(staged_plot_path),
+                                                sanitize_log_value(str(staged_plot_path)),
                                             )
                                         elif import_result.get("status") == "imported":
                                             _append_job_message(job, messages.imported_file(plot_import_rel))
                                             logger.info(
                                                 "Imported SEM EDX plot %s into dataset_id=%s",
-                                                plot_import_rel,
+                                                sanitize_log_value(plot_import_rel),
                                                 sem_dataset_id,
                                             )
                                         imported_plots.add(txt_rel)
 
                                     # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
                                     try:
-                                        logger.info("Attaching %s to %s (Image:%d)", txt_name, image_name, image_id)
+                                        logger.info(
+                                            "Attaching %s to %s (Image:%d)",
+                                            sanitize_log_value(txt_name),
+                                            sanitize_log_value(image_name),
+                                            image_id,
+                                        )
                                         _attach_txt_to_image_service(
                                             conn,
                                             image_id,
@@ -2926,10 +2969,20 @@ def _process_import_job(job_id: str):
                                             job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get("size", 0)
 
                                         _append_txt_attachment_message(job, txt_name, image_name, True)
-                                        logger.info("Successfully attached %s to %s", txt_name, image_name)
+                                        logger.info(
+                                            "Successfully attached %s to %s",
+                                            sanitize_log_value(txt_name),
+                                            sanitize_log_value(image_name),
+                                        )
 
                                     except Exception as exc:
-                                        logger.error("Failed to attach %s to %s: %s", txt_rel, image_rel, exc)
+                                        logger.error(
+                                            "Failed to attach %s to %s: %s",
+                                            sanitize_log_value(txt_rel),
+                                            sanitize_log_value(image_rel),
+                                            sanitize_log_value(exc),
+                                            exc_info=sanitized_exc_info(exc),
+                                        )
                                         _append_txt_attachment_message(job, txt_name, image_name, False)
 
                                     # Save job state periodically
@@ -2939,30 +2992,42 @@ def _process_import_job(job_id: str):
                             
                             # Final save
                             _save_job(job)
-                            logger.info("Completed SEM EDX attachment processing for job %s: %d/%d processed", 
-                                      job_id, attachment_count, total_attachments)
+                            logger.info(
+                                "Completed SEM EDX attachment processing for job %s: %d/%d processed",
+                                safe_job_id,
+                                attachment_count,
+                                total_attachments,
+                            )
                             
                         finally:
                             try:
                                 conn.close()
                             except Exception as exc:
-                                logger.warning("Error closing connection: %s", exc)
-                except Exception:
-                    logger.exception("SEM EDX txt attachment failed for job %s.", job_id)
+                                logger.warning(
+                                    "Error closing connection: %s",
+                                    sanitize_log_value(exc),
+                                )
+                except Exception as exc:
+                    logger.error(
+                        "SEM EDX txt attachment failed for job %s: %s",
+                        safe_job_id,
+                        sanitize_log_value(exc),
+                        exc_info=sanitized_exc_info(exc),
+                    )
 
             job = _load_job(job_id) or job
             if job.get("errors"):
                 job["status"] = "error"
                 logger.warning(
                     "Import thread: job %s finished with errors (%d errors, %d messages)",
-                    job_id, len(job.get("errors", [])), len(job.get("messages", [])),
+                    safe_job_id, len(job.get("errors", [])), len(job.get("messages", [])),
                 )
             else:
                 job["status"] = "done"
                 logger.info(
                     "Import thread: job %s completed successfully "
                     "(imported_bytes=%s, total_bytes=%s, messages=%d)",
-                    job_id,
+                    safe_job_id,
                     job.get("imported_bytes", 0),
                     job.get("total_bytes", 0),
                     len(job.get("messages", [])),
@@ -2973,12 +3038,21 @@ def _process_import_job(job_id: str):
                 # Keep the job JSON so the UI can still display final status/messages.
                 safe_remove_job_data(job_id, _get_upload_root())
             except Exception as exc:
-                logger.warning("Post-success cleanup failed for job %s: %s", job_id, exc)
+                logger.warning(
+                    "Post-success cleanup failed for job %s: %s",
+                    safe_job_id,
+                    sanitize_log_value(exc),
+                )
         finally:
             lock.release()
-            logger.info("Import thread: lock released for job %s", job_id)
+            logger.info("Import thread: lock released for job %s", safe_job_id)
     except Exception as exc:
-        logger.exception("Import job %s failed unexpectedly.", job_id)
+        logger.error(
+            "Import job %s failed unexpectedly: %s",
+            safe_job_id,
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         job = _load_job(job_id) or {"job_id": job_id}
         _append_job_error(job, errors.unexpected_import_failure(exc))
         job["status"] = "error"
