@@ -2,6 +2,8 @@ import logging
 import os
 from contextlib import contextmanager
 
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+
 from ..strings import errors
 
 logger = logging.getLogger(__name__)
@@ -117,14 +119,21 @@ def _connect():
         except Exception as e:
             logger.warning(
                 "Database connection failed for %s:%s: %s",
-                params.get("host"),
-                params.get("port"),
-                e,
+                sanitize_log_value(params.get("host")),
+                sanitize_log_value(params.get("port")),
+                sanitize_log_value(e),
             )
             last_error = e
 
     if conn is None:
-        logger.exception("Database connection failed for all configured hosts/ports: %s", last_error)
+        if last_error is not None:
+            logger.error(
+                "Database connection failed for all configured hosts/ports: %s",
+                sanitize_log_value(last_error),
+                exc_info=sanitized_exc_info(last_error),
+            )
+        else:
+            logger.error("Database connection failed for all configured hosts/ports.")
         raise UserSettingsStoreError(errors.db_connection_failed())
 
     try:
@@ -245,7 +254,12 @@ def save_user_settings(username, settings_payload):
     except UserSettingsStoreError:
         raise
     except Exception as e:
-        logger.exception("Failed to save user settings for %s: %s", username, e)
+        logger.error(
+            "Failed to save user settings for %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         raise UserSettingsStoreError(errors.user_settings_save_failed())
 
 
@@ -287,7 +301,12 @@ def save_special_method_settings(username, method_key, settings_payload):
     except UserSettingsStoreError:
         raise
     except Exception as e:
-        logger.exception("Failed to save special method settings for %s: %s", username, e)
+        logger.error(
+            "Failed to save special method settings for %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         raise UserSettingsStoreError(errors.special_method_settings_save_failed())
 
 
@@ -314,5 +333,10 @@ def load_special_method_settings(username, method_key):
     except UserSettingsStoreError:
         raise
     except Exception as e:
-        logger.exception("Failed to load special method settings for %s: %s", username, e)
+        logger.error(
+            "Failed to load special method settings for %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         raise UserSettingsStoreError(errors.db_connection_failed())
