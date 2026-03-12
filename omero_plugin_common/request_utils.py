@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Any, Optional, Tuple
 
+from .logging_utils import sanitize_log_value
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,10 @@ def current_username(request, conn):
         if user:
             return user.getName()
     except Exception as exc:
-        logger.debug("Failed to resolve username from OMERO connection: %s", exc)
+        logger.debug(
+            "Failed to resolve username from OMERO connection: %s",
+            sanitize_log_value(exc),
+        )
 
     try:
         return request.user.username

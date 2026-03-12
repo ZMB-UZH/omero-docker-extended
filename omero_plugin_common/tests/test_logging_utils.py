@@ -1,6 +1,7 @@
 """Tests for shared logging configuration helpers."""
 
 import logging
+import traceback
 
 from omero_plugin_common import logging_utils
 
@@ -69,3 +70,14 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
     )
 
     assert sanitized == "https://alice:***@example.org/path"
+
+
+def test_sanitized_exc_info_escapes_exception_message() -> None:
+    try:
+        raise RuntimeError("line1\nline2")
+    except RuntimeError as exc:
+        exc_type, sanitized_exc, tb = logging_utils.sanitized_exc_info(exc)
+
+    formatted = "".join(traceback.format_exception(exc_type, sanitized_exc, tb))
+    assert "line1\\nline2" in formatted
+    assert "line1\nline2" not in formatted

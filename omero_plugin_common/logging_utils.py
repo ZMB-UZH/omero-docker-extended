@@ -61,6 +61,18 @@ def sanitize_url_for_logging(url: Any) -> str:
     return sanitize_log_value(sanitized)
 
 
+def sanitized_exc_info(exc: BaseException):
+    """Return exc_info with sanitized exception text while preserving traceback."""
+    safe_message = sanitize_log_value(exc)
+    exc_type = type(exc)
+    try:
+        sanitized_exc = exc_type(safe_message)
+    except Exception:
+        sanitized_exc = RuntimeError(f"{sanitize_log_value(exc_type.__name__)}: {safe_message}")
+    sanitized_exc = sanitized_exc.with_traceback(exc.__traceback__)
+    return type(sanitized_exc), sanitized_exc, sanitized_exc.__traceback__
+
+
 def configure_omero_gateway_logging() -> None:
     """Reduce noisy OMERO gateway debug logs in production web logs.
 

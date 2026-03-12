@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -15,6 +16,11 @@ from omeroweb_upload.views import utils as view_utils
 def _ensure_dir(path):
     Path(path).mkdir(parents=True, exist_ok=True)
     return True
+
+
+def _mark_job_owned(monkeypatch, job):
+    job["username"] = "alice"
+    monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
 
 def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: Path, monkeypatch):
@@ -36,6 +42,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             }
         ],
     }
+    _mark_job_owned(monkeypatch, job)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
@@ -70,7 +77,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             "file": SimpleUploadedFile("big.bin", b"hello"),
         },
     )
-    first_response = index_view._upload_files(first_request, job_id)
+    first_response = index_view._upload_files(first_request, job_id, None)
     first_payload = json.loads(first_response.content)
 
     assert first_response.status_code == 200
@@ -93,7 +100,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             "file": SimpleUploadedFile("big.bin", b"world"),
         },
     )
-    second_response = index_view._upload_files(second_request, job_id)
+    second_response = index_view._upload_files(second_request, job_id, None)
     second_payload = json.loads(second_response.content)
 
     assert second_response.status_code == 200
@@ -123,6 +130,7 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
             }
         ],
     }
+    _mark_job_owned(monkeypatch, job)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
@@ -146,7 +154,7 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
         },
     )
 
-    response = index_view._upload_files(request, job_id)
+    response = index_view._upload_files(request, job_id, None)
     payload = json.loads(response.content)
 
     assert response.status_code == 409
@@ -172,6 +180,7 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
             }
         ],
     }
+    _mark_job_owned(monkeypatch, job)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
@@ -198,7 +207,7 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
         },
     )
 
-    response = index_view._upload_files(request, job_id)
+    response = index_view._upload_files(request, job_id, None)
     payload = json.loads(response.content)
 
     assert response.status_code == 400
@@ -226,6 +235,7 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
             }
         ],
     }
+    _mark_job_owned(monkeypatch, job)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
@@ -270,16 +280,16 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
         },
     )
 
-    response = index_view._upload_files(request, job_id)
+    response = index_view._upload_files(request, job_id, None)
     payload = json.loads(response.content)
 
     assert response.status_code == 500
-    assert payload["error"] == errors.upload_file_save_failed("folder/big.bin")
+    assert payload["error"] == errors.unexpected_server_error_uploading_files()
     assert "sensitive filesystem path" not in payload["error"]
-    assert apply_calls[0][2] == [errors.upload_file_save_failed("folder/big.bin")]
+    assert apply_calls[0][2] == [errors.unexpected_server_error_uploading_files()]
 
 
-def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypatch):
+def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypatch, caplog):
     request = RequestFactory().post("/omeroweb_upload/upload/test-job/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -289,12 +299,15 @@ def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypat
 
     monkeypatch.setattr(index_view, "_upload_files", raise_upload_error)
 
-    response = index_view.upload_files(request, job_id="test-job")
+    with caplog.at_level(logging.ERROR, logger=index_view.logger.name):
+        response = index_view.upload_files(request, job_id="test\njob")
     payload = json.loads(response.content)
 
     assert response.status_code == 500
     assert payload["ok"] is False
     assert payload["error"] == errors.unexpected_server_error_uploading_files()
+    assert "Unhandled error while uploading files for job test\\\\njob." in caplog.text
+    assert "job test\njob" not in caplog.text
 
 
 def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
@@ -314,6 +327,7 @@ def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
             }
         ],
     }
+    _mark_job_owned(monkeypatch, job)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
@@ -341,10 +355,10 @@ def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
         },
     )
 
-    response = index_view._upload_files(request, job_id)
+    response = index_view._upload_files(request, job_id, None)
     payload = json.loads(response.content)
 
     assert response.status_code == 200
     assert payload["ok"] is False
-    assert payload["error"] == errors.upload_file_save_failed("folder/file.bin")
+    assert payload["error"] == errors.unexpected_server_error_uploading_files()
     assert "secret-path" not in payload["error"]

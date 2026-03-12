@@ -359,10 +359,11 @@ def check_major_action_rate_limit(request, conn=None):
 
     except Exception as exc:
         # Log the error but fail closed (block on error for security)
-        logger.exception(
+        logger.error(
             "[RATE_LIMIT] ERROR: Rate limit check failed for %s: %s",
             safe_key,
             sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
         )
         return False, MAJOR_ACTION_BLOCK_SECONDS
 
@@ -384,7 +385,11 @@ def reset_rate_limit(request, conn=None):
         logger.info("Rate limit reset for %s", sanitize_log_value(key))
         return True
     except Exception as exc:
-        logger.exception("Failed to reset rate limit: %s", sanitize_log_value(exc))
+        logger.error(
+            "Failed to reset rate limit: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         return False
 
 
@@ -433,5 +438,9 @@ def get_rate_limit_status(request, conn=None):
             "remaining_block_time": remaining if is_blocked else 0,
         }
     except Exception as exc:
-        logger.exception("Failed to get rate limit status: %s", sanitize_log_value(exc))
+        logger.error(
+            "Failed to get rate limit status: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         return {"error": str(exc)}

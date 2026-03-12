@@ -6,6 +6,7 @@ import urllib.request
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..services.data_store import (
     AiCredentialStoreError,
@@ -119,7 +120,12 @@ def _perform_connection_test(provider, api_key):
             )
         return False, message
     except Exception as e:
-        logger.exception("AI credential connection test failed for %s: %s", provider, e)
+        logger.error(
+            "AI credential connection test failed for %s: %s",
+            sanitize_log_value(provider),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return False, errors.connection_test_failed()
 
 
@@ -208,11 +214,15 @@ def list_credentials(request, conn=None, url=None, **kwargs):
     try:
         providers = list_ai_credentials(username)
         return JsonResponse({"providers": providers})
-    except AiCredentialStoreError:
-        logger.exception("AI credential store failure while listing credentials.")
+    except AiCredentialStoreError as exc:
+        logger.error("AI credential store failure while listing credentials.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error listing AI credentials: %s", e)
+        logger.error(
+            "Unexpected error listing AI credentials: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -242,7 +252,11 @@ def test_credentials(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": message}, status=400)
         return JsonResponse({"message": message})
     except Exception as e:
-        logger.exception("Unexpected error testing AI credentials: %s", e)
+        logger.error(
+            "Unexpected error testing AI credentials: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -268,11 +282,15 @@ def save_credentials(request, conn=None, url=None, **kwargs):
             return JsonResponse({"error": message}, status=400)
         save_ai_credentials(username, provider, api_key)
         return JsonResponse({"message": messages.api_key_saved_status()})
-    except AiCredentialStoreError:
-        logger.exception("AI credential store failure while saving credentials.")
+    except AiCredentialStoreError as exc:
+        logger.error("AI credential store failure while saving credentials.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.ai_credentials_save_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error saving AI credentials: %s", e)
+        logger.error(
+            "Unexpected error saving AI credentials: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -293,8 +311,8 @@ def list_models(request, conn=None, url=None, **kwargs):
 
     try:
         api_key = (get_ai_credential(username, provider) or "").strip()
-    except AiCredentialStoreError:
-        logger.exception("AI credential store failure while listing models.")
+    except AiCredentialStoreError as exc:
+        logger.error("AI credential store failure while listing models.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
     if not api_key:
@@ -320,7 +338,12 @@ def list_models(request, conn=None, url=None, **kwargs):
             message = errors.provider_http_status_with_detail(e.code, detail)
         return JsonResponse({"error": message}, status=400)
     except Exception as e:
-        logger.exception("Unexpected error fetching models for %s: %s", provider, e)
+        logger.error(
+            "Unexpected error fetching models for %s: %s",
+            sanitize_log_value(provider),
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
     if provider in _OPENAI_STYLE_PROVIDERS:

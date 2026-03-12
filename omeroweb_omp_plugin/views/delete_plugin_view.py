@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import subprocess
 import logging
 from ..services.core import (
@@ -105,7 +106,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     iid = get_id(img)
                     plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
                 except Exception as e:
-                    logger.warning("Cannot resolve annotations for image %s: %s", get_id(img), e)
+                    logger.warning(
+                        "Cannot resolve annotations for image %s: %s",
+                        sanitize_log_value(get_id(img)),
+                        sanitize_log_value(e),
+                    )
                     deletion_errors.append(
                         {"image": get_id(img), "error": error_messages.unexpected_error()}
                     )
@@ -213,9 +218,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                     except Exception as e:
                         logger.warning(
                             "Error deleting plugin annotation %s on image %s: %s",
-                            aid,
-                            iid,
-                            e,
+                            sanitize_log_value(aid),
+                            sanitize_log_value(iid),
+                            sanitize_log_value(e),
                         )
                         deletion_errors.append(
                             {
@@ -246,5 +251,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
             )
 
     except Exception as e:
-        logger.exception("delete_plugin_keyvaluepairs failed: %s", e)
+        logger.error(
+            "delete_plugin_keyvaluepairs failed: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)

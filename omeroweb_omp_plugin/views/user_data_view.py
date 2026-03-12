@@ -3,6 +3,7 @@ import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..services.data_store import (
     AiCredentialStoreError,
@@ -33,11 +34,15 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
     try:
         deleted = delete_all_ai_credentials(username)
         return JsonResponse({"ok": True, "deleted": deleted})
-    except AiCredentialStoreError:
-        logger.exception("AI credential store failure while deleting API keys.")
+    except AiCredentialStoreError as exc:
+        logger.error("AI credential store failure while deleting API keys.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.ai_credentials_delete_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error deleting API keys: %s", e)
+        logger.error(
+            "Unexpected error deleting API keys: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -55,11 +60,15 @@ def delete_variable_sets(request, conn=None, url=None, **kwargs):
     try:
         deleted = delete_all_variable_sets(username)
         return JsonResponse({"ok": True, "deleted": deleted})
-    except VariableStoreError:
-        logger.exception("Variable store failure while deleting variable sets.")
+    except VariableStoreError as exc:
+        logger.error("Variable store failure while deleting variable sets.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.variable_sets_delete_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error deleting variable sets: %s", e)
+        logger.error(
+            "Unexpected error deleting variable sets: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -77,9 +86,13 @@ def delete_all_data(request, conn=None, url=None, **kwargs):
     try:
         deleted = delete_all_user_data(username)
         return JsonResponse({"ok": True, "deleted": deleted})
-    except UserDataStoreError:
-        logger.exception("User data store failure while deleting all data.")
+    except UserDataStoreError as exc:
+        logger.error("User data store failure while deleting all data.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.user_data_delete_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error deleting all user data: %s", e)
+        logger.error(
+            "Unexpected error deleting all user data: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)

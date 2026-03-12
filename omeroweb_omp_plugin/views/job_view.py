@@ -2,6 +2,7 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 import time
 import uuid
 import logging
@@ -108,7 +109,11 @@ def _validate_user_password(conn, password):
     try:
         client.createSession(username, password)
     except Exception as exc:
-        logger.warning("Password validation failed for user %s: %s", username, exc)
+        logger.warning(
+            "Password validation failed for user %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(exc),
+        )
         return False, error_messages.wrong_password()
     finally:
         try:
@@ -189,7 +194,10 @@ def start_job(request, conn=None, url=None, **kwargs):
             try:
                 re.compile(raw_seps)
             except re.error as e:
-                logger.warning("Rejected invalid regex pattern for job start: %s", e)
+                logger.warning(
+                    "Rejected invalid regex pattern for job start: %s",
+                    sanitize_log_value(e),
+                )
                 return JsonResponse({"error": error_messages.invalid_regex_pattern()}, status=400)
 
         if delete_mode not in ("keep", "all", "plugin"):
@@ -230,7 +238,11 @@ def start_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"job_id": job_id, "total": len(image_ids)})
 
     except Exception as e:
-        logger.exception("start_job() error: %s", e)
+        logger.error(
+            "start_job() error: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 @csrf_exempt
@@ -289,7 +301,11 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"job_id": job_id, "total": len(image_ids)})
 
     except Exception as e:
-        logger.exception("start_acq_job() error")
+        logger.error(
+            "start_acq_job() error: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
@@ -355,7 +371,11 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"job_id": job_id, "total": len(image_ids)})
 
     except Exception as e:
-        logger.exception("start_delete_all_job() error")
+        logger.error(
+            "start_delete_all_job() error: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
@@ -421,7 +441,11 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
         return JsonResponse({"job_id": job_id, "total": len(image_ids)})
 
     except Exception as e:
-        logger.exception("start_delete_plugin_job() error")
+        logger.error(
+            "start_delete_plugin_job() error: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
 
@@ -536,11 +560,12 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                                 "because deletions could not be confirmed."
                             )
                     except Exception as e:
-                        logger.exception(
+                        logger.error(
                             "Delete-all batch processing failed for image %s in job %s: %s",
                             iid,
-                            job_id,
-                            e,
+                            sanitize_log_value(job_id),
+                            sanitize_log_value(e),
+                            exc_info=sanitized_exc_info(e),
                         )
                         batch_logs.append(
                             f"Image {iid} ({filename}): ERROR deleting ALL key-value pairs."
@@ -576,11 +601,12 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                                 "because deletions could not be confirmed."
                             )
                     except Exception as e:
-                        logger.exception(
+                        logger.error(
                             "Delete-plugin batch processing failed for image %s in job %s: %s",
                             iid,
-                            job_id,
-                            e,
+                            sanitize_log_value(job_id),
+                            sanitize_log_value(e),
+                            exc_info=sanitized_exc_info(e),
                         )
                         batch_logs.append(
                             f"Image {iid} ({filename}): ERROR deleting plugin key-value pairs."
@@ -673,7 +699,13 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
             except Exception as e:
                 batch_logs.append(f"Image {iid}: ERROR processing image.")
-                logger.exception("Error processing image %s in job %s: %s", iid, job_id, e)
+                logger.error(
+                    "Error processing image %s in job %s: %s",
+                    iid,
+                    sanitize_log_value(job_id),
+                    sanitize_log_value(e),
+                    exc_info=sanitized_exc_info(e),
+                )
 
         job["index"] = end
         save_job(job)
