@@ -3,6 +3,7 @@ import logging
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from ..services.data_store import (
     UserSettingsStoreError,
@@ -51,11 +52,15 @@ def save_settings(request, conn=None, url=None, **kwargs):
             "message": messages.special_method_settings_saved_db(),
             "settings": normalized,
         })
-    except UserSettingsStoreError:
-        logger.exception("Special method settings store failure on save.")
+    except UserSettingsStoreError as exc:
+        logger.error("Special method settings store failure on save.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.special_method_settings_save_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error saving special method settings: %s", e)
+        logger.error(
+            "Unexpected error saving special method settings: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
@@ -81,9 +86,13 @@ def load_settings(request, conn=None, url=None, **kwargs):
             "success": True,
             "settings": settings,
         })
-    except UserSettingsStoreError:
-        logger.exception("Special method settings store failure on load.")
+    except UserSettingsStoreError as exc:
+        logger.error("Special method settings store failure on load.", exc_info=sanitized_exc_info(exc))
         return JsonResponse({"error": errors.special_method_settings_load_failed()}, status=500)
     except Exception as e:
-        logger.exception("Unexpected error loading special method settings: %s", e)
+        logger.error(
+            "Unexpected error loading special method settings: %s",
+            sanitize_log_value(e),
+            exc_info=sanitized_exc_info(e),
+        )
         return JsonResponse({"error": errors.unexpected_error()}, status=500)

@@ -6,6 +6,7 @@ from celery import states as celery_states
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from omeroweb.decorators import login_required
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 from .celery_app import app as celery_app
 from .config import get_celery_queue, use_celery
@@ -68,13 +69,16 @@ def _get_client_ip(request):
 def imaris_export(request, conn=None, **kwargs):
     """Handle IMS export requests - both starting exports and polling status."""
     client_ip = _get_client_ip(request)
+    safe_client_ip = sanitize_log_value(client_ip)
+    safe_query = sanitize_log_value(request.GET.urlencode())
+    safe_user = sanitize_log_value(getattr(conn, 'getUser', lambda: None)() if conn else 'unknown')
 
     # Log request for debugging
     logger.debug(
         "IMS export request from %s: %s (user=%s)",
-        client_ip,
-        request.GET.urlencode(),
-        getattr(conn, 'getUser', lambda: None)() if conn else 'unknown',
+        safe_client_ip,
+        safe_query,
+        safe_user,
     )
 
     base_url_override = None
@@ -83,10 +87,19 @@ def imaris_export(request, conn=None, **kwargs):
             base_url_override = _parse_base_url(request.GET.get("base_url"))
         except ValueError:
             return HttpResponseBadRequest(INVALID_BASE_URL_MESSAGE)
+    if "omero_port" in request.GET:
+        try:
+            _parse_port_param(request.GET.get("omero_port"))
+        except ValueError:
+            return HttpResponseBadRequest(INVALID_OMERO_PORT_MESSAGE)
 
     job_id = request.GET.get("job") or request.GET.get("job_id")
     if job_id:
-        logger.debug("IMS export status request job_id=%s from %s", job_id, client_ip)
+        logger.debug(
+            "IMS export status request job_id=%s from %s",
+            sanitize_log_value(job_id),
+            safe_client_ip,
+        )
         if not job_id.startswith(CELERY_JOB_PREFIX):
             return HttpResponse(
                 "Only Celery-backed IMS export jobs are supported.",
@@ -105,7 +118,11 @@ def imaris_export(request, conn=None, **kwargs):
         if _bool_from_request(request.GET.get("download")):
             if not is_finished:
                 return HttpResponse("IMS export is not ready for download.", status=409)
-            logger.info("IMS export download requested job_id=%s from %s", job_id, client_ip)
+            logger.info(
+                "IMS export download requested job_id=%s from %s",
+                sanitize_log_value(job_id),
+                safe_client_ip,
+            )
             return _build_download_response(conn, outputs)
 
         payload = {
@@ -139,6 +156,7 @@ def imaris_export(request, conn=None, **kwargs):
 
     async_mode = _bool_from_request(request.GET.get("async"))
     wait_param = request.GET.get("wait")
+    safe_wait_param = sanitize_log_value(wait_param)
     if wait_param is not None:
         async_mode = not _bool_from_request(wait_param)
     if not use_celery():
@@ -153,8 +171,8 @@ def imaris_export(request, conn=None, **kwargs):
             "IMS export request image_id=%s async=%s wait_param=%s from %s",
             image_id,
             async_mode,
-            wait_param,
-            client_ip,
+            safe_wait_param,
+            safe_client_ip,
         )
         script_id = _find_script_id(conn)
         if not script_id:
@@ -191,7 +209,7 @@ def imaris_export(request, conn=None, **kwargs):
                 "IMS export poll job_id=%s state=%s error=%s",
                 celery_job_id,
                 last_state,
-                last_error,
+                sanitize_log_value(last_error),
             )
             if last_state in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                 break
@@ -200,7 +218,7 @@ def imaris_export(request, conn=None, **kwargs):
                     "IMS export job %s failed for image %s: %s",
                     celery_job_id,
                     image_id,
-                    last_error or "unknown error",
+                    sanitize_log_value(last_error or "unknown error"),
                 )
                 return HttpResponse(IMS_EXPORT_JOB_FAILED_MESSAGE, status=500)
             time.sleep(EXPORT_POLL_INTERVAL)
@@ -215,7 +233,11 @@ def imaris_export(request, conn=None, **kwargs):
         return _build_download_response(conn, outputs, export_name)
 
     except Exception as exc:
-        logger.exception("IMS export failed: %s", exc)
+        logger.error(
+            "IMS export failed: %s",
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
         return HttpResponse(IMS_EXPORT_FAILED_MESSAGE, status=500)
 
 
@@ -339,7 +361,7 @@ def _get_session_key(conn):
             if session_id:
                 return session_id
         except Exception as e:
-            logger.debug("getSessionId() failed: %s", e)
+            logger.debug("getSessionId() failed: %s", sanitize_log_value(e))
 
     # Try to get from connection attributes
     for attr in ("_sessionUuid", "_session", "session"):
@@ -355,7 +377,7 @@ def _get_session_key(conn):
                 if session_id:
                     return session_id
     except Exception as e:
-        logger.debug("conn.c.getSessionId() failed: %s", e)
+        logger.debug("conn.c.getSessionId() failed: %s", sanitize_log_value(e))
 
     return None
 
