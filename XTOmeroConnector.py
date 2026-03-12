@@ -37,7 +37,10 @@ import http.cookiejar
 # because this script runs inside Imaris on the user's machine.
 EXPORT_TIMEOUT = 3600       # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
+IMARIS_HANDLE_RETRY_ATTEMPTS = 10
+IMARIS_HANDLE_RETRY_INTERVAL = 0.25
 _XT_LOG_PATH = None
+_XT_DLL_DIR_HANDLES = []
 
 
 def _xt_debug(message):
@@ -106,6 +109,321 @@ def open_file_in_imaris(file_path, imaris_app):
         print("Imaris open failed: no supported API method found.")
     return False
 
+
+def _looks_like_imaris_application(candidate):
+    """Return True when the object looks like a live Imaris application handle."""
+    if candidate is None:
+        return False
+    for method_name in ("FileOpen", "OpenFile", "LoadFile"):
+        if callable(getattr(candidate, method_name, None)):
+            return True
+    return False
+
+
+def _iter_imaris_executable_candidates():
+    """Yield plausible Imaris executable paths without requiring admin access."""
+    seen = set()
+
+    def _yield_candidate(path):
+        normalized = os.path.normpath(path)
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        yield normalized
+
+    env_candidate = os.environ.get("IMARIS_EXE", "").strip()
+    if env_candidate:
+        yield from _yield_candidate(env_candidate)
+
+    try:
+        import winreg
+    except Exception:
+        winreg = None
+
+    if winreg is not None:
+        reg_locations = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
+        ]
+        for hive, subkey in reg_locations:
+            try:
+                with winreg.OpenKey(hive, subkey) as key:
+                    value, _ = winreg.QueryValueEx(key, None)
+                if value:
+                    yield from _yield_candidate(value)
+            except Exception:
+                continue
+
+    base_dirs = [
+        os.environ.get("ProgramW6432", r"C:\Program Files"),
+        os.environ.get("ProgramFiles", r"C:\Program Files"),
+        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+    ]
+    vendor_dirs = [
+        "Bitplane",
+        "Oxford Instruments",
+    ]
+    for base_dir in base_dirs:
+        if not base_dir:
+            continue
+        for vendor_dir in vendor_dirs:
+            vendor_root = os.path.join(base_dir, vendor_dir)
+            if not os.path.isdir(vendor_root):
+                continue
+            try:
+                entries = sorted(os.listdir(vendor_root), reverse=True)
+            except Exception:
+                entries = []
+            for entry in entries:
+                if not entry.lower().startswith("imaris"):
+                    continue
+                candidate = os.path.join(vendor_root, entry, "Imaris.exe")
+                yield from _yield_candidate(candidate)
+
+
+def _find_imaris_executable():
+    """Return a launchable Imaris.exe path if present."""
+    if os.name != "nt":
+        return None
+    for candidate in _iter_imaris_executable_candidates():
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _iter_imaris_install_roots():
+    """Yield plausible Imaris installation roots."""
+    seen = set()
+
+    env_root = os.environ.get("IMARIS_HOME", "").strip()
+    if env_root:
+        normalized = os.path.normpath(env_root)
+        if normalized not in seen:
+            seen.add(normalized)
+            yield normalized
+
+    exe_path = _find_imaris_executable()
+    if exe_path:
+        install_root = os.path.dirname(exe_path)
+        normalized = os.path.normpath(install_root)
+        if normalized not in seen:
+            seen.add(normalized)
+            yield normalized
+
+
+def _prepend_unique_path(values, candidate):
+    normalized = os.path.normpath(candidate)
+    if normalized in values:
+        return False
+    values.insert(0, normalized)
+    return True
+
+
+def _prepare_imaris_xt_environment():
+    """Add bundled Imaris XT Python paths and DLL directories so ImarisLib/IcePy can load."""
+    if os.name != "nt":
+        return {"paths": [], "dll_dirs": []}
+
+    path_parts = os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
+    added = []
+    dll_dirs = []
+    add_dll_directory = getattr(os, "add_dll_directory", None)
+    for install_root in _iter_imaris_install_roots():
+        candidates = [
+            install_root,
+            os.path.join(install_root, "XT"),
+            os.path.join(install_root, "XT", "python3"),
+            os.path.join(install_root, "XT", "python3", "DLLs"),
+            os.path.join(install_root, "XT", "bin"),
+            os.path.join(install_root, "XT", "python3", "Lib"),
+            os.path.join(install_root, "XT", "python3", "Lib", "site-packages"),
+            os.path.join(install_root, "XT", "python"),
+            os.path.join(install_root, "XT", "lib"),
+        ]
+        for candidate in candidates:
+            if not os.path.isdir(candidate):
+                continue
+            normalized = os.path.normpath(candidate)
+            if normalized not in sys.path:
+                sys.path.insert(0, normalized)
+                added.append(normalized)
+            _prepend_unique_path(path_parts, normalized)
+            if callable(add_dll_directory):
+                try:
+                    handle = add_dll_directory(normalized)
+                    _XT_DLL_DIR_HANDLES.append(handle)
+                    dll_dirs.append(normalized)
+                except Exception:
+                    pass
+
+    if path_parts:
+        os.environ["PATH"] = os.pathsep.join(path_parts)
+    return {"paths": added, "dll_dirs": dll_dirs}
+
+
+def _safe_path_exists(path_value):
+    try:
+        return bool(path_value) and os.path.exists(path_value)
+    except Exception:
+        return False
+
+
+def _probe_module_import(module_name):
+    try:
+        __import__(module_name)
+        return {"ok": True, "error": ""}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _collect_imaris_xt_diagnostics():
+    """Collect host-side diagnostics for the Imaris XT runtime."""
+    exe_path = _find_imaris_executable()
+    install_roots = list(_iter_imaris_install_roots())
+    xt_paths = []
+    for install_root in install_roots:
+        xt_paths.append(os.path.join(install_root, "XT"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib"))
+        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib", "site-packages"))
+    deduped_xt_paths = []
+    seen = set()
+    for candidate in xt_paths:
+        normalized = os.path.normpath(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped_xt_paths.append(normalized)
+
+    return {
+        "python_executable": sys.executable,
+        "python_version": sys.version.replace("\n", " "),
+        "python_version_short": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "imaris_exe_env": os.environ.get("IMARIS_EXE", ""),
+        "imaris_home_env": os.environ.get("IMARIS_HOME", ""),
+        "imaris_executable": exe_path or "",
+        "imaris_executable_exists": _safe_path_exists(exe_path),
+        "install_roots": install_roots,
+        "xt_candidate_paths": [
+            {"path": candidate, "exists": _safe_path_exists(candidate)}
+            for candidate in deduped_xt_paths
+        ],
+        "has_add_dll_directory": callable(getattr(os, "add_dll_directory", None)),
+        "imarislib_import": _probe_module_import("ImarisLib"),
+        "icepy_import": _probe_module_import("IcePy"),
+    }
+
+
+def _log_imaris_xt_diagnostics():
+    diagnostics = _collect_imaris_xt_diagnostics()
+    _xt_debug(
+        "XT diagnostics: "
+        f"python_executable={diagnostics['python_executable']} "
+        f"python_version={diagnostics['python_version_short']} "
+        f"imaris_exe={diagnostics['imaris_executable'] or '<not found>'} "
+        f"imaris_exe_exists={diagnostics['imaris_executable_exists']}"
+    )
+    _xt_debug(
+        "XT diagnostics env: "
+        f"IMARIS_HOME={diagnostics['imaris_home_env'] or '<unset>'} "
+        f"IMARIS_EXE={diagnostics['imaris_exe_env'] or '<unset>'}"
+    )
+    for install_root in diagnostics["install_roots"]:
+        _xt_debug(f"XT diagnostics install_root={install_root}")
+    for entry in diagnostics["xt_candidate_paths"]:
+        _xt_debug(
+            f"XT diagnostics path={entry['path']} exists={entry['exists']}"
+        )
+    _xt_debug(
+        "XT diagnostics imports: "
+        f"has_add_dll_directory={diagnostics['has_add_dll_directory']} "
+        f"ImarisLib_ok={diagnostics['imarislib_import']['ok']} "
+        f"ImarisLib_error={diagnostics['imarislib_import']['error'] or '<none>'} "
+        f"IcePy_ok={diagnostics['icepy_import']['ok']} "
+        f"IcePy_error={diagnostics['icepy_import']['error'] or '<none>'}"
+    )
+
+
+def _coerce_imaris_id(aImarisId):
+    """Normalize XT entrypoint values to an integer application id when possible."""
+    if aImarisId is None or _looks_like_imaris_application(aImarisId):
+        return None
+    if isinstance(aImarisId, int):
+        return aImarisId
+    try:
+        text_value = str(aImarisId).strip()
+    except Exception:
+        text_value = ""
+    if text_value.isdigit():
+        try:
+            return int(text_value)
+        except Exception:
+            return None
+    try:
+        return int(aImarisId)
+    except Exception:
+        return None
+
+
+def _resolve_imaris_application(
+    aImarisId,
+    retries=1,
+    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+):
+    """Resolve the live Imaris application handle from the XT entrypoint value."""
+    if _looks_like_imaris_application(aImarisId):
+        return aImarisId
+
+    app_id = _coerce_imaris_id(aImarisId)
+    if app_id is None:
+        return None
+
+    attempts = max(1, int(retries or 1))
+    for attempt in range(attempts):
+        try:
+            prepared = _prepare_imaris_xt_environment()
+            added_paths = prepared.get("paths", [])
+            added_dll_dirs = prepared.get("dll_dirs", [])
+            if added_paths:
+                _xt_debug(
+                    "Prepared Imaris XT environment paths: "
+                    + "; ".join(added_paths)
+                )
+            if added_dll_dirs:
+                _xt_debug(
+                    "Prepared Imaris XT DLL directories: "
+                    + "; ".join(added_dll_dirs)
+                )
+            import ImarisLib
+
+            lib_factory = getattr(ImarisLib, "ImarisLib", None)
+            if callable(lib_factory):
+                lib = lib_factory()
+                get_application = getattr(lib, "GetApplication", None)
+                if callable(get_application):
+                    app = get_application(app_id)
+                    if app is not None:
+                        return app
+
+            get_application = getattr(ImarisLib, "GetApplication", None)
+            if callable(get_application):
+                app = get_application(app_id)
+                if app is not None:
+                    return app
+        except Exception as exc:
+            version_info = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            _xt_debug(
+                "Imaris XT bridge import failed: "
+                f"{exc}. Current Python={version_info}. "
+                "The live Imaris session handle is unavailable, so same-session open cannot work."
+            )
+            break
+
+        if attempt + 1 < attempts:
+            time.sleep(max(0.0, float(retry_interval)))
+
+    return None
+
 # =============================================================================
 # OMERO WEB CLIENT
 # =============================================================================
@@ -134,41 +452,21 @@ class OMEROWebClient:
             return host.rstrip("/")
         return f"{scheme}://{host}:{port}"
 
-    def _build_cookie_header(self):
-        """Build Cookie header string from stored session credentials.
-        
-        This ensures cookies are always sent, regardless of cookie jar matching issues.
-        """
-        cookies = []
-        if self.session_id:
-            cookies.append(f'sessionid={self.session_id}')
-        if self.csrf_token:
-            cookies.append(f'csrftoken={self.csrf_token}')
-        return '; '.join(cookies) if cookies else None
-
     def _create_request_with_cookies(self, url, data=None, method=None):
-        """Create a request with explicit cookie headers.
-        
-        This bypasses potential issues with automatic cookie jar matching.
-        """
+        """Create a request and let urllib's cookie jar manage session cookies."""
         req = urllib.request.Request(url, data=data, method=method)
-        
-        # Always add cookies explicitly
-        cookie_header = self._build_cookie_header()
-        if cookie_header:
-            req.add_header('Cookie', cookie_header)
-        
+
         # Add CSRF token header for POST requests
         if method == 'POST' or data is not None:
             if self.csrf_token:
                 req.add_header('X-CSRFToken', self.csrf_token)
             req.add_header('Referer', self.base_url)
-        
+
         # Add common headers to prevent caching issues
         req.add_header('Cache-Control', 'no-cache')
         req.add_header('Pragma', 'no-cache')
         req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
-        
+
         return req
 
     def _extract_cookies_from_jar(self):
@@ -308,10 +606,6 @@ class OMEROWebClient:
             req.add_header('Referer', login_url)
             req.add_header('X-CSRFToken', self.csrf_token)
             req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
-            # Also add existing cookies explicitly
-            cookie_header = self._build_cookie_header()
-            if cookie_header:
-                req.add_header('Cookie', cookie_header)
             
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
@@ -826,8 +1120,9 @@ class OMEROWebClient:
 class OMEROBrowserDialog:
     """UI dialog for browsing OMERO data and loading IMS into Imaris."""
 
-    def __init__(self, imaris):
+    def __init__(self, imaris, imaris_id=None):
         self.imaris = imaris
+        self.imaris_id = imaris_id
         self.client = None
         self.projects_data = []
         self.datasets_data = []
@@ -957,6 +1252,49 @@ class OMEROBrowserDialog:
 
     def _show_info(self, title, message):
         self.root.after(0, lambda: messagebox.showinfo(title, message))
+
+    def _invoke_on_ui_thread(self, callback, wait=True):
+        """Run a callback on Tk's UI thread and optionally wait for the result."""
+        result = {"value": None, "error": None}
+        completed = threading.Event()
+
+        def runner():
+            try:
+                result["value"] = callback()
+            except Exception as exc:
+                result["error"] = exc
+            finally:
+                completed.set()
+
+        self.root.after(0, runner)
+        if not wait:
+            return None
+        completed.wait()
+        if result["error"] is not None:
+            raise result["error"]
+        return result["value"]
+
+    def _open_downloaded_file_in_imaris(self, downloaded_file):
+        """Resolve the Imaris handle on the UI thread and open the IMS file."""
+        self._set_status("Opening IMS in Imaris...", "#fff3cd")
+
+        if self.imaris is None:
+            _xt_debug("Imaris handle missing before open; attempting UI-thread re-acquisition")
+            try:
+                self.imaris = _resolve_imaris_application(
+                    self.imaris_id,
+                    retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                    retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+                )
+            except Exception as exc:
+                _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
+
+        if self.imaris is None:
+            _xt_debug("Imaris handle is still unavailable after re-acquisition attempts")
+        else:
+            _xt_debug(f"Using Imaris handle type={type(self.imaris).__name__} for file open")
+
+        return open_file_in_imaris(downloaded_file, self.imaris)
     
     def _connect(self):
         h = self.host_entry.get().strip()
@@ -1078,10 +1416,11 @@ class OMEROBrowserDialog:
             
             self.temp_files.append(downloaded_file)
             
-            # Open in Imaris
-            self._set_status("Opening IMS in Imaris...", "#fff3cd")
-            
-            success = open_file_in_imaris(downloaded_file, self.imaris)
+            # Open in Imaris on the UI thread so the XT handle stays in the
+            # same thread/apartment as the original dialog.
+            success = self._invoke_on_ui_thread(
+                lambda: self._open_downloaded_file_in_imaris(downloaded_file)
+            )
             
             if success:
                 self._set_status("✓ Opened in Imaris", "#d4edda")
@@ -1098,7 +1437,7 @@ class OMEROBrowserDialog:
             traceback.print_exc()
             _xt_debug(f"Load worker failed: {e}")
         finally:
-            self.load_btn.config(state=tk.NORMAL)
+            self._invoke_on_ui_thread(lambda: self.load_btn.config(state=tk.NORMAL), wait=False)
     
     def show(self):
         self.root.mainloop()
@@ -1144,16 +1483,28 @@ def XTOmeroConnector(aImarisId):
         _xt_write_log(log_path, f"Python: {sys.version}")
         _xt_write_log(log_path, f"argv: {sys.argv}")
         _xt_write_log(log_path, f"cwd: {os.getcwd()}")
+        _log_imaris_xt_diagnostics()
 
         vImaris = None
         try:
-            import ImarisLib
-            vImaris = ImarisLib.GetApplication(aImarisId)
+            vImaris = _resolve_imaris_application(
+                aImarisId,
+                retries=IMARIS_HANDLE_RETRY_ATTEMPTS,
+                retry_interval=IMARIS_HANDLE_RETRY_INTERVAL,
+            )
         except Exception:
             # When run outside Imaris (manual debug), aImarisId may be None or already an app object.
-            vImaris = aImarisId if not isinstance(aImarisId, int) else None
+            vImaris = aImarisId if _looks_like_imaris_application(aImarisId) else None
 
-        dialog = OMEROBrowserDialog(vImaris)
+        if vImaris is None:
+            _xt_write_log(log_path, f"Imaris handle resolution returned None for entrypoint={aImarisId!r}")
+        else:
+            _xt_write_log(
+                log_path,
+                f"Resolved Imaris handle type={type(vImaris).__name__} for entrypoint={aImarisId!r}",
+            )
+
+        dialog = OMEROBrowserDialog(vImaris, imaris_id=aImarisId)
         dialog.show()
 
     except Exception as e:

@@ -114,7 +114,7 @@ Operational observability for platform administrators:
 Asynchronous OMERO-to-Imaris export:
 - Dispatches Celery tasks to Redis queue for processing by the co-located worker.
 - Supports sync mode (wait for result) and async mode (return job ID for polling).
-- Script processor retry with backoff, fast-fail when processors disabled.
+- Launches `IMS_Export.py` through the OMERO CLI inside `omeroweb` after locating the registered script ID.
 - Job-service account support: export tasks can use a dedicated OMERO account instead of the user's session.
 - OMERO script: `IMS_Export.py` (registered at server startup).
 
