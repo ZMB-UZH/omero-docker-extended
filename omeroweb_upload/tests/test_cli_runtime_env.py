@@ -82,6 +82,31 @@ def test_classify_import_failure_defaults_to_generic_error():
     assert core_functions._classify_import_failure("", "plain failure") == errors.import_failed()
 
 
+def test_classify_import_failure_detects_parent_directory_write_denial():
+    stderr = """
+    Joined session for e.mitridis@omeroserver:4064. Idle timeout: 10 min. Current group: users_ldap
+    Error on import: No annotate access for parent directory: 227
+    omero.SecurityViolation: null
+    """
+
+    assert core_functions._classify_import_failure("", stderr) == (
+        "Import failed because OMERO denied write access to the managed repository "
+        "parent directory for group 'users_ldap' (directory id 227). This usually "
+        "means the group-level repository folder already exists but is owned by a "
+        "different user."
+    )
+
+
+def test_classify_import_failure_detects_parent_directory_write_denial_without_metadata():
+    stderr = "No annotate access for parent directory: 227"
+
+    assert core_functions._classify_import_failure("", stderr) == (
+        "Import failed because OMERO denied write access to the managed repository "
+        "parent directory (directory id 227). This usually means the group-level "
+        "repository folder already exists but is owned by a different user."
+    )
+
+
 def test_classify_import_failure_does_not_treat_generic_object_not_exist_as_session_expiry():
     stderr = """
     java.lang.RuntimeException: Failure response on import!

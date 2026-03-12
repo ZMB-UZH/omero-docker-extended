@@ -31,7 +31,7 @@ require_positive_integer_env_var() {
 
 OMERO_DIR="${OMERO_DIR:-/OMERO}"
 CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
-SERVER_HOME="/opt/omero/server/OMERO.server"
+SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"
 SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
 resolve_omero_bin() {
@@ -46,6 +46,15 @@ resolve_omero_bin() {
     fi
 
     local candidate=""
+    local server_root=""
+    server_root="${SERVER_HOME%/*}"
+    for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do
+        if [[ -x "${candidate}" ]]; then
+            printf "%s\n" "${candidate}"
+            return 0
+        fi
+    done
+
     for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do
         if [[ -x "${candidate}" ]]; then
             printf "%s\n" "${candidate}"
@@ -64,6 +73,26 @@ resolve_omero_bin() {
 
 OMERO_BIN="$(resolve_omero_bin)"
 OMERO_CLI_USER="${OMERO_CLI_USER:-omero-server}"
+
+resolve_server_venv_python() {
+    local server_root=""
+    local candidate=""
+
+    server_root="${SERVER_HOME%/*}"
+    for candidate in "${server_root}"/venv*/bin/python; do
+        if [[ -x "${candidate}" ]]; then
+            printf "%s\n" "${candidate}"
+            return 0
+        fi
+    done
+
+    echo "ERROR: Could not auto-detect an executable OMERO virtualenv python. Set SERVER_HOME explicitly." >&2
+    exit 1
+}
+
+trim_whitespace() {
+    printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
 
 run_omero() {
     if [[ "$(id -u)" -ne 0 ]]; then
@@ -109,6 +138,7 @@ ensure_tmpdir_permissions() {
     local tmp_root="${OMERO_TMP_PATH:-}"
     local expected_tmp_dir=""
     local legacy_tmp_dir="$(dirname "${SERVER_HOME}")/omero/tmp"
+    local runtime_tmp_dir=""
     if [[ -z "${tmp_root}" ]]; then
         echo "ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set." >&2
         exit 1
@@ -146,12 +176,74 @@ ensure_tmpdir_permissions() {
         exit 1
     fi
 
-    export TMPDIR="${expected_tmp_dir}"
-    export OMERO_TEMPDIR="${expected_tmp_dir}"
-    export OMERO_TMPDIR="${expected_tmp_dir}"
+    prepare_runtime_tmp_dir() {
+        local candidate_dir="$1"
+        local candidate_omero_py_dir="${candidate_dir}/omero"
+        local candidate_omero_py_user_dir="${candidate_dir}/omero_${requested_owner}"
 
-    local omero_py_dir="${expected_tmp_dir}/omero"
-    local omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
+        mkdir -p "${candidate_dir}" || return 1
+
+        if [[ "$(id -u)" -eq 0 ]]; then
+            chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_dir}" 2>/dev/null || true
+            chmod 0777 "${candidate_dir}" 2>/dev/null || true
+        fi
+
+        if [[ ! -w "${candidate_dir}" ]]; then
+            log "WARN: Candidate runtime temp directory is not writable: ${candidate_dir}"
+            ls -ld "${candidate_dir}" >&2 || true
+            return 1
+        fi
+
+        rm -rf "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" "${candidate_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+
+        if [[ -d "${candidate_omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+            log "WARN: Root cleanup of ${candidate_omero_py_user_dir} incomplete. Retrying as ${requested_owner}."
+            runuser -u "${requested_owner}" -- rm -rf "${candidate_omero_py_user_dir}" 2>/dev/null || true
+        fi
+        if [[ -d "${candidate_omero_py_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+            log "WARN: Root cleanup of ${candidate_omero_py_dir} incomplete. Retrying as ${requested_owner}."
+            runuser -u "${requested_owner}" -- rm -rf "${candidate_omero_py_dir}" 2>/dev/null || true
+        fi
+
+        if [[ -d "${candidate_omero_py_user_dir}" || -d "${candidate_omero_py_dir}" ]]; then
+            log "WARN: Candidate runtime temp directory still contains stale OMERO lock state: ${candidate_dir}"
+            ls -la "${candidate_dir}" >&2 || true
+            return 1
+        fi
+
+        mkdir -p "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" || return 1
+        if [[ "$(id -u)" -eq 0 ]]; then
+            chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
+            chmod 0777 "${candidate_omero_py_dir}" "${candidate_omero_py_user_dir}" 2>/dev/null || true
+        fi
+
+        return 0
+    }
+
+    local candidate_dir=""
+    for candidate_dir in \
+        "${expected_tmp_dir}/runtime" \
+        "${expected_tmp_dir}/runtime-1" \
+        "${expected_tmp_dir}/runtime-2" \
+        "${expected_tmp_dir}/runtime-3"
+    do
+        if prepare_runtime_tmp_dir "${candidate_dir}"; then
+            runtime_tmp_dir="${candidate_dir}"
+            break
+        fi
+    done
+
+    if [[ -z "${runtime_tmp_dir}" ]]; then
+        echo "ERROR: Could not prepare a clean OMERO runtime temp directory under ${expected_tmp_dir}" >&2
+        exit 1
+    fi
+
+    export TMPDIR="${runtime_tmp_dir}"
+    export OMERO_TEMPDIR="${runtime_tmp_dir}"
+    export OMERO_TMPDIR="${runtime_tmp_dir}"
+
+    local omero_py_dir="${runtime_tmp_dir}/omero"
+    local omero_py_user_dir="${runtime_tmp_dir}/omero_${requested_owner}"
 
     # CRITICAL: Always try to remove stale OMERO temp subdirs to prevent Python
     # TempFileManager from hitting PermissionError on .lock files left by previous
@@ -200,7 +292,7 @@ ensure_tmpdir_permissions() {
     fi
     if [[ ! -e "${legacy_tmp_dir}" ]]; then
         mkdir -p "$(dirname "${legacy_tmp_dir}")"
-        ln -sf "${expected_tmp_dir}" "${legacy_tmp_dir}"
+        ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"
     fi
     if [[ "$(id -u)" -eq 0 ]]; then
         chown -h "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" "${legacy_tmp_dir}" 2>/dev/null || true
@@ -359,12 +451,7 @@ reset_runtime_if_requested() {
 
 configure_script_python() {
     local venv_py
-    venv_py="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)/bin/python"
-    if [[ ! -x "${venv_py}" ]]; then
-        echo "ERROR: OMERO venv python not found at ${venv_py}" >&2
-        exit 1
-    fi
-
+    venv_py="$(resolve_server_venv_python)"
     run_omero config set omero.scripts.python "${venv_py}"
     log "Configured omero.scripts.python=${venv_py}"
 }
@@ -618,16 +705,23 @@ schedule_ldap_group_bootstrap() {
 
         local add_output=""
         local add_exit_code=1
+        local login_ok=0
         local retry_limit="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRIES:-180}"
         local retry_delay_seconds="${OMERO_LDAP_GROUP_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
         local attempt=1
 
         for attempt in $(seq 1 "${retry_limit}"); do
             if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+                login_ok=1
                 break
             fi
             sleep "${retry_delay_seconds}"
         done
+
+        if [[ "${login_ok}" -ne 1 ]]; then
+            echo "ERROR: Timed out waiting for OMERO login before ensuring LDAP new-user group '${ldap_group_setting}'." >&2
+            exit 1
+        fi
 
         for attempt in $(seq 1 "${retry_limit}"); do
             set +e
@@ -658,6 +752,296 @@ schedule_ldap_group_bootstrap() {
     ) >>"${SERVER_LOG_DIR}/ldap-group-bootstrap.log" 2>&1 &
 
     log "Scheduled background LDAP group bootstrap for static group '${ldap_group_setting}'"
+}
+
+list_repo_root_bootstrap_groups() {
+    local root_pass="$1"
+    local out=""
+
+    out="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" 2>/dev/null || true)"
+    if [[ -z "${out}" ]]; then
+        return 0
+    fi
+
+    if printf "%s" "${out}" | grep -q '|'; then
+        printf "%s\n" "${out}" \
+            | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
+            | sort -u
+        return 0
+    fi
+
+    printf "%s\n" "${out}" \
+        | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}' \
+        | sort -u
+}
+
+collect_repo_root_bootstrap_paths() {
+    local repo_path="${CONFIG_omero_fs_repo_path:-}"
+    if [[ -z "${repo_path}" ]]; then
+        return 0
+    fi
+
+    local -A seen=()
+    local -A seen_groups=()
+    local install_groups="${OMERO_INSTALL_GROUP_LIST:-}"
+    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
+    local -a candidate_groups=()
+    local entry=""
+    local group_name=""
+    local current_year=""
+    local current_month=""
+    local current_day=""
+    local current_time=""
+    local template_parts=()
+    local template_part=""
+    local rendered_part=""
+
+    current_year="$(date +%Y)"
+    current_month="$(date +%m)"
+    current_day="$(date +%d)"
+    current_time="$(date +%H-%M-%S)"
+
+    _add_candidate_group() {
+        local candidate="$1"
+        candidate="$(trim_whitespace "${candidate}")"
+        [[ -n "${candidate}" ]] || return 0
+        [[ -n "${seen_groups[${candidate}]+x}" ]] && return 0
+        seen_groups["${candidate}"]=1
+        candidate_groups+=("${candidate}")
+    }
+
+    _emit_repo_paths() {
+        local current_group="$1"
+        local cumulative=()
+        local joined=""
+
+        IFS='/' read -r -a template_parts <<< "${repo_path}"
+        for template_part in "${template_parts[@]}"; do
+            [[ -n "${template_part}" ]] || continue
+            if [[ "${template_part}" == *%user%* ]]; then
+                break
+            fi
+
+            rendered_part="${template_part}"
+            rendered_part="${rendered_part//%group%/${current_group}}"
+            rendered_part="${rendered_part//%year%/${current_year}}"
+            rendered_part="${rendered_part//%month%/${current_month}}"
+            rendered_part="${rendered_part//%day%/${current_day}}"
+            rendered_part="${rendered_part//%time%/${current_time}}"
+
+            if [[ "${rendered_part}" == *%* ]]; then
+                return 0
+            fi
+
+            [[ -n "${rendered_part}" ]] || continue
+            cumulative+=("${rendered_part}")
+            joined="$(IFS=/; printf '%s' "${cumulative[*]}")"
+            if [[ -n "${joined}" ]] && [[ -z "${seen[${joined}]+x}" ]]; then
+                seen["${joined}"]=1
+                printf '%s\n' "${joined}"
+            fi
+        done
+    }
+
+    if [[ "$#" -gt 0 ]]; then
+        for group_name in "$@"; do
+            _add_candidate_group "${group_name}"
+        done
+    else
+        IFS=',' read -r -a _repo_root_group_entries <<< "${install_groups}"
+        for entry in "${_repo_root_group_entries[@]}"; do
+            entry="$(trim_whitespace "${entry}")"
+            [[ -n "${entry}" ]] || continue
+            [[ "${entry}" == \#* ]] && continue
+            group_name="${entry%%:*}"
+            _add_candidate_group "${group_name}"
+        done
+
+        if [[ "${CONFIG_omero_ldap_config:-false}" == "true" ]] \
+            && [[ -n "${ldap_group_setting}" ]] \
+            && [[ "${ldap_group_setting}" != "default" ]] \
+            && [[ "${ldap_group_setting}" != :* ]]; then
+            _add_candidate_group "${ldap_group_setting}"
+        fi
+    fi
+
+    for group_name in "${candidate_groups[@]}"; do
+        _emit_repo_paths "${group_name}"
+    done
+}
+
+resolve_cli_home() {
+    local cli_user="$1"
+    local cli_home=""
+
+    cli_home="$(getent passwd "${cli_user}" | cut -d: -f6 2>/dev/null || true)"
+    if [[ -z "${cli_home}" ]] || [[ ! -d "${cli_home}" ]]; then
+        cli_home="/tmp"
+    fi
+    printf "%s\n" "${cli_home}"
+}
+
+schedule_repo_root_bootstrap() {
+    local root_pass="${ROOTPASS:-}"
+    if [[ -z "${root_pass}" ]]; then
+        log "Skipping managed-repository root bootstrap (ROOTPASS missing)."
+        return
+    fi
+
+    local repo_path="${CONFIG_omero_fs_repo_path:-}"
+    if [[ "${repo_path}" != *%group%* ]]; then
+        log "Managed-repository root bootstrap skipped because CONFIG_omero_fs_repo_path has no %group% token."
+        return
+    fi
+
+    (
+        set -eo pipefail
+        local lockdir="${SERVER_VAR_DIR}/repo-root-bootstrap.lock"
+        if ! acquire_lockdir "${lockdir}" "" "repo-root-bootstrap"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
+        local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
+        local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+        local attempt=1
+        local login_ok=0
+        local path_list=""
+        local repo_dir_path=""
+        local -a repo_root_groups=()
+        local lookup_output=""
+        local root_dir_id=""
+        local root_dir_owner=""
+        local venv_py=""
+        local lookup_py=""
+        local cli_home=""
+        local chown_output=""
+        local chown_exit_code=1
+
+        for attempt in $(seq 1 "${retry_limit}"); do
+            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+                login_ok=1
+                break
+            fi
+            sleep "${retry_delay_seconds}"
+        done
+
+        if [[ "${login_ok}" -ne 1 ]]; then
+            echo "[$(date -u)] ERROR: Timed out waiting for OMERO login before normalizing managed-repository prefixes"
+            exit 1
+        fi
+
+        mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")
+        if [[ "${#repo_root_groups[@]}" -gt 0 ]]; then
+            path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"
+        else
+            echo "[$(date -u)] WARN: OMERO group discovery returned no rows; falling back to environment-derived groups"
+        fi
+
+        if [[ -z "${path_list}" ]]; then
+            path_list="$(collect_repo_root_bootstrap_paths)"
+        fi
+
+        if [[ -z "${path_list}" ]]; then
+            echo "[$(date -u)] INFO: no managed-repository shared prefixes require normalization"
+            exit 0
+        fi
+
+        venv_py="$(resolve_server_venv_python)"
+        cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+        lookup_py="$(mktemp "${TMPDIR%/}/repo-root-lookup.XXXXXX.py")"
+        cat >"${lookup_py}" <<'PY'
+import sys
+from omero.gateway import BlitzGateway
+
+if len(sys.argv) != 3:
+    print("usage: repo_root_lookup.py <root_pass> <repo_dir_path>", file=sys.stderr)
+    sys.exit(2)
+
+root_pass = sys.argv[1]
+repo_dir_path = sys.argv[2].strip("/")
+if not repo_dir_path:
+    print("ERROR: empty repository path", file=sys.stderr)
+    sys.exit(2)
+
+path_parts = repo_dir_path.split("/")
+dir_name = path_parts[-1]
+parent_path = "/"
+if len(path_parts) > 1:
+    parent_path = "/" + "/".join(path_parts[:-1]) + "/"
+
+conn = BlitzGateway("root", root_pass, host="localhost", port=4064)
+try:
+    if not conn.connect():
+        print("ERROR: failed to connect as root", file=sys.stderr)
+        sys.exit(1)
+    conn.SERVICE_OPTS.setOmeroGroup("-1")
+    candidates = list(conn.getObjects("OriginalFile", attributes={"name": dir_name}))
+    exact = None
+    for obj in candidates:
+        if obj.getPath() == parent_path:
+            exact = obj
+            break
+    if exact is None:
+        print("MISSING")
+        sys.exit(0)
+    print(f"FOUND|{exact.getId()}|{exact.getOwnerOmeName()}")
+finally:
+    try:
+        conn.close()
+    except Exception:
+        pass
+PY
+
+        while IFS= read -r repo_dir_path; do
+            [[ -n "${repo_dir_path}" ]] || continue
+            echo "[$(date -u)] INFO: ensuring managed-repository shared prefix ${repo_dir_path}"
+            run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
+
+            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+            if [[ "${lookup_output}" == MISSING* ]]; then
+                echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir"
+                continue
+            fi
+
+            if [[ "${lookup_output}" != FOUND\|* ]]; then
+                echo "[$(date -u)] ERROR: repository root lookup failed for ${repo_dir_path}: ${lookup_output}"
+                continue
+            fi
+
+            IFS='|' read -r _found_marker root_dir_id root_dir_owner <<< "${lookup_output}"
+            echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner}"
+
+            if [[ "${root_dir_owner}" == "root" ]]; then
+                echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} already normalized"
+                continue
+            fi
+
+            # Non-destructive repair: normalize only OMERO ownership metadata for
+            # shared prefix directories. No files or repository payload are deleted.
+            chown_exit_code=1
+            for attempt in $(seq 1 "${retry_limit}"); do
+                set +e
+                chown_output="$(run_omero chown root "OriginalFile:${root_dir_id}" --force 2>&1)"
+                chown_exit_code=$?
+                set -e
+                [[ "${chown_exit_code}" -eq 0 ]] && break
+                sleep "${retry_delay_seconds}"
+            done
+
+            if [[ "${chown_exit_code}" -ne 0 ]]; then
+                echo "[$(date -u)] ERROR: failed to normalize repository prefix ${repo_dir_path} (OriginalFile:${root_dir_id}): ${chown_output}"
+                continue
+            fi
+
+            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+            echo "[$(date -u)] INFO: normalized repository prefix ${repo_dir_path}: ${lookup_output}"
+        done <<< "${path_list}"
+
+        rm -f "${lookup_py}"
+    ) >>"${SERVER_LOG_DIR}/repo-root-bootstrap.log" 2>&1 &
+
+    log "Scheduled background managed-repository shared-prefix bootstrap for discovered groups"
 }
 
 install_figure_script() {
@@ -853,10 +1237,12 @@ if __name__ == "__main__":
 EOF
 
         local venv_py
-        venv_py="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' | sort -V | tail -n 1)/bin/python"
+        venv_py="$(resolve_server_venv_python)"
+        local cli_home
+        cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
         
         # Run the idempotent sync script (output goes to the log file via the subshell redirect)
-        runuser -u "${OMERO_CLI_USER}" -- "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
+        runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
 
         rm -f "${script_sync_py}"
     ) >>"${SERVER_LOG_DIR}/register-official-scripts.log" 2>&1 &
@@ -940,6 +1326,7 @@ main() {
     schedule_script_registration
     schedule_job_service_bootstrap
     schedule_ldap_group_bootstrap
+    schedule_repo_root_bootstrap
 
     log "Startup flow finished"
 }

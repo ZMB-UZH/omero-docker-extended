@@ -1236,6 +1236,23 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
         or 'operation = "keepallalive"' in combined
     ):
         return errors.import_session_expired()
+    if "no annotate access for parent directory" in combined:
+        parent_match = re.search(
+            r"no annotate access for parent directory:\s*(\d+)",
+            stderr,
+            re.IGNORECASE,
+        )
+        group_match = re.search(
+            r"current group:\s*([^\r\n]+)",
+            stderr,
+            re.IGNORECASE,
+        )
+        parent_id = parent_match.group(1) if parent_match else None
+        group_name = group_match.group(1).strip() if group_match else None
+        return errors.import_parent_directory_not_writable(
+            group_name=group_name,
+            parent_id=parent_id,
+        )
     return errors.import_failed()
 
 
