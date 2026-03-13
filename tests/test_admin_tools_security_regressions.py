@@ -141,7 +141,7 @@ class AdminToolsSecurityRegressionTests(unittest.TestCase):
         self.assertEqual(400, response.status_code)
         self.assertEqual(
             {"error": "Invalid quota update payload."},
-            response.payload,
+            json.loads(response.content.decode("utf-8")),
         )
 
     def test_write_state_temp_file_is_not_world_writable(self):
