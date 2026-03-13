@@ -13,6 +13,7 @@ from typing import Optional
 import omero
 from omero.gateway import BlitzGateway
 from ...constants import OMERO_CLI
+from omero_plugin_common.logging_utils import sanitize_log_value
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
@@ -384,15 +385,13 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         try:
             ok = conn.connect()
         except Exception as exc:
-            last_err = None
-            try:
-                last_err = conn.getLastError()
-            except Exception:
-                last_err = None
-
             logger.error(
-                "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
-                host, port, secure, exc, last_err
+                "job-service connect() raised: host=%s port=%s secure=%s error_type=%s has_last_error=%s",
+                sanitize_log_value(host),
+                port,
+                secure,
+                sanitize_log_value(type(exc).__name__),
+                _connection_has_last_error(conn),
             )
             try:
                 conn.close()
@@ -401,15 +400,12 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             return None
 
         if not ok:
-            last_err = None
-            try:
-                last_err = conn.getLastError()
-            except Exception:
-                last_err = None
-
             logger.error(
-                "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
-                host, port, secure, last_err
+                "job-service connect() failed: host=%s port=%s secure=%s has_last_error=%s",
+                sanitize_log_value(host),
+                port,
+                secure,
+                _connection_has_last_error(conn),
             )
             try:
                 conn.close()
@@ -441,6 +437,13 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         except Exception as exc:
             logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
         raise
+
+
+def _connection_has_last_error(conn) -> bool:
+    try:
+        return bool(conn.getLastError())
+    except Exception:
+        return False
 
 
 def _attach_txt_to_image_service(
