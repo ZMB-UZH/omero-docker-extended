@@ -1047,7 +1047,8 @@ PY
 install_figure_script() {
     local figure_version="${OMERO_FIGURE_VERSION:-}"
     if [[ -z "${figure_version}" ]]; then
-        figure_version="7.3.0"
+        echo "ERROR: OMERO_FIGURE_VERSION must be set in env/omeroserver.env and must not be empty." >&2
+        exit 1
     fi
 
     local script_dir="${SERVER_HOME}/lib/scripts/omero/figure_scripts"
@@ -1168,7 +1169,9 @@ def sync_scripts(conn, script_dir):
     # Walk the physical script directory
     for root, dirs, files in os.walk(script_dir):
         for file in files:
-            if not file.endswith('.py'):
+            # Package markers are not runnable OMERO scripts and can create
+            # broken script-service entries if uploaded.
+            if not file.endswith('.py') or file == '__init__.py':
                 continue
 
             filepath = os.path.join(root, file)
@@ -1240,7 +1243,7 @@ EOF
         venv_py="$(resolve_server_venv_python)"
         local cli_home
         cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
-        
+
         # Run the idempotent sync script (output goes to the log file via the subshell redirect)
         runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${script_sync_py}" "${root_pass}" "${scripts_dir}" 2>&1 || true
 

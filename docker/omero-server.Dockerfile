@@ -252,6 +252,29 @@ RUN set -euo pipefail; \
     \
     rm -rf /tmp/ome-omero-scripts
 
+# Install the OMERO.Figure PDF export script at build time.
+# Relying on a runtime download here makes PDF export nondeterministic and can
+# leave OMERO.figure without Figure_To_Pdf.py when outbound network access fails.
+ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"
+ARG OME_OMERO_FIGURE_REF="7.3.1"
+RUN set -euo pipefail; \
+    echo "Installing OMERO.Figure Figure_To_Pdf.py from ${OME_OMERO_FIGURE_REPO} @ ${OME_OMERO_FIGURE_REF}"; \
+    rm -rf /tmp/ome-omero-figure; \
+    git clone --depth 1 --branch "v${OME_OMERO_FIGURE_REF#v}" "${OME_OMERO_FIGURE_REPO}" /tmp/ome-omero-figure \
+        || git clone --depth 1 --branch "${OME_OMERO_FIGURE_REF#v}" "${OME_OMERO_FIGURE_REPO}" /tmp/ome-omero-figure; \
+    SCRIPT_SRC="/tmp/ome-omero-figure/omero_figure/scripts/omero/figure_scripts/Figure_To_Pdf.py"; \
+    if [[ ! -f "${SCRIPT_SRC}" ]]; then \
+        echo "ERROR: Figure_To_Pdf.py not found in the cloned OMERO.figure repo." >&2; \
+        echo "Repo top-level layout is (FYI):" >&2; \
+        (cd /tmp/ome-omero-figure && find . -maxdepth 3 -type d -print) >&2 || true; \
+        exit 1; \
+    fi; \
+    mkdir -p /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts; \
+    cp -f "${SCRIPT_SRC}" /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
+    chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
+    chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py; \
+    rm -rf /tmp/ome-omero-figure
+
 # Install BIOP OMERO script: Export_CellProfiler_IDs.py
 # -----------------------------------------------------
 ARG BIOP_OMERO_SCRIPTS_REPO="https://github.com/BIOP/OMERO-scripts.git"
