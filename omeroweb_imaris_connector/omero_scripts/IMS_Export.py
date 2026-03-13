@@ -12,8 +12,6 @@ import os
 import subprocess
 import shutil
 import re
-import urllib.request
-import urllib.error
 from datetime import datetime
 
 from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
@@ -78,46 +76,13 @@ def _ensure_bioformats_jar(install_dir):
     if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
         return jar_path
 
-    os.makedirs(jar_dir, exist_ok=True)
-    tmp_path = jar_path + ".download"
-
-    print(f"Bio-Formats jar missing. Downloading to: {jar_path}")
-    print(f"Source: {BIOFORMATS_URL}")
-    try:
-        with urllib.request.urlopen(BIOFORMATS_URL, timeout=60) as r, open(tmp_path, "wb") as f:
-            shutil.copyfileobj(r, f)
-        if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
-            print("ERROR: Downloaded Bio-Formats jar is empty")
-            try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
-            return None
-        os.replace(tmp_path, jar_path)
-        os.chmod(jar_path, 0o640)
-    except (urllib.error.URLError, urllib.error.HTTPError) as e:
-        print(f"ERROR: Failed to download Bio-Formats jar: {e}")
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
-        return None
-    except Exception as e:
-        print(f"ERROR: Unexpected error downloading Bio-Formats jar: {e}")
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=exc)
-        return None
-
-    if not os.path.exists(jar_path) or os.path.getsize(jar_path) == 0:
-        print("ERROR: Bio-Formats jar download resulted in an empty or missing file")
-        return None
-
-    return jar_path
+    print(f"ERROR: Missing Bio-Formats jar at: {jar_path}")
+    print(
+        "ERROR: Refusing runtime network download for security reasons. "
+        "Install ImarisConvert via startup/51-install-imarisconvert.sh so the pinned jar is pre-provisioned."
+    )
+    print(f"ERROR: Expected Bio-Formats source URL during build time: {BIOFORMATS_URL}")
+    return None
 
 
 def _get_voxel_size_from_image(image):
