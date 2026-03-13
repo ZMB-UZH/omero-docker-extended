@@ -61,7 +61,14 @@ def test_server_database_testing_run_returns_results(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view.run_diagnostic_script",
-        lambda script_id: {"script_id": script_id, "status": "pass", "checks": []},
+        lambda script_id: {
+            "script_id": script_id,
+            "label": "OMERO.server core connectivity",
+            "description": "DNS resolution, Blitz TCP ports, OMERO.web health probe, and Docker runtime state.",
+            "category": "OMERO.server",
+            "status": "pass",
+            "checks": [],
+        },
     )
 
     response = server_database_testing_run(request, conn=None)
@@ -69,7 +76,14 @@ def test_server_database_testing_run_returns_results(monkeypatch) -> None:
     assert response.status_code == 200
     payload = json.loads(response.content.decode("utf-8"))
     assert payload["results"] == [
-        {"script_id": "omero_server_core", "status": "pass", "checks": []}
+        {
+            "script_id": "omero_server_core",
+            "label": "OMERO.server core connectivity",
+            "description": "DNS resolution, Blitz TCP ports, OMERO.web health probe, and Docker runtime state.",
+            "category": "OMERO.server",
+            "status": "pass",
+            "checks": [],
+        }
     ]
     assert isinstance(payload["request_id"], str)
     assert payload["request_id"]

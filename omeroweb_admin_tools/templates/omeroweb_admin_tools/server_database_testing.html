@@ -19,6 +19,9 @@
         </div>
     </div>
     <div class="admin-tools-card admin-tools-card--wide diagnostics-card">
+        <div class="diagnostics-note">
+            Compose-state checks use the Docker Engine API over the mounted socket. Database SQL checks run directly from the OMERO.web runtime with environment-provided credentials.
+        </div>
         <div class="diagnostics-top-row">
             <div id="diag_summary" class="diagnostics-summary">Ready to execute diagnostics.</div>
             <button type="button" id="diag_run_btn" class="admin-tools-button log-refresh-button">Run selected scripts</button>
@@ -37,6 +40,7 @@ const requestInfoEl = document.getElementById('diag_request_info');
 const resultsEl = document.getElementById('diag_results');
 const scriptsEl = document.getElementById('diag_scripts');
 const runBtn = document.getElementById('diag_run_btn');
+const scriptsById = new Map(scripts.map((script) => [script.script_id, script]));
 
 function escapeHtml(value) {
     return String(value)
@@ -116,8 +120,15 @@ function selectedScripts() {
 
 function renderResults(payload) {
     const rendered = payload.results.map((result) => {
+        const script = scriptsById.get(result.script_id) || {};
+        const title = result.label || script.label || result.script_id;
+        const description = result.description || script.description || '';
+        const category = result.category || script.category || '';
         const summary = result.summary || { pass: 0, warn: 0, fail: 0, total: 0 };
         const checks = Array.isArray(result.checks) ? result.checks : [];
+        const errorBlock = result.error
+            ? `<div class="diag-result-error">${escapeHtml(result.error)}</div>`
+            : '';
         const checksRows = checks.map((check) => `
             <tr>
                 <td>${escapeHtml(check.label || check.check_id)}</td>
@@ -130,9 +141,17 @@ function renderResults(payload) {
         return `
             <section class="diag-result-card">
                 <div class="diag-result-header">
-                    <h3>${escapeHtml(result.script_id)}</h3>
-                    ${statusBadge(result.status)}
+                    <div>
+                        <h3>${escapeHtml(title)}</h3>
+                        <div class="diag-result-meta">
+                            <span>${escapeHtml(result.script_id)}</span>
+                            ${category ? `<span>${escapeHtml(category)}</span>` : ''}
+                        </div>
+                        ${description ? `<div class="diag-result-description">${escapeHtml(description)}</div>` : ''}
+                    </div>
+                    <div>${statusBadge(result.status)}</div>
                 </div>
+                ${errorBlock}
                 <div class="diag-counter-row">
                     <span>${statusBadge('pass')} ${summary.pass}</span>
                     <span>${statusBadge('warn')} ${summary.warn}</span>

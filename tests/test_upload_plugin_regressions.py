@@ -227,7 +227,10 @@ class UploadPluginRegressionTests(unittest.TestCase):
             )
 
         self.assertIsNone(job)
-        self.assertEqual({"ok": False, "error": "Upload job not found."}, error_response["payload"])
+        self.assertEqual(
+            {"ok": False, "error": "Upload job not found."},
+            json.loads(error_response.content.decode("utf-8")),
+        )
         load_job_mock.assert_not_called()
 
     def test_load_owned_job_rejects_cross_user_job_access(self):
@@ -245,7 +248,10 @@ class UploadPluginRegressionTests(unittest.TestCase):
             )
 
         self.assertIsNone(job)
-        self.assertEqual({"ok": False, "error": "Upload job not found."}, error_response["payload"])
+        self.assertEqual(
+            {"ok": False, "error": "Upload job not found."},
+            json.loads(error_response.content.decode("utf-8")),
+        )
 
     def test_load_owned_job_allows_matching_owner(self):
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
@@ -280,7 +286,11 @@ class UploadPluginRegressionTests(unittest.TestCase):
         from omeroweb_upload.views import user_settings_view
         from omeroweb_upload.services import data_store
 
-        request = types.SimpleNamespace(method="POST", body=b"{}")
+        request = types.SimpleNamespace(
+            method="POST",
+            body=b"{}",
+            user=types.SimpleNamespace(username="alice"),
+        )
         with mock.patch.object(user_settings_view, "load_request_data", return_value={"settings": {}}), mock.patch.object(
             user_settings_view,
             "save_user_settings",
@@ -297,7 +307,11 @@ class UploadPluginRegressionTests(unittest.TestCase):
         from omeroweb_upload.views import special_method_settings_view
         from omeroweb_upload.services import data_store
 
-        request = types.SimpleNamespace(method="POST", body=b"{}")
+        request = types.SimpleNamespace(
+            method="POST",
+            body=b"{}",
+            user=types.SimpleNamespace(username="alice"),
+        )
         with mock.patch.object(
             special_method_settings_view,
             "load_request_data",
