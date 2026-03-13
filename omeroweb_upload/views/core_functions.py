@@ -384,11 +384,15 @@ def _ensure_dir(path: Path) -> bool:
     Does NOT set permissions (uses defaults).
     """
     try:
-        path = path.resolve()
-        path.mkdir(parents=True, exist_ok=True)
+        managed_path = _resolve_managed_directory_path(path)
+        managed_path.mkdir(parents=True, exist_ok=True)
         return True
-    except OSError as exc:
-        logger.warning("Unable to create directory %s: %s", path, exc)
+    except (OSError, ValueError) as exc:
+        logger.warning(
+            "Unable to create directory %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
         return False
 
 
@@ -437,9 +441,7 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
 
 
 def _job_path(job_id: str) -> Path:
-    if not _safe_job_id(job_id):
-        raise ValueError("Invalid job id.")
-    return _get_jobs_root() / f"{job_id}.json"
+    return _resolve_managed_child_path(_get_jobs_root(), f"{_validated_job_id(job_id)}.json")
 
 
 def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
@@ -691,23 +693,12 @@ def _normalize_upload_relative_path(raw_name: str):
 
 
 def _resolve_root_relative_path(root: Path, relative_path: str, *, max_bytes: int = None):
-    normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
-    if normalize_error:
-        return None, normalize_error
-
-    target = root / normalized_path
-    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
-        return None, errors.file_path_too_long(relative_path, max_bytes)
-
     try:
-        root_resolved = root.resolve(strict=False)
-        target_resolved = target.resolve(strict=False)
-        target_resolved.relative_to(root_resolved)
-    except (OSError, ValueError):
+        return _resolve_managed_child_path(root, relative_path, max_bytes=max_bytes), None
+    except OSError:
         return None, errors.invalid_filename(relative_path)
-
-    return target, None
-
+    except ValueError as exc:
+        return None, str(exc) or errors.invalid_filename(relative_path)
 
 def _resolve_staged_target_path(upload_root: Path, staged_path: str):
     return _resolve_root_relative_path(
@@ -1810,16 +1801,44 @@ def _safe_job_id(value: str) -> bool:
     return bool(value and isinstance(value, str) and JOB_ID_SANITIZER.match(value))
 
 
-def _job_lock_path(job_id: str) -> Path:
-    if not _safe_job_id(job_id):
+def _validated_job_id(value: str) -> str:
+    if not _safe_job_id(value):
         raise ValueError("Invalid job id.")
-    return _get_jobs_root() / f".{job_id}.lock"
+    return str(value).lower()
 
 
-def _resolve_managed_child_path(root: Path, relative_path: str) -> Path:
-    target = (root / relative_path).resolve()
-    target.relative_to(root.resolve())
-    return target
+def _job_lock_path(job_id: str) -> Path:
+    return _resolve_managed_child_path(_get_jobs_root(), f".{_validated_job_id(job_id)}.lock")
+
+
+def _resolve_managed_child_path(root: Path, relative_path: str, *, max_bytes: int = None) -> Path:
+    normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
+    if normalize_error:
+        raise ValueError(normalize_error)
+
+    root_resolved = root.resolve(strict=False)
+    target = root_resolved / normalized_path
+    if max_bytes is not None and len(os.fsencode(str(target))) > max_bytes:
+        raise ValueError(errors.file_path_too_long(relative_path, max_bytes))
+
+    target_resolved = target.resolve(strict=False)
+    target_resolved.relative_to(root_resolved)
+    return target_resolved
+
+
+def _resolve_managed_directory_path(path: Path) -> Path:
+    candidate = Path(path)
+    for root in (_get_upload_root(), _get_jobs_root()):
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            continue
+        if not relative.parts:
+            return root.resolve(strict=False)
+        if any(part in ("", ".", "..") for part in relative.parts):
+            raise ValueError("Invalid managed directory path.")
+        return _resolve_managed_child_path(root, "/".join(relative.parts))
+    raise ValueError("Directory is outside managed upload roots.")
 
 
 def _fsync_directory(path: Path):
