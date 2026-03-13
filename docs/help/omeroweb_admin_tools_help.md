@@ -51,6 +51,8 @@ Purpose: run packaged diagnostics against server and PostgreSQL services.
 Capabilities include:
 
 - script selection and execution,
+- Docker runtime state inspection through the mounted engine socket,
+- direct PostgreSQL `SELECT 1` sanity checks from the OMERO.web runtime,
 - PASS/WARN/FAIL result badges,
 - response metadata and request identifiers.
 
@@ -66,7 +68,8 @@ Capabilities include:
 - **Monitoring links unauthorized/not found**: use documented Grafana navigation guidance in UI subtitle.
 - **Quota updates fail**: verify repository compatibility and permissions.
 - **Diagnostics fail broadly**: investigate shared infrastructure dependencies first (database, network, Docker health).
-- **Docker compose unavailable warnings in diagnostics**: expected when diagnostics run in an environment without `docker compose` access (for example inside restricted containers). Set `ADMIN_TOOLS_REQUIRE_DOCKER_COMPOSE=1` only when compose-backed checks must be enforced.
+- **Docker runtime inspection failed**: verify that `/var/run/docker.sock` is mounted read-only into `omeroweb` and that the runtime user can read it.
+- **Direct SQL sanity test failed**: verify database host/user/name/password env values in `env/omeroweb.env`, `env/omeroserver.env`, and `env/omero_secrets.env`, and confirm `psycopg2-binary` is present in the OMERO.web image.
 
 ## Best practices
 
