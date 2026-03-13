@@ -22,8 +22,11 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             self.dockerfile,
         )
 
-    def test_bootstrap_skips_package_markers_during_script_registration(self):
-        self.assertIn("! -name '__init__.py'", self.bootstrap)
+    def test_bootstrap_register_script_sync_skips_package_markers(self):
+        self.assertIn(
+            "if not file.endswith('.py') or file == '__init__.py':",
+            self.bootstrap,
+        )
 
     def test_bootstrap_requires_figure_version_env_var(self):
         self.assertIn(
