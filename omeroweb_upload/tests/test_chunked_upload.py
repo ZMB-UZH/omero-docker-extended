@@ -113,6 +113,63 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     assert import_started == [job_id]
 
 
+def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    job_id = "c3c9bf8e3f0846d3b719f7874707dbba"
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 5,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/big.bin",
+                "staged_path": "_staged/u1/big.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+    _mark_job_owned(monkeypatch, job)
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda current_job_id, updates, upload_errors: {**job, "status": "ready", "uploaded_bytes": 5},
+    )
+    monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
+
+    staged_target = upload_root / job_id / "_staged/u1/big.bin"
+    staged_target.parent.mkdir(parents=True, exist_ok=True)
+    staged_target.write_bytes(b"stale-data")
+
+    request = RequestFactory().post(
+        f"/omeroweb_upload/upload/{job_id}/",
+        data={
+            "upload_mode": "chunked",
+            "relative_path": "folder/big.bin",
+            "chunk_start": "0",
+            "chunk_end": "5",
+            "file_size": "5",
+            "is_last_chunk": "1",
+            "file": SimpleUploadedFile("big.bin", b"fresh"),
+        },
+    )
+
+    response = index_view._upload_files(request, job_id, None)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert staged_target.read_bytes() == b"fresh"
+
+
 def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch):
     upload_root = tmp_path / "upload-root"
     job_id = "e8706ee910b147a8b428d44ced0d68dd"
