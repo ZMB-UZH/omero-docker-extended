@@ -86,7 +86,25 @@ def _normalize_proxy_prefix(proxy_prefix: str) -> str:
 
 
 def _safe_redirect_segment(value: str, default: str) -> str:
-    cleaned = _SAFE_REDIRECT_SEGMENT_RE.sub("-", str(value or "").strip()).strip(".-")
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return default
+    if raw_value.startswith(("http://", "https://")):
+        return default
+    if "/" in raw_value or "\\" in raw_value or ".." in raw_value or ":" in raw_value:
+        return default
+    cleaned = _SAFE_REDIRECT_SEGMENT_RE.sub("-", raw_value).strip(".-")
+    return cleaned or default
+
+
+def _safe_dashboard_uid(value: str, default: str) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return default
+    if raw_value.startswith(("http://", "https://")):
+        return default
+    last_segment = raw_value.replace("\\", "/").rsplit("/", 1)[-1]
+    cleaned = _SAFE_REDIRECT_SEGMENT_RE.sub("-", last_segment).strip(".-")
     return cleaned or default
 
 
@@ -105,7 +123,10 @@ def _normalize_proxy_request_target(subpath: str) -> Tuple[str, str]:
         if not segment or segment == ".":
             continue
         if segment == "..":
-            raise ValueError("Invalid proxy target")
+            if not segments:
+                raise ValueError("Invalid proxy target")
+            segments.pop()
+            continue
         segments.append(segment)
     return "/".join(segments), forwarded_query
 
@@ -168,8 +189,21 @@ def _proxy_http_request(
     )
     try:
         with urllib.request.urlopen(request, timeout=10.0) as response:
-            payload = response.read()
             headers: HTTPMessage = response.headers
+            content_type = str(headers.get("Content-Type", "") or "").lower()
+            if (
+                normalized_path == "api/v1/notifications/live"
+                and content_type.startswith("text/event-stream")
+            ):
+                logger.info(
+                    "Proxy suppressed unsupported event stream target=%s",
+                    sanitize_url_for_logging(target_url),
+                )
+                suppressed = HttpResponse(status=204)
+                suppressed["Cache-Control"] = "no-store"
+                return suppressed
+
+            payload = response.read()
             return _build_proxied_response(
                 payload,
                 status_code=int(response.status),
@@ -195,6 +229,16 @@ def _proxy_http_request(
         return JsonResponse(
             {"error": "Backend unreachable."},
             status=502,
+        )
+    except (TimeoutError, socket.timeout) as exc:
+        logger.warning(
+            "Proxy backend timed out target=%s reason=%s",
+            sanitize_url_for_logging(target_url),
+            sanitize_log_value(str(exc) or exc.__class__.__name__),
+        )
+        return JsonResponse(
+            {"error": "Backend timed out."},
+            status=504,
         )
 
 
@@ -349,7 +393,7 @@ def _build_proxy_backend_urls(internal_url: str, public_url: str) -> List[str]:
 def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     """Redirect Grafana root requests to the configured default dashboard."""
     normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
-    dashboard_uid = _safe_redirect_segment(
+    dashboard_uid = _safe_dashboard_uid(
         os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
     ).strip(),

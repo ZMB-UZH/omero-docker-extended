@@ -1045,6 +1045,15 @@ body {
 .diagnostics-card {
     gap: 14px;
 }
+.diagnostics-note {
+    border: 1px solid #c7dbff;
+    background: #eef4ff;
+    color: #1e3a8a;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}
 .diagnostics-top-row {
     display: flex;
     justify-content: space-between;
@@ -1125,6 +1134,32 @@ body {
     flex: 1;
     min-width: 0;
     word-break: break-word;
+}
+.diag-result-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.diag-result-description {
+    margin-top: 6px;
+    color: #475569;
+    font-size: 13px;
+}
+.diag-result-error {
+    margin-top: 10px;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 600;
 }
 .diag-counter-row {
     display: flex;
@@ -1231,4 +1266,21 @@ body {
 .diag-badge--fail {
     color: #991b1b;
     background: #fee2e2;
+}
+
+@media (max-width: 1280px) {
+    .admin-tools-page--wide {
+        min-width: 0;
+    }
+    .diagnostics-script-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .diagnostics-top-row,
+    .diag-result-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
 }
