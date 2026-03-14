@@ -12,15 +12,18 @@ import os
 import subprocess
 import shutil
 import re
+import hashlib
 from datetime import datetime
 
 from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
+BIOFORMATS_ARTIFACTS_SUBDIR = os.path.join("artifacts", BIOFORMATS_SUBDIR)
 BIOFORMATS_JAR_NAME = "bioformats_package.jar"
 # Keep this in sync with startup/51-install-imarisconvert.sh
 BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
+BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
 
 
@@ -72,17 +75,120 @@ def _ensure_bioformats_jar(install_dir):
     """Ensure Bio-Formats jar exists where ImarisConvertBioformats expects it."""
     jar_dir = os.path.join(install_dir, BIOFORMATS_SUBDIR)
     jar_path = os.path.join(jar_dir, BIOFORMATS_JAR_NAME)
+    cache_dir = os.path.join(install_dir, BIOFORMATS_ARTIFACTS_SUBDIR)
+    cache_path = os.path.join(cache_dir, BIOFORMATS_JAR_NAME)
+    cache_sha256_path = cache_path + ".sha256"
+    expected_sha256 = _read_expected_sha256(cache_sha256_path)
 
-    if os.path.exists(jar_path) and os.path.getsize(jar_path) > 0:
+    if _is_valid_bioformats_jar(jar_path, expected_sha256=expected_sha256):
+        if not _is_valid_bioformats_jar(cache_path, expected_sha256=expected_sha256):
+            if _copy_bioformats_jar(
+                jar_path,
+                cache_path,
+                expected_sha256=_sha256_file(jar_path),
+                file_mode=0o644,
+                description="cached Bio-Formats jar",
+            ):
+                _write_expected_sha256(cache_sha256_path, _sha256_file(jar_path))
         return jar_path
+
+    if _is_valid_bioformats_jar(cache_path, expected_sha256=expected_sha256):
+        os.makedirs(jar_dir, exist_ok=True)
+        restored_sha256 = expected_sha256 or _sha256_file(cache_path)
+        if _copy_bioformats_jar(
+            cache_path,
+            jar_path,
+            expected_sha256=restored_sha256,
+            file_mode=0o640,
+            description="restored Bio-Formats jar",
+        ):
+            print(f"Restored Bio-Formats jar from local cache: {cache_path}")
+            return jar_path
 
     print(f"ERROR: Missing Bio-Formats jar at: {jar_path}")
     print(
         "ERROR: Refusing runtime network download for security reasons. "
-        "Install ImarisConvert via startup/51-install-imarisconvert.sh so the pinned jar is pre-provisioned."
+        "Install or repair ImarisConvert via startup/51-install-imarisconvert.sh so the pinned jar "
+        "and its internal repair copy are auto-provisioned during startup."
     )
+    print(f"ERROR: Expected local cache path: {cache_path}")
     print(f"ERROR: Expected Bio-Formats source URL during build time: {BIOFORMATS_URL}")
     return None
+
+
+def _read_expected_sha256(path):
+    try:
+        with open(path, "r", encoding="ascii") as handle:
+            token = handle.read().strip().split()[0].lower()
+    except (OSError, IndexError, UnicodeDecodeError):
+        return None
+
+    if re.fullmatch(r"[0-9a-f]{64}", token):
+        return token
+    return None
+
+
+def _write_expected_sha256(path, sha256_value):
+    tmp_path = path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="ascii") as handle:
+            handle.write(f"{sha256_value}  {BIOFORMATS_JAR_NAME}\n")
+        os.chmod(tmp_path, 0o644)
+        os.replace(tmp_path, path)
+        return True
+    except OSError as exc:
+        print(f"WARNING: Failed to write Bio-Formats checksum file {path}: {exc}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError as cleanup_exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc)
+        return False
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_valid_bioformats_jar(path, expected_sha256=None):
+    if not os.path.exists(path):
+        return False
+
+    try:
+        if os.path.getsize(path) < BIOFORMATS_MIN_SIZE_BYTES:
+            return False
+        if expected_sha256 is not None and _sha256_file(path) != expected_sha256:
+            return False
+    except OSError:
+        return False
+
+    return True
+
+
+def _copy_bioformats_jar(source_path, destination_path, expected_sha256, file_mode, description):
+    tmp_path = destination_path + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+        shutil.copyfile(source_path, tmp_path)
+        if _sha256_file(tmp_path) != expected_sha256:
+            print(f"ERROR: Integrity check failed while preparing {description}: {destination_path}")
+            os.remove(tmp_path)
+            return False
+        os.chmod(tmp_path, file_mode)
+        os.replace(tmp_path, destination_path)
+        return True
+    except OSError as exc:
+        print(f"ERROR: Failed to install {description} at {destination_path}: {exc}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError as cleanup_exc:
+            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc)
+        return False
 
 
 def _get_voxel_size_from_image(image):

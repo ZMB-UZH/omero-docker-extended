@@ -10,6 +10,95 @@ fail() {
 INSTALL_DIR="/opt/omero/imarisconvert"
 VERSION_FILE="${INSTALL_DIR}/.version"
 TARGET_VERSION="1.0.0"
+BIOFORMATS_SUBDIR="bioformats"
+BIOFORMATS_JAR_NAME="bioformats_package.jar"
+BIOFORMATS_URL="https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
+BIOFORMATS_MIN_SIZE_BYTES=10000000
+BIOFORMATS_JAR="${INSTALL_DIR}/${BIOFORMATS_SUBDIR}/${BIOFORMATS_JAR_NAME}"
+BIOFORMATS_CACHE_DIR="${INSTALL_DIR}/artifacts/${BIOFORMATS_SUBDIR}"
+BIOFORMATS_CACHE_JAR="${BIOFORMATS_CACHE_DIR}/${BIOFORMATS_JAR_NAME}"
+BIOFORMATS_CACHE_SHA256="${BIOFORMATS_CACHE_JAR}.sha256"
+
+is_valid_bioformats_jar() {
+    local jar_path="$1"
+    [[ -s "${jar_path}" ]] && [[ "$(stat -c%s "${jar_path}")" -ge "${BIOFORMATS_MIN_SIZE_BYTES}" ]]
+}
+
+sha256_matches_manifest() {
+    local source_path="$1"
+    local sha_path="$2"
+    local expected_sha
+    local actual_sha
+
+    if [[ ! -f "${sha_path}" ]]; then
+        return 1
+    fi
+
+    expected_sha="$(awk '{print tolower($1)}' "${sha_path}")"
+    if [[ ! "${expected_sha}" =~ ^[0-9a-f]{64}$ ]]; then
+        return 1
+    fi
+
+    actual_sha="$(sha256sum "${source_path}" | awk '{print $1}')"
+    [[ "${actual_sha}" == "${expected_sha}" ]]
+}
+
+is_valid_bioformats_cache() {
+    is_valid_bioformats_jar "${BIOFORMATS_CACHE_JAR}" && \
+        sha256_matches_manifest "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
+}
+
+write_bioformats_sha256() {
+    local source_path="$1"
+    local sha_path="$2"
+    local tmp_path="${sha_path}.tmp"
+    local digest
+    digest="$(sha256sum "${source_path}" | awk '{print $1}')"
+    printf '%s  %s\n' "${digest}" "${BIOFORMATS_JAR_NAME}" > "${tmp_path}"
+    chmod 0644 "${tmp_path}"
+    mv -f "${tmp_path}" "${sha_path}"
+}
+
+copy_bioformats_jar() {
+    local source_path="$1"
+    local destination_path="$2"
+    local file_mode="$3"
+    local tmp_path="${destination_path}.tmp"
+    local expected_sha
+    local actual_sha
+
+    expected_sha="$(sha256sum "${source_path}" | awk '{print $1}')"
+    cp -f "${source_path}" "${tmp_path}"
+    chmod "${file_mode}" "${tmp_path}"
+    actual_sha="$(sha256sum "${tmp_path}" | awk '{print $1}')"
+    if [[ "${actual_sha}" != "${expected_sha}" ]]; then
+        rm -f "${tmp_path}"
+        fail "Integrity verification failed while copying ${source_path} to ${destination_path}"
+    fi
+    mv -f "${tmp_path}" "${destination_path}"
+}
+
+install_imarisconvert_wrapper() {
+    cat > /usr/local/bin/imarisconvert <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+INSTALL_DIR="/opt/omero/imarisconvert"
+cd "${INSTALL_DIR}"
+exec "${INSTALL_DIR}/ImarisConvertBioformats" "$@"
+SH
+    chmod 0755 /usr/local/bin/imarisconvert
+}
+
+seed_bioformats_cache_from_runtime() {
+    mkdir -p "${BIOFORMATS_CACHE_DIR}"
+    copy_bioformats_jar "${BIOFORMATS_JAR}" "${BIOFORMATS_CACHE_JAR}" 0644
+    write_bioformats_sha256 "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
+}
+
+restore_runtime_jar_from_cache() {
+    mkdir -p "${INSTALL_DIR}/${BIOFORMATS_SUBDIR}"
+    copy_bioformats_jar "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_JAR}" 0644
+}
 
 if [[ -f "${VERSION_FILE}" ]]; then
     INSTALLED_VERSION="$(cat "${VERSION_FILE}")"
@@ -17,15 +106,26 @@ else
     INSTALLED_VERSION=""
 fi
 
-BIOFORMATS_JAR="${INSTALL_DIR}/bioformats/bioformats_package.jar"
+if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" && -x "${INSTALL_DIR}/ImarisConvertBioformats" ]]; then
+    if ! [[ -x /usr/local/bin/imarisconvert ]]; then
+        echo "Recreating missing ImarisConvert wrapper..."
+        install_imarisconvert_wrapper
+    fi
 
-if [[ "${INSTALLED_VERSION}" == "${TARGET_VERSION}" \
-      && -x "${INSTALL_DIR}/ImarisConvertBioformats" \
-      && -s "${BIOFORMATS_JAR}" \
-      && "$(stat -c%s "${BIOFORMATS_JAR}")" -gt 10000000 \
-      && -x /usr/local/bin/imarisconvert ]]; then
-    echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + VALID Bio-Formats jar)."
-    exit 0
+    if is_valid_bioformats_jar "${BIOFORMATS_JAR}" && ! is_valid_bioformats_cache; then
+        echo "Seeding Bio-Formats cache from existing runtime jar..."
+        seed_bioformats_cache_from_runtime
+    fi
+
+    if ! is_valid_bioformats_jar "${BIOFORMATS_JAR}" && is_valid_bioformats_cache; then
+        echo "Restoring Bio-Formats runtime jar from local cache..."
+        restore_runtime_jar_from_cache
+    fi
+
+    if is_valid_bioformats_jar "${BIOFORMATS_JAR}" && is_valid_bioformats_cache; then
+        echo "ImarisConvertBioformats ${TARGET_VERSION} already installed (binary + runtime jar + local cache)."
+        exit 0
+    fi
 fi
 
 echo "Installing ImarisConvertBioformats ${TARGET_VERSION}..."
@@ -49,14 +149,13 @@ sed -i '1i #include <limits>' ImarisConvertBioformats/meta/bpUtils.cxx
 mkdir -p bioformats
 if ! curl -L --fail --retry 5 --retry-delay 3 --max-time 1800 \
     --connect-timeout 20 --speed-time 30 --speed-limit 1024 \
-    "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar" \
+    "${BIOFORMATS_URL}" \
     -o bioformats/bioformats_package.jar; then
     fail "Failed to download bioformats_package.jar"
 fi
 
 # Validate Bio-Formats jar (must be large; real file is ~80–90 MB)
-if [[ ! -s bioformats/bioformats_package.jar ]] || \
-   [[ "$(stat -c%s bioformats/bioformats_package.jar)" -lt 10000000 ]]; then
+if ! is_valid_bioformats_jar bioformats/bioformats_package.jar; then
     echo "ERROR: bioformats_package.jar download failed or is invalid" >&2
     ls -lh bioformats/bioformats_package.jar >&2 || true
     fail "Invalid bioformats_package.jar"
@@ -124,18 +223,15 @@ chmod +x "${INSTALL_DIR}/ImarisConvertBioformats"
 # Copy Bio-Formats runtime into install directory.
 # ImarisConvertBioformats expects to find the Bio-Formats jar at runtime.
 mkdir -p "${INSTALL_DIR}/bioformats"
-cp -f "../../bioformats/bioformats_package.jar" "${INSTALL_DIR}/bioformats/bioformats_package.jar"
-chmod 0644 "${INSTALL_DIR}/bioformats/bioformats_package.jar"
+copy_bioformats_jar "../../bioformats/bioformats_package.jar" "${BIOFORMATS_JAR}" 0644
+
+# Keep a second local copy so runtime repairs never need outbound network access.
+mkdir -p "${BIOFORMATS_CACHE_DIR}"
+copy_bioformats_jar "../../bioformats/bioformats_package.jar" "${BIOFORMATS_CACHE_JAR}" 0644
+write_bioformats_sha256 "${BIOFORMATS_CACHE_JAR}" "${BIOFORMATS_CACHE_SHA256}"
 
 # Create a wrapper instead of a symlink so runtime discovery works reliably
-cat > /usr/local/bin/imarisconvert <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-INSTALL_DIR="/opt/omero/imarisconvert"
-cd "${INSTALL_DIR}"
-exec "${INSTALL_DIR}/ImarisConvertBioformats" "$@"
-SH
-chmod 0755 /usr/local/bin/imarisconvert
+install_imarisconvert_wrapper
 
 # Mark version
 echo "${TARGET_VERSION}" > "${VERSION_FILE}"
