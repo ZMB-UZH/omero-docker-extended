@@ -189,8 +189,21 @@ def _proxy_http_request(
     )
     try:
         with urllib.request.urlopen(request, timeout=10.0) as response:
-            payload = response.read()
             headers: HTTPMessage = response.headers
+            content_type = str(headers.get("Content-Type", "") or "").lower()
+            if (
+                normalized_path == "api/v1/notifications/live"
+                and content_type.startswith("text/event-stream")
+            ):
+                logger.info(
+                    "Proxy suppressed unsupported event stream target=%s",
+                    sanitize_url_for_logging(target_url),
+                )
+                suppressed = HttpResponse(status=204)
+                suppressed["Cache-Control"] = "no-store"
+                return suppressed
+
+            payload = response.read()
             return _build_proxied_response(
                 payload,
                 status_code=int(response.status),
@@ -216,6 +229,16 @@ def _proxy_http_request(
         return JsonResponse(
             {"error": "Backend unreachable."},
             status=502,
+        )
+    except (TimeoutError, socket.timeout) as exc:
+        logger.warning(
+            "Proxy backend timed out target=%s reason=%s",
+            sanitize_url_for_logging(target_url),
+            sanitize_log_value(str(exc) or exc.__class__.__name__),
+        )
+        return JsonResponse(
+            {"error": "Backend timed out."},
+            status=504,
         )
 
 
