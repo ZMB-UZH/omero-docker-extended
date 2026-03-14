@@ -99,6 +99,7 @@ Quota reconciliation and the host enforcer intentionally do **not** create missi
 
 Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
+Prometheus requests are proxied as standard request/response traffic only. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
 
 ## Typical admin workflow
 
