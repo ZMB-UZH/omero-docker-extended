@@ -15,6 +15,7 @@ The admin tools plugin exposes operational interfaces for log exploration, syste
 - Quota management tab for group-level quota definitions with CSV import/template export and enforcement reconciliation logs.
 - Server and database diagnostic scripts (platform end-to-end health checks).
 - Root-only access enforcement on all endpoints.
+- Docker-backed compose-state inspection via the mounted engine socket and direct PostgreSQL sanity checks from the `omeroweb` runtime.
 
 ## Key routes
 
@@ -82,7 +83,9 @@ This plugin requires reachable monitoring service endpoints configured in `env/o
 | `ADMIN_TOOLS_QUOTA_PROJID_FILE` | ext4 project-name mapping file updated by the enforcer | `/tmp/omero-admin-tools/quota/projid` |
 | `ADMIN_TOOLS_QUOTA_PROJECT_ID_MIN` | Minimum project ID used when assigning new group IDs | `200000` |
 
-The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats functionality.
+The Docker socket (`/var/run/docker.sock`) must be mounted read-only for container stats and diagnostics compose-state inspection.
+
+Server/database diagnostics resolve PostgreSQL connection settings from the live `omeroweb` runtime environment. OMERO database checks use `ADMIN_TOOLS_OMERO_DB_*` when set, otherwise the shared OMERO.server values (`CONFIG_omero_db_host`, `CONFIG_omero_db_user`, `CONFIG_omero_db_name`, `OMERO_DB_PASS`). Plugin database checks use `ADMIN_TOOLS_PLUGIN_DB_*` when set, otherwise the plugin runtime values (`OMP_DATA_HOST`, `OMP_DATA_PORT`, `OMP_DATA_USER`, `OMP_DATA_DB`, `OMP_DATA_PASS`).
 
 The quota compatibility check reads `CONFIG_omero_fs_repo_path` from the shared OMERO.server environment (`env/omeroserver.env`), which is also loaded into the `omeroweb` service in `docker-compose.yml` to keep a single source of truth for the repository template.
 
@@ -96,13 +99,14 @@ Quota reconciliation and the host enforcer intentionally do **not** create missi
 
 Grafana proxy authentication depends on passing session and auth headers through OMERO.web. The proxy forwards `Authorization` and `Cookie` request headers, rewrites `Origin` and `Referer` to match the Grafana backend origin, and preserves `Set-Cookie` responses. Cookie `Path` attributes are rewritten to `/omeroweb_admin_tools/resource-monitoring/grafana-proxy/` so Grafana login sessions continue to work when Grafana is accessed through the plugin proxy route.
 The proxy also rewrites Grafana boot settings (`appSubUrl` and `appUrl`) to the proxy prefix, preventing top-right **Sign in** redirects from escaping to an unmapped root route. Grafana root requests (`/`) through the proxy now redirect users directly to the configured default OMERO dashboard route under the proxy prefix (for example when users click **Home** or complete **Sign in**).
+Prometheus requests are proxied as standard request/response traffic only. The live notifications SSE endpoint (`/api/v1/notifications/live`) is intentionally short-circuited with `204 No Content` because the Django proxy does not stream chunked event responses; slow upstream reads return `504 Gateway Timeout` instead of surfacing a Django `500`.
 
 ## Typical admin workflow
 
 1. Use the Logs page to inspect recent service events, filter by container, browse internal log files.
 2. Use Resource Monitoring to inspect infrastructure health via embedded Grafana dashboards and Docker container stats.
 3. Use Storage page to identify disk growth hotspots by user and group.
-4. Use Server Database Testing to run platform end-to-end health diagnostics.
+4. Use Server Database Testing to run platform end-to-end health diagnostics, including Docker runtime state and direct SQL probes.
 5. Apply operational actions externally based on findings (cleanup, scaling, user guidance).
 
 If the configured ManagedRepository template does not start with `%group%/%user%/`, the Quotas tab is intentionally disabled and shows an incompatibility warning to prevent unsafe quota enforcement assumptions.
@@ -121,6 +125,7 @@ Quota state writes are atomic by default and include a compatibility fallback fo
 - Review Grafana dashboard provisioning files after monitoring configuration changes.
 - Keep query timeouts and entry caps aligned with cluster scale.
 - Verify Docker socket is accessible (check `docker compose logs omeroweb` for socket permission errors).
+- Verify `psycopg2-binary` remains installed in the OMERO.web image after image rebuilds or package updates.
 
 ### ext4 project-quota enforcement behavior
 
