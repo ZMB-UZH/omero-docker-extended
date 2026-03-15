@@ -2316,7 +2316,7 @@ _scout_extract_base_image() {
 # _scout_scan_image <image_ref> [timeout_seconds]
 # Runs `docker scout cves` and prints raw output.  Returns 1 on failure/timeout.
 _scout_scan_image() {
-    local image="${1:-}" scan_timeout="${2:-180}" output=""
+    local image="${1:-}" scan_timeout="${2:-600}" output=""
     [ -n "${image}" ] || return 1
     output="$(timeout "${scan_timeout}" docker scout cves "local://${image}" 2>&1)" || true
     [ -n "${output}" ] || return 1
@@ -2377,7 +2377,7 @@ run_docker_scout_baseline_scan() {
         fi
 
         echo "  Scanning ${base_image} ..."
-        raw="$(_scout_scan_image "${base_image}" 180)" || true
+        raw="$(_scout_scan_image "${base_image}")" || true
         if [ -n "${raw}" ]; then
             summary="$(_scout_extract_summary "${raw}")" || true
             if [ -n "${summary}" ]; then
@@ -2528,7 +2528,7 @@ run_docker_scout_summary() {
             fi
         fi
 
-        raw="$(_scout_scan_image "${image}" 180)" || true
+        raw="$(_scout_scan_image "${image}")" || true
         summary="$(_scout_extract_summary "${raw}")" || true
         [ -n "${summary}" ] || summary="(scan failed)"
 
@@ -2544,7 +2544,7 @@ run_docker_scout_summary() {
         if ! docker image inspect "${image}" >/dev/null 2>&1; then
             continue
         fi
-        raw="$(_scout_scan_image "${image}" 180)" || true
+        raw="$(_scout_scan_image "${image}")" || true
         summary="$(_scout_extract_summary "${raw}")" || true
         [ -n "${summary}" ] || summary="(scan failed)"
 
