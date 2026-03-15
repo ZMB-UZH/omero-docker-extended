@@ -12,8 +12,7 @@ from ..constants import JOBS_DIR, JOB_MAX_AGE_SECONDS, JOB_CLEANUP_INTERVAL
 
 logger = logging.getLogger(__name__)
 
-# Global state for cleanup tracking
-_last_cleanup_time = 0
+_cleanup_state = {"last_cleanup_time": 0.0}
 
 
 def cleanup_old_jobs():
@@ -26,13 +25,12 @@ def cleanup_old_jobs():
 
     Multiple simultaneous calls are safe (worst case: redundant cleanup requests)
     """
-    global _last_cleanup_time
     now = time.time()
 
     # Throttle cleanup to avoid excessive file system operations
-    if now - _last_cleanup_time < JOB_CLEANUP_INTERVAL:
+    if now - _cleanup_state["last_cleanup_time"] < JOB_CLEANUP_INTERVAL:
         return
-    _last_cleanup_time = now
+    _cleanup_state["last_cleanup_time"] = now
     try:
         if not os.path.exists(JOBS_DIR):
             return
