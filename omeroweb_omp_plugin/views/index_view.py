@@ -96,6 +96,7 @@ def _get_owner_username(obj):
         try:
             value = getattr(owner, attr)()
         except Exception:
+            logger.debug("Failed to get owner name via %s", attr)
             continue
         if value:
             return str(value)
@@ -117,6 +118,7 @@ def _get_permissions(obj):
         try:
             permissions = getattr(obj, attr)()
         except Exception:
+            logger.debug("Failed to get permissions via %s", attr)
             continue
         if permissions is not None:
             return permissions
@@ -228,6 +230,7 @@ def _group_member_count(conn, group):
         try:
             value = getattr(group, attr)()
         except Exception:
+            logger.debug("Failed to get group member count via %s", attr)
             continue
         if value is None:
             continue
@@ -235,10 +238,12 @@ def _group_member_count(conn, group):
             try:
                 return int(value)
             except Exception:
+                logger.debug("Failed to convert member count to int for %s", attr)
                 continue
         try:
             return len(list(value))
         except Exception:
+            logger.debug("Failed to enumerate members via %s", attr)
             continue
     group_id = get_id(group)
     if group_id is None:
@@ -523,6 +528,7 @@ def index(request, conn=None, url=None, **kwargs):
                     try:
                         filenames.append(get_text(img.getName()))
                     except Exception:
+                        logger.debug("Failed to get image name in regex suggestion")
                         continue
 
             if not filenames:
@@ -629,6 +635,7 @@ def index(request, conn=None, url=None, **kwargs):
                         filenames.append(get_text(img.getName()))
                         image_ids.append(int(get_id(img)))
                     except Exception:
+                        logger.debug("Failed to get image name/id in AI parse")
                         continue
 
             if not filenames:
@@ -915,6 +922,7 @@ def index(request, conn=None, url=None, **kwargs):
                         vars_dict = {f"Var{i+1}": p for i, p in enumerate(parts_capped)}
                         preview_rows.append((ds_label, iid, fname, vars_dict))
                     except Exception:
+                        logger.debug("Failed to parse filename for preview row")
                         continue
 
             if max_vars == 0:

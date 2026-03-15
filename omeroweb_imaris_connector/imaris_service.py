@@ -821,6 +821,7 @@ def _get_job_state_and_outputs(conn, job_id):
                             logger.debug("Job %s state via getJobs(): %s outputs=%s", job_id, status, _serialize_outputs(outputs))
                             return str(status), outputs
                     except Exception:
+                        logger.debug("Failed to query job state via getJobs()")
                         continue
             except Exception as exc:
                 logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)

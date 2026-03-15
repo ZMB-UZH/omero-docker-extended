@@ -89,4 +89,3 @@ if not settings.configured:
         USE_TZ=True,
     )
     django.setup()
-

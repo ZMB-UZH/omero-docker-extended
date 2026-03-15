@@ -173,6 +173,7 @@ def extract_acquisition_metadata(img):
                         if k and v:
                             meta[f"BF_{str(k)}"] = str(v)
                 except Exception:
+                    logger.debug("Failed to parse metadata key-value pair")
                     continue
     except Exception as e:
         try:

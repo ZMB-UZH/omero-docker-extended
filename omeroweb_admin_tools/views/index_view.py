@@ -25,7 +25,6 @@ import urllib.parse
 
 from django.http import JsonResponse
 from django.http import HttpResponse
-from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -1523,9 +1522,6 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
     request_host = _safe_request_host(request)
     request_scheme = request.scheme
     _proxied = _is_behind_reverse_proxy(request)
-    _fwd_proto = (
-        request.META.get("HTTP_X_FORWARDED_PROTO", "").strip().split(",")[0].strip()
-    )
 
     dashboard_uid = os.environ.get(
         "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
