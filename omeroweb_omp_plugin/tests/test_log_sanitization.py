@@ -51,7 +51,7 @@ def test_job_progress_logs_escape_job_id_and_exception(monkeypatch, tmp_path: Pa
         lambda filename, sep_pattern: (_ for _ in ()).throw(RuntimeError("bad\nparse")),
     )
 
-    conn = SimpleNamespace(getUpdateService=lambda: object())
+    conn = SimpleNamespace(getUpdateService=object)
     with caplog.at_level(logging.ERROR, logger=job_view.logger.name):
         response = job_view.job_progress(request, job_id="bad\njob", conn=conn)
 
