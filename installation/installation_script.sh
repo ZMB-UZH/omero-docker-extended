@@ -2583,23 +2583,50 @@ chown_tree_or_die() {
     return 0
 }
 
-ensure_omero_server_tmp_namespace() {
+ensure_omero_tmp_layout() {
     local tmp_root="$1"
-    local server_uid="$2"
-    local server_gid="$3"
-    local server_runtime_user="$4"
+    local web_uid="$2"
+    local web_gid="$3"
+    local server_uid="$4"
+    local server_gid="$5"
+    local server_runtime_user="$6"
     local server_namespace_dir="${tmp_root%/}/${server_runtime_user}"
     local server_tmp_dir="${server_namespace_dir}/tmp"
+    local top_level_entry=""
+
+    if [ -e "${tmp_root}" ] && [ ! -d "${tmp_root}" ]; then
+        echo "ERROR: OMERO temp directory exists but is not a directory: ${tmp_root}" >&2
+        return 1
+    fi
 
     mkdir -p "${server_tmp_dir}"
 
-    if ! chmod u+rwx,go+x "${tmp_root}"; then
+    if ! chown "${web_uid}:${web_gid}" "${tmp_root}"; then
+        echo "ERROR: Failed to assign OMERO.web ownership for temp root: ${tmp_root}" >&2
+        return 1
+    fi
+
+    if ! chmod u+rwx,go+rx "${tmp_root}"; then
         echo "ERROR: Failed to set traversal permissions on OMERO temp root: ${tmp_root}" >&2
         return 1
     fi
 
-    if ! chown "${server_uid}:${server_gid}" "${server_namespace_dir}" "${server_tmp_dir}"; then
-        echo "ERROR: Failed to assign OMERO.server ownership for temp namespace: ${server_tmp_dir}" >&2
+    while IFS= read -r -d '' top_level_entry; do
+        if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then
+            continue
+        fi
+
+        echo "chown -R ${web_uid}:${web_gid} ${top_level_entry}    (OMERO web/plugin temp subtree)"
+        if ! chown -R "${web_uid}:${web_gid}" "${top_level_entry}"; then
+            echo "ERROR: Failed chown for OMERO web/plugin temp subtree: ${top_level_entry}" >&2
+            return 1
+        fi
+        chmod -R u+rwX "${top_level_entry}" || true
+    done < <(find "${tmp_root}" -mindepth 1 -maxdepth 1 -print0)
+
+    echo "chown -R ${server_uid}:${server_gid} ${server_namespace_dir}    (OMERO.server temp namespace)"
+    if ! chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"; then
+        echo "ERROR: Failed to assign OMERO.server ownership for temp namespace: ${server_namespace_dir}" >&2
         return 1
     fi
 
@@ -2608,7 +2635,7 @@ ensure_omero_server_tmp_namespace() {
         return 1
     fi
 
-    echo "Prepared OMERO.server temp namespace: ${server_tmp_dir} (owner ${server_uid}:${server_gid}, mode 0700)"
+    echo "Prepared OMERO temp layout: root ${tmp_root} (owner ${web_uid}:${web_gid}), server namespace ${server_tmp_dir} (owner ${server_uid}:${server_gid})"
 }
 
 if ! chown_tree_or_die "${OMERO_USER_DATA_PATH}" "OMERO user data directory" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"; then exit 1; fi
@@ -2623,8 +2650,7 @@ if ! chown_tree_or_die "${OMERO_SERVER_LOGS_PATH}" "OMERO server logs directory"
 if ! chown_tree_or_die "${OMERO_WEB_VAR_PATH}" "OMERO web var directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_LOGS_PATH}" "OMERO web logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_WEB_SUPERVISOR_LOGS_PATH}" "OMERO web supervisor logs directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
-if ! chown_tree_or_die "${OMERO_TMP_PATH}" "OMERO temp directory" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}"; then exit 1; fi
-if ! ensure_omero_server_tmp_namespace "${OMERO_TMP_PATH}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
+if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}" "${OMERO_WEB_UID}" "${OMERO_WEB_GID}" "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}" "${OMERO_SERVER_RUNTIME_USER:-omero-server}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_DATABASE_PATH}" "OMERO database directory" "${DATABASE_UID}" "${DATABASE_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${OMERO_PLUGIN_DATABASE_PATH}" "OMERO plugin database directory" "${DATABASE_PLUGIN_UID}" "${DATABASE_PLUGIN_GID}"; then exit 1; fi
 if ! chown_tree_or_die "${PROMETHEUS_DATA_PATH}" "Prometheus data directory" "${PROMETHEUS_UID}" "${PROMETHEUS_GID}"; then exit 1; fi
