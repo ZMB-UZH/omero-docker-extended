@@ -2237,7 +2237,14 @@ _SCOUT_SERVER_BASE_IMAGE=""
 _SCOUT_WEB_BASE_IMAGE=""
 
 _scout_is_available() {
-    command -v docker >/dev/null 2>&1 && docker scout version >/dev/null 2>&1
+    command -v docker >/dev/null 2>&1 || return 1
+
+    # After buildx workflows the active builder may be a docker-container
+    # driver that doesn't expose the Scout plugin.  Restore the default
+    # builder so the CLI can reach the Scout plugin reliably.
+    docker buildx use default >/dev/null 2>&1 || true
+
+    docker scout version >/dev/null 2>&1
 }
 
 # _scout_extract_summary <raw_output>
