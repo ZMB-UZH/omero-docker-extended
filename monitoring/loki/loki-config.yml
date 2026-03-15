@@ -25,8 +25,8 @@ schema_config:
         period: 24h
 
 limits_config:
-  ingestion_rate_mb: 8
-  ingestion_burst_size_mb: 16
+  ingestion_rate_mb: 32
+  ingestion_burst_size_mb: 64
   max_entries_limit_per_query: 5000
   reject_old_samples: false
   reject_old_samples_max_age: 744h # Accept logs up to 31 days old (ignored when reject_old_samples is false)
