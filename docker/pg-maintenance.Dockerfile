@@ -4,10 +4,23 @@
 # ---------------------------------------------------------
 FROM postgres:16.12
 
+# Use bash with pipefail for safer RUN commands
+# ---------------------------------------------
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Optional: enable OS package security updates at build time
+# ----------------------------------------------------------
+ARG APPLY_SECURITY_HARDENING=0
+
 # Install cron
 # ------------
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cron && \
+RUN set -euo pipefail; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cron; \
+    if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
+        echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
+        DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the maintenance script and cron schedule
