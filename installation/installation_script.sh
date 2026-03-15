@@ -49,7 +49,7 @@ set -euo pipefail
 # CROWDSEC_ENROLL_KEY must be set, non-empty, and not the placeholder value.
 is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
-    [[ -n "${key}" && "${key}" != "CHANGEVALUE2" ]]
+    [[ -n "${key}" && "${key}" != "CHANGEVALUE2" && "${key}" != "CHANGEVALUE3" ]]
 }
 
 
@@ -2665,6 +2665,33 @@ echo ""
 echo "✔ Host ownership fix complete."
 echo "==============================="
 echo ""
+
+# =====================================================
+# Conditional CrowdSec monitoring probe
+#
+# The checked-in prometheus.yml omits the CrowdSec health probe by default.
+# When CrowdSec is enabled, the installation script injects the probe target
+# at the CROWDSEC_PROBE_MARKER comment so blackbox-exporter monitors CrowdSec.
+# When CrowdSec is disabled, any previously injected probe line is removed
+# so blackbox-exporter does not produce error logs for a missing service.
+# =====================================================
+PROMETHEUS_CONFIG="${OMERO_INSTALLATION_PATH%/}/monitoring/prometheus/prometheus.yml"
+CROWDSEC_PROBE_LINE="          - http://crowdsec:8080/health"
+if [ -f "${PROMETHEUS_CONFIG}" ]; then
+    if is_crowdsec_enabled; then
+        if ! grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then
+            sed -i "/# CROWDSEC_PROBE_MARKER/a\\${CROWDSEC_PROBE_LINE}" "${PROMETHEUS_CONFIG}"
+            echo "Injected CrowdSec health probe into prometheus.yml"
+        else
+            echo "CrowdSec health probe already present in prometheus.yml"
+        fi
+    else
+        if grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then
+            sed -i '\|http://crowdsec:8080/health|d' "${PROMETHEUS_CONFIG}"
+            echo "Removed CrowdSec health probe from prometheus.yml (CrowdSec disabled)"
+        fi
+    fi
+fi
 
 # =====================================================
 # Quota enforcer installation (non-blocking)

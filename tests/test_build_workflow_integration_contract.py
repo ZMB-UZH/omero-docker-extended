@@ -160,6 +160,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn("! -name 'github_pull_project_bash'", script_text)
 
+    # ------------------------------------------------------------------
+    # CrowdSec conditional probe injection
+    # ------------------------------------------------------------------
+
+    def test_prometheus_yml_contains_crowdsec_probe_marker(self) -> None:
+        prom_text = (self.repo_root / "monitoring" / "prometheus" / "prometheus.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("# CROWDSEC_PROBE_MARKER", prom_text)
+        self.assertNotIn(
+            "http://crowdsec:8080/health",
+            prom_text,
+            "Checked-in prometheus.yml must not contain a hard-coded CrowdSec probe; "
+            "the installation script injects it at runtime when CrowdSec is enabled.",
+        )
+
+    def test_installation_script_injects_crowdsec_probe_conditionally(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("CROWDSEC_PROBE_MARKER", script_text)
+        self.assertIn("http://crowdsec:8080/health", script_text)
+        self.assertIn("Injected CrowdSec health probe into prometheus.yml", script_text)
+        self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
+
+    def test_is_crowdsec_enabled_rejects_both_placeholder_values(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"CHANGEVALUE2"', script_text)
+        self.assertIn('"CHANGEVALUE3"', script_text)
+
 
 if __name__ == "__main__":
     unittest.main()
