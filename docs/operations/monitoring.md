@@ -82,9 +82,18 @@ Quick operator check after any change:
 - Loki, Prometheus, Grafana, cAdvisor
 - All exporters (node, postgres x2, redis, blackbox)
 - Portainer (`/api/system/status`)
-- CrowdSec (`/health`)
+- CrowdSec (`/health`) — **conditional**: only probed when CrowdSec is enabled (see below)
 - OMERO.web (port 4090)
 - Alloy (`/metrics`)
+
+### Conditional CrowdSec probe
+
+The checked-in `monitoring/prometheus/prometheus.yml` does **not** include a hard-coded CrowdSec health probe. Instead, it contains a `CROWDSEC_PROBE_MARKER` comment. The installation script (`installation/installation_script.sh`) conditionally injects or removes the CrowdSec probe target at that marker:
+
+- **CrowdSec enabled** (valid `CROWDSEC_ENROLL_KEY` in `omero_secrets.env`): the script injects `- http://crowdsec:8080/health` after the marker so blackbox-exporter monitors CrowdSec.
+- **CrowdSec disabled** (key empty, missing, or set to placeholder `CHANGEVALUE2`/`CHANGEVALUE3`): the script removes any previously injected CrowdSec probe line, preventing blackbox-exporter from producing recurring connection-refused errors for a non-existent service.
+
+This means operators never need to manually edit `prometheus.yml` for CrowdSec — the installation script handles it automatically based on credentials.
 
 **TCP probes** (verify connectivity):
 - `database:5432` (OMERO PostgreSQL)

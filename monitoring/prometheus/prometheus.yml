@@ -61,7 +61,7 @@ scrape_configs:
           - http://redis-exporter:9121/metrics
           - http://blackbox-exporter:9115/-/healthy
           - http://portainer:9000/api/system/status
-          - http://crowdsec:8080/health
+          # CROWDSEC_PROBE_MARKER (do not remove — installation script injects CrowdSec target here when enabled)
           - http://omeroweb:4090/webgateway/
           - http://alloy:12345/metrics
     relabel_configs:
