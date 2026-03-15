@@ -1,11 +1,10 @@
 import sys
 import tempfile
 import types
-import unittest
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, mock, main as unittest_main
 import threading
 
 
@@ -132,7 +131,7 @@ from omeroweb_upload.views import core_functions
 from omeroweb_upload.views import index_view
 
 
-class UploadPluginRegressionTests(unittest.TestCase):
+class UploadPluginRegressionTests(TestCase):
     def _json_status_and_payload(self, response):
         if isinstance(response, dict):
             return response["status"], response["payload"]
@@ -349,4 +348,4 @@ class UploadPluginRegressionTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest_main()
