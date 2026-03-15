@@ -27,11 +27,12 @@ For the official OMERO documentation, release notes, and guides, your first poin
 
 - OMP plugin (`omeroweb_omp_plugin`)
 - Admin tools (`omeroweb_admin_tools`, root user only per design)
+- Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
 ### 🐢 Not working yet / progressing slowly
 
-- Direct Imaris 11 integration
+- TBD
 
 </details>
 
