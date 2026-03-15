@@ -1,5 +1,9 @@
 FROM crowdsecurity/crowdsec:v1.7.6
 
+# Optional: enable OS package security updates at build time
+# ----------------------------------------------------------
+ARG APPLY_SECURITY_HARDENING=0
+
 # Pre-install the firewall bouncer binary and both firewall backends at build
 # time so the entrypoint does not need network access for package installation.
 #
@@ -15,6 +19,10 @@ RUN apk update \
         iptables \
         ip6tables \
         ipset \
+    && if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
+        echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
+        apk upgrade --no-cache; \
+    fi \
     && rm -rf /var/cache/apk/*
 
 COPY docker/crowdsec-entrypoint.sh /usr/local/bin/custom-entrypoint.sh

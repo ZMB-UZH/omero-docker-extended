@@ -291,7 +291,40 @@ RUN set -euo pipefail; \
         setuptools>=78.1.1 \
         wheel \
         cryptography>=42.0.0 \
-        urllib3>=2.6.3
+        urllib3>=2.6.3 \
+        certifi \
+        idna>=3.7 \
+        requests>=2.32.0 \
+        jinja2>=3.1.6 \
+        pyopenssl>=24.0.0
+
+# Optional (off by default): broad security upgrade of ALL outdated Python packages
+# WARNING:
+# - More aggressive than venv tooling updates — upgrades every outdated package
+# - May affect OMERO.web compatibility
+# - Enable only for security hardening
+# ----------------------------------------------------------
+ARG APPLY_SECURITY_HARDENING=0
+RUN set -euo pipefail; \
+    if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
+        echo "Skipping broad Python security upgrade (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
+        exit 0; \
+    fi; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
+        echo "ERROR: Could not find valid OMERO.web venv" >&2; \
+        exit 1; \
+    fi; \
+    echo "Upgrading all outdated Python packages in ${VENV_DIR} for security hardening..."; \
+    OUTDATED="$("${VENV_DIR}/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
+    PACKAGES="$(printf '%s' "${OUTDATED}" | "${VENV_DIR}/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice','omero-web','django')))" 2>/dev/null || true)"; \
+    if [[ -n "${PACKAGES}" ]]; then \
+        echo "Upgrading: ${PACKAGES}"; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade ${PACKAGES} || \
+            echo "WARNING: Some package upgrades failed (non-fatal for hardening)."; \
+    else \
+        echo "All packages are up to date."; \
+    fi
 
 # Configure supervisord to run OMERO.web and Imaris Celery worker
 # ---------------------------------------------------------------

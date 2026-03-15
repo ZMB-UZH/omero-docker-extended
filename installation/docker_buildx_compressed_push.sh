@@ -967,6 +967,16 @@ build_target_overrides() {
         printf -- '--set\n%s.tags=%s\n' "${target}" "${target_image_name}"
         printf -- '--set\n%s.args.BUILDKIT_INLINE_CACHE=%s\n' "${target}" "${DOCKER_BUILD_INLINE_CACHE}"
 
+        # Optional Docker image security hardening build args
+        # Controlled by APPLY_SECURITY_HARDENING from the installation script
+        if [ "${APPLY_SECURITY_HARDENING:-0}" = "1" ]; then
+            printf -- '--set\n%s.args.APPLY_SECURITY_HARDENING=1\n' "${target}"
+            printf -- '--set\n%s.args.APPLY_DNF_UPDATES=1\n' "${target}"
+            printf -- '--set\n%s.args.APPLY_OMERO_VENV_TOOLING_UPDATES=1\n' "${target}"
+            printf -- '--set\n%s.args.APPLY_OMEROWEB_DNF_UPDATES=1\n' "${target}"
+            printf -- '--set\n%s.args.APPLY_OMEROWEB_VENV_TOOLING_UPDATES=1\n' "${target}"
+        fi
+
         if [ "${DOCKER_BUILD_NO_CACHE}" = "1" ]; then
             printf -- '--set\n%s.no-cache=true\n' "${target}"
         elif [ "${DOCKER_BUILD_LOCAL_CACHE_ENABLED}" = "1" ]; then
