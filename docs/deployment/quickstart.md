@@ -127,7 +127,7 @@ bash github_pull_project_bash
 
 ### Post-build vulnerability report
 
-After every build, the installation script runs Docker Scout to report known CVEs in the `omeroserver` and `omeroweb` images. When the build ran without cache (fresh pull), the report includes a baseline comparison against the upstream base images.
+After every build, the installation script runs Docker Scout to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built and third-party. When the build ran without cache (fresh pull), the report includes a before/after baseline comparison against the upstream base images. The output is a compact table with one line per image.
 
 To enable optional security hardening (OS and Python package updates):
 
