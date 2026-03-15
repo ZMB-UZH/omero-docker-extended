@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 _UPLOAD_ROOT_CACHE = None
 _JOBS_ROOT_CACHE = None
-_DIRS_INITIALIZED = False
 
 
 def resolve_upload_root() -> Path:
@@ -43,9 +42,9 @@ def ensure_parent_dir(path: Path) -> bool:
 
 def initialize_directories():
     """Initialize upload and jobs directories."""
-    global _UPLOAD_ROOT_CACHE, _JOBS_ROOT_CACHE, _DIRS_INITIALIZED
+    global _UPLOAD_ROOT_CACHE, _JOBS_ROOT_CACHE
 
-    if _DIRS_INITIALIZED:
+    if _UPLOAD_ROOT_CACHE is not None and _JOBS_ROOT_CACHE is not None:
         return
 
     upload_root = resolve_upload_root()
@@ -66,7 +65,6 @@ def initialize_directories():
 
     _UPLOAD_ROOT_CACHE = upload_root
     _JOBS_ROOT_CACHE = jobs_root
-    _DIRS_INITIALIZED = True
 
 
 def get_upload_root() -> Path:
