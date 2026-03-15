@@ -21,9 +21,14 @@ Security practices and controls for this deployment.
 
 ## Post-build vulnerability scanning
 
-The installation script runs [Docker Scout](https://docs.docker.com/scout/) after every successful image build to report known CVEs in the final images. When the upstream base images are available locally (always the case for cache-disabled builds), the report includes a baseline comparison showing vulnerability counts for the unmodified upstream image alongside the built image.
+The installation script runs [Docker Scout](https://docs.docker.com/scout/) after every successful image build to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built images (omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter, redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis, PostgreSQL, etc.).
 
-Docker Scout is optional — if the CLI plugin is not installed, the scan is silently skipped and installation proceeds normally.
+The scan operates in two phases:
+
+1. **Pre-build baseline** (cache-disabled builds only): Pulls upstream base images from each Dockerfile's `FROM` line, scans them, and stores the results. Images pulled solely for baseline scanning are automatically removed after the report.
+2. **Post-build report**: Scans every image from `docker-compose.yml` and displays a compact table. When baseline data is available, the table shows Before (upstream) and After (built) columns for side-by-side comparison. Third-party images show "(not modified)" in the Before column since they are used as-is.
+
+Docker Scout is optional — if the CLI plugin is not installed, both phases are silently skipped and installation proceeds normally. The scan never blocks the installation.
 
 ## Security hardening (optional)
 
