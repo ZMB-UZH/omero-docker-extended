@@ -44,8 +44,9 @@ RUN set -euo pipefail; \
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then \
         echo "Applying optional security updates (APPLY_SECURITY_HARDENING=1)..."; \
         apt-get upgrade -y --no-install-recommends; \
+        apt-get autoremove -y --purge || true; \
     fi; \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/*
 
 # Create a venv to not depend on "system pip" state
 ENV VENV=/opt/venv

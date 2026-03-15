@@ -10,6 +10,7 @@ USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx 
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
 APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-0}" # set to 1 to apply OS and Python security updates to all images
+ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -269,6 +270,7 @@ run_image_build() {
         echo "  Cache enabled  : ${USE_CACHE_BUILD}"
         echo "  Provenance     : ${provenance_setting}"
         echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
+        echo "  Vuln scan      : ${ENABLE_VULNERABILITY_SCAN}"
 
         local -a compose_build_args=(build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
@@ -324,6 +326,7 @@ run_image_build() {
     echo "  Cache enabled : ${inline_cache_setting}"
     echo "  Provenance    : ${provenance_setting}"
     echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
+    echo "  Vuln scan      : ${ENABLE_VULNERABILITY_SCAN}"
 
     # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
     local no_cache_setting="0"
@@ -1875,6 +1878,54 @@ resolve_security_hardening_choice() {
     return 0
 }
 
+resolve_vulnerability_scan_choice() {
+    local reply=""
+    local override_choice="${VULNERABILITY_SCAN_CHOICE:-}"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                ENABLE_VULNERABILITY_SCAN=1
+                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: Docker Scout vulnerability scanning enabled."
+                return 0
+                ;;
+            n|no)
+                ENABLE_VULNERABILITY_SCAN=0
+                echo "VULNERABILITY_SCAN_CHOICE=${override_choice}: Docker Scout vulnerability scanning disabled."
+                return 0
+                ;;
+            *)
+                echo "ERROR: VULNERABILITY_SCAN_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    if ! validate_toggle_config "ENABLE_VULNERABILITY_SCAN" "${ENABLE_VULNERABILITY_SCAN}"; then
+        return 1
+    fi
+
+    local prompt_hint="Y/n"
+    local prompt_default="n"
+    local default_choice="no"
+
+    if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
+        prompt_hint="Y/n"
+        prompt_default="Y"
+        default_choice="yes"
+    fi
+
+    reply="$(prompt_yes_no "Enable Docker Scout vulnerability scanning? (scans all images for known CVEs — adds several minutes) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    if [ "${reply}" = "yes" ]; then
+        ENABLE_VULNERABILITY_SCAN=1
+    else
+        ENABLE_VULNERABILITY_SCAN=0
+    fi
+
+    return 0
+}
+
 resolve_buildx_compressed_build_choice() {
     local reply=""
     local override_choice="${USE_BUILDX_CHOICE:-}"
@@ -1960,6 +2011,10 @@ if ! resolve_flatten_final_image_choice; then
 fi
 
 if ! resolve_security_hardening_choice; then
+    exit 1
+fi
+
+if ! resolve_vulnerability_scan_choice; then
     exit 1
 fi
 
@@ -2385,7 +2440,9 @@ run_docker_scout_baseline_scan() {
 }
 
 # Phase 1: Pull and scan upstream base images for baseline (only when cache disabled).
-run_docker_scout_baseline_scan
+if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
+    run_docker_scout_baseline_scan
+fi
 
 if ! run_image_build; then
     exit 1
@@ -2540,9 +2597,24 @@ run_docker_scout_summary() {
     done
 
     # --- Scan third-party images ---
+    # Third-party images may not be local yet (they are pulled during
+    # docker compose up, which runs after this report).  Pull them for
+    # scanning and track which ones were pulled solely for this purpose.
+    local -a _scout_pulled_thirdparty=()
     for image in "${thirdparty_images[@]+"${thirdparty_images[@]}"}"; do
+        local was_local_tp="true"
         if ! docker image inspect "${image}" >/dev/null 2>&1; then
-            continue
+            was_local_tp="false"
+            echo "  Pulling ${image} for scanning..."
+            if ! docker pull "${image}" >/dev/null 2>&1; then
+                if [ "${has_baseline}" = "true" ]; then
+                    printf '  %-35s  %-30s  %s\n' "${image}" "-" "(pull failed)"
+                else
+                    printf '  %-35s  %s\n' "${image}" "(pull failed)"
+                fi
+                continue
+            fi
+            _scout_pulled_thirdparty+=("${image}")
         fi
         raw="$(_scout_scan_image "${image}")" || true
         summary="$(_scout_extract_summary "${raw}")" || true
@@ -2578,16 +2650,29 @@ run_docker_scout_summary() {
         rm -rf "${_SCOUT_BASELINE_DIR}" 2>/dev/null || true
         _SCOUT_BASELINE_DIR=""
     fi
-    # Remove base images that were pulled solely for baseline scanning.
-    local pulled_img=""
+    # Remove base images that were pulled solely for baseline scanning,
+    # but ONLY if they are not also used as runtime images in docker-compose.yml.
+    local pulled_img="" is_runtime=""
     for pulled_img in "${_SCOUT_PULLED_FOR_BASELINE[@]+"${_SCOUT_PULLED_FOR_BASELINE[@]}"}"; do
-        echo "  Cleaning up baseline image: ${pulled_img}"
-        docker rmi "${pulled_img}" >/dev/null 2>&1 || true
+        is_runtime="false"
+        for ci in "${thirdparty_images[@]+"${thirdparty_images[@]}"}"; do
+            if [ "${ci}" = "${pulled_img}" ]; then is_runtime="true"; break; fi
+        done
+        if [ "${is_runtime}" = "true" ]; then
+            echo "  Keeping baseline image (used at runtime): ${pulled_img}"
+        else
+            echo "  Cleaning up baseline-only image: ${pulled_img}"
+            docker rmi "${pulled_img}" >/dev/null 2>&1 || true
+        fi
     done
     _SCOUT_PULLED_FOR_BASELINE=()
+    # Third-party images pulled for scanning are NOT cleaned up here —
+    # they will be used by docker compose up when containers start.
 }
 
-run_docker_scout_summary
+if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
+    run_docker_scout_summary
+fi
 
 echo "============================================"
 echo "Discovering actual UID/GID from built images"

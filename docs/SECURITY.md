@@ -21,12 +21,12 @@ Security practices and controls for this deployment.
 
 ## Post-build vulnerability scanning
 
-The installation script runs [Docker Scout](https://docs.docker.com/scout/) after every successful image build to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built images (omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter, redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis, PostgreSQL, etc.).
+Vulnerability scanning is **disabled by default** and can be enabled during installation by answering "yes" to the interactive prompt or by setting `ENABLE_VULNERABILITY_SCAN=1`. When enabled, the installation script runs [Docker Scout](https://docs.docker.com/scout/) to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built images (omero-server, omero-web, crowdsec, pg-maintenance, path-usage-exporter, redis-sysctl-init) and third-party images (Prometheus, Grafana, Loki, Redis, PostgreSQL, etc.).
 
 The scan operates in two phases:
 
-1. **Pre-build baseline** (cache-disabled builds only): Pulls upstream base images from each Dockerfile's `FROM` line, scans them, and stores the results. Images pulled solely for baseline scanning are automatically removed after the report.
-2. **Post-build report**: Scans every image from `docker-compose.yml` and displays a compact table. When baseline data is available, the table shows Before (upstream) and After (built) columns for side-by-side comparison. Third-party images show "(not modified)" in the Before column since they are used as-is.
+1. **Pre-build baseline** (cache-disabled builds only): Pulls upstream base images from each Dockerfile's `FROM` line, scans them, and stores the results. Images pulled solely for baseline scanning that are not needed at runtime are automatically removed after the report.
+2. **Post-build report**: Scans every image from `docker-compose.yml` and displays a compact table. Third-party images not yet local are pulled for scanning and retained (they will be used when containers start). When baseline data is available, the table shows Before (upstream) and After (built) columns for side-by-side comparison.
 
 Docker Scout is optional — if the CLI plugin is not installed, both phases are silently skipped and installation proceeds normally. The scan never blocks the installation.
 

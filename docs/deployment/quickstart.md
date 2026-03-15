@@ -127,15 +127,15 @@ bash github_pull_project_bash
 
 ### Post-build vulnerability report
 
-After every build, the installation script runs Docker Scout to report known CVEs in all images referenced by `docker-compose.yml` — both custom-built and third-party. When the build ran without cache (fresh pull), the report includes a before/after baseline comparison against the upstream base images. The output is a compact table with one line per image.
+Vulnerability scanning is disabled by default (it adds several minutes). To enable it, answer "yes" to the interactive prompt or set `ENABLE_VULNERABILITY_SCAN=1`. When enabled, Docker Scout reports known CVEs in all images referenced by `docker-compose.yml` — both custom-built and third-party. When the build ran without cache (fresh pull), the report includes a before/after baseline comparison. The output is a compact table with one line per image.
 
 To enable optional security hardening (OS and Python package updates):
 
 ```bash
-APPLY_SECURITY_HARDENING=1 bash installation/installation_script.sh
+APPLY_SECURITY_HARDENING=1 ENABLE_VULNERABILITY_SCAN=1 bash installation/installation_script.sh
 ```
 
-Or answer "yes" to the interactive prompt during installation. See `docs/SECURITY.md` for details.
+Or answer "yes" to the interactive prompts during installation. See `docs/SECURITY.md` for details.
 
 ## 3) Start the Platform
 

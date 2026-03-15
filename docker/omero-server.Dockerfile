@@ -453,8 +453,14 @@ RUN set -euo pipefail; \
         done; \
     }; \
     dnf_retry update || true; \
+    echo "=== Final security hardening: removing unnecessary packages ==="; \
+    dnf -y remove --noautoremove \
+        vim-minimal \
+        langpacks-en \
+        glibc-langpack-en \
+        || true; \
     dnf clean all || true; \
-    rm -rf /var/cache/dnf /var/tmp/* || true; \
+    rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
     echo "=== Final security hardening: Python packages (pip) ==="; \
     mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
     for VENV_DIR in "${VENV_DIRS[@]}"; do \
