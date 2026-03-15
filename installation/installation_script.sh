@@ -2331,7 +2331,7 @@ _scout_is_available() {
 
 # _scout_extract_summary <raw_output>
 # Parses Docker Scout CVE output into a compact one-line format:
-#   "73 vulns (9C 58H 63M 51L)"
+#   "73 (9C 58H 63M 51L)"
 # Returns non-zero if parsing fails.
 _scout_extract_summary() {
     local raw="${1:-}"
@@ -2349,7 +2349,7 @@ _scout_extract_summary() {
     med="$(printf '%s\n' "${raw}" | grep -iE '^\s*MEDIUM\s' | grep -oE '[0-9]+' | head -1 || true)"
     low="$(printf '%s\n' "${raw}" | grep -iE '^\s*LOW\s' | grep -oE '[0-9]+' | head -1 || true)"
 
-    printf '%s vulns (%sC %sH %sM %sL)' "${total}" "${crit:-0}" "${high:-0}" "${med:-0}" "${low:-0}"
+    printf '%s (%sC %sH %sM %sL)' "${total}" "${crit:-0}" "${high:-0}" "${med:-0}" "${low:-0}"
     return 0
 }
 
@@ -2550,14 +2550,28 @@ run_docker_scout_summary() {
         [ -z "${any_file}" ] || has_baseline="true"
     fi
 
+    # --- Pull third-party images before printing the table ---
+    # Third-party images may not be local yet (they are pulled during
+    # docker compose up, which runs after this report).  Pull them now
+    # so the table output is not interleaved with pull progress lines.
+    local -a _scout_thirdparty_failed=()
+    for image in "${thirdparty_images[@]+"${thirdparty_images[@]}"}"; do
+        if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "  Pulling ${image} for scanning..."
+            if ! docker pull "${image}" >/dev/null 2>&1; then
+                _scout_thirdparty_failed+=("${image}")
+            fi
+        fi
+    done
+
     # --- Print table header ---
     echo ""
     if [ "${has_baseline}" = "true" ]; then
-        printf '  %-35s  %-30s  %s\n' "Image" "Before (upstream)" "After (built)"
-        printf '  %-35s  %-30s  %s\n' "-----------------------------------" "------------------------------" "------------------------------"
+        printf '  %-48s %-24s %s\n' "Image" "Before (upstream)" "After (built)"
+        printf '  %-48s %-24s %s\n' "------------------------------------------------" "------------------------" "------------------------"
     else
-        printf '  %-35s  %s\n' "Image" "Vulnerabilities"
-        printf '  %-35s  %s\n' "-----------------------------------" "------------------------------"
+        printf '  %-48s %s\n' "Image" "Vulnerabilities"
+        printf '  %-48s %s\n' "------------------------------------------------" "------------------------"
     fi
 
     # --- Scan custom-built images ---
@@ -2568,9 +2582,9 @@ run_docker_scout_summary() {
 
         if ! docker image inspect "${image}" >/dev/null 2>&1; then
             if [ "${has_baseline}" = "true" ]; then
-                printf '  %-35s  %-30s  %s\n' "${image}" "-" "(not found)"
+                printf '  %-48s %-24s %s\n' "${image}" "-" "(not found)"
             else
-                printf '  %-35s  %s\n' "${image}" "(not found)"
+                printf '  %-48s %s\n' "${image}" "(not found)"
             fi
             continue
         fi
@@ -2590,40 +2604,38 @@ run_docker_scout_summary() {
         [ -n "${summary}" ] || summary="(scan failed)"
 
         if [ "${has_baseline}" = "true" ]; then
-            printf '  %-35s  %-30s  %s\n' "${image}" "${baseline_summary}" "${summary}"
+            printf '  %-48s %-24s %s\n' "${image}" "${baseline_summary}" "${summary}"
         else
-            printf '  %-35s  %s\n' "${image}" "${summary}"
+            printf '  %-48s %s\n' "${image}" "${summary}"
         fi
     done
 
     # --- Scan third-party images ---
-    # Third-party images may not be local yet (they are pulled during
-    # docker compose up, which runs after this report).  Pull them for
-    # scanning and track which ones were pulled solely for this purpose.
-    local -a _scout_pulled_thirdparty=()
     for image in "${thirdparty_images[@]+"${thirdparty_images[@]}"}"; do
-        local was_local_tp="true"
-        if ! docker image inspect "${image}" >/dev/null 2>&1; then
-            was_local_tp="false"
-            echo "  Pulling ${image} for scanning..."
-            if ! docker pull "${image}" >/dev/null 2>&1; then
-                if [ "${has_baseline}" = "true" ]; then
-                    printf '  %-35s  %-30s  %s\n' "${image}" "-" "(pull failed)"
-                else
-                    printf '  %-35s  %s\n' "${image}" "(pull failed)"
-                fi
-                continue
+        # Skip images that failed to pull earlier.
+        local pull_failed="false" pf=""
+        for pf in "${_scout_thirdparty_failed[@]+"${_scout_thirdparty_failed[@]}"}"; do
+            if [ "${pf}" = "${image}" ]; then pull_failed="true"; break; fi
+        done
+        if [ "${pull_failed}" = "true" ]; then
+            if [ "${has_baseline}" = "true" ]; then
+                printf '  %-48s %-24s %s\n' "${image}" "-" "(pull failed)"
+            else
+                printf '  %-48s %s\n' "${image}" "(pull failed)"
             fi
-            _scout_pulled_thirdparty+=("${image}")
+            continue
+        fi
+        if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            continue
         fi
         raw="$(_scout_scan_image "${image}")" || true
         summary="$(_scout_extract_summary "${raw}")" || true
         [ -n "${summary}" ] || summary="(scan failed)"
 
         if [ "${has_baseline}" = "true" ]; then
-            printf '  %-35s  %-30s  %s\n' "${image}" "(not modified)" "${summary}"
+            printf '  %-48s %-24s %s\n' "${image}" "(not modified)" "${summary}"
         else
-            printf '  %-35s  %s\n' "${image}" "${summary}"
+            printf '  %-48s %s\n' "${image}" "${summary}"
         fi
     done
 
