@@ -16,6 +16,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - Assume the system administrator has provisioned the corresponding non-example runtime file(s) on the target host, and that those files match their tracked `*_example*` counterparts unless explicitly documented otherwise.
 - The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
 - Treat this distribution as a full-stack, multi-container deployment that may contend with pre-existing Docker workloads (for example via host ports, network names, volumes, or maintenance automation). Operators are expected to validate coexistence in their own environment before production rollout.
+- For log triage, use the Admin Tools logging path first: prefer the Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs` sweeps. Fall back to direct container logs, internal log files, or Docker inspection only when the Admin Tools/Loki mechanism returns no data, appears stale/inconsistent with service state, or is itself suspected to be unhealthy.
 
 ## Where to look first
 
@@ -24,6 +25,7 @@ It is intentionally short. Deep context lives in the files it points to.
 3. **`docs/index.md`** -- full documentation index with cross-links to every doc.
 4. **`docs/QUALITY_SCORE.md`** -- current quality grades and debt priorities.
 5. **`docs/exec-plans/`** -- active and completed implementation plans.
+6. **`docs/operations/installation-permissions.md`** -- authoritative install/update/bootstrap permission and ownership model.
 
 ## Domain map
 
@@ -87,6 +89,39 @@ omeroweb_<name>/
 - The `omeroweb` container runs two processes via supervisord: OMERO.web and the Imaris Celery worker.
 - Job state files use `portalocker` for safe concurrent access on tmpfs.
 - The `pg-maintenance` sidecar uses `REINDEX CONCURRENTLY` (PostgreSQL 12+), never `VACUUM FULL`.
+
+## Operational pitfalls for AI agents
+
+### File ownership
+- `/opt/omero` is typically owned by `root`. Git operations (fetch, checkout, stash, push) will fail with `Permission denied` unless the agent's user has write access. Request `sudo chown -R <user>:<user> /opt/omero/.git` for git-only access, or `sudo chown -R <user>:<user> /opt/omero` for full file operations.
+- **Do not** `chown` bind-mounted data directories (`postgresdb/`, `omero_data/`, `omero_temp/`) to a non-service user — this breaks container runtime permissions. If you must `chown` the repo root, restore data directory ownership afterward via `installation/installation_script.sh` or targeted `chown` commands matching the UIDs in `docker-compose.yml`.
+
+### Git worktrees and finding commits
+- The repo uses git worktrees. Active and prunable worktrees live under `/tmp/omero-*`. Standalone clones may also exist there (e.g. `/tmp/omero-alpha-publish`).
+- If a commit hash is not found in the main repo (`git cat-file -t <hash>` fails), search worktrees and standalone clones: `find /tmp -maxdepth 2 -name ".git" 2>/dev/null` then `git -C <path> log --all --oneline | grep <hash>`.
+- To bring a commit from another local repo: `git fetch <path> <hash>` then `git cherry-pick FETCH_HEAD`.
+- Always `git fetch origin <branch>:refs/remotes/origin/<branch> --force` before rebasing to avoid stale tracking refs.
+
+### Docker compose requires secrets
+- `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
+
+### Testing
+- Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
+- Correct pattern:
+  ```bash
+  python3 -m pytest tests/ -v
+  python3 -m pytest omero_plugin_common/tests/ -v
+  python3 -m pytest omeroweb_imaris_connector/tests/ -v
+  python3 -m pytest omeroweb_admin_tools/tests/ -v
+  python3 -m pytest omeroweb_omp_plugin/tests/ -v
+  python3 -m pytest omeroweb_upload/tests/ -v
+  ```
+- Always also run: `python3 tools/lint_docs_structure.py`
+
+### Log checking
+- Follow AGENTS.md log triage order: Loki first, then container logs.
+- Loki query for errors in last hour: `curl -s "http://localhost:3100/loki/api/v1/query_range?query=%7Bjob%3D%22docker%22%7D%20%7C%3D%20%60error%60&start=$(date -u -d '1 hour ago' +%s)000000000&end=$(date -u +%s)000000000&limit=50"`
+- Container logs fallback: `docker logs <container> --since 1h --tail 30`
 
 ## Knowledge maintenance
 
