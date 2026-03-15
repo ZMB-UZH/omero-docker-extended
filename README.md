@@ -22,11 +22,11 @@ For the official OMERO documentation, release notes, and guides, your first poin
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
 - Upload plugin (`omeroweb_upload`)
+- Admin tools (`omeroweb_admin_tools`)
 
 ### 🛠️ Works partially / under active development
 
 - OMP plugin (`omeroweb_omp_plugin`)
-- Admin tools (`omeroweb_admin_tools`, root user only per design)
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
