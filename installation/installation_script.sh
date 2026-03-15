@@ -2210,13 +2210,6 @@ if ! cleanup_local_build_cache_if_disabled; then
     exit 1
 fi
 
-# Phase 1: Pull and scan upstream base images for baseline (only when cache disabled).
-run_docker_scout_baseline_scan
-
-if ! run_image_build; then
-    exit 1
-fi
-
 # ---------------------------------------------------------------------------
 # Docker Scout vulnerability scanning
 #
@@ -2390,6 +2383,13 @@ run_docker_scout_baseline_scan() {
     echo "Baseline scan complete."
     echo ""
 }
+
+# Phase 1: Pull and scan upstream base images for baseline (only when cache disabled).
+run_docker_scout_baseline_scan
+
+if ! run_image_build; then
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Phase 2: Post-build vulnerability summary
