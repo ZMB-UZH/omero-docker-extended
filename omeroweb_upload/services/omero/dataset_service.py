@@ -2,7 +2,6 @@
 Dataset management for OMERO upload workflow.
 """
 import logging
-import re
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 
@@ -148,10 +147,6 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     dataset_map[name] = dataset_id
     return dataset_id
 
-
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
-
-
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     cmd = [OMERO_CLI]
     cmd.extend(subcommand)
@@ -161,6 +156,7 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
+    return cmd
 
 
 def _iter_accessible_projects(conn):

@@ -12,7 +12,12 @@ from ..services.core import (
 )
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_json_body, require_non_root_user
+from ..views.utils import (
+    build_omero_cli_base_command,
+    load_json_body,
+    require_non_root_user,
+    validate_user_password,
+)
 from ..strings import errors as error_messages
 logger = logging.getLogger(__name__)
 
@@ -40,36 +45,11 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         if not password:
             return JsonResponse({"error": error_messages.missing_password()}, status=400)
 
-        username = conn.getUser().getName()
-
-        # 1) LOGOUT first to clear any cached sessions
-        subprocess.run(
-            [OMERO, "logout"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        # 2) LOGIN to the SECURE server (fresh login, no cached session)
-        login_cmd = [
-            OMERO, "login",
-            "-s", "omeroserver",
-            "-u", username,
-            "-w", password,
-            "-p", "4064",
-        ]
-
-        login = subprocess.run(
-            login_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-
-        if login.returncode != 0:
+        valid, _ = validate_user_password(conn, password)
+        if not valid:
             logger.warning(
-                "OMERO CLI login failed for delete_plugin_keyvaluepairs user %s: rc=%s stdout=%r stderr=%r",
-                username,
-                login.returncode,
-                login.stdout,
-                login.stderr,
+                "OMERO password validation failed for delete_plugin_keyvaluepairs user %s",
+                conn.getUser().getName(),
             )
             return JsonResponse(
                 {
@@ -78,177 +58,171 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 }
             )
 
-        try:
-            images = collect_images_in_project(conn, project_id)
-            if not images:
-                return JsonResponse(
-                    {
-                        "ok": True,
-                        "deleted_images": 0,
-                        "deleted_annotations": 0,
-                        "errors": [],
-                    }
+        cli_base_cmd = build_omero_cli_base_command(conn)
+
+        images = collect_images_in_project(conn, project_id)
+        if not images:
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "deleted_images": 0,
+                    "deleted_annotations": 0,
+                    "errors": [],
+                }
+            )
+
+        allowed, remaining = check_major_action_rate_limit(request, conn)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
+
+        deleted_annotations = 0
+        deleted_images = 0
+        deletion_errors = []
+
+        for img in images:
+            try:
+                iid = get_id(img)
+                plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
+            except Exception as e:
+                logger.warning(
+                    "Cannot resolve annotations for image %s: %s",
+                    sanitize_log_value(get_id(img)),
+                    sanitize_log_value(e),
                 )
-
-            allowed, remaining = check_major_action_rate_limit(request, conn)
-            if not allowed:
-                return JsonResponse(
-                    {"error": build_rate_limit_message(remaining)},
-                    status=429,
+                deletion_errors.append(
+                    {"image": get_id(img), "error": error_messages.unexpected_error()}
                 )
+                continue
 
-            deleted_annotations = 0
-            deleted_images = 0
-            deletion_errors = []
+            if not plugin_ann_ids:
+                continue
 
-            for img in images:
+            removed_for_image = False
+
+            for aid in plugin_ann_ids:
                 try:
-                    iid = get_id(img)
-                    plugin_ann_ids = find_plugin_annotation_ids(conn, iid)
-                except Exception as e:
-                    logger.warning(
-                        "Cannot resolve annotations for image %s: %s",
-                        sanitize_log_value(get_id(img)),
-                        sanitize_log_value(e),
-                    )
-                    deletion_errors.append(
-                        {"image": get_id(img), "error": error_messages.unexpected_error()}
-                    )
-                    continue
-
-                if not plugin_ann_ids:
-                    continue
-
-                removed_for_image = False
-
-                for aid in plugin_ann_ids:
-                    try:
-                        link_ids = find_annotation_link_ids(conn, aid)
-                        for lid in link_ids:
-                            # Explicitly cast to int to prevent command injection
-                            link_cmd = [
-                                OMERO,
-                                "delete",
-                                f"ImageAnnotationLink:{int(lid)}",
-                                "--force",
-                            ]
-                            link_result = subprocess.run(
-                                link_cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                text=True,
-                            )
-                            if link_result.returncode != 0:
-                                logger.warning(
-                                    "Failed to delete annotation link %s for image %s annotation %s: rc=%s stdout=%r stderr=%r",
-                                    lid,
-                                    iid,
-                                    aid,
-                                    link_result.returncode,
-                                    link_result.stdout,
-                                    link_result.stderr,
-                                )
-                                deletion_errors.append(
-                                    {
-                                        "image": iid,
-                                        "annotation": aid,
-                                        "link": lid,
-                                        "error": error_messages.unable_delete_plugin_annotations(),
-                                    }
-                                )
-
-                        remaining_links = find_annotation_link_ids(conn, aid)
-                        if remaining_links:
-                            deletion_errors.append(
-                                {
-                                    "image": iid,
-                                    "annotation": aid,
-                                    "links_remaining": remaining_links,
-                                    "error": error_messages.annotation_links_still_exist(),
-                                }
-                            )
-                            continue
-
-                        # Explicitly cast to int to prevent command injection
-                        cmd = [
-                            OMERO,
+                    link_ids = find_annotation_link_ids(conn, aid)
+                    for lid in link_ids:
+                        link_cmd = [
+                            *cli_base_cmd,
                             "delete",
-                            f"Annotation:{int(aid)}",
+                            f"ImageAnnotationLink:{int(lid)}",
                             "--force",
                         ]
-
-                        result = subprocess.run(
-                            cmd,
+                        link_result = subprocess.run(
+                            link_cmd,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             text=True,
+                            stdin=subprocess.DEVNULL,
                         )
-
-                        if result.returncode != 0:
+                        if link_result.returncode != 0:
                             logger.warning(
-                                "Failed to delete plugin annotation %s for image %s: rc=%s stdout=%r stderr=%r",
-                                aid,
+                                "Failed to delete annotation link %s for image %s annotation %s: rc=%s stdout=%r stderr=%r",
+                                lid,
                                 iid,
-                                result.returncode,
-                                result.stdout,
-                                result.stderr,
+                                aid,
+                                link_result.returncode,
+                                link_result.stdout,
+                                link_result.stderr,
                             )
                             deletion_errors.append(
                                 {
                                     "image": iid,
                                     "annotation": aid,
+                                    "link": lid,
                                     "error": error_messages.unable_delete_plugin_annotations(),
                                 }
                             )
-                            continue
 
-                        ann_obj = conn.getObject("MapAnnotation", int(aid))
-                        if ann_obj is not None:
-                            deletion_errors.append(
-                                {
-                                    "image": iid,
-                                    "annotation": aid,
-                                    "error": error_messages.annotation_still_exists(),
-                                }
-                            )
-                            continue
+                    remaining_links = find_annotation_link_ids(conn, aid)
+                    if remaining_links:
+                        deletion_errors.append(
+                            {
+                                "image": iid,
+                                "annotation": aid,
+                                "links_remaining": remaining_links,
+                                "error": error_messages.annotation_links_still_exist(),
+                            }
+                        )
+                        continue
 
-                        deleted_annotations += 1
-                        removed_for_image = True
-                    except Exception as e:
+                    cmd = [
+                        *cli_base_cmd,
+                        "delete",
+                        f"Annotation:{int(aid)}",
+                        "--force",
+                    ]
+
+                    result = subprocess.run(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        stdin=subprocess.DEVNULL,
+                    )
+
+                    if result.returncode != 0:
                         logger.warning(
-                            "Error deleting plugin annotation %s on image %s: %s",
-                            sanitize_log_value(aid),
-                            sanitize_log_value(iid),
-                            sanitize_log_value(e),
+                            "Failed to delete plugin annotation %s for image %s: rc=%s stdout=%r stderr=%r",
+                            aid,
+                            iid,
+                            result.returncode,
+                            result.stdout,
+                            result.stderr,
                         )
                         deletion_errors.append(
                             {
                                 "image": iid,
                                 "annotation": aid,
-                                "error": error_messages.unexpected_error(),
+                                "error": error_messages.unable_delete_plugin_annotations(),
                             }
                         )
                         continue
 
-                if removed_for_image:
-                    deleted_images += 1
+                    ann_obj = conn.getObject("MapAnnotation", int(aid))
+                    if ann_obj is not None:
+                        deletion_errors.append(
+                            {
+                                "image": iid,
+                                "annotation": aid,
+                                "error": error_messages.annotation_still_exists(),
+                            }
+                        )
+                        continue
 
-            return JsonResponse(
-                {
-                    "ok": True,
-                    "deleted_images": deleted_images,
-                    "deleted_annotations": deleted_annotations,
-                    "errors": deletion_errors,
-                }
-            )
-        finally:
-            subprocess.run(
-                [OMERO, "logout"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+                    deleted_annotations += 1
+                    removed_for_image = True
+                except Exception as e:
+                    logger.warning(
+                        "Error deleting plugin annotation %s on image %s: %s",
+                        sanitize_log_value(aid),
+                        sanitize_log_value(iid),
+                        sanitize_log_value(e),
+                    )
+                    deletion_errors.append(
+                        {
+                            "image": iid,
+                            "annotation": aid,
+                            "error": error_messages.unexpected_error(),
+                        }
+                    )
+                    continue
+
+            if removed_for_image:
+                deleted_images += 1
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "deleted_images": deleted_images,
+                "deleted_annotations": deleted_annotations,
+                "errors": deletion_errors,
+            }
+        )
 
     except Exception as e:
         logger.error(

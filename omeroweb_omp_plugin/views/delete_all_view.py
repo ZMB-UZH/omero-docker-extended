@@ -8,7 +8,12 @@ import logging
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
 from ..constants import OMERO_CLI
 from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
-from ..views.utils import load_json_body, require_non_root_user
+from ..views.utils import (
+    build_omero_cli_base_command,
+    load_json_body,
+    require_non_root_user,
+    validate_user_password,
+)
 from ..strings import errors as error_messages
 
 logger = logging.getLogger(__name__)
@@ -40,40 +45,11 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         if not password:
             return JsonResponse({"error": error_messages.missing_password()}, status=400)
 
-        # OMERO.web username from current web session
-        username = conn.getUser().getName()
-
-        # 1) LOGOUT first to clear any cached sessions
-        subprocess.run(
-            [OMERO, "logout"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        # 2) LOGIN to the SECURE server (fresh login, no cached session)
-        login_cmd = [
-            OMERO, "login",
-            "-s", "omeroserver",
-            "-u", username,
-            "-w", password,
-            "-p", "4064",
-        ]
-
-        login = subprocess.run(
-            login_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        if login.returncode != 0:
+        valid, _ = validate_user_password(conn, password)
+        if not valid:
             logger.warning(
-                "OMERO CLI login failed for delete_all_keyvaluepairs user %s: rc=%s stdout=%r stderr=%r",
-                username,
-                login.returncode,
-                login.stdout,
-                login.stderr,
+                "OMERO password validation failed for delete_all_keyvaluepairs user %s",
+                conn.getUser().getName(),
             )
             return JsonResponse(
                 {
@@ -82,100 +58,90 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
                 }
             )
 
-        try:
-            # 2) Collect all images for the project
-            images = collect_images_in_project(conn, project_id)
-            image_ids = [str(get_id(img)) for img in images]
+        cli_base_cmd = build_omero_cli_base_command(conn)
 
-            if not image_ids:
-                return JsonResponse(
-                    {
-                        "ok": True,
-                        "deleted_count": 0,
-                        "errors": [],
-                        "note": error_messages.no_images_found(),
-                    }
-                )
+        images = collect_images_in_project(conn, project_id)
+        image_ids = [str(get_id(img)) for img in images]
 
-            allowed, remaining = check_major_action_rate_limit(request, conn)
-            if not allowed:
-                return JsonResponse(
-                    {"error": build_rate_limit_message(remaining)},
-                    status=429,
-                )
-
-            deleted_count = 0
-            deletion_errors = []
-
-            # 3) Delete in batches using a single CLI call per chunk
-            # DO NOT increase CHUNK too much else the users might be tempted to interrupt the process
-            CHUNK = 100
-            for i in range(0, len(image_ids), CHUNK):
-                # Explicitly cast to int and then str to ensure no shell injection characters
-                # are present in the IDs before passing to the command line.
-                chunk_ids = [str(int(x)) for x in image_ids[i:i + CHUNK]]
-                target = "Image/Annotation:" + ",".join(chunk_ids)
-                cmd = [
-                    OMERO,
-                    "delete",
-                    target,
-                    "--include",
-                    "MapAnnotation",
-                    "--include",
-                    "ImageAnnotationLink",
-                    "--force",
-                ]
-
-                result = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-
-                if result.returncode != 0:
-                    logger.warning(
-                        "Failed to delete map annotations for image chunk %s: rc=%s stdout=%r stderr=%r",
-                        chunk_ids,
-                        result.returncode,
-                        result.stdout,
-                        result.stderr,
-                    )
-                    deletion_errors.append(
-                        {
-                            "ids": chunk_ids,
-                            "error": error_messages.unable_delete_annotations(),
-                        }
-                    )
-                    continue
-
-                for image_id in chunk_ids:
-                    remaining = find_map_annotation_ids(conn, image_id)
-                    if remaining:
-                        deletion_errors.append(
-                            {
-                                "ids": [image_id],
-                                "error": error_messages.map_annotations_still_present(),
-                                "remaining": remaining,
-                            }
-                        )
-                        continue
-                    deleted_count += 1
-
+        if not image_ids:
             return JsonResponse(
                 {
                     "ok": True,
-                    "deleted_count": deleted_count,
-                    "errors": deletion_errors,
+                    "deleted_count": 0,
+                    "errors": [],
+                    "note": error_messages.no_images_found(),
                 }
             )
-        finally:
-            subprocess.run(
-                [OMERO, "logout"],
+
+        allowed, remaining = check_major_action_rate_limit(request, conn)
+        if not allowed:
+            return JsonResponse(
+                {"error": build_rate_limit_message(remaining)},
+                status=429,
+            )
+
+        deleted_count = 0
+        deletion_errors = []
+
+        CHUNK = 100
+        for i in range(0, len(image_ids), CHUNK):
+            chunk_ids = [str(int(x)) for x in image_ids[i:i + CHUNK]]
+            target = "Image/Annotation:" + ",".join(chunk_ids)
+            cmd = [
+                *cli_base_cmd,
+                "delete",
+                target,
+                "--include",
+                "MapAnnotation",
+                "--include",
+                "ImageAnnotationLink",
+                "--force",
+            ]
+
+            result = subprocess.run(
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                stdin=subprocess.DEVNULL,
             )
+
+            if result.returncode != 0:
+                logger.warning(
+                    "Failed to delete map annotations for image chunk %s: rc=%s stdout=%r stderr=%r",
+                    chunk_ids,
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
+                )
+                deletion_errors.append(
+                    {
+                        "ids": chunk_ids,
+                        "error": error_messages.unable_delete_annotations(),
+                    }
+                )
+                continue
+
+            for image_id in chunk_ids:
+                remaining = find_map_annotation_ids(conn, image_id)
+                if remaining:
+                    deletion_errors.append(
+                        {
+                            "ids": [image_id],
+                            "error": error_messages.map_annotations_still_present(),
+                            "remaining": remaining,
+                        }
+                    )
+                    continue
+                deleted_count += 1
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "deleted_count": deleted_count,
+                "errors": deletion_errors,
+            }
+        )
 
     except Exception as e:
         logger.error(
