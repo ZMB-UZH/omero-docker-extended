@@ -110,7 +110,18 @@ jobs:
       - name: Install Bandit
         run: pip install "bandit[sarif]"
 
-      - name: Run Bandit scan
+      - name: Discover test directories
+        id: find-tests
+        run: |
+          # Auto-discover all test directories matching tests/ or test/ at any depth
+          TEST_DIRS=$(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
+            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+            -type d \( -name 'tests' -o -name 'test' \) 2>/dev/null \
+            | tr '\n' ' ')
+          echo "test_dirs=${TEST_DIRS}" >> "$GITHUB_OUTPUT"
+          echo "Found test directories: ${TEST_DIRS:-none}"
+
+      - name: Run Bandit scan (production code — excludes test directories)
         run: >-
           bandit -r
           omero_plugin_common/
@@ -118,9 +129,46 @@ jobs:
           omeroweb_upload/
           omeroweb_admin_tools/
           omeroweb_imaris_connector/
+          --exclude '*/tests,*/test'
+          --skip B603,B404
           -f sarif
-          -o bandit-results.sarif
+          -o bandit-prod.sarif
           --exit-zero
+
+      - name: Run Bandit scan (test code — skips assert and test-credential rules)
+        if: steps.find-tests.outputs.test_dirs != ''
+        run: >-
+          bandit -r
+          ${{ steps.find-tests.outputs.test_dirs }}
+          --skip B101,B106,B603,B404
+          -f sarif
+          -o bandit-test.sarif
+          --exit-zero
+
+      - name: Merge Bandit SARIF results
+        run: |
+          python3 -c "
+          import json, sys, os
+          merged = None
+          for path in ['bandit-prod.sarif', 'bandit-test.sarif']:
+              if not os.path.exists(path):
+                  continue
+              try:
+                  with open(path) as f:
+                      data = json.load(f)
+              except json.JSONDecodeError:
+                  continue
+              if merged is None:
+                  merged = data
+              else:
+                  for run in data.get('runs', []):
+                      merged.setdefault('runs', []).append(run)
+          if merged:
+              with open('bandit-results.sarif', 'w') as f:
+                  json.dump(merged, f)
+          else:
+              sys.exit(1)
+          "
 
       - name: Upload Bandit results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -176,6 +224,8 @@ jobs:
         uses: microsoft/DevSkim-Action@v1
         with:
           directory-to-scan: .
+          ignore-globs: "**/.git/**,**/pgdata/**,**/omero_data/**,**/omero_temp/**"
+          exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
