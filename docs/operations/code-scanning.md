@@ -123,7 +123,7 @@ Most Note-level findings have been resolved through a combination of code fixes 
 
 | Rule | Original | Now | Resolution |
 |---|---|---|---|
-| `B101` (Bandit) | 489 | 0 | **Eliminated** — skipped in test directories only |
+| `B101` (Bandit) | 489 | 0 | **Eliminated** — test directories auto-discovered and excluded from production scan; B101 skipped in test scan |
 | `DS162092` (DevSkim) | 46 | 0 | **Eliminated** — excluded from DevSkim (Docker infrastructure) |
 | `B603` (Bandit) | 12 | 0 | **Eliminated** — skipped globally (shell=False is secure) |
 | `B404` (Bandit) | 9 | 0 | **Eliminated** — skipped globally (import is informational) |
@@ -203,7 +203,7 @@ These categories may contain genuine issues that should be reviewed:
 
 5. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
-6. **Adding new plugins or test directories**: The Bandit workflow auto-discovers test directories using `find`. If you add a new plugin, ensure its test directory is named `tests/` or `test/` so the workflow automatically applies test-appropriate rule exclusions (B101, B106). You do NOT need to update the workflow file — discovery is dynamic. However, you MUST add the new plugin's source directory to the `bandit -r` target list in both the production and test-discovery steps.
+6. **Adding new plugins or test directories**: The Bandit workflow auto-discovers both scan targets and test directories at runtime. Any directory at the repo root matching `omero_*` or `omeroweb_*` that contains `__init__.py` is automatically included in the scan. Test directories named `tests/` or `test/` within those packages are auto-discovered and excluded from the production scan (and scanned separately with B101/B106 skipped). **You do NOT need to update the workflow file** — discovery is fully dynamic. Just follow the naming convention.
 
 7. **Commit message convention**: When fixing a security finding, use the commit message format:
    ```
