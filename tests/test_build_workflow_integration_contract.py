@@ -109,6 +109,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('"${expected_tmp_dir}/runtime"', script_text)
         self.assertIn('export TMPDIR="${runtime_tmp_dir}"', script_text)
         self.assertIn('ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"', script_text)
+        self.assertIn('local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"', script_text)
+        self.assertIn('rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}"', script_text)
+
+    def test_installation_script_preserves_server_temp_namespace_ownership(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ensure_omero_tmp_layout()", script_text)
+        self.assertIn('if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}"', script_text)
+        self.assertIn('if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text)
+        self.assertIn('chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"', script_text)
+        self.assertNotIn('chown_tree_or_die "${OMERO_TMP_PATH}"', script_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
@@ -147,6 +159,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("! -name 'github_pull_project_bash'", script_text)
+
+    # ------------------------------------------------------------------
+    # CrowdSec conditional probe injection
+    # ------------------------------------------------------------------
+
+    def test_prometheus_yml_contains_crowdsec_probe_marker(self) -> None:
+        prom_text = (self.repo_root / "monitoring" / "prometheus" / "prometheus.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("# CROWDSEC_PROBE_MARKER", prom_text)
+        self.assertNotIn(
+            "http://crowdsec:8080/health",
+            prom_text,
+            "Checked-in prometheus.yml must not contain a hard-coded CrowdSec probe; "
+            "the installation script injects it at runtime when CrowdSec is enabled.",
+        )
+
+    def test_installation_script_injects_crowdsec_probe_conditionally(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("CROWDSEC_PROBE_MARKER", script_text)
+        self.assertIn("http://crowdsec:8080/health", script_text)
+        self.assertIn("Injected CrowdSec health probe into prometheus.yml", script_text)
+        self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
+
+    def test_is_crowdsec_enabled_rejects_both_placeholder_values(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"CHANGEVALUE2"', script_text)
+        self.assertIn('"CHANGEVALUE3"', script_text)
 
 
 if __name__ == "__main__":
