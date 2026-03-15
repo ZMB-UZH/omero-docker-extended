@@ -143,57 +143,75 @@ jobs:
       - name: Install Bandit
         run: pip install "bandit[sarif]"
 
+      - name: Discover scan targets and test directories
+        id: discover
+        run: |
+          # Auto-discover plugin/library directories at repo root (omero_*/omeroweb_* convention)
+          SCAN_DIRS=$(find . -maxdepth 1 -type d \( -name 'omero_*' -o -name 'omeroweb_*' \) \
+            | sed 's|^\./||' | sort | tr '\n' ' ')
+          SCAN_DIRS=$(echo "$SCAN_DIRS" | xargs)
+          echo "scan_dirs=${SCAN_DIRS}" >> "$GITHUB_OUTPUT"
+
+          # Auto-discover test directories within those packages
+          TEST_DIRS=""
+          EXCLUDE_CSV=""
+          if [ -n "$SCAN_DIRS" ]; then
+            # shellcheck disable=SC2086
+            TEST_DIRS=$(find $SCAN_DIRS -type d \( -name 'tests' -o -name 'test' \) 2>/dev/null \
+              | sort | tr '\n' ' ')
+            TEST_DIRS=$(echo "$TEST_DIRS" | xargs)
+            if [ -n "$TEST_DIRS" ]; then
+              EXCLUDE_CSV=$(echo "$TEST_DIRS" | tr ' ' ',')
+            fi
+          fi
+          echo "test_dirs=${TEST_DIRS}" >> "$GITHUB_OUTPUT"
+          echo "exclude_csv=${EXCLUDE_CSV}" >> "$GITHUB_OUTPUT"
+
+          echo "Scan directories: ${SCAN_DIRS:-none}"
+          echo "Test directories: ${TEST_DIRS:-none}"
+          echo "Exclude CSV for Bandit: ${EXCLUDE_CSV:-none}"
+
       - name: Audit — list files in scan scope
+        if: steps.discover.outputs.scan_dirs != ''
         run: |
           echo "::group::Bandit scan scope"
           echo "Scanning Python source files for security issues."
+          echo "Discovered scan directories: ${{ steps.discover.outputs.scan_dirs }}"
+          echo "Discovered test directories: ${{ steps.discover.outputs.test_dirs }}"
           echo "--- Production Python files ---"
-          find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
-            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+          find ${{ steps.discover.outputs.scan_dirs }} \
             -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | sort
           echo "--- Test Python files ---"
-          find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
-            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+          find ${{ steps.discover.outputs.scan_dirs }} \
             -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | sort
           echo "--- File counts ---"
-          echo "Production: $(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
-            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+          echo "Production: $(find ${{ steps.discover.outputs.scan_dirs }} \
             -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | wc -l)"
-          echo "Test: $(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
-            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+          echo "Test: $(find ${{ steps.discover.outputs.scan_dirs }} \
             -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | wc -l)"
           echo "::endgroup::"
 
-      - name: Discover test directories
-        id: find-tests
-        run: |
-          # Auto-discover all test directories matching tests/ or test/ at any depth
-          TEST_DIRS=$(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
-            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
-            -type d \( -name 'tests' -o -name 'test' \) 2>/dev/null \
-            | tr '\n' ' ')
-          echo "test_dirs=${TEST_DIRS}" >> "$GITHUB_OUTPUT"
-          echo "Found test directories: ${TEST_DIRS:-none}"
-
       - name: Run Bandit scan (production code — excludes test directories)
-        run: >-
-          bandit -r
-          omero_plugin_common/
-          omeroweb_omp_plugin/
-          omeroweb_upload/
-          omeroweb_admin_tools/
-          omeroweb_imaris_connector/
-          --exclude '*/tests,*/test'
-          --skip B603,B404
-          -f sarif
-          -o bandit-prod.sarif
-          --exit-zero
+        if: steps.discover.outputs.scan_dirs != ''
+        run: |
+          EXCLUDE_ARG=""
+          if [ -n "${{ steps.discover.outputs.exclude_csv }}" ]; then
+            EXCLUDE_ARG="--exclude ${{ steps.discover.outputs.exclude_csv }}"
+          fi
+          # shellcheck disable=SC2086
+          bandit -r \
+            ${{ steps.discover.outputs.scan_dirs }} \
+            $EXCLUDE_ARG \
+            --skip B603,B404 \
+            -f sarif \
+            -o bandit-prod.sarif \
+            --exit-zero
 
       - name: Run Bandit scan (test code — skips assert and test-credential rules)
-        if: steps.find-tests.outputs.test_dirs != ''
+        if: steps.discover.outputs.test_dirs != ''
         run: >-
           bandit -r
-          ${{ steps.find-tests.outputs.test_dirs }}
+          ${{ steps.discover.outputs.test_dirs }}
           --skip B101,B106,B603,B404
           -f sarif
           -o bandit-test.sarif
@@ -204,14 +222,14 @@ jobs:
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
-        if: always()
+        if: always() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
-        if: always() && steps.find-tests.outputs.test_dirs != ''
+        if: always() && steps.discover.outputs.test_dirs != ''
 
   hadolint:
     name: Hadolint (${{ matrix.dockerfile }})
