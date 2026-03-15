@@ -15,7 +15,6 @@ from .config import get_job_service_credentials, use_job_service_session
 from .imaris_service import (
     EXPORT_TIMEOUT,
     _find_script_id,
-    _normalize_job_state,
     _serialize_outputs,
 )
 
@@ -74,7 +73,7 @@ def _get_connection_session_key(conn) -> str | None:
                 if session_id:
                     return str(session_id)
             except Exception:
-                pass
+                logger.debug("Failed to get session key via conn.%s", attr_name)
     client = getattr(conn, "c", None)
     getter = getattr(client, "getSessionId", None)
     if callable(getter):
@@ -83,7 +82,7 @@ def _get_connection_session_key(conn) -> str | None:
             if session_id:
                 return str(session_id)
         except Exception:
-            pass
+            logger.debug("Failed to get session key via conn.c.getSessionId")
     return None
 
 

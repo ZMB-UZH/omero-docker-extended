@@ -4,9 +4,8 @@ import stat
 import sys
 import tempfile
 import types
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, mock, main as unittest_main
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -89,7 +88,7 @@ from omeroweb_admin_tools.views import index_view
 from omeroweb_admin_tools.views import utils as admin_utils
 
 
-class AdminToolsSecurityRegressionTests(unittest.TestCase):
+class AdminToolsSecurityRegressionTests(TestCase):
     def test_normalize_proxy_request_target_rejects_traversal(self):
         with self.assertRaises(ValueError):
             index_view._normalize_proxy_request_target("../api/admin")
@@ -161,4 +160,4 @@ class AdminToolsSecurityRegressionTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest_main()
