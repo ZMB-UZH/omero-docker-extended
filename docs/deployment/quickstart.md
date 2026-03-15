@@ -125,6 +125,18 @@ bash installation/installation_script.sh
 bash github_pull_project_bash
 ```
 
+### Post-build vulnerability report
+
+After every build, the installation script runs Docker Scout to report known CVEs in the `omeroserver` and `omeroweb` images. When the build ran without cache (fresh pull), the report includes a baseline comparison against the upstream base images.
+
+To enable optional security hardening (OS and Python package updates):
+
+```bash
+APPLY_SECURITY_HARDENING=1 bash installation/installation_script.sh
+```
+
+Or answer "yes" to the interactive prompt during installation. See `docs/SECURITY.md` for details.
+
 ## 3) Start the Platform
 
 ```bash

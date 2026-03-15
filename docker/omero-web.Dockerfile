@@ -298,24 +298,29 @@ RUN set -euo pipefail; \
         jinja2>=3.1.6 \
         pyopenssl>=24.0.0
 
-# Optional (off by default): broad security upgrade of ALL outdated Python packages
-# WARNING:
-# - More aggressive than venv tooling updates — upgrades every outdated package
-# - May affect OMERO.web compatibility
-# - Enable only for security hardening
-# ----------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Final security hardening pass (APPLY_SECURITY_HARDENING=1)
+#
+# Runs AFTER all dnf installs and pip installs are complete, so that every
+# transitive dependency introduced by earlier layers is covered.
+# ---------------------------------------------------------------------------
 ARG APPLY_SECURITY_HARDENING=0
 RUN set -euo pipefail; \
     if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
-        echo "Skipping broad Python security upgrade (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
+        echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
         exit 0; \
     fi; \
+    echo "=== Final security hardening: OS packages (dnf) ==="; \
+    dnf -y update || echo "WARNING: dnf update failed (non-fatal for hardening)."; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true; \
+    echo "=== Final security hardening: Python packages (pip) ==="; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
-        echo "ERROR: Could not find valid OMERO.web venv" >&2; \
-        exit 1; \
+        echo "WARNING: Could not find valid OMERO.web venv; skipping Python hardening." >&2; \
+        exit 0; \
     fi; \
-    echo "Upgrading all outdated Python packages in ${VENV_DIR} for security hardening..."; \
+    echo "Upgrading all outdated Python packages in ${VENV_DIR}..."; \
     OUTDATED="$("${VENV_DIR}/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
     PACKAGES="$(printf '%s' "${OUTDATED}" | "${VENV_DIR}/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice','omero-web','django')))" 2>/dev/null || true)"; \
     if [[ -n "${PACKAGES}" ]]; then \

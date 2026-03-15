@@ -85,33 +85,10 @@ RUN set -euo pipefail; \
         "${VENV_DIR}/bin/python" -c "import importlib.metadata as metadata; import setuptools, wheel, cryptography, urllib3; print(\"Python packaging import check succeeded (setuptools={})\".format(metadata.version(\"setuptools\")))"; \
     done
 
-# Optional (off by default): broad security upgrade of ALL outdated Python packages
-# WARNING:
-# - More aggressive than venv tooling updates — upgrades every outdated package
-# - May affect OMERO.server compatibility
-# - Enable only for security hardening
-# ----------------------------------------------------------
+# APPLY_SECURITY_HARDENING is declared here for layer ordering but the
+# broad upgrade runs at the end of the Dockerfile (after all pip/dnf installs)
+# so that every transitive dependency is covered.
 ARG APPLY_SECURITY_HARDENING=0
-RUN set -euo pipefail; \
-    if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
-        echo "Skipping broad Python security upgrade (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
-        exit 0; \
-    fi; \
-    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
-    for VENV_DIR in "${VENV_DIRS[@]}"; do \
-        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then continue; fi; \
-        echo "Upgrading all outdated Python packages in ${VENV_DIR} for security hardening..."; \
-        OUTDATED="$("${VENV_DIR}/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
-        PACKAGES="$(printf '%s' "${OUTDATED}" | "${VENV_DIR}/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice','setuptools')))" 2>/dev/null || true)"; \
-        if [[ -n "${PACKAGES}" ]]; then \
-            echo "Upgrading: ${PACKAGES}"; \
-            "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade ${PACKAGES} || \
-                echo "WARNING: Some package upgrades failed (non-fatal for hardening)."; \
-        else \
-            echo "All packages are up to date."; \
-        fi; \
-        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
-    done
 
 # Install OMERO.Figure PDF export dependencies in the OMERO.server virtualenv
 # ---------------------------------------------------------------------------
@@ -453,6 +430,47 @@ RUN set -euo pipefail; \
 # --------------------------------------------------------------------------------------
 HEALTHCHECK --interval=60s --timeout=30s --start-period=300s --retries=5 \
     CMD runuser -p -m -u omero-server -- sh -c 'set -eu; omero_bin=$(find /opt/omero/server -maxdepth 1 -type d -name "venv*" | sort -V | tail -n 1)/bin/omero; [ -x "${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found at ${omero_bin}" >&2; exit 127; }; exec "${omero_bin}" admin diagnostics'
+
+# ---------------------------------------------------------------------------
+# Final security hardening pass (APPLY_SECURITY_HARDENING=1)
+#
+# Runs AFTER all dnf installs and pip installs are complete, so that every
+# transitive dependency introduced by earlier layers is covered.
+# ---------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    if [[ "${APPLY_SECURITY_HARDENING}" != "1" ]]; then \
+        echo "Skipping final security hardening pass (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
+        exit 0; \
+    fi; \
+    echo "=== Final security hardening: OS packages (dnf) ==="; \
+    dnf_retry() { \
+        local attempt=1; \
+        while true; do \
+            if dnf -y --refresh --setopt=timeout=20 --setopt=retries=2 "$@"; then return 0; fi; \
+            if [[ "${attempt}" -ge 3 ]]; then echo "WARNING: dnf hardening update failed after 3 attempts (non-fatal)." >&2; return 0; fi; \
+            attempt=$((attempt + 1)); \
+            sleep 1; \
+        done; \
+    }; \
+    dnf_retry update || true; \
+    dnf clean all || true; \
+    rm -rf /var/cache/dnf /var/tmp/* || true; \
+    echo "=== Final security hardening: Python packages (pip) ==="; \
+    mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
+    for VENV_DIR in "${VENV_DIRS[@]}"; do \
+        if [[ ! -x "${VENV_DIR}/bin/python" ]]; then continue; fi; \
+        echo "Upgrading all outdated Python packages in ${VENV_DIR}..."; \
+        OUTDATED="$("${VENV_DIR}/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
+        PACKAGES="$(printf '%s' "${OUTDATED}" | "${VENV_DIR}/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice','setuptools')))" 2>/dev/null || true)"; \
+        if [[ -n "${PACKAGES}" ]]; then \
+            echo "Upgrading: ${PACKAGES}"; \
+            "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade ${PACKAGES} || \
+                echo "WARNING: Some package upgrades failed (non-fatal for hardening)."; \
+        else \
+            echo "All packages are up to date."; \
+        fi; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
+    done
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts
