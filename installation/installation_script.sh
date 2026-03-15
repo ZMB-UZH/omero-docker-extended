@@ -2215,78 +2215,189 @@ if ! run_image_build; then
 fi
 
 # ---------------------------------------------------------------------------
-# Docker Scout vulnerability scan (post-build)
+# Docker Scout vulnerability scanning (post-build)
 #
-# Runs after every successful build. When security hardening is enabled the
-# output lets the operator compare the hardened image against its base.
-# When Docker Scout is unavailable or not logged in, the scan is skipped
+# Runs after every successful build. For each main image (server, web):
+#   - Checks if the upstream base image (FROM line) exists locally.
+#     When cache is disabled Docker pulls it during the build, so it will
+#     be present. When cache is enabled the base image may not be local.
+#   - If the base image IS available, scans it and shows a before/after
+#     comparison (upstream baseline vs. built image).
+#   - If the base image is NOT available, shows only the built image scan.
+#     No extra pulls are performed solely for scanning.
+#
+# Docker Scout availability is checked once; if absent the scan is skipped
 # with an informational message — it never blocks the installation.
 # ---------------------------------------------------------------------------
+
+# Base images for the two main Dockerfiles (largest attack surface).
+# Populated by _scout_resolve_base_images() from the Dockerfiles so the
+# script stays in sync with pinned upstream tags without duplication.
+_SCOUT_SERVER_BASE_IMAGE=""
+_SCOUT_WEB_BASE_IMAGE=""
+
+_scout_is_available() {
+    command -v docker >/dev/null 2>&1 && docker scout version >/dev/null 2>&1
+}
+
+# _scout_extract_summary <raw_output>
+# Parses Docker Scout CVE output and returns a compact one-line summary.
+# Returns empty string (and non-zero) if parsing fails.
+_scout_extract_summary() {
+    local raw="${1:-}"
+    local summary=""
+
+    if [ -z "${raw}" ]; then return 1; fi
+
+    # Primary: the totals line near the end (e.g. "73 vulnerabilities found in 42 packages")
+    summary="$(printf '%s\n' "${raw}" | grep -E '[0-9]+ vulnerabilities found' | tail -1 || true)"
+    if [ -n "${summary}" ]; then
+        printf '%s' "${summary}"
+        return 0
+    fi
+
+    # Fallback: severity breakdown lines
+    summary="$(printf '%s\n' "${raw}" | tail -10 | grep -E '(CRITICAL|HIGH|MEDIUM|LOW)' | head -4 || true)"
+    if [ -n "${summary}" ]; then
+        printf '%s' "${summary}"
+        return 0
+    fi
+
+    # Last resort: detected-packages line
+    summary="$(printf '%s\n' "${raw}" | grep -m 1 -E 'Detected .* vulnerable' || true)"
+    if [ -n "${summary}" ]; then
+        printf '%s' "${summary}"
+        return 0
+    fi
+
+    return 1
+}
+
+# _scout_extract_base_image <dockerfile_path>
+# Reads the first FROM instruction and prints the image reference.
+_scout_extract_base_image() {
+    local dockerfile="${1:-}"
+    if [ ! -f "${dockerfile}" ]; then return 1; fi
+    grep -m 1 '^FROM ' "${dockerfile}" | awk '{print $2}'
+}
+
+# _scout_scan_image <image_ref> [timeout_seconds]
+# Runs `docker scout cves` and prints raw output. Returns 1 on failure/timeout.
+_scout_scan_image() {
+    local image="${1:-}"
+    local scan_timeout="${2:-180}"
+    local output=""
+
+    if [ -z "${image}" ]; then return 1; fi
+
+    output="$(timeout "${scan_timeout}" docker scout cves "local://${image}" 2>&1)" || true
+    if [ -z "${output}" ]; then return 1; fi
+
+    printf '%s' "${output}"
+    return 0
+}
+
+# _scout_resolve_base_images
+# Populates _SCOUT_SERVER_BASE_IMAGE and _SCOUT_WEB_BASE_IMAGE from
+# the Dockerfiles. Called once at the start of the post-build summary.
+_scout_resolve_base_images() {
+    local server_dockerfile="${REPO_ROOT_DIR}/docker/omero-server.Dockerfile"
+    local web_dockerfile="${REPO_ROOT_DIR}/docker/omero-web.Dockerfile"
+    _SCOUT_SERVER_BASE_IMAGE="$(_scout_extract_base_image "${server_dockerfile}")" || true
+    _SCOUT_WEB_BASE_IMAGE="$(_scout_extract_base_image "${web_dockerfile}")" || true
+}
+
+# ---------------------------------------------------------------------------
+# Post-build vulnerability summary
+#
+# For each main image (omero-server, omero-web):
+#   - If the upstream base image is available locally (always the case when
+#     cache is disabled, since Docker pulls it during the build), scan it
+#     and show the baseline alongside the built image for comparison.
+#   - If the base image is NOT available locally (cache hit reused layers
+#     without pulling), show only the built image results — no extra pulls
+#     are performed just for scanning.
+# ---------------------------------------------------------------------------
 run_docker_scout_summary() {
-    local image=""
-    local scout_output=""
-    local scout_summary=""
-    local -a scout_images=()
-    local scout_timeout=60
+    local image="" base_image="" scout_raw="" scout_summary=""
+    local base_raw="" base_summary=""
+    local has_baseline="false"
+    local -a scout_targets=()
+    local -a scout_bases=()
 
     echo ""
     echo "============================================"
-    echo "Docker Scout vulnerability overview"
+    echo "  Docker Scout — Vulnerability Report"
     echo "============================================"
 
-    if ! command -v docker >/dev/null 2>&1; then
-        echo "INFO: Docker CLI not found. Skipping vulnerability scan."
+    if ! _scout_is_available; then
+        echo "  Docker Scout is not installed or not accessible."
+        echo "  Install the Docker Scout CLI plugin to enable"
+        echo "  post-build vulnerability reports."
+        echo "============================================"
+        echo ""
         return 0
     fi
 
-    if ! docker scout version >/dev/null 2>&1; then
-        echo "INFO: Docker Scout is not available. Skipping vulnerability scan."
-        echo "INFO: Install the Docker Scout CLI plugin to see vulnerability summaries after builds."
-        return 0
-    fi
+    _scout_resolve_base_images
 
-    # Scan the two main custom-built images (largest attack surface)
-    scout_images=("${OMERO_SERVER_IMAGE}" "${OMERO_WEB_IMAGE}")
+    scout_targets=("${OMERO_SERVER_IMAGE}" "${OMERO_WEB_IMAGE}")
+    scout_bases=("${_SCOUT_SERVER_BASE_IMAGE}" "${_SCOUT_WEB_BASE_IMAGE}")
 
-    for image in "${scout_images[@]}"; do
+    for i in "${!scout_targets[@]}"; do
+        image="${scout_targets[$i]}"
+        base_image="${scout_bases[$i]:-}"
+
         if ! docker image inspect "${image}" >/dev/null 2>&1; then
-            echo "WARNING: Image '${image}' not found locally; skipping scan."
+            echo ""
+            echo "  [SKIP] ${image} — image not found locally."
             continue
         fi
 
         echo ""
-        echo "--- ${image} ---"
-        scout_output="$(timeout "${scout_timeout}" docker scout cves "local://${image}" 2>&1)" || true
+        echo "  Image: ${image}"
 
-        if [ -z "${scout_output}" ]; then
-            echo "WARNING: Docker Scout scan timed out or failed for ${image} (non-blocking)."
+        # --- Baseline: scan upstream base image if it exists locally ---
+        has_baseline="false"
+        if [ -n "${base_image}" ] && docker image inspect "${base_image}" >/dev/null 2>&1; then
+            base_raw="$(_scout_scan_image "${base_image}" 180)" || true
+            if [ -n "${base_raw}" ]; then
+                base_summary="$(_scout_extract_summary "${base_raw}")" || true
+                if [ -n "${base_summary}" ]; then
+                    has_baseline="true"
+                    echo "    Upstream base (${base_image}):"
+                    echo "      ${base_summary}"
+                fi
+            fi
+        fi
+
+        # --- Final built image ---
+        scout_raw="$(_scout_scan_image "${image}" 180)" || true
+        if [ -z "${scout_raw}" ]; then
+            echo "    Scan timed out or returned no data (non-blocking)."
             continue
         fi
 
-        # Extract only the final summary block (count lines at end of output)
-        scout_summary="$(printf '%s\n' "${scout_output}" | tail -10 | grep -E '(vulnerabilities found in|CRITICAL|HIGH|MEDIUM|LOW)' || true)"
+        scout_summary="$(_scout_extract_summary "${scout_raw}")" || true
         if [ -n "${scout_summary}" ]; then
-            printf '%s\n' "${scout_summary}"
-        else
-            # Fallback: try the detected line near the top
-            scout_summary="$(printf '%s\n' "${scout_output}" | grep -m 1 -E 'Detected .* vulnerable packages' || true)"
-            if [ -n "${scout_summary}" ]; then
-                printf '%s\n' "${scout_summary}"
-            else
-                echo "INFO: No vulnerability summary available for ${image}."
+            if [ "${has_baseline}" = "true" ]; then
+                echo "    Built image:"
             fi
+            echo "      ${scout_summary}"
+        else
+            echo "    No vulnerability summary could be extracted."
         fi
     done
 
     echo ""
+    echo "  ----------------------------------------"
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
-        echo "Security hardening was ENABLED for this build."
-        echo "Vulnerability counts above reflect images WITH OS security updates applied."
+        echo "  Security hardening: ENABLED"
+        echo "  Built images include OS-level and Python package security updates."
     else
-        echo "Security hardening was DISABLED for this build (default)."
-        echo "Re-run with security hardening enabled to apply OS security updates."
+        echo "  Security hardening: DISABLED (default)"
+        echo "  To reduce vulnerabilities, re-run with security hardening enabled."
     fi
-
     echo "============================================"
     echo ""
 }
