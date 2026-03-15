@@ -30,7 +30,7 @@ This project enables automated security scanning via `.github/workflows/security
 
 ## Alert inventory
 
-Last updated: 2026-03-15. Total open alerts: **~940** (55 Note-level findings resolved).
+Last updated: 2026-03-15. Total open alerts: **~940** pre-config, **~370** post-config (scanner configuration eliminates ~570 false positives).
 
 ### Summary by severity
 
@@ -42,7 +42,7 @@ Last updated: 2026-03-15. Total open alerts: **~940** (55 Note-level findings re
 | Medium | 38 | Fix within 30 days. |
 | Warning | 192 | Review during regular maintenance cycles. |
 | Low | 8 | Address opportunistically. |
-| Note | ~590 | Informational. Address during related refactoring. |
+| Note | ~20 | Informational. Most eliminated by scanner config (B101 test-only, DS162092 infra, B603/B404 informational). |
 
 ### Summary by scanner
 
@@ -110,25 +110,32 @@ Last updated: 2026-03-15. Total open alerts: **~940** (55 Note-level findings re
 | `dynamic-urllib-use` (Semgrep) | 10 | Dynamic URL construction with urllib |
 | Other | 9 | Hadolint DL3003/DL3018/DL3008/DL3002, Bandit B308/B703/B103, CodeQL warnings |
 
-### Note/informational findings (~590 remaining)
+### Note/informational findings (~20 remaining)
 
-55 Note-level findings were resolved by removing dead code, unused imports/variables, adding debug logging to empty except blocks, consolidating imports, replacing `ls` with `find` in Dockerfiles, and removing unused JS variables.
+Most Note-level findings have been resolved through a combination of code fixes and scanner configuration:
 
-| Rule | Count | Status |
-|---|---|---|
-| `B101` (Bandit) | 489 | Acceptable — `assert` is correct in test code |
-| `DS162092` (DevSkim) | 46 | Acceptable — localhost refs expected in Docker configs |
-| `B311` (Bandit) | 12 | Acceptable — `random` used for jitter/genetic algo, not crypto |
-| `B105` (Bandit) | 11 | Acceptable — env var name constants, not actual passwords |
-| `B404` (Bandit) | 9 | Acceptable — `subprocess` import is informational |
-| `B603` (Bandit) | 12 | Acceptable — `shell=False` IS the secure form |
-| `SC2016` (Hadolint) | 3 | Acceptable — single-quoted printf strings are intentional |
-| `B106` (Bandit) | 2 | Acceptable — test fixtures with dummy credentials |
-| `js/syntax-error` (CodeQL) | 1 | Acceptable — Django template tag inside `<script>` block |
-| `B112` (Bandit) | ~~18~~ 0 | **Resolved** — added debug logging before `continue` |
-| `B110` (Bandit) | ~~3~~ 0 | **Resolved** — replaced `pass` with debug logging |
-| `SC2012` (Hadolint) | ~~9~~ 0 | **Resolved** — replaced `ls` with `find` |
-| CodeQL py/js notes | ~~28~~ ~3 | **Mostly resolved** — unused code removed, imports fixed |
+**Code fixes (55 alerts):** Removed dead code, unused imports/variables, added debug logging to empty except blocks, consolidated imports, replaced `ls` with `find` in Dockerfiles, removed unused JS variables.
+
+**Scanner configuration (additional ~570 alerts):**
+- Bandit split into production and test scans; `B101` (assert) and `B106` (test credentials) skipped only in test directories
+- `B603` (subprocess shell=False) and `B404` (subprocess import) skipped globally — purely informational, not vulnerabilities
+- DevSkim `DS162092` (localhost references) excluded — all 46 are Docker healthchecks, startup scripts, and container-internal networking
+
+| Rule | Original | Now | Resolution |
+|---|---|---|---|
+| `B101` (Bandit) | 489 | 0 | **Eliminated** — skipped in test directories only |
+| `DS162092` (DevSkim) | 46 | 0 | **Eliminated** — excluded from DevSkim (Docker infrastructure) |
+| `B603` (Bandit) | 12 | 0 | **Eliminated** — skipped globally (shell=False is secure) |
+| `B404` (Bandit) | 9 | 0 | **Eliminated** — skipped globally (import is informational) |
+| `B106` (Bandit) | 2 | 0 | **Eliminated** — skipped in test directories only |
+| `B112` (Bandit) | 18 | 0 | **Resolved** — added debug logging before `continue` |
+| `B110` (Bandit) | 3 | 0 | **Resolved** — replaced `pass` with debug logging |
+| `SC2012` (Hadolint) | 9 | 0 | **Resolved** — replaced `ls` with `find` |
+| CodeQL py/js notes | 28 | ~1 | **Mostly resolved** — unused code removed, imports fixed |
+| `B311` (Bandit) | 12 | 12 | Remaining — `random` for jitter/genetic algo, not crypto |
+| `B105` (Bandit) | 11 | 11 | Remaining — env var name constants, not actual passwords |
+| `SC2016` (Hadolint) | 3 | 3 | Remaining — single-quoted printf strings are intentional |
+| `js/syntax-error` (CodeQL) | 1 | 1 | Remaining — Django template tag inside `<script>` block |
 
 ## Triage guidance
 
@@ -196,7 +203,9 @@ These categories may contain genuine issues that should be reviewed:
 
 5. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
-6. **Commit message convention**: When fixing a security finding, use the commit message format:
+6. **Adding new plugins or test directories**: The Bandit workflow auto-discovers test directories using `find`. If you add a new plugin, ensure its test directory is named `tests/` or `test/` so the workflow automatically applies test-appropriate rule exclusions (B101, B106). You do NOT need to update the workflow file — discovery is dynamic. However, you MUST add the new plugin's source directory to the `bandit -r` target list in both the production and test-discovery steps.
+
+7. **Commit message convention**: When fixing a security finding, use the commit message format:
    ```
    Fix <scanner>/<rule-id>: <brief description>
    ```
