@@ -90,6 +90,39 @@ omeroweb_<name>/
 - Job state files use `portalocker` for safe concurrent access on tmpfs.
 - The `pg-maintenance` sidecar uses `REINDEX CONCURRENTLY` (PostgreSQL 12+), never `VACUUM FULL`.
 
+## Operational pitfalls for AI agents
+
+### File ownership
+- `/opt/omero` is typically owned by `root`. Git operations (fetch, checkout, stash, push) will fail with `Permission denied` unless the agent's user has write access. Request `sudo chown -R <user>:<user> /opt/omero/.git` for git-only access, or `sudo chown -R <user>:<user> /opt/omero` for full file operations.
+- **Do not** `chown` bind-mounted data directories (`postgresdb/`, `omero_data/`, `omero_temp/`) to a non-service user — this breaks container runtime permissions. If you must `chown` the repo root, restore data directory ownership afterward via `installation/installation_script.sh` or targeted `chown` commands matching the UIDs in `docker-compose.yml`.
+
+### Git worktrees and finding commits
+- The repo uses git worktrees. Active and prunable worktrees live under `/tmp/omero-*`. Standalone clones may also exist there (e.g. `/tmp/omero-alpha-publish`).
+- If a commit hash is not found in the main repo (`git cat-file -t <hash>` fails), search worktrees and standalone clones: `find /tmp -maxdepth 2 -name ".git" 2>/dev/null` then `git -C <path> log --all --oneline | grep <hash>`.
+- To bring a commit from another local repo: `git fetch <path> <hash>` then `git cherry-pick FETCH_HEAD`.
+- Always `git fetch origin <branch>:refs/remotes/origin/<branch> --force` before rebasing to avoid stale tracking refs.
+
+### Docker compose requires secrets
+- `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
+
+### Testing
+- Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
+- Correct pattern:
+  ```bash
+  python3 -m pytest tests/ -v
+  python3 -m pytest omero_plugin_common/tests/ -v
+  python3 -m pytest omeroweb_imaris_connector/tests/ -v
+  python3 -m pytest omeroweb_admin_tools/tests/ -v
+  python3 -m pytest omeroweb_omp_plugin/tests/ -v
+  python3 -m pytest omeroweb_upload/tests/ -v
+  ```
+- Always also run: `python3 tools/lint_docs_structure.py`
+
+### Log checking
+- Follow AGENTS.md log triage order: Loki first, then container logs.
+- Loki query for errors in last hour: `curl -s "http://localhost:3100/loki/api/v1/query_range?query=%7Bjob%3D%22docker%22%7D%20%7C%3D%20%60error%60&start=$(date -u -d '1 hour ago' +%s)000000000&end=$(date -u +%s)000000000&limit=50"`
+- Container logs fallback: `docker logs <container> --since 1h --tail 30`
+
 ## Knowledge maintenance
 
 - Repository-local knowledge is the system of record. Keep decisions in version control.
