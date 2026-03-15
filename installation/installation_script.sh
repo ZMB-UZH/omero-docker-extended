@@ -9,7 +9,7 @@ SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
-APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-0}" # set to 1 to apply OS security updates to all images (EXPERIMENTAL)
+APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-0}" # set to 1 to apply OS and Python security updates to all images
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -1865,7 +1865,7 @@ resolve_security_hardening_choice() {
         default_choice="yes"
     fi
 
-    reply="$(prompt_yes_no "Enable Docker image security hardening? (EXPERIMENTAL: applies OS security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    reply="$(prompt_yes_no "Enable Docker image security hardening? (applies OS and Python security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
     if [ "${reply}" = "yes" ]; then
         APPLY_SECURITY_HARDENING=1
     else
@@ -2244,7 +2244,37 @@ _scout_is_available() {
     # builder so the CLI can reach the Scout plugin reliably.
     docker buildx use default >/dev/null 2>&1 || true
 
-    docker scout version >/dev/null 2>&1
+    # Fast path: Scout is on the default plugin search path.
+    if docker scout version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # When the script runs as root (e.g. via sudo), HOME is /root and Docker
+    # cannot find a per-user Scout installation under the invoking user's
+    # ~/.docker/cli-plugins/.  Discover the real user's DOCKER_CONFIG and
+    # export it so all subsequent docker scout calls find the plugin.
+    local probe_home=""
+    if [ -n "${SUDO_USER:-}" ]; then
+        probe_home="$(getent passwd "${SUDO_USER}" 2>/dev/null | cut -d: -f6)" || true
+    fi
+    if [ -z "${probe_home}" ] || [ ! -d "${probe_home}/.docker/cli-plugins" ]; then
+        local candidate=""
+        for candidate in /home/*/.docker/cli-plugins/docker-scout; do
+            if [ -x "${candidate}" ]; then
+                probe_home="${candidate%/.docker/cli-plugins/docker-scout}"
+                break
+            fi
+        done
+    fi
+    if [ -n "${probe_home}" ] && [ -x "${probe_home}/.docker/cli-plugins/docker-scout" ]; then
+        export DOCKER_CONFIG="${probe_home}/.docker"
+        if docker scout version >/dev/null 2>&1; then
+            return 0
+        fi
+        unset DOCKER_CONFIG
+    fi
+
+    return 1
 }
 
 # _scout_extract_summary <raw_output>

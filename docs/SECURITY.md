@@ -33,7 +33,7 @@ Setting `APPLY_SECURITY_HARDENING=1` (or answering "yes" to the interactive prom
 2. **Python packages**: Upgrades all outdated packages in each image's virtual environment, excluding pinned compatibility-critical packages (`omero-py`, `zeroc-ice`, `django`, `omero-web`).
 3. **Targeted fixes**: Upgrades specific high-value packages (`cryptography`, `urllib3`, `certifi`, `jinja2`, `pyopenssl`) even without the broad hardening flag.
 
-This is marked EXPERIMENTAL because upgrading transitive dependencies may affect OMERO compatibility. Disable immediately if issues occur.
+Upgrading transitive dependencies may affect OMERO compatibility in rare cases. Disable and rebuild if issues occur.
 
 ## Image pinning
 
