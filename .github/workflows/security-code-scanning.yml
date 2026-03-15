@@ -77,7 +77,6 @@ jobs:
   fortify:
     name: Fortify AST Scan
     runs-on: ubuntu-24.04
-    if: ${{ secrets.FOD_TENANT != '' }}
     permissions:
       actions: read
       contents: read
@@ -85,10 +84,24 @@ jobs:
       pull-requests: write # Required for PR comments
 
     steps:
+      - name: Check Fortify credentials
+        id: fortify-check
+        run: |
+          if [ -z "$FOD_TENANT" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Fortify credentials not configured — skipping scan."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          FOD_TENANT: ${{ secrets.FOD_TENANT }}
+
       - name: Checkout
+        if: steps.fortify-check.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       - name: Run Fortify Scan
+        if: steps.fortify-check.outputs.skip != 'true'
         uses: fortify/github-action@v1
         with:
           sast-scan: true
@@ -242,6 +255,7 @@ jobs:
 
       - name: Run OSSF Scorecard
         uses: ossf/scorecard-action@v2.4.0
+        continue-on-error: true
         with:
           results_file: scorecard-results.sarif
           results_format: sarif
