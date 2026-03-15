@@ -109,6 +109,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('"${expected_tmp_dir}/runtime"', script_text)
         self.assertIn('export TMPDIR="${runtime_tmp_dir}"', script_text)
         self.assertIn('ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"', script_text)
+        self.assertIn('local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"', script_text)
+        self.assertIn('rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}"', script_text)
+
+    def test_installation_script_preserves_server_temp_namespace_ownership(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ensure_omero_tmp_layout()", script_text)
+        self.assertIn('if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}"', script_text)
+        self.assertIn('if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text)
+        self.assertIn('chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"', script_text)
+        self.assertNotIn('chown_tree_or_die "${OMERO_TMP_PATH}"', script_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
