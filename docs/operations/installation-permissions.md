@@ -1,0 +1,307 @@
+# Installation Permissions
+
+Authoritative map of ownership, mode bits, and writable-path assumptions during install, update, and bootstrap.
+
+Use this document when investigating:
+- permission-denied startup failures,
+- ownership drift after `github_pull_project_bash` / `github_pull_private_project_bash`,
+- missing writable directories,
+- Docker socket access problems,
+- quota metadata write failures,
+- monitoring/database bind-mount ownership issues.
+
+## 1. Authority and Flow
+
+The permission model is enforced in layers:
+
+1. `installation/installation_script.sh`
+   This is the primary host-side ownership normalizer for bind-mounted paths from `installation_paths.env`.
+2. `startup/*.sh`
+   These scripts repair runtime-critical writable paths inside containers on every boot.
+3. `docker/*.Dockerfile`
+   Image builds establish ownership and executable bits for image-internal paths, but not host bind mounts.
+4. `github_pull*_example` and runtime pull helpers
+   These preserve runtime files and invoke the installation script. They do not own the final host permission model themselves.
+
+The high-risk shared area is `OMERO_TMP_PATH` because both `omeroserver` and `omeroweb` use it. Its correctness depends on subtree-specific ownership, not a single recursive `chown` across the full root.
+
+## 2. Path Model
+
+### `OMERO_TMP_PATH`
+
+Intent:
+- temp root is traversable by both OMERO.web and OMERO.server,
+- OMERO.web/plugin subtrees are owned by `omero-web`,
+- `${OMERO_TMP_PATH}/omero-server` is owned recursively by `omero-server`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - `ensure_omero_tmp_layout()`
+  - creates the temp root,
+  - sets the temp root owner to `OMERO_WEB_UID:GID`,
+  - keeps the root traversable with `u+rwx,go+rx`,
+  - recursively re-owns top-level non-server temp subtrees to `OMERO_WEB_UID:GID`,
+  - recursively restores `${OMERO_TMP_PATH}/omero-server` to `OMERO_SERVER_UID:GID`,
+  - sets `${OMERO_TMP_PATH}/omero-server` and `${OMERO_TMP_PATH}/omero-server/tmp` to `0700`.
+
+Server bootstrap:
+- `startup/10-server-bootstrap.sh`
+  - creates `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`,
+  - sets it writable for runtime use,
+  - prepares `runtime*` temp slots,
+  - removes stale legacy `omero_${requested_owner}` lock namespaces directly under `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`,
+  - repairs `.lock` ownership in-place if cleanup cannot fully remove stale state,
+  - symlinks legacy `/opt/omero/server/omero/tmp` to the selected runtime slot.
+
+Web bootstrap:
+- `startup/10-web-bootstrap.sh`
+  - manages OMERO.web `var/omero/tmp`,
+  - not the shared `${OMERO_TMP_PATH}/omero-server` namespace.
+
+Operational risk:
+- repeated reinstall/update flows can corrupt OMERO.server temp ownership if the installer recursively normalizes the whole temp root to the OMERO.web UID.
+- stale `omero_omero-server/.../.lock` trees can trigger `PermissionError` on restart if ownership is wrong.
+
+### `OMERO_USER_DATA_PATH`
+
+Intent:
+- primary OMERO managed repository and server certs are owned by `omero-server`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - `chown_tree_or_die "${OMERO_USER_DATA_PATH}" ... "${OMERO_SERVER_UID}" "${OMERO_SERVER_GID}"`
+  - explicitly normalizes `${OMERO_USER_DATA_PATH}/certs` to the same owner.
+
+Quota helper:
+- `scripts/install-quota-enforcer.sh`
+  - creates `${OMERO_DATA_DIR}/.admin-tools/quota`,
+  - sets `.admin-tools` and `.admin-tools/quota` to `0777`,
+  - sets `group-quotas.json` to `0666` so host root and non-root `omeroweb` can both update quota state.
+
+### `OMERO_SERVER_VAR_PATH`
+
+Intent:
+- owned by `omero-server`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns to `OMERO_SERVER_UID:GID`.
+  - also creates `${OMERO_SERVER_VAR_PATH}/tmp`, sets it to server-owned `1777`.
+
+Image build:
+- `docker/omero-server.Dockerfile`
+  - ensures `/opt/omero/server/OMERO.server/var` is owned by `omero-server`.
+
+### `OMERO_SERVER_LOGS_PATH`
+
+Intent:
+- owned by `omero-server`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns to `OMERO_SERVER_UID:GID`.
+
+### `OMERO_WEB_VAR_PATH`
+
+Intent:
+- owned by `omero-web`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns to `OMERO_WEB_UID:GID`.
+
+Web bootstrap:
+- `startup/10-web-bootstrap.sh`
+  - creates/repairs web runtime directories,
+  - recursively `chown -R` the web var tree to `omero-web`,
+  - sets `var` and `var/omero` to `0755`,
+  - sets `var/omero/tmp` to `1777`,
+  - generates `django_secret_key` with `0600`.
+
+### `OMERO_WEB_LOGS_PATH` and `OMERO_WEB_SUPERVISOR_LOGS_PATH`
+
+Intent:
+- owned by `omero-web`.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns both paths to `OMERO_WEB_UID:GID`.
+
+Image build:
+- `docker/omero-web.Dockerfile`
+  - ensures `/opt/omero/web/logs` is owned by `omero-web`.
+
+### Upload / plugin temp subtrees
+
+Intent:
+- plugin temp folders under `OMERO_TMP_PATH` are owned by `omero-web`.
+
+Code path:
+- `omero_plugin_common/tmp_utils.py`
+  - all plugin temp directories derive from `OMERO_TMP_PATH`.
+  - calling packages such as `omeroweb_upload` map to host subtrees like `omeroweb-upload`.
+
+Installer expectation:
+- non-server top-level temp/plugin subtrees are normalized to the web UID/GID by `ensure_omero_tmp_layout()`.
+
+### Database paths
+
+Paths:
+- `OMERO_DATABASE_PATH`
+- `OMERO_PLUGIN_DATABASE_PATH`
+
+Intent:
+- owned by the Postgres runtime user inside the corresponding image.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns both paths to auto-detected database image UIDs/GIDs.
+
+### Monitoring data paths
+
+Paths include:
+- Prometheus data,
+- Grafana data,
+- Loki data,
+- node-exporter/path-usage textfile output.
+
+Intent:
+- owned by the runtime users inside the monitoring images.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns these paths using detected image UIDs/GIDs such as `PROMETHEUS_UID`, `GRAFANA_UID`, and `LOKI_UID`.
+
+### CrowdSec paths
+
+Paths:
+- `CROWDSEC_DB_PATH`
+- `CROWDSEC_CONFIG_PATH`
+
+Intent:
+- owned by the CrowdSec runtime user when CrowdSec is enabled.
+
+Host-side installer:
+- `installation/installation_script.sh`
+  - recursively re-owns both paths to `CROWDSEC_UID:GID`.
+
+## 3. Special Runtime Permission Bridges
+
+### Docker socket access from `omeroweb`
+
+Script:
+- `startup/10-web-bootstrap.sh`
+
+Behavior:
+- reads the GID of `/var/run/docker.sock`,
+- creates a matching group if needed,
+- adds `omero-web` to that group.
+
+Purpose:
+- allows Admin Tools to inspect containers and collect Docker-backed metrics without running OMERO.web as root.
+
+### Quota metadata interoperability
+
+Scripts:
+- `scripts/install-quota-enforcer.sh`
+- `startup/10-web-bootstrap.sh`
+
+Behavior:
+- quota state directories may be intentionally `0777`,
+- quota state files may fall back to `0664` or `0666`,
+- this is deliberate to support both host-side root automation and non-root web-side updates.
+
+This is one of the few intentionally broad write-permission exceptions in the stack.
+
+## 4. Pull / Update Scripts
+
+### `github_pull_project_bash_example`
+### `github_pull_private_project_bash_example`
+
+Behavior:
+- preserve runtime files and data paths derived from `installation_paths.env`,
+- protect `installation_paths.env` and runtime env files from overwrite,
+- create/update a temporary clone,
+- execute the installation script afterward.
+
+Important:
+- these scripts do not directly normalize host bind-mount ownership.
+- the real permission authority remains `installation/installation_script.sh`.
+
+The private variant also:
+- creates `~/.ssh` with `0700`,
+- creates `known_hosts` with `0600`,
+- configures `GIT_SSH_COMMAND`.
+
+## 5. Image-Build Ownership Work
+
+Relevant Dockerfiles:
+- `docker/omero-server.Dockerfile`
+- `docker/omero-web.Dockerfile`
+- `docker/omero-celery-worker.Dockerfile`
+- `docker/pg-maintenance.Dockerfile`
+- `docker/crowdsec.Dockerfile`
+- `docker/firewall-bouncer.Dockerfile`
+
+These Dockerfiles mostly:
+- `chown` image-internal runtime directories to their service user,
+- set scripts to executable (`0555` or `0755`),
+- set static files such as branding assets to fixed read-only modes.
+
+They do not replace host-side bind-mount normalization.
+
+## 6. Failure Patterns
+
+### Symptom: `PermissionError` on `.lock` under `${OMERO_TMP_PATH}/omero-server/tmp/omero_omero-server/...`
+
+Likely cause:
+- stale server temp state under `OMERO_TMP_PATH` is owned by the wrong UID,
+- often after repeated reinstall/update cycles that normalized the full temp root incorrectly,
+- or after incomplete stale-temp cleanup before server restart.
+
+Relevant files:
+- `installation/installation_script.sh`
+- `startup/10-server-bootstrap.sh`
+- `docs/troubleshooting/common.md`
+
+### Symptom: Admin Tools cannot inspect Docker
+
+Likely cause:
+- `omero-web` is not in the Docker socket group matching `/var/run/docker.sock`.
+
+Relevant file:
+- `startup/10-web-bootstrap.sh`
+
+### Symptom: quota metadata writes fail intermittently
+
+Likely cause:
+- host-side and web-side writers do not agree on `.admin-tools/quota` ownership/modes.
+
+Relevant files:
+- `scripts/install-quota-enforcer.sh`
+- `startup/10-web-bootstrap.sh`
+
+## 7. Audit Checklist
+
+When debugging permission faults, check in this order:
+
+1. Confirm the affected path comes from `installation_paths.env`.
+2. Identify the intended runtime user for the owning service.
+3. Check whether the path is host bind-mounted or image-internal.
+4. Check whether ownership should be normalized by the installer or repaired by a startup script.
+5. For `OMERO_TMP_PATH`, inspect subtree ownership separately:
+   - root,
+   - `omero-server`,
+   - `omero-web`,
+   - plugin temp subtrees such as `omeroweb-upload`,
+   - any stale `omero_<user>` lock namespaces.
+6. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
+7. Re-check logs through the Admin Tools/Loki path after repair, not only raw container logs.
+
+## 8. Related Documents
+
+- `deployment/configuration.md`
+- `RELIABILITY.md`
+- `troubleshooting/common.md`
+- `operations/monitoring.md`
+- `plugins/admin-tools-plugin.md`

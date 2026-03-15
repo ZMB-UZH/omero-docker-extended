@@ -244,6 +244,7 @@ ensure_tmpdir_permissions() {
 
     local omero_py_dir="${runtime_tmp_dir}/omero"
     local omero_py_user_dir="${runtime_tmp_dir}/omero_${requested_owner}"
+    local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"
 
     # CRITICAL: Always try to remove stale OMERO temp subdirs to prevent Python
     # TempFileManager from hitting PermissionError on .lock files left by previous
@@ -253,7 +254,7 @@ ensure_tmpdir_permissions() {
     # Root cleanup can fail silently on NFS with root_squash (root is mapped to
     # nobody and cannot delete files owned by omero-server).  Running as the
     # target user handles that case.
-    rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${expected_tmp_dir}/omero_${requested_owner}"_* 2>/dev/null || true
+    rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}" "${expected_tmp_dir}/omero_${requested_owner}"_* 2>/dev/null || true
 
     # If the root cleanup failed (e.g. NFS root_squash), retry as the target user.
     if [[ -d "${omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
@@ -263,6 +264,10 @@ ensure_tmpdir_permissions() {
     if [[ -d "${omero_py_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
         log "WARN: Root cleanup of ${omero_py_dir} incomplete. Retrying as ${requested_owner}."
         runuser -u "${requested_owner}" -- rm -rf "${omero_py_dir}" 2>/dev/null || true
+    fi
+    if [[ -d "${legacy_omero_py_user_dir}" ]] && [[ "$(id -u)" -eq 0 ]]; then
+        log "WARN: Root cleanup of legacy temp dir ${legacy_omero_py_user_dir} incomplete. Retrying as ${requested_owner}."
+        runuser -u "${requested_owner}" -- rm -rf "${legacy_omero_py_user_dir}" 2>/dev/null || true
     fi
 
     # Final check: if stale dirs still exist, log a clear error so it's diagnosable.
@@ -275,6 +280,15 @@ ensure_tmpdir_permissions() {
             find "${omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
             find "${omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
             find "${omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
+        fi
+    fi
+    if [[ -d "${legacy_omero_py_user_dir}" ]]; then
+        log "WARN: Could not fully remove stale legacy temp dir: ${legacy_omero_py_user_dir}"
+        ls -la "${legacy_omero_py_user_dir}" >&2 || true
+        if [[ "$(id -u)" -eq 0 ]]; then
+            find "${legacy_omero_py_user_dir}" -name ".lock" -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${legacy_omero_py_user_dir}" -type d -exec chown "$(id -u "${requested_owner}")":"$(id -g "${requested_owner}")" {} \; 2>/dev/null || true
+            find "${legacy_omero_py_user_dir}" -type d -exec chmod 0777 {} \; 2>/dev/null || true
         fi
     fi
 

@@ -16,6 +16,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - Assume the system administrator has provisioned the corresponding non-example runtime file(s) on the target host, and that those files match their tracked `*_example*` counterparts unless explicitly documented otherwise.
 - The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
 - Treat this distribution as a full-stack, multi-container deployment that may contend with pre-existing Docker workloads (for example via host ports, network names, volumes, or maintenance automation). Operators are expected to validate coexistence in their own environment before production rollout.
+- For log triage, use the Admin Tools logging path first: prefer the Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs` sweeps. Fall back to direct container logs, internal log files, or Docker inspection only when the Admin Tools/Loki mechanism returns no data, appears stale/inconsistent with service state, or is itself suspected to be unhealthy.
 
 ## Where to look first
 
@@ -24,6 +25,7 @@ It is intentionally short. Deep context lives in the files it points to.
 3. **`docs/index.md`** -- full documentation index with cross-links to every doc.
 4. **`docs/QUALITY_SCORE.md`** -- current quality grades and debt priorities.
 5. **`docs/exec-plans/`** -- active and completed implementation plans.
+6. **`docs/operations/installation-permissions.md`** -- authoritative install/update/bootstrap permission and ownership model.
 
 ## Domain map
 
