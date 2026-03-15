@@ -19,6 +19,22 @@ Security practices and controls for this deployment.
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
 - The `redis-sysctl-init` sidecar is the only privileged container, and it runs once and exits.
 
+## Post-build vulnerability scanning
+
+The installation script runs [Docker Scout](https://docs.docker.com/scout/) after every successful image build to report known CVEs in the final images. When the upstream base images are available locally (always the case for cache-disabled builds), the report includes a baseline comparison showing vulnerability counts for the unmodified upstream image alongside the built image.
+
+Docker Scout is optional — if the CLI plugin is not installed, the scan is silently skipped and installation proceeds normally.
+
+## Security hardening (optional)
+
+Setting `APPLY_SECURITY_HARDENING=1` (or answering "yes" to the interactive prompt during installation) enables an additional build pass that:
+
+1. **OS packages**: Runs `dnf update` (Rocky-based images) or `apt-get upgrade` (Ubuntu-based) or `apk upgrade` (Alpine-based) to patch known vulnerabilities in system libraries.
+2. **Python packages**: Upgrades all outdated packages in each image's virtual environment, excluding pinned compatibility-critical packages (`omero-py`, `zeroc-ice`, `django`, `omero-web`).
+3. **Targeted fixes**: Upgrades specific high-value packages (`cryptography`, `urllib3`, `certifi`, `jinja2`, `pyopenssl`) even without the broad hardening flag.
+
+This is marked EXPERIMENTAL because upgrading transitive dependencies may affect OMERO compatibility. Disable immediately if issues occur.
+
 ## Image pinning
 
 - All Docker images in `docker-compose.yml` use explicit version tags (e.g., `postgres:16.12`, `redis:8.4.0-alpine`).
