@@ -2210,31 +2210,35 @@ if ! cleanup_local_build_cache_if_disabled; then
     exit 1
 fi
 
+# Phase 1: Pull and scan upstream base images for baseline (only when cache disabled).
+run_docker_scout_baseline_scan
+
 if ! run_image_build; then
     exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Docker Scout vulnerability scanning (post-build)
+# Docker Scout vulnerability scanning
 #
-# Runs after every successful build. For each main image (server, web):
-#   - Checks if the upstream base image (FROM line) exists locally.
-#     When cache is disabled Docker pulls it during the build, so it will
-#     be present. When cache is enabled the base image may not be local.
-#   - If the base image IS available, scans it and shows a before/after
-#     comparison (upstream baseline vs. built image).
-#   - If the base image is NOT available, shows only the built image scan.
-#     No extra pulls are performed solely for scanning.
+# Two-phase approach:
+#   Phase 1 (pre-build):  When cache is disabled, pull and scan upstream base
+#                         images referenced in docker/*.Dockerfile to establish
+#                         a vulnerability baseline.  Tracks which images were
+#                         pulled so they can be cleaned up after the report.
+#   Phase 2 (post-build): Scan ALL images referenced in docker-compose.yml —
+#                         both custom-built and third-party.  Shows a compact
+#                         table with Before/After columns when baseline data
+#                         is available, or a single Vulnerabilities column
+#                         when it is not (cache was enabled).
 #
-# Docker Scout availability is checked once; if absent the scan is skipped
-# with an informational message — it never blocks the installation.
+# Docker Scout availability is checked once; if absent both phases are skipped
+# with an informational message — scanning never blocks the installation.
 # ---------------------------------------------------------------------------
 
-# Base images for the two main Dockerfiles (largest attack surface).
-# Populated by _scout_resolve_base_images() from the Dockerfiles so the
-# script stays in sync with pinned upstream tags without duplication.
-_SCOUT_SERVER_BASE_IMAGE=""
-_SCOUT_WEB_BASE_IMAGE=""
+# Temporary directory for baseline scan results.  Cleaned up after the report.
+_SCOUT_BASELINE_DIR=""
+# Images pulled solely for baseline scanning (removed after report).
+declare -a _SCOUT_PULLED_FOR_BASELINE=()
 
 _scout_is_available() {
     command -v docker >/dev/null 2>&1 || return 1
@@ -2278,154 +2282,280 @@ _scout_is_available() {
 }
 
 # _scout_extract_summary <raw_output>
-# Parses Docker Scout CVE output and returns a compact one-line summary.
-# Returns empty string (and non-zero) if parsing fails.
+# Parses Docker Scout CVE output into a compact one-line format:
+#   "73 vulns (9C 58H 63M 51L)"
+# Returns non-zero if parsing fails.
 _scout_extract_summary() {
     local raw="${1:-}"
-    local summary=""
-
     if [ -z "${raw}" ]; then return 1; fi
 
-    # Primary: the totals line near the end (e.g. "73 vulnerabilities found in 42 packages")
-    summary="$(printf '%s\n' "${raw}" | grep -E '[0-9]+ vulnerabilities found' | tail -1 || true)"
-    if [ -n "${summary}" ]; then
-        printf '%s' "${summary}"
-        return 0
+    local total="" crit="" high="" med="" low=""
+    total="$(printf '%s\n' "${raw}" | grep -oE '[0-9]+ vulnerabilities found' | tail -1 | grep -oE '[0-9]+' | head -1 || true)"
+    if [ -z "${total}" ]; then
+        total="$(printf '%s\n' "${raw}" | grep -oE '[0-9]+ vulnerabilit' | tail -1 | grep -oE '[0-9]+' | head -1 || true)"
     fi
+    if [ -z "${total}" ]; then return 1; fi
 
-    # Fallback: severity breakdown lines
-    summary="$(printf '%s\n' "${raw}" | tail -10 | grep -E '(CRITICAL|HIGH|MEDIUM|LOW)' | head -4 || true)"
-    if [ -n "${summary}" ]; then
-        printf '%s' "${summary}"
-        return 0
-    fi
+    crit="$(printf '%s\n' "${raw}" | grep -iE '^\s*CRITICAL\s' | grep -oE '[0-9]+' | head -1 || true)"
+    high="$(printf '%s\n' "${raw}" | grep -iE '^\s*HIGH\s' | grep -oE '[0-9]+' | head -1 || true)"
+    med="$(printf '%s\n' "${raw}" | grep -iE '^\s*MEDIUM\s' | grep -oE '[0-9]+' | head -1 || true)"
+    low="$(printf '%s\n' "${raw}" | grep -iE '^\s*LOW\s' | grep -oE '[0-9]+' | head -1 || true)"
 
-    # Last resort: detected-packages line
-    summary="$(printf '%s\n' "${raw}" | grep -m 1 -E 'Detected .* vulnerable' || true)"
-    if [ -n "${summary}" ]; then
-        printf '%s' "${summary}"
-        return 0
-    fi
-
-    return 1
+    printf '%s vulns (%sC %sH %sM %sL)' "${total}" "${crit:-0}" "${high:-0}" "${med:-0}" "${low:-0}"
+    return 0
 }
 
 # _scout_extract_base_image <dockerfile_path>
 # Reads the first FROM instruction and prints the image reference.
 _scout_extract_base_image() {
     local dockerfile="${1:-}"
-    if [ ! -f "${dockerfile}" ]; then return 1; fi
+    [ -f "${dockerfile}" ] || return 1
     grep -m 1 '^FROM ' "${dockerfile}" | awk '{print $2}'
 }
 
 # _scout_scan_image <image_ref> [timeout_seconds]
-# Runs `docker scout cves` and prints raw output. Returns 1 on failure/timeout.
+# Runs `docker scout cves` and prints raw output.  Returns 1 on failure/timeout.
 _scout_scan_image() {
-    local image="${1:-}"
-    local scan_timeout="${2:-180}"
-    local output=""
-
-    if [ -z "${image}" ]; then return 1; fi
-
+    local image="${1:-}" scan_timeout="${2:-180}" output=""
+    [ -n "${image}" ] || return 1
     output="$(timeout "${scan_timeout}" docker scout cves "local://${image}" 2>&1)" || true
-    if [ -z "${output}" ]; then return 1; fi
-
+    [ -n "${output}" ] || return 1
     printf '%s' "${output}"
     return 0
 }
 
-# _scout_resolve_base_images
-# Populates _SCOUT_SERVER_BASE_IMAGE and _SCOUT_WEB_BASE_IMAGE from
-# the Dockerfiles. Called once at the start of the post-build summary.
-_scout_resolve_base_images() {
-    local server_dockerfile="${REPO_ROOT_DIR}/docker/omero-server.Dockerfile"
-    local web_dockerfile="${REPO_ROOT_DIR}/docker/omero-web.Dockerfile"
-    _SCOUT_SERVER_BASE_IMAGE="$(_scout_extract_base_image "${server_dockerfile}")" || true
-    _SCOUT_WEB_BASE_IMAGE="$(_scout_extract_base_image "${web_dockerfile}")" || true
+# ---------------------------------------------------------------------------
+# Phase 1: Pre-build baseline scan
+#
+# When cache is disabled (USE_CACHE_BUILD=0), pulls upstream base images
+# referenced in docker/*.Dockerfile and scans them.  Results are saved to
+# $_SCOUT_BASELINE_DIR for the post-build report.  Images that were NOT
+# already local before pulling are tracked in _SCOUT_PULLED_FOR_BASELINE
+# and removed after the report to avoid stale images.
+# ---------------------------------------------------------------------------
+run_docker_scout_baseline_scan() {
+    # Only scan baselines when cache is disabled (fresh pulls).
+    if [ "${USE_CACHE_BUILD}" != "0" ]; then return 0; fi
+    if ! _scout_is_available; then return 0; fi
+
+    _SCOUT_BASELINE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/scout-baseline.XXXXXX")" || return 0
+
+    local dockerfile="" base_image="" tag="" raw="" summary=""
+    local -a base_images_seen=()
+
+    echo ""
+    echo "Scanning upstream base images for vulnerability baseline..."
+
+    for dockerfile in "${REPO_ROOT_DIR}"/docker/*.Dockerfile; do
+        [ -f "${dockerfile}" ] || continue
+        base_image="$(_scout_extract_base_image "${dockerfile}")" || continue
+        [ -n "${base_image}" ] || continue
+
+        # Deduplicate (multiple Dockerfiles may share the same base).
+        local already_seen="false" seen=""
+        for seen in "${base_images_seen[@]+"${base_images_seen[@]}"}"; do
+            if [ "${seen}" = "${base_image}" ]; then already_seen="true"; break; fi
+        done
+        [ "${already_seen}" = "false" ] || continue
+        base_images_seen+=("${base_image}")
+
+        # Track whether the image was already local before pulling.
+        local was_local="false"
+        if docker image inspect "${base_image}" >/dev/null 2>&1; then
+            was_local="true"
+        fi
+
+        echo "  Pulling ${base_image} ..."
+        if ! docker pull "${base_image}" >/dev/null 2>&1; then
+            echo "  WARNING: Failed to pull ${base_image}; skipping baseline."
+            continue
+        fi
+
+        # If it was NOT local before, mark for cleanup after report.
+        if [ "${was_local}" = "false" ]; then
+            _SCOUT_PULLED_FOR_BASELINE+=("${base_image}")
+        fi
+
+        echo "  Scanning ${base_image} ..."
+        raw="$(_scout_scan_image "${base_image}" 180)" || true
+        if [ -n "${raw}" ]; then
+            summary="$(_scout_extract_summary "${raw}")" || true
+            if [ -n "${summary}" ]; then
+                tag="$(printf '%s' "${base_image}" | tr '/:' '__')"
+                printf '%s' "${summary}" > "${_SCOUT_BASELINE_DIR}/${tag}.summary"
+            fi
+        fi
+    done
+
+    echo "Baseline scan complete."
+    echo ""
 }
 
 # ---------------------------------------------------------------------------
-# Post-build vulnerability summary
+# Phase 2: Post-build vulnerability summary
 #
-# For each main image (omero-server, omero-web):
-#   - If the upstream base image is available locally (always the case when
-#     cache is disabled, since Docker pulls it during the build), scan it
-#     and show the baseline alongside the built image for comparison.
-#   - If the base image is NOT available locally (cache hit reused layers
-#     without pulling), show only the built image results — no extra pulls
-#     are performed just for scanning.
+# Discovers ALL images from docker-compose.yml:
+#   - Custom-built images (those with a build: + dockerfile: block) are
+#     matched to their Dockerfile's FROM base image for baseline lookup.
+#   - Third-party images (no build: block) are scanned as-is; their
+#     Before column shows "(not modified)" when baseline is available.
+#
+# Output is a compact table with one line per image.
 # ---------------------------------------------------------------------------
 run_docker_scout_summary() {
-    local image="" base_image="" scout_raw="" scout_summary=""
-    local base_raw="" base_summary=""
-    local has_baseline="false"
-    local -a scout_targets=()
-    local -a scout_bases=()
-
     echo ""
-    echo "============================================"
+    echo "============================================================"
     echo "  Docker Scout — Vulnerability Report"
-    echo "============================================"
+    echo "============================================================"
 
     if ! _scout_is_available; then
         echo "  Docker Scout is not installed or not accessible."
         echo "  Install the Docker Scout CLI plugin to enable"
         echo "  post-build vulnerability reports."
-        echo "============================================"
+        echo "============================================================"
         echo ""
         return 0
     fi
 
-    _scout_resolve_base_images
+    # --- Discover built images from docker-compose.yml ---
+    # We parse the compose file for services that have both image: and
+    # build:/dockerfile: directives.  These are the custom-built images.
+    local -a built_images=() built_bases=()
+    local -a thirdparty_images=()
+    local dockerfile="" df_basename="" base_image="" built_tag=""
 
-    scout_targets=("${OMERO_SERVER_IMAGE}" "${OMERO_WEB_IMAGE}")
-    scout_bases=("${_SCOUT_SERVER_BASE_IMAGE}" "${_SCOUT_WEB_BASE_IMAGE}")
+    # Map each Dockerfile referenced in docker-compose.yml to its image tag.
+    local compose_config=""
+    compose_config="$(compose_with_installation_env "${COMPOSE_FILE}" config 2>/dev/null || true)"
 
-    for i in "${!scout_targets[@]}"; do
-        image="${scout_targets[$i]}"
-        base_image="${scout_bases[$i]:-}"
+    if [ -n "${compose_config}" ]; then
+        # Extract image tags for services that have a dockerfile: directive.
+        # These are custom-built images.
+        local -a compose_dockerfiles=()
+        local -a compose_image_tags=()
+
+        # Parse pairs: in `docker compose config` output, for built services
+        # the dockerfile: line always appears before image:.  We reset state
+        # on each dockerfile: to avoid mispairing with a prior third-party image.
+        local current_image="" current_dockerfile="" line=""
+        while IFS= read -r line; do
+            case "${line}" in
+                *dockerfile:*)
+                    # New build service — reset any stale image from prior service.
+                    current_image=""
+                    current_dockerfile="$(printf '%s' "${line}" | sed 's/.*dockerfile:\s*//' | tr -d '"' | tr -d "'")"
+                    ;;
+                *image:*)
+                    current_image="$(printf '%s' "${line}" | sed 's/.*image:\s*//' | tr -d '"' | tr -d "'")"
+                    ;;
+            esac
+            # When we have both, record the pair and reset.
+            if [ -n "${current_image}" ] && [ -n "${current_dockerfile}" ]; then
+                compose_dockerfiles+=("${current_dockerfile}")
+                compose_image_tags+=("${current_image}")
+                current_image=""
+                current_dockerfile=""
+            fi
+        done <<< "${compose_config}"
+
+        # Build the built_images and built_bases arrays from discovered pairs.
+        local idx=""
+        for idx in "${!compose_dockerfiles[@]}"; do
+            local df_path="${REPO_ROOT_DIR}/${compose_dockerfiles[$idx]}"
+            built_tag="${compose_image_tags[$idx]}"
+            base_image=""
+            if [ -f "${df_path}" ]; then
+                base_image="$(_scout_extract_base_image "${df_path}")" || true
+            fi
+            built_images+=("${built_tag}")
+            built_bases+=("${base_image:-}")
+        done
+
+        # Third-party images: all image: entries NOT in the built list.
+        local all_compose_images=""
+        all_compose_images="$(printf '%s\n' "${compose_config}" | grep -E '^\s+image:' | sed 's/.*image:\s*//' | tr -d '"' | tr -d "'" | sort -u || true)"
+        local ci="" is_built="" bi=""
+        for ci in ${all_compose_images}; do
+            is_built="false"
+            for bi in "${built_images[@]+"${built_images[@]}"}"; do
+                if [ "${bi}" = "${ci}" ]; then is_built="true"; break; fi
+            done
+            [ "${is_built}" = "false" ] || continue
+            thirdparty_images+=("${ci}")
+        done
+    fi
+
+    # --- Determine if baseline data is available ---
+    local has_baseline="false"
+    if [ -n "${_SCOUT_BASELINE_DIR}" ] && [ -d "${_SCOUT_BASELINE_DIR}" ]; then
+        local any_file=""
+        any_file="$(find "${_SCOUT_BASELINE_DIR}" -name '*.summary' -print -quit 2>/dev/null || true)"
+        [ -z "${any_file}" ] || has_baseline="true"
+    fi
+
+    # --- Print table header ---
+    echo ""
+    if [ "${has_baseline}" = "true" ]; then
+        printf '  %-35s  %-30s  %s\n' "Image" "Before (upstream)" "After (built)"
+        printf '  %-35s  %-30s  %s\n' "-----------------------------------" "------------------------------" "------------------------------"
+    else
+        printf '  %-35s  %s\n' "Image" "Vulnerabilities"
+        printf '  %-35s  %s\n' "-----------------------------------" "------------------------------"
+    fi
+
+    # --- Scan custom-built images ---
+    local i="" image="" base="" tag="" baseline_file="" baseline_summary="" raw="" summary=""
+    for i in "${!built_images[@]}"; do
+        image="${built_images[$i]}"
+        base="${built_bases[$i]:-}"
 
         if ! docker image inspect "${image}" >/dev/null 2>&1; then
-            echo ""
-            echo "  [SKIP] ${image} — image not found locally."
-            continue
-        fi
-
-        echo ""
-        echo "  Image: ${image}"
-
-        # --- Baseline: scan upstream base image if it exists locally ---
-        has_baseline="false"
-        if [ -n "${base_image}" ] && docker image inspect "${base_image}" >/dev/null 2>&1; then
-            base_raw="$(_scout_scan_image "${base_image}" 180)" || true
-            if [ -n "${base_raw}" ]; then
-                base_summary="$(_scout_extract_summary "${base_raw}")" || true
-                if [ -n "${base_summary}" ]; then
-                    has_baseline="true"
-                    echo "    Upstream base (${base_image}):"
-                    echo "      ${base_summary}"
-                fi
-            fi
-        fi
-
-        # --- Final built image ---
-        scout_raw="$(_scout_scan_image "${image}" 180)" || true
-        if [ -z "${scout_raw}" ]; then
-            echo "    Scan timed out or returned no data (non-blocking)."
-            continue
-        fi
-
-        scout_summary="$(_scout_extract_summary "${scout_raw}")" || true
-        if [ -n "${scout_summary}" ]; then
             if [ "${has_baseline}" = "true" ]; then
-                echo "    Built image:"
+                printf '  %-35s  %-30s  %s\n' "${image}" "-" "(not found)"
+            else
+                printf '  %-35s  %s\n' "${image}" "(not found)"
             fi
-            echo "      ${scout_summary}"
+            continue
+        fi
+
+        # Look up baseline summary for this image's base.
+        baseline_summary="-"
+        if [ -n "${base}" ] && [ -n "${_SCOUT_BASELINE_DIR}" ]; then
+            tag="$(printf '%s' "${base}" | tr '/:' '__')"
+            baseline_file="${_SCOUT_BASELINE_DIR}/${tag}.summary"
+            if [ -f "${baseline_file}" ]; then
+                baseline_summary="$(cat "${baseline_file}")"
+            fi
+        fi
+
+        raw="$(_scout_scan_image "${image}" 180)" || true
+        summary="$(_scout_extract_summary "${raw}")" || true
+        [ -n "${summary}" ] || summary="(scan failed)"
+
+        if [ "${has_baseline}" = "true" ]; then
+            printf '  %-35s  %-30s  %s\n' "${image}" "${baseline_summary}" "${summary}"
         else
-            echo "    No vulnerability summary could be extracted."
+            printf '  %-35s  %s\n' "${image}" "${summary}"
         fi
     done
 
+    # --- Scan third-party images ---
+    for image in "${thirdparty_images[@]+"${thirdparty_images[@]}"}"; do
+        if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            continue
+        fi
+        raw="$(_scout_scan_image "${image}" 180)" || true
+        summary="$(_scout_extract_summary "${raw}")" || true
+        [ -n "${summary}" ] || summary="(scan failed)"
+
+        if [ "${has_baseline}" = "true" ]; then
+            printf '  %-35s  %-30s  %s\n' "${image}" "(not modified)" "${summary}"
+        else
+            printf '  %-35s  %s\n' "${image}" "${summary}"
+        fi
+    done
+
+    # --- Footer ---
     echo ""
     echo "  ----------------------------------------"
     if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
@@ -2435,8 +2565,26 @@ run_docker_scout_summary() {
         echo "  Security hardening: DISABLED (default)"
         echo "  To reduce vulnerabilities, re-run with security hardening enabled."
     fi
-    echo "============================================"
+    if [ "${has_baseline}" != "true" ]; then
+        echo "  Baseline: not available (build cache was enabled)."
+        echo "  Disable build cache for a before/after comparison."
+    fi
+    echo "============================================================"
     echo ""
+
+    # --- Cleanup ---
+    # Remove baseline temp directory.
+    if [ -n "${_SCOUT_BASELINE_DIR}" ] && [ -d "${_SCOUT_BASELINE_DIR}" ]; then
+        rm -rf "${_SCOUT_BASELINE_DIR}" 2>/dev/null || true
+        _SCOUT_BASELINE_DIR=""
+    fi
+    # Remove base images that were pulled solely for baseline scanning.
+    local pulled_img=""
+    for pulled_img in "${_SCOUT_PULLED_FOR_BASELINE[@]+"${_SCOUT_PULLED_FOR_BASELINE[@]}"}"; do
+        echo "  Cleaning up baseline image: ${pulled_img}"
+        docker rmi "${pulled_img}" >/dev/null 2>&1 || true
+    done
+    _SCOUT_PULLED_FOR_BASELINE=()
 }
 
 run_docker_scout_summary
