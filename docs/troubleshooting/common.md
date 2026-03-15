@@ -377,6 +377,7 @@ Cause:
 
 - A pre-existing path under `/opt/omero/server/omero/tmp` is owned by another user/group and is not writable by the OMERO bootstrap user.
 - `startup/10-server-bootstrap.sh` now treats this legacy lock-file path as best-effort compatibility and falls back to `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp`.
+- Reinstall/update runs before the ownership fix could also recursively reassign stale `${OMERO_TMP_PATH}/omero-server/tmp/omero_omero-server/...` lock trees to the OMERO.web UID because the installer normalized the entire `OMERO_TMP_PATH` recursively before restoring only the top-level server namespace.
 
 Fix (optional hardening):
 
@@ -394,3 +395,4 @@ Expected result:
 
 - Bootstrap continues successfully using `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR`.
 - If ownership/permissions are corrected, the legacy warning disappears.
+- Current installer/bootstrap logic also reclaims stale `${OMERO_TMP_PATH}/omero-server/tmp/omero_omero-server` lock namespaces so repeated `github_pull...` reinstall runs do not reintroduce `PermissionError` on `.lock` files.
