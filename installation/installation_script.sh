@@ -9,6 +9,7 @@ SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
+APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-0}" # set to 1 to apply OS security updates to all images (EXPERIMENTAL)
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
 BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH:-installation/docker_buildx_compressed_push.sh}"
@@ -267,12 +268,22 @@ run_image_build() {
         echo "  Compose file   : ${COMPOSE_FILE}"
         echo "  Cache enabled  : ${USE_CACHE_BUILD}"
         echo "  Provenance     : ${provenance_setting}"
+        echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
 
         local -a compose_build_args=(build)
         if [ "${USE_CACHE_BUILD}" = "0" ]; then
             compose_build_args+=(--no-cache)
         fi
         compose_build_args+=(--provenance "${provenance_setting}")
+
+        # Optional Docker image security hardening build args
+        if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
+            compose_build_args+=(--build-arg "APPLY_SECURITY_HARDENING=1")
+            compose_build_args+=(--build-arg "APPLY_DNF_UPDATES=1")
+            compose_build_args+=(--build-arg "APPLY_OMERO_VENV_TOOLING_UPDATES=1")
+            compose_build_args+=(--build-arg "APPLY_OMEROWEB_DNF_UPDATES=1")
+            compose_build_args+=(--build-arg "APPLY_OMEROWEB_VENV_TOOLING_UPDATES=1")
+        fi
 
         if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"; then
             echo "ERROR: docker compose build workflow failed." >&2
@@ -312,6 +323,7 @@ run_image_build() {
     echo "  Helper script : ${buildx_helper_path}"
     echo "  Cache enabled : ${inline_cache_setting}"
     echo "  Provenance    : ${provenance_setting}"
+    echo "  Security harden: ${APPLY_SECURITY_HARDENING}"
 
     # Derive no-cache flag: if cache is disabled (0), also disable docker layer cache
     local no_cache_setting="0"
@@ -1815,6 +1827,54 @@ resolve_flatten_final_image_choice() {
     return 0
 }
 
+resolve_security_hardening_choice() {
+    local reply=""
+    local override_choice="${SECURITY_HARDENING_CHOICE:-}"
+
+    if [ -n "${override_choice}" ]; then
+        reply="$(printf '%s' "${override_choice}" | tr '[:upper:]' '[:lower:]')"
+        case "${reply}" in
+            y|yes)
+                APPLY_SECURITY_HARDENING=1
+                echo "SECURITY_HARDENING_CHOICE=${override_choice}: Docker image security hardening enabled."
+                return 0
+                ;;
+            n|no)
+                APPLY_SECURITY_HARDENING=0
+                echo "SECURITY_HARDENING_CHOICE=${override_choice}: Docker image security hardening disabled."
+                return 0
+                ;;
+            *)
+                echo "ERROR: SECURITY_HARDENING_CHOICE must be one of: y, yes, n, no. Got: ${override_choice}" >&2
+                return 1
+                ;;
+        esac
+    fi
+
+    if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
+        return 1
+    fi
+
+    local prompt_hint="Y/n"
+    local prompt_default="n"
+    local default_choice="no"
+
+    if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
+        prompt_hint="Y/n"
+        prompt_default="Y"
+        default_choice="yes"
+    fi
+
+    reply="$(prompt_yes_no "Enable Docker image security hardening? (EXPERIMENTAL: applies OS security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
+    if [ "${reply}" = "yes" ]; then
+        APPLY_SECURITY_HARDENING=1
+    else
+        APPLY_SECURITY_HARDENING=0
+    fi
+
+    return 0
+}
+
 resolve_buildx_compressed_build_choice() {
     local reply=""
     local override_choice="${USE_BUILDX_CHOICE:-}"
@@ -1899,6 +1959,10 @@ if ! resolve_flatten_final_image_choice; then
     exit 1
 fi
 
+if ! resolve_security_hardening_choice; then
+    exit 1
+fi
+
 if ! resolve_start_containers_choice; then
     exit 1
 fi
@@ -1914,6 +1978,13 @@ fi
 if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}"; then
     exit 1
 fi
+
+if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
+    exit 1
+fi
+
+# Export for the buildx compressed build script (reads APPLY_SECURITY_HARDENING env var)
+export APPLY_SECURITY_HARDENING
 
 DEFAULT_OMERO_INSTALLATION_PATH="${OMERO_INSTALLATION_PATH}"
 DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
@@ -2142,6 +2213,85 @@ fi
 if ! run_image_build; then
     exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Docker Scout vulnerability scan (post-build)
+#
+# Runs after every successful build. When security hardening is enabled the
+# output lets the operator compare the hardened image against its base.
+# When Docker Scout is unavailable or not logged in, the scan is skipped
+# with an informational message — it never blocks the installation.
+# ---------------------------------------------------------------------------
+run_docker_scout_summary() {
+    local image=""
+    local scout_output=""
+    local scout_summary=""
+    local -a scout_images=()
+    local scout_timeout=60
+
+    echo ""
+    echo "============================================"
+    echo "Docker Scout vulnerability overview"
+    echo "============================================"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "INFO: Docker CLI not found. Skipping vulnerability scan."
+        return 0
+    fi
+
+    if ! docker scout version >/dev/null 2>&1; then
+        echo "INFO: Docker Scout is not available. Skipping vulnerability scan."
+        echo "INFO: Install the Docker Scout CLI plugin to see vulnerability summaries after builds."
+        return 0
+    fi
+
+    # Scan the two main custom-built images (largest attack surface)
+    scout_images=("${OMERO_SERVER_IMAGE}" "${OMERO_WEB_IMAGE}")
+
+    for image in "${scout_images[@]}"; do
+        if ! docker image inspect "${image}" >/dev/null 2>&1; then
+            echo "WARNING: Image '${image}' not found locally; skipping scan."
+            continue
+        fi
+
+        echo ""
+        echo "--- ${image} ---"
+        scout_output="$(timeout "${scout_timeout}" docker scout cves "local://${image}" 2>&1)" || true
+
+        if [ -z "${scout_output}" ]; then
+            echo "WARNING: Docker Scout scan timed out or failed for ${image} (non-blocking)."
+            continue
+        fi
+
+        # Extract only the final summary block (count lines at end of output)
+        scout_summary="$(printf '%s\n' "${scout_output}" | tail -10 | grep -E '(vulnerabilities found in|CRITICAL|HIGH|MEDIUM|LOW)' || true)"
+        if [ -n "${scout_summary}" ]; then
+            printf '%s\n' "${scout_summary}"
+        else
+            # Fallback: try the detected line near the top
+            scout_summary="$(printf '%s\n' "${scout_output}" | grep -m 1 -E 'Detected .* vulnerable packages' || true)"
+            if [ -n "${scout_summary}" ]; then
+                printf '%s\n' "${scout_summary}"
+            else
+                echo "INFO: No vulnerability summary available for ${image}."
+            fi
+        fi
+    done
+
+    echo ""
+    if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
+        echo "Security hardening was ENABLED for this build."
+        echo "Vulnerability counts above reflect images WITH OS security updates applied."
+    else
+        echo "Security hardening was DISABLED for this build (default)."
+        echo "Re-run with security hardening enabled to apply OS security updates."
+    fi
+
+    echo "============================================"
+    echo ""
+}
+
+run_docker_scout_summary
 
 echo "============================================"
 echo "Discovering actual UID/GID from built images"
