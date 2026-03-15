@@ -30,7 +30,7 @@ This project enables automated security scanning via `.github/workflows/security
 
 ## Alert inventory
 
-Last updated: 2026-03-15. Total open alerts: **995**.
+Last updated: 2026-03-15. Total open alerts: **~940** (55 Note-level findings resolved).
 
 ### Summary by severity
 
@@ -42,7 +42,7 @@ Last updated: 2026-03-15. Total open alerts: **995**.
 | Medium | 38 | Fix within 30 days. |
 | Warning | 192 | Review during regular maintenance cycles. |
 | Low | 8 | Address opportunistically. |
-| Note | 645 | Informational. Address during related refactoring. |
+| Note | ~590 | Informational. Address during related refactoring. |
 
 ### Summary by scanner
 
@@ -110,17 +110,25 @@ Last updated: 2026-03-15. Total open alerts: **995**.
 | `dynamic-urllib-use` (Semgrep) | 10 | Dynamic URL construction with urllib |
 | Other | 9 | Hadolint DL3003/DL3018/DL3008/DL3002, Bandit B308/B703/B103, CodeQL warnings |
 
-### Note/informational findings (645 alerts)
+### Note/informational findings (~590 remaining)
 
-| Rule | Count | Description |
+55 Note-level findings were resolved by removing dead code, unused imports/variables, adding debug logging to empty except blocks, consolidating imports, replacing `ls` with `find` in Dockerfiles, and removing unused JS variables.
+
+| Rule | Count | Status |
 |---|---|---|
-| `B101` (Bandit) | 489 | Use of `assert` statements (appropriate in test code) |
-| `DS162092` (DevSkim) | 46 | Localhost references (expected in Docker-internal configs) |
-| `B112` (Bandit) | 18 | `try/except/continue` patterns |
-| `B105` (Bandit) | 11 | Hardcoded password-like variable names (mostly test fixtures) |
-| `B404` (Bandit) | 9 | Import of `subprocess` module |
-| `SC2012` (Hadolint) | 9 | Use of `ls` in Dockerfile RUN (prefer `find`) |
-| Other | 63 | Unused imports/variables, empty except, mixed returns, shell quoting |
+| `B101` (Bandit) | 489 | Acceptable — `assert` is correct in test code |
+| `DS162092` (DevSkim) | 46 | Acceptable — localhost refs expected in Docker configs |
+| `B311` (Bandit) | 12 | Acceptable — `random` used for jitter/genetic algo, not crypto |
+| `B105` (Bandit) | 11 | Acceptable — env var name constants, not actual passwords |
+| `B404` (Bandit) | 9 | Acceptable — `subprocess` import is informational |
+| `B603` (Bandit) | 12 | Acceptable — `shell=False` IS the secure form |
+| `SC2016` (Hadolint) | 3 | Acceptable — single-quoted printf strings are intentional |
+| `B106` (Bandit) | 2 | Acceptable — test fixtures with dummy credentials |
+| `js/syntax-error` (CodeQL) | 1 | Acceptable — Django template tag inside `<script>` block |
+| `B112` (Bandit) | ~~18~~ 0 | **Resolved** — added debug logging before `continue` |
+| `B110` (Bandit) | ~~3~~ 0 | **Resolved** — replaced `pass` with debug logging |
+| `SC2012` (Hadolint) | ~~9~~ 0 | **Resolved** — replaced `ls` with `find` |
+| CodeQL py/js notes | ~~28~~ ~3 | **Mostly resolved** — unused code removed, imports fixed |
 
 ## Triage guidance
 
@@ -193,3 +201,96 @@ These categories may contain genuine issues that should be reviewed:
    Fix <scanner>/<rule-id>: <brief description>
    ```
    Example: `Fix CodeQL/py/path-injection: validate upload path against managed root`
+
+## AI agent coding guidelines — preventing new findings
+
+**These rules prevent introducing new code scanning alerts.** Follow them when writing or modifying code in this repository.
+
+### Python code structure
+
+1. **No unused imports.** Remove imports immediately when the symbol they provide is no longer referenced. Run CodeQL locally or inspect before committing.
+
+2. **No bare `except:` or empty `except Exception: pass/continue`.** Every except block must either:
+   - Log the exception at `logger.debug()` or higher, OR
+   - Re-raise the exception, OR
+   - Explicitly handle the error condition.
+   Never silently swallow exceptions. Use `logger.debug("...", exc_info=True)` for low-priority catches.
+
+3. **No unused variables.** If a function returns a tuple and you don't need all values, use `_` for discarded positions: `value, _, meta = some_call()`. Remove variables that are assigned but never read.
+
+4. **No dead code.** Remove stub functions, unreachable branches, and commented-out code. Do not leave partial implementations at the end of files.
+
+5. **Consistent imports.** Do not combine `import X` and `from X import Y` for the same module. Use one style:
+   ```python
+   # Preferred: from-import when using specific names
+   from unittest import TestCase, mock, main as unittest_main
+   # Not: import unittest + from unittest import mock
+   ```
+
+6. **No redundant imports inside functions.** If a module is imported at the top of the file, do not re-import it inside functions or test methods.
+
+7. **Lambdas must add value.** Replace `lambda x: str(x)` with `str`, `lambda: object()` with `object`. Only use lambdas when they contain logic beyond calling a single function with the same arguments.
+
+8. **Explicit returns.** Every code path in a function should return the same type. Do not mix explicit `return value` with implicit `return None` (falling off the end).
+
+9. **Use `random` only for non-security purposes.** For jitter, shuffling, or display randomization, `random` is fine. For tokens, session IDs, nonces, or any security-sensitive value, use `secrets` or `os.urandom`.
+
+10. **Environment variable names are not passwords.** Constants like `PASSWORD_ENV = "OMERO_DB_PASSWORD"` store the *name* of an env var, not a credential. Bandit B105 flags these — they are acceptable. Do not rename them to avoid the pattern; instead ensure actual secrets never appear in source code.
+
+### JavaScript in Django templates
+
+1. **No unused JS variables.** If you destructure or assign a value, use it. Remove `const x = ...` if `x` is never referenced.
+
+2. **Django template tags in `<script>` blocks** will always trigger `js/syntax-error` from CodeQL. This is a known false positive. Minimize template logic inside JS blocks where possible, but do not restructure working code just to appease the scanner.
+
+### Dockerfiles
+
+1. **Use `find` instead of `ls` in RUN commands.** Replace `ls -d /path/glob*` with `find /path -maxdepth 1 -type d -name 'glob*'`. Replace `ls -la /path` with `find /path -maxdepth 1 -ls`.
+
+2. **Single-quoted strings with `$` in printf/heredocs** are intentional when writing entrypoint scripts. SC2016 alerts on these are acceptable.
+
+3. **Pin all base images and action versions.** Use exact tags or SHA digests, never `:latest`.
+
+4. **Add `USER` directive** before `ENTRYPOINT`/`CMD` where possible. Document containers that require root (bind-mount permissions) with an inline comment.
+
+### Exception handling patterns
+
+```python
+# WRONG — triggers B112 and py/empty-except
+try:
+    value = risky_call()
+except Exception:
+    continue
+
+# CORRECT — log before continuing
+try:
+    value = risky_call()
+except Exception:
+    logger.debug("Failed to get value from risky_call")
+    continue
+
+# WRONG — bare pass
+except Exception:
+    pass
+
+# CORRECT — explain why the exception is expected
+except Exception:
+    logger.debug("Expected failure in optional path, skipping")
+```
+
+### Test code
+
+1. **`assert` in test code is correct.** Bandit B101 flags all `assert` usage. In test files (`tests/`, `*/tests/`), this is expected and acceptable.
+
+2. **Dummy credentials in test fixtures** (B106) are acceptable. Use obviously fake values like `"test_password"` or `"dummy_token"`.
+
+3. **Test files should import `from unittest import TestCase, mock`** — not both `import unittest` and `from unittest import mock`.
+
+### What NOT to do to resolve findings
+
+- **Do not suppress findings with inline comments** (`# nosec`, `# noqa`, `# type: ignore`) unless the finding is a verified false positive AND you document why.
+- **Do not rename variables** to avoid pattern matching (e.g., renaming `password_env` to `pw_env` to dodge B105).
+- **Do not remove `subprocess` imports** (B404) or change `shell=False` to avoid B603 — these are informational, not vulnerabilities.
+- **Do not replace `assert` in tests** with `if/raise` just to satisfy B101.
+- **Do not replace `random` with `secrets`** for non-security purposes (jitter, UI randomization) — `secrets` is slower and unnecessary.
+- **Do not restructure Docker networking** to avoid localhost references (DS162092) — internal container communication uses localhost by design.

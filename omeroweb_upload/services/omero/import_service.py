@@ -1105,11 +1105,3 @@ def _start_compatibility_check_thread(job_id: str):
         return
     worker = threading.Thread(target=_run_compatibility_check, args=(job_id,), daemon=True)
     worker.start()
-
-
-def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, orphan_dataset_name):
-    rel_path = entry.get("relative_path")
-    if not rel_path:
-        return {"skip": True}
-
-    staged_path = entry.get("staged_path") or rel_path

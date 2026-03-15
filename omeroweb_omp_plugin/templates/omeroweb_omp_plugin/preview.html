@@ -639,7 +639,6 @@ function toggleEditMode() {
     
     const editBtn = document.getElementById('edit_rows_btn');
     const finishBtn = document.getElementById('finish_edit_btn');
-    const addBtn = document.getElementById('add_var_row_btn');
     const varRowActions = document.querySelector('.var-row-actions');
     const rows = varNameInputs ? Array.from(varNameInputs.querySelectorAll('.var-row')) : [];
     
@@ -1460,7 +1459,6 @@ function loadVariableSet() {
             return;
         }
 
-        const container = document.getElementById('var-config');
         const saved = data.var_names || [];
         ensureVarRows(saved.length);
         const count = getVarRowCount();
@@ -1655,7 +1653,6 @@ function startSaveJob() {
     const separatorMode = document.getElementById('separator_mode').value;
 
     const count = getVarRowCount();
-    const useDefaults = document.getElementById('use_defaults').checked;
 
     if (count < MAX_PARSED_VARS) {
         showNonBlockingModal(formatMessage(messages.minVariablesRequired, {

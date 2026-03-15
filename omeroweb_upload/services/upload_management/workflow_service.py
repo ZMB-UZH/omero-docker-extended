@@ -16,9 +16,6 @@ from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
 logger = logging.getLogger(__name__)
 
-UPLOAD_CONCURRENCY_ENV = "OMERO_WEB_UPLOAD_CONCURRENCY"
-_IMPORT_LOCKS = {}
-_IMPORT_LOCKS_GUARD = threading.Lock()
 
 def _classify_compatibility_output(
     return_code: int,
@@ -248,8 +245,7 @@ def _check_import_compatibility(
         os.chmod(cli_home, 0o700)
         os.chmod(cli_cache, 0o700)
     except Exception:
-        # Best-effort only; container/filesystem may not allow chmod.
-        pass
+        logger.debug("Best-effort chmod failed for CLI home/cache directories")
 
     env["HOME"] = str(cli_home)
     env["XDG_CACHE_HOME"] = str(cli_cache)

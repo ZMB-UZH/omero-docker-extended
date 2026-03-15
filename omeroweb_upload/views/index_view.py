@@ -8,7 +8,6 @@ from .utils import require_non_root_user
 
 @login_required()
 def index(request, conn=None, url=None, **kwargs):
-    username = current_username(request, conn)
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()
     upload_enabled = _ensure_dir(upload_root)

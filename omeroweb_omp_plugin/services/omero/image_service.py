@@ -122,6 +122,7 @@ def collect_images_by_selected_datasets(
             try:
                 ds_id_int = int(ds_id)
             except Exception:
+                logger.debug("Failed to convert dataset ID to int: %s", ds_id)
                 continue
             if ds_id_int not in wanted:
                 continue
@@ -212,6 +213,7 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                                 }
                                                 return format_map.get(fmt_val, fmt_val)
                                 except Exception:
+                                    logger.debug("Failed to detect image format via pixel metadata")
                                     continue
                     except Exception as exc:
                         logger.debug(
@@ -271,6 +273,7 @@ def collect_dataset_summaries(conn, project_id, owner_id=None):
                                             }
                                             return format_map.get(ext, ext)
                             except Exception:
+                                logger.debug("Failed to detect image format via file extension")
                                 continue
             except Exception as exc:
                 logger.debug(

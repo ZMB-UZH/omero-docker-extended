@@ -389,6 +389,7 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
             try:
                 base_names.add(extract_base_name(name))
             except Exception:
+                logger.debug("Failed to extract base name from filename")
                 continue
 
     rows = []

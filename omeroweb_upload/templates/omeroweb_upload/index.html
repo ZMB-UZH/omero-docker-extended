@@ -1366,7 +1366,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const normalizedQuery = query.trim().toLowerCase();
             const matches = [];
             const orderedEntries = getOrderedProjectEntries(isCollaborationEnabled());
-            const totalProjects = orderedEntries.length;
             let totalMatches = 0;
             let ownedMatches = 0;
             const maxResults = getProjectResultsLimit(isCollaborationEnabled());
@@ -1790,8 +1789,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             refreshFileList();
         }
 
-        function applySpecialUploadMode(value, options = {}) {
-            const { isInitial = false } = options;
+        function applySpecialUploadMode(value) {
             const isSemEdx = value === 'sem_edx_spectra';
             const shouldHideProjectSelection = !!value;
             document.documentElement.classList.toggle('special-upload-active', shouldHideProjectSelection);

@@ -240,7 +240,7 @@ RUN set -euo pipefail; \
     \
     if [[ ! -d /opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts ]]; then \
         echo "ERROR: figure_scripts not found after copy (expected from omero-scripts repo)" >&2; \
-        ls -la /opt/omero/server/OMERO.server/lib/scripts/omero >&2 || true; \
+        find /opt/omero/server/OMERO.server/lib/scripts/omero -maxdepth 1 -ls >&2 || true; \
         exit 1; \
     fi; \
     \
@@ -337,7 +337,7 @@ RUN set -euo pipefail; \
 # ------------------------------------------------------------------------
 COPY omero_plugin_common /tmp/omero_plugin_common
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     rm -rf "${SITE_PACKAGES}/omero_plugin_common"; \
@@ -348,7 +348,7 @@ RUN set -euo pipefail; \
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
 # --------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/server/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \

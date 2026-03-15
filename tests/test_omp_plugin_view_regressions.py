@@ -4,9 +4,8 @@ import importlib
 import json
 import sys
 import types
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, mock, main as unittest_main
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +53,7 @@ def _install_import_stubs() -> None:
         "django.utils.html",
         types.ModuleType("django.utils.html"),
     )
-    django_utils_html.escape = lambda value: str(value)
+    django_utils_html.escape = str
 
     django_utils_safe = sys.modules.setdefault(
         "django.utils.safestring",
@@ -259,7 +258,7 @@ def _clear_omp_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
-class OmpPluginViewRegressionTests(unittest.TestCase):
+class OmpPluginViewRegressionTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         _install_import_stubs()
@@ -712,4 +711,4 @@ class OmpPluginViewRegressionTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest_main()

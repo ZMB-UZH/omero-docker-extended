@@ -527,7 +527,6 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     response = resource_monitoring_data(request, conn=None)
 
     assert response.status_code == 200
-    import json
 
     payload = json.loads(response.content.decode("utf-8"))
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
@@ -613,7 +612,6 @@ def test_resource_monitoring_data_keeps_external_urls_optional(monkeypatch) -> N
     )
 
     response = resource_monitoring_data(request, conn=None)
-    import json
 
     payload = json.loads(response.content.decode("utf-8"))
 
@@ -1321,7 +1319,6 @@ def test_resource_monitoring_suppresses_external_url_behind_proxy(monkeypatch) -
     monkeypatch.delenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", raising=False)
 
     response = resource_monitoring_data(request, conn=None)
-    import json
 
     payload = json.loads(response.content.decode())
 

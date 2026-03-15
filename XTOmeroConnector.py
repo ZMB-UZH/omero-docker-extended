@@ -254,7 +254,7 @@ def _prepare_imaris_xt_environment():
                     _XT_DLL_DIR_HANDLES.append(handle)
                     dll_dirs.append(normalized)
                 except Exception:
-                    pass
+                    logger.debug("Failed to add DLL directory: %s", normalized)
 
     if path_parts:
         os.environ["PATH"] = os.pathsep.join(path_parts)

@@ -2,7 +2,6 @@ import os
 
 from omero_plugin_common.env_utils import ENV_FILE_OMEROWEB, get_env
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
-import time
 import logging
 
 logger = logging.getLogger(__name__)

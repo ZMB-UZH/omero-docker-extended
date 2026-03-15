@@ -35,7 +35,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Locate OMERO.web venv, validate layout, and ensure stable OMERO.web symlink
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
@@ -121,7 +121,7 @@ RUN set -euo pipefail; \
 # IMPORTANT: Pin omero-py to match OMERO.server stack
 # ---------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
@@ -144,7 +144,7 @@ RUN set -euo pipefail; \
 # Remove old copies of the plugins inside the container (if any)
 # --------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     rm -rf "${SITE_PACKAGES}/omeroweb_omp_plugin" \
@@ -168,7 +168,7 @@ COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     cp -a /tmp/omeroweb_omp_plugin "${SITE_PACKAGES}/omeroweb_omp_plugin"; \
@@ -203,7 +203,7 @@ RUN set -euo pipefail; \
 # This preserves the documented login-logo path while avoiding noisy debug
 # log entries from missing ome.logo_src / ome.logo_href lookups.
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     DECORATORS_PY="${SITE_PACKAGES}/omeroweb/webclient/decorators.py"; \
@@ -214,7 +214,7 @@ RUN set -euo pipefail; \
 # Patch omero-py TempFileManager to physically remove fallbacks and force strictly the env var
 # --------------------------------------------------------------------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
     TEMP_FILES_PY="${SITE_PACKAGES}/omero/util/temp_files.py"; \
@@ -259,7 +259,7 @@ RUN --mount=type=bind,source=.,target=/tmp/build-context,readonly \
 # Sync OMERO.web static + media files
 # -----------------------------------
 RUN set -euo pipefail; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     su -s /bin/bash omero-web -c "\
         source \"${VENV_DIR}/bin/activate\" && \
         omero web syncmedia \
@@ -281,7 +281,7 @@ RUN set -euo pipefail; \
         echo "Skipping optional OMERO.web venv tooling updates (APPLY_OMEROWEB_VENV_TOOLING_UPDATES=${APPLY_OMEROWEB_VENV_TOOLING_UPDATES})."; \
         exit 0; \
     fi; \
-    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
         echo "ERROR: Could not find valid OMERO.web venv" >&2; \
         exit 1; \
@@ -323,11 +323,11 @@ RUN set -euo pipefail; \
         'if [ -n "${VENV_DIR}" ]; then' \
         '    VENV_DIR="/opt/omero/web/${VENV_DIR}"' \
         'else' \
-        '    VENV_DIR="$(ls -d /opt/omero/web/venv* 2>/dev/null | sort -V | tail -n 1)"' \
+        '    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"' \
         'fi' \
         'if [ -z "${VENV_DIR}" ] || [ ! -f "${VENV_DIR}/bin/activate" ]; then' \
         '    echo "ERROR: Could not find OMERO.web venv under /opt/omero/web (OMERO_WEB_VENV=${OMERO_WEB_VENV:-unset})" >&2' \
-        '    ls -la /opt/omero/web >&2 || true' \
+        '    find /opt/omero/web -maxdepth 1 -ls >&2 || true' \
         '    exit 1' \
         'fi' \
         'source "${VENV_DIR}/bin/activate"' \

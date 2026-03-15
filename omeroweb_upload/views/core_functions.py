@@ -931,6 +931,7 @@ def _get_owner_username(obj):
                 if value:
                     return value
         except Exception:
+            logger.debug("Failed to get owner name via %s", attr)
             continue
     owner_id = _get_id(owner)
     return str(owner_id) if owner_id is not None else ""
@@ -945,6 +946,7 @@ def _has_read_write_permissions(obj):
             try:
                 return bool(checker())
             except Exception:
+                logger.debug("Permission check via %s failed", attr)
                 continue
     try:
         details = obj.getDetails()
