@@ -105,7 +105,7 @@ def imaris_export(request, conn=None, **kwargs):
                 "Only Celery-backed IMS export jobs are supported.",
                 status=400,
             )
-        state, outputs, error, meta = _poll_celery_job(job_id)
+        state, outputs, _, meta = _poll_celery_job(job_id)
         normalized_state = _normalize_job_state(state)
         finished_states = {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}
         failed_states = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
@@ -113,7 +113,6 @@ def imaris_export(request, conn=None, **kwargs):
         is_failed = normalized_state in failed_states
         if normalized_state == "TIMEOUT":
             is_failed = True
-            error = error or "Timed out waiting for IMS export job."
 
         if _bool_from_request(request.GET.get("download")):
             if not is_finished:
