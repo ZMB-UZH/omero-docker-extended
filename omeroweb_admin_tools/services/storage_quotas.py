@@ -306,7 +306,8 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
     logs = state.setdefault("logs", [])
-    assert isinstance(logs, list)
+    if not isinstance(logs, list):
+        raise TypeError(f"Expected 'logs' to be a list, got {type(logs).__name__}")
     if (
         level == "info"
         and logs
@@ -440,7 +441,8 @@ def upsert_quotas(
     path = quota_state_path()
     state = _load_state(path)
     quotas = state.setdefault("quotas_gb", {})
-    assert isinstance(quotas, dict)
+    if not isinstance(quotas, dict):
+        raise TypeError(f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}")
     changed = False
 
     for raw_group, raw_quota in updates:
@@ -540,7 +542,8 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         path = quota_state_path()
         state = _load_state(path)
         quotas = state.setdefault("quotas_gb", {})
-        assert isinstance(quotas, dict)
+        if not isinstance(quotas, dict):
+            raise TypeError(f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}")
 
         auto_set_default_quota = auto_set_default_group_quota_enabled()
         default_quota_gb = default_group_quota_gb()
