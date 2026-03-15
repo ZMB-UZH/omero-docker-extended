@@ -24,7 +24,7 @@ Monitoring data-directory ownership is auto-detected by `installation/installati
 | File | Content |
 |---|---|
 | `monitoring/prometheus/prometheus.yml` | Scrape targets, blackbox probe definitions |
-| `monitoring/loki/loki-config.yml` | TSDB storage, ingestion rates, retention |
+| `monitoring/loki/loki-config.yml` | TSDB storage, ingestion rates, retention, single-node burst tuning |
 | `monitoring/alloy/alloy-config.alloy` | Docker log discovery, file log discovery, Loki push |
 | `monitoring/grafana/provisioning/datasources/prometheus.yml` | Prometheus data source |
 | `monitoring/grafana/provisioning/dashboards/dashboard-provider.yml` | Dashboard auto-provisioning |
@@ -110,6 +110,8 @@ Alloy collects logs from two sources:
 2. **OMERO internal log files**: discovered by file path patterns in mounted OMERO server and web log directories (`*.log`, `*.out`, `*.err`). Labeled with `compose_service`, `log_type=internal`, and `filepath`.
 
 All logs are pushed to Loki at `http://loki:3100/loki/api/v1/push`.
+
+The internal OMERO file tails start from the current end-of-file (`tail_from_end = true`). This avoids replaying historical log backlogs into Loki during restarts, which previously caused startup-time ingestion-rate errors on single-node deployments. Docker container logs are still collected continuously after startup.
 
 ## CrowdSec log expectations
 
@@ -253,4 +255,5 @@ For the `Swap usage` panel specifically, only presentation options (for example 
 - Do not expose Grafana, Prometheus, or Loki publicly without authentication.
 - Restrict Grafana dashboard write access to admin users.
 - Rotate Grafana admin credentials (configured in `env/grafana.env`).
+- Grafana outbound analytics and update checks are disabled in `env/grafana_example.env` for offline or restricted-network deployments; this prevents recurring startup warnings when egress is blocked.
 - Alloy has read-only access to the Docker socket and log files.

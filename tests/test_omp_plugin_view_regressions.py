@@ -149,6 +149,7 @@ def _install_import_stubs() -> None:
         types.ModuleType("omero_plugin_common.logging_utils"),
     )
     logging_utils.sanitize_log_value = lambda value: value
+    logging_utils.sanitized_exc_info = lambda exc: None
 
 
 def _install_omp_dependency_stubs() -> None:
@@ -306,23 +307,130 @@ class OmpPluginViewRegressionTests(unittest.TestCase):
 
     def test_delete_plugin_login_failure_hides_cli_output(self) -> None:
         view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_plugin_view")
-        conn = mock.Mock()
-        conn.getUser.return_value.getName.return_value = "alice"
-
-        run_results = [
-            mock.Mock(returncode=0, stdout="", stderr=""),
-            mock.Mock(returncode=1, stdout="secret stdout", stderr="secret stderr"),
-        ]
-
-        with mock.patch.object(view_module.subprocess, "run", side_effect=run_results):
+        with mock.patch.object(view_module, "validate_user_password", return_value=(False, "Wrong password.")):
             response = view_module.delete_plugin_keyvaluepairs(
                 self._make_request(payload={"project_id": 1, "password": "pw"}),
-                conn=conn,
+                conn=mock.Mock(),
             )
 
         self.assertEqual("OMERO.web login failed", response["payload"]["error"])
         self.assertNotIn("stdout", response["payload"])
         self.assertNotIn("stderr", response["payload"])
+
+    def test_delete_plugin_view_uses_session_key_cli_without_passing_password(self) -> None:
+        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_plugin_view")
+        conn = mock.Mock()
+        conn.getUser.return_value.getName.return_value = "alice"
+        conn.getObject.return_value = None
+
+        image = types.SimpleNamespace(id=12)
+        recorded_commands = []
+
+        def _record_run(cmd, **kwargs):
+            recorded_commands.append(cmd)
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with mock.patch.object(view_module, "validate_user_password", return_value=(True, None)), mock.patch.object(
+            view_module,
+            "build_omero_cli_base_command",
+            return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
+        ), mock.patch.object(
+            view_module,
+            "collect_images_in_project",
+            return_value=[image],
+        ), mock.patch.object(
+            view_module,
+            "find_plugin_annotation_ids",
+            return_value=[77],
+        ), mock.patch.object(
+            view_module,
+            "find_annotation_link_ids",
+            return_value=[],
+        ), mock.patch.object(
+            view_module.subprocess,
+            "run",
+            side_effect=_record_run,
+        ):
+            response = view_module.delete_plugin_keyvaluepairs(
+                self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
+                conn=conn,
+            )
+
+        self.assertEqual(200, response["status"])
+        self.assertEqual(1, len(recorded_commands))
+        self.assertEqual(
+            [
+                "/usr/bin/omero",
+                "-k",
+                "session-123",
+                "-s",
+                "omeroserver",
+                "-p",
+                "4064",
+                "delete",
+                "Annotation:77",
+                "--force",
+            ],
+            recorded_commands[0],
+        )
+        self.assertNotIn("pw-secret", recorded_commands[0])
+
+    def test_delete_all_view_uses_session_key_cli_without_passing_password(self) -> None:
+        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_all_view")
+        conn = mock.Mock()
+        conn.getUser.return_value.getName.return_value = "alice"
+
+        image = types.SimpleNamespace(id=12)
+        recorded_commands = []
+
+        def _record_run(cmd, **kwargs):
+            recorded_commands.append(cmd)
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with mock.patch.object(view_module, "validate_user_password", return_value=(True, None)), mock.patch.object(
+            view_module,
+            "build_omero_cli_base_command",
+            return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
+        ), mock.patch.object(
+            view_module,
+            "collect_images_in_project",
+            return_value=[image],
+        ), mock.patch.object(
+            view_module,
+            "find_map_annotation_ids",
+            return_value=[],
+        ), mock.patch.object(
+            view_module.subprocess,
+            "run",
+            side_effect=_record_run,
+        ):
+            response = view_module.delete_all_keyvaluepairs(
+                self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
+                conn=conn,
+            )
+
+        self.assertEqual(200, response["status"])
+        self.assertEqual(1, len(recorded_commands))
+        self.assertEqual(
+            [
+                "/usr/bin/omero",
+                "-k",
+                "session-123",
+                "-s",
+                "omeroserver",
+                "-p",
+                "4064",
+                "delete",
+                "Image/Annotation:12",
+                "--include",
+                "MapAnnotation",
+                "--include",
+                "ImageAnnotationLink",
+                "--force",
+            ],
+            recorded_commands[0],
+        )
+        self.assertNotIn("pw-secret", recorded_commands[0])
 
     def test_job_view_invalid_regex_message_is_sanitized(self) -> None:
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
@@ -404,6 +512,14 @@ class OmpPluginViewRegressionTests(unittest.TestCase):
                     view_module,
                     "collect_images_in_project",
                     side_effect=RuntimeError("secret delete failure"),
+                ), mock.patch.object(
+                    view_module,
+                    "validate_user_password",
+                    return_value=(True, None),
+                ), mock.patch.object(
+                    view_module,
+                    "build_omero_cli_base_command",
+                    return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
                 ), mock.patch.object(
                     view_module.subprocess,
                     "run",
