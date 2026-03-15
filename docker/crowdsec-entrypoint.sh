@@ -404,3 +404,4 @@ fi
 
 # --- Wait for CrowdSec daemon to exit (container lifecycle) ----------------
 wait $CROWDSEC_PID
+
