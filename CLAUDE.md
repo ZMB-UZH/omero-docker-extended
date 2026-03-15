@@ -81,16 +81,22 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 
 ## Testing
 
+**Important:** Run each test directory as a **separate** `pytest` invocation. The root `conftest.py` installs mock stubs that interfere across test modules when run together in a single process. A combined `pytest tests/ omero_plugin_common/tests/ ...` call produces false failures.
+
 ```bash
-# Run docs structure validation
+# Run docs structure validation (always run this)
 python3 tools/lint_docs_structure.py
 
 # Run docs lint tests
 python3 -m unittest -v tests/test_lint_docs_structure.py
 
-# Run plugin unit tests (example)
-python3 -m pytest omeroweb_imaris_connector/tests/ -v
+# Run all test suites (each separately)
+python3 -m pytest tests/ -v
 python3 -m pytest omero_plugin_common/tests/ -v
+python3 -m pytest omeroweb_imaris_connector/tests/ -v
+python3 -m pytest omeroweb_admin_tools/tests/ -v
+python3 -m pytest omeroweb_omp_plugin/tests/ -v
+python3 -m pytest omeroweb_upload/tests/ -v
 ```
 
 ## Build and deploy
@@ -102,9 +108,18 @@ docker compose --env-file installation_paths.env build
 # Start all services
 docker compose --env-file installation_paths.env up -d
 
-# Check service health
+# Check service health (requires secrets env files to be provisioned)
 docker compose --env-file installation_paths.env ps
+# Fallback if secrets env files are missing:
+docker ps --format "table {{.Names}}\t{{.Status}}"
 
 # View logs for a service
 docker compose --env-file installation_paths.env logs -f omeroweb
 ```
+
+## Git operations
+
+- Repository files are owned by `root`. You need `sudo chown -R <user>:<user> /opt/omero/.git` before any git write operation (fetch, checkout, push, stash).
+- Do not chown bind-mounted data directories (`postgresdb/`, `omero_data/`, `omero_temp/`) — this breaks container permissions.
+- Commits may exist in worktrees or standalone clones under `/tmp/omero-*`, not just in the main repo. Search there if `git cat-file -t <hash>` fails.
+- Always force-update tracking refs before rebase: `git fetch origin <branch>:refs/remotes/origin/<branch> --force`
