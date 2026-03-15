@@ -461,6 +461,11 @@ RUN set -euo pipefail; \
         || true; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
+    echo "=== Final security hardening: removing unused locale/i18n data ==="; \
+    localedef --list-archive 2>/dev/null | grep -v -E '^(en_US|C|POSIX)' | while read -r loc; do \
+        localedef --delete-from-archive "${loc}" 2>/dev/null || true; \
+    done; \
+    rm -rf /usr/share/i18n/locales /usr/share/locale/*/LC_MESSAGES || true; \
     echo "=== Final security hardening: Python packages (pip) ==="; \
     mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
     for VENV_DIR in "${VENV_DIRS[@]}"; do \
@@ -476,7 +481,15 @@ RUN set -euo pipefail; \
             echo "All packages are up to date."; \
         fi; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
-    done
+        echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \
+        find "${VENV_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true; \
+        find "${VENV_DIR}" -type d \( -name "tests" -o -name "test" -o -name "testing" \) \
+            -not -path "*/omero/*" -not -path "*/Ice/*" \
+            -exec rm -rf {} + 2>/dev/null || true; \
+        find "${VENV_DIR}" -type f -name "*.pyc" -delete 2>/dev/null || true; \
+    done; \
+    echo "=== Final security hardening: stripping shared libraries ==="; \
+    find /usr/lib64 /usr/lib -type f -name "*.so*" -exec strip --strip-unneeded {} 2>/dev/null \; || true
 
 # Keep root as image user so bootstrap scripts can reconcile runtime permissions
 # before dropping to the application user in 99-run.sh and in entrypoint python scripts

@@ -166,9 +166,19 @@ def _post_json(url, headers, payload, timeout=15):
     parsed = urllib.parse.urlparse(str(url or ""))
     if parsed.scheme != "https" or not parsed.netloc:
         raise AiAssistError(errors.provider_unreachable())
+    # Reconstruct the URL from validated components to prevent any
+    # user-influenced path/query segments from altering scheme or host.
+    validated_url = urllib.parse.urlunparse((
+        parsed.scheme,
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        parsed.query,
+        "",  # discard fragment
+    ))
     data = json.dumps(payload).encode("utf-8")
-    safe_url = sanitize_url_for_logging(url)
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    safe_url = sanitize_url_for_logging(validated_url)
+    request = urllib.request.Request(validated_url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
