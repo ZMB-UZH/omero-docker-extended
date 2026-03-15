@@ -117,7 +117,7 @@ Most Note-level findings have been resolved through a combination of code fixes 
 **Code fixes (55 alerts):** Removed dead code, unused imports/variables, added debug logging to empty except blocks, consolidated imports, replaced `ls` with `find` in Dockerfiles, removed unused JS variables.
 
 **Scanner configuration (additional ~570 alerts):**
-- Bandit split into production and test scans; `B101` (assert) and `B106` (test credentials) skipped only in test directories. The two SARIF files are merged and uploaded under the stable `bandit` category so GitHub code scanning closes older Bandit alerts instead of treating them as a separate analysis stream.
+- Bandit split into production and test scans; `B101` (assert) and `B106` (test credentials) skipped only in test directories. The workflow also uploads a zero-result legacy `bandit` SARIF so GitHub code scanning can close stale alerts from the pre-split Bandit configuration without suppressing current `bandit-prod` or `bandit-test` results.
 - `B603` (subprocess shell=False) and `B404` (subprocess import) skipped globally — purely informational, not vulnerabilities
 - DevSkim `DS162092` (localhost references) excluded — all 46 are Docker healthchecks, startup scripts, and container-internal networking
 
