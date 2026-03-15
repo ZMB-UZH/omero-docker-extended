@@ -146,30 +146,42 @@ jobs:
       - name: Discover scan targets and test directories
         id: discover
         run: |
-          # Auto-discover plugin/library directories at repo root (omero_*/omeroweb_* convention)
+          # Auto-discover Python package directories at repo root (omero_*/omeroweb_* convention)
+          # Only include real Python packages with __init__.py to avoid scanning data/runtime dirs.
           SCAN_DIRS=$(find . -maxdepth 1 -type d \( -name 'omero_*' -o -name 'omeroweb_*' \) \
-            | sed 's|^\./||' | sort | tr '\n' ' ')
+            | while read -r dir; do
+                if [ -f "$dir/__init__.py" ]; then
+                  printf '%s\n' "${dir#./}"
+                fi
+              done | sort | tr '\n' ' ')
           SCAN_DIRS=$(echo "$SCAN_DIRS" | xargs)
           echo "scan_dirs=${SCAN_DIRS}" >> "$GITHUB_OUTPUT"
 
-          # Auto-discover test directories within those packages
+          # Auto-discover package test directories for exclusion from the production scan.
+          PACKAGE_TEST_DIRS=""
           TEST_DIRS=""
           EXCLUDE_CSV=""
           if [ -n "$SCAN_DIRS" ]; then
             # shellcheck disable=SC2086
-            TEST_DIRS=$(find $SCAN_DIRS -type d \( -name 'tests' -o -name 'test' \) 2>/dev/null \
+            PACKAGE_TEST_DIRS=$(find $SCAN_DIRS -type d \( -name 'tests' -o -name 'test' \) 2>/dev/null \
               | sort | tr '\n' ' ')
-            TEST_DIRS=$(echo "$TEST_DIRS" | xargs)
-            if [ -n "$TEST_DIRS" ]; then
-              EXCLUDE_CSV=$(echo "$TEST_DIRS" | tr ' ' ',')
+            PACKAGE_TEST_DIRS=$(echo "$PACKAGE_TEST_DIRS" | xargs)
+            if [ -n "$PACKAGE_TEST_DIRS" ]; then
+              EXCLUDE_CSV=$(echo "$PACKAGE_TEST_DIRS" | tr ' ' ',')
             fi
           fi
+          TEST_DIRS="$PACKAGE_TEST_DIRS"
+          if [ -d tests ]; then
+            TEST_DIRS="$TEST_DIRS tests"
+          fi
+          TEST_DIRS=$(echo "$TEST_DIRS" | xargs)
           echo "test_dirs=${TEST_DIRS}" >> "$GITHUB_OUTPUT"
           echo "exclude_csv=${EXCLUDE_CSV}" >> "$GITHUB_OUTPUT"
 
           echo "Scan directories: ${SCAN_DIRS:-none}"
-          echo "Test directories: ${TEST_DIRS:-none}"
-          echo "Exclude CSV for Bandit: ${EXCLUDE_CSV:-none}"
+          echo "Package test directories: ${PACKAGE_TEST_DIRS:-none}"
+          echo "All test directories: ${TEST_DIRS:-none}"
+          echo "Exclude CSV for Bandit production scan: ${EXCLUDE_CSV:-none}"
 
       - name: Audit — list files in scan scope
         if: steps.discover.outputs.scan_dirs != ''
@@ -189,6 +201,9 @@ jobs:
             -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | wc -l)"
           echo "Test: $(find ${{ steps.discover.outputs.scan_dirs }} \
             -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | wc -l)"
+          if [ -d tests ]; then
+            echo "Top-level test: $(find tests -name '*.py' | wc -l)"
+          fi
           echo "::endgroup::"
 
       - name: Run Bandit scan (production code — excludes test directories)
@@ -217,19 +232,39 @@ jobs:
           -o bandit-test.sarif
           --exit-zero
 
-      - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: bandit-prod.sarif
-          category: bandit-prod
-        if: always() && steps.discover.outputs.scan_dirs != ''
+      - name: Merge Bandit SARIF results
+        if: always() && (steps.discover.outputs.scan_dirs != '' || steps.discover.outputs.test_dirs != '')
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
 
-      - name: Upload Bandit test results to GitHub Security tab
+          merged = None
+          for path in ("bandit-prod.sarif", "bandit-test.sarif"):
+              if not os.path.exists(path) or os.path.getsize(path) == 0:
+                  continue
+              with open(path, encoding="utf-8") as handle:
+                  data = json.load(handle)
+              if merged is None:
+                  merged = data
+                  continue
+              merged.setdefault("runs", []).extend(data.get("runs", []))
+
+          if merged is None:
+              sys.exit("No Bandit SARIF files were generated.")
+
+          with open("bandit-results.sarif", "w", encoding="utf-8") as handle:
+              json.dump(merged, handle)
+          PY
+
+      - name: Upload Bandit results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: bandit-test.sarif
-          category: bandit-test
-        if: always() && steps.discover.outputs.test_dirs != ''
+          sarif_file: bandit-results.sarif
+          # Keep a stable category so GitHub can close stale alerts from older Bandit runs.
+          category: bandit
+        if: always() && (steps.discover.outputs.scan_dirs != '' || steps.discover.outputs.test_dirs != '')
 
   hadolint:
     name: Hadolint (${{ matrix.dockerfile }})

@@ -117,7 +117,7 @@ Most Note-level findings have been resolved through a combination of code fixes 
 **Code fixes (55 alerts):** Removed dead code, unused imports/variables, added debug logging to empty except blocks, consolidated imports, replaced `ls` with `find` in Dockerfiles, removed unused JS variables.
 
 **Scanner configuration (additional ~570 alerts):**
-- Bandit split into production and test scans; `B101` (assert) and `B106` (test credentials) skipped only in test directories
+- Bandit split into production and test scans; `B101` (assert) and `B106` (test credentials) skipped only in test directories. The two SARIF files are merged and uploaded under the stable `bandit` category so GitHub code scanning closes older Bandit alerts instead of treating them as a separate analysis stream.
 - `B603` (subprocess shell=False) and `B404` (subprocess import) skipped globally — purely informational, not vulnerabilities
 - DevSkim `DS162092` (localhost references) excluded — all 46 are Docker healthchecks, startup scripts, and container-internal networking
 
@@ -203,7 +203,7 @@ These categories may contain genuine issues that should be reviewed:
 
 5. **Never include exploitation details**: Document what the vulnerability is and where it is located. Do not include proof-of-concept code, payload examples, or step-by-step exploitation instructions.
 
-6. **Adding new plugins or test directories**: The Bandit workflow auto-discovers both scan targets and test directories at runtime. Any directory at the repo root matching `omero_*` or `omeroweb_*` that contains `__init__.py` is automatically included in the scan. Test directories named `tests/` or `test/` within those packages are auto-discovered and excluded from the production scan (and scanned separately with B101/B106 skipped). **You do NOT need to update the workflow file** — discovery is fully dynamic. Just follow the naming convention.
+6. **Adding new plugins or test directories**: The Bandit workflow auto-discovers both scan targets and test directories at runtime. Any directory at the repo root matching `omero_*` or `omeroweb_*` that contains `__init__.py` is automatically included in the scan. Test directories named `tests/` or `test/` within those packages are auto-discovered and excluded from the production scan (and scanned separately with B101/B106 skipped). The repo-root `tests/` directory is also included in the test-only scan. **You do NOT need to update the workflow file** — discovery is fully dynamic. Just follow the naming convention.
 
 7. **Commit message convention**: When fixing a security finding, use the commit message format:
    ```
