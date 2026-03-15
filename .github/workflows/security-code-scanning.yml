@@ -74,47 +74,6 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy-fs
 
-  fortify:
-    name: Fortify AST Scan
-    runs-on: ubuntu-24.04
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-      pull-requests: write # Required for PR comments
-
-    steps:
-      - name: Check Fortify credentials
-        id: fortify-check
-        run: |
-          if [ -z "$FOD_TENANT" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Fortify credentials not configured — skipping scan."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          FOD_TENANT: ${{ secrets.FOD_TENANT }}
-
-      - name: Checkout
-        if: steps.fortify-check.outputs.skip != 'true'
-        uses: actions/checkout@v4
-
-      - name: Run Fortify Scan
-        if: steps.fortify-check.outputs.skip != 'true'
-        uses: fortify/github-action@v1
-        with:
-          sast-scan: true
-          debricked-sca-scan: true
-        env:
-          FOD_URL: https://ams.fortify.com
-          FOD_TENANT: ${{ secrets.FOD_TENANT }}
-          FOD_USER: ${{ secrets.FOD_USER }}
-          FOD_PASSWORD: ${{ secrets.FOD_PAT }}
-          DO_EXPORT: true
-          DO_PR_COMMENT: true
-          DO_JOB_SUMMARY: true
-
   semgrep:
     name: Semgrep SAST
     runs-on: ubuntu-24.04
