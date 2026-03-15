@@ -182,7 +182,7 @@ These categories may contain genuine issues that should be reviewed:
 2. Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
 4. Add a `SECURITY.md` to the repository root (addresses Scorecard `SecurityPolicyID`).
-5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout post-build scanning is integrated into `installation/installation_script.sh` with optional `APPLY_SECURITY_HARDENING=1` for OS and Python package upgrades. See `docs/SECURITY.md`.
+5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build report) covers all images in `docker-compose.yml` — both custom-built and third-party. Optional `APPLY_SECURITY_HARDENING=1` enables OS and Python package upgrades. See `docs/SECURITY.md`.
 6. Evaluate adding fuzz testing for parser code (`filename_parser.py`, `sem_edx_parser.py`).
 
 ## AI agent maintenance instructions
