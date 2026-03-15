@@ -145,12 +145,21 @@ def _proxy_http_request(
         base_parsed = urllib.parse.urlparse(base_url)
         if base_parsed.scheme not in {"http", "https"} or not base_parsed.netloc:
             return JsonResponse({"error": "Invalid proxy target"}, status=400)
-        target_url = f"{base_url.rstrip('/')}/{normalized_path}" if normalized_path else base_url.rstrip("/") + "/"
-        if query:
-            target_url = f"{target_url}?{query}"
-        target_parsed = urllib.parse.urlparse(target_url)
-        if target_parsed.scheme != base_parsed.scheme or target_parsed.netloc != base_parsed.netloc:
-            return JsonResponse({"error": "Invalid proxy target"}, status=400)
+        # Reconstruct the URL from validated base components + normalized path
+        # to prevent any user-controlled input from altering the scheme or host.
+        safe_path = base_parsed.path.rstrip("/")
+        if normalized_path:
+            safe_path = f"{safe_path}/{normalized_path}"
+        else:
+            safe_path = f"{safe_path}/"
+        target_url = urllib.parse.urlunparse((
+            base_parsed.scheme,
+            base_parsed.netloc,
+            safe_path,
+            "",      # params
+            query,   # query string
+            "",      # fragment
+        ))
     except Exception:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
