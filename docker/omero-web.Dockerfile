@@ -312,8 +312,14 @@ RUN set -euo pipefail; \
     fi; \
     echo "=== Final security hardening: OS packages (dnf) ==="; \
     dnf -y update || echo "WARNING: dnf update failed (non-fatal for hardening)."; \
+    echo "=== Final security hardening: removing unnecessary packages ==="; \
+    dnf -y remove --noautoremove \
+        vim-minimal \
+        langpacks-en \
+        glibc-langpack-en \
+        || true; \
     dnf clean all || true; \
-    rm -rf /var/cache/dnf /var/tmp/* || true; \
+    rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
     echo "=== Final security hardening: Python packages (pip) ==="; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     if [[ -z "${VENV_DIR}" || ! -x "${VENV_DIR}/bin/python" ]]; then \
