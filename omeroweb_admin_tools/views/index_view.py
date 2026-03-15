@@ -1763,7 +1763,8 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         if getattr(response, "status_code", 502) != 502:
             return response
 
-    assert last_response is not None
+    if last_response is None:
+        raise RuntimeError("No Grafana backend URLs configured; cannot proxy request.")
     if getattr(last_response, "status_code", 502) in {500, 502, 503, 504}:
         logger.warning(
             "Grafana proxy unavailable for path=%s after checking backends=%s",
@@ -1823,7 +1824,8 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         if getattr(response, "status_code", 502) != 502:
             return response
 
-    assert last_response is not None
+    if last_response is None:
+        raise RuntimeError("No Grafana backend URLs configured; cannot proxy request.")
     return last_response
 
 

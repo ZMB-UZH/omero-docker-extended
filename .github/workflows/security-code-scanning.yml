@@ -58,6 +58,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Audit — list files in scan scope
+        run: |
+          echo "::group::Trivy filesystem scan scope"
+          echo "Scanning lockfiles and config files for dependency vulnerabilities, misconfigs, and secrets."
+          echo "--- Dependency manifests ---"
+          find . -maxdepth 5 \( -name 'requirements*.txt' -o -name 'Pipfile.lock' \
+            -o -name 'poetry.lock' -o -name 'package-lock.json' -o -name 'yarn.lock' \
+            -o -name 'Gemfile.lock' -o -name 'go.sum' -o -name 'pom.xml' \) \
+            -not -path './.git/*' | sort
+          echo "--- Config files (misconfig scan) ---"
+          find . -maxdepth 5 \( -name 'Dockerfile' -o -name '*.Dockerfile' \
+            -o -name 'docker-compose*.yml' -o -name '*.yaml' -o -name '*.yml' \
+            -o -name '*.tf' -o -name '*.json' \) \
+            -not -path './.git/*' -not -path './node_modules/*' | sort | head -100
+          echo "::endgroup::"
+
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@0.28.0
         with:
@@ -84,6 +100,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Audit — list files in scan scope
+        run: |
+          echo "::group::Semgrep scan scope"
+          echo "Scanning all source files for SAST findings."
+          echo "--- Python files ---"
+          find . -name '*.py' -not -path './.git/*' | wc -l
+          find . -name '*.py' -not -path './.git/*' | sort
+          echo "--- JavaScript/TypeScript files ---"
+          find . \( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \) \
+            -not -path './.git/*' -not -path './node_modules/*' | sort
+          echo "--- HTML templates ---"
+          find . -name '*.html' -not -path './.git/*' | sort
+          echo "--- YAML/JSON config ---"
+          find . \( -name '*.yml' -o -name '*.yaml' -o -name '*.json' \) \
+            -not -path './.git/*' -not -path './node_modules/*' | sort | head -50
+          echo "::endgroup::"
+
       - name: Run Semgrep scan
         run: semgrep scan --sarif --config auto . > semgrep-results.sarif
 
@@ -109,6 +142,27 @@ jobs:
 
       - name: Install Bandit
         run: pip install "bandit[sarif]"
+
+      - name: Audit — list files in scan scope
+        run: |
+          echo "::group::Bandit scan scope"
+          echo "Scanning Python source files for security issues."
+          echo "--- Production Python files ---"
+          find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
+            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+            -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | sort
+          echo "--- Test Python files ---"
+          find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
+            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+            -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | sort
+          echo "--- File counts ---"
+          echo "Production: $(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
+            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+            -name '*.py' -not -path '*/tests/*' -not -path '*/test/*' | wc -l)"
+          echo "Test: $(find omero_plugin_common/ omeroweb_omp_plugin/ omeroweb_upload/ \
+            omeroweb_admin_tools/ omeroweb_imaris_connector/ \
+            -name '*.py' \( -path '*/tests/*' -o -path '*/test/*' \) | wc -l)"
+          echo "::endgroup::"
 
       - name: Discover test directories
         id: find-tests
@@ -145,37 +199,19 @@ jobs:
           -o bandit-test.sarif
           --exit-zero
 
-      - name: Merge Bandit SARIF results
-        run: |
-          python3 -c "
-          import json, sys, os
-          merged = None
-          for path in ['bandit-prod.sarif', 'bandit-test.sarif']:
-              if not os.path.exists(path):
-                  continue
-              try:
-                  with open(path) as f:
-                      data = json.load(f)
-              except json.JSONDecodeError:
-                  continue
-              if merged is None:
-                  merged = data
-              else:
-                  for run in data.get('runs', []):
-                      merged.setdefault('runs', []).append(run)
-          if merged:
-              with open('bandit-results.sarif', 'w') as f:
-                  json.dump(merged, f)
-          else:
-              sys.exit(1)
-          "
-
-      - name: Upload Bandit results to GitHub Security tab
+      - name: Upload Bandit production results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: bandit-results.sarif
-          category: bandit
+          sarif_file: bandit-prod.sarif
+          category: bandit-prod
         if: always()
+
+      - name: Upload Bandit test results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit-test.sarif
+          category: bandit-test
+        if: always() && steps.find-tests.outputs.test_dirs != ''
 
   hadolint:
     name: Hadolint (${{ matrix.dockerfile }})
@@ -196,6 +232,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Audit — show file being scanned
+        run: |
+          echo "::group::Hadolint scan scope"
+          echo "Scanning Dockerfile: ${{ matrix.dockerfile }}"
+          wc -l "${{ matrix.dockerfile }}"
+          echo "::endgroup::"
 
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -220,6 +263,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Audit — list files in scan scope
+        run: |
+          echo "::group::DevSkim scan scope"
+          echo "Scanning all source files for security anti-patterns."
+          echo "Excluded globs: **/.git/**, **/pgdata/**, **/omero_data/**, **/omero_temp/**"
+          echo "Excluded rules: DS162092 (localhost references in container infrastructure)"
+          echo "--- All scannable files ---"
+          find . -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.html' \
+            -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.sh' \
+            -o -name '*.sql' -o -name '*.xml' -o -name 'Dockerfile' -o -name '*.Dockerfile' \) \
+            -not -path './.git/*' -not -path '*/pgdata/*' \
+            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' | sort
+          echo "Total: $(find . -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.html' \
+            -o -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.sh' \
+            -o -name '*.sql' -o -name '*.xml' -o -name 'Dockerfile' -o -name '*.Dockerfile' \) \
+            -not -path './.git/*' -not -path '*/pgdata/*' \
+            -not -path '*/omero_data/*' -not -path '*/omero_temp/*' | wc -l) files"
+          echo "::endgroup::"
+
       - name: Run DevSkim scan
         uses: microsoft/DevSkim-Action@v1
         with:
@@ -233,6 +295,27 @@ jobs:
           sarif_file: devskim-results.sarif
           category: devskim
         if: always()
+
+  osv-scanner-audit:
+    name: OSV scan scope audit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Audit — list dependency manifests for OSV scan
+        run: |
+          echo "::group::OSV-Scanner scan scope"
+          echo "OSV-Scanner recursively scans dependency manifests for known vulnerabilities."
+          echo "--- Dependency manifests found ---"
+          find . -maxdepth 5 \( -name 'requirements*.txt' -o -name 'Pipfile' \
+            -o -name 'Pipfile.lock' -o -name 'poetry.lock' -o -name 'pyproject.toml' \
+            -o -name 'setup.py' -o -name 'setup.cfg' \
+            -o -name 'package.json' -o -name 'package-lock.json' -o -name 'yarn.lock' \
+            -o -name 'pnpm-lock.yaml' -o -name 'go.sum' -o -name 'go.mod' \
+            -o -name 'Gemfile.lock' -o -name 'pom.xml' -o -name 'gradle.lockfile' \) \
+            -not -path './.git/*' -not -path './node_modules/*' | sort
+          echo "::endgroup::"
 
   osv-scanner:
     name: OSV dependency vulnerability scan
@@ -261,6 +344,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Audit — describe scan scope
+        run: |
+          echo "::group::OSSF Scorecard scan scope"
+          echo "Scorecard evaluates repository-level supply-chain security practices."
+          echo "It checks: branch protection, CI/CD config, dependency management,"
+          echo "code review, contributors, vulnerability disclosure, and more."
+          echo "This is a repository-level assessment, not a per-file scan."
+          echo "::endgroup::"
 
       - name: Run OSSF Scorecard
         uses: ossf/scorecard-action@v2.4.0
