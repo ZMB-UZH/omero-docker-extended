@@ -2,7 +2,20 @@ from __future__ import annotations
 
 import json
 
+import django
+from django.conf import settings
 from django.test import RequestFactory
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY="test-secret-key",
+        DEFAULT_CHARSET="utf-8",
+        ALLOWED_HOSTS=["testserver", "localhost"],
+        USE_I18N=False,
+        USE_TZ=True,
+        INSTALLED_APPS=[],
+    )
+    django.setup()
 
 from omeroweb_upload.views import special_method_settings_view, user_settings_view
 

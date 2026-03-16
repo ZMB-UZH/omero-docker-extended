@@ -3407,6 +3407,25 @@ install_tmp_cleaner_if_available() {
     return 0
 }
 
+print_binary_repository_cleanse_notice() {
+    local startup_state="${1:?BUG: print_binary_repository_cleanse_notice requires startup state}"
+    local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
+    local data_dir="${OMERO_BINARY_REPO_CLEANSE_DATA_DIR:-/OMERO}"
+
+    if [ "${enabled}" = "1" ]; then
+        if [ "${startup_state}" = "started" ]; then
+            echo "OMERO binary repository cleanse is configured to run automatically on each omeroserver start (data dir: ${data_dir})."
+        else
+            echo "OMERO binary repository cleanse will run automatically on the next omeroserver start (data dir: ${data_dir})."
+        fi
+        echo "The runtime hook runs inside the omeroserver container after OMERO login is ready and does not block container startup."
+        return 0
+    fi
+
+    echo "OMERO binary repository cleanse is disabled (OMERO_BINARY_REPO_CLEANSE_ON_START=${enabled})."
+    return 0
+}
+
 install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
@@ -3419,8 +3438,10 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
     fi
 
     add_job_service_to_install_groups "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"
+    print_binary_repository_cleanse_notice "started"
 else
     echo "Skipping container startup (START_CONTAINERS=0)."
+    print_binary_repository_cleanse_notice "deferred"
 fi
 
 # Cleanup build containers

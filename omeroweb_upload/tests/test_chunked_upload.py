@@ -5,8 +5,21 @@ import json
 import logging
 from pathlib import Path
 
+import django
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY="test-secret-key",
+        DEFAULT_CHARSET="utf-8",
+        ALLOWED_HOSTS=["testserver", "localhost"],
+        USE_I18N=False,
+        USE_TZ=True,
+        INSTALLED_APPS=[],
+    )
+    django.setup()
 
 from omeroweb_upload.strings import errors
 from omeroweb_upload.views import index_view

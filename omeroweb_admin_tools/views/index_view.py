@@ -53,6 +53,7 @@ from .utils import current_username, require_root_user
 logger = logging.getLogger(__name__)
 LOG_TABLE_ROW_CAP = 5000
 _SAFE_REDIRECT_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def _to_int_env(name: str, default: int) -> int:
@@ -901,6 +902,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": "Invalid lookback or limit value."}, status=400)
     query = request.GET.get("query", "").strip()
     level = request.GET.get("level", "").strip().lower()
+    text_query = query if len(query) >= 2 else None
     since_ns = None
     since_raw = request.GET.get("since", "").strip()
     if since_raw:
@@ -927,6 +929,7 @@ def logs_data(request, conn=None, url=None, **kwargs):
             max_entries,
             internal_files=internal_files,
             since_ns=since_ns,
+            text_query=text_query,
         )
     except RuntimeError as exc:  # pragma: no cover - network errors
         logger.warning("Failed to fetch logs from Loki: %s", exc)
@@ -984,7 +987,10 @@ def internal_log_labels(request, conn=None, url=None, **kwargs):
 
 def _load_compose_service_names(compose_file: str = "docker-compose.yml") -> List[str]:
     """Return declared Docker Compose service names from the local compose file."""
-    compose_path = os.path.join(os.getcwd(), compose_file)
+    if os.path.isabs(compose_file):
+        compose_path = compose_file
+    else:
+        compose_path = os.path.join(_REPO_ROOT, compose_file)
     if not os.path.exists(compose_path):
         logger.warning("Compose file not found at %s", compose_path)
         return []

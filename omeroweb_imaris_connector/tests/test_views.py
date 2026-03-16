@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import django
 import logging
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.test import RequestFactory
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY="test-secret-key",
+        DEFAULT_CHARSET="utf-8",
+        ALLOWED_HOSTS=["testserver", "localhost"],
+        USE_I18N=False,
+        USE_TZ=True,
+        INSTALLED_APPS=[],
+    )
+    django.setup()
 
 
 def _import_views():

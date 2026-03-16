@@ -666,6 +666,7 @@ def test_storage_quota_import_invalid_errors_are_sanitized(monkeypatch) -> None:
 def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
     request = RequestFactory().get("/omeroweb_admin_tools/storage/data/")
     conn = SimpleNamespace(
+        c=None,
         SERVICE_OPTS=SimpleNamespace(setOmeroGroup=lambda value: None),
         getQueryService=lambda: SimpleNamespace(
             projection=lambda query, params, opts: (_ for _ in ()).throw(

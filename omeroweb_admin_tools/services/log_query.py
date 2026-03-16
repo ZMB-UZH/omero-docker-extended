@@ -261,6 +261,20 @@ def _chunks(values: Sequence[str], chunk_size: int) -> List[Tuple[str, ...]]:
         for index in range(0, len(values), chunk_size)
     ]
 
+
+def _escape_logql_string(value: str) -> str:
+    """Escape a string for safe inclusion inside a LogQL double-quoted literal."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _append_text_filter(query: str, text_query: Optional[str]) -> str:
+    """Append a case-insensitive literal text filter to a LogQL query."""
+    if not text_query:
+        return query
+    pattern = f"(?i){re.escape(text_query)}"
+    return f'{query} |~ "{_escape_logql_string(pattern)}"'
+
+
 def build_loki_query(containers: List[str]) -> str:
     """Build a Loki query that matches any of the selected container sources.
 
@@ -566,6 +580,7 @@ def fetch_loki_logs(
     max_entries: int,
     internal_files: Optional[Dict[str, set[str]]] = None,
     since_ns: Optional[int] = None,
+    text_query: Optional[str] = None,
 ) -> List[LogEntry]:
     """Fetch logs from Loki for the selected containers and time window."""
     _LOG_RESULT_CACHE.reconfigure(max_bytes=config.cache_max_bytes)
@@ -576,6 +591,7 @@ def fetch_loki_logs(
         max_entries,
         internal_files=internal_files,
         since_ns=since_ns,
+        text_query=text_query,
     )
     cached_entries = _LOG_RESULT_CACHE.get_or_load(
         cache_key,
@@ -587,6 +603,7 @@ def fetch_loki_logs(
                 max_entries,
                 internal_files=internal_files,
                 since_ns=since_ns,
+                text_query=text_query,
             )
         ),
     )
@@ -603,6 +620,7 @@ def _build_docker_query(container: str) -> str:
 def _prepare_query_jobs(
     containers: List[str],
     internal_files: Optional[Dict[str, set[str]]] = None,
+    text_query: Optional[str] = None,
 ) -> List[_QueryJob]:
     """Build the minimal set of Loki queries required for the request."""
     docker_containers = [c for c in containers if not c.endswith("_internal")]
@@ -612,7 +630,7 @@ def _prepare_query_jobs(
     for container in docker_containers:
         jobs.append(
             _QueryJob(
-                query=_build_docker_query(container),
+                query=_append_text_filter(_build_docker_query(container), text_query),
                 source_type="docker",
                 source_name=container,
             )
@@ -624,10 +642,13 @@ def _prepare_query_jobs(
             for batch in _chunks(selected_files, _INTERNAL_FILE_QUERY_BATCH_SIZE):
                 jobs.append(
                     _QueryJob(
-                        query=_build_internal_files_query(
-                            service,
-                            batch,
-                            label_key="filepath",
+                        query=_append_text_filter(
+                            _build_internal_files_query(
+                                service,
+                                batch,
+                                label_key="filepath",
+                            ),
+                            text_query,
                         ),
                         source_type="internal_batch",
                         source_name=service,
@@ -639,7 +660,10 @@ def _prepare_query_jobs(
         normalized = _normalize_internal_service(service)
         jobs.append(
             _QueryJob(
-                query=f'{{compose_service="{normalized}", log_type="internal"}}',
+                query=_append_text_filter(
+                    f'{{compose_service="{normalized}", log_type="internal"}}',
+                    text_query,
+                ),
                 source_type="internal_all",
                 source_name=service,
             )
@@ -691,15 +715,21 @@ def _fetch_loki_logs_uncached(
     max_entries: int,
     internal_files: Optional[Dict[str, set[str]]] = None,
     since_ns: Optional[int] = None,
+    text_query: Optional[str] = None,
 ) -> List[LogEntry]:
     """Fetch logs without using the process-local cache."""
-    jobs = _prepare_query_jobs(containers, internal_files=internal_files)
+    jobs = _prepare_query_jobs(
+        containers,
+        internal_files=internal_files,
+        text_query=text_query,
+    )
     logger.debug(
-        "fetch_loki_logs called: jobs=%d, lookback=%d, max=%d, since_ns=%s",
+        "fetch_loki_logs called: jobs=%d, lookback=%d, max=%d, since_ns=%s, text_query=%r",
         len(jobs),
         lookback_seconds,
         max_entries,
         since_ns,
+        text_query,
     )
     if not jobs:
         return []
@@ -869,6 +899,7 @@ def _build_logs_cache_key(
     max_entries: int,
     internal_files: Optional[Dict[str, set[str]]] = None,
     since_ns: Optional[int] = None,
+    text_query: Optional[str] = None,
 ) -> str:
     """Build a stable cache key for log result caching."""
     normalized_internal = tuple(
@@ -884,6 +915,7 @@ def _build_logs_cache_key(
             "max_entries": max_entries,
             "internal_files": normalized_internal,
             "since_ns": since_ns,
+            "text_query": text_query or "",
         },
         sort_keys=True,
         separators=(",", ":"),

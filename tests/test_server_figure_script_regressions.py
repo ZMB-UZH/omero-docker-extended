@@ -41,6 +41,7 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
             re.compile(
                 r"configure_script_python\n"
                 r"\s*ensure_certificate_sans\n"
+                r"\s*cleanup_stale_repository_lock_files\n"
                 r"\s*install_figure_script\n"
                 r"\s*schedule_script_registration\n",
                 re.DOTALL,
