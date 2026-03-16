@@ -53,6 +53,7 @@ class _HttpResponseRedirect(_HttpResponse):
 def _install_import_stubs():
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
+        django_module.__path__ = []
         django_http = types.ModuleType("django.http")
         django_http.JsonResponse = _JsonResponse
         django_http.HttpResponse = _HttpResponse
@@ -72,6 +73,10 @@ def _install_import_stubs():
         sys.modules["django.views"] = django_views
         sys.modules["django.views.decorators"] = django_views_decorators
         sys.modules["django.views.decorators.csrf"] = django_views_csrf
+    else:
+        django_module = sys.modules.setdefault("django", types.ModuleType("django"))
+        if not hasattr(django_module, "__path__"):
+            django_module.__path__ = []
 
     if "omeroweb.decorators" not in sys.modules:
         omeroweb_module = types.ModuleType("omeroweb")

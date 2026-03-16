@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 def _install_import_stubs():
     if "django.http" not in sys.modules:
         django_module = types.ModuleType("django")
+        django_module.__path__ = []
         django_conf = types.ModuleType("django.conf")
         django_conf.settings = types.SimpleNamespace()
         django_http = types.ModuleType("django.http")
@@ -36,6 +37,12 @@ def _install_import_stubs():
         sys.modules["django.shortcuts"] = django_shortcuts
         sys.modules["django.urls"] = django_urls
         sys.modules["django.views.decorators.csrf"] = django_csrf
+    else:
+        django_module = sys.modules.setdefault("django", types.ModuleType("django"))
+        if not hasattr(django_module, "__path__"):
+            django_module.__path__ = []
+        django_conf = sys.modules.setdefault("django.conf", types.ModuleType("django.conf"))
+        django_conf.settings = types.SimpleNamespace()
 
     if "omero" not in sys.modules:
         omero_module = types.ModuleType("omero")
@@ -94,6 +101,7 @@ def _install_import_stubs():
         common_module = types.ModuleType("omero_plugin_common")
         logging_utils = types.ModuleType("omero_plugin_common.logging_utils")
         logging_utils.sanitize_log_value = lambda value: value
+        logging_utils.sanitized_exc_info = lambda exc: None
         tmp_utils = types.ModuleType("omero_plugin_common.tmp_utils")
         tmp_utils.get_plugin_tmp_dir = lambda name: Path("/tmp") / f"upload-plugin-{name}"
         tmp_cleanup = types.ModuleType("omero_plugin_common.tmp_cleanup")

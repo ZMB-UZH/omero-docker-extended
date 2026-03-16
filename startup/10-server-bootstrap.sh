@@ -117,20 +117,115 @@ run_omero() {
         cli_home="/tmp"
     fi
 
+    local -a env_args=(
+        HOME="${cli_home}"
+    )
+
     if [[ -n "${TMPDIR:-}" ]]; then
-        # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
-        runuser -u "${OMERO_CLI_USER}" -- env \
-            HOME="${cli_home}" \
-            TMPDIR="${TMPDIR}" \
-            OMERO_TMPDIR="${OMERO_TMPDIR:-}" \
-            OMERO_TEMPDIR="${OMERO_TEMPDIR:-}" \
-            "${OMERO_BIN}" "$@"
-        return
+        env_args+=(
+            TMPDIR="${TMPDIR}"
+            OMERO_TMPDIR="${OMERO_TMPDIR:-}"
+            OMERO_TEMPDIR="${OMERO_TEMPDIR:-}"
+        )
     fi
 
+    if [[ -n "${ICE_CONFIG:-}" ]]; then
+        env_args+=(
+            ICE_CONFIG="${ICE_CONFIG}"
+        )
+    fi
+
+    # CRITICAL: runuser strips environment variables. We must EXPLICITLY pass them all.
     runuser -u "${OMERO_CLI_USER}" -- env \
-        HOME="${cli_home}" \
+        "${env_args[@]}" \
         "${OMERO_BIN}" "$@"
+}
+
+write_cli_keepalive_config() {
+    local keepalive_seconds="${1:?BUG: write_cli_keepalive_config requires keepalive seconds}"
+    local base_config="${ICE_CONFIG:-}"
+    local target_dir="${TMPDIR:-/tmp}"
+    local config_path=""
+    local owner_uid=""
+    local owner_gid=""
+
+    if ! [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Invalid OMERO CLI keepalive value: ${keepalive_seconds}" >&2
+        return 1
+    fi
+
+    if (( keepalive_seconds <= 0 )); then
+        return 1
+    fi
+
+    mkdir -p "${target_dir}" || {
+        echo "ERROR: Could not prepare CLI keepalive directory: ${target_dir}" >&2
+        return 1
+    }
+
+    config_path="$(mktemp "${target_dir%/}/omero-cli-ice.XXXXXX.cfg")" || {
+        echo "ERROR: Could not create temporary ICE_CONFIG under ${target_dir}" >&2
+        return 1
+    }
+    chmod 0600 "${config_path}" 2>/dev/null || true
+
+    if [[ -n "${base_config}" ]]; then
+        if [[ -r "${base_config}" ]]; then
+            cat "${base_config}" > "${config_path}"
+            if [[ -s "${config_path}" ]]; then
+                printf '\n' >> "${config_path}"
+            fi
+        else
+            log "WARN: Existing ICE_CONFIG is not readable; ignoring base config: ${base_config}"
+        fi
+    fi
+
+    printf 'omero.keep_alive=%s\n' "${keepalive_seconds}" >> "${config_path}"
+
+    if [[ "$(id -u)" -eq 0 ]] && id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
+        owner_uid="$(id -u "${OMERO_CLI_USER}")"
+        owner_gid="$(id -g "${OMERO_CLI_USER}")"
+        chown "${owner_uid}:${owner_gid}" "${config_path}" || {
+            echo "ERROR: Could not hand temporary ICE_CONFIG to ${OMERO_CLI_USER}: ${config_path}" >&2
+            rm -f "${config_path}" 2>/dev/null || true
+            return 1
+        }
+    fi
+
+    printf '%s\n' "${config_path}"
+}
+
+run_omero_with_keepalive() {
+    local keepalive_seconds="${1:?BUG: run_omero_with_keepalive requires keepalive seconds}"
+    shift
+
+    local had_ice_config=0
+    local previous_ice_config="${ICE_CONFIG:-}"
+    local generated_ice_config=""
+    local rc=0
+
+    if [[ -n "${ICE_CONFIG+x}" ]]; then
+        had_ice_config=1
+    fi
+
+    if [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]] && (( keepalive_seconds > 0 )); then
+        generated_ice_config="$(write_cli_keepalive_config "${keepalive_seconds}")" || return 1
+        export ICE_CONFIG="${generated_ice_config}"
+    fi
+
+    run_omero "$@" || rc=$?
+
+    if [[ -n "${generated_ice_config}" ]]; then
+        rm -f "${generated_ice_config}" 2>/dev/null || true
+    fi
+
+    if [[ "${had_ice_config}" -eq 1 ]]; then
+        export ICE_CONFIG="${previous_ice_config}"
+    else
+        unset ICE_CONFIG || true
+    fi
+
+    return "${rc}"
 }
 
 ensure_tmpdir_permissions() {
@@ -388,6 +483,88 @@ validate_job_service_bootstrap_configuration() {
             exit 1
         fi
     fi
+}
+
+validate_binary_repository_cleanse_configuration() {
+    local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
+
+    if [[ "${enabled}" != "0" && "${enabled}" != "1" ]]; then
+        echo "ERROR: OMERO_BINARY_REPO_CLEANSE_ON_START must be 0 or 1, got: '${enabled}'" >&2
+        exit 1
+    fi
+
+    local required_positive_integer_vars=(
+        "OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS"
+        "OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS"
+    )
+
+    local var_name=""
+    for var_name in "${required_positive_integer_vars[@]}"; do
+        if [[ -n "${!var_name-}" ]]; then
+            require_positive_integer_env_var "${var_name}"
+        fi
+    done
+
+    if [[ -n "${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS-}" ]]; then
+        local keepalive_seconds="${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS}"
+        if ! [[ "${keepalive_seconds}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS must be a non-negative integer, got: '${keepalive_seconds}'" >&2
+            exit 1
+        fi
+    fi
+
+    local data_dir="${OMERO_BINARY_REPO_CLEANSE_DATA_DIR:-${OMERO_DIR}}"
+    if [[ -n "${data_dir}" && "${data_dir}" != /* ]]; then
+        echo "ERROR: OMERO_BINARY_REPO_CLEANSE_DATA_DIR must be an absolute path, got: '${data_dir}'" >&2
+        exit 1
+    fi
+}
+
+validate_repository_lock_cleanup_configuration() {
+    local enabled="${OMERO_REPOSITORY_LOCK_CLEANUP_ON_START:-1}"
+
+    if [[ "${enabled}" != "0" && "${enabled}" != "1" ]]; then
+        echo "ERROR: OMERO_REPOSITORY_LOCK_CLEANUP_ON_START must be 0 or 1, got: '${enabled}'" >&2
+        exit 1
+    fi
+}
+
+cleanup_stale_repository_lock_files() {
+    local enabled="${OMERO_REPOSITORY_LOCK_CLEANUP_ON_START:-1}"
+    local repository_lock_root="${OMERO_DIR%/}/.omero/repository"
+    local -a repository_lock_files=()
+    local lock_file=""
+    local removed_count=0
+
+    if [[ "${enabled}" != "1" ]]; then
+        log "Skipping repository lock cleanup (OMERO_REPOSITORY_LOCK_CLEANUP_ON_START != 1)."
+        return
+    fi
+
+    if [[ ! -d "${repository_lock_root}" ]]; then
+        return
+    fi
+
+    if pgrep -f '(/opt/omero/server/.*/omero admin start --foreground|icegridnode|Blitz-0|OMERO\.IceStorm)' >/dev/null 2>&1; then
+        log "WARN: Skipping repository lock cleanup because OMERO server processes already appear to be running"
+        return
+    fi
+
+    mapfile -t repository_lock_files < <(find "${repository_lock_root}" -type f -name '.lock' -print 2>/dev/null | sort)
+    if [[ "${#repository_lock_files[@]}" -eq 0 ]]; then
+        return
+    fi
+
+    for lock_file in "${repository_lock_files[@]}"; do
+        rm -f "${lock_file}" || {
+            echo "ERROR: Failed to remove stale repository lock file: ${lock_file}" >&2
+            exit 1
+        }
+        log "Removed stale repository lock file: ${lock_file}"
+        removed_count=$((removed_count + 1))
+    done
+
+    log "Removed ${removed_count} stale repository lock file(s) from ${repository_lock_root}"
 }
 
 apply_ldap_runtime_configuration() {
@@ -1058,6 +1235,84 @@ PY
     log "Scheduled background managed-repository shared-prefix bootstrap for discovered groups"
 }
 
+schedule_binary_repository_cleanse() {
+    local enabled="${OMERO_BINARY_REPO_CLEANSE_ON_START:-1}"
+    local root_pass="${ROOTPASS:-}"
+    local data_dir="${OMERO_BINARY_REPO_CLEANSE_DATA_DIR:-${OMERO_DIR}}"
+    local startup_wait="${OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS:-300}"
+    local poll_interval="${OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS:-10}"
+    local keepalive_seconds="${OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS:-30}"
+    local log_file="${SERVER_LOG_DIR}/binary-repository-cleanse.log"
+    local server_root="${SERVER_HOME%/*}"
+
+    if [[ "${enabled}" != "1" ]]; then
+        log "Skipping binary repository cleanse (OMERO_BINARY_REPO_CLEANSE_ON_START != 1)."
+        return
+    fi
+
+    if [[ -z "${root_pass}" ]]; then
+        log "Skipping binary repository cleanse (ROOTPASS missing)."
+        return
+    fi
+
+    (
+        set -u -o pipefail
+        umask 022
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
+
+        local lockdir="${SERVER_VAR_DIR}/binary-repository-cleanse.lock"
+        if ! acquire_lockdir "${lockdir}" "" "binary repository cleanse"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
+        exec > >(tee -a "${log_file}") 2>&1
+
+        echo "[$(date -u)] binary repository cleanse starting (data_dir=${data_dir}, keepalive=${keepalive_seconds}s)"
+
+        if [[ ! -d "${data_dir}" ]]; then
+            echo "[$(date -u)] WARN: binary repository cleanse skipped because data directory is missing: ${data_dir}"
+            exit 0
+        fi
+
+        local deadline=$(( $(date +%s) + startup_wait ))
+        local login_ok=0
+        while [[ "$(date +%s)" -lt "${deadline}" ]]; do
+            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+                login_ok=1
+                break
+            fi
+            sleep "${poll_interval}"
+        done
+
+        if [[ "${login_ok}" -ne 1 ]]; then
+            echo "[$(date -u)] ERROR: Timed out waiting for OMERO login before running binary repository cleanse"
+            exit 1
+        fi
+
+        if [[ -d "${server_root}" ]]; then
+            cd "${server_root}"
+        fi
+
+        local start_epoch="$(date +%s)"
+        local rc=0
+
+        run_omero_with_keepalive \
+            "${keepalive_seconds}" \
+            admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}" || rc=$?
+
+        local elapsed=$(( $(date +%s) - start_epoch ))
+        if [[ "${rc}" -eq 0 ]]; then
+            echo "[$(date -u)] binary repository cleanse finished successfully in ${elapsed}s"
+            exit 0
+        fi
+
+        echo "[$(date -u)] ERROR: binary repository cleanse failed with rc=${rc} after ${elapsed}s"
+        exit "${rc}"
+    ) &
+
+    log "Scheduled background binary repository cleanse for ${data_dir}"
+}
 install_figure_script() {
     local figure_version="${OMERO_FIGURE_VERSION:-}"
     if [[ -z "${figure_version}" ]]; then
@@ -1272,21 +1527,106 @@ acquire_lockdir() {
     local pidfile="${2:-}"
     local label="${3:-lock}"
     local existing_pid=""
+    local existing_start_ticks=""
+    local existing_boot_id=""
+    local owner_uid=""
+    local owner_gid=""
+    local current_boot_id=""
+    local lock_timestamp_path=""
 
-    # Important: Ensure lockdir is readable/executable by others so OMERO admin checks don't fail!
-    if mkdir "${lockdir}" 2>/dev/null; then
-        chmod 0755 "${lockdir}" 2>/dev/null || true
-        echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
-        if [[ -n "${pidfile}" ]]; then
-            echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
+    if id -u "${OMERO_CLI_USER}" >/dev/null 2>&1; then
+        owner_uid="$(id -u "${OMERO_CLI_USER}")"
+        owner_gid="$(id -g "${OMERO_CLI_USER}")"
+    fi
+
+    current_boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)"
+
+    _read_proc_start_ticks() {
+        local target_pid="$1"
+        [[ -r "/proc/${target_pid}/stat" ]] || return 1
+        awk '{print $22}' "/proc/${target_pid}/stat" 2>/dev/null
+    }
+
+    _normalize_lock_path() {
+        local target_path="$1"
+        [[ -e "${target_path}" ]] || return 0
+        if [[ -d "${target_path}" ]]; then
+            chmod 0755 "${target_path}" 2>/dev/null || true
+        else
+            chmod 0644 "${target_path}" 2>/dev/null || true
         fi
+        if [[ -n "${owner_uid}" && -n "${owner_gid}" ]]; then
+            chown "${owner_uid}:${owner_gid}" "${target_path}" 2>/dev/null || true
+        fi
+    }
+
+    _write_lock_metadata() {
+        local target_lockdir="$1"
+        local target_pid="$2"
+        local target_start_ticks=""
+
+        echo "${target_pid}" > "${target_lockdir}/pid" 2>/dev/null || true
+        _normalize_lock_path "${target_lockdir}/pid"
+
+        target_start_ticks="$(_read_proc_start_ticks "${target_pid}" || true)"
+        if [[ -n "${target_start_ticks}" ]]; then
+            echo "${target_start_ticks}" > "${target_lockdir}/proc_start_ticks" 2>/dev/null || true
+            _normalize_lock_path "${target_lockdir}/proc_start_ticks"
+        fi
+
+        if [[ -n "${current_boot_id}" ]]; then
+            echo "${current_boot_id}" > "${target_lockdir}/boot_id" 2>/dev/null || true
+            _normalize_lock_path "${target_lockdir}/boot_id"
+        fi
+
+        if [[ -n "${pidfile}" ]]; then
+            echo "${target_pid}" > "${pidfile}" 2>/dev/null || true
+        fi
+    }
+
+    if mkdir "${lockdir}" 2>/dev/null; then
+        _normalize_lock_path "${lockdir}"
+        _write_lock_metadata "${lockdir}" "${BASHPID}"
         return 0
     fi
 
     existing_pid="$(cat "${lockdir}/pid" 2>/dev/null || true)"
+    existing_start_ticks="$(cat "${lockdir}/proc_start_ticks" 2>/dev/null || true)"
+    existing_boot_id="$(cat "${lockdir}/boot_id" 2>/dev/null || true)"
     if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" 2>/dev/null; then
-        log "${label} already running (pid=${existing_pid}); skipping"
-        return 1
+        local live_start_ticks=""
+        local live_proc_epoch=""
+        local lock_epoch=""
+        local lock_state="stale"
+
+        live_start_ticks="$(_read_proc_start_ticks "${existing_pid}" || true)"
+        if [[ -n "${live_start_ticks}" ]]; then
+            if [[ -n "${existing_start_ticks}" ]]; then
+                if [[ -n "${existing_boot_id}" && -n "${current_boot_id}" && "${existing_boot_id}" != "${current_boot_id}" ]]; then
+                    lock_state="stale"
+                elif [[ "${existing_start_ticks}" == "${live_start_ticks}" ]]; then
+                    lock_state="active"
+                fi
+            else
+                # Legacy lockdirs from earlier revisions only stored a PID. Those can
+                # collide after container recreation because low PIDs are reused. Treat
+                # the lock as stale when its timestamp predates the current process.
+                lock_timestamp_path="${lockdir}/pid"
+                [[ -e "${lock_timestamp_path}" ]] || lock_timestamp_path="${lockdir}"
+                live_proc_epoch="$(stat -c %Y "/proc/${existing_pid}" 2>/dev/null || true)"
+                lock_epoch="$(stat -c %Y "${lock_timestamp_path}" 2>/dev/null || true)"
+                if [[ -n "${live_proc_epoch}" && -n "${lock_epoch}" && "${lock_epoch}" -ge "${live_proc_epoch}" ]]; then
+                    lock_state="active"
+                fi
+            fi
+        fi
+
+        if [[ "${lock_state}" == "active" ]]; then
+            log "${label} already running (pid=${existing_pid}); skipping"
+            return 1
+        fi
+
+        log "Removing stale ${label} lock (${lockdir}) left by pid=${existing_pid}"
     fi
 
     rm -rf "${lockdir}" 2>/dev/null || true
@@ -1295,11 +1635,8 @@ acquire_lockdir() {
         return 1
     fi
 
-    chmod 0755 "${lockdir}" 2>/dev/null || true
-    echo "${BASHPID}" > "${lockdir}/pid" 2>/dev/null || true
-    if [[ -n "${pidfile}" ]]; then
-        echo "${BASHPID}" > "${pidfile}" 2>/dev/null || true
-    fi
+    _normalize_lock_path "${lockdir}"
+    _write_lock_metadata "${lockdir}" "${BASHPID}"
     return 0
 }
 
@@ -1335,15 +1672,19 @@ main() {
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
     validate_job_service_bootstrap_configuration
+    validate_binary_repository_cleanse_configuration
+    validate_repository_lock_cleanup_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
     ensure_certificate_sans
+    cleanup_stale_repository_lock_files
     install_figure_script
     schedule_script_registration
     schedule_job_service_bootstrap
     schedule_ldap_group_bootstrap
     schedule_repo_root_bootstrap
+    schedule_binary_repository_cleanse
 
     log "Startup flow finished"
 }

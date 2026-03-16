@@ -74,10 +74,13 @@ def test_sanitize_url_for_logging_redacts_userinfo() -> None:
 
 def test_sanitized_exc_info_escapes_exception_message() -> None:
     try:
-        raise RuntimeError("line1\nline2")
+        raise RuntimeError("secret\nline")
     except RuntimeError as exc:
         exc_type, sanitized_exc, tb = logging_utils.sanitized_exc_info(exc)
 
+    assert exc_type is RuntimeError
+    assert str(sanitized_exc) == "secret\\\\nline"
+    assert tb is not None
     formatted = "".join(traceback.format_exception(exc_type, sanitized_exc, tb))
-    assert "line1\\nline2" in formatted
-    assert "line1\nline2" not in formatted
+    assert "secret\\nline" in formatted
+    assert "secret\nline" not in formatted
