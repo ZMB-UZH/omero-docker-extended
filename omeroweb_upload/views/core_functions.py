@@ -1053,6 +1053,35 @@ def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
     return "\\".join(parts[:-1])
 
 
+def _logical_unit_is_directory_package_root(entry: dict) -> bool:
+    dataset_relative_path = entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    if not dataset_relative_path or entry.get("relative_path") != dataset_relative_path:
+        return False
+
+    root_parts = PurePosixPath(dataset_relative_path).parts
+    if not root_parts:
+        return False
+
+    covered_relative_paths = entry.get("covered_relative_paths") or []
+    if len(covered_relative_paths) <= 1:
+        return False
+
+    for covered_relative_path in covered_relative_paths:
+        covered_parts = PurePosixPath(covered_relative_path).parts
+        if covered_parts[:len(root_parts)] == root_parts and len(covered_parts) > len(root_parts):
+            return True
+    return False
+
+
+def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str = None):
+    dataset_relative_path = entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    if not dataset_relative_path:
+        return orphan_dataset_name
+    if _logical_unit_is_directory_package_root(entry):
+        return "\\".join(PurePosixPath(dataset_relative_path).parts)
+    return _dataset_name_for_path(dataset_relative_path, orphan_dataset_name)
+
+
 def _generate_orphan_dataset_name():
     suffix = "".join(secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH))
     return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
@@ -1165,6 +1194,78 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
     dataset_map[name] = dataset_id
     return dataset_id
+
+
+def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
+    orphan_dataset_name = job_dict.get("orphan_dataset_name")
+    if any(_dataset_name_for_import_entry(entry) is None for entry in entries_to_import):
+        orphan_dataset_name = orphan_dataset_name or _generate_orphan_dataset_name()
+
+    dataset_names = []
+    for entry in entries_to_import:
+        dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
+        if dataset_name:
+            dataset_names.append(dataset_name)
+
+    return orphan_dataset_name, sorted(set(dataset_names))
+
+
+def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
+    orphan_dataset_name, dataset_names = _plan_job_dataset_targets(job_dict, entries_to_import)
+    dataset_map = dict(job_dict.get("dataset_map") or {})
+    missing_dataset_names = [name for name in dataset_names if name not in dataset_map]
+
+    job_dict["orphan_dataset_name"] = orphan_dataset_name
+    job_dict["dataset_map"] = dataset_map
+
+    if not missing_dataset_names:
+        return True, None
+
+    host = job_dict.get("host")
+    port = job_dict.get("port")
+    username = (job_dict.get("username") or "").strip()
+    if not host or not port or not username:
+        return False, "Missing OMERO connection details for dataset creation."
+
+    service_conn = _open_service_connection(host, port, group_id=job_dict.get("group_id"))
+    if not service_conn:
+        return False, "Unable to open OMERO service connection for dataset creation."
+
+    user_conn = None
+    try:
+        user_conn = service_conn.suConn(username)
+        if not user_conn:
+            return False, f"Unable to impersonate OMERO user {username!r} for dataset creation."
+        if job_dict.get("group_id") is not None:
+            try:
+                user_conn.SERVICE_OPTS.setOmeroGroup(str(int(job_dict["group_id"])))
+            except Exception as exc:
+                logger.warning(
+                    "Failed to set impersonated dataset-creation group context to %s: %s",
+                    job_dict["group_id"],
+                    exc,
+                )
+
+        for dataset_name in missing_dataset_names:
+            dataset_id = _get_or_create_dataset(
+                user_conn,
+                dataset_name,
+                dataset_map,
+                project_id=job_dict.get("project_id"),
+            )
+            if dataset_id is None:
+                return False, f"Failed to create dataset {dataset_name!r}."
+        return True, None
+    finally:
+        if user_conn is not None:
+            try:
+                user_conn.close()
+            except Exception as exc:
+                logger.warning("Failed to close impersonated OMERO connection after dataset creation: %s", exc)
+        try:
+            service_conn.close()
+        except Exception as exc:
+            logger.warning("Failed to close job-service connection after dataset creation: %s", exc)
 
 
 _CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
@@ -2641,7 +2742,7 @@ def _run_compatibility_check(job_id: str):
                     }
                 )
                 continue
-            dataset_name = _dataset_name_for_path(unit.get("relative_path"), job.get("orphan_dataset_name"))
+            dataset_name = _dataset_name_for_import_entry(unit, job.get("orphan_dataset_name"))
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -2792,8 +2893,7 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     # Allow callers (SEM-EDX) to override dataset selection.
     dataset_id = entry.get("dataset_id_override")
     if dataset_id is None:
-        dataset_relative_path = entry.get("dataset_relative_path") or rel_path
-        dataset_name = _dataset_name_for_path(dataset_relative_path, orphan_dataset_name)
+        dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
         dataset_id = dataset_map.get(dataset_name)
 
     try:
@@ -2909,8 +3009,6 @@ def _process_import_job(job_id: str):
                 _save_job(job)
                 return
 
-            dataset_map = job.get("dataset_map") or {}
-            orphan_dataset_name = job.get("orphan_dataset_name")
             batch_size = _resolve_job_batch_size(job)
 
             # ----------------------------------------------------------
@@ -2951,6 +3049,16 @@ def _process_import_job(job_id: str):
                 _save_job(job)
 
             entries_to_import = _build_import_units(job, upload_root)
+            datasets_ready, dataset_error = _ensure_job_dataset_targets(job, entries_to_import)
+            if not datasets_ready:
+                job["status"] = "error"
+                _append_job_error(job, dataset_error or "Failed to create target dataset(s) for import.")
+                _save_job(job)
+                return
+
+            dataset_map = job.get("dataset_map") or {}
+            orphan_dataset_name = job.get("orphan_dataset_name")
+            _save_job(job)
 
             logger.info(
                 "Import thread: %d logical import units to import for job %s (batch_size=%d)",

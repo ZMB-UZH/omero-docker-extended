@@ -224,17 +224,8 @@ def _start_upload(request, conn):
 
     dataset_map = {}
     orphan_dataset_name = None
-    dataset_names = set()
     if any(_dataset_name_for_path(entry["relative_path"]) is None for entry in normalized):
         orphan_dataset_name = _generate_orphan_dataset_name()
-    for entry in normalized:
-        dataset_name = _dataset_name_for_path(entry["relative_path"], orphan_dataset_name)
-        if dataset_name:
-            dataset_names.add(dataset_name)
-    for dataset_name in sorted(dataset_names):
-        dataset_id = _get_or_create_dataset(conn, dataset_name, dataset_map, project_id=project_id)
-        if dataset_id is None:
-            return json_error(errors.dataset_create_failed(dataset_name), status=500)
 
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
