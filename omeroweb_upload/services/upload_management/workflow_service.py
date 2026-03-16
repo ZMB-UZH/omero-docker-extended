@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+from ...constants import OMERO_CLI, OMERO_IMPORT_SCAN_DEPTH
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,7 @@ def _check_import_compatibility(
         }
     
     # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(file_path)]
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()

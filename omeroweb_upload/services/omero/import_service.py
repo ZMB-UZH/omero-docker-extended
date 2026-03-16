@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 import omero
 from omero.gateway import BlitzGateway
-from ...constants import OMERO_CLI
+from ...constants import OMERO_CLI, OMERO_IMPORT_SCAN_DEPTH
 from omero_plugin_common.logging_utils import sanitize_log_value
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 
@@ -99,6 +99,7 @@ def _parse_cli_id(output: str, expected_type: str):
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
+    cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
@@ -850,7 +851,7 @@ def _check_import_compatibility(
         }
     
     # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(file_path)]
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
