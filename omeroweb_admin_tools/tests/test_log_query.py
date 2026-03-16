@@ -174,6 +174,17 @@ def test_prepare_query_jobs_batches_internal_files() -> None:
     assert sum(len(job.selected_files) for job in jobs) == 13
 
 
+def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries() -> None:
+    jobs = _prepare_query_jobs(
+        ["omeroserver", "omeroweb_internal"],
+        text_query='imaris "warning"',
+    )
+
+    assert len(jobs) == 2
+    assert all("|~" in job.query for job in jobs)
+    assert any('\\"warning\\"' in job.query for job in jobs)
+
+
 def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
     config = LogConfig(
         loki_url="http://loki:3100",
@@ -213,6 +224,49 @@ def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
     assert calls["count"] == 1
     assert [entry.message for entry in first] == ["cached"]
     assert [entry.message for entry in second] == ["cached"]
+
+
+def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
+    config = LogConfig(
+        loki_url="http://loki:3100",
+        lookback_seconds=900,
+        max_entries=5000,
+        timeout_seconds=30.0,
+        cache_max_bytes=64 * 1024 * 1024,
+    )
+    calls = {"count": 0}
+    monkeypatch.setattr(
+        log_query_module,
+        "_LOG_RESULT_CACHE",
+        log_query_module._InMemoryTTLCache(
+            ttl_seconds=60.0,
+            max_items=8,
+            max_bytes=64 * 1024 * 1024,
+            size_estimator=_estimate_log_entries_size,
+        ),
+    )
+
+    def fake_fetch(*args, **kwargs):
+        calls["count"] += 1
+        return [
+            LogEntry(
+                timestamp="2026-03-09T00:00:00+00:00",
+                container="omeroserver",
+                level="info",
+                message=str(kwargs.get("text_query")),
+            )
+        ]
+
+    monkeypatch.setattr(log_query_module, "_fetch_loki_logs_uncached", fake_fetch)
+
+    first = fetch_loki_logs(config, ["omeroserver"], 900, 100, text_query="imaris")
+    second = fetch_loki_logs(config, ["omeroserver"], 900, 100, text_query="imaris")
+    third = fetch_loki_logs(config, ["omeroserver"], 900, 100, text_query="bioformats")
+
+    assert calls["count"] == 2
+    assert [entry.message for entry in first] == ["imaris"]
+    assert [entry.message for entry in second] == ["imaris"]
+    assert [entry.message for entry in third] == ["bioformats"]
 
 
 def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> None:

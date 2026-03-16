@@ -112,6 +112,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"', script_text)
         self.assertIn('rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}"', script_text)
 
+    def test_server_bootstrap_schedules_binary_repository_cleanse_with_keepalive(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("schedule_binary_repository_cleanse()", script_text)
+        self.assertIn("cleanup_stale_repository_lock_files()", script_text)
+        self.assertIn("OMERO_BINARY_REPO_CLEANSE_ON_START", script_text)
+        self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START", script_text)
+        self.assertIn("run_omero_with_keepalive", script_text)
+        self.assertIn('admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}"', script_text)
+        self.assertIn('proc_start_ticks', script_text)
+        self.assertIn('Removed stale repository lock file', script_text)
     def test_installation_script_preserves_server_temp_namespace_ownership(self) -> None:
         script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
             encoding="utf-8"
@@ -121,6 +133,39 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text)
         self.assertIn('chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"', script_text)
         self.assertNotIn('chown_tree_or_die "${OMERO_TMP_PATH}"', script_text)
+
+    def test_installation_script_reports_binary_repository_cleanse_runtime_hook(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("print_binary_repository_cleanse_notice()", script_text)
+        self.assertIn("OMERO binary repository cleanse is configured to run automatically on each omeroserver start", script_text)
+        self.assertIn("OMERO binary repository cleanse will run automatically on the next omeroserver start", script_text)
+
+    def test_omeroserver_example_env_defines_binary_repository_cleanse_defaults(self) -> None:
+        env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("OMERO_BINARY_REPO_CLEANSE_ON_START=1", env_text)
+        self.assertIn("OMERO_BINARY_REPO_CLEANSE_DATA_DIR=/OMERO", env_text)
+        self.assertIn("OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS=30", env_text)
+        self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START=1", env_text)
+
+    def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
+        supervisord_text = (self.repo_root / "supervisord.conf").read_text(
+            encoding="utf-8"
+        )
+        env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
+            encoding="utf-8"
+        )
+        web_bootstrap_text = (self.repo_root / "startup" / "10-web-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('OMERO_WEB_WSGI_ARGS', supervisord_text)
+        self.assertIn('--chdir /opt/omero/web/OMERO.web/var/run', supervisord_text)
+        self.assertIn('OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run', env_text)
+        self.assertIn('local run_dir="${var_dir}/run"', web_bootstrap_text)
+        self.assertIn('mkdir -p "${var_dir}" "${var_dir}/omero/tmp" "${var_dir}/static" "${run_dir}"', web_bootstrap_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(

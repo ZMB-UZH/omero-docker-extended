@@ -80,9 +80,10 @@ configure_docker_socket_access() {
 ensure_web_var_layout() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
+    local run_dir="${var_dir}/run"
 
     echo "[web-bootstrap] Checking OMERO.web var directory: ${var_dir}"
-    mkdir -p "${var_dir}" "${var_dir}/omero/tmp" "${var_dir}/static"
+    mkdir -p "${var_dir}" "${var_dir}/omero/tmp" "${var_dir}/static" "${run_dir}"
 
     if id -u "${runtime_user}" >/dev/null 2>&1; then
         chown -R "${runtime_user}:${runtime_user}" "${var_dir}" || true
@@ -90,7 +91,7 @@ ensure_web_var_layout() {
         echo "[web-bootstrap] WARNING: Runtime user ${runtime_user} does not exist; skipping chown for ${var_dir}" >&2
     fi
 
-    chmod 0755 "${var_dir}" "${var_dir}/omero" || true
+    chmod 0755 "${var_dir}" "${var_dir}/omero" "${run_dir}" || true
     chmod 1777 "${var_dir}/omero/tmp" || true
 
     if [[ ! -w "${var_dir}" ]]; then
@@ -111,6 +112,12 @@ ensure_web_var_layout() {
         exit 1
     fi
 
+    if [[ ! -w "${run_dir}" ]]; then
+        echo "[web-bootstrap] ERROR: OMERO.web runtime directory is not writable: ${run_dir}" >&2
+        ls -ld "${run_dir}" >&2 || true
+        exit 1
+    fi
+
     if [[ ! -f "${var_dir}/django_secret_key" ]]; then
         if command -v openssl >/dev/null 2>&1; then
             umask 077
@@ -126,8 +133,6 @@ ensure_web_var_layout() {
         echo "[web-bootstrap] Generated ${var_dir}/django_secret_key"
     fi
 }
-
-
 
 ensure_web_var_layout
 
