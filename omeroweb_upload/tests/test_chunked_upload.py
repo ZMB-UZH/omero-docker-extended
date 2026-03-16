@@ -48,7 +48,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             {
                 "upload_id": "u1",
                 "relative_path": "folder/big.bin",
-                "staged_path": "_staged/u1/big.bin",
+                "staged_path": "_staged/folder/big.bin",
                 "size": 10,
                 "status": "pending",
                 "errors": [],
@@ -97,7 +97,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     assert first_payload["ok"] is True
     assert first_payload["complete"] is False
 
-    staged_target = upload_root / job_id / "_staged/u1/big.bin"
+    staged_target = upload_root / job_id / "_staged/folder/big.bin"
     assert staged_target.read_bytes() == b"hello"
     assert import_started == []
 
@@ -138,7 +138,7 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
             {
                 "upload_id": "u1",
                 "relative_path": "folder/big.bin",
-                "staged_path": "_staged/u1/big.bin",
+                "staged_path": "_staged/folder/big.bin",
                 "size": 5,
                 "status": "pending",
                 "errors": [],
@@ -158,7 +158,7 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
     )
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
 
-    staged_target = upload_root / job_id / "_staged/u1/big.bin"
+    staged_target = upload_root / job_id / "_staged/folder/big.bin"
     staged_target.parent.mkdir(parents=True, exist_ok=True)
     staged_target.write_bytes(b"stale-data")
 
@@ -193,7 +193,7 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
             {
                 "upload_id": "u1",
                 "relative_path": "folder/big.bin",
-                "staged_path": "_staged/u1/big.bin",
+                "staged_path": "_staged/folder/big.bin",
                 "size": 10,
                 "status": "pending",
                 "errors": [],
@@ -206,7 +206,7 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
     monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
 
-    staged_target = upload_root / job_id / "_staged/u1/big.bin"
+    staged_target = upload_root / job_id / "_staged/folder/big.bin"
     staged_target.parent.mkdir(parents=True, exist_ok=True)
     staged_target.write_bytes(b"abc")
 
@@ -298,7 +298,7 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
             {
                 "upload_id": "u1",
                 "relative_path": "folder/big.bin",
-                "staged_path": "_staged/u1/big.bin",
+                "staged_path": "_staged/folder/big.bin",
                 "size": 5,
                 "status": "pending",
                 "errors": [],
@@ -390,7 +390,7 @@ def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
             {
                 "upload_id": "u1",
                 "relative_path": "folder/file.bin",
-                "staged_path": "_staged/u1/file.bin",
+                "staged_path": "_staged/folder/file.bin",
                 "size": 5,
                 "status": "pending",
                 "errors": [],

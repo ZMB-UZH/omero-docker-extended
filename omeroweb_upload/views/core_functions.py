@@ -87,6 +87,7 @@ __all__ = [
     '_apply_upload_updates',
     '_attach_txt_to_image_service',
     '_batch_find_images_by_name',
+    '_build_staged_relative_path',
     '_build_omero_cli_command',
     '_build_sem_edx_associations_from_entries',
     '_check_import_compatibility',
@@ -528,11 +529,12 @@ def _should_start_compatibility_check(job_dict) -> bool:
         return False
     if job_dict.get("compatibility_confirmed"):
         return False
+    if _has_pending_uploads(job_dict):
+        return False
     pending_entries = _compatibility_pending_entries(job_dict)
     if not pending_entries:
         return False
-    batch_size = _resolve_job_batch_size(job_dict)
-    return len(pending_entries) >= batch_size or not _has_pending_uploads(job_dict)
+    return True
 
 
 def _refresh_job_status(job_dict):
@@ -717,6 +719,10 @@ def _resolve_staged_target_path(upload_root: Path, staged_path: str):
 def _validate_staged_target_path(upload_root: Path, staged_path: str):
     _, error = _resolve_staged_target_path(upload_root, staged_path)
     return error
+
+
+def _build_staged_relative_path(relative_path: str) -> str:
+    return PurePosixPath("_staged", relative_path).as_posix()
 
 
 def _should_auto_skip_import(relative_path: str) -> bool:
@@ -1180,6 +1186,7 @@ IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microsco
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 CLI_KEEPALIVE_SECONDS_DEFAULT = 30
 CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
+LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS = 45
 
 
 def _get_cli_keepalive_seconds() -> int:
@@ -1287,6 +1294,35 @@ def _run_omero_cli(cmd, timeout=None):
         stdin=subprocess.DEVNULL,
         env=cli_env,
     )
+
+
+def _run_local_import_scan(path: Path, timeout: int = LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS):
+    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(path)]
+
+    env = os.environ.copy()
+    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    env["OMERODIR"] = str(omerodir_path)
+
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+
+    env["HOME"] = str(cli_home)
+    env["XDG_CACHE_HOME"] = str(cli_cache)
+
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+    finally:
+        shutil.rmtree(omerodir_path, ignore_errors=True)
 
 
 def _parse_cli_id(output: str, expected_type: str):
@@ -2107,6 +2143,359 @@ def _parse_candidate_path_line(line: str) -> Optional[Path]:
     return candidate
 
 
+def _parse_import_groups(output: str):
+    groups = []
+    current_group = None
+
+    for line in (output or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.startswith("# Group:"):
+            group_header = stripped[len("# Group:"):].strip()
+            group_path_text = group_header.split(" SPW:", 1)[0].strip()
+            current_group = {
+                "group_path": _parse_candidate_path_line(group_path_text),
+                "members": [],
+            }
+            groups.append(current_group)
+            continue
+
+        if current_group is None or stripped.startswith("#"):
+            continue
+
+        member_path = _parse_candidate_path_line(stripped)
+        if member_path is not None:
+            current_group["members"].append(member_path)
+
+    return groups
+
+
+def _relative_path_within_root(relative_path: str, root_relative_path: str) -> bool:
+    if not root_relative_path:
+        return False
+    return relative_path == root_relative_path or relative_path.startswith(f"{root_relative_path}/")
+
+
+def _common_relative_prefix(relative_paths: list[str]) -> str:
+    if not relative_paths:
+        return ""
+
+    common_parts = list(PurePosixPath(relative_paths[0]).parts)
+    for relative_path in relative_paths[1:]:
+        parts = PurePosixPath(relative_path).parts
+        max_len = min(len(common_parts), len(parts))
+        match_len = 0
+        while match_len < max_len and common_parts[match_len] == parts[match_len]:
+            match_len += 1
+        common_parts = common_parts[:match_len]
+        if not common_parts:
+            return ""
+
+    return PurePosixPath(*common_parts).as_posix()
+
+
+def _group_covers_all_active_paths_under_root(
+    active_relative_paths: list[str],
+    root_relative_path: str,
+    covered_relative_paths: list[str],
+) -> bool:
+    if not root_relative_path or not covered_relative_paths:
+        return False
+
+    covered_relative_path_set = set(covered_relative_paths)
+    found_any_active_path = False
+
+    for active_relative_path in active_relative_paths:
+        if not _relative_path_within_root(active_relative_path, root_relative_path):
+            continue
+        found_any_active_path = True
+        if active_relative_path not in covered_relative_path_set:
+            return False
+
+    return found_any_active_path
+
+
+def _looks_like_directory_package_root(
+    active_relative_paths: list[str],
+    root_relative_path: str,
+    group_path_relative: str,
+    covered_relative_paths: list[str],
+) -> bool:
+    if not root_relative_path or not covered_relative_paths:
+        return False
+    if group_path_relative and not _relative_path_within_root(group_path_relative, root_relative_path):
+        return False
+    if not _group_covers_all_active_paths_under_root(
+        active_relative_paths,
+        root_relative_path,
+        covered_relative_paths,
+    ):
+        return False
+
+    root_name = PurePosixPath(root_relative_path).name
+    root_parts = PurePosixPath(root_relative_path).parts
+    direct_hidden_children = False
+    distinct_first_children = set()
+    has_nested_children = False
+
+    for covered_relative_path in covered_relative_paths:
+        covered_parts = PurePosixPath(covered_relative_path).parts
+        if covered_parts[:len(root_parts)] != root_parts:
+            continue
+        suffix_parts = covered_parts[len(root_parts):]
+        if not suffix_parts:
+            continue
+        distinct_first_children.add(suffix_parts[0])
+        if len(suffix_parts) == 1 and suffix_parts[0].startswith("."):
+            direct_hidden_children = True
+        if len(suffix_parts) > 1:
+            has_nested_children = True
+
+    if direct_hidden_children:
+        return True
+
+    if "." not in root_name.lstrip("."):
+        return False
+
+    if group_path_relative:
+        root_depth = len(PurePosixPath(root_relative_path).parts)
+        group_depth = len(PurePosixPath(group_path_relative).parts)
+        if group_depth > root_depth + 1:
+            return True
+
+    return has_nested_children and len(distinct_first_children) > 1
+
+
+def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
+    entries = []
+    for index, entry in enumerate(job_dict.get("files", [])):
+        rel_path = entry.get("relative_path")
+        if not rel_path:
+            continue
+        if for_compatibility:
+            if entry.get("status") != "uploaded":
+                continue
+            if entry.get("compatibility") or entry.get("compatibility_skip"):
+                continue
+        else:
+            if entry.get("status") not in ("uploaded", "pending"):
+                continue
+            if entry.get("import_skip"):
+                continue
+        entries.append(
+            {
+                "index": index,
+                "relative_path": rel_path,
+                "staged_path": entry.get("staged_path") or _build_staged_relative_path(rel_path),
+                "entry": entry,
+            }
+        )
+    return entries
+
+
+def _single_entry_import_unit(entry: dict):
+    rel_path = entry["relative_path"]
+    return {
+        "cleanup_staged_paths": [entry["staged_path"]],
+        "covered_indexes": [entry["index"]],
+        "covered_relative_paths": [rel_path],
+        "dataset_relative_path": rel_path,
+        "index": entry["index"],
+        "relative_path": rel_path,
+        "staged_path": entry["staged_path"],
+    }
+
+
+def _probe_import_path(
+    path: Path,
+    staged_root: Path,
+    active_relative_paths: list[str],
+    cache: dict[str, dict],
+):
+    cache_key = str(path)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        staged_root_resolved = staged_root.resolve()
+    except OSError:
+        staged_root_resolved = staged_root
+    try:
+        path_resolved = path.resolve()
+    except OSError:
+        path_resolved = path
+
+    result = _run_local_import_scan(path)
+    active_relative_path_set = set(active_relative_paths)
+    groups = []
+    coverage = set()
+
+    for parsed_group in _parse_import_groups(result.stdout):
+        group_path = parsed_group.get("group_path")
+        member_paths = parsed_group.get("members") or []
+        group_path_relative = None
+        if group_path is not None:
+            try:
+                group_path_resolved = group_path.resolve()
+            except OSError:
+                group_path_resolved = group_path
+            try:
+                group_path_relative = group_path_resolved.relative_to(staged_root_resolved).as_posix()
+            except ValueError:
+                group_path_relative = None
+
+        member_relative_paths = []
+        for member_path in member_paths:
+            try:
+                member_resolved = member_path.resolve()
+            except OSError:
+                member_resolved = member_path
+            try:
+                member_relative_path = member_resolved.relative_to(staged_root_resolved).as_posix()
+            except ValueError:
+                continue
+            if member_relative_path in active_relative_path_set:
+                member_relative_paths.append(member_relative_path)
+
+        if group_path_relative and group_path_relative in active_relative_path_set:
+            member_relative_paths.append(group_path_relative)
+
+        if not member_relative_paths:
+            continue
+
+        ordered_member_relative_paths = [
+            relative_path
+            for relative_path in active_relative_paths
+            if relative_path in set(member_relative_paths)
+        ]
+        coverage.update(ordered_member_relative_paths)
+        groups.append(
+            {
+                "covered_relative_paths": tuple(ordered_member_relative_paths),
+                "group_path_relative": group_path_relative,
+            }
+        )
+
+    cached = {
+        "coverage": coverage,
+        "groups": tuple(groups),
+        "returncode": result.returncode,
+        "stderr": result.stderr,
+        "stdout": result.stdout,
+    }
+    cache[cache_key] = cached
+    return cached
+
+
+def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool = False):
+    active_entries = _collect_import_entries(job_dict, for_compatibility=for_compatibility)
+    if not active_entries:
+        return []
+
+    active_relative_paths = [entry["relative_path"] for entry in active_entries]
+    if len(set(active_relative_paths)) != len(active_relative_paths):
+        logger.warning(
+            "Duplicate relative paths detected in upload job during import planning; "
+            "falling back to per-entry units."
+        )
+        return [_single_entry_import_unit(entry) for entry in active_entries]
+
+    entry_by_relative_path = {
+        entry["relative_path"]: entry
+        for entry in active_entries
+    }
+    staged_root = upload_root / "_staged"
+    probe_cache = {}
+
+    covered_relative_paths = set()
+    units = []
+
+    for rel_path in active_relative_paths:
+        if rel_path in covered_relative_paths:
+            continue
+
+        chosen_group = None
+        current = PurePosixPath(rel_path).parent
+        while current and str(current) != ".":
+            dir_rel = current.as_posix()
+            dir_path = staged_root / dir_rel
+            if dir_path.exists() and dir_path.is_dir():
+                probe = _probe_import_path(dir_path, staged_root, active_relative_paths, probe_cache)
+                matching_groups = [
+                    group
+                    for group in probe.get("groups", [])
+                    if rel_path in group.get("covered_relative_paths", ())
+                    and len(group.get("covered_relative_paths", ())) > 1
+                ]
+                if matching_groups:
+                    chosen_group = sorted(
+                        matching_groups,
+                        key=lambda group: (
+                            -len(group.get("covered_relative_paths", ())),
+                            group.get("group_path_relative") or "",
+                        ),
+                    )[0]
+                    break
+            current = current.parent
+
+        if chosen_group:
+            group_coverage = [
+                covered_rel_path
+                for covered_rel_path in active_relative_paths
+                if covered_rel_path in chosen_group["covered_relative_paths"]
+                and covered_rel_path not in covered_relative_paths
+            ]
+            if group_coverage:
+                common_root_relative_path = _common_relative_prefix(group_coverage)
+                group_path_relative = chosen_group.get("group_path_relative") or group_coverage[0]
+                if _looks_like_directory_package_root(
+                    active_relative_paths,
+                    common_root_relative_path,
+                    group_path_relative,
+                    group_coverage,
+                ):
+                    logical_relative_path = common_root_relative_path
+                    dataset_relative_path = common_root_relative_path
+                    cleanup_staged_paths = [_build_staged_relative_path(common_root_relative_path)]
+                else:
+                    logical_relative_path = group_path_relative
+                    if group_path_relative in group_coverage:
+                        dataset_relative_path = group_path_relative
+                    else:
+                        dataset_relative_path = group_coverage[0]
+                    cleanup_staged_paths = [
+                        entry_by_relative_path[covered_rel_path]["staged_path"]
+                        for covered_rel_path in group_coverage
+                    ]
+
+                covered_relative_paths.update(group_coverage)
+                units.append(
+                    {
+                        "cleanup_staged_paths": cleanup_staged_paths,
+                        "covered_indexes": [
+                            entry_by_relative_path[covered_rel_path]["index"]
+                            for covered_rel_path in group_coverage
+                        ],
+                        "covered_relative_paths": group_coverage,
+                        "dataset_relative_path": dataset_relative_path,
+                        "index": entry_by_relative_path[group_coverage[0]]["index"],
+                        "relative_path": logical_relative_path,
+                        "staged_path": _build_staged_relative_path(group_path_relative),
+                    }
+                )
+                continue
+
+        entry = entry_by_relative_path[rel_path]
+        covered_relative_paths.add(rel_path)
+        units.append(_single_entry_import_unit(entry))
+
+    units.sort(key=lambda unit: unit["index"])
+    return units
+
+
 def _check_import_compatibility(
     session_key: str,
     host: str,
@@ -2134,36 +2523,9 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    
-    # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(file_path)]
-    
-    # Use a temporary OMERODIR for isolation
-    env = os.environ.copy()
-    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
-    env["OMERODIR"] = str(omerodir_path)
-
-    # CRITICAL: Ensure OMERO CLI cache paths are writable.
-    # Without this, OMERO CLI may try to write to /root/.cache and crash (PermissionError),
-    # which makes compatibility_status="error" and the UI will not block imports.
-    cli_home = _get_upload_root() / ".omero-cli-home"
-    cli_cache = cli_home / ".cache"
-    _ensure_dir_with_permissions(cli_home, 0o700)
-    _ensure_dir_with_permissions(cli_cache, 0o700)
-
-    env["HOME"] = str(cli_home)
-    env["XDG_CACHE_HOME"] = str(cli_cache)
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=45,  # Increased timeout for large files
-            env=env,
-            stdin=subprocess.DEVNULL,
-        )
+        result = _run_local_import_scan(file_path)
     except subprocess.TimeoutExpired:
         return {
             "status": "error",
@@ -2224,16 +2586,8 @@ def _run_compatibility_check(job_id: str):
     host = job.get("host")
     port = job.get("port")
     upload_root = _get_upload_root() / job_id
-    pending_entries = [
-        (index, entry)
-        for index, entry in enumerate(job.get("files", []))
-        if (
-            entry.get("status") == "uploaded"
-            and not entry.get("compatibility")
-            and not entry.get("compatibility_skip")
-        )
-    ]
-    if not pending_entries:
+    units_to_check = _build_import_units(job, upload_root, for_compatibility=True)
+    if not units_to_check:
         def mark_idle(job_dict):
             job_dict["compatibility_thread_active"] = False
             has_uploaded = any(entry.get("status") == "uploaded" for entry in job_dict.get("files", []))
@@ -2257,16 +2611,15 @@ def _run_compatibility_check(job_id: str):
         _update_job(job_id, mark_idle)
         return
 
-    pending_entries.sort(key=lambda item: item[0])
     batch_size = _resolve_job_batch_size(job)
-    entries_to_check = pending_entries[:batch_size]
+    units_to_check = units_to_check[:batch_size]
 
-    max_workers = min(4, len(entries_to_check), os.cpu_count() or 2)
+    max_workers = min(4, len(units_to_check), os.cpu_count() or 2)
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {}
-        for entry_index, entry in entries_to_check:
-            staged_path = entry.get("staged_path") or entry.get("relative_path")
+        for unit in units_to_check:
+            staged_path = unit.get("staged_path") or unit.get("relative_path")
             if not staged_path:
                 continue
             file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
@@ -2274,21 +2627,21 @@ def _run_compatibility_check(job_id: str):
                 logger.warning(
                     "Compatibility check rejected staged path for job %s: relative_path=%s staged_path=%s error=%s",
                     job_id,
-                    entry.get("relative_path"),
+                    unit.get("relative_path"),
                     staged_path,
                     staged_error,
                 )
                 results.append(
                     {
-                        "index": entry_index,
-                        "upload_id": entry.get("upload_id"),
-                        "relative_path": entry.get("relative_path"),
+                        "covered_indexes": unit.get("covered_indexes", []),
+                        "covered_relative_paths": unit.get("covered_relative_paths", []),
+                        "relative_path": unit.get("relative_path"),
                         "status": "error",
                         "details": staged_error,
                     }
                 )
                 continue
-            dataset_name = _dataset_name_for_path(entry.get("relative_path"), job.get("orphan_dataset_name"))
+            dataset_name = _dataset_name_for_path(unit.get("relative_path"), job.get("orphan_dataset_name"))
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -2297,15 +2650,15 @@ def _run_compatibility_check(job_id: str):
                 port,
                 file_path,
                 dataset_id,
-                entry.get("relative_path"),
+                unit.get("relative_path"),
             )
-            future_map[future] = (entry_index, entry)
+            future_map[future] = unit
         for future in as_completed(future_map):
-            entry_index, entry = future_map[future]
+            unit = future_map[future]
             try:
                 result = future.result()
             except Exception as exc:
-                logger.warning("Compatibility check failed for %s: %s", entry.get("relative_path"), exc)
+                logger.warning("Compatibility check failed for %s: %s", unit.get("relative_path"), exc)
                 result = {
                     "status": "error",
                     "stdout": "",
@@ -2314,41 +2667,43 @@ def _run_compatibility_check(job_id: str):
                 }
             results.append(
                 {
-                    "index": entry_index,
-                    "upload_id": entry.get("upload_id"),
-                    "relative_path": entry.get("relative_path"),
+                    "covered_indexes": unit.get("covered_indexes", []),
+                    "covered_relative_paths": unit.get("covered_relative_paths", []),
+                    "relative_path": unit.get("relative_path"),
                     "status": result.get("status"),
                     "details": result.get("details", ""),
                 }
             )
 
     new_incompatible = [
-        result["relative_path"]
+        rel_path
         for result in results
         if result.get("status") == "incompatible"
-           and isinstance(result.get("relative_path"), str)
+        for rel_path in result.get("covered_relative_paths", [])
+        if isinstance(rel_path, str)
     ]
 
     def apply_results(job_dict):
         entries = job_dict.get("files", [])
         for result in results:
-            entry_index = result.get("index")
-            if entry_index is None or entry_index >= len(entries):
-                continue
-            entry = entries[entry_index]
+            covered_indexes = result.get("covered_indexes", [])
             status = result.get("status")
-            if status == "compatible":
-                entry["compatibility"] = "compatible"
-            elif status == "incompatible":
-                entry["compatibility"] = "incompatible"
-                entry.setdefault("compatibility_errors", []).append(
-                    result.get("details") or "Import check failed."
-                )
-            else:
-                entry["compatibility"] = "error"
-                entry.setdefault("compatibility_errors", []).append(
-                    result.get("details") or "Compatibility check failed."
-                )
+            for entry_index in covered_indexes:
+                if entry_index is None or entry_index >= len(entries):
+                    continue
+                entry = entries[entry_index]
+                if status == "compatible":
+                    entry["compatibility"] = "compatible"
+                elif status == "incompatible":
+                    entry["compatibility"] = "incompatible"
+                    entry.setdefault("compatibility_errors", []).append(
+                        result.get("details") or "Import check failed."
+                    )
+                else:
+                    entry["compatibility"] = "error"
+                    entry.setdefault("compatibility_errors", []).append(
+                        result.get("details") or "Compatibility check failed."
+                    )
 
         existing_incompatible = set(job_dict.get("incompatible_files", []))
         existing_incompatible.update(filter(None, new_incompatible))
@@ -2406,10 +2761,16 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     if not rel_path:
         return {"skip": True}
 
+    cleanup_staged_paths = entry.get("cleanup_staged_paths") or []
+    covered_indexes = entry.get("covered_indexes") or [entry.get("index")]
+    covered_relative_paths = entry.get("covered_relative_paths") or [rel_path]
+
     staged_path = entry.get("staged_path") or rel_path
     file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
     if staged_error:
         return {
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
             "entry_error": staged_error,
@@ -2419,6 +2780,8 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     if not file_path.exists():
         error_msg = errors.missing_staged_file(rel_path)
         return {
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
             "entry_error": error_msg,
@@ -2429,7 +2792,8 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     # Allow callers (SEM-EDX) to override dataset selection.
     dataset_id = entry.get("dataset_id_override")
     if dataset_id is None:
-        dataset_name = _dataset_name_for_path(rel_path, orphan_dataset_name)
+        dataset_relative_path = entry.get("dataset_relative_path") or rel_path
+        dataset_name = _dataset_name_for_path(dataset_relative_path, orphan_dataset_name)
         dataset_id = dataset_map.get(dataset_name)
 
     try:
@@ -2462,6 +2826,9 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
         error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
             "status": "error",
             "entry_error": error_msg,
@@ -2470,6 +2837,9 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
         }
 
     return {
+        "cleanup_staged_paths": cleanup_staged_paths,
+        "covered_indexes": covered_indexes,
+        "covered_relative_paths": covered_relative_paths,
         "index": entry.get("index"),
         "status": "imported",
         "rel_path": rel_path,
@@ -2580,24 +2950,10 @@ def _process_import_job(job_id: str):
                 )
                 _save_job(job)
 
-            entries_to_import = []
-            for index, entry in enumerate(job.get("files", [])):
-                if entry.get("status") not in ("uploaded", "pending"):
-                    continue
-                if entry.get("import_skip"):
-                    continue
-                if not entry.get("relative_path"):
-                    continue
-                entries_to_import.append(
-                    {
-                        "index": index,
-                        "relative_path": entry.get("relative_path"),
-                        "staged_path": entry.get("staged_path"),
-                    }
-                )
+            entries_to_import = _build_import_units(job, upload_root)
 
             logger.info(
-                "Import thread: %d entries to import for job %s (batch_size=%d)",
+                "Import thread: %d logical import units to import for job %s (batch_size=%d)",
                 len(entries_to_import), safe_job_id, batch_size,
             )
 
@@ -2632,40 +2988,72 @@ def _process_import_job(job_id: str):
                         continue
                     if not result or result.get("skip"):
                         continue
-                    entry_index = result.get("index")
-                    if entry_index is None:
+                    covered_indexes = result.get("covered_indexes") or []
+                    if not covered_indexes:
                         continue
-                    entry = job.get("files", [])[entry_index]
+                    covered_entries = [
+                        job.get("files", [])[entry_index]
+                        for entry_index in covered_indexes
+                        if entry_index is not None and entry_index < len(job.get("files", []))
+                    ]
+                    if not covered_entries:
+                        continue
 
                     if result.get("status") == "error":
-                        entry["status"] = "error"
                         entry_error = result.get("entry_error")
-                        if entry_error:
-                            entry.setdefault("errors", []).append(entry_error)
+                        for entry in covered_entries:
+                            entry["status"] = "error"
+                            if entry_error:
+                                entry.setdefault("errors", []).append(entry_error)
                         if result.get("job_error"):
                             _append_job_error(job, result["job_error"])
                         if result.get("job_message"):
                             _append_job_message(job, result["job_message"])
                         # Count errored files as processed so the progress
                         # bar reflects that the file has been attempted.
-                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
+                            entry.get("size", 0) for entry in covered_entries
+                        )
                         _save_job(job)
                         continue
 
                     if result.get("status") == "imported":
-                        rel_path = result.get("rel_path") or entry.get("relative_path")
-                        entry["status"] = "imported"
-                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                        rel_path = result.get("rel_path") or covered_entries[0].get("relative_path")
+                        for entry in covered_entries:
+                            entry["status"] = "imported"
+                        job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
+                            entry.get("size", 0) for entry in covered_entries
+                        )
                         if rel_path:
                             _append_job_message(job, messages.imported_file(rel_path))
-                        file_path = result.get("file_path")
-                        if file_path:
+                        cleanup_targets = []
+                        for cleanup_staged_path in result.get("cleanup_staged_paths") or []:
+                            cleanup_target, cleanup_error = _resolve_staged_target_path(
+                                upload_root,
+                                cleanup_staged_path,
+                            )
+                            if cleanup_error:
+                                logger.warning(
+                                    "Failed to resolve staged cleanup target %s: %s",
+                                    sanitize_log_value(cleanup_staged_path),
+                                    sanitize_log_value(cleanup_error),
+                                )
+                                continue
+                            cleanup_targets.append(cleanup_target)
+                        for cleanup_target in sorted(
+                            set(cleanup_targets),
+                            key=lambda path: (len(path.parts), str(path)),
+                            reverse=True,
+                        ):
                             try:
-                                file_path.unlink()
+                                if cleanup_target.is_dir():
+                                    shutil.rmtree(cleanup_target, ignore_errors=False)
+                                elif cleanup_target.exists():
+                                    cleanup_target.unlink()
                             except OSError as exc:
                                 logger.warning(
-                                    "Failed to remove staged file %s: %s",
-                                    sanitize_log_value(file_path),
+                                    "Failed to remove staged import payload %s: %s",
+                                    sanitize_log_value(cleanup_target),
                                     sanitize_log_value(exc),
                                 )
                         _save_job(job)
@@ -2900,16 +3288,18 @@ def _process_import_job(job_id: str):
                                                 PurePosixPath(plot_rel).name
                                             )
                                         )
+                                        plot_staged_rel = _build_staged_relative_path(plot_import_rel)
 
                                         staged_plot_path, staged_plot_error = _resolve_staged_target_path(
                                             upload_root,
-                                            plot_import_rel,
+                                            plot_staged_rel,
                                         )
                                         if staged_plot_error:
                                             logger.warning(
-                                                "Rejected SEM-EDX plot staged path for job %s: rel=%s error=%s",
+                                                "Rejected SEM-EDX plot staged path for job %s: rel=%s staged=%s error=%s",
                                                 safe_job_id,
                                                 sanitize_log_value(plot_import_rel),
+                                                sanitize_log_value(plot_staged_rel),
                                                 sanitize_log_value(staged_plot_error),
                                             )
                                             _append_job_error(job, staged_plot_error)
@@ -2942,7 +3332,7 @@ def _process_import_job(job_id: str):
 
                                         import_entry = {
                                             "relative_path": plot_import_rel,
-                                            "staged_path": plot_import_rel,
+                                            "staged_path": plot_staged_rel,
                                             "dataset_id_override": sem_dataset_id,
                                         }
                                         import_result = _import_job_entry(
