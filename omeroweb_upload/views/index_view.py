@@ -127,6 +127,8 @@ def _start_upload(request, conn):
     normalized = []
     total_bytes = 0
     invalid = []
+    seen_relative_paths = set()
+    seen_parent_paths = set()
 
     for entry in files:
         if not isinstance(entry, dict):
@@ -138,6 +140,27 @@ def _start_upload(request, conn):
         if rel_error:
             invalid.append(rel_error)
             continue
+        if rel_path in seen_relative_paths:
+            invalid.append(f"Duplicate file path: {rel_path}")
+            continue
+        if rel_path in seen_parent_paths:
+            invalid.append(f"Conflicting file path hierarchy: {rel_path}")
+            continue
+        rel_parts = PurePosixPath(rel_path).parts
+        conflicting_ancestor = None
+        for depth in range(1, len(rel_parts)):
+            ancestor = PurePosixPath(*rel_parts[:depth]).as_posix()
+            if ancestor in seen_relative_paths:
+                conflicting_ancestor = ancestor
+                break
+        if conflicting_ancestor:
+            invalid.append(
+                f"Conflicting file path hierarchy: {conflicting_ancestor} <-> {rel_path}"
+            )
+            continue
+        seen_relative_paths.add(rel_path)
+        for depth in range(1, len(rel_parts)):
+            seen_parent_paths.add(PurePosixPath(*rel_parts[:depth]).as_posix())
         try:
             size = int(size)
         except (TypeError, ValueError):
@@ -161,7 +184,7 @@ def _start_upload(request, conn):
             import_skip = True
             compatibility_skip = True
 
-        staged_path = f"_staged/{upload_id}/{filename}"
+        staged_path = _build_staged_relative_path(rel_path)
         staged_error = _validate_staged_target_path(upload_root / ("0" * 32), staged_path)
         if staged_error:
             invalid.append(staged_error)

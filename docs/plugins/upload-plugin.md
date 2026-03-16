@@ -11,7 +11,10 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - OMERO CLI-based import with configurable batching and concurrency.
 - OMERO CLI import and import preflight checks run with `--depth 10` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
-- Automatic detection and skipping of non-importable files (OS metadata, companion XML in metadata directories) to match OMERO Insight behaviour.
+- Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
+- Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the group header path that OMERO reports, while ordinary folders still import file-by-file.
+- Grouped-directory cleanup is conservative: the plugin only collapses cleanup to a staged directory root when the OMERO-reported group covers the full uploaded subtree under that root.
+- Automatic detection and skipping of non-importable files is limited to operating-system and filesystem junk (for example `Thumbs.db`, `.DS_Store`, recycle-bin metadata); all other files are handed to OMERO/Bio-Formats unchanged.
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
@@ -118,6 +121,7 @@ The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_
 - Small files continue to upload as normal multipart requests.
 - Files larger than the browser-side request ceiling are sliced into bounded chunks before they are sent to `/omeroweb_upload/upload/<job_id>/`.
 - The upload endpoint validates chunk offsets and file sizes and returns JSON errors for server-side failures, avoiding raw HTML error pages in the UI when possible.
+- Upload session creation rejects duplicate normalized relative paths up front so mixed slash styles cannot collide onto the same staged target.
 - This reduces exposure to reverse-proxy and app-server request-body limits for large microscopy datasets, but operators should still review any external proxy size and timeout settings used in front of OMERO.web.
 
 ## Operator checklist

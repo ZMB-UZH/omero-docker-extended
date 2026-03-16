@@ -134,6 +134,43 @@ def test_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monk
     assert captured["cmd"][-1] == str(file_path)
 
 
+def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    upload_root.mkdir()
+    file_path = tmp_path / "nested" / "sample.zarr"
+    file_path.parent.mkdir()
+    file_path.write_text("dummy", encoding="utf-8")
+
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(core_functions.subprocess, "run", fake_run)
+
+    result = core_functions._run_local_import_scan(file_path)
+
+    assert result.returncode == 0
+    assert captured["cmd"][:4] == [core_functions.OMERO_CLI, "import", "-f", "--depth"]
+    depth_index = captured["cmd"].index("--depth")
+    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][-1] == str(file_path)
+
+    env = captured["kwargs"]["env"]
+    expected_home = upload_root / ".omero-cli-home"
+    expected_cache = expected_home / ".cache"
+
+    assert env["HOME"] == str(expected_home)
+    assert env["XDG_CACHE_HOME"] == str(expected_cache)
+    assert env["OMERODIR"]
+    assert expected_home.is_dir()
+    assert expected_cache.is_dir()
+
+
 def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     for module in (connection_service, import_service):
         captured = {}
