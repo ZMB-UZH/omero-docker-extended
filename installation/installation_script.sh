@@ -9,7 +9,7 @@ SCRIPT_ENV_FILE=""
 USE_CACHE_BUILD="${USE_CACHE_BUILD:-1}"             # set to 1 to enable buildx inline cache
 USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-0}" # set to 0 to use plain docker compose build
 DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}" # set to 1 to rebuild final images into single-layer outputs
-APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-0}" # set to 1 to apply OS and Python security updates to all images
+APPLY_SECURITY_HARDENING="${APPLY_SECURITY_HARDENING:-}" # set to 0/1 to override the prompt; empty defaults the prompt to yes
 ENABLE_VULNERABILITY_SCAN="${ENABLE_VULNERABILITY_SCAN:-0}" # set to 1 to run Docker Scout vulnerability scanning
 KEEP_IMAGES="${KEEP_IMAGES:-0}"                     # set to 1 to keep existing images
 START_CONTAINERS="${START_CONTAINERS:-1}"            # set to 0 to skip `docker compose up -d`
@@ -1854,18 +1854,18 @@ resolve_security_hardening_choice() {
         esac
     fi
 
-    if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
-        return 1
-    fi
-
     local prompt_hint="Y/n"
-    local prompt_default="n"
-    local default_choice="no"
+    local prompt_default="Y"
+    local default_choice="yes"
 
-    if [ "${APPLY_SECURITY_HARDENING}" = "1" ]; then
-        prompt_hint="Y/n"
-        prompt_default="Y"
-        default_choice="yes"
+    if [ -n "${APPLY_SECURITY_HARDENING}" ]; then
+        if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
+            return 1
+        fi
+        if [ "${APPLY_SECURITY_HARDENING}" = "0" ]; then
+            prompt_default="n"
+            default_choice="no"
+        fi
     fi
 
     reply="$(prompt_yes_no "Enable Docker image security hardening? (applies OS and Python security updates to all images) ${prompt_hint} (Default: ${prompt_default})" "${default_choice}")"
@@ -2034,8 +2034,10 @@ if ! validate_toggle_config "DOCKER_BUILD_FLATTEN_FINAL_IMAGE" "${DOCKER_BUILD_F
     exit 1
 fi
 
-if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
-    exit 1
+if [ -n "${APPLY_SECURITY_HARDENING}" ]; then
+    if ! validate_toggle_config "APPLY_SECURITY_HARDENING" "${APPLY_SECURITY_HARDENING}"; then
+        exit 1
+    fi
 fi
 
 # Export for the buildx compressed build script (reads APPLY_SECURITY_HARDENING env var)
@@ -2646,8 +2648,8 @@ run_docker_scout_summary() {
         echo "  Security hardening: ENABLED"
         echo "  Built images include OS-level and Python package security updates."
     else
-        echo "  Security hardening: DISABLED (default)"
-        echo "  To reduce vulnerabilities, re-run with security hardening enabled."
+        echo "  Security hardening: DISABLED"
+        echo "  Interactive installs default this option to enabled; re-run with hardening enabled to reduce vulnerabilities."
     fi
     if [ "${has_baseline}" != "true" ]; then
         echo "  Baseline: not available (build cache was enabled)."
