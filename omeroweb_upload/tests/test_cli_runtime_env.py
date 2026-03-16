@@ -4,6 +4,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from omeroweb_upload.services.omero import connection_service, import_service
+from omeroweb_upload.services.upload_management import workflow_service
 from omeroweb_upload.strings import errors
 from omeroweb_upload.views import core_functions
 
@@ -66,6 +68,129 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
         "Ice.Default.Router=test-router\n"
         "omero.keep_alive=30\n"
     )
+
+
+def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, timeout=None):
+        captured["cmd"] = cmd
+        captured["timeout"] = timeout
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(core_functions, "_run_omero_cli", fake_run)
+
+    path = Path("/tmp/sample.czi")
+    ok, _stdout, _stderr = core_functions._import_file(
+        None,
+        "session-key",
+        "omeroserver",
+        4064,
+        path,
+        dataset_id=17,
+    )
+
+    assert ok is True
+    depth_index = captured["cmd"].index("--depth")
+    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][-3:] == ["-d", "17", str(path)]
+
+
+def test_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "upload-root"
+    upload_root.mkdir()
+    file_path = tmp_path / "nested" / "sample.czi"
+    file_path.parent.mkdir()
+    file_path.write_text("dummy", encoding="utf-8")
+
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=f"{file_path}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(core_functions.subprocess, "run", fake_run)
+
+    result = core_functions._check_import_compatibility(
+        "session-key",
+        "omeroserver",
+        4064,
+        file_path,
+        None,
+        "nested/sample.czi",
+    )
+
+    assert result["status"] == "compatible"
+    depth_index = captured["cmd"].index("--depth")
+    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][:4] == [core_functions.OMERO_CLI, "import", "-f", "--depth"]
+    assert captured["cmd"][-1] == str(file_path)
+
+
+def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
+    for module in (connection_service, import_service):
+        captured = {}
+
+        def fake_run(cmd, *args, **kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(module, "_run_omero_cli", fake_run)
+
+        ok, _stdout, _stderr = module._import_file(
+            None,
+            "session-key",
+            "omeroserver",
+            4064,
+            Path("/tmp/sample.czi"),
+            dataset_id=17,
+        )
+
+        assert ok is True
+        depth_index = captured["cmd"].index("--depth")
+        assert captured["cmd"][depth_index + 1] == "10"
+        assert captured["cmd"][-3:] == ["-d", "17", "/tmp/sample.czi"]
+
+
+def test_service_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monkeypatch):
+    file_path = tmp_path / "nested" / "sample.czi"
+    file_path.parent.mkdir()
+    file_path.write_text("dummy", encoding="utf-8")
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=f"{file_path}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(workflow_service.subprocess, "run", fake_run)
+
+    result = workflow_service._check_import_compatibility(
+        "session-key",
+        "omeroserver",
+        4064,
+        file_path,
+        None,
+        "nested/sample.czi",
+    )
+
+    assert result["status"] == "compatible"
+    depth_index = captured["cmd"].index("--depth")
+    assert captured["cmd"][depth_index + 1] == "10"
+    assert captured["cmd"][:4] == [workflow_service.OMERO_CLI, "import", "-f", "--depth"]
+    assert captured["cmd"][-1] == str(file_path)
 
 
 def test_classify_import_failure_detects_session_expiry():

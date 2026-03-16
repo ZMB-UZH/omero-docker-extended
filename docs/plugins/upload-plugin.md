@@ -9,6 +9,7 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - Upload session creation and browser-to-server file transfer.
 - Automatic chunked transfer for large files so multi-GB uploads do not depend on a single oversized HTTP request.
 - OMERO CLI-based import with configurable batching and concurrency.
+- OMERO CLI import and import preflight checks run with `--depth 10` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
 - Automatic detection and skipping of non-importable files (OS metadata, companion XML in metadata directories) to match OMERO Insight behaviour.
 - Job lifecycle: start, upload, import, confirm, prune.
