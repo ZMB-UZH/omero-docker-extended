@@ -89,6 +89,8 @@ omeroweb_<name>/
 - The `omeroweb` container runs two processes via supervisord: OMERO.web and the Imaris Celery worker.
 - Job state files use `portalocker` for safe concurrent access on tmpfs.
 - The `pg-maintenance` sidecar uses `REINDEX CONCURRENTLY` (PostgreSQL 12+), never `VACUUM FULL`.
+- Interactive installation defaults Docker image security hardening to enabled, while Docker Scout vulnerability scanning remains opt-in.
+- Locale data is preserved across the hardened images; treat package and dependency updates, not locale stripping, as the security control.
 
 ## Operational pitfalls for AI agents
 
@@ -107,14 +109,15 @@ omeroweb_<name>/
 
 ### Testing
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
+- In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
 - Correct pattern:
   ```bash
-  python3 -m pytest tests/ -v
-  python3 -m pytest omero_plugin_common/tests/ -v
-  python3 -m pytest omeroweb_imaris_connector/tests/ -v
-  python3 -m pytest omeroweb_admin_tools/tests/ -v
-  python3 -m pytest omeroweb_omp_plugin/tests/ -v
-  python3 -m pytest omeroweb_upload/tests/ -v
+  python3 -m pytest tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
   ```
 - Always also run: `python3 tools/lint_docs_structure.py`
 

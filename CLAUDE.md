@@ -48,6 +48,8 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Treat plugin input as untrusted; validate at system boundaries.
 - Use OMERO permissions checks for data access.
 - Do not expose monitoring interfaces without authentication.
+- Interactive installation defaults Docker image security hardening to enabled, while Docker Scout vulnerability scanning remains opt-in.
+- Locale data is preserved across the hardened images; package and dependency updates are the intended security control.
 
 ### Documentation
 - Update docs when behavior or operating assumptions change.
@@ -82,6 +84,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 ## Testing
 
 **Important:** Run each test directory as a **separate** `pytest` invocation. The root `conftest.py` installs mock stubs that interfere across test modules when run together in a single process. A combined `pytest tests/ omero_plugin_common/tests/ ...` call produces false failures.
+In root-owned deployment clones, disable the pytest cache provider so the verification run stays warning-free when the repo root is not writable.
 
 ```bash
 # Run docs structure validation (always run this)
@@ -90,13 +93,13 @@ python3 tools/lint_docs_structure.py
 # Run docs lint tests
 python3 -m unittest -v tests/test_lint_docs_structure.py
 
-# Run all test suites (each separately)
-python3 -m pytest tests/ -v
-python3 -m pytest omero_plugin_common/tests/ -v
-python3 -m pytest omeroweb_imaris_connector/tests/ -v
-python3 -m pytest omeroweb_admin_tools/tests/ -v
-python3 -m pytest omeroweb_omp_plugin/tests/ -v
-python3 -m pytest omeroweb_upload/tests/ -v
+# Run all test suites (each separately, warning-free)
+python3 -m pytest tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
 ```
 
 ## Build and deploy
