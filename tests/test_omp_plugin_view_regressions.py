@@ -16,6 +16,8 @@ if str(REPO_ROOT) not in sys.path:
 def _install_import_stubs() -> None:
     if "django" not in sys.modules:
         sys.modules["django"] = types.ModuleType("django")
+    if not hasattr(sys.modules["django"], "__path__"):
+        sys.modules["django"].__path__ = []
 
     django_conf = sys.modules.setdefault("django.conf", types.ModuleType("django.conf"))
     django_conf.settings = types.SimpleNamespace()

@@ -43,9 +43,8 @@ networks:
 """.strip()
     compose_file = tmp_path / "docker-compose.yml"
     compose_file.write_text(compose_text, encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
 
-    names = _load_compose_service_names()
+    names = _load_compose_service_names(str(compose_file))
 
     assert names == ["app", "db"]
 
