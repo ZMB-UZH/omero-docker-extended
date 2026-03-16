@@ -315,8 +315,6 @@ RUN set -euo pipefail; \
     echo "=== Final security hardening: removing unnecessary packages ==="; \
     dnf -y remove --noautoremove \
         vim-minimal \
-        langpacks-en \
-        glibc-langpack-en \
         || true; \
     dnf clean all || true; \
     rm -rf /var/cache/dnf /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/info/* || true; \
