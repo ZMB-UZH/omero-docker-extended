@@ -32,7 +32,12 @@ from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 from omeroweb.decorators import login_required
 from typing import Optional
-from ..constants import MAX_UPLOAD_BATCH_BYTES, MAX_UPLOAD_BATCH_GB, OMERO_CLI
+from ..constants import (
+    MAX_UPLOAD_BATCH_BYTES,
+    MAX_UPLOAD_BATCH_GB,
+    OMERO_CLI,
+    OMERO_IMPORT_SCAN_DEPTH,
+)
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
@@ -56,6 +61,7 @@ __all__ = [
     'MAX_UPLOAD_BATCH_BYTES',
     'MAX_UPLOAD_BATCH_GB',
     'OMERO_CLI',
+    'OMERO_IMPORT_SCAN_DEPTH',
     'ORPHAN_DATASET_PREFIX',
     'ORPHAN_SUFFIX_ALPHANUM',
     'ORPHAN_SUFFIX_LENGTH',
@@ -1293,6 +1299,7 @@ def _parse_cli_id(output: str, expected_type: str):
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
+    cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
@@ -2129,7 +2136,7 @@ def _check_import_compatibility(
         }
     
     # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    cmd = [OMERO_CLI, "import", "-f", str(file_path)]
+    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(file_path)]
     
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()

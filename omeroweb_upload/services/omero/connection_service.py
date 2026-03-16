@@ -4,10 +4,12 @@ OMERO connection and session management.
 import os
 import logging
 import re
+import subprocess
 from typing import Optional
 from omero.gateway import BlitzGateway
 from omero.rtypes import rstring
 from pathlib import Path
+from ...constants import OMERO_CLI, OMERO_IMPORT_SCAN_DEPTH
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +132,7 @@ def _parse_cli_id(output: str, expected_type: str):
 
 def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
+    cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
