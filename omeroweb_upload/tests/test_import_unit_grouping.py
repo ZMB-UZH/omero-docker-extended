@@ -541,6 +541,94 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
     assert fake_service_conn.closed is True
 
 
+def test_ensure_job_dataset_targets_uses_request_connection_when_available(monkeypatch):
+    request_conn = object()
+    created = []
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: (_ for _ in ()).throw(AssertionError("service connection should not be used")),
+    )
+
+    def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        created.append((conn, name, project_id))
+        dataset_map[name] = 11
+        return 11
+
+    monkeypatch.setattr(core_functions, "_get_or_create_dataset", fake_get_or_create_dataset)
+
+    job = {
+        "job_id": "a" * 32,
+        "host": "omeroserver",
+        "port": 4064,
+        "username": "alice",
+        "group_id": 4,
+        "project_id": 9,
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+    }
+    entries_to_import = [
+        {
+            "relative_path": "folder/sample.tif",
+            "dataset_relative_path": "folder/sample.tif",
+            "covered_relative_paths": ["folder/sample.tif"],
+        }
+    ]
+
+    ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import, conn=request_conn)
+
+    assert ok is True
+    assert error is None
+    assert created == [(request_conn, "folder", 9)]
+    assert job["dataset_map"] == {"folder": 11}
+
+
+def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
+    class _FakeServiceConn:
+        def __init__(self):
+            self.closed = False
+
+        def suConn(self, username):
+            return None
+
+        def close(self):
+            self.closed = True
+
+    fake_service_conn = _FakeServiceConn()
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_service_connection",
+        lambda host, port, group_id=None: fake_service_conn,
+    )
+
+    job = {
+        "job_id": "b" * 32,
+        "host": "omeroserver",
+        "port": 4064,
+        "username": "test",
+        "group_id": 4,
+        "project_id": None,
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+    }
+    entries_to_import = [
+        {
+            "relative_path": "folder/sample.tif",
+            "dataset_relative_path": "folder/sample.tif",
+            "covered_relative_paths": ["folder/sample.tif"],
+        }
+    ]
+
+    ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import)
+
+    assert ok is False
+    assert error == errors.unable_prepare_import_destination()
+    assert "impersonate" not in error.lower()
+    assert fake_service_conn.closed is True
+
+
 def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monkeypatch):
     upload_root = tmp_path / "job-root"
     metadata_path = upload_root / "_staged" / "plate.zarr" / "OME" / "METADATA.ome.xml"

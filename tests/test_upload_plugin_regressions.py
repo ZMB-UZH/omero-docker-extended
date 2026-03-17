@@ -277,6 +277,83 @@ class UploadPluginRegressionTests(TestCase):
         self.assertEqual(job_payload, job)
         self.assertIsNone(error_response)
 
+    def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
+        request_conn = types.SimpleNamespace(SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None))
+        created = []
+
+        def fail_open_service_connection(*args, **kwargs):
+            raise AssertionError("service connection should not be used when request connection is available")
+
+        def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+            created.append((conn, name, project_id))
+            dataset_map[name] = 11
+            return 11
+
+        job = {
+            "job_id": "a" * 32,
+            "host": "omeroserver",
+            "port": 4064,
+            "username": "alice",
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "orphan_dataset_name": None,
+        }
+        entries_to_import = [
+            {
+                "relative_path": "folder/sample.tif",
+                "dataset_relative_path": "folder/sample.tif",
+                "covered_relative_paths": ["folder/sample.tif"],
+            }
+        ]
+
+        with mock.patch.object(core_functions, "_open_service_connection", side_effect=fail_open_service_connection), \
+             mock.patch.object(core_functions, "_get_or_create_dataset", side_effect=fake_get_or_create_dataset):
+            ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import, conn=request_conn)
+
+        self.assertTrue(ok)
+        self.assertIsNone(error)
+        self.assertEqual([(request_conn, "folder", 9)], created)
+        self.assertEqual({"folder": 11}, job["dataset_map"])
+
+    def test_ensure_job_dataset_targets_hides_impersonation_details(self):
+        class _FakeServiceConn:
+            def __init__(self):
+                self.closed = False
+
+            def suConn(self, username):
+                return None
+
+            def close(self):
+                self.closed = True
+
+        fake_service_conn = _FakeServiceConn()
+        job = {
+            "job_id": "b" * 32,
+            "host": "omeroserver",
+            "port": 4064,
+            "username": "test",
+            "group_id": 4,
+            "project_id": None,
+            "dataset_map": {},
+            "orphan_dataset_name": None,
+        }
+        entries_to_import = [
+            {
+                "relative_path": "folder/sample.tif",
+                "dataset_relative_path": "folder/sample.tif",
+                "covered_relative_paths": ["folder/sample.tif"],
+            }
+        ]
+
+        with mock.patch.object(core_functions, "_open_service_connection", return_value=fake_service_conn):
+            ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import)
+
+        self.assertFalse(ok)
+        self.assertEqual("OMERO could not prepare the destination for this import.", error)
+        self.assertNotIn("impersonate", error.lower())
+        self.assertTrue(fake_service_conn.closed)
+
     def test_start_import_thread_does_not_spawn_when_save_fails(self):
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
 

@@ -54,7 +54,12 @@
             </div>
         </div>
         <div id="upload-card" class="upload-card" data-start-url="{{ upload_start_url }}">
-            <div class="upload-card__overlay" aria-live="polite">Uploading</div>
+            <div class="upload-card__overlay" aria-live="polite">
+                <div class="upload-card__overlay-panel" role="status">
+                    <span class="upload-card__spinner" aria-hidden="true"></span>
+                    <span class="upload-card__overlay-text">UPLOADING</span>
+                </div>
+            </div>
             <div class="upload-card__content">
                 <div class="upload-intro-row">
                     <p id="upload_intro_text"><strong>Drag & drop</strong> folders and files here or <strong>choose from storage</strong>.</p>
@@ -331,6 +336,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         };
         const uploadCard = document.getElementById('upload-card');
         const uploadOverlay = uploadCard.querySelector('.upload-card__overlay');
+        const uploadOverlayText = uploadCard.querySelector('.upload-card__overlay-text');
         const startUrl = uploadCard.dataset.startUrl;
         const fileInput = document.getElementById('file-input');
         const fileBtn = document.getElementById('file-btn');
@@ -463,6 +469,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         const importLogState = new Map();
         let importPollTimer = null;
         let isUploading = false;
+        let isPreparingFiles = false;
         let cancelUploadRequested = false;
         let compatibilityPopupResolver = null;
         let semEdxConfirmPopupResolver = null;
@@ -746,8 +753,16 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             return isSemEdxSelected() && semEdxInstructionStep > 1;
         }
 
+        function setUploadOverlayText(text) {
+            if (uploadOverlayText) {
+                uploadOverlayText.textContent = text;
+            } else if (uploadOverlay) {
+                uploadOverlay.textContent = text;
+            }
+        }
+
         function updateUploadControlAvailability() {
-            const shouldDisable = isUploading || !uploadEnabled || isSemEdxAddLocked();
+            const shouldDisable = isUploading || isPreparingFiles || !uploadEnabled || isSemEdxAddLocked();
             fileInput.disabled = shouldDisable;
             folderInput.disabled = shouldDisable;
             if (fileBtn) {
@@ -756,7 +771,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             if (folderBtn) {
                 folderBtn.disabled = shouldDisable;
             }
-            uploadBtn.disabled = isUploading || !uploadEnabled;
+            uploadBtn.disabled = isUploading || isPreparingFiles || !uploadEnabled;
         }
 
         function resetSemEdxStateAfterUpload() {
@@ -786,10 +801,23 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
         }
 
+        function setPreparingFilesState(active, statusText = 'LOADING FILES') {
+            isPreparingFiles = active;
+            uploadCard.classList.toggle('is-preparing-files', active);
+            if (active) {
+                setUploadOverlayText(statusText);
+            }
+            updateUploadControlAvailability();
+            updateCancelButtons();
+        }
+
         function setUploadingState(active, statusText) {
             const wasUploading = isUploading;
             isUploading = active;
             uploadCard.classList.toggle('is-uploading', active);
+            if (active && isPreparingFiles) {
+                setPreparingFilesState(false);
+            }
             updateUploadControlAvailability();
             if (!active) {
                 resetUploadProgress();
@@ -799,10 +827,28 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     }
                     skipSpecialUploadReset = false;
                 }
-            } else if (statusText && uploadOverlay) {
-                uploadOverlay.textContent = statusText;
+            } else if (statusText) {
+                setUploadOverlayText(statusText);
             }
             updateCancelButtons();
+        }
+
+        function waitForNextPaint() {
+            return new Promise((resolve) => {
+                window.requestAnimationFrame(() => {
+                    window.setTimeout(resolve, 0);
+                });
+            });
+        }
+
+        async function withPreparingFilesState(statusText, callback) {
+            setPreparingFilesState(true, statusText);
+            await waitForNextPaint();
+            try {
+                return await callback();
+            } finally {
+                setPreparingFilesState(false);
+            }
         }
 
         function registerActiveRequest(xhr) {
@@ -840,14 +886,14 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const job = Array.from(importJobs.values())[0];
             if (!job) return;
             if (job.compatibility_enabled === false) {
-                uploadOverlay.textContent = 'PREPARING IMPORT...';
+                setUploadOverlayText('PREPARING IMPORT...');
                 return;
             }
             
             const total = job.compatibility_total || 0;
             if (total === 0) return;
 
-            uploadOverlay.textContent = 'CHECKING COMPATIBILITY...';
+            setUploadOverlayText('CHECKING COMPATIBILITY...');
         }
 
         function updateUploadButtonLabel() {
@@ -874,9 +920,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             uploadTotalBytes = 0;
             uploadCompletedBytes = 0;
             uploadProgressEntries.clear();
-            if (uploadOverlay) {
-                uploadOverlay.textContent = 'UPLOADING';
-            }
+            setUploadOverlayText('UPLOADING');
         }
 
         function finalizeUploadProgressEntry(key, countCompleted = false) {
@@ -893,9 +937,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         function updateUploadOverlayProgress() {
             if (!uploadOverlay || !isUploading) {
-                if (uploadOverlay) {
-                    uploadOverlay.textContent = 'UPLOADING';
-                }
+                setUploadOverlayText('UPLOADING');
                 return;
             }
             const totalBytes = Number.isFinite(uploadTotalBytes) && uploadTotalBytes > 0
@@ -905,7 +947,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     0
                 );
             if (!totalBytes) {
-                uploadOverlay.textContent = 'UPLOADING';
+                setUploadOverlayText('UPLOADING');
                 return;
             }
             const activeLoaded = Array.from(uploadProgressEntries.values()).reduce((acc, entry) => {
@@ -915,7 +957,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }, 0);
             const loaded = Math.min(totalBytes, uploadCompletedBytes + activeLoaded);
             const percent = Math.min(100, Math.floor((loaded / totalBytes) * 100));
-            uploadOverlay.textContent = `UPLOADING (${percent}%)`;
+            setUploadOverlayText(`UPLOADING (${percent}%)`);
         }
 
         function setUploadProgressEntry(key, loaded, total) {
@@ -3477,20 +3519,22 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             if (typeof window.showOpenFilePicker !== 'function') {
                 return;
             }
-            const collected = [];
             try {
                 const fileHandles = await window.showOpenFilePicker({ multiple: true });
-                for (const handle of fileHandles) {
-                    const file = await handle.getFile();
-                    collected.push({ file, relativePath: file.name });
-                }
+                await withPreparingFilesState('LOADING FILES', async () => {
+                    const collected = [];
+                    for (const handle of fileHandles) {
+                        const file = await handle.getFile();
+                        collected.push({ file, relativePath: file.name });
+                    }
+                    if (collected.length) {
+                        handleFiles(collected);
+                    }
+                });
             } catch (error) {
                 if (error?.name !== 'AbortError') {
                     throw error;
                 }
-            }
-            if (collected.length) {
-                handleFiles(collected);
             }
         }
 
@@ -3498,18 +3542,18 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             if (typeof window.showDirectoryPicker !== 'function') {
                 return;
             }
-            const collected = [];
             try {
                 const dirHandle = await window.showDirectoryPicker();
-                const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
-                collected.push(...dirEntries);
+                await withPreparingFilesState('LOADING FOLDER', async () => {
+                    const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
+                    if (dirEntries.length) {
+                        handleFiles(dirEntries);
+                    }
+                });
             } catch (error) {
                 if (error?.name !== 'AbortError') {
                     throw error;
                 }
-            }
-            if (collected.length) {
-                handleFiles(collected);
             }
         }
 
@@ -3617,7 +3661,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         uploadCard.addEventListener('dragover', (event) => {
             event.stopPropagation();
-            if (isUploading || isSemEdxAddLocked()) {
+            if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                 return;
             }
             event.preventDefault();
@@ -3630,7 +3674,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         uploadCard.addEventListener('drop', async (event) => {
             event.preventDefault();
-            if (isUploading || isSemEdxAddLocked()) {
+            if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                 return;
             }
             uploadCard.classList.remove('dragover');
@@ -3638,24 +3682,31 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
-            const files = await getFilesFromDrop(event);
+            let files = [];
+            await withPreparingFilesState('LOADING DROPPED FILES', async () => {
+                files = await getFilesFromDrop(event);
+                if (files.length) {
+                    handleFiles(files);
+                }
+            });
             if (!files.length) {
                 setStatus('No files detected in the dropped folder.', 'error');
-                return;
             }
-            handleFiles(files);
         });
 
-        fileInput.addEventListener('change', () => {
+        fileInput.addEventListener('change', async () => {
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
-            if (isUploading || isSemEdxAddLocked()) {
+            if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                 return;
             }
             if (fileInput.files?.length) {
-                handleFiles(normalizeFileList(fileInput.files));
+                await withPreparingFilesState('POPULATING UPLOAD LIST', async () => {
+                    const files = normalizeFileList(fileInput.files);
+                    handleFiles(files);
+                });
             }
         });
         if (fileBtn) {
@@ -3664,7 +3715,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                     return;
                 }
-                if (isUploading || isSemEdxAddLocked()) {
+                if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                     return;
                 }
                 if (typeof window.showOpenFilePicker === 'function') {
@@ -3685,7 +3736,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                     return;
                 }
-                if (isUploading || isSemEdxAddLocked()) {
+                if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                     return;
                 }
                 if (canUseDirectoryPicker) {
@@ -3704,16 +3755,19 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 setStatus('Folder selection is unavailable in this browser. Drag & drop a folder instead.', 'error');
             });
         }
-        folderInput.addEventListener('change', () => {
+        folderInput.addEventListener('change', async () => {
             if (!uploadEnabled) {
                 setStatus('Upload folder is not writable. Please contact the server administrator.', 'error');
                 return;
             }
-            if (isUploading || isSemEdxAddLocked()) {
+            if (isUploading || isPreparingFiles || isSemEdxAddLocked()) {
                 return;
             }
             if (folderInput.files?.length) {
-                handleFiles(normalizeFileList(folderInput.files));
+                await withPreparingFilesState('POPULATING UPLOAD LIST', async () => {
+                    const files = normalizeFileList(folderInput.files);
+                    handleFiles(files);
+                });
             }
         });
 
@@ -3797,9 +3851,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 if (data.compatibility_checked !== undefined && data.compatibility_total !== undefined) {
                     const total = data.compatibility_total || 0;
                     if (total > 0) {
-                        if (uploadOverlay) {
-                            uploadOverlay.textContent = 'UPLOADED. CHECKING COMPATIBILITY...';
-                        }
+                        setUploadOverlayText('UPLOADED. CHECKING COMPATIBILITY...');
                     }
                 }
                 
@@ -4610,7 +4662,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         });
 
         uploadBtn.addEventListener('click', async () => {
-            if (isUploading) {
+            if (isUploading || isPreparingFiles) {
                 return;
             }
             if (!pendingFiles.length) {
