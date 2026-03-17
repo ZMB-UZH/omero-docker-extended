@@ -16,6 +16,9 @@ It is intentionally short. Deep context lives in the files it points to.
 - Assume the system administrator has provisioned the corresponding non-example runtime file(s) on the target host, and that those files match their tracked `*_example*` counterparts unless explicitly documented otherwise.
 - The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
 - Treat this distribution as a full-stack, multi-container deployment that may contend with pre-existing Docker workloads (for example via host ports, network names, volumes, or maintenance automation). Operators are expected to validate coexistence in their own environment before production rollout.
+- Keep agent commentary terse and action-first. Prefer short progress updates over long explanations.
+- When a general command fails for a reusable environment-specific reason, update `AGENTS.md` or the relevant doc in the same change so later agents do not repeat it.
+- Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
 - For log triage, use the Admin Tools logging path first: prefer the Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs` sweeps. Fall back to direct container logs, internal log files, or Docker inspection only when the Admin Tools/Loki mechanism returns no data, appears stale/inconsistent with service state, or is itself suspected to be unhealthy.
 
 ## Where to look first
@@ -105,6 +108,7 @@ omeroweb_<name>/
 - Always `git fetch origin <branch>:refs/remotes/origin/<branch> --force` before rebasing to avoid stale tracking refs.
 
 ### Docker compose requires secrets
+- In this repo, `docker compose build`, `up`, and `config` commands should normally include both `--env-file installation_paths.env` and `--env-file env/omero_secrets.env`. Using only `installation_paths.env` can fail during variable interpolation for secrets-backed settings such as database exporter credentials.
 - `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
 
 ### OMERO CLI inside containers
@@ -115,6 +119,7 @@ omeroweb_<name>/
   docker exec omero-omeroserver-1 bash -lc 'su omero-server -s /bin/bash -c "HOME=/tmp /opt/omero/server/venv-3.11/bin/omero ..."' 
   docker exec omero-omeroweb-1 bash -lc 'su omero-web -s /bin/bash -c "HOME=/tmp /opt/omero/web/venv-3.12/bin/python3 -m pytest ..."'
   ```
+- For OMERO CLI, keep connection/auth flags before the subcommand. Example: `omero -s localhost -p 4064 -u root -w "$ROOTPASS" delete Image:123 --wait 120`. Do not place `-s/-p/-u/-w` after `delete`, `import`, or other subcommands.
 - When the exact virtualenv path is uncertain, resolve it first as the service user and then run the command as that same service user. Do not probe by executing OMERO CLI as `root`.
 - For live OMERO.web upload tests, authenticate as a regular OMERO user. The upload plugin intentionally blocks `root`, so using `root` for `/omeroweb_upload/` validation is an invalid test procedure.
 
@@ -134,10 +139,16 @@ omeroweb_<name>/
   ```
 - Use `docker exec ... bash -lc '...'` only for short single-line commands. If a command needs substantial escaping, stop and convert it to the `docker exec -i ... <interpreter> - <<'EOF'` form instead of fighting the wrapper.
 
+### Container Python imports
+- Do not assume repository modules are importable from `/opt/omero` inside containers. In this deployment they are typically available from the active virtualenv site-packages, for example `/opt/omero/web/venv-*/lib/python*/site-packages`.
+- Before running container-local Python that imports `omeroweb_upload`, `omeroweb_admin_tools`, or `omero_plugin_common`, first resolve the runtime interpreter/module location with `python -c 'import module; print(module.__file__)'` or inspect the active `venv*/site-packages`.
+- If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
+
 ### Testing
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
 - In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
 - Before rerunning `pytest`, confirm the selected Python environment can import Django. If `python3 -m pytest ...` fails while loading `/opt/omero/conftest.py` with `ModuleNotFoundError: django`, do **not** keep retrying the same host-interpreter command.
+- Never probe OMERO.web or plugin imports inside containers with plain `python3` from the container default `PATH`. Resolve the active virtualenv first and use that interpreter (or `source` its `activate` script) for all import checks. Treat `docker exec <container> python3 -c 'import ...'` `ModuleNotFoundError` results as an invalid procedure when the package is expected to live in the OMERO venv.
 - Recovery order when Django is missing from the current interpreter:
   1. Switch to the project runtime that already has the web/test dependencies installed (typically the OMERO.web container or its virtualenv) and rerun the split `pytest` commands there.
   2. If only a quick regression check is needed and a test module is intentionally self-stubbing, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py` loading. Example: `python3 tests/test_upload_plugin_regressions.py`.
