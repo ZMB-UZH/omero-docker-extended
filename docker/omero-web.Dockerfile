@@ -256,11 +256,20 @@ RUN --mount=type=bind,source=.,target=/tmp/build-context,readonly \
         echo "No logo/logo.png found in build context, skipping logo setup"; \
     fi
 
+# Pre-create a strict temp root for build-time OMERO CLI commands.
+# TempFileManager fallbacks are removed above, so syncmedia must get an explicit
+# writable location under the omero-web account.
+RUN set -euo pipefail; \
+    install -d -o omero-web -g omero-web -m 0700 /opt/omero/web/tmp/build-syncmedia
+
 # Sync OMERO.web static + media files
 # -----------------------------------
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     su -s /bin/bash omero-web -c "\
+        export TMPDIR=/opt/omero/web/tmp/build-syncmedia && \
+        export OMERO_TMPDIR=/opt/omero/web/tmp/build-syncmedia && \
+        export OMERO_TEMPDIR=/opt/omero/web/tmp/build-syncmedia && \
         source \"${VENV_DIR}/bin/activate\" && \
         omero web syncmedia \
     "

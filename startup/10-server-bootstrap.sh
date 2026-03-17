@@ -1006,6 +1006,8 @@ collect_repo_root_bootstrap_paths() {
         local cumulative=()
         local joined=""
 
+        # Normalize only the shared prefix segments that exist before %user%.
+        # This is bounded by the template shape, not by repository size.
         IFS='/' read -r -a template_parts <<< "${repo_path}"
         for template_part in "${template_parts[@]}"; do
             [[ -n "${template_part}" ]] || continue
@@ -1038,22 +1040,22 @@ collect_repo_root_bootstrap_paths() {
         for group_name in "$@"; do
             _add_candidate_group "${group_name}"
         done
-    else
-        IFS=',' read -r -a _repo_root_group_entries <<< "${install_groups}"
-        for entry in "${_repo_root_group_entries[@]}"; do
-            entry="$(trim_whitespace "${entry}")"
-            [[ -n "${entry}" ]] || continue
-            [[ "${entry}" == \#* ]] && continue
-            group_name="${entry%%:*}"
-            _add_candidate_group "${group_name}"
-        done
+    fi
 
-        if [[ "${CONFIG_omero_ldap_config:-false}" == "true" ]] \
-            && [[ -n "${ldap_group_setting}" ]] \
-            && [[ "${ldap_group_setting}" != "default" ]] \
-            && [[ "${ldap_group_setting}" != :* ]]; then
-            _add_candidate_group "${ldap_group_setting}"
-        fi
+    IFS=',' read -r -a _repo_root_group_entries <<< "${install_groups}"
+    for entry in "${_repo_root_group_entries[@]}"; do
+        entry="$(trim_whitespace "${entry}")"
+        [[ -n "${entry}" ]] || continue
+        [[ "${entry}" == \#* ]] && continue
+        group_name="${entry%%:*}"
+        _add_candidate_group "${group_name}"
+    done
+
+    if [[ "${CONFIG_omero_ldap_config:-false}" == "true" ]] \
+        && [[ -n "${ldap_group_setting}" ]] \
+        && [[ "${ldap_group_setting}" != "default" ]] \
+        && [[ "${ldap_group_setting}" != :* ]]; then
+        _add_candidate_group "${ldap_group_setting}"
     fi
 
     for group_name in "${candidate_groups[@]}"; do
