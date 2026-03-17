@@ -801,7 +801,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
         }
 
-        function setPreparingFilesState(active, statusText = 'LOADING FILES') {
+        function setPreparingFilesState(active, statusText = 'LOADING') {
             isPreparingFiles = active;
             uploadCard.classList.toggle('is-preparing-files', active);
             if (active) {
@@ -3706,7 +3706,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 return;
             }
             if (fileInput.files?.length) {
-                await withPreparingFilesState('POPULATING UPLOAD LIST', async () => {
+                await withPreparingFilesState('LOADING', async () => {
                     const files = normalizeFileList(fileInput.files);
                     handleFiles(files);
                 });
@@ -3767,7 +3767,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 return;
             }
             if (folderInput.files?.length) {
-                await withPreparingFilesState('POPULATING UPLOAD LIST', async () => {
+                await withPreparingFilesState('LOADING', async () => {
                     const files = normalizeFileList(folderInput.files);
                     handleFiles(files);
                 });
