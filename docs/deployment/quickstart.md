@@ -129,7 +129,7 @@ bash github_pull_project_bash
 
 Vulnerability scanning is disabled by default (it adds several minutes). To enable it, answer "yes" to the interactive prompt or set `ENABLE_VULNERABILITY_SCAN=1`. When enabled, Docker Scout reports known CVEs in all images referenced by `docker-compose.yml` — both custom-built and third-party. When the build ran without cache (fresh pull), the report includes a before/after baseline comparison. The output is a compact table with one line per image.
 
-Interactive installation defaults security hardening to `yes`, and the hardening pass keeps locale data intact while still applying OS updates plus curated compatibility-safe Python updates. It does not blanket-upgrade OMERO/plugin virtual environments after image-local overlays are installed. To force hardening explicitly in automation, use:
+Interactive installation defaults security hardening to `yes`, and the hardening pass keeps locale data intact while still applying OS updates plus curated compatibility-safe Python updates. It does not blanket-upgrade OMERO/plugin virtual environments after OMERO/plugin packages are installed. To force hardening explicitly in automation, use:
 
 ```bash
 APPLY_SECURITY_HARDENING=1 bash installation/installation_script.sh
