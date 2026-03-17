@@ -63,6 +63,8 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
 
     import_started = []
+    prepare_calls = []
+    fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
         assert current_job_id == job_id
@@ -75,6 +77,14 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
 
     monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_request_job_import_datasets",
+        lambda current_job_id, current_job, conn: (
+            prepare_calls.append((current_job_id, conn)),
+            (current_job, None),
+        )[1],
+    )
 
     factory = RequestFactory()
 
@@ -90,7 +100,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             "file": SimpleUploadedFile("big.bin", b"hello"),
         },
     )
-    first_response = index_view._upload_files(first_request, job_id, None)
+    first_response = index_view._upload_files(first_request, job_id, fake_conn)
     first_payload = json.loads(first_response.content)
 
     assert first_response.status_code == 200
@@ -113,7 +123,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
             "file": SimpleUploadedFile("big.bin", b"world"),
         },
     )
-    second_response = index_view._upload_files(second_request, job_id, None)
+    second_response = index_view._upload_files(second_request, job_id, fake_conn)
     second_payload = json.loads(second_response.content)
 
     assert second_response.status_code == 200
@@ -124,6 +134,85 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     assert staged_target.read_bytes() == b"helloworld"
     assert job["files"][0]["status"] == "uploaded"
     assert import_started == [job_id]
+    assert prepare_calls == [(job_id, fake_conn)]
+
+
+def test_upload_files_uses_fast_request_dataset_preparation_before_background_import_thread(
+    tmp_path: Path, monkeypatch
+):
+    upload_root = tmp_path / "upload-root"
+    job_id = "3d8c24356da649fba1313ce123b5c0ff"
+    job = {
+        "job_id": job_id,
+        "status": "uploading",
+        "uploaded_bytes": 0,
+        "total_bytes": 5,
+        "compatibility_enabled": False,
+        "files": [
+            {
+                "upload_id": "u1",
+                "relative_path": "folder/file.bin",
+                "staged_path": "_staged/folder/file.bin",
+                "size": 5,
+                "status": "pending",
+                "errors": [],
+            }
+        ],
+    }
+    _mark_job_owned(monkeypatch, job)
+
+    monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
+    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_job_import_datasets",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("dataset prep must stay off the upload request")
+        ),
+    )
+
+    import_started = []
+    prepare_calls = []
+    fake_conn = object()
+
+    def fake_apply_upload_updates(current_job_id, updates, upload_errors):
+        assert current_job_id == job_id
+        assert upload_errors == []
+        assert updates == [{"upload_id": "u1", "status": "uploaded"}]
+        job["files"][0]["status"] = "uploaded"
+        job["uploaded_bytes"] = 5
+        job["status"] = "ready"
+        return job
+
+    monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
+    monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_request_job_import_datasets",
+        lambda current_job_id, current_job, conn: (
+            prepare_calls.append((current_job_id, conn)),
+            (current_job, None),
+        )[1],
+    )
+
+    request = RequestFactory().post(
+        f"/omeroweb_upload/upload/{job_id}/",
+        data={
+            "relative_paths": ["folder/file.bin"],
+            "files": [SimpleUploadedFile("file.bin", b"hello")],
+        },
+    )
+
+    response = index_view._upload_files(request, job_id, conn=fake_conn)
+    payload = json.loads(response.content)
+
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["ready"] is True
+    assert import_started == [job_id]
+    assert prepare_calls == [(job_id, fake_conn)]
 
 
 def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: Path, monkeypatch):
@@ -151,12 +240,22 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
     monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
     monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
+    prepare_calls = []
+    fake_conn = object()
     monkeypatch.setattr(
         index_view,
         "_apply_upload_updates",
         lambda current_job_id, updates, upload_errors: {**job, "status": "ready", "uploaded_bytes": 5},
     )
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
+    monkeypatch.setattr(
+        index_view,
+        "_prepare_request_job_import_datasets",
+        lambda current_job_id, current_job, conn: (
+            prepare_calls.append((current_job_id, conn)),
+            (current_job, None),
+        )[1],
+    )
 
     staged_target = upload_root / job_id / "_staged/folder/big.bin"
     staged_target.parent.mkdir(parents=True, exist_ok=True)
@@ -175,12 +274,13 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
         },
     )
 
-    response = index_view._upload_files(request, job_id, None)
+    response = index_view._upload_files(request, job_id, fake_conn)
     payload = json.loads(response.content)
 
     assert response.status_code == 200
     assert payload["ok"] is True
     assert staged_target.read_bytes() == b"fresh"
+    assert prepare_calls == [(job_id, fake_conn)]
 
 
 def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch):

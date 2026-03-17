@@ -3686,7 +3686,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             // Capture DataTransfer entries before yielding; browsers can clear
             // dropped-folder metadata once the event loop advances.
             const dropFilesPromise = getFilesFromDrop(event);
-            await withPreparingFilesState('LOADING DROPPED FILES', async () => {
+            await withPreparingFilesState('LOADING', async () => {
                 files = await dropFilesPromise;
                 if (files.length) {
                     handleFiles(files);
@@ -3838,35 +3838,33 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             if (!job?.status_url) {
                 return { confirmation_required: false, compatibility_status: 'compatible', status: 'ready' };
             }
-            const maxAttempts = 300;
-            const maxTimeMs = 5 * 60 * 1000; // 5 minutes
-            const startTime = Date.now();
-            let attempts = 0;
-            
-            while (attempts < maxAttempts) {
-                // Check absolute timeout
-                if (Date.now() - startTime > maxTimeMs) {
-                    throw new Error('Compatibility check timeout - operation took too long. Please try again.');
+            // Large directory-backed formats can take much longer than a few minutes
+            // to finish server-side compatibility planning. Keep polling instead of
+            // imposing a browser-side deadline that marks a healthy job as failed.
+            while (true) {
+                let data;
+                try {
+                    data = await fetchJobStatus(job);
+                } catch (error) {
+                    console.warn('Compatibility poll error for job', job.job_id, error);
+                    await delay(2000);
+                    continue;
                 }
-                
-                const data = await fetchJobStatus(job);
-                
+
                 if (data.compatibility_checked !== undefined && data.compatibility_total !== undefined) {
                     const total = data.compatibility_total || 0;
                     if (total > 0) {
                         setUploadOverlayText('UPLOADED. CHECKING COMPATIBILITY...');
                     }
                 }
-                
+
                 const compatibilityStatus = data.compatibility_status || data.status;
                 if (compatibilityStatus === 'checking' || compatibilityStatus === 'pending') {
                     await delay(800);
-                    attempts++;
                     continue;
                 }
                 return data;
             }
-            throw new Error('Compatibility check timeout - maximum attempts exceeded.');
         }
 
         async function confirmCompatibility(job) {
