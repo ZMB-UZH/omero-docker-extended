@@ -11,11 +11,17 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - OMERO CLI-based import with configurable batching and concurrency.
 - OMERO CLI import and import preflight checks run with `--depth 10` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
+- Long-running OMERO CLI imports use `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` with a 24-hour default so very large structured datasets are not aborted by a short plugin-side subprocess timeout.
 - Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
 - Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the staged package root that OMERO groups, while ordinary folders still import file-by-file.
-- Target datasets are created from those logical import units immediately before import, not from raw staged member paths, so directory-backed formats land in one real dataset instead of generating orphaned images or empty internal datasets.
-- After a grouped logical-package import succeeds, the plugin reconciles the imported OMERO image names against the logical upload root so internal header filenames reported by OMERO/Bio-Formats do not leak through as user-facing image names.
+- Heavy import planning for grouped formats is deferred to the background import worker after the final upload response returns, so large `.zarr` dry-run scans do not block a Gunicorn request long enough to trigger worker timeouts.
+- Request-path dataset preparation uses upload-relative-path heuristics for directory packages such as `.zarr`, so the plugin can create the correct target dataset before the background import starts without reopening the browser's live OMERO session.
+- Background workers must not reopen the importing user's live OMERO.web session from a stored `session_key`; once no browser request holds a live reference, closing that helper client can destroy the login session.
+- Grouped logical-package imports pass the logical upload-root name to OMERO CLI with `-n`, so internal header filenames reported by OMERO/Bio-Formats do not need a post-import OMERO API rename against the user's browser session.
 - Grouped-directory cleanup is conservative: the plugin only collapses cleanup to a staged directory root when the OMERO-reported group covers the full uploaded subtree under that root.
+- Browser compatibility polling intentionally has no fixed five-minute deadline; the UI keeps waiting for server-side status changes so large `.zarr` and other directory-backed imports do not fail client-side while the backend is still healthy.
+- OMERO.web should run Gunicorn with a long request timeout (for example `OMERO_WEB_WSGI_ARGS=... --timeout 7200`) so slow chunk uploads are not killed by the WSGI worker before the browser-side 2-hour upload timeout expires.
+- OMERO CLI dry-run scan timeouts are controlled by `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS` (default example `7200`) instead of a short hardcoded deadline, so large `.zarr` compatibility/planning scans can finish in the background.
 - Automatic detection and skipping of non-importable files is limited to operating-system and filesystem junk (for example `Thumbs.db`, `.DS_Store`, recycle-bin metadata); all other files are handed to OMERO/Bio-Formats unchanged.
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.
@@ -115,6 +121,10 @@ Configuration values in `env/omeroweb.env`:
 | `UPLOAD_CONCURRENT_LIMIT` | Maximum simultaneous upload jobs |
 | `UPLOAD_BATCH_SIZE` | Files per import batch |
 | `OMERO_UPLOAD_PATH` | Host path for temporary upload storage |
+| `OMERO_WEB_WSGI_ARGS` | Gunicorn arguments for OMERO.web; include a long `--timeout` for slow upload requests (default example: `--timeout 7200`) |
+| `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` | OMERO CLI keepalive interval for long-running imports (default `30`) |
+| `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS` | Timeout for OMERO CLI dry-run compatibility/grouping scans (default `7200`) |
+| `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` | Per-import subprocess timeout in seconds (default `86400`) |
 | `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`) |
 
 The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_UPLOAD_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
@@ -124,6 +134,9 @@ The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_
 - Small files continue to upload as normal multipart requests.
 - Files larger than the browser-side request ceiling are sliced into bounded chunks before they are sent to `/omeroweb_upload/upload/<job_id>/`.
 - The upload endpoint validates chunk offsets and file sizes and returns JSON errors for server-side failures, avoiding raw HTML error pages in the UI when possible.
+- The final upload request no longer performs grouped dry-run dataset planning inline; that work runs in the background import worker so large structured uploads do not die at the HTTP worker timeout boundary.
+- Before the background import starts, the request path pre-creates any missing dataset targets using relative-path heuristics for package roots such as `.zarr`; this keeps background workers off the live browser session while still routing grouped imports into the right dataset.
+- Background compatibility and grouped-import dry-run scans now use the long env-driven `OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS` limit instead of a fixed 45-second ceiling.
 - Upload session creation rejects duplicate normalized relative paths up front so mixed slash styles cannot collide onto the same staged target.
 - This reduces exposure to reverse-proxy and app-server request-body limits for large microscopy datasets, but operators should still review any external proxy size and timeout settings used in front of OMERO.web.
 

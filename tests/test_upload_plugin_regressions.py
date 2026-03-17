@@ -217,6 +217,46 @@ class UploadPluginRegressionTests(TestCase):
                 self.assertIsNotNone(loaded)
                 self.assertEqual(100, loaded["counter"])
 
+    def test_open_session_connection_detaches_joined_session_before_wrapper_teardown(self):
+        detach_calls = []
+        group_calls = []
+        client_calls = {}
+
+        class FakeSession:
+            def detachOnDestroy(self):
+                detach_calls.append("detached")
+
+        class FakeClient:
+            def __init__(self, *, host, port):
+                client_calls["host"] = host
+                client_calls["port"] = port
+
+            def joinSession(self, session_key):
+                client_calls["session_key"] = session_key
+                return FakeSession()
+
+        class FakeServiceOpts:
+            def setOmeroGroup(self, value):
+                group_calls.append(value)
+
+        class FakeGateway:
+            def __init__(self, client_obj=None):
+                self.client_obj = client_obj
+                self.SERVICE_OPTS = FakeServiceOpts()
+
+        with mock.patch.object(
+            core_functions.omero,
+            "client",
+            side_effect=lambda host, port: FakeClient(host=host, port=port),
+            create=True,
+        ), mock.patch.object(core_functions, "BlitzGateway", FakeGateway):
+            conn = core_functions._open_session_connection("session-key", "omeroserver", 4064)
+
+        self.assertIsInstance(conn, FakeGateway)
+        self.assertEqual({"host": "omeroserver", "port": 4064, "session_key": "session-key"}, client_calls)
+        self.assertEqual(["detached"], detach_calls)
+        self.assertEqual(["-1"], group_calls)
+
     def test_load_job_falls_back_to_unlocked_read_after_lock_contention(self):
         job_id = "b" * 32
         job = {"job_id": job_id, "status": "uploading"}
@@ -336,6 +376,23 @@ class UploadPluginRegressionTests(TestCase):
         self.assertEqual(["_staged/plate.zarr"], units[0]["cleanup_staged_paths"])
         self.assertEqual("METADATA.ome.xml", units[0]["group_header_name"])
 
+    def test_upload_template_keeps_compatibility_polling_without_browser_timeout(self):
+        template = (
+            REPO_ROOT / "omeroweb_upload" / "templates" / "omeroweb_upload" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("Compatibility check timeout - operation took too long. Please try again.", template)
+        self.assertNotIn("Compatibility check timeout - maximum attempts exceeded.", template)
+        self.assertNotIn("const maxTimeMs = 5 * 60 * 1000", template)
+
+    def test_upload_template_uses_short_loading_label_for_dropped_files(self):
+        template = (
+            REPO_ROOT / "omeroweb_upload" / "templates" / "omeroweb_upload" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("withPreparingFilesState('LOADING', async () => {", template)
+        self.assertNotIn("LOADING DROPPED FILES", template)
+
     def test_resolve_managed_child_path_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -398,6 +455,36 @@ class UploadPluginRegressionTests(TestCase):
         self.assertEqual(job_payload, job)
         self.assertIsNone(error_response)
 
+    def test_confirm_import_defers_dataset_preparation_to_background_thread(self):
+        job_id = "d" * 32
+        request = types.SimpleNamespace(method="POST", user=types.SimpleNamespace(username="alice"))
+        job_payload = {
+            "job_id": job_id,
+            "username": "alice",
+            "status": "awaiting_confirmation",
+            "compatibility_thread_active": True,
+        }
+        import_started = []
+
+        with mock.patch.object(index_view, "_load_owned_job", return_value=(job_payload, None)), mock.patch.object(
+            index_view, "_save_job", return_value=True
+        ), mock.patch.object(
+            index_view,
+            "_prepare_job_import_datasets",
+            side_effect=AssertionError("dataset prep must stay off confirm_import"),
+        ), mock.patch.object(
+            index_view, "_start_import_thread", side_effect=lambda current_job_id: import_started.append(current_job_id)
+        ):
+            response = index_view.confirm_import(request, conn=object(), job_id=job_id)
+
+        status, payload = self._json_status_and_payload(response)
+        self.assertEqual(200, status)
+        self.assertEqual({"ok": True, "status": "ready"}, payload)
+        self.assertTrue(job_payload["compatibility_confirmed"])
+        self.assertFalse(job_payload["compatibility_thread_active"])
+        self.assertEqual("ready", job_payload["status"])
+        self.assertEqual([job_id], import_started)
+
     def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
         request_conn = types.SimpleNamespace(SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None))
         created = []
@@ -436,6 +523,75 @@ class UploadPluginRegressionTests(TestCase):
         self.assertIsNone(error)
         self.assertEqual([(request_conn, "folder", 9)], created)
         self.assertEqual({"folder": 11}, job["dataset_map"])
+
+    def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(self):
+        created = []
+        group_calls = []
+
+        class _RequestConn:
+            class _Opts:
+                def setOmeroGroup(self, value):
+                    group_calls.append(value)
+
+            SERVICE_OPTS = _Opts()
+
+        def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+            created.append((conn, name, project_id))
+            dataset_map[name] = 21
+            return 21
+
+        job = {
+            "job_id": "c" * 32,
+            "group_id": 4,
+            "project_id": 9,
+            "dataset_map": {},
+            "orphan_dataset_name": None,
+            "files": [
+                {"relative_path": "plate.zarr/.zattrs"},
+                {"relative_path": "plate.zarr/OME/METADATA.ome.xml"},
+                {"relative_path": "plate.zarr/0/0/0"},
+            ],
+        }
+
+        with mock.patch.object(
+            core_functions,
+            "_get_or_create_dataset",
+            side_effect=fake_get_or_create_dataset,
+        ), mock.patch.object(
+            core_functions,
+            "_save_job",
+            return_value=True,
+        ):
+            prepared_job, error = core_functions._prepare_request_job_import_datasets(
+                job["job_id"],
+                job,
+                conn=_RequestConn(),
+            )
+
+        self.assertIs(prepared_job, job)
+        self.assertIsNone(error)
+        self.assertEqual(1, len(created))
+        self.assertEqual("plate.zarr", created[0][1])
+        self.assertEqual(9, created[0][2])
+        self.assertEqual({"plate.zarr": 21}, job["dataset_map"])
+        self.assertEqual(["4"], group_calls)
+
+    def test_open_user_owned_background_connection_requires_service_connection(self):
+        with mock.patch.object(
+            core_functions,
+            "_open_group_scoped_session_connection",
+        ) as open_session:
+            conn = core_functions._open_user_owned_background_connection(
+                "alice",
+                session_key="session-key",
+                host="omeroserver",
+                port=4064,
+                group_id=4,
+                purpose="dataset preparation",
+            )
+
+        self.assertIsNone(conn)
+        open_session.assert_not_called()
 
     def test_ensure_job_dataset_targets_hides_impersonation_details(self):
         class _FakeServiceConn:
