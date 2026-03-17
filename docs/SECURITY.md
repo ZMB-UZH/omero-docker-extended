@@ -36,10 +36,10 @@ Docker Scout is optional — if the CLI plugin is not installed, both phases are
 Interactive installation defaults Docker image security hardening to **yes**. Set `APPLY_SECURITY_HARDENING=0` or answer "no" to skip it. Setting `APPLY_SECURITY_HARDENING=1` also enables the same build pass explicitly:
 
 1. **OS packages**: Runs `dnf update` (Rocky-based images) or `apt-get upgrade` (Ubuntu-based) or `apk upgrade` (Alpine-based) to patch known vulnerabilities in system libraries.
-2. **Python packages**: Applies curated compatibility-safe Python updates only. The hardening pass does **not** blanket-upgrade entire OMERO/plugin virtual environments after image-local overlays are installed.
+2. **Python packages**: Applies curated compatibility-safe Python updates only. The hardening pass does **not** blanket-upgrade entire OMERO/plugin virtual environments after OMERO/plugin packages are installed.
 3. **Targeted fixes**: Upgrades specific high-value packages (`cryptography`, `urllib3`, `certifi`, `jinja2`, `pyopenssl`) even without the broad hardening flag.
 
-Locale data is intentionally preserved across the hardened images for compatibility and multilingual support; the hardening pass focuses on package and dependency updates rather than locale stripping. Blanket post-overlay venv upgrades are intentionally avoided because they can override pinned/plugin-dependent stacks such as `omero-web-zarr` and its Zarr compatibility constraint.
+Locale data is intentionally preserved across the hardened images for compatibility and multilingual support; the hardening pass focuses on package and dependency updates rather than locale stripping. Blanket post-install venv upgrades are intentionally avoided because they can override pinned/plugin-dependent stacks such as `omero-web-zarr` and its Zarr compatibility constraint.
 
 ## Image pinning
 
