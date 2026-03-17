@@ -13,12 +13,18 @@
 #
 # NOTE:
 #   Immediate deletion of large artifacts after a successful job is handled in-plugin.
-#   This host-side cleaner is the "sweep" that removes remnants older than 24h.
+#   This host-side cleaner is the default 24h sweep, but it also honors per-path
+#   deferred-cleanup markers written by plugins for longer retention when needed.
 # =============================================================================
 set -euo pipefail
 
 TMP_DIR=""
 MAX_AGE_SECONDS="86400"
+RETENTION_DIR_MARKER_NAME=".omero-retain-until"
+RETENTION_FILE_MARKER_SUFFIX=".retain-until"
+declare -a RETAINED_DIRS=()
+declare -a RETAINED_FILES=()
+declare -a RETAINED_MARKERS=()
 
 usage() {
     echo "Usage: $0 --tmp-dir <DIR> [--max-age-seconds <SECONDS>]" >&2
@@ -79,7 +85,87 @@ if [[ "${MAX_AGE_MINUTES}" -lt 1 ]]; then
     MAX_AGE_MINUTES=1
 fi
 
+read_retention_expiry() {
+    local marker="$1"
+    local expiry=""
+
+    if [[ ! -f "${marker}" || -L "${marker}" ]]; then
+        return 1
+    fi
+    IFS= read -r expiry < "${marker}" || true
+    expiry="${expiry//[$' \t\r\n']/}"
+    if [[ ! "${expiry}" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    printf '%s\n' "${expiry}"
+}
+
+path_is_within() {
+    local path="$1"
+    local root="$2"
+    [[ "${path}" == "${root}" || "${path}" == "${root}"/* ]]
+}
+
+load_active_retention_markers() {
+    local now_epoch marker expiry marker_name target_name target_path
+    now_epoch="$(date +%s)"
+
+    while IFS= read -r -d '' marker; do
+        expiry="$(read_retention_expiry "${marker}" || true)"
+        if [[ -z "${expiry}" || "${expiry}" -le "${now_epoch}" ]]; then
+            continue
+        fi
+
+        marker_name="$(basename "${marker}")"
+        if [[ "${marker_name}" == "${RETENTION_DIR_MARKER_NAME}" ]]; then
+            RETAINED_DIRS+=("$(dirname "${marker}")")
+            RETAINED_MARKERS+=("${marker}")
+            continue
+        fi
+
+        if [[ "${marker_name}" == .*"${RETENTION_FILE_MARKER_SUFFIX}" ]]; then
+            target_name="${marker_name#.}"
+            target_name="${target_name%${RETENTION_FILE_MARKER_SUFFIX}}"
+            target_path="$(dirname "${marker}")/${target_name}"
+            RETAINED_FILES+=("${target_path}")
+            RETAINED_MARKERS+=("${marker}")
+        fi
+    done < <(
+        find -P "${TMP_DIR}" -xdev -type f \
+            \( -name "${RETENTION_DIR_MARKER_NAME}" -o -name ".*${RETENTION_FILE_MARKER_SUFFIX}" \) \
+            -print0
+    )
+}
+
+path_is_retained() {
+    local path="$1"
+    local retained_dir retained_file retained_marker
+
+    for retained_dir in "${RETAINED_DIRS[@]}"; do
+        if path_is_within "${path}" "${retained_dir}"; then
+            return 0
+        fi
+    done
+
+    for retained_file in "${RETAINED_FILES[@]}"; do
+        if [[ "${path}" == "${retained_file}" ]]; then
+            return 0
+        fi
+    done
+
+    for retained_marker in "${RETAINED_MARKERS[@]}"; do
+        if [[ "${path}" == "${retained_marker}" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+load_active_retention_markers
+
 echo "[omero-tmp-cleaner] tmp_dir=${TMP_DIR} max_age_seconds=${MAX_AGE_SECONDS}"
+echo "[omero-tmp-cleaner] retained_dirs=${#RETAINED_DIRS[@]} retained_files=${#RETAINED_FILES[@]}"
 
 # ---------------------------------------------------------------------------
 # Delete old files (and symlinks) first.
@@ -88,15 +174,27 @@ echo "[omero-tmp-cleaner] tmp_dir=${TMP_DIR} max_age_seconds=${MAX_AGE_SECONDS}"
 # -mindepth 1: never target the root itself
 # -mmin +N: older than N minutes
 # -P: never follow symlinks (default for find, explicit for clarity)
-find -P "${TMP_DIR}" -xdev -mindepth 1 \( -type f -o -type l \) -mmin "+${MAX_AGE_MINUTES}" -print0 \
-  | xargs -0r rm -f --
+while IFS= read -r -d '' candidate; do
+    if path_is_retained "${candidate}"; then
+        continue
+    fi
+    rm -f -- "${candidate}"
+done < <(
+    find -P "${TMP_DIR}" -xdev -mindepth 1 \( -type f -o -type l \) -mmin "+${MAX_AGE_MINUTES}" -print0
+)
 
 # ---------------------------------------------------------------------------
 # Then prune empty directories (repeat twice to catch nested empties).
 # ---------------------------------------------------------------------------
 for _ in 1 2; do
-    find -P "${TMP_DIR}" -xdev -mindepth 1 -type d -empty -mmin "+${MAX_AGE_MINUTES}" -print0 \
-      | xargs -0r rmdir --ignore-fail-on-non-empty --
+    while IFS= read -r -d '' candidate; do
+        if path_is_retained "${candidate}"; then
+            continue
+        fi
+        rmdir --ignore-fail-on-non-empty -- "${candidate}"
+    done < <(
+        find -P "${TMP_DIR}" -xdev -mindepth 1 -type d -empty -mmin "+${MAX_AGE_MINUTES}" -print0
+    )
 done
 
 echo "[omero-tmp-cleaner] done"
