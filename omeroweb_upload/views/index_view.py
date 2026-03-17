@@ -4,6 +4,7 @@ Upload plugin views.
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 # Import all helper functions from core_functions
 from .core_functions import *
+from .core_functions import _prepare_request_job_import_datasets
 from .utils import require_non_root_user
 
 @login_required()
@@ -341,6 +342,17 @@ def _load_owned_job(request, conn, job_id, missing_error):
     return job, None
 
 
+def _prepare_ready_job_for_import_start(job_id, job, conn):
+    if job.get("status") != "ready":
+        return job, None
+
+    prepared_job, prep_error = _prepare_request_job_import_datasets(job_id, job, conn)
+    if prep_error:
+        return prepared_job or job, prep_error
+
+    return _load_job(job_id) or prepared_job or job, None
+
+
 def _parse_chunk_int(raw_value, field_name):
     try:
         value = int(raw_value)
@@ -486,15 +498,13 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state(), status=500)
 
-    if conn is not None and not _has_pending_uploads(updated_job):
-        updated_job, dataset_error = _prepare_job_import_datasets(job_id, updated_job, conn=conn)
-        if dataset_error:
-            return json_error(dataset_error, status=500)
-
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
         logger.info("Upload job %s checking compatibility after chunked upload.", sanitize_log_value(job_id))
     if updated_job["status"] == "ready":
+        updated_job, prep_error = _prepare_ready_job_for_import_start(job_id, updated_job, conn)
+        if prep_error:
+            return json_error(prep_error, status=500)
         _start_import_thread(job_id)
         logger.info(
             "Upload job %s ready after chunked upload; import thread started.",
@@ -617,15 +627,13 @@ def _upload_files(request, job_id, conn):
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state())
 
-    if conn is not None and not _has_pending_uploads(updated_job):
-        updated_job, dataset_error = _prepare_job_import_datasets(job_id, updated_job, conn=conn)
-        if dataset_error:
-            return json_error(dataset_error, status=500)
-
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
         logger.info("Upload job %s checking compatibility.", safe_job_id)
     if updated_job["status"] == "ready":
+        updated_job, prep_error = _prepare_ready_job_for_import_start(job_id, updated_job, conn)
+        if prep_error:
+            return json_error(prep_error, status=500)
         _start_import_thread(job_id)
         logger.info("Upload job %s ready; import thread started.", safe_job_id)
 
@@ -672,10 +680,9 @@ def _import_step(request, job_id, conn):
         return error_response
 
     if job.get("status") == "ready":
-        if conn is not None:
-            job, dataset_error = _prepare_job_import_datasets(job_id, job, conn=conn)
-            if dataset_error:
-                return json_error(dataset_error, status=500)
+        job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
+        if prep_error:
+            return json_error(prep_error, status=500)
         _start_import_thread(job_id)
         job = _load_job(job_id) or job
 
@@ -719,10 +726,10 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
             sanitize_log_value(job_id),
         )
         return json_error(errors.unable_update_upload_job_state(), status=500)
-    if conn is not None:
-        job, dataset_error = _prepare_job_import_datasets(job_id, job, conn=conn)
-        if dataset_error:
-            return json_error(dataset_error, status=500)
+    prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
+    if prep_error:
+        return json_error(prep_error, status=500)
+    job = prepared_job or job
     _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": "ready"})
@@ -820,10 +827,9 @@ def prune_upload(request, job_id, conn=None, url=None, **kwargs):
         return json_error(errors.unable_update_upload_job_state())
 
     if job.get("status") == "ready":
-        if conn is not None:
-            job, dataset_error = _prepare_job_import_datasets(job_id, job, conn=conn)
-            if dataset_error:
-                return json_error(dataset_error, status=500)
+        job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
+        if prep_error:
+            return json_error(prep_error, status=500)
         _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": job.get("status")})

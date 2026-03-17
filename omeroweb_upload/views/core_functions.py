@@ -1074,6 +1074,28 @@ def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
     return "\\".join(parts[:-1])
 
 
+DIRECTORY_PACKAGE_EXTENSIONS = (".zarr",)
+
+
+def _directory_package_root_for_relative_path(relative_path: str) -> Optional[str]:
+    parts = PurePosixPath(relative_path).parts
+    if not parts:
+        return None
+
+    for index, part in enumerate(parts):
+        lower_part = part.lower()
+        if any(lower_part.endswith(extension) for extension in DIRECTORY_PACKAGE_EXTENSIONS):
+            return PurePosixPath(*parts[:index + 1]).as_posix()
+    return None
+
+
+def _dataset_name_for_upload_relative_path(relative_path: str, orphan_dataset_name: str = None):
+    package_root = _directory_package_root_for_relative_path(relative_path)
+    if package_root:
+        return "\\".join(PurePosixPath(package_root).parts)
+    return _dataset_name_for_path(relative_path, orphan_dataset_name)
+
+
 def _logical_unit_is_directory_package_root(entry: dict) -> bool:
     dataset_relative_path = entry.get("dataset_relative_path") or entry.get("relative_path") or ""
     if not dataset_relative_path or entry.get("relative_path") != dataset_relative_path:
@@ -1231,6 +1253,91 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     return orphan_dataset_name, sorted(set(dataset_names))
 
 
+def _plan_request_job_dataset_targets(job_dict: dict):
+    orphan_dataset_name = job_dict.get("orphan_dataset_name")
+    entries = job_dict.get("files") or []
+    requires_orphan_dataset = False
+
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("import_skip"):
+            continue
+        relative_path = (entry.get("relative_path") or "").strip()
+        if not relative_path:
+            continue
+        if _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name) is None:
+            requires_orphan_dataset = True
+            break
+
+    if requires_orphan_dataset and not orphan_dataset_name:
+        orphan_dataset_name = _generate_orphan_dataset_name()
+
+    dataset_names = []
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("import_skip"):
+            continue
+        relative_path = (entry.get("relative_path") or "").strip()
+        if not relative_path:
+            continue
+        dataset_name = _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name)
+        if dataset_name:
+            dataset_names.append(dataset_name)
+
+    return orphan_dataset_name, sorted(set(dataset_names))
+
+
+def _prepare_request_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None):
+    generic_error = errors.unable_prepare_import_destination()
+    if conn is None:
+        return None, generic_error
+
+    orphan_dataset_name, dataset_names = _plan_request_job_dataset_targets(job_dict)
+    dataset_map = dict(job_dict.get("dataset_map") or {})
+    missing_dataset_names = [name for name in dataset_names if name not in dataset_map]
+
+    job_dict["orphan_dataset_name"] = orphan_dataset_name
+    job_dict["dataset_map"] = dataset_map
+
+    if missing_dataset_names:
+        try:
+            if job_dict.get("group_id") is not None and hasattr(conn, "SERVICE_OPTS"):
+                try:
+                    conn.SERVICE_OPTS.setOmeroGroup(str(int(job_dict["group_id"])))
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to scope request OMERO connection to group %s for job %s: %s",
+                        sanitize_log_value(job_dict.get("group_id")),
+                        sanitize_log_value(job_id),
+                        sanitize_log_value(exc),
+                    )
+
+            for dataset_name in missing_dataset_names:
+                dataset_id = _get_or_create_dataset(
+                    conn,
+                    dataset_name,
+                    dataset_map,
+                    project_id=job_dict.get("project_id"),
+                )
+                if dataset_id is None:
+                    logger.warning(
+                        "Failed to create dataset %s for job %s using the request OMERO connection.",
+                        sanitize_log_value(dataset_name),
+                        sanitize_log_value(job_id),
+                    )
+                    return None, generic_error
+        except Exception as exc:
+            logger.warning(
+                "Failed to prepare request-path dataset targets for job %s: %s",
+                sanitize_log_value(job_id),
+                sanitize_log_value(exc),
+            )
+            return None, generic_error
+
+    if not _save_job(job_dict):
+        return None, errors.unable_update_upload_job_state()
+
+    return job_dict, None
+
+
 def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None):
     orphan_dataset_name, dataset_names = _plan_job_dataset_targets(job_dict, entries_to_import)
     dataset_map = dict(job_dict.get("dataset_map") or {})
@@ -1299,23 +1406,19 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
 
     user_conn = None
     try:
-        user_conn = service_conn.suConn(username)
+        user_conn = _open_user_owned_background_connection(
+            username,
+            group_id=job_dict.get("group_id"),
+            service_conn=service_conn,
+            purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
+        )
         if not user_conn:
             logger.warning(
-                "Service connection could not switch to OMERO user %s for dataset preparation on job %s.",
-                sanitize_log_value(username),
+                "Background dataset preparation for job %s cannot reuse the live OMERO.web session. "
+                "Prepare dataset targets on the request path or provide an admin-capable job-service account.",
                 sanitize_log_value(job_dict.get("job_id")),
             )
             return False, generic_error
-        if job_dict.get("group_id") is not None:
-            try:
-                user_conn.SERVICE_OPTS.setOmeroGroup(str(int(job_dict["group_id"])))
-            except Exception as exc:
-                logger.warning(
-                    "Failed to set impersonated dataset-creation group context to %s: %s",
-                    job_dict["group_id"],
-                    exc,
-                )
 
         for dataset_name in missing_dataset_names:
             dataset_id = _get_or_create_dataset(
@@ -1393,13 +1496,14 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microscopy files can be slow)
+IMPORT_TIMEOUT_SECONDS_DEFAULT = 24 * 60 * 60  # 24 hours per file import for large structured datasets
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 CLI_KEEPALIVE_SECONDS_DEFAULT = 30
 CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
 FAILED_IMPORT_RETENTION_SECONDS_DEFAULT = 48 * 60 * 60
 FAILED_IMPORT_RETENTION_SECONDS_ENV = "OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS"
-LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS = 45
+LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT = 2 * 60 * 60
+LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS"
 
 
 def _get_cli_keepalive_seconds() -> int:
@@ -1408,6 +1512,15 @@ def _get_cli_keepalive_seconds() -> int:
         CLI_KEEPALIVE_SECONDS_DEFAULT,
         0,
         3600,
+    )
+
+
+def _get_local_import_scan_timeout_seconds() -> int:
+    return _get_env_int(
+        LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV,
+        LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT,
+        30,
+        24 * 60 * 60,
     )
 
 
@@ -1518,7 +1631,9 @@ def _run_omero_cli(cmd, timeout=None):
     )
 
 
-def _run_local_import_scan(path: Path, timeout: int = LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS):
+def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
+    if timeout is None:
+        timeout = _get_local_import_scan_timeout_seconds()
     cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(path)]
 
     env = os.environ.copy()
@@ -1555,11 +1670,21 @@ def _parse_cli_id(output: str, expected_type: str):
     return None
 
 
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
+def _import_file(
+    conn,
+    session_key: str,
+    host: str,
+    port: int,
+    path: Path,
+    dataset_id=None,
+    import_name: Optional[str] = None,
+):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
+    if import_name:
+        cmd.extend(["-n", str(import_name)])
     cmd.append(str(path))
 
     logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
@@ -1623,7 +1748,7 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     
     try:
         client = omero.client(host=host, port=port)
-        client.joinSession(session_key)
+        _join_detached_session(client, session_key)
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup("-1")
 
@@ -1655,10 +1780,19 @@ def _open_session_connection(session_key: str, host: str, port: int):
         BlitzGateway connection
     """
     client = omero.client(host=host, port=port)
-    client.joinSession(session_key)
+    _join_detached_session(client, session_key)
     conn = BlitzGateway(client_obj=client)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
     return conn
+
+
+def _join_detached_session(client, session_key: str):
+    """Join a live OMERO session without letting helper-client teardown destroy it."""
+    session = client.joinSession(session_key)
+    detach_on_destroy = getattr(session, "detachOnDestroy", None)
+    if callable(detach_on_destroy):
+        detach_on_destroy()
+    return session
 
 
 def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=30):
@@ -1937,6 +2071,59 @@ def _open_group_scoped_session_connection(
         raise
 
 
+def _open_user_owned_background_connection(
+    username: str,
+    *,
+    session_key: str = "",
+    host: str = "",
+    port: Optional[int] = None,
+    group_id: Optional[int] = None,
+    service_conn: Optional[BlitzGateway] = None,
+    purpose: str = "background OMERO work",
+):
+    """Open a user-owned OMERO connection without reusing the live OMERO.web session."""
+    if service_conn is None or not username:
+        logger.warning(
+            "No service connection available for %s as user %s. "
+            "Live OMERO.web sessions are not reopened in background workers.",
+            sanitize_log_value(purpose),
+            sanitize_log_value(username),
+        )
+        return None
+
+    try:
+        conn = service_conn.suConn(username)
+    except Exception as exc:
+        logger.warning(
+            "Service connection failed to switch to OMERO user %s for %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(purpose),
+            sanitize_log_value(exc),
+        )
+        return None
+
+    if not conn:
+        logger.warning(
+            "Service connection could not switch to OMERO user %s for %s.",
+            sanitize_log_value(username),
+            sanitize_log_value(purpose),
+        )
+        return None
+
+    if group_id is not None:
+        try:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        except Exception as exc:
+            logger.warning(
+                "Failed to set impersonated group context to %s for %s: %s",
+                sanitize_log_value(group_id),
+                sanitize_log_value(purpose),
+                sanitize_log_value(exc),
+            )
+
+    return conn
+
+
 def _logical_import_entry_display_name(entry: dict) -> str:
     rel_path = (entry.get("relative_path") or "").strip()
     if not rel_path:
@@ -2092,6 +2279,11 @@ def _attach_txt_to_image_service(
     username: str,
     create_tables: bool = True,
     plot_path: Optional[Path] = None,
+    *,
+    session_key: str = "",
+    host: str = "",
+    port: Optional[int] = None,
+    group_id: Optional[int] = None,
 ):
     """Attach a TXT file to an Image using OMERO API (no CLI).
 
@@ -2103,7 +2295,8 @@ def _attach_txt_to_image_service(
       - Optional PNG plot attachment (if plot_path provided)
 
     This is safe to run in background threads and does NOT touch the user's session.
-    Uses suConn to impersonate the user so annotations are created in the correct group.
+    Prefer a detached end-user session when available so user-owned objects do
+    not depend on job-service administrator privileges.
     """
     from omero.model import FileAnnotationI, OriginalFileI
     from omero.rtypes import rstring, rlong
@@ -2147,10 +2340,15 @@ def _attach_txt_to_image_service(
         fa = update_service.saveAndReturnObject(fa)
         image_obj.linkAnnotation(FileAnnotationWrapper(user_connection, fa))
 
-    # CRITICAL FIX: Use suConn() to impersonate the user
-    # This is the OMERO-approved way for admins to create objects as another user
-    # All objects created will automatically be in the user's current group
-    user_conn = conn.suConn(username)
+    user_conn = _open_user_owned_background_connection(
+        username,
+        session_key=session_key,
+        host=host,
+        port=port,
+        group_id=group_id,
+        service_conn=conn,
+        purpose=f"SEM-EDX attachment for Image:{image_id}",
+    )
     if not user_conn:
         raise RuntimeError(f"Failed to create connection as user {username}")
     
@@ -2894,7 +3092,7 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
                     "relative_path": logical_relative_path,
                     "staged_path": staged_path,
                 }
-                if group_header_name:
+                if group_header_name and group_header_name != PurePosixPath(logical_relative_path).name:
                     unit["group_header_name"] = group_header_name
                 units.append(unit)
                 continue
@@ -2938,12 +3136,13 @@ def _check_import_compatibility(
     try:
         result = _run_local_import_scan(file_path)
     except subprocess.TimeoutExpired:
+        timeout_seconds = _get_local_import_scan_timeout_seconds()
         return {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
             "stderr": "Compatibility check timeout",
-            "details": "Compatibility check timeout after 45 seconds",
+            "details": f"Compatibility check timeout after {timeout_seconds} seconds",
         }
     except FileNotFoundError as exc:
         return {
@@ -3216,6 +3415,9 @@ def _import_job_entry(
         dataset_id = dataset_map.get(dataset_name)
 
     normalization_context = _build_import_name_normalization_context(entry, dataset_id)
+    import_name = None
+    if normalization_context:
+        import_name = (normalization_context.get("desired_name") or "").strip() or None
 
     try:
         success, stdout, stderr = _import_file(
@@ -3225,6 +3427,7 @@ def _import_job_entry(
             port=port,
             path=file_path,
             dataset_id=dataset_id,
+            import_name=import_name,
         )
     except Exception as exc:
         logger.error(
@@ -3256,23 +3459,6 @@ def _import_job_entry(
             "job_error": job_error,
             "job_message": job_error,
         }
-
-    imported_image_ids = _extract_imported_image_ids(str(stdout).strip())
-    renamed_image_ids = _apply_import_name_normalization_context(
-        entry,
-        normalization_context,
-        imported_image_ids,
-        session_key,
-        host,
-        port,
-        group_id,
-    )
-    if renamed_image_ids:
-        logger.info(
-            "Post-import name normalization updated %d image(s) for logical import unit %s.",
-            len(renamed_image_ids),
-            sanitize_log_value(rel_path),
-        )
 
     return {
         "cleanup_staged_paths": cleanup_staged_paths,
@@ -3416,6 +3602,8 @@ def _process_import_job(job_id: str):
                 )
                 _save_job(job)
 
+            # Keep OMERO CLI dry-run planning off the request path. Large grouped
+            # formats such as .zarr can legitimately spend tens of seconds here.
             entries_to_import = _build_import_units(job, upload_root)
             datasets_ready, dataset_error = _ensure_job_dataset_targets(job, entries_to_import)
             if not datasets_ready:
@@ -3841,7 +4029,9 @@ def _process_import_job(job_id: str):
                                             )
                                         imported_plots.add(txt_rel)
 
-                                    # IMPORTANT: Attach via OMERO API using job-service connection (NO CLI, NO user session)
+                                    # Attach via OMERO API with a detached user session when available.
+                                    # This keeps ownership/group context aligned with the importing
+                                    # user without requiring job-service to be an OMERO administrator.
                                     try:
                                         logger.info(
                                             "Attaching %s to %s (Image:%d)",
@@ -3853,9 +4043,13 @@ def _process_import_job(job_id: str):
                                             conn,
                                             image_id,
                                             txt_path,
-                                            username,  # Pass username for suConn
+                                            username,
                                             create_tables,
                                             plot_path=plot_path if create_figures_attachments else None,
+                                            session_key=session_key,
+                                            host=host,
+                                            port=port,
+                                            group_id=job.get("group_id"),
                                         )
 
                                         # Mark as imported if not already
