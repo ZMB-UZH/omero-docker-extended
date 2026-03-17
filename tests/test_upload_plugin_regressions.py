@@ -236,7 +236,7 @@ class UploadPluginRegressionTests(TestCase):
         self.assertIsNone(job)
         self.assertEqual(
             {"ok": False, "error": "Upload job not found."},
-            json.loads(error_response.content.decode("utf-8")),
+            self._json_status_and_payload(error_response)[1],
         )
         load_job_mock.assert_not_called()
 
@@ -257,7 +257,7 @@ class UploadPluginRegressionTests(TestCase):
         self.assertIsNone(job)
         self.assertEqual(
             {"ok": False, "error": "Upload job not found."},
-            json.loads(error_response.content.decode("utf-8")),
+            self._json_status_and_payload(error_response)[1],
         )
 
     def test_load_owned_job_allows_matching_owner(self):
