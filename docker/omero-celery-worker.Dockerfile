@@ -77,25 +77,17 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omero_plugin_common"; \
     rm -rf /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common
 
-# Optional (off by default): broad security upgrade of ALL outdated Python packages
+# Optional (off by default): curated compatibility-safe Python hardening
 # ----------------------------------------------------------
 RUN set -euo pipefail; \
     if [ "${APPLY_SECURITY_HARDENING}" != "1" ]; then \
-        echo "Skipping broad Python security upgrade (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
+        echo "Skipping curated Python hardening (APPLY_SECURITY_HARDENING=${APPLY_SECURITY_HARDENING})."; \
         exit 0; \
     fi; \
-    echo "Upgrading all outdated Python packages in ${VENV} for security hardening..."; \
+    echo "Applying curated compatibility-safe Python hardening in ${VENV}..."; \
     "$VENV/bin/python" -m pip install --no-cache-dir --upgrade \
         pip setuptools wheel cryptography certifi idna requests jinja2 urllib3; \
-    OUTDATED="$("$VENV/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
-    PACKAGES="$(printf '%s' "${OUTDATED}" | "$VENV/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice')))" 2>/dev/null || true)"; \
-    if [ -n "${PACKAGES}" ]; then \
-        echo "Upgrading: ${PACKAGES}"; \
-        "$VENV/bin/python" -m pip install --no-cache-dir --upgrade ${PACKAGES} || \
-            echo "WARNING: Some package upgrades failed (non-fatal for hardening)."; \
-    else \
-        echo "All packages are up to date."; \
-    fi
+    echo "Skipping blanket celery-worker venv upgrades to preserve pinned/runtime-integrated packages."
 
 USER celery
 ENV PATH="/opt/venv/bin:${PATH}"
