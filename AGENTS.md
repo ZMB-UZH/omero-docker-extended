@@ -119,7 +119,7 @@ omeroweb_<name>/
 
 ### Dockerfile hardening vs pinned stacks
 - Security-hardening passes in Dockerfiles must never blanket-upgrade entire Python virtualenvs after OMERO/plugin packages are installed. Curated allowlists only.
-- Treat image-local overlays and compatibility-pinned packages as protected runtime state. Examples in this repo include OMERO/ZeroC packages, in-tree plugin overlays, and `omero-web-zarr` with its Zarr compatibility pin.
+- Treat compatibility-pinned packages as protected runtime state. Examples in this repo include OMERO/ZeroC packages and `omero-web-zarr` with its Zarr compatibility pin.
 - If a hardening change upgrades arbitrary outdated packages in a venv, assume it can silently break the image even when the base build succeeds. Fix the Dockerfile, do not normalize the breakage as expected.
 
 ### OMERO CLI inside containers
@@ -127,7 +127,7 @@ omeroweb_<name>/
 - If that root-warning appears once, stop repeating the same command and switch immediately to the container service account.
 - Correct wrappers:
   ```bash
-  docker exec omero-omeroserver-1 bash -lc 'su omero-server -s /bin/bash -c "HOME=/tmp /opt/omero/server/venv-3.11/bin/omero ..."' 
+  docker exec omero-omeroserver-1 bash -lc 'su omero-server -s /bin/bash -c "HOME=/tmp /opt/omero/server/venv-3.11/bin/omero ..."'
   docker exec omero-omeroweb-1 bash -lc 'su omero-web -s /bin/bash -c "HOME=/tmp /opt/omero/web/venv-3.12/bin/python3 -m pytest ..."'
   ```
 - For OMERO CLI, keep connection/auth flags before the subcommand. Example: `omero -s localhost -p 4064 -u root -w "$ROOTPASS" delete Image:123 --wait 120`. Do not place `-s/-p/-u/-w` after `delete`, `import`, or other subcommands.
