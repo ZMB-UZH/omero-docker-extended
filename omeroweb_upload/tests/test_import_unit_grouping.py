@@ -585,6 +585,52 @@ def test_ensure_job_dataset_targets_uses_request_connection_when_available(monke
     assert job["dataset_map"] == {"folder": 11}
 
 
+def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(monkeypatch):
+    created = []
+    group_calls = []
+
+    class _RequestConn:
+        class _Opts:
+            def setOmeroGroup(self, value):
+                group_calls.append(value)
+
+        SERVICE_OPTS = _Opts()
+
+    def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        created.append((conn, name, project_id))
+        dataset_map[name] = 21
+        return 21
+
+    monkeypatch.setattr(core_functions, "_get_or_create_dataset", fake_get_or_create_dataset)
+    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+
+    job = {
+        "job_id": "c" * 32,
+        "group_id": 4,
+        "project_id": 9,
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+        "files": [
+            {"relative_path": "plate.zarr/.zattrs"},
+            {"relative_path": "plate.zarr/OME/METADATA.ome.xml"},
+            {"relative_path": "plate.zarr/0/0/0"},
+        ],
+    }
+
+    prepared_job, error = core_functions._prepare_request_job_import_datasets(
+        job["job_id"],
+        job,
+        conn=_RequestConn(),
+    )
+
+    assert prepared_job is job
+    assert error is None
+    assert len(created) == 1
+    assert created[0][1:] == ("plate.zarr", 9)
+    assert job["dataset_map"] == {"plate.zarr": 21}
+    assert group_calls == ["4"]
+
+
 def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
     class _FakeServiceConn:
         def __init__(self):
@@ -639,9 +685,10 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
 
     captured = {}
 
-    def fake_import_file(conn, session_key, host, port, path, dataset_id):
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None):
         captured["path"] = path
         captured["dataset_id"] = dataset_id
+        captured["import_name"] = import_name
         return True, "", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
@@ -675,6 +722,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
     assert result["status"] == "imported"
     assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
+    assert captured["import_name"] is None
 
 
 def test_entry_requires_name_normalization_only_for_grouped_internal_header():
@@ -870,22 +918,13 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
         },
     )
 
-    def fake_import_file(conn, session_key, host, port, path, dataset_id):
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None):
         captured["path"] = path
         captured["dataset_id"] = dataset_id
+        captured["import_name"] = import_name
         return True, "Image:99", ""
 
-    def fake_apply(entry, context, imported_image_ids, session_key, host, port, group_id):
-        captured["normalized"] = {
-            "context": context,
-            "imported_image_ids": imported_image_ids,
-            "session_key": session_key,
-            "group_id": group_id,
-        }
-        return [99]
-
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
-    monkeypatch.setattr(core_functions, "_apply_import_name_normalization_context", fake_apply)
 
     result = core_functions._import_job_entry(
         {
@@ -912,12 +951,4 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
     assert result["status"] == "imported"
     assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
-    assert captured["normalized"] == {
-        "context": {
-            "desired_name": "plate.zarr",
-            "group_header_name": "METADATA.ome.xml",
-        },
-        "imported_image_ids": [99],
-        "session_key": "session-key",
-        "group_id": 4,
-    }
+    assert captured["import_name"] == "plate.zarr"

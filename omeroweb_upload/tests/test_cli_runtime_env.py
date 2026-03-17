@@ -70,6 +70,18 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
     )
 
 
+def test_get_import_timeout_seconds_defaults_to_24_hours(monkeypatch):
+    monkeypatch.delenv(core_functions.IMPORT_TIMEOUT_SECONDS_ENV, raising=False)
+
+    assert core_functions._get_import_timeout_seconds() == 24 * 60 * 60
+
+
+def test_get_local_import_scan_timeout_seconds_defaults_to_2_hours(monkeypatch):
+    monkeypatch.delenv(core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, raising=False)
+
+    assert core_functions._get_local_import_scan_timeout_seconds() == 2 * 60 * 60
+
+
 def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     captured = {}
 
@@ -159,6 +171,7 @@ def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(tmp_path:
     depth_index = captured["cmd"].index("--depth")
     assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
     assert captured["cmd"][-1] == str(file_path)
+    assert captured["kwargs"]["timeout"] == 2 * 60 * 60
 
     env = captured["kwargs"]["env"]
     expected_home = upload_root / ".omero-cli-home"
