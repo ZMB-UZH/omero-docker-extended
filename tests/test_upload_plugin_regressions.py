@@ -2,6 +2,7 @@ import sys
 import tempfile
 import types
 import json
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import TestCase, mock, main as unittest_main
@@ -105,6 +106,7 @@ def _install_import_stubs():
         tmp_utils = types.ModuleType("omero_plugin_common.tmp_utils")
         tmp_utils.get_plugin_tmp_dir = lambda name: Path("/tmp") / f"upload-plugin-{name}"
         tmp_cleanup = types.ModuleType("omero_plugin_common.tmp_cleanup")
+        tmp_cleanup.safe_mark_path_for_deferred_cleanup = lambda *args, **kwargs: True
         tmp_cleanup.safe_remove_job_data = lambda *args, **kwargs: None
         request_utils = types.ModuleType("omero_plugin_common.request_utils")
         request_utils.current_username = lambda request, conn: "stub-user"
@@ -214,6 +216,125 @@ class UploadPluginRegressionTests(TestCase):
                 loaded = core_functions._load_job(job_id)
                 self.assertIsNotNone(loaded)
                 self.assertEqual(100, loaded["counter"])
+
+    def test_load_job_falls_back_to_unlocked_read_after_lock_contention(self):
+        job_id = "b" * 32
+        job = {"job_id": job_id, "status": "uploading"}
+
+        class FailingLock:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def __enter__(self):
+                raise core_functions.portalocker.exceptions.LockException("busy")
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jobs_root = Path(tmpdir)
+            with mock.patch.object(core_functions, "_get_jobs_root", return_value=jobs_root):
+                self.assertTrue(core_functions._save_job(dict(job)))
+                with mock.patch.object(core_functions.portalocker, "Lock", FailingLock):
+                    loaded = core_functions._load_job(job_id)
+
+        self.assertEqual(job["job_id"], loaded["job_id"])
+        self.assertEqual(job["status"], loaded["status"])
+        self.assertIn("updated", loaded)
+
+    def test_mark_failed_job_for_deferred_cleanup_marks_upload_data_and_job_file(self):
+        job_id = "c" * 32
+        upload_root = Path("/tmp/upload-root")
+        jobs_root = Path("/tmp/jobs-root")
+        calls = []
+
+        def capture_marker(path, root, *, ttl_seconds, now=None):
+            calls.append((path, root, ttl_seconds, now))
+            return True
+
+        with mock.patch.object(core_functions, "_get_upload_root", return_value=upload_root), mock.patch.object(
+            core_functions, "_get_jobs_root", return_value=jobs_root
+        ), mock.patch.object(
+            core_functions, "safe_mark_path_for_deferred_cleanup", side_effect=capture_marker
+        ), mock.patch.dict(
+            core_functions.os.environ,
+            {core_functions.FAILED_IMPORT_RETENTION_SECONDS_ENV: "172800"},
+            clear=False,
+        ):
+            self.assertTrue(core_functions._mark_failed_job_for_deferred_cleanup(job_id))
+
+        self.assertEqual(
+            [
+                (upload_root / job_id, upload_root, 172800, None),
+                (jobs_root / f"{job_id}.json", jobs_root, 172800, None),
+            ],
+            calls,
+        )
+
+    def test_build_import_units_uses_package_root_for_grouped_directory_imports(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upload_root = Path(tmpdir) / "job-root"
+            relative_paths = [
+                "plate.zarr/.zattrs",
+                "plate.zarr/OME/METADATA.ome.xml",
+                "plate.zarr/0/0/0",
+            ]
+            entries = []
+            staged_members = {}
+            for index, relative_path in enumerate(relative_paths):
+                staged_path = core_functions._build_staged_relative_path(relative_path)
+                target = upload_root / staged_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("x", encoding="utf-8")
+                staged_members[relative_path] = target
+                entries.append(
+                    {
+                        "upload_id": f"u{index}",
+                        "relative_path": relative_path,
+                        "staged_path": staged_path,
+                        "size": 1,
+                        "status": "uploaded",
+                        "errors": [],
+                    }
+                )
+
+            package_root = upload_root / "_staged" / "plate.zarr"
+            group_path = staged_members["plate.zarr/OME/METADATA.ome.xml"]
+            stdout = "\n".join(
+                [
+                    "3 file(s) parsed into 1 group(s) with 1 call(s) to setId",
+                    f"# Group: {group_path} SPW: false",
+                    str(staged_members["plate.zarr/.zattrs"]),
+                    str(staged_members["plate.zarr/OME/METADATA.ome.xml"]),
+                    str(staged_members["plate.zarr/0/0/0"]),
+                    "",
+                ]
+            )
+
+            def fake_scan(path, timeout=45):
+                if path == package_root:
+                    return subprocess.CompletedProcess(
+                        args=["omero", "import"],
+                        returncode=0,
+                        stdout=stdout,
+                        stderr="",
+                    )
+                return subprocess.CompletedProcess(
+                    args=["omero", "import"],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                )
+
+            with mock.patch.object(core_functions, "_run_local_import_scan", side_effect=fake_scan):
+                units = core_functions._build_import_units({"files": entries}, upload_root)
+
+        self.assertEqual(1, len(units))
+        self.assertEqual("plate.zarr", units[0]["relative_path"])
+        self.assertEqual("plate.zarr", units[0]["dataset_relative_path"])
+        self.assertEqual("_staged/plate.zarr", units[0]["staged_path"])
+        self.assertEqual(["_staged/plate.zarr"], units[0]["cleanup_staged_paths"])
+        self.assertEqual("METADATA.ome.xml", units[0]["group_header_name"])
 
     def test_resolve_managed_child_path_rejects_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmpdir:

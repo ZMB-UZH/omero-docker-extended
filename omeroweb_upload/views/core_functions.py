@@ -42,7 +42,10 @@ from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
-from omero_plugin_common.tmp_cleanup import safe_remove_job_data
+from omero_plugin_common.tmp_cleanup import (
+    safe_mark_path_for_deferred_cleanup,
+    safe_remove_job_data,
+)
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
@@ -105,6 +108,7 @@ __all__ = [
     '_generate_orphan_dataset_name',
     '_get_env_bool',
     '_get_env_int',
+    '_get_failed_import_retention_seconds',
     '_get_id',
     '_get_import_lock',
     '_get_job_service_credentials',
@@ -126,6 +130,7 @@ __all__ = [
     '_job_path',
     '_link_dataset_to_project',
     '_load_job',
+    '_mark_failed_job_for_deferred_cleanup',
     '_normalize_job_batch_size',
     '_normalize_upload_relative_path',
     '_normalize_sem_edx_associations',
@@ -580,6 +585,7 @@ def _load_job(job_id: str):
     lock_path = _job_lock_path(job_id)
     if not path.exists():
         return None
+    last_lock_error = None
     for attempt in range(5):
         if attempt:
             time.sleep(random.uniform(0.05, 0.2))
@@ -592,13 +598,27 @@ def _load_job(job_id: str):
             logger.error("Job file %s is corrupt: %s", path, exc)
             return None
         except (portalocker.exceptions.LockException, OSError) as exc:
-            logger.warning(
-                "Unable to lock or read job file %s (attempt %s/%s): %s",
+            last_lock_error = exc
+            logger.debug(
+                "Unable to lock job file %s for read (attempt %s/%s): %s",
                 path,
                 attempt + 1,
                 5,
                 exc,
             )
+    if last_lock_error is None:
+        return None
+    try:
+        return _read_job_file(job_id)
+    except json.JSONDecodeError as exc:
+        logger.error("Job file %s is corrupt after lock contention: %s", path, exc)
+    except OSError as exc:
+        logger.warning(
+            "Unable to read job file %s after lock contention: %s (last lock error: %s)",
+            path,
+            exc,
+            last_lock_error,
+        )
     return None
 
 
@@ -1377,6 +1397,8 @@ IMPORT_TIMEOUT_SECONDS_DEFAULT = 7200  # 2 hours per file import (large microsco
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 CLI_KEEPALIVE_SECONDS_DEFAULT = 30
 CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
+FAILED_IMPORT_RETENTION_SECONDS_DEFAULT = 48 * 60 * 60
+FAILED_IMPORT_RETENTION_SECONDS_ENV = "OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS"
 LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS = 45
 
 
@@ -1386,6 +1408,15 @@ def _get_cli_keepalive_seconds() -> int:
         CLI_KEEPALIVE_SECONDS_DEFAULT,
         0,
         3600,
+    )
+
+
+def _get_failed_import_retention_seconds() -> int:
+    return _get_env_int(
+        FAILED_IMPORT_RETENTION_SECONDS_ENV,
+        FAILED_IMPORT_RETENTION_SECONDS_DEFAULT,
+        60,
+        30 * 24 * 60 * 60,
     )
 
 
@@ -1914,6 +1945,9 @@ def _logical_import_entry_display_name(entry: dict) -> str:
 
 
 def _logical_import_entry_group_header_name(entry: dict) -> str:
+    explicit_group_header_name = (entry.get("group_header_name") or "").strip()
+    if explicit_group_header_name:
+        return explicit_group_header_name
     staged_path = (entry.get("staged_path") or "").strip()
     if not staged_path:
         return ""
@@ -2824,6 +2858,7 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
             if group_coverage:
                 common_root_relative_path = _common_relative_prefix(group_coverage)
                 group_path_relative = chosen_group.get("group_path_relative") or group_coverage[0]
+                group_header_name = PurePosixPath(group_path_relative).name if group_path_relative else ""
                 if _looks_like_directory_package_root(
                     active_relative_paths,
                     common_root_relative_path,
@@ -2832,33 +2867,36 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
                 ):
                     logical_relative_path = common_root_relative_path
                     dataset_relative_path = common_root_relative_path
-                    cleanup_staged_paths = [_build_staged_relative_path(common_root_relative_path)]
+                    staged_path = _build_staged_relative_path(common_root_relative_path)
+                    cleanup_staged_paths = [staged_path]
                 else:
                     logical_relative_path = group_path_relative
                     if group_path_relative in group_coverage:
                         dataset_relative_path = group_path_relative
                     else:
                         dataset_relative_path = group_coverage[0]
+                    staged_path = _build_staged_relative_path(group_path_relative)
                     cleanup_staged_paths = [
                         entry_by_relative_path[covered_rel_path]["staged_path"]
                         for covered_rel_path in group_coverage
                     ]
 
                 covered_relative_paths.update(group_coverage)
-                units.append(
-                    {
-                        "cleanup_staged_paths": cleanup_staged_paths,
-                        "covered_indexes": [
-                            entry_by_relative_path[covered_rel_path]["index"]
-                            for covered_rel_path in group_coverage
-                        ],
-                        "covered_relative_paths": group_coverage,
-                        "dataset_relative_path": dataset_relative_path,
-                        "index": entry_by_relative_path[group_coverage[0]]["index"],
-                        "relative_path": logical_relative_path,
-                        "staged_path": _build_staged_relative_path(group_path_relative),
-                    }
-                )
+                unit = {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": [
+                        entry_by_relative_path[covered_rel_path]["index"]
+                        for covered_rel_path in group_coverage
+                    ],
+                    "covered_relative_paths": group_coverage,
+                    "dataset_relative_path": dataset_relative_path,
+                    "index": entry_by_relative_path[group_coverage[0]]["index"],
+                    "relative_path": logical_relative_path,
+                    "staged_path": staged_path,
+                }
+                if group_header_name:
+                    unit["group_header_name"] = group_header_name
+                units.append(unit)
                 continue
 
         entry = entry_by_relative_path[rel_path]
@@ -3245,6 +3283,36 @@ def _import_job_entry(
         "rel_path": rel_path,
         "file_path": file_path,
     }
+
+
+def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
+    retention_seconds = _get_failed_import_retention_seconds()
+    upload_root = _get_upload_root()
+    jobs_root = _get_jobs_root()
+    results = [
+        safe_mark_path_for_deferred_cleanup(
+            upload_root / _validated_job_id(job_id),
+            upload_root,
+            ttl_seconds=retention_seconds,
+        ),
+        safe_mark_path_for_deferred_cleanup(
+            _job_path(job_id),
+            jobs_root,
+            ttl_seconds=retention_seconds,
+        ),
+    ]
+    if all(results):
+        logger.info(
+            "Marked failed job %s for deferred cleanup in %s seconds.",
+            sanitize_log_value(job_id),
+            retention_seconds,
+        )
+        return True
+    logger.warning(
+        "Failed to mark one or more artifacts for deferred cleanup for job %s.",
+        sanitize_log_value(job_id),
+    )
+    return False
 
 
 def _process_import_job(job_id: str):
@@ -3860,16 +3928,19 @@ def _process_import_job(job_id: str):
                     len(job.get("messages", [])),
                 )
             _save_job(job)
-            try:
-                # Immediately delete large temporary upload payloads after successful import.
-                # Keep the job JSON so the UI can still display final status/messages.
-                safe_remove_job_data(job_id, _get_upload_root())
-            except Exception as exc:
-                logger.warning(
-                    "Post-success cleanup failed for job %s: %s",
-                    safe_job_id,
-                    sanitize_log_value(exc),
-                )
+            if job.get("status") == "done":
+                try:
+                    # Immediately delete large temporary upload payloads after successful import.
+                    # Keep the job JSON so the UI can still display final status/messages.
+                    safe_remove_job_data(job_id, _get_upload_root())
+                except Exception as exc:
+                    logger.warning(
+                        "Post-success cleanup failed for job %s: %s",
+                        safe_job_id,
+                        sanitize_log_value(exc),
+                    )
+            else:
+                _mark_failed_job_for_deferred_cleanup(job_id)
         finally:
             lock.release()
             logger.info("Import thread: lock released for job %s", safe_job_id)

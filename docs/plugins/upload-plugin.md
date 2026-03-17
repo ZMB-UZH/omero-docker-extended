@@ -12,7 +12,7 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - OMERO CLI import and import preflight checks run with `--depth 10` so directory-backed formats can be scanned deeper than the OMERO CLI default.
 - OMERO CLI keepalive hardening for long-running imports via `OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS` (default `30` seconds).
 - Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
-- Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the group header path that OMERO reports, while ordinary folders still import file-by-file.
+- Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the staged package root that OMERO groups, while ordinary folders still import file-by-file.
 - Target datasets are created from those logical import units immediately before import, not from raw staged member paths, so directory-backed formats land in one real dataset instead of generating orphaned images or empty internal datasets.
 - After a grouped logical-package import succeeds, the plugin reconciles the imported OMERO image names against the logical upload root so internal header filenames reported by OMERO/Bio-Formats do not leak through as user-facing image names.
 - Grouped-directory cleanup is conservative: the plugin only collapses cleanup to a staged directory root when the OMERO-reported group covers the full uploaded subtree under that root.
@@ -21,7 +21,7 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - Job status polling for progress tracking.
 - SEM-EDX spectrum parsing (EMSA format) with matplotlib visualization and genetic algorithm label placement.
 - File attachment support: link related files (spectra, metadata) to imported images.
-- Automatic temp cleanup: immediate deletion after successful import + host-side sweep deleting remnants older than 24h.
+- Automatic temp cleanup: immediate deletion after successful import; failed imports retain their staged payload and job status for deferred cleanup after `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` (default `172800`, 48 hours).
 - User settings and special-method settings persistence in `database_plugin`.
 - Project listing and root status checks.
 
@@ -32,7 +32,7 @@ Temporary artifacts live under `OMERO_TMP_PATH`.
 Cleanup is performed by two mechanisms:
 
 - **Immediate**: the upload payload directory for a job is deleted right after a successful import finishes (job JSON remains for UI status).
-- **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours.
+- **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours by default. The upload plugin writes deferred-cleanup markers for failed jobs so their payload directory and job JSON are retained for 48 hours unless `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` overrides that window.
 
 Useful commands (host):
 
@@ -115,6 +115,7 @@ Configuration values in `env/omeroweb.env`:
 | `UPLOAD_CONCURRENT_LIMIT` | Maximum simultaneous upload jobs |
 | `UPLOAD_BATCH_SIZE` | Files per import batch |
 | `OMERO_UPLOAD_PATH` | Host path for temporary upload storage |
+| `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`) |
 
 The import step runs OMERO CLI with `HOME` and `XDG_CACHE_HOME` set to `${OMERO_UPLOAD_PATH}/.omero-cli-home` to guarantee writable cache space for OMERO.java downloads in non-root containers.
 

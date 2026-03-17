@@ -3360,7 +3360,8 @@ fi
 # Tmp artifact cleaner installation (non-blocking)
 #
 # Installs a host-side systemd timer that periodically deletes temporary
-# artifacts under OMERO_TMP_PATH that are older than 24 hours.
+# artifacts under OMERO_TMP_PATH that are older than 24 hours by default,
+# while allowing plugin-written retention markers to extend specific paths.
 #
 # IMPORTANT:
 # - This replaces all previous "cleanup on page load" mechanisms in plugins.
