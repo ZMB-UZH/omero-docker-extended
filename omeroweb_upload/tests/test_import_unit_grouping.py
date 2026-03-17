@@ -103,9 +103,10 @@ def test_build_import_units_collapses_directory_package_to_single_logical_unit(t
                 "plate.zarr/0/0/0",
             ],
             "dataset_relative_path": "plate.zarr",
+            "group_header_name": "METADATA.ome.xml",
             "index": 0,
             "relative_path": "plate.zarr",
-            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "staged_path": "_staged/plate.zarr",
         }
     ]
 
@@ -631,7 +632,8 @@ def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
 
 def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monkeypatch):
     upload_root = tmp_path / "job-root"
-    metadata_path = upload_root / "_staged" / "plate.zarr" / "OME" / "METADATA.ome.xml"
+    package_root = upload_root / "_staged" / "plate.zarr"
+    metadata_path = package_root / "OME" / "METADATA.ome.xml"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.write_text("x", encoding="utf-8")
 
@@ -653,7 +655,8 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
         {
             "relative_path": "plate.zarr",
             "dataset_relative_path": "plate.zarr",
-            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "group_header_name": "METADATA.ome.xml",
+            "staged_path": "_staged/plate.zarr",
             "covered_indexes": [0, 1, 2],
             "covered_relative_paths": [
                 "plate.zarr/.zattrs",
@@ -670,14 +673,15 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
     )
 
     assert result["status"] == "imported"
-    assert captured["path"] == metadata_path
+    assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
 
 
 def test_entry_requires_name_normalization_only_for_grouped_internal_header():
     grouped_entry = {
+        "group_header_name": "METADATA.ome.xml",
         "relative_path": "plate.zarr",
-        "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+        "staged_path": "_staged/plate.zarr",
         "covered_relative_paths": [
             "plate.zarr/.zattrs",
             "plate.zarr/OME/METADATA.ome.xml",
@@ -760,7 +764,8 @@ def test_apply_import_name_normalization_context_renames_single_placeholder_imag
     renamed_ids = core_functions._apply_import_name_normalization_context(
         {
             "relative_path": "plate.zarr",
-            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "group_header_name": "METADATA.ome.xml",
+            "staged_path": "_staged/plate.zarr",
         },
         {
             "desired_name": "plate.zarr",
@@ -825,7 +830,8 @@ def test_apply_import_name_normalization_context_suffixes_multiple_placeholder_i
     renamed_ids = core_functions._apply_import_name_normalization_context(
         {
             "relative_path": "plate.zarr",
-            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "group_header_name": "METADATA.ome.xml",
+            "staged_path": "_staged/plate.zarr",
         },
         {
             "desired_name": "plate.zarr",
@@ -848,7 +854,8 @@ def test_apply_import_name_normalization_context_suffixes_multiple_placeholder_i
 
 def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_path: Path, monkeypatch):
     upload_root = tmp_path / "job-root"
-    metadata_path = upload_root / "_staged" / "plate.zarr" / "OME" / "METADATA.ome.xml"
+    package_root = upload_root / "_staged" / "plate.zarr"
+    metadata_path = package_root / "OME" / "METADATA.ome.xml"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.write_text("x", encoding="utf-8")
 
@@ -884,7 +891,8 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
         {
             "relative_path": "plate.zarr",
             "dataset_relative_path": "plate.zarr",
-            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "group_header_name": "METADATA.ome.xml",
+            "staged_path": "_staged/plate.zarr",
             "covered_indexes": [0, 1, 2],
             "covered_relative_paths": [
                 "plate.zarr/.zattrs",
@@ -902,7 +910,7 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
     )
 
     assert result["status"] == "imported"
-    assert captured["path"] == metadata_path
+    assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
     assert captured["normalized"] == {
         "context": {
