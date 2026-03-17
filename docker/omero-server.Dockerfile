@@ -463,16 +463,18 @@ RUN set -euo pipefail; \
     mapfile -t VENV_DIRS < <(find /opt/omero/server -maxdepth 1 -mindepth 1 \( -type d -o -type l \) -name "venv*" | sort -u -V); \
     for VENV_DIR in "${VENV_DIRS[@]}"; do \
         if [[ ! -x "${VENV_DIR}/bin/python" ]]; then continue; fi; \
-        echo "Upgrading all outdated Python packages in ${VENV_DIR}..."; \
-        OUTDATED="$("${VENV_DIR}/bin/python" -m pip list --outdated --format=json 2>/dev/null || echo '[]')"; \
-        PACKAGES="$(printf '%s' "${OUTDATED}" | "${VENV_DIR}/bin/python" -c "import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].lower() not in ('omero-py','zeroc-ice','setuptools')))" 2>/dev/null || true)"; \
-        if [[ -n "${PACKAGES}" ]]; then \
-            echo "Upgrading: ${PACKAGES}"; \
-            "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade ${PACKAGES} || \
-                echo "WARNING: Some package upgrades failed (non-fatal for hardening)."; \
-        else \
-            echo "All packages are up to date."; \
-        fi; \
+        echo "Applying curated compatibility-safe Python security updates in ${VENV_DIR}..."; \
+        "${VENV_DIR}/bin/python" -m pip install --no-cache-dir --upgrade \
+            pip \
+            wheel \
+            cryptography>=42.0.0 \
+            urllib3>=2.2.2 \
+            certifi \
+            idna>=3.7 \
+            requests>=2.32.0 \
+            jinja2>=3.1.6 \
+            pyopenssl>=24.0.0 || \
+            echo "WARNING: Some curated Python hardening updates failed (non-fatal)."; \
         "${VENV_DIR}/bin/python" -m pip install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" || true; \
         echo "Stripping test directories and bytecode caches from ${VENV_DIR}..."; \
         find "${VENV_DIR}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true; \

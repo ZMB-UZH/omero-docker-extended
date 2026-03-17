@@ -111,6 +111,17 @@ omeroweb_<name>/
 - In this repo, `docker compose build`, `up`, and `config` commands should normally include both `--env-file installation_paths.env` and `--env-file env/omero_secrets.env`. Using only `installation_paths.env` can fail during variable interpolation for secrets-backed settings such as database exporter credentials.
 - `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
 
+### Sandboxed localhost vs container network
+- Do not assume host-shell `localhost` or published ports are reachable from the coding-agent sandbox. A host-side `curl http://localhost:3100/...` failure is often a path/isolation issue, not evidence that Loki or the target service is down.
+- If a host-side probe to `localhost`, `127.0.0.1`, or a published port fails once, stop repeating it. Switch immediately to the Docker network path by running the probe inside a running container with `docker exec` and the compose service DNS name (for example `http://loki:3100`, `http://omeroserver:4064`, `database:5432`).
+- Prefer `omeroweb` for in-network HTTP/Python diagnostics because it already has `curl` and the OMERO.web virtualenv. Use the active runtime interpreter, for example `/opt/omero/web/venv-3.12/bin/python3`.
+- In agent commentary, do not keep repeating that a host endpoint "isn't reachable from the sandbox". State the procedural switch once and continue with the container-network probe.
+
+### Dockerfile hardening vs pinned stacks
+- Security-hardening passes in Dockerfiles must never blanket-upgrade entire Python virtualenvs after OMERO/plugin packages are installed. Curated allowlists only.
+- Treat image-local overlays and compatibility-pinned packages as protected runtime state. Examples in this repo include OMERO/ZeroC packages, in-tree plugin overlays, and `omero-web-zarr` with its Zarr compatibility pin.
+- If a hardening change upgrades arbitrary outdated packages in a venv, assume it can silently break the image even when the base build succeeds. Fix the Dockerfile, do not normalize the breakage as expected.
+
 ### OMERO CLI inside containers
 - Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`. OMERO emits `FATAL: Running ... as root can corrupt your directory permissions.` and the agent must treat that as a procedure error, not as noise to repeat.
 - If that root-warning appears once, stop repeating the same command and switch immediately to the container service account.
@@ -167,7 +178,23 @@ omeroweb_<name>/
 
 ### Log checking
 - Follow AGENTS.md log triage order: Loki first, then container logs.
-- Loki query for errors in last hour: `curl -s "http://localhost:3100/loki/api/v1/query_range?query=%7Bjob%3D%22docker%22%7D%20%7C%3D%20%60error%60&start=$(date -u -d '1 hour ago' +%s)000000000&end=$(date -u +%s)000000000&limit=50"`
+- When the agent shell cannot reach host `localhost`, query Loki from inside `omeroweb` over the Docker network instead of retrying the host probe.
+- Preferred Loki pattern:
+  ```bash
+  docker exec -i omero-omeroweb-1 /opt/omero/web/venv-3.12/bin/python3 - <<'PY'
+  import json, urllib.parse, urllib.request
+  params = urllib.parse.urlencode({
+      "query": '{compose_service="omeroserver", log_type="internal"} |~ "(?i)error"',
+      "direction": "backward",
+      "start": "START_NS",
+      "end": "END_NS",
+      "limit": "50",
+  })
+  with urllib.request.urlopen(f"http://loki:3100/loki/api/v1/query_range?{params}", timeout=20) as response:
+      print(json.loads(response.read().decode("utf-8", errors="replace")))
+  PY
+  ```
+- Replace `START_NS` and `END_NS` with UTC nanosecond timestamps for the window being investigated.
 - Container logs fallback: `docker logs <container> --since 1h --tail 30`
 
 ## Knowledge maintenance
