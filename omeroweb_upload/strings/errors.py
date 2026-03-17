@@ -124,6 +124,10 @@ def missing_omero_connection_details():
     return "Missing OMERO connection details for import."
 
 
+def unable_prepare_import_destination():
+    return "OMERO could not prepare the destination for this import."
+
+
 def upload_folder_missing_on_server():
     return "Upload folder missing on server."
 

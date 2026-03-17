@@ -75,8 +75,9 @@ body {
             flex: 1;
             min-height: 0;
         }
-        .upload-card.is-uploading .upload-card__content {
-            filter: blur(3px);
+        .upload-card.is-uploading .upload-card__content,
+        .upload-card.is-preparing-files .upload-card__content {
+            filter: blur(4px);
             pointer-events: none;
             user-select: none;
         }
@@ -86,31 +87,61 @@ body {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.05rem;
-            font-weight: 600;
-            color: #1e3a8a;
-            background: rgba(248, 250, 252, 0.4);
+            background: rgba(248, 250, 252, 0.56);
+            backdrop-filter: blur(8px);
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
             z-index: 2;
         }
-        .upload-card.is-uploading .upload-card__overlay {
+        .upload-card__overlay-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            min-width: 220px;
+            padding: 24px 28px;
+            border-radius: 22px;
+            border: 1px solid rgba(59, 130, 246, 0.16);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.92));
+            box-shadow: 0 18px 44px rgba(30, 64, 175, 0.14);
+            transform: translateY(8px) scale(0.98);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .upload-card__spinner {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 0deg,
+                #2563eb 0deg,
+                #60a5fa 155deg,
+                rgba(191, 219, 254, 0.28) 290deg,
+                rgba(191, 219, 254, 0.08) 360deg
+            );
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+            animation: uploadSpinner 1.05s linear infinite;
+        }
+        .upload-card__overlay-text {
+            font-size: 0.92rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #0f172a;
+        }
+        .upload-card.is-uploading .upload-card__overlay,
+        .upload-card.is-preparing-files .upload-card__overlay {
             opacity: 1;
             pointer-events: auto;
-            animation: uploadPulse 2.8s ease-in-out infinite;
         }
-        @keyframes uploadPulse {
-            0% {
-                opacity: 0.6;
-            }
-            50% {
-                opacity: 1;
-            }
-            100% {
-                opacity: 0.6;
+        .upload-card.is-uploading .upload-card__overlay-panel,
+        .upload-card.is-preparing-files .upload-card__overlay-panel {
+            transform: translateY(0) scale(1);
+        }
+        @keyframes uploadSpinner {
+            to {
+                transform: rotate(360deg);
             }
         }
         .upload-card p {

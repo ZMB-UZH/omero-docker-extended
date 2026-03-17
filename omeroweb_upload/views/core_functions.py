@@ -133,6 +133,7 @@ __all__ = [
     '_open_service_connection',
     '_open_session_connection',
     '_parse_cli_id',
+    '_prepare_job_import_datasets',
     '_process_import_job',
     '_reconnect_session',
     '_refresh_job_status',
@@ -1210,10 +1211,11 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     return orphan_dataset_name, sorted(set(dataset_names))
 
 
-def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
+def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None):
     orphan_dataset_name, dataset_names = _plan_job_dataset_targets(job_dict, entries_to_import)
     dataset_map = dict(job_dict.get("dataset_map") or {})
     missing_dataset_names = [name for name in dataset_names if name not in dataset_map]
+    generic_error = errors.unable_prepare_import_destination()
 
     job_dict["orphan_dataset_name"] = orphan_dataset_name
     job_dict["dataset_map"] = dataset_map
@@ -1221,21 +1223,70 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     if not missing_dataset_names:
         return True, None
 
+    if conn is not None:
+        try:
+            if job_dict.get("group_id") is not None and hasattr(conn, "SERVICE_OPTS"):
+                try:
+                    conn.SERVICE_OPTS.setOmeroGroup(str(int(job_dict["group_id"])))
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to scope request OMERO connection to group %s for job %s: %s",
+                        sanitize_log_value(job_dict.get("group_id")),
+                        sanitize_log_value(job_dict.get("job_id")),
+                        sanitize_log_value(exc),
+                    )
+
+            for dataset_name in missing_dataset_names:
+                dataset_id = _get_or_create_dataset(
+                    conn,
+                    dataset_name,
+                    dataset_map,
+                    project_id=job_dict.get("project_id"),
+                )
+                if dataset_id is None:
+                    logger.warning(
+                        "Failed to create dataset %s for job %s using the request OMERO connection.",
+                        sanitize_log_value(dataset_name),
+                        sanitize_log_value(job_dict.get("job_id")),
+                    )
+                    return False, generic_error
+            return True, None
+        except Exception as exc:
+            logger.warning(
+                "Failed to prepare dataset targets for job %s using the request OMERO connection: %s",
+                sanitize_log_value(job_dict.get("job_id")),
+                sanitize_log_value(exc),
+            )
+            return False, generic_error
+
     host = job_dict.get("host")
     port = job_dict.get("port")
     username = (job_dict.get("username") or "").strip()
     if not host or not port or not username:
-        return False, "Missing OMERO connection details for dataset creation."
+        logger.warning(
+            "Missing OMERO connection details for dataset preparation on job %s.",
+            sanitize_log_value(job_dict.get("job_id")),
+        )
+        return False, generic_error
 
     service_conn = _open_service_connection(host, port, group_id=job_dict.get("group_id"))
     if not service_conn:
-        return False, "Unable to open OMERO service connection for dataset creation."
+        logger.warning(
+            "Unable to open OMERO service connection for dataset preparation on job %s.",
+            sanitize_log_value(job_dict.get("job_id")),
+        )
+        return False, generic_error
 
     user_conn = None
     try:
         user_conn = service_conn.suConn(username)
         if not user_conn:
-            return False, f"Unable to impersonate OMERO user {username!r} for dataset creation."
+            logger.warning(
+                "Service connection could not switch to OMERO user %s for dataset preparation on job %s.",
+                sanitize_log_value(username),
+                sanitize_log_value(job_dict.get("job_id")),
+            )
+            return False, generic_error
         if job_dict.get("group_id") is not None:
             try:
                 user_conn.SERVICE_OPTS.setOmeroGroup(str(int(job_dict["group_id"])))
@@ -1254,7 +1305,12 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
                 project_id=job_dict.get("project_id"),
             )
             if dataset_id is None:
-                return False, f"Failed to create dataset {dataset_name!r}."
+                logger.warning(
+                    "Failed to create dataset %s for job %s using the service OMERO connection.",
+                    sanitize_log_value(dataset_name),
+                    sanitize_log_value(job_dict.get("job_id")),
+                )
+                return False, generic_error
         return True, None
     finally:
         if user_conn is not None:
@@ -1266,6 +1322,40 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
             service_conn.close()
         except Exception as exc:
             logger.warning("Failed to close job-service connection after dataset creation: %s", exc)
+
+
+def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None):
+    upload_root = _get_upload_root() / job_id
+    if not upload_root.exists():
+        error_message = errors.upload_folder_missing_on_server()
+
+        def mark_error(current_job):
+            current_job["status"] = "error"
+            _append_job_error(current_job, error_message)
+            current_job["updated"] = time.time()
+            return current_job
+
+        updated_job = _update_job(job_id, mark_error) or job_dict
+        return updated_job, error_message
+
+    entries_to_import = _build_import_units(job_dict, upload_root)
+    datasets_ready, dataset_error = _ensure_job_dataset_targets(job_dict, entries_to_import, conn=conn)
+    if not datasets_ready:
+        error_message = dataset_error or errors.unable_prepare_import_destination()
+
+        def mark_error(current_job):
+            current_job["status"] = "error"
+            _append_job_error(current_job, error_message)
+            current_job["updated"] = time.time()
+            return current_job
+
+        updated_job = _update_job(job_id, mark_error) or job_dict
+        return updated_job, error_message
+
+    if not _save_job(job_dict):
+        return None, errors.unable_update_upload_job_state()
+
+    return job_dict, None
 
 
 _CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")

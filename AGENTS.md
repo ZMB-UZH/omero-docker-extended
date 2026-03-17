@@ -107,9 +107,42 @@ omeroweb_<name>/
 ### Docker compose requires secrets
 - `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
 
+### OMERO CLI inside containers
+- Never run OMERO CLI as `root` inside `omeroserver` or `omeroweb`. OMERO emits `FATAL: Running ... as root can corrupt your directory permissions.` and the agent must treat that as a procedure error, not as noise to repeat.
+- If that root-warning appears once, stop repeating the same command and switch immediately to the container service account.
+- Correct wrappers:
+  ```bash
+  docker exec omero-omeroserver-1 bash -lc 'su omero-server -s /bin/bash -c "HOME=/tmp /opt/omero/server/venv-3.11/bin/omero ..."' 
+  docker exec omero-omeroweb-1 bash -lc 'su omero-web -s /bin/bash -c "HOME=/tmp /opt/omero/web/venv-3.12/bin/python3 -m pytest ..."'
+  ```
+- When the exact virtualenv path is uncertain, resolve it first as the service user and then run the command as that same service user. Do not probe by executing OMERO CLI as `root`.
+- For live OMERO.web upload tests, authenticate as a regular OMERO user. The upload plugin intentionally blocks `root`, so using `root` for `/omeroweb_upload/` validation is an invalid test procedure.
+
+### Nested shell / heredoc procedure
+- Do not nest multiline heredocs inside `docker exec ... bash -lc "..."` when the payload contains Python, regexes, JSON, or mixed quotes. That pattern is fragile and wastes time on shell-escaping failures.
+- Preferred pattern for multiline container probes:
+  ```bash
+  docker exec -i omero-omeroweb-1 python3 - <<'PY'
+  ...
+  PY
+  ```
+- For multiline shell payloads, prefer:
+  ```bash
+  docker exec -i <container> bash -s <<'SH'
+  ...
+  SH
+  ```
+- Use `docker exec ... bash -lc '...'` only for short single-line commands. If a command needs substantial escaping, stop and convert it to the `docker exec -i ... <interpreter> - <<'EOF'` form instead of fighting the wrapper.
+
 ### Testing
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
 - In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
+- Before rerunning `pytest`, confirm the selected Python environment can import Django. If `python3 -m pytest ...` fails while loading `/opt/omero/conftest.py` with `ModuleNotFoundError: django`, do **not** keep retrying the same host-interpreter command.
+- Recovery order when Django is missing from the current interpreter:
+  1. Switch to the project runtime that already has the web/test dependencies installed (typically the OMERO.web container or its virtualenv) and rerun the split `pytest` commands there.
+  2. If only a quick regression check is needed and a test module is intentionally self-stubbing, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py` loading. Example: `python3 tests/test_upload_plugin_regressions.py`.
+  3. If dependency-complete execution is unavailable, use `python3 -m py_compile <changed python files>` for syntax validation and report that full `pytest` verification was blocked by missing Django in the active interpreter.
+- Agent responses must explicitly state which of the three verification levels above was used; do not imply that host-side `pytest` passed when only direct-module or syntax validation was possible.
 - Correct pattern:
   ```bash
   python3 -m pytest tests/ -v -p no:cacheprovider -W error
