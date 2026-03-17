@@ -555,6 +555,11 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
         return True, "", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
 
     result = core_functions._import_job_entry(
         {
@@ -579,3 +584,244 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
     assert result["status"] == "imported"
     assert captured["path"] == metadata_path
     assert captured["dataset_id"] == 77
+
+
+def test_entry_requires_name_normalization_only_for_grouped_internal_header():
+    grouped_entry = {
+        "relative_path": "plate.zarr",
+        "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+        "covered_relative_paths": [
+            "plate.zarr/.zattrs",
+            "plate.zarr/OME/METADATA.ome.xml",
+            "plate.zarr/0/0/0",
+        ],
+    }
+    plain_entry = {
+        "relative_path": "folder/sample.czi",
+        "staged_path": "_staged/folder/sample.czi",
+        "covered_relative_paths": ["folder/sample.czi"],
+    }
+    grouped_folder_entry = {
+        "relative_path": "folder/subfolder",
+        "staged_path": "_staged/folder/subfolder",
+        "covered_relative_paths": [
+            "folder/subfolder/a.tif",
+            "folder/subfolder/b.tif",
+        ],
+    }
+
+    assert core_functions._entry_requires_name_normalization(grouped_entry, 7) is True
+    assert core_functions._entry_requires_name_normalization(plain_entry, 7) is False
+    assert core_functions._entry_requires_name_normalization(grouped_folder_entry, 7) is False
+    assert core_functions._entry_requires_name_normalization(grouped_entry, None) is False
+
+
+def test_extract_imported_image_ids_deduplicates_stdout():
+    stdout = """
+    Image:42
+    Fileset:7
+    Image:43
+    Image:42
+    """
+
+    assert core_functions._extract_imported_image_ids(stdout) == [42, 43]
+
+
+def test_apply_import_name_normalization_context_renames_single_placeholder_image(monkeypatch):
+    class _FakeImage:
+        def __init__(self, image_id, name):
+            self._id = image_id
+            self._name = name
+            self.saved = False
+
+        def getId(self):
+            return self._id
+
+        def getName(self):
+            return self._name
+
+        def setName(self, value):
+            self._name = value
+
+        def save(self):
+            self.saved = True
+
+    class _FakeConn:
+        def __init__(self, images):
+            self._images = images
+            self.closed = False
+
+        def getObject(self, object_type, object_id):
+            if object_type == "Image":
+                return self._images.get(object_id)
+            return None
+
+        def close(self):
+            self.closed = True
+
+    existing = _FakeImage(1, "existing")
+    imported = _FakeImage(42, "METADATA.ome.xml")
+    fake_conn = _FakeConn({1: existing, 42: imported})
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda session_key, host, port, group_id=None: fake_conn,
+    )
+
+    renamed_ids = core_functions._apply_import_name_normalization_context(
+        {
+            "relative_path": "plate.zarr",
+            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+        },
+        {
+            "desired_name": "plate.zarr",
+            "group_header_name": "METADATA.ome.xml",
+        },
+        [42],
+        "session-key",
+        "omeroserver",
+        4064,
+        4,
+    )
+
+    assert renamed_ids == [42]
+    assert imported.getName() == "plate.zarr"
+    assert imported.saved is True
+    assert fake_conn.closed is True
+
+
+def test_apply_import_name_normalization_context_suffixes_multiple_placeholder_images(monkeypatch):
+    class _FakeImage:
+        def __init__(self, image_id, name):
+            self._id = image_id
+            self._name = name
+            self.saved = False
+
+        def getId(self):
+            return self._id
+
+        def getName(self):
+            return self._name
+
+        def setName(self, value):
+            self._name = value
+
+        def save(self):
+            self.saved = True
+
+    class _FakeConn:
+        def __init__(self, images):
+            self._images = images
+            self.closed = False
+
+        def getObject(self, object_type, object_id):
+            if object_type == "Image":
+                return self._images.get(object_id)
+            return None
+
+        def close(self):
+            self.closed = True
+
+    existing = _FakeImage(1, "existing")
+    imported_a = _FakeImage(42, "METADATA.ome.xml")
+    imported_b = _FakeImage(43, "")
+    fake_conn = _FakeConn({1: existing, 42: imported_a, 43: imported_b})
+
+    monkeypatch.setattr(
+        core_functions,
+        "_open_group_scoped_session_connection",
+        lambda session_key, host, port, group_id=None: fake_conn,
+    )
+
+    renamed_ids = core_functions._apply_import_name_normalization_context(
+        {
+            "relative_path": "plate.zarr",
+            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+        },
+        {
+            "desired_name": "plate.zarr",
+            "group_header_name": "METADATA.ome.xml",
+        },
+        [42, 43],
+        "session-key",
+        "omeroserver",
+        4064,
+        4,
+    )
+
+    assert renamed_ids == [42, 43]
+    assert imported_a.getName() == "plate.zarr [1]"
+    assert imported_b.getName() == "plate.zarr [2]"
+    assert imported_a.saved is True
+    assert imported_b.saved is True
+    assert fake_conn.closed is True
+
+
+def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_path: Path, monkeypatch):
+    upload_root = tmp_path / "job-root"
+    metadata_path = upload_root / "_staged" / "plate.zarr" / "OME" / "METADATA.ome.xml"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text("x", encoding="utf-8")
+
+    captured = {}
+
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: {
+            "desired_name": "plate.zarr",
+            "group_header_name": "METADATA.ome.xml",
+        },
+    )
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id):
+        captured["path"] = path
+        captured["dataset_id"] = dataset_id
+        return True, "Image:99", ""
+
+    def fake_apply(entry, context, imported_image_ids, session_key, host, port, group_id):
+        captured["normalized"] = {
+            "context": context,
+            "imported_image_ids": imported_image_ids,
+            "session_key": session_key,
+            "group_id": group_id,
+        }
+        return [99]
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(core_functions, "_apply_import_name_normalization_context", fake_apply)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "plate.zarr",
+            "dataset_relative_path": "plate.zarr",
+            "staged_path": "_staged/plate.zarr/OME/METADATA.ome.xml",
+            "covered_indexes": [0, 1, 2],
+            "covered_relative_paths": [
+                "plate.zarr/.zattrs",
+                "plate.zarr/OME/METADATA.ome.xml",
+                "plate.zarr/0/0/0",
+            ],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {"plate.zarr": 77},
+        None,
+        group_id=4,
+    )
+
+    assert result["status"] == "imported"
+    assert captured["path"] == metadata_path
+    assert captured["dataset_id"] == 77
+    assert captured["normalized"] == {
+        "context": {
+            "desired_name": "plate.zarr",
+            "group_header_name": "METADATA.ome.xml",
+        },
+        "imported_image_ids": [99],
+        "session_key": "session-key",
+        "group_id": 4,
+    }

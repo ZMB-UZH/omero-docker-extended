@@ -14,6 +14,7 @@ The upload plugin manages staged file upload and controlled import into OMERO, i
 - Browser uploads preserve the full relative path tree under `_staged/` so OMERO/Bio-Formats can see real directory-backed formats instead of flattened basenames.
 - Logical import planning follows OMERO/Bio-Formats dry-run grouping output instead of a format allowlist: package-style directories are imported through the group header path that OMERO reports, while ordinary folders still import file-by-file.
 - Target datasets are created from those logical import units immediately before import, not from raw staged member paths, so directory-backed formats land in one real dataset instead of generating orphaned images or empty internal datasets.
+- After a grouped logical-package import succeeds, the plugin reconciles the imported OMERO image names against the logical upload root so internal header filenames reported by OMERO/Bio-Formats do not leak through as user-facing image names.
 - Grouped-directory cleanup is conservative: the plugin only collapses cleanup to a staged directory root when the OMERO-reported group covers the full uploaded subtree under that root.
 - Automatic detection and skipping of non-importable files is limited to operating-system and filesystem junk (for example `Thumbs.db`, `.DS_Store`, recycle-bin metadata); all other files are handed to OMERO/Bio-Formats unchanged.
 - Job lifecycle: start, upload, import, confirm, prune.

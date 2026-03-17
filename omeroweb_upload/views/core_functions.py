@@ -1779,6 +1779,188 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         raise
 
 
+def _open_group_scoped_session_connection(
+    session_key: str,
+    host: str,
+    port: int,
+    group_id: Optional[int] = None,
+):
+    """Open the importing user's OMERO session and scope it to the target group."""
+    if not session_key:
+        return None
+
+    conn = None
+    try:
+        conn = _open_session_connection(session_key, host, port)
+        if conn is None:
+            return None
+        if group_id is not None:
+            try:
+                conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+            except Exception as exc:
+                logger.warning(
+                    "Failed to set session-scoped post-import group context to %s: %s",
+                    sanitize_log_value(group_id),
+                    sanitize_log_value(exc),
+                )
+        return conn
+    except Exception:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception as close_exc:
+                logger.warning(
+                    "Failed to close session-scoped OMERO connection after exception: %s",
+                    sanitize_log_value(close_exc),
+                )
+        raise
+
+
+def _logical_import_entry_display_name(entry: dict) -> str:
+    rel_path = (entry.get("relative_path") or "").strip()
+    if not rel_path:
+        return ""
+    return PurePosixPath(rel_path).name
+
+
+def _logical_import_entry_group_header_name(entry: dict) -> str:
+    staged_path = (entry.get("staged_path") or "").strip()
+    if not staged_path:
+        return ""
+    return PurePosixPath(staged_path).name
+
+
+def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -> bool:
+    if not dataset_id:
+        return False
+
+    covered_relative_paths = entry.get("covered_relative_paths") or []
+    if len(covered_relative_paths) <= 1:
+        return False
+
+    desired_name = _logical_import_entry_display_name(entry)
+    group_header_name = _logical_import_entry_group_header_name(entry)
+    return bool(desired_name and group_header_name and desired_name != group_header_name)
+
+
+def _build_import_name_normalization_context(entry: dict, dataset_id: Optional[int]):
+    if not _entry_requires_name_normalization(entry, dataset_id):
+        return None
+
+    desired_name = _logical_import_entry_display_name(entry)
+    group_header_name = _logical_import_entry_group_header_name(entry)
+    if not desired_name or not group_header_name:
+        return None
+
+    return {
+        "desired_name": desired_name,
+        "group_header_name": group_header_name,
+    }
+
+
+def _extract_imported_image_ids(import_stdout: str) -> list[int]:
+    if not import_stdout:
+        return []
+
+    imported_ids = []
+    seen_ids = set()
+    for match in re.finditer(r"(?m)^\s*Image:(\d+)\s*$", import_stdout):
+        image_id = int(match.group(1))
+        if image_id in seen_ids:
+            continue
+        seen_ids.add(image_id)
+        imported_ids.append(image_id)
+    return imported_ids
+
+
+def _image_name_requires_normalization(current_name: str, group_header_name: str) -> bool:
+    normalized_current = (current_name or "").strip()
+    if not normalized_current:
+        return True
+    return normalized_current == (group_header_name or "").strip()
+
+
+def _apply_import_name_normalization_context(
+    entry: dict,
+    context: Optional[dict],
+    imported_image_ids: list[int],
+    session_key: str,
+    host: str,
+    port: int,
+    group_id: Optional[int],
+) -> list[int]:
+    if not context or not session_key:
+        return []
+
+    desired_name = (context.get("desired_name") or "").strip()
+    group_header_name = (context.get("group_header_name") or "").strip()
+    if not imported_image_ids or not desired_name or not group_header_name:
+        return []
+
+    conn = _open_group_scoped_session_connection(
+        session_key,
+        host,
+        port,
+        group_id=group_id,
+    )
+    if conn is None:
+        return []
+
+    try:
+        images = []
+        for image_id in imported_image_ids:
+            image = conn.getObject("Image", image_id)
+            if image is None:
+                logger.warning(
+                    "Imported image %s could not be reopened for post-import reconciliation.",
+                    image_id,
+                )
+                continue
+            images.append(image)
+
+        renamed_ids = []
+        if len(images) == 1:
+            image = images[0]
+            current_name = (image.getName() or "").strip()
+            if _image_name_requires_normalization(current_name, group_header_name) and current_name != desired_name:
+                image.setName(desired_name)
+                image.save()
+                image_id = _get_id(image)
+                if image_id is not None:
+                    renamed_ids.append(int(image_id))
+            return renamed_ids
+
+        for index, image in enumerate(images, start=1):
+            current_name = (image.getName() or "").strip()
+            if not _image_name_requires_normalization(current_name, group_header_name):
+                continue
+            target_name = f"{desired_name} [{index}]"
+            if current_name == target_name:
+                continue
+            image.setName(target_name)
+            image.save()
+            image_id = _get_id(image)
+            if image_id is not None:
+                renamed_ids.append(int(image_id))
+
+        return renamed_ids
+    except Exception as exc:
+        logger.warning(
+            "Post-import name normalization failed for %s: %s",
+            sanitize_log_value(entry.get("relative_path")),
+            sanitize_log_value(exc),
+        )
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception as exc:
+            logger.warning(
+                "Failed to close session-scoped OMERO connection after normalization: %s",
+                sanitize_log_value(exc),
+            )
+
+
 def _attach_txt_to_image_service(
     conn: BlitzGateway,
     image_id: int,
@@ -2857,7 +3039,16 @@ def _start_compatibility_check_thread(job_id: str):
     worker.start()
 
 
-def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, orphan_dataset_name):
+def _import_job_entry(
+    entry,
+    upload_root,
+    session_key,
+    host,
+    port,
+    dataset_map,
+    orphan_dataset_name,
+    group_id=None,
+):
     rel_path = entry.get("relative_path")
     if not rel_path:
         return {"skip": True}
@@ -2895,6 +3086,8 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
     if dataset_id is None:
         dataset_name = _dataset_name_for_import_entry(entry, orphan_dataset_name)
         dataset_id = dataset_map.get(dataset_name)
+
+    normalization_context = _build_import_name_normalization_context(entry, dataset_id)
 
     try:
         success, stdout, stderr = _import_file(
@@ -2935,6 +3128,23 @@ def _import_job_entry(entry, upload_root, session_key, host, port, dataset_map, 
             "job_error": job_error,
             "job_message": job_error,
         }
+
+    imported_image_ids = _extract_imported_image_ids(str(stdout).strip())
+    renamed_image_ids = _apply_import_name_normalization_context(
+        entry,
+        normalization_context,
+        imported_image_ids,
+        session_key,
+        host,
+        port,
+        group_id,
+    )
+    if renamed_image_ids:
+        logger.info(
+            "Post-import name normalization updated %d image(s) for logical import unit %s.",
+            len(renamed_image_ids),
+            sanitize_log_value(rel_path),
+        )
 
     return {
         "cleanup_staged_paths": cleanup_staged_paths,
@@ -3086,6 +3296,7 @@ def _process_import_job(job_id: str):
                             port,
                             dataset_map,
                             orphan_dataset_name,
+                            group_id=job.get("group_id"),
                         )
                     except Exception as exc:
                         logger.error(
