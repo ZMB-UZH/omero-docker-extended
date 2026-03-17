@@ -2688,7 +2688,7 @@ if [ "${ENABLE_VULNERABILITY_SCAN}" = "1" ]; then
     run_docker_scout_summary
 fi
 
-echo ""
+echo " "
 echo "============================================"
 echo "Discovering actual UID/GID from built images"
 echo "============================================"
