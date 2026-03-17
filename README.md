@@ -32,7 +32,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 
 ### 🐢 Not working yet / progressing slowly
 
-- TBD
+- Acquisition metadata search
 
 </details>
 
