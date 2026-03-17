@@ -374,8 +374,8 @@ services:
       - ${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:${OMERO_TMP_PATH:?Set OMERO_TMP_PATH (run installation/installation_script.sh)}:rw
     ulimits:
       nofile:
-        soft: 15000
-        hard: 15000
+        soft: 10000
+        hard: 12000
     healthcheck:
       test:
         - CMD-SHELL
