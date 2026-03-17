@@ -30,7 +30,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 - Direct Imaris 11 integration
 - Unofficial and helper scripts specific to this repository
 
-### 🐢 Not working yet / progressing slowly
+### 🐢 Not working yet / progressing slowly / planned
 
 - Acquisition metadata search
 
