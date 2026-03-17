@@ -8,7 +8,7 @@ IFS=$'\n\t'
 umask 022
 
 SCRIPT_NAME="$(basename "$0")"
-VERSION="1.0.0"
+VERSION="1.0.1"
 DEFAULT_OUTPUT_DIR="image-inventory-reports"
 DEFAULT_PROBE_TIMEOUT_SECONDS="900"
 DEFAULT_MAX_REPORT_BYTES="$((50 * 1024 * 1024))"
@@ -44,7 +44,7 @@ Analyze a Docker image automatically and list installed software versions, inclu
 - pip package lists for Python virtual environments (pyvenv.cfg discovery)
 
 Usage:
-  $SCRIPT_NAME [options]
+  $SCRIPT_NAME [options] [IMAGE_REF]
 
 Options:
   -i, --image IMAGE_REF      Docker image reference (example: postgres:16.11)
@@ -58,6 +58,7 @@ Options:
   -h, --help                 Show this help and exit
 
 Behavior:
+- IMAGE_REF may be passed positionally for backward compatibility.
 - If --image is not provided and input is interactive, the script prompts for it.
 - Fails fast with actionable errors when Docker is unavailable.
 - Uses multiple shell candidates in target containers (/bin/sh, /bin/bash, /busybox/sh, sh, bash).
@@ -525,6 +526,18 @@ EOF
     return 1
   fi
 
+  if ! "${BASH:-bash}" "$0" alpine:3.20 --help >/dev/null 2>&1; then
+    log_error "Self-test failed: positional IMAGE_REF compatibility check failed"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if "${BASH:-bash}" "$0" --definitely-not-a-real-option >/dev/null 2>&1; then
+    log_error "Self-test failed: unknown option was accepted unexpectedly"
+    rm -f "$tmp"
+    return 1
+  fi
+
   rm -f "$tmp"
   log_info "Self-tests passed."
   return 0
@@ -597,10 +610,20 @@ main() {
         usage
         return 0
         ;;
-      *)
+      -*)
         log_error "Unknown argument: $1"
         usage
         return 2
+        ;;
+      *)
+        if [ -z "$image_ref" ]; then
+          image_ref="$1"
+          shift
+        else
+          log_error "Unexpected argument: $1"
+          usage
+          return 2
+        fi
         ;;
     esac
   done
