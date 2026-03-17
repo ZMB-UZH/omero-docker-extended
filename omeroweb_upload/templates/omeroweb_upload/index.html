@@ -3683,8 +3683,11 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 return;
             }
             let files = [];
+            // Capture DataTransfer entries before yielding; browsers can clear
+            // dropped-folder metadata once the event loop advances.
+            const dropFilesPromise = getFilesFromDrop(event);
             await withPreparingFilesState('LOADING DROPPED FILES', async () => {
-                files = await getFilesFromDrop(event);
+                files = await dropFilesPromise;
                 if (files.length) {
                     handleFiles(files);
                 }
