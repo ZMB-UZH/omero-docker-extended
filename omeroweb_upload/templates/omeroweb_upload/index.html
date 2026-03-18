@@ -3521,7 +3521,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             try {
                 const fileHandles = await window.showOpenFilePicker({ multiple: true });
-                await withPreparingFilesState('LOADING FILES', async () => {
+                await withPreparingFilesState('LOADING', async () => {
                     const collected = [];
                     for (const handle of fileHandles) {
                         const file = await handle.getFile();
@@ -3544,7 +3544,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             }
             try {
                 const dirHandle = await window.showDirectoryPicker();
-                await withPreparingFilesState('LOADING FOLDER', async () => {
+                await withPreparingFilesState('LOADING', async () => {
                     const dirEntries = await collectDirectoryHandleFiles(dirHandle, `${dirHandle.name}/`);
                     if (dirEntries.length) {
                         handleFiles(dirEntries);
