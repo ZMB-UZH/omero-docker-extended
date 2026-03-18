@@ -34,6 +34,7 @@ CERTS_DIR="${CERTS_DIR:-${OMERO_DIR}/certs}"
 SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"
 SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
+REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
     if [[ -n "${configured_bin}" ]]; then
@@ -526,6 +527,29 @@ validate_repository_lock_cleanup_configuration() {
     if [[ "${enabled}" != "0" && "${enabled}" != "1" ]]; then
         echo "ERROR: OMERO_REPOSITORY_LOCK_CLEANUP_ON_START must be 0 or 1, got: '${enabled}'" >&2
         exit 1
+    fi
+}
+
+validate_repo_root_sync_configuration() {
+    local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
+    local jitter="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
+
+    if ! [[ "${interval}" =~ ^[0-9]+$ ]] || [ "${interval}" -lt 1 ]; then
+        echo "ERROR: OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS must be a positive integer, got: '${interval}'" >&2
+        exit 1
+    fi
+
+    if ! [[ "${jitter}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: OMERO_REPO_ROOT_SYNC_JITTER_SECONDS must be a non-negative integer, got: '${jitter}'" >&2
+        exit 1
+    fi
+
+    if [[ -n "${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES-}" ]]; then
+        require_positive_integer_env_var "OMERO_REPO_ROOT_BOOTSTRAP_RETRIES"
+    fi
+
+    if [[ -n "${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS-}" ]]; then
+        require_positive_integer_env_var "OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS"
     fi
 }
 
@@ -1074,76 +1098,83 @@ resolve_cli_home() {
     printf "%s\n" "${cli_home}"
 }
 
-schedule_repo_root_bootstrap() {
-    local root_pass="${ROOTPASS:-}"
-    if [[ -z "${root_pass}" ]]; then
-        log "Skipping managed-repository root bootstrap (ROOTPASS missing)."
-        return
+write_repo_root_sync_status() {
+    local status="$1"
+    local last_success_epoch="${2:-0}"
+    local inspected_prefix_count="${3:-0}"
+    local normalized_prefix_count="${4:-0}"
+    local failed_prefix_count="${5:-0}"
+    local tmp_status_file="${REPO_ROOT_SYNC_STATUS_FILE}.tmp.$$"
+
+    mkdir -p "${SERVER_VAR_DIR}"
+    cat > "${tmp_status_file}" <<EOF
+status=${status}
+last_success_epoch=${last_success_epoch}
+inspected_prefix_count=${inspected_prefix_count}
+normalized_prefix_count=${normalized_prefix_count}
+failed_prefix_count=${failed_prefix_count}
+EOF
+    mv "${tmp_status_file}" "${REPO_ROOT_SYNC_STATUS_FILE}"
+}
+
+run_repo_root_bootstrap_once() {
+    local root_pass="$1"
+    local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
+    local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+    local attempt=1
+    local login_ok=0
+    local path_list=""
+    local repo_dir_path=""
+    local -a repo_root_groups=()
+    local lookup_output=""
+    local root_dir_id=""
+    local root_dir_owner=""
+    local venv_py=""
+    local lookup_py=""
+    local cli_home=""
+    local chown_output=""
+    local chown_exit_code=1
+    local inspected_prefix_count=0
+    local normalized_prefix_count=0
+    local failed_prefix_count=0
+    local last_success_epoch=0
+
+    for attempt in $(seq 1 "${retry_limit}"); do
+        if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
+            login_ok=1
+            break
+        fi
+        sleep "${retry_delay_seconds}"
+    done
+
+    if [[ "${login_ok}" -ne 1 ]]; then
+        echo "[$(date -u)] ERROR: Timed out waiting for OMERO login before normalizing managed-repository prefixes"
+        write_repo_root_sync_status "error" "0" "0" "0" "1"
+        return 1
     fi
 
-    local repo_path="${CONFIG_omero_fs_repo_path:-}"
-    if [[ "${repo_path}" != *%group%* ]]; then
-        log "Managed-repository root bootstrap skipped because CONFIG_omero_fs_repo_path has no %group% token."
-        return
+    mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")
+    if [[ "${#repo_root_groups[@]}" -gt 0 ]]; then
+        path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"
+    else
+        echo "[$(date -u)] WARN: OMERO group discovery returned no rows; falling back to environment-derived groups"
     fi
 
-    (
-        set -eo pipefail
-        local lockdir="${SERVER_VAR_DIR}/repo-root-bootstrap.lock"
-        if ! acquire_lockdir "${lockdir}" "" "repo-root-bootstrap"; then
-            exit 0
-        fi
-        trap 'release_lockdir "${lockdir}" ""' EXIT
+    if [[ -z "${path_list}" ]]; then
+        path_list="$(collect_repo_root_bootstrap_paths)"
+    fi
 
-        local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
-        local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
-        local attempt=1
-        local login_ok=0
-        local path_list=""
-        local repo_dir_path=""
-        local -a repo_root_groups=()
-        local lookup_output=""
-        local root_dir_id=""
-        local root_dir_owner=""
-        local venv_py=""
-        local lookup_py=""
-        local cli_home=""
-        local chown_output=""
-        local chown_exit_code=1
+    if [[ -z "${path_list}" ]]; then
+        echo "[$(date -u)] INFO: no managed-repository shared prefixes require normalization"
+        last_success_epoch="$(date +%s)"
+        write_repo_root_sync_status "ok" "${last_success_epoch}" "0" "0" "0"
+        return 0
+    fi
 
-        for attempt in $(seq 1 "${retry_limit}"); do
-            if run_omero -C -s localhost -p 4064 login -u root -w "${root_pass}" >/dev/null 2>&1; then
-                login_ok=1
-                break
-            fi
-            sleep "${retry_delay_seconds}"
-        done
-
-        if [[ "${login_ok}" -ne 1 ]]; then
-            echo "[$(date -u)] ERROR: Timed out waiting for OMERO login before normalizing managed-repository prefixes"
-            exit 1
-        fi
-
-        mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")
-        if [[ "${#repo_root_groups[@]}" -gt 0 ]]; then
-            path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"
-        else
-            echo "[$(date -u)] WARN: OMERO group discovery returned no rows; falling back to environment-derived groups"
-        fi
-
-        if [[ -z "${path_list}" ]]; then
-            path_list="$(collect_repo_root_bootstrap_paths)"
-        fi
-
-        if [[ -z "${path_list}" ]]; then
-            echo "[$(date -u)] INFO: no managed-repository shared prefixes require normalization"
-            exit 0
-        fi
-
-        venv_py="$(resolve_server_venv_python)"
-        cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
-        lookup_py="$(mktemp "${TMPDIR%/}/repo-root-lookup.XXXXXX.py")"
-        cat >"${lookup_py}" <<'PY'
+    venv_py="$(resolve_server_venv_python)"
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+    lookup_py="$(mktemp "${TMPDIR:-/tmp}/repo-root-lookup.XXXXXX.py")"
+    cat >"${lookup_py}" <<'PY'
 import sys
 from omero.gateway import BlitzGateway
 
@@ -1185,56 +1216,106 @@ finally:
     except Exception:
         pass
 PY
+    chown "${OMERO_CLI_USER}" "${lookup_py}"
+    chmod 0600 "${lookup_py}"
 
-        while IFS= read -r repo_dir_path; do
-            [[ -n "${repo_dir_path}" ]] || continue
-            echo "[$(date -u)] INFO: ensuring managed-repository shared prefix ${repo_dir_path}"
-            run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
+    while IFS= read -r repo_dir_path; do
+        [[ -n "${repo_dir_path}" ]] || continue
+        inspected_prefix_count=$((inspected_prefix_count + 1))
+        echo "[$(date -u)] INFO: ensuring managed-repository shared prefix ${repo_dir_path}"
+        run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
 
-            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
-            if [[ "${lookup_output}" == MISSING* ]]; then
-                echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir"
-                continue
+        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+        if [[ "${lookup_output}" == MISSING* ]]; then
+            echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir"
+            failed_prefix_count=$((failed_prefix_count + 1))
+            continue
+        fi
+
+        if [[ "${lookup_output}" != FOUND\|* ]]; then
+            echo "[$(date -u)] ERROR: repository root lookup failed for ${repo_dir_path}: ${lookup_output}"
+            failed_prefix_count=$((failed_prefix_count + 1))
+            continue
+        fi
+
+        IFS='|' read -r _found_marker root_dir_id root_dir_owner <<< "${lookup_output}"
+        echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner}"
+
+        if [[ "${root_dir_owner}" == "root" ]]; then
+            echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} already normalized"
+            continue
+        fi
+
+        # Non-destructive repair: normalize only OMERO ownership metadata for
+        # shared prefix directories. No files or repository payload are deleted.
+        chown_exit_code=1
+        for attempt in $(seq 1 "${retry_limit}"); do
+            set +e
+            chown_output="$(run_omero chown root "OriginalFile:${root_dir_id}" --force 2>&1)"
+            chown_exit_code=$?
+            set -e
+            [[ "${chown_exit_code}" -eq 0 ]] && break
+            sleep "${retry_delay_seconds}"
+        done
+
+        if [[ "${chown_exit_code}" -ne 0 ]]; then
+            echo "[$(date -u)] ERROR: failed to normalize repository prefix ${repo_dir_path} (OriginalFile:${root_dir_id}): ${chown_output}"
+            failed_prefix_count=$((failed_prefix_count + 1))
+            continue
+        fi
+
+        normalized_prefix_count=$((normalized_prefix_count + 1))
+        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+        echo "[$(date -u)] INFO: normalized repository prefix ${repo_dir_path}: ${lookup_output}"
+    done <<< "${path_list}"
+
+    rm -f "${lookup_py}"
+
+    if [[ "${failed_prefix_count}" -ne 0 ]]; then
+        write_repo_root_sync_status "error" "0" "${inspected_prefix_count}" "${normalized_prefix_count}" "${failed_prefix_count}"
+        return 1
+    fi
+
+    last_success_epoch="$(date +%s)"
+    write_repo_root_sync_status "ok" "${last_success_epoch}" "${inspected_prefix_count}" "${normalized_prefix_count}" "0"
+    return 0
+}
+
+schedule_repo_root_sync() {
+    local root_pass="${ROOTPASS:-}"
+    local repo_path="${CONFIG_omero_fs_repo_path:-}"
+    local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
+    local jitter_max="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
+
+    if [[ -z "${root_pass}" ]]; then
+        log "Skipping managed-repository root sync (ROOTPASS missing)."
+        return
+    fi
+
+    if [[ "${repo_path}" != *%group%* ]]; then
+        log "Managed-repository root sync skipped because CONFIG_omero_fs_repo_path has no %group% token."
+        return
+    fi
+
+    (
+        set -u -o pipefail
+        mkdir -p "${SERVER_LOG_DIR}" "${SERVER_VAR_DIR}"
+
+        local lockdir="${SERVER_VAR_DIR}/repo-root-bootstrap.lock"
+        if ! acquire_lockdir "${lockdir}" "" "repo-root-sync"; then
+            exit 0
+        fi
+        trap 'release_lockdir "${lockdir}" ""' EXIT
+
+        while true; do
+            if ! run_repo_root_bootstrap_once "${root_pass}"; then
+                echo "[$(date -u)] WARN: managed-repository shared-prefix sync cycle finished with errors"
             fi
-
-            if [[ "${lookup_output}" != FOUND\|* ]]; then
-                echo "[$(date -u)] ERROR: repository root lookup failed for ${repo_dir_path}: ${lookup_output}"
-                continue
-            fi
-
-            IFS='|' read -r _found_marker root_dir_id root_dir_owner <<< "${lookup_output}"
-            echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner}"
-
-            if [[ "${root_dir_owner}" == "root" ]]; then
-                echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} already normalized"
-                continue
-            fi
-
-            # Non-destructive repair: normalize only OMERO ownership metadata for
-            # shared prefix directories. No files or repository payload are deleted.
-            chown_exit_code=1
-            for attempt in $(seq 1 "${retry_limit}"); do
-                set +e
-                chown_output="$(run_omero chown root "OriginalFile:${root_dir_id}" --force 2>&1)"
-                chown_exit_code=$?
-                set -e
-                [[ "${chown_exit_code}" -eq 0 ]] && break
-                sleep "${retry_delay_seconds}"
-            done
-
-            if [[ "${chown_exit_code}" -ne 0 ]]; then
-                echo "[$(date -u)] ERROR: failed to normalize repository prefix ${repo_dir_path} (OriginalFile:${root_dir_id}): ${chown_output}"
-                continue
-            fi
-
-            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
-            echo "[$(date -u)] INFO: normalized repository prefix ${repo_dir_path}: ${lookup_output}"
-        done <<< "${path_list}"
-
-        rm -f "${lookup_py}"
+            sleep $((interval + (RANDOM % (jitter_max + 1))))
+        done
     ) >>"${SERVER_LOG_DIR}/repo-root-bootstrap.log" 2>&1 &
 
-    log "Scheduled background managed-repository shared-prefix bootstrap for discovered groups"
+    log "Scheduled background managed-repository shared-prefix sync (interval=${interval}s)"
 }
 
 schedule_binary_repository_cleanse() {
@@ -1676,6 +1757,7 @@ main() {
     validate_job_service_bootstrap_configuration
     validate_binary_repository_cleanse_configuration
     validate_repository_lock_cleanup_configuration
+    validate_repo_root_sync_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
@@ -1685,7 +1767,7 @@ main() {
     schedule_script_registration
     schedule_job_service_bootstrap
     schedule_ldap_group_bootstrap
-    schedule_repo_root_bootstrap
+    schedule_repo_root_sync
     schedule_binary_repository_cleanse
 
     log "Startup flow finished"

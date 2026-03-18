@@ -259,6 +259,8 @@ sudo bash ./github_pull_project_bash
 
 The helper updates project files, prompts for installation parameters (defaults are available), and starts the full stack. Installation duration depends on host CPU and disk performance.
 
+The pull/install helpers also save a full terminal transcript of the visible session under `${OMERO_DATA_PATH}/installation_logs/`, for example `github_pull_project_bash_20260318T080431Z.log`. The destination is finalized after the installation paths are resolved, so runs that move `OMERO_DATA_PATH` still write the transcript into the selected data root.
+
 After a successful run:
 
 - Portainer: <http://localhost:9000> (set admin password on first login)
