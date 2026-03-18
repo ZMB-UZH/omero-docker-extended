@@ -42,6 +42,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `PRODUCT_SENSE.md` -- user personas, reliability over speed, operational impact awareness
 - `QUALITY_SCORE.md` -- quality scorecard by domain with grades and improvement targets
 - `design-docs/index.md` -- design document catalog
+- `design-docs/acquisition-metadata-search-options.md` -- feasibility study and three options for OMERO.web acquisition-metadata search
 - `exec-plans/active/knowledge-base-bootstrap.md` -- active execution plan
 - `exec-plans/tech-debt-tracker.md` -- known technical debt items
 - `product-specs/index.md` -- product specification catalog
