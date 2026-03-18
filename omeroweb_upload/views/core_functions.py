@@ -140,6 +140,7 @@ __all__ = [
     '_parse_cli_id',
     '_planned_import_units_for_request',
     '_prepare_job_import_datasets',
+    '_prepare_uploaded_job_for_request_path_import',
     '_process_import_job',
     '_reconnect_session',
     '_refresh_job_status',
@@ -158,6 +159,7 @@ __all__ = [
     '_special_methods_enabled',
     '_should_auto_skip_import',
     '_should_start_compatibility_check',
+    '_should_start_import_plan_build',
     '_start_compatibility_check_thread',
     '_start_import_thread',
     '_update_job',
@@ -544,9 +546,32 @@ def _should_start_compatibility_check(job_dict) -> bool:
     return True
 
 
+def _should_start_import_plan_build(job_dict) -> bool:
+    if not job_dict or job_dict.get("compatibility_enabled", True):
+        return False
+    if job_dict.get("compatibility_thread_active"):
+        return False
+    if job_dict.get("status") in ("done", "error", "importing"):
+        return False
+    if _has_pending_uploads(job_dict):
+        return False
+    if _planned_import_units_for_request(job_dict):
+        return False
+    return any(
+        isinstance(entry, dict)
+        and entry.get("status") == "uploaded"
+        and not entry.get("import_skip")
+        for entry in (job_dict.get("files") or [])
+    )
+
+
 def _refresh_job_status(job_dict):
     if _has_pending_uploads(job_dict):
         job_dict["status"] = "uploading"
+        return job_dict
+
+    if job_dict.get("compatibility_thread_active"):
+        job_dict["status"] = "checking"
         return job_dict
 
     # If nothing requires compatibility (all files skipped or already decided),
@@ -1413,6 +1438,47 @@ def _prepare_request_job_import_datasets(job_id: str, job_dict: dict, conn: Opti
         return None, errors.unable_update_upload_job_state()
 
     return job_dict, None
+
+
+def _prepare_uploaded_job_for_request_path_import(
+    job_id: str,
+    job_dict: dict,
+    conn: Optional[BlitzGateway] = None,
+):
+    if conn is None or _has_pending_uploads(job_dict):
+        return job_dict, None
+
+    if _should_start_compatibility_check(job_dict):
+        _start_compatibility_check_thread(job_id)
+        logger.info("Upload job %s checking compatibility.", sanitize_log_value(job_id))
+        return _load_job(job_id) or job_dict, None
+
+    if _should_start_import_plan_build(job_dict):
+        _start_compatibility_check_thread(job_id)
+        logger.info(
+            "Upload job %s planning import units before request-path dataset preparation.",
+            sanitize_log_value(job_id),
+        )
+        return _load_job(job_id) or job_dict, None
+
+    if job_dict.get("status") not in ("checking", "awaiting_confirmation", "ready"):
+        return job_dict, None
+
+    if job_dict.get("compatibility_thread_active") and not _planned_import_units_for_request(job_dict):
+        return job_dict, None
+
+    if (
+        job_dict.get("compatibility_enabled", True)
+        and job_dict.get("status") in ("checking", "awaiting_confirmation")
+        and not _planned_import_units_for_request(job_dict)
+    ):
+        return job_dict, None
+
+    prepared_job, prep_error = _prepare_request_job_import_datasets(job_id, job_dict, conn)
+    if prep_error:
+        return prepared_job or job_dict, prep_error
+
+    return _load_job(job_id) or prepared_job or job_dict, None
 
 
 def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None):
@@ -3311,6 +3377,18 @@ def _run_compatibility_check(job_id: str):
         return job_dict
 
     job = _update_job(job_id, persist_plans) or job
+
+    if not job.get("compatibility_enabled", True):
+        def mark_planning_ready(job_dict):
+            job_dict["compatibility_thread_active"] = False
+            if job_dict.get("compatibility_status") not in ("incompatible", "error"):
+                job_dict["compatibility_status"] = "compatible"
+            _refresh_job_status(job_dict)
+            job_dict["updated"] = time.time()
+            return job_dict
+
+        _update_job(job_id, mark_planning_ready)
+        return
 
     batch_size = _resolve_job_batch_size(job)
     units_to_check = planned_units[:batch_size]
