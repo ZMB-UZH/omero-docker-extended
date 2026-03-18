@@ -178,6 +178,7 @@ omeroweb_<name>/
 
 ### Log checking
 - Follow AGENTS.md log triage order: Loki first, then container logs.
+- For install/update failures, check `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` before container logs. These transcripts capture the full visible terminal session and often surface path, prompt, or bootstrap failures faster than service logs.
 - When the agent shell cannot reach host `localhost`, query Loki from inside `omeroweb` over the Docker network instead of retrying the host probe.
 - Preferred Loki pattern:
   ```bash
