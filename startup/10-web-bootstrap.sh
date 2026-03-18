@@ -217,16 +217,55 @@ normalize_quota_path "${quota_marker_path}"
 
 configure_docker_socket_access
 
+repair_branding_logo_permissions() {
+    local logo_path="${1:?BUG: repair_branding_logo_permissions requires a logo path}"
+    local runtime_user="${2:-omero-web}"
+    local runtime_group="${3:-${runtime_user}}"
+    local branding_dir
+
+    if [[ ! -f "${logo_path}" ]]; then
+        return 1
+    fi
+
+    branding_dir="$(dirname "${logo_path}")"
+    chmod 0755 "${branding_dir}" 2>/dev/null || true
+
+    if id -u "${runtime_user}" >/dev/null 2>&1; then
+        chown "${runtime_user}:${runtime_group}" "${logo_path}" 2>/dev/null || true
+    fi
+
+    if [[ ! -r "${logo_path}" ]]; then
+        echo "[web-bootstrap] WARNING: Branding logo exists but is not readable; repairing permissions: ${logo_path}" >&2
+    fi
+
+    chmod 0444 "${logo_path}" 2>/dev/null || chmod a+r "${logo_path}" 2>/dev/null || true
+    return 0
+}
+
 sync_static_assets() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local static_dir="${var_dir}/static"
     local static_backup_dir="/opt/omero/web/static_backup"
     local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
     local runtime_group="${OMERO_WEB_RUNTIME_GROUP:-${runtime_user}}"
+    local branding_logo_path="${static_dir}/branding/logo.png"
+    local repo_logo_path="/opt/omero/logo/logo.png"
+    local preserved_logo_path=""
 
     if [[ ! -d "${static_backup_dir}" ]]; then
         echo "[web-bootstrap] ERROR: Static backup directory missing: ${static_backup_dir}" >&2
         exit 1
+    fi
+
+    if [[ -f "${branding_logo_path}" ]]; then
+        preserved_logo_path="$(mktemp "${TMPDIR:-/tmp}/omero-web-branding-logo.XXXXXX")"
+        if cp -p "${branding_logo_path}" "${preserved_logo_path}"; then
+            echo "[web-bootstrap] Preserving existing branding logo across static sync: ${branding_logo_path}"
+        else
+            echo "[web-bootstrap] WARNING: Failed to preserve existing branding logo before static sync: ${branding_logo_path}" >&2
+            rm -f "${preserved_logo_path}" || true
+            preserved_logo_path=""
+        fi
     fi
 
     echo "[web-bootstrap] Synchronizing OMERO.web static assets into ${static_dir}"
@@ -237,9 +276,29 @@ sync_static_assets() {
         chown -R "${runtime_user}:${runtime_group}" "${static_dir}" || true
     fi
 
-    if [[ ! -f "${static_dir}/branding/logo.png" ]]; then
-        echo "[web-bootstrap] ERROR: Branding logo missing after static sync: ${static_dir}/branding/logo.png" >&2
-        exit 1
+    if [[ -n "${preserved_logo_path}" && -f "${preserved_logo_path}" ]]; then
+        mkdir -p "${static_dir}/branding"
+        if cp -f "${preserved_logo_path}" "${branding_logo_path}"; then
+            echo "[web-bootstrap] Restored pre-existing branding logo after static sync: ${branding_logo_path}"
+        else
+            echo "[web-bootstrap] WARNING: Failed to restore preserved branding logo after static sync: ${branding_logo_path}" >&2
+        fi
+        rm -f "${preserved_logo_path}" || true
+    fi
+
+    if [[ ! -f "${branding_logo_path}" && -f "${repo_logo_path}" ]]; then
+        mkdir -p "${static_dir}/branding"
+        if cp -f "${repo_logo_path}" "${branding_logo_path}"; then
+            echo "[web-bootstrap] Restored branding logo from repository logo path: ${repo_logo_path}"
+        else
+            echo "[web-bootstrap] WARNING: Failed to restore branding logo from repository logo path: ${repo_logo_path}" >&2
+        fi
+    fi
+
+    if [[ -f "${branding_logo_path}" ]]; then
+        repair_branding_logo_permissions "${branding_logo_path}" "${runtime_user}" "${runtime_group}" || true
+    else
+        echo "[web-bootstrap] WARNING: Branding logo missing after static sync: ${branding_logo_path}. Continuing without a custom login logo." >&2
     fi
 
     if [[ ! -f "${static_dir}/omero_web_zarr/openwith.js" ]]; then
