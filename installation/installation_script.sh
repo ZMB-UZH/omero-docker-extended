@@ -47,6 +47,28 @@ CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
 
 set -euo pipefail
 
+TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"
+if [ -r "${TRANSCRIPT_HELPER_PATH}" ]; then
+    # shellcheck disable=SC1090
+    . "${TRANSCRIPT_HELPER_PATH}"
+fi
+
+if declare -F install_transcript_enable >/dev/null 2>&1; then
+    install_transcript_enable "${REPO_ROOT_DIR}/installation_paths.env" "$0" "$@"
+fi
+
+if ! declare -F install_transcript_record_line >/dev/null 2>&1; then
+    install_transcript_record_line() {
+        :
+    }
+fi
+
+if ! declare -F install_transcript_record_text >/dev/null 2>&1; then
+    install_transcript_record_text() {
+        :
+    }
+fi
+
 # Returns true (0) if CrowdSec is enabled:
 # CROWDSEC_ENROLL_KEY must be set, non-empty, and not the placeholder value.
 is_crowdsec_enabled() {
@@ -856,6 +878,70 @@ EOS_JOB_SERVICE
     return 0
 }
 
+wait_for_repo_root_sync_ready() {
+    local started_epoch="${1:?BUG: wait_for_repo_root_sync_ready requires a start epoch}"
+    local status_file="${OMERO_SERVER_VAR_PATH%/}/repo-root-sync.status"
+    local repo_path_template="${CONFIG_omero_fs_repo_path:-}"
+    local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
+    local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+    local poll_interval_seconds=5
+    local max_wait_seconds=0
+    local deadline_epoch=0
+    local now_epoch=0
+    local status=""
+    local last_success_epoch=""
+    local status_line=""
+
+    if [ "${START_CONTAINERS}" -ne 1 ]; then
+        return 0
+    fi
+
+    if [ -z "${ROOTPASS:-}" ]; then
+        echo "Skipping managed-repository shared-prefix readiness wait (ROOTPASS not set)."
+        return 0
+    fi
+
+    if [[ "${repo_path_template}" != *%group%* ]]; then
+        echo "Skipping managed-repository shared-prefix readiness wait (CONFIG_omero_fs_repo_path has no %group% token)."
+        return 0
+    fi
+
+    if ! [[ "${retry_limit}" =~ ^[0-9]+$ ]] || [ "${retry_limit}" -lt 1 ]; then
+        retry_limit=180
+    fi
+    if ! [[ "${retry_delay_seconds}" =~ ^[0-9]+$ ]]; then
+        retry_delay_seconds=2
+    fi
+
+    max_wait_seconds=$((retry_limit * retry_delay_seconds + 120))
+    deadline_epoch=$((started_epoch + max_wait_seconds))
+
+    echo "Waiting for managed-repository shared-prefix normalization to complete..."
+
+    while true; do
+        if [ -r "${status_file}" ]; then
+            status="$(sed -n 's/^status=//p' "${status_file}" | tail -n 1)"
+            last_success_epoch="$(sed -n 's/^last_success_epoch=//p' "${status_file}" | tail -n 1)"
+            if [ "${status}" = "ok" ] && [[ "${last_success_epoch}" =~ ^[0-9]+$ ]] && [ "${last_success_epoch}" -ge "${started_epoch}" ]; then
+                echo "Managed-repository shared-prefix normalization is ready."
+                return 0
+            fi
+        fi
+
+        now_epoch="$(date +%s)"
+        if [ "${now_epoch}" -ge "${deadline_epoch}" ]; then
+            echo "ERROR: Timed out waiting for managed-repository shared-prefix normalization status at ${status_file}" >&2
+            if [ -r "${status_file}" ]; then
+                status_line="$(tr '\n' ' ' < "${status_file}" | sed 's/[[:space:]]\+/ /g')"
+                echo "ERROR: Last repo-root sync status: ${status_line}" >&2
+            fi
+            return 1
+        fi
+
+        sleep "${poll_interval_seconds}"
+    done
+}
+
 stop_old_installation_containers() {
     local old_install_path="${1%/}"
     local old_database_path="$2"
@@ -1532,6 +1618,38 @@ validate_path_is_preparable() {
     return 0
 }
 
+tty_echo() {
+    local message="${1:-}"
+
+    if [ -r /dev/tty ]; then
+        echo "${message}" > /dev/tty
+    fi
+    install_transcript_record_line "${message}"
+}
+
+tty_printf() {
+    local rendered_message=""
+
+    printf -v rendered_message "$@"
+    if [ -r /dev/tty ]; then
+        printf '%s' "${rendered_message}" > /dev/tty
+    fi
+    install_transcript_record_text "${rendered_message}"
+}
+
+tty_read_line() {
+    local __result_var="${1:?BUG: tty_read_line requires target variable name}"
+    local reply=""
+
+    if ! IFS= read -r reply < /dev/tty; then
+        return 1
+    fi
+
+    install_transcript_record_line "${reply}"
+    printf -v "${__result_var}" '%s' "${reply}"
+    return 0
+}
+
 prompt_for_preparable_path() {
     local default_path="$1"
     local path_label="$2"
@@ -1545,7 +1663,7 @@ prompt_for_preparable_path() {
         fi
 
         if [ -r /dev/tty ]; then
-            echo "Please choose a different ${path_label}." > /dev/tty
+            tty_echo "Please choose a different ${path_label}."
         else
             return 1
         fi
@@ -1643,8 +1761,8 @@ resolve_delete_images_choice() {
     echo "Delete all container images? Y/n (Default: n)"
 
     while true; do
-        printf '> ' > /dev/tty
-        if ! IFS= read -r reply < /dev/tty; then
+        tty_printf '> '
+        if ! tty_read_line reply; then
             KEEP_IMAGES=1
             echo "WARNING: Could not read confirmation input; defaulting to keep existing images." >&2
             return 0
@@ -1662,7 +1780,7 @@ resolve_delete_images_choice() {
             return 0
         fi
 
-        echo "Wrong choice. Please type Y or n." > /dev/tty
+        tty_echo "Wrong choice. Please type Y or n."
     done
 }
 
@@ -1678,10 +1796,10 @@ resolve_path_with_default_prompt() {
     fi
 
     while true; do
-        echo "Use default ${path_label} (${default_path})? Y/n (Default: Y)" > /dev/tty
-        printf '> ' > /dev/tty
+        tty_echo "Use default ${path_label} (${default_path})? Y/n (Default: Y)"
+        tty_printf '> '
 
-        if ! IFS= read -r reply < /dev/tty; then
+        if ! tty_read_line reply; then
             printf '%s' "${default_path}"
             return 0
         fi
@@ -1695,9 +1813,9 @@ resolve_path_with_default_prompt() {
 
         if [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
             while true; do
-                printf '%s: (Current: %s) ' "${path_label}" "${default_path}" > /dev/tty
+                tty_printf '%s: (Current: %s) ' "${path_label}" "${default_path}"
 
-                if ! IFS= read -r chosen_path < /dev/tty; then
+                if ! tty_read_line chosen_path; then
                     printf '%s' "${default_path}"
                     return 0
                 fi
@@ -1711,11 +1829,11 @@ resolve_path_with_default_prompt() {
                     return 0
                 fi
 
-                echo "Wrong ${path_label}, try again: (Current: ${default_path})" > /dev/tty
+                tty_echo "Wrong ${path_label}, try again: (Current: ${default_path})"
             done
         fi
 
-        echo "Wrong choice. Please type Y or n." > /dev/tty
+        tty_echo "Wrong choice. Please type Y or n."
     done
 }
 
@@ -1730,10 +1848,10 @@ prompt_yes_no() {
     fi
 
     while true; do
-        echo "${prompt_message}" > /dev/tty
-        printf '> ' > /dev/tty
+        tty_echo "${prompt_message}"
+        tty_printf '> '
 
-        if ! IFS= read -r reply < /dev/tty; then
+        if ! tty_read_line reply; then
             printf '%s' "${default_choice}"
             return 0
         fi
@@ -1755,7 +1873,7 @@ prompt_yes_no() {
                 return 0
                 ;;
             *)
-                echo "Wrong choice. Please type Y or n." > /dev/tty
+                tty_echo "Wrong choice. Please type Y or n."
                 ;;
         esac
     done
@@ -2081,6 +2199,13 @@ CROWDSEC_CONFIG_PATH="${OMERO_DATA_PATH%/}/crowdsec_config"
 # (This handles cases where the env file is from an older installation)
 if [ -z "${BUILDX_DATA_PATH:-}" ]; then
     BUILDX_DATA_PATH="${OMERO_DATA_PATH%/}/buildx_cache"
+fi
+
+if declare -F install_transcript_publish_final_path_if_needed >/dev/null 2>&1; then
+    install_transcript_publish_final_path_if_needed \
+        "${OMERO_INSTALL_TRANSCRIPT_SOURCE_NAME:-${SCRIPT_NAME}}" \
+        "${SCRIPT_ENV_FILE}" \
+        "${OMERO_DATA_PATH}"
 fi
 
 if ! export_compose_interpolation_env; then
@@ -3433,9 +3558,14 @@ echo "================================================"
 echo ""
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
+    repo_root_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
 
     if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
+        exit 1
+    fi
+
+    if ! wait_for_repo_root_sync_ready "${repo_root_sync_started_epoch}"; then
         exit 1
     fi
 
