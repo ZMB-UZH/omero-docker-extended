@@ -24,6 +24,8 @@ set -eu
 
 CROWDSEC_REQUIRE_BOUNCERS="${CROWDSEC_REQUIRE_BOUNCERS:-false}"
 CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"
+CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"
+CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="${CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR:-/var/lib/crowdsec/data}"
 
 is_true() {
     case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -397,6 +399,35 @@ crowdsec_has_console_credentials() {
     [ -s "$(crowdsec_console_credentials_path)" ]
 }
 
+crowdsec_install_enrollment_done_marker_path() {
+    printf '%s' "${CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR%/}/.console-enrollment-install.done"
+}
+
+crowdsec_has_install_enrollment_done_marker() {
+    [ -f "$(crowdsec_install_enrollment_done_marker_path)" ]
+}
+
+mark_crowdsec_install_enrollment_done() {
+    local marker_path=""
+
+    marker_path="$(crowdsec_install_enrollment_done_marker_path)"
+    mkdir -p "$(dirname "${marker_path}")"
+    : > "${marker_path}"
+    chmod 0600 "${marker_path}" 2>/dev/null || true
+}
+
+crowdsec_install_enrollment_completed() {
+    if crowdsec_has_install_enrollment_done_marker; then
+        return 0
+    fi
+
+    if crowdsec_has_console_credentials; then
+        return 0
+    fi
+
+    return 1
+}
+
 configure_console_enrollment() {
     local enroll_key="${CROWDSEC_ENROLL_KEY:-}"
     local engine_name="${CROWDSEC_ENGINE_NAME:-}"
@@ -409,8 +440,16 @@ configure_console_enrollment() {
         return 0
     fi
 
-    if crowdsec_has_console_credentials; then
-        echo "CrowdSec Console credentials already exist. Skipping console enrollment."
+    if crowdsec_install_enrollment_completed; then
+        if ! crowdsec_has_install_enrollment_done_marker && crowdsec_has_console_credentials; then
+            mark_crowdsec_install_enrollment_done
+        fi
+        echo "CrowdSec Console enrollment is already completed. Skipping console enrollment."
+        return 0
+    fi
+
+    if ! is_true "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}"; then
+        echo "CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment."
         return 0
     fi
 
@@ -422,13 +461,19 @@ configure_console_enrollment() {
 
     echo "Enrolling to CrowdSec Console for first-time installation..."
     if [ -n "${engine_name}" ] && ! is_placeholder_value "${engine_name}"; then
-        cscli console enroll "${clean_token}" --name "${engine_name}" \
-            || echo "WARNING: Failed to enroll to CrowdSec Console."
+        if cscli console enroll "${clean_token}" --overwrite --name "${engine_name}"; then
+            mark_crowdsec_install_enrollment_done
+        else
+            echo "WARNING: Failed to enroll to CrowdSec Console."
+        fi
         return 0
     fi
 
-    cscli console enroll "${clean_token}" \
-        || echo "WARNING: Failed to enroll to CrowdSec Console."
+    if cscli console enroll "${clean_token}" --overwrite; then
+        mark_crowdsec_install_enrollment_done
+    else
+        echo "WARNING: Failed to enroll to CrowdSec Console."
+    fi
     return 0
 }
 
