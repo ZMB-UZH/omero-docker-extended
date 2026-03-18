@@ -436,7 +436,7 @@ configure_console_enrollment() {
         return 1
     fi
 
-    echo "Enrolling to CrowdSec Console for first-time installation..."
+    echo "Enrolling to CrowdSec Console for this installation run..."
     if [ -n "${engine_name}" ] && ! is_placeholder_value "${engine_name}"; then
         if cscli console enroll "${clean_token}" --overwrite --name "${engine_name}"; then
             mark_crowdsec_install_enrollment_done

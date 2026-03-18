@@ -276,7 +276,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env', script_text)
         self.assertIn("schedule_crowdsec_install_auto_restart()", script_text)
         self.assertIn("CrowdSec Console Approval Required", script_text)
-        self.assertIn("This enrollment request is created only during first", script_text)
+        self.assertIn("This enrollment request is created during installation", script_text)
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
     def test_installation_script_prints_crowdsec_banner_before_compose_up(self) -> None:
