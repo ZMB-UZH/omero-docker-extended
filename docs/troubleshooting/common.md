@@ -355,6 +355,38 @@ Expected result:
 - `repo-root-sync.status` reports `status=ok` with a recent `last_success_epoch`.
 - The server logs show the shared-prefix normalization cycle completing without failures for the affected group.
 
+## 14a. Large grouped uploads fail with `OMERO could not prepare the destination for this import.`
+
+Symptom:
+
+- A grouped upload (for example a large `.zarr` tree or another directory-backed import) finishes transferring all bytes.
+- The job can spend time in `checking` even when browser-side compatibility checking was disabled.
+- The final job error is the generic message:
+  - `OMERO could not prepare the destination for this import.`
+
+Cause:
+
+- The upload plugin always lets OMERO CLI/Bio-Formats build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
+- Compatibility-disabled jobs use that background step for planning only: it persists `planned_import_units`, but it does not run the first-batch compatibility scan.
+- Dataset creation must still happen on the request path with the live user-owned OMERO connection. If the import thread reaches background dataset preparation instead, OMERO.web can no longer safely reuse the browser session and the job falls back to the generic destination-preparation error.
+
+Validation:
+
+```bash
+rg -n "planning import units before request-path dataset preparation|cannot reuse the live OMERO.web session|could not switch to OMERO user" \
+  /disks/omero_data/omero_web_logs/OMEROweb.log
+```
+
+Expected result:
+
+- Healthy behavior:
+  - the logs show the planning/import-unit message first
+  - a later browser poll/import-step request prepares datasets on the request path
+  - the import thread starts without the background session-switch warning
+- Failing behavior:
+  - the logs show `Service connection could not switch to OMERO user ... for dataset preparation on job ...`
+  - followed by `Background dataset preparation for job ... cannot reuse the live OMERO.web session.`
+
 ## 15. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
 
 Symptom:
