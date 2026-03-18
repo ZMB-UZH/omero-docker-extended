@@ -10,6 +10,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - Prefer small, focused pull requests with clear acceptance criteria.
 - Update documentation in `docs/` whenever behavior or operating assumptions change.
 - Run `python3 tools/lint_docs_structure.py` before proposing changes.
+- Prefer focused unit tests or other fast local verification before live runtime tests whenever that is feasible. Use live tests after that, not instead of that, so debugging cycles stay short and failures surface earlier.
 - Pin image tags and dependency versions. Never use `:latest`.
 - Treat plugin input as untrusted; validate at system boundaries.
 - Treat every `*_example*` file in this repository as the canonical reference for expected configuration and helper scripts.
@@ -217,6 +218,7 @@ omeroweb_<name>/
 - Do **not** reopen the importing user's live OMERO.web session inside background threads or subprocess-driven follow-up work. Between HTTP requests OMERO.web may hold no active Blitz reference; if a background helper rejoins that session and then closes, OMERO can destroy the login session and log the user out.
 - Do not assume the `job-service` OMERO account can impersonate users. In this repository the bootstrap sync adds `job-service` to groups, but it does not grant OMERO administrator privileges, so `suConn()` can legitimately fail.
 - For the upload plugin, keep heavy grouped-import planning in background threads, but do any required user-owned dataset-target preparation on the request path with the live request connection. Do not push that step into background session-rejoin helpers.
+- For the upload plugin, keep request-path dataset-target preparation format-agnostic whenever a generic path is feasible. Prefer persisted logical import-unit plans over format-specific or extension-specific heuristics so grouped, packaged, directory-based, and cross-version Zarr imports keep working through the same mechanism. Only bypass this with a narrowly scoped format-specific rule when it is absolutely necessary, and document that reason in the same change.
 - For grouped-package naming, prefer OMERO CLI `-n` so the final logical name is set during import instead of requiring a post-import OMERO API rename against the browser session.
 - For long-running upload compatibility or post-import work, do not add short browser-side deadlines around status polling. Large structured imports can legitimately spend more than a few minutes in compatibility planning before import begins.
 - Do not run `_prepare_job_import_datasets()`, `_build_import_units()`, or OMERO CLI dry-run scans synchronously inside upload HTTP handlers (`upload_files`, `import_step`, `confirm_import`, `prune_upload`). Large `.zarr` uploads can spend long enough in that planning step to trip Gunicorn worker timeouts and surface raw 500s on the final upload request.
