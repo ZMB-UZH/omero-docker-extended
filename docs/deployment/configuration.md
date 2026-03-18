@@ -50,7 +50,8 @@ Paths declared in `installation_paths.env` map host storage into containers for:
 - databases,
 - temporary/working data (`OMERO_TMP_PATH`),
 - OMERO server/web logs,
-- monitoring state.
+- monitoring state,
+- host-side installation/update transcripts under `${OMERO_DATA_PATH}/installation_logs`.
 
 Ensure host paths exist and are writable by container runtime users before startup.
 
@@ -102,11 +103,22 @@ environment-defined group list so partial early-startup discovery cannot skip
 configured groups such as `users_private`. It then creates any missing shared
 prefix directories with `omero fs mkdir --parents`, and non-destructively
 reassigns their OMERO ownership metadata to `root` when an earlier uploader
-created them under a personal account. This keeps older installations and
-drifted deployments compatible without changing the path template itself. With
-the default `%group%/%user%/...` template this work is bounded to the shared
+created them under a personal account. The same repair now continues in the
+background on a configurable interval (`OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS`,
+default 3600 seconds, with jitter from `OMERO_REPO_ROOT_SYNC_JITTER_SECONDS`)
+so groups created after server startup are normalized as well. Each cycle
+writes its latest status to `${SERVER_VAR_DIR}/repo-root-sync.status`, and the
+host installer waits for a successful current-cycle status before reporting
+startup success. This keeps older installations, drifted deployments, and
+future groups compatible without changing the path template itself. With the
+default `%group%/%user%/...` template this work is bounded to the shared
 group-level prefixes only; it does not scan per-user trees or walk repository
 payload files.
+
+The pull/update helpers store full visible terminal transcripts under
+`${OMERO_DATA_PATH}/installation_logs/`. The final transcript path is written
+only after the installation paths are resolved, so changes to `OMERO_DATA_PATH`
+during the run still place the log in the selected data root.
 
 If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
 without trailing `%`), OMERO treats those strings literally and creates
