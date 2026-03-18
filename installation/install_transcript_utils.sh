@@ -177,6 +177,7 @@ install_transcript_enable() {
 
     if command -v script >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
         local reexec_cmd=""
+        local -a pipeline_status=()
         local script_rc=0
         local tee_rc=0
 
@@ -185,8 +186,9 @@ install_transcript_enable() {
 
         set +e
         script -qefc "${reexec_cmd}" /dev/null | tee "${temp_log_path}"
-        script_rc="${PIPESTATUS[0]}"
-        tee_rc="${PIPESTATUS[1]}"
+        pipeline_status=("${PIPESTATUS[@]}")
+        script_rc="${pipeline_status[0]:-1}"
+        tee_rc="${pipeline_status[1]:-1}"
         set -e
 
         rc="${script_rc}"
