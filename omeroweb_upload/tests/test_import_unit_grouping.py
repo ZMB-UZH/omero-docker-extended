@@ -631,6 +631,59 @@ def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_impo
     assert group_calls == ["4"]
 
 
+def test_prepare_request_job_import_datasets_uses_planned_import_units_for_generic_directory_package(monkeypatch):
+    created = []
+
+    class _RequestConn:
+        class _Opts:
+            def setOmeroGroup(self, value):
+                return None
+
+        SERVICE_OPTS = _Opts()
+
+    def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
+        created.append((conn, name, project_id))
+        dataset_map[name] = 44
+        return 44
+
+    monkeypatch.setattr(core_functions, "_get_or_create_dataset", fake_get_or_create_dataset)
+    monkeypatch.setattr(core_functions, "_save_job", lambda job: True)
+
+    job = {
+        "job_id": "d" * 32,
+        "group_id": 4,
+        "project_id": 9,
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+        "planned_import_units": [
+            {
+                "relative_path": "bundle.pkg",
+                "dataset_relative_path": "bundle.pkg",
+                "covered_relative_paths": [
+                    "bundle.pkg/manifest.json",
+                    "bundle.pkg/data/0.bin",
+                ],
+            }
+        ],
+        "files": [
+            {"relative_path": "bundle.pkg/manifest.json"},
+            {"relative_path": "bundle.pkg/data/0.bin"},
+        ],
+    }
+
+    prepared_job, error = core_functions._prepare_request_job_import_datasets(
+        job["job_id"],
+        job,
+        conn=_RequestConn(),
+    )
+
+    assert prepared_job is job
+    assert error is None
+    assert len(created) == 1
+    assert created[0][1:] == ("bundle.pkg", 9)
+    assert job["dataset_map"] == {"bundle.pkg": 44}
+
+
 def test_ensure_job_dataset_targets_hides_impersonation_details(monkeypatch):
     class _FakeServiceConn:
         def __init__(self):
