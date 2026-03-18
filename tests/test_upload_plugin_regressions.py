@@ -586,13 +586,9 @@ class UploadPluginRegressionTests(TestCase):
 
         with mock.patch.object(
             index_view,
-            "_prepare_request_job_import_datasets",
+            "_prepare_uploaded_job_for_request_path_import",
             return_value=(job, None),
-        ) as prepare_mock, mock.patch.object(
-            index_view,
-            "_load_job",
-            return_value=job,
-        ):
+        ) as prepare_mock:
             prepared_job, error = index_view._prepare_uploaded_job_dataset_targets(
                 job["job_id"],
                 job,
@@ -603,21 +599,22 @@ class UploadPluginRegressionTests(TestCase):
         self.assertIsNone(error)
         prepare_mock.assert_called_once_with(job["job_id"], job, request_conn)
 
-    def test_prepare_uploaded_job_dataset_targets_waits_for_planned_units_during_compatibility(self):
+    def test_prepare_uploaded_job_for_request_path_import_waits_for_planned_units_during_compatibility(self):
         job = {
             "job_id": "e" * 32,
             "status": "checking",
             "compatibility_enabled": True,
+            "compatibility_thread_active": True,
             "planned_import_units": [],
             "files": [{"status": "uploaded", "relative_path": "bundle.pkg/data/0.bin"}],
         }
 
         with mock.patch.object(
-            index_view,
+            core_functions,
             "_prepare_request_job_import_datasets",
             side_effect=AssertionError("request-path preparation should wait for planned units"),
         ):
-            prepared_job, error = index_view._prepare_uploaded_job_dataset_targets(
+            prepared_job, error = core_functions._prepare_uploaded_job_for_request_path_import(
                 job["job_id"],
                 job,
                 conn=object(),
@@ -625,6 +622,87 @@ class UploadPluginRegressionTests(TestCase):
 
         self.assertIs(prepared_job, job)
         self.assertIsNone(error)
+
+    def test_prepare_uploaded_job_for_request_path_import_waits_for_background_import_plan(self):
+        job = {
+            "job_id": "f" * 32,
+            "status": "checking",
+            "compatibility_enabled": False,
+            "compatibility_thread_active": True,
+            "planned_import_units": [],
+            "files": [{"status": "uploaded", "relative_path": "plate.zarr/0/0/0"}],
+        }
+
+        with mock.patch.object(
+            core_functions,
+            "_prepare_request_job_import_datasets",
+            side_effect=AssertionError("request-path preparation should wait for the persisted import plan"),
+        ):
+            prepared_job, error = core_functions._prepare_uploaded_job_for_request_path_import(
+                job["job_id"],
+                job,
+                conn=object(),
+            )
+
+        self.assertIs(prepared_job, job)
+        self.assertIsNone(error)
+
+    def test_run_compatibility_check_skips_scan_when_compatibility_is_disabled(self):
+        job_id = "1" * 32
+        job_state = {
+            "job_id": job_id,
+            "status": "checking",
+            "compatibility_enabled": False,
+            "compatibility_thread_active": True,
+            "compatibility_status": "checking",
+            "files": [{"status": "uploaded", "relative_path": "plate.zarr/.zattrs"}],
+            "planned_import_units": [],
+            "host": "omeroserver",
+            "port": 4064,
+        }
+        planned_unit = {
+            "relative_path": "plate.zarr",
+            "dataset_relative_path": "plate.zarr",
+            "covered_relative_paths": ["plate.zarr/.zattrs"],
+        }
+
+        def fake_load_job(current_job_id):
+            self.assertEqual(job_id, current_job_id)
+            return job_state
+
+        def fake_update_job(current_job_id, updater):
+            self.assertEqual(job_id, current_job_id)
+            updater(job_state)
+            return job_state
+
+        with mock.patch.object(core_functions, "_load_job", side_effect=fake_load_job), mock.patch.object(
+            core_functions,
+            "_build_import_units",
+            return_value=[planned_unit],
+        ), mock.patch.object(
+            core_functions,
+            "_update_job",
+            side_effect=fake_update_job,
+        ), mock.patch.object(
+            core_functions,
+            "_check_import_compatibility",
+            side_effect=AssertionError("compatibility scan should not run when disabled"),
+        ):
+            core_functions._run_compatibility_check(job_id)
+
+        self.assertEqual(
+            [
+                {
+                    "relative_path": "plate.zarr",
+                    "dataset_relative_path": "plate.zarr",
+                    "covered_relative_paths": ["plate.zarr/.zattrs"],
+                }
+            ],
+            job_state["planned_import_units"],
+        )
+        self.assertFalse(job_state["compatibility_thread_active"])
+        self.assertEqual("compatible", job_state["compatibility_status"])
+        self.assertEqual("ready", job_state["status"])
 
     def test_job_status_starts_ready_job_after_request_path_preparation(self):
         request = types.SimpleNamespace(method="GET")

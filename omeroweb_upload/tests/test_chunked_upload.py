@@ -60,7 +60,6 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
     monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
-    monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
 
     import_started = []
     prepare_calls = []
@@ -79,7 +78,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
     monkeypatch.setattr(
         index_view,
-        "_prepare_request_job_import_datasets",
+        "_prepare_uploaded_job_for_request_path_import",
         lambda current_job_id, current_job, conn: (
             prepare_calls.append((current_job_id, conn)),
             (current_job, None),
@@ -137,7 +136,7 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
     assert prepare_calls == [(job_id, fake_conn)]
 
 
-def test_upload_files_uses_fast_request_dataset_preparation_before_background_import_thread(
+def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     tmp_path: Path, monkeypatch
 ):
     upload_root = tmp_path / "upload-root"
@@ -164,17 +163,9 @@ def test_upload_files_uses_fast_request_dataset_preparation_before_background_im
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
     monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
-    monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
-    monkeypatch.setattr(
-        index_view,
-        "_prepare_job_import_datasets",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            AssertionError("dataset prep must stay off the upload request")
-        ),
-    )
 
     import_started = []
-    prepare_calls = []
+    helper_calls = []
     fake_conn = object()
 
     def fake_apply_upload_updates(current_job_id, updates, upload_errors):
@@ -190,10 +181,10 @@ def test_upload_files_uses_fast_request_dataset_preparation_before_background_im
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
     monkeypatch.setattr(
         index_view,
-        "_prepare_request_job_import_datasets",
+        "_prepare_uploaded_job_for_request_path_import",
         lambda current_job_id, current_job, conn: (
-            prepare_calls.append((current_job_id, conn)),
-            (current_job, None),
+            helper_calls.append((current_job_id, conn)),
+            ({**current_job, "status": "checking"}, None),
         )[1],
     )
 
@@ -210,9 +201,9 @@ def test_upload_files_uses_fast_request_dataset_preparation_before_background_im
 
     assert response.status_code == 200
     assert payload["ok"] is True
-    assert payload["ready"] is True
-    assert import_started == [job_id]
-    assert prepare_calls == [(job_id, fake_conn)]
+    assert payload["ready"] is False
+    assert import_started == []
+    assert helper_calls == [(job_id, fake_conn)]
 
 
 def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: Path, monkeypatch):
@@ -239,7 +230,6 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
     monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
-    monkeypatch.setattr(index_view, "_should_start_compatibility_check", lambda updated_job: False)
     prepare_calls = []
     fake_conn = object()
     monkeypatch.setattr(
@@ -250,7 +240,7 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
     monkeypatch.setattr(
         index_view,
-        "_prepare_request_job_import_datasets",
+        "_prepare_uploaded_job_for_request_path_import",
         lambda current_job_id, current_job, conn: (
             prepare_calls.append((current_job_id, conn)),
             (current_job, None),
