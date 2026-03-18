@@ -267,6 +267,34 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('"CHANGEVALUE2"', script_text)
         self.assertIn('"CHANGEVALUE3"', script_text)
 
+    def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"', script_text)
+        self.assertIn("crowdsec_has_persisted_console_credentials()", script_text)
+        self.assertIn("schedule_crowdsec_install_auto_restart()", script_text)
+        self.assertIn("CrowdSec Console Approval Required", script_text)
+        self.assertIn("Leaving the existing one-shot schedule in place", script_text)
+        self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
+
+    def test_crowdsec_restart_helper_is_single_shot(self) -> None:
+        helper_text = (
+            self.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('trap cleanup_marker EXIT HUP INT TERM', helper_text)
+        self.assertIn('docker restart "${container_name}"', helper_text)
+        self.assertNotIn("while ", helper_text)
+
+    def test_crowdsec_entrypoint_enrolls_only_without_persisted_credentials(self) -> None:
+        entrypoint_text = (self.repo_root / "docker" / "crowdsec-entrypoint.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"', entrypoint_text)
+        self.assertIn("crowdsec_has_console_credentials()", entrypoint_text)
+        self.assertIn("CrowdSec Console credentials already exist. Skipping console enrollment.", entrypoint_text)
+        self.assertNotIn("--overwrite", entrypoint_text)
+
 
 if __name__ == "__main__":
     unittest.main()
