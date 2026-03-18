@@ -391,14 +391,6 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
 fi
 
 # --- Console enrollment (optional, free tier) -----------------------------
-crowdsec_console_credentials_path() {
-    printf '%s' "${CROWDSEC_CONFIG_DIR%/}/online_api_credentials.yaml"
-}
-
-crowdsec_has_console_credentials() {
-    [ -s "$(crowdsec_console_credentials_path)" ]
-}
-
 crowdsec_install_enrollment_done_marker_path() {
     printf '%s' "${CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR%/}/.console-enrollment-install.done"
 }
@@ -416,18 +408,6 @@ mark_crowdsec_install_enrollment_done() {
     chmod 0600 "${marker_path}" 2>/dev/null || true
 }
 
-crowdsec_install_enrollment_completed() {
-    if crowdsec_has_install_enrollment_done_marker; then
-        return 0
-    fi
-
-    if crowdsec_has_console_credentials; then
-        return 0
-    fi
-
-    return 1
-}
-
 configure_console_enrollment() {
     local enroll_key="${CROWDSEC_ENROLL_KEY:-}"
     local engine_name="${CROWDSEC_ENGINE_NAME:-}"
@@ -440,16 +420,13 @@ configure_console_enrollment() {
         return 0
     fi
 
-    if crowdsec_install_enrollment_completed; then
-        if ! crowdsec_has_install_enrollment_done_marker && crowdsec_has_console_credentials; then
-            mark_crowdsec_install_enrollment_done
-        fi
-        echo "CrowdSec Console enrollment is already completed. Skipping console enrollment."
+    if ! is_true "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}"; then
+        echo "CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment."
         return 0
     fi
 
-    if ! is_true "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}"; then
-        echo "CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment."
+    if crowdsec_has_install_enrollment_done_marker; then
+        echo "CrowdSec install enrollment request was already created earlier. Skipping console enrollment."
         return 0
     fi
 

@@ -279,6 +279,20 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("This enrollment request is created only during first", script_text)
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
+    def test_installation_script_prints_crowdsec_banner_before_compose_up(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        banner_call_index = script_text.rindex(
+            'print_crowdsec_install_enrollment_notice "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"'
+        )
+        compose_up_index = script_text.rindex('compose_up_with_retries "${COMPOSE_FILE}"')
+        self.assertLess(
+            banner_call_index,
+            compose_up_index,
+            "The CrowdSec approval banner must be emitted before container startup begins.",
+        )
+
     def test_crowdsec_restart_helper_is_single_shot(self) -> None:
         helper_text = (
             self.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
