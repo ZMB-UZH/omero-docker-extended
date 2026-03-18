@@ -217,16 +217,35 @@ normalize_quota_path "${quota_marker_path}"
 
 configure_docker_socket_access
 
-# Restore static files if shadowed by the host bind mount
-var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
-if [[ ! -d "${var_dir}/static/branding" ]]; then
-    echo "[web-bootstrap] Bind mount detected over var/: Restoring static files..."
-    mkdir -p "${var_dir}/static"
-    cp -a /opt/omero/web/static_backup/. "${var_dir}/static/"
-    chown -R omero-web:omero-web "${var_dir}/static"
+sync_static_assets() {
+    local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
+    local static_dir="${var_dir}/static"
+    local static_backup_dir="/opt/omero/web/static_backup"
+    local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
+    local runtime_group="${OMERO_WEB_RUNTIME_GROUP:-${runtime_user}}"
 
-    if [[ ! -d "${var_dir}/static/branding" ]]; then
-        echo "[web-bootstrap] ERROR: Failed to restore OMERO.web static assets into ${var_dir}/static" >&2
+    if [[ ! -d "${static_backup_dir}" ]]; then
+        echo "[web-bootstrap] ERROR: Static backup directory missing: ${static_backup_dir}" >&2
         exit 1
     fi
-fi
+
+    echo "[web-bootstrap] Synchronizing OMERO.web static assets into ${static_dir}"
+    mkdir -p "${static_dir}"
+    cp -a "${static_backup_dir}/." "${static_dir}/"
+
+    if id -u "${runtime_user}" >/dev/null 2>&1; then
+        chown -R "${runtime_user}:${runtime_group}" "${static_dir}" || true
+    fi
+
+    if [[ ! -f "${static_dir}/branding/logo.png" ]]; then
+        echo "[web-bootstrap] ERROR: Branding logo missing after static sync: ${static_dir}/branding/logo.png" >&2
+        exit 1
+    fi
+
+    if [[ ! -f "${static_dir}/omero_web_zarr/openwith.js" ]]; then
+        echo "[web-bootstrap] ERROR: Vizarr static asset missing after static sync: ${static_dir}/omero_web_zarr/openwith.js" >&2
+        exit 1
+    fi
+}
+
+sync_static_assets

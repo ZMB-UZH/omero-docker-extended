@@ -576,6 +576,102 @@ class UploadPluginRegressionTests(TestCase):
         self.assertEqual({"plate.zarr": 21}, job["dataset_map"])
         self.assertEqual(["4"], group_calls)
 
+    def test_prepare_uploaded_job_dataset_targets_runs_when_job_is_ready(self):
+        request_conn = object()
+        job = {
+            "job_id": "d" * 32,
+            "status": "ready",
+            "files": [{"status": "uploaded", "relative_path": "plate.zarr/.zattrs"}],
+        }
+
+        with mock.patch.object(
+            index_view,
+            "_prepare_request_job_import_datasets",
+            return_value=(job, None),
+        ) as prepare_mock, mock.patch.object(
+            index_view,
+            "_load_job",
+            return_value=job,
+        ):
+            prepared_job, error = index_view._prepare_uploaded_job_dataset_targets(
+                job["job_id"],
+                job,
+                request_conn,
+            )
+
+        self.assertIs(prepared_job, job)
+        self.assertIsNone(error)
+        prepare_mock.assert_called_once_with(job["job_id"], job, request_conn)
+
+    def test_prepare_uploaded_job_dataset_targets_waits_for_planned_units_during_compatibility(self):
+        job = {
+            "job_id": "e" * 32,
+            "status": "checking",
+            "compatibility_enabled": True,
+            "planned_import_units": [],
+            "files": [{"status": "uploaded", "relative_path": "bundle.pkg/data/0.bin"}],
+        }
+
+        with mock.patch.object(
+            index_view,
+            "_prepare_request_job_import_datasets",
+            side_effect=AssertionError("request-path preparation should wait for planned units"),
+        ):
+            prepared_job, error = index_view._prepare_uploaded_job_dataset_targets(
+                job["job_id"],
+                job,
+                conn=object(),
+            )
+
+        self.assertIs(prepared_job, job)
+        self.assertIsNone(error)
+
+    def test_job_status_starts_ready_job_after_request_path_preparation(self):
+        request = types.SimpleNamespace(method="GET")
+        job_id = "f" * 32
+        job = {
+            "job_id": job_id,
+            "status": "ready",
+            "import_thread_started": False,
+            "files": [],
+            "uploaded_bytes": 0,
+            "imported_bytes": 0,
+            "total_bytes": 0,
+            "errors": [],
+            "messages": [],
+            "compatibility_status": "compatible",
+            "compatibility_enabled": True,
+        }
+
+        with mock.patch.object(index_view, "_load_owned_job", return_value=(job, None)), mock.patch.object(
+            index_view,
+            "_prepare_uploaded_job_dataset_targets",
+            return_value=(job, None),
+        ), mock.patch.object(
+            index_view,
+            "_prepare_ready_job_for_import_start",
+            return_value=(job, None),
+        ), mock.patch.object(index_view, "_start_import_thread") as start_import, mock.patch.object(
+            index_view,
+            "_load_job",
+            return_value=job,
+        ):
+            response = index_view.job_status.__wrapped__(request, job_id, conn=object())
+
+        status, payload = self._json_status_and_payload(response)
+        self.assertEqual(200, status)
+        self.assertTrue(payload["ok"])
+        start_import.assert_called_once_with(job_id)
+
+    def test_vizarr_openwith_uses_browser_origin_for_source_url(self):
+        script = (
+            REPO_ROOT
+            / "omero_web_zarr/static/omero_web_zarr/openwith.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("window.location.origin", script)
+        self.assertIn("encodeURIComponent(sourceUrl.toString())", script)
+
     def test_open_user_owned_background_connection_requires_service_connection(self):
         with mock.patch.object(
             core_functions,
