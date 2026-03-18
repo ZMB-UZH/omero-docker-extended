@@ -569,6 +569,7 @@ services:
     environment:
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
       DS_HOST_ROOT: "/host"
+      CROWDSEC_INSTALL_BOOTSTRAP_ENROLL: "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"
     volumes:
       - ./monitoring/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
       - ${CROWDSEC_DB_PATH:?Set CROWDSEC_DB_PATH (run installation/installation_script.sh)}:/var/lib/crowdsec/data/

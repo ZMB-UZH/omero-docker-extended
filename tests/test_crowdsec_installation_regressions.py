@@ -24,7 +24,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
     def test_console_enrollment_skips_reenroll_when_credentials_exist(self) -> None:
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
-            "is_placeholder_value() {",
+            "is_true() {",
             "# ---------------------------------------------------------------------------\n# Firewall backend detection",
         )
         enrollment_block = self._slice_between(
@@ -46,6 +46,8 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="token-value"
                 CROWDSEC_ENGINE_NAME="omero-host"
                 CSCLI_LOG="{log_path}"
@@ -61,11 +63,15 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             self._run_bash(script)
 
             self.assertFalse(log_path.exists(), "Existing credentials must suppress re-enrollment.")
+            self.assertTrue(
+                (tmpdir_path / "data" / ".console-enrollment-install.done").exists(),
+                "Existing credentials should backfill the install-done marker.",
+            )
 
     def test_console_enrollment_uses_engine_name_on_first_install(self) -> None:
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
-            "is_placeholder_value() {",
+            "is_true() {",
             "# ---------------------------------------------------------------------------\n# Firewall backend detection",
         )
         enrollment_block = self._slice_between(
@@ -84,6 +90,8 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="sudo cscli console enroll first-install-token"
                 CROWDSEC_ENGINE_NAME="omero-host"
                 CSCLI_LOG="{log_path}"
@@ -100,13 +108,17 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
 
             self.assertEqual(
                 log_path.read_text(encoding="utf-8").strip(),
-                "console enroll first-install-token --name omero-host",
+                "console enroll first-install-token --overwrite --name omero-host",
+            )
+            self.assertTrue(
+                (tmpdir_path / "data" / ".console-enrollment-install.done").exists(),
+                "Successful first-install enrollment should persist the install-done marker.",
             )
 
     def test_console_enrollment_disables_when_key_is_placeholder(self) -> None:
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
-            "is_placeholder_value() {",
+            "is_true() {",
             "# ---------------------------------------------------------------------------\n# Firewall backend detection",
         )
         enrollment_block = self._slice_between(
@@ -125,6 +137,8 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="CHANGEVALUE3"
                 CROWDSEC_ENGINE_NAME="CHANGEVALUE4"
                 CSCLI_LOG="{log_path}"
@@ -142,6 +156,49 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             self.assertEqual(
                 log_path.read_text(encoding="utf-8").strip(),
                 "console disable",
+            )
+
+    def test_console_enrollment_is_never_attempted_on_regular_restart_without_install_arm(self) -> None:
+        helper_block = self._slice_between(
+            self.crowdsec_entrypoint,
+            "is_true() {",
+            "# ---------------------------------------------------------------------------\n# Firewall backend detection",
+        )
+        enrollment_block = self._slice_between(
+            self.crowdsec_entrypoint,
+            "crowdsec_console_credentials_path() {",
+            "configure_console_enrollment\n\n# --- Wait for CrowdSec daemon to exit (container lifecycle) ----------------",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            config_dir = tmpdir_path / "etc" / "crowdsec"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            log_path = tmpdir_path / "cscli.log"
+
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                CROWDSEC_CONFIG_DIR="{config_dir}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="0"
+                CROWDSEC_ENROLL_KEY="first-install-token"
+                CROWDSEC_ENGINE_NAME="omero-host"
+                CSCLI_LOG="{log_path}"
+                cscli() {{
+                    printf '%s\\n' "$*" >> "${{CSCLI_LOG}}"
+                }}
+                {helper_block}
+                {enrollment_block}
+                configure_console_enrollment
+                """
+            )
+
+            self._run_bash(script)
+
+            self.assertFalse(
+                log_path.exists(),
+                "Regular CrowdSec restarts must not trigger console enrollment even when the key is present.",
             )
 
     def test_restart_helper_restarts_running_container_once_and_removes_marker(self) -> None:
@@ -253,7 +310,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             self.assertFalse(marker_path.exists(), "Helper must clear stale one-shot markers.")
             self.assertFalse(log_path.exists(), "Stopped containers must not be restarted by the helper.")
 
-    def test_installation_snapshots_missing_credentials_before_first_start(self) -> None:
+    def test_installation_arms_first_bootstrap_only_when_no_completed_marker_or_credentials_exist(self) -> None:
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -272,17 +329,23 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 CROWDSEC_CONFIG_PATH="{config_dir}"
                 CROWDSEC_DB_PATH="{tmpdir_path / 'crowdsec_db'}"
                 CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
                 {install_block}
-                mark_crowdsec_install_auto_restart_requirement
-                printf 'before=%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}"
-                : > "{config_dir / 'online_api_credentials.yaml'}"
-                printf 'after=%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}"
+                prepare_crowdsec_install_bootstrap_enrollment
+                printf 'before=%s,%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}" "${{CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}}"
+                cat > "{config_dir / 'online_api_credentials.yaml'}" <<'EOF'
+url: https://api.crowdsec.net/
+login: seeded-login
+password: seeded-password
+EOF
+                prepare_crowdsec_install_bootstrap_enrollment
+                printf 'after=%s,%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}" "${{CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}}"
                 """
             )
 
             result = self._run_bash(script)
 
-            self.assertEqual(result.stdout.strip().splitlines(), ["before=1", "after=1"])
+            self.assertEqual(result.stdout.strip().splitlines(), ["before=1,1", "after=0,0"])
 
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
