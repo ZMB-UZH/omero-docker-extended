@@ -23,10 +23,18 @@
 set -eu
 
 CROWDSEC_REQUIRE_BOUNCERS="${CROWDSEC_REQUIRE_BOUNCERS:-false}"
+CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"
 
 is_true() {
     case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
         1|true|yes|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_placeholder_value() {
+    case "${1:-}" in
+        CHANGEVALUE*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -381,26 +389,50 @@ if [ "${BOUNCER_AVAILABLE}" = "true" ]; then
 fi
 
 # --- Console enrollment (optional, free tier) -----------------------------
-# Apply the currently provided environment variables. If changed by the admin,
-# this guarantees the new settings are pushed immediately upon startup.
-_enroll_key="${CROWDSEC_ENROLL_KEY:-}"
-_engine_name="${CROWDSEC_ENGINE_NAME:-}"
+crowdsec_console_credentials_path() {
+    printf '%s' "${CROWDSEC_CONFIG_DIR%/}/online_api_credentials.yaml"
+}
 
-if [ -z "${_enroll_key}" ] || echo "${_enroll_key}" | grep -q "^CHANGEVALUE"; then
-    echo "CROWDSEC_ENROLL_KEY is empty or a placeholder."
-    echo "Ensuring console enrollment is disabled to reflect current environment state..."
-    cscli console disable >/dev/null 2>&1 || true
-else
-    CLEAN_TOKEN=$(echo "${_enroll_key}" | awk '{print $NF}')
-    ENROLL_ARGS="${CLEAN_TOKEN} --overwrite"
+crowdsec_has_console_credentials() {
+    [ -s "$(crowdsec_console_credentials_path)" ]
+}
 
-    if [ -n "${_engine_name}" ] && ! echo "${_engine_name}" | grep -q "^CHANGEVALUE"; then
-        ENROLL_ARGS="${ENROLL_ARGS} --name ${_engine_name}"
+configure_console_enrollment() {
+    local enroll_key="${CROWDSEC_ENROLL_KEY:-}"
+    local engine_name="${CROWDSEC_ENGINE_NAME:-}"
+    local clean_token=""
+
+    if [ -z "${enroll_key}" ] || is_placeholder_value "${enroll_key}"; then
+        echo "CROWDSEC_ENROLL_KEY is empty or a placeholder."
+        echo "Ensuring console enrollment is disabled to reflect current environment state..."
+        cscli console disable >/dev/null 2>&1 || true
+        return 0
     fi
 
-    echo "Enrolling to CrowdSec Console (forcing overwrite to apply any env changes)..."
-    cscli console enroll ${ENROLL_ARGS} || echo "WARNING: Failed to enroll to CrowdSec Console."
-fi
+    if crowdsec_has_console_credentials; then
+        echo "CrowdSec Console credentials already exist. Skipping console enrollment."
+        return 0
+    fi
+
+    clean_token="$(echo "${enroll_key}" | awk '{print $NF}')"
+    if [ -z "${clean_token}" ]; then
+        echo "WARNING: CrowdSec enrollment token resolved to an empty value." >&2
+        return 1
+    fi
+
+    echo "Enrolling to CrowdSec Console for first-time installation..."
+    if [ -n "${engine_name}" ] && ! is_placeholder_value "${engine_name}"; then
+        cscli console enroll "${clean_token}" --name "${engine_name}" \
+            || echo "WARNING: Failed to enroll to CrowdSec Console."
+        return 0
+    fi
+
+    cscli console enroll "${clean_token}" \
+        || echo "WARNING: Failed to enroll to CrowdSec Console."
+    return 0
+}
+
+configure_console_enrollment
 
 # --- Wait for CrowdSec daemon to exit (container lifecycle) ----------------
 wait $CROWDSEC_PID
