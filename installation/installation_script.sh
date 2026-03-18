@@ -98,6 +98,24 @@ crowdsec_has_install_enrollment_done_marker() {
 }
 
 
+clear_crowdsec_install_enrollment_done_marker() {
+    local marker_path=""
+
+    marker_path="$(crowdsec_install_enrollment_done_marker_path)"
+    if [ ! -f "${marker_path}" ]; then
+        return 0
+    fi
+
+    if ! rm -f "${marker_path}"; then
+        echo "ERROR: Failed to remove CrowdSec install enrollment marker: ${marker_path}" >&2
+        return 1
+    fi
+
+    echo "Removed existing CrowdSec install enrollment marker so this installation run requests dashboard approval again."
+    return 0
+}
+
+
 crowdsec_directory_has_runtime_state() {
     local directory_path="${1:?BUG: crowdsec_directory_has_runtime_state requires a path}"
 
@@ -141,22 +159,21 @@ prepare_crowdsec_install_bootstrap_enrollment() {
     fi
 
     if crowdsec_has_install_enrollment_done_marker; then
-        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="already_completed"
-        echo "CrowdSec install enrollment already completed ($(crowdsec_install_enrollment_done_marker_path) exists)."
-        echo "Skipping CrowdSec dashboard enrollment and install-only auto-restart for this run."
-        return 0
+        if ! clear_crowdsec_install_enrollment_done_marker; then
+            return 1
+        fi
     fi
 
     if crowdsec_has_preexisting_runtime_state; then
-        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="existing_runtime_state"
+        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="reinstall_existing_runtime_state"
         echo "CrowdSec runtime state already exists under ${CROWDSEC_CONFIG_PATH} and/or ${CROWDSEC_DB_PATH}."
-        echo "No new CrowdSec dashboard enrollment request or install-only auto-restart will be triggered on this run."
-        return 0
+        echo "This installation run will still create a fresh CrowdSec dashboard enrollment request and schedule the install-only auto-restart."
+    else
+        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="install_startup"
     fi
 
     CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=1
     CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=1
-    CROWDSEC_INSTALL_BOOTSTRAP_STATUS="fresh_install"
     return 0
 }
 
@@ -716,8 +733,8 @@ print_crowdsec_install_enrollment_notice() {
     echo "============================================================"
     echo "Approve the new CrowdSec engine in the CrowdSec dashboard"
     echo "within the next ${window_minutes} minute(s)."
-    echo "This enrollment request is created only during first"
-    echo "installation startup, not on ordinary CrowdSec restarts."
+    echo "This enrollment request is created during installation"
+    echo "startup, not on ordinary CrowdSec restarts."
     echo "A one-time automatic restart of the 'crowdsec' container has"
     echo "been scheduled for this installation run only."
     if [ "${remaining_delay_seconds}" -eq 0 ]; then
