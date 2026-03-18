@@ -111,6 +111,12 @@ omeroweb_<name>/
 - In this repo, `docker compose build`, `up`, and `config` commands should normally include both `--env-file installation_paths.env` and `--env-file env/omero_secrets.env`. Using only `installation_paths.env` can fail during variable interpolation for secrets-backed settings such as database exporter credentials.
 - `docker compose --env-file installation_paths.env ps` will fail if `env/omero_secrets.env` is missing (it is gitignored). Use `docker ps --format "table {{.Names}}\t{{.Status}}"` as a fallback to check container health.
 
+### Sandboxed Docker socket access
+- In this environment, agent-shell Docker commands may fail with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock` even when Docker itself is healthy.
+- Treat that exact error as a sandbox/privilege issue, not as evidence that the Docker daemon, container, or mounted socket is down.
+- If the Docker command is important to the task, rerun the same command immediately with escalated permissions (`sandbox_permissions=require_escalated`). Do not keep retrying the unprivileged form.
+- Apply the same rule to `docker run`, `docker logs`, `docker exec`, `docker inspect`, `docker compose ...`, and similar commands that need daemon access.
+
 ### Sandboxed localhost vs container network
 - Do not assume host-shell `localhost` or published ports are reachable from the coding-agent sandbox. A host-side `curl http://localhost:3100/...` failure is often a path/isolation issue, not evidence that Loki or the target service is down.
 - If a host-side probe to `localhost`, `127.0.0.1`, or a published port fails once, stop repeating it. Switch immediately to the Docker network path by running the probe inside a running container with `docker exec` and the compose service DNS name (for example `http://loki:3100`, `http://omeroserver:4064`, `database:5432`).

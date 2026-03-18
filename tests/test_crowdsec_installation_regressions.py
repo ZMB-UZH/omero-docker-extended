@@ -367,7 +367,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             self.assertFalse(marker_path.exists(), "Helper must clear stale one-shot markers.")
             self.assertFalse(log_path.exists(), "Stopped containers must not be restarted by the helper.")
 
-    def test_installation_arms_first_bootstrap_only_when_no_completed_marker_or_runtime_state_exist(self) -> None:
+    def test_installation_arms_bootstrap_even_when_runtime_state_already_exists(self) -> None:
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -406,10 +406,10 @@ EOF
             self.assertEqual(stdout_lines[0], "before=1,1")
             self.assertIn("CrowdSec runtime state already exists", result.stdout)
             self.assertIn(
-                "No new CrowdSec dashboard enrollment request or install-only auto-restart will be triggered on this run.",
+                "This installation run will still create a fresh CrowdSec dashboard enrollment request and schedule the install-only auto-restart.",
                 result.stdout,
             )
-            self.assertEqual(stdout_lines[-1], "after=0,0")
+            self.assertEqual(stdout_lines[-1], "after=1,1")
 
     def test_installation_reports_existing_crowdsec_runtime_state_in_transcript(self) -> None:
         install_block = self._slice_between(
@@ -444,10 +444,54 @@ EOF
 
             self.assertIn("CrowdSec runtime state already exists", result.stdout)
             self.assertIn(
-                "No new CrowdSec dashboard enrollment request or install-only auto-restart will be triggered on this run.",
+                "This installation run will still create a fresh CrowdSec dashboard enrollment request and schedule the install-only auto-restart.",
                 result.stdout,
             )
-            self.assertIn("flags=0,0", result.stdout)
+            self.assertIn("flags=1,1", result.stdout)
+
+    def test_installation_clears_done_marker_before_rearming_enrollment(self) -> None:
+        install_block = self._slice_between(
+            self.installation_script,
+            "is_crowdsec_enabled() {",
+            "load_installation_paths_env() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            config_dir = tmpdir_path / "crowdsec_config"
+            db_dir = tmpdir_path / "crowdsec_db"
+            marker_path = db_dir / ".console-enrollment-install.done"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            db_dir.mkdir(parents=True, exist_ok=True)
+            marker_path.write_text("done\n", encoding="utf-8")
+
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                CROWDSEC_ENROLL_KEY="real-token"
+                CROWDSEC_CONFIG_PATH="{config_dir}"
+                CROWDSEC_DB_PATH="{db_dir}"
+                CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+                CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
+                {install_block}
+                prepare_crowdsec_install_bootstrap_enrollment
+                printf 'flags=%s,%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}" "${{CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}}"
+                if [ -f "{marker_path}" ]; then
+                    echo "marker=present"
+                else
+                    echo "marker=removed"
+                fi
+                """
+            )
+
+            result = self._run_bash(script)
+
+            self.assertIn(
+                "Removed existing CrowdSec install enrollment marker so this installation run requests dashboard approval again.",
+                result.stdout,
+            )
+            self.assertIn("flags=1,1", result.stdout)
+            self.assertIn("marker=removed", result.stdout)
 
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
