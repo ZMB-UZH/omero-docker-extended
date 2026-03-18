@@ -138,6 +138,7 @@ __all__ = [
     '_open_service_connection',
     '_open_session_connection',
     '_parse_cli_id',
+    '_planned_import_units_for_request',
     '_prepare_job_import_datasets',
     '_process_import_job',
     '_reconnect_session',
@@ -1253,7 +1254,83 @@ def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     return orphan_dataset_name, sorted(set(dataset_names))
 
 
+def _serialize_import_unit_plan(unit: dict):
+    covered_relative_paths = [
+        relative_path
+        for relative_path in (unit.get("covered_relative_paths") or [])
+        if isinstance(relative_path, str) and relative_path
+    ]
+    relative_path = (unit.get("relative_path") or "").strip()
+    dataset_relative_path = (unit.get("dataset_relative_path") or relative_path).strip()
+    if not relative_path or not dataset_relative_path or not covered_relative_paths:
+        return None
+
+    serialized = {
+        "covered_relative_paths": covered_relative_paths,
+        "dataset_relative_path": dataset_relative_path,
+        "relative_path": relative_path,
+    }
+    group_header_name = (unit.get("group_header_name") or "").strip()
+    if group_header_name:
+        serialized["group_header_name"] = group_header_name
+    return serialized
+
+
+def _planned_import_units_for_request(job_dict: dict):
+    raw_units = job_dict.get("planned_import_units") or []
+    if not isinstance(raw_units, list):
+        return []
+
+    active_relative_paths = {
+        (entry.get("relative_path") or "").strip()
+        for entry in (job_dict.get("files") or [])
+        if isinstance(entry, dict)
+        and not entry.get("import_skip")
+        and (entry.get("relative_path") or "").strip()
+    }
+    if not active_relative_paths:
+        return []
+
+    planned_units = []
+    seen_units = set()
+    for raw_unit in raw_units:
+        if not isinstance(raw_unit, dict):
+            continue
+        serialized = _serialize_import_unit_plan(raw_unit)
+        if serialized is None:
+            continue
+        covered_relative_paths = serialized["covered_relative_paths"]
+        if any(relative_path not in active_relative_paths for relative_path in covered_relative_paths):
+            continue
+        unit_key = (
+            serialized["relative_path"],
+            serialized["dataset_relative_path"],
+            tuple(covered_relative_paths),
+            serialized.get("group_header_name", ""),
+        )
+        if unit_key in seen_units:
+            continue
+        seen_units.add(unit_key)
+        planned_units.append(serialized)
+
+    return planned_units
+
+
 def _plan_request_job_dataset_targets(job_dict: dict):
+    planned_units = _planned_import_units_for_request(job_dict)
+    if planned_units:
+        orphan_dataset_name = job_dict.get("orphan_dataset_name")
+        if any(_dataset_name_for_import_entry(unit) is None for unit in planned_units):
+            orphan_dataset_name = orphan_dataset_name or _generate_orphan_dataset_name()
+
+        dataset_names = []
+        for unit in planned_units:
+            dataset_name = _dataset_name_for_import_entry(unit, orphan_dataset_name)
+            if dataset_name:
+                dataset_names.append(dataset_name)
+
+        return orphan_dataset_name, sorted(set(dataset_names))
+
     orphan_dataset_name = job_dict.get("orphan_dataset_name")
     entries = job_dict.get("files") or []
     requires_orphan_dataset = False
@@ -3196,9 +3273,10 @@ def _run_compatibility_check(job_id: str):
     host = job.get("host")
     port = job.get("port")
     upload_root = _get_upload_root() / job_id
-    units_to_check = _build_import_units(job, upload_root, for_compatibility=True)
-    if not units_to_check:
+    planned_units = _build_import_units(job, upload_root, for_compatibility=True)
+    if not planned_units:
         def mark_idle(job_dict):
+            job_dict["planned_import_units"] = []
             job_dict["compatibility_thread_active"] = False
             has_uploaded = any(entry.get("status") == "uploaded" for entry in job_dict.get("files", []))
             if has_uploaded:
@@ -3221,8 +3299,21 @@ def _run_compatibility_check(job_id: str):
         _update_job(job_id, mark_idle)
         return
 
+    serialized_plans = [
+        serialized
+        for serialized in (_serialize_import_unit_plan(unit) for unit in planned_units)
+        if serialized is not None
+    ]
+
+    def persist_plans(job_dict):
+        job_dict["planned_import_units"] = serialized_plans
+        job_dict["updated"] = time.time()
+        return job_dict
+
+    job = _update_job(job_id, persist_plans) or job
+
     batch_size = _resolve_job_batch_size(job)
-    units_to_check = units_to_check[:batch_size]
+    units_to_check = planned_units[:batch_size]
 
     max_workers = min(4, len(units_to_check), os.cpu_count() or 2)
     results = []
@@ -3341,8 +3432,6 @@ def _run_compatibility_check(job_id: str):
         if _should_start_compatibility_check(updated_job):
             _start_compatibility_check_thread(job_id)
             return
-        if updated_job.get("status") == "ready":
-            _start_import_thread(job_id)
 
 
 def _start_compatibility_check_thread(job_id: str):

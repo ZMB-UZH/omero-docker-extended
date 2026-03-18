@@ -4,7 +4,7 @@ Upload plugin views.
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 # Import all helper functions from core_functions
 from .core_functions import *
-from .core_functions import _prepare_request_job_import_datasets
+from .core_functions import _planned_import_units_for_request, _prepare_request_job_import_datasets
 from .utils import require_non_root_user
 
 @login_required()
@@ -271,6 +271,7 @@ def _start_upload(request, conn):
         "incompatible_files": [],
         "compatibility_thread_active": False,
         "compatibility_confirmed": False,
+        "planned_import_units": [],
         "special_upload": special_upload,
         "sem_edx_associations": sem_edx_associations,
         "sem_edx_settings": sem_edx_settings,
@@ -343,7 +344,29 @@ def _load_owned_job(request, conn, job_id, missing_error):
 
 
 def _prepare_ready_job_for_import_start(job_id, job, conn):
+    prepared_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
+    if prep_error:
+        return prepared_job or job, prep_error
+
+    job = prepared_job or job
     if job.get("status") != "ready":
+        return job, None
+
+    return job, None
+
+
+def _prepare_uploaded_job_dataset_targets(job_id, job, conn):
+    if conn is None or _has_pending_uploads(job):
+        return job, None
+
+    if job.get("status") not in ("checking", "awaiting_confirmation", "ready"):
+        return job, None
+
+    if (
+        job.get("compatibility_enabled", True)
+        and job.get("status") in ("checking", "awaiting_confirmation")
+        and not _planned_import_units_for_request(job)
+    ):
         return job, None
 
     prepared_job, prep_error = _prepare_request_job_import_datasets(job_id, job, conn)
@@ -498,6 +521,10 @@ def _handle_chunk_upload(request, job_id, conn, job, job_root):
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state(), status=500)
 
+    updated_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, updated_job, conn)
+    if prep_error:
+        return json_error(prep_error, status=500)
+
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
         logger.info("Upload job %s checking compatibility after chunked upload.", sanitize_log_value(job_id))
@@ -626,6 +653,10 @@ def _upload_files(request, job_id, conn):
     updated_job = _apply_upload_updates(job_id, updates, upload_errors)
     if not updated_job:
         return json_error(errors.unable_update_upload_job_state())
+
+    updated_job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, updated_job, conn)
+    if prep_error:
+        return json_error(prep_error, status=500)
 
     if _should_start_compatibility_check(updated_job):
         _start_compatibility_check_thread(job_id)
@@ -846,6 +877,17 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
     )
     if error_response:
         return error_response
+
+    job, prep_error = _prepare_uploaded_job_dataset_targets(job_id, job, conn)
+    if prep_error:
+        return json_error(prep_error, status=500)
+
+    if job.get("status") == "ready" and not job.get("import_thread_started"):
+        job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
+        if prep_error:
+            return json_error(prep_error, status=500)
+        _start_import_thread(job_id)
+        job = _load_job(job_id) or job
 
     return JsonResponse(
         {

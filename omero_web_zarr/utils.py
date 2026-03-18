@@ -1,4 +1,5 @@
 from django.http import Http404
+import warnings
 import zarr
 
 
@@ -75,7 +76,12 @@ def generate_coordinate_transformations(shapes):
 
 
 def open_compat_array(path, *, mode, shape, chunks, dtype):
-    """Create a v2-compatible array layout under both Zarr 2 and 3 runtimes."""
+    """Create a v2-compatible array layout under both Zarr 2 and 3 runtimes.
+
+    Empty arrays may omit ``.zattrs`` until attributes are written, so the
+    compatibility contract here is the v2 array layout itself, not eager
+    creation of every optional metadata file.
+    """
     kwargs = {
         "mode": mode,
         "shape": shape,
@@ -83,8 +89,14 @@ def open_compat_array(path, *, mode, shape, chunks, dtype):
         "dtype": dtype,
     }
     try:
-        return zarr.open_array(path, zarr_format=2, **kwargs)
-    except TypeError as exc:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error",
+                message=r".*ignoring keyword argument 'zarr_format'.*",
+                category=UserWarning,
+            )
+            return zarr.open_array(path, zarr_format=2, **kwargs)
+    except (TypeError, UserWarning) as exc:
         if "zarr_format" not in str(exc):
             raise
         return zarr.open_array(path, **kwargs)

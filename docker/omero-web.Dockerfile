@@ -161,6 +161,7 @@ COPY omeroweb_upload /tmp/omeroweb_upload
 COPY omeroweb_admin_tools /tmp/omeroweb_admin_tools
 COPY omeroweb_imaris_connector /tmp/omeroweb_imaris_connector
 COPY omero_plugin_common /tmp/omero_plugin_common
+COPY omero_web_zarr /tmp/omero_web_zarr
 COPY docs/help /tmp/omero_plugin_help_docs
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 
@@ -191,14 +192,17 @@ RUN set -euo pipefail; \
         omero-parade \
         "zarr<3" \
         omero-web-zarr; \
+    rm -rf "${SITE_PACKAGES}/omero_web_zarr"; \
+    cp -a /tmp/omero_web_zarr "${SITE_PACKAGES}/omero_web_zarr"; \
     chown -R omero-web:omero-web \
         "${SITE_PACKAGES}/omeroweb_omp_plugin" \
+        "${SITE_PACKAGES}/omero_web_zarr" \
         "${SITE_PACKAGES}/omeroweb_upload" \
         "${SITE_PACKAGES}/omeroweb_admin_tools" \
         "${SITE_PACKAGES}/omeroweb_imaris_connector" \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
-    rm -rf /tmp/omeroweb_omp_plugin /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+    rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_upload /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
 
 # Patch OMERO.web to keep optional top-logo context keys defined when unset.
 # This preserves the documented login-logo path while avoiding noisy debug
@@ -274,6 +278,16 @@ RUN set -euo pipefail; \
         source \"${VENV_DIR}/bin/activate\" && \
         omero web syncmedia \
     "
+
+# Force the repo-tracked Vizarr static assets into the final collected tree.
+# syncmedia can otherwise retain an older upstream copy when the destination
+# already contains the same relative path from the base image.
+RUN set -euo pipefail; \
+    VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
+    PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    SITE_PACKAGES="${VENV_DIR}/lib/python${PY_VER}/site-packages"; \
+    cp -a "${SITE_PACKAGES}/omero_web_zarr/static/omero_web_zarr/." /opt/omero/web/OMERO.web/var/static/omero_web_zarr/; \
+    chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var/static/omero_web_zarr
 
 # Backup static files so they can be restored if the host bind-mount shadows var/
 # -------------------------------------------------------------------------------

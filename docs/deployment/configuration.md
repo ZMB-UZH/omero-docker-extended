@@ -8,7 +8,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 
 - `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions.
 - `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
-- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When `logo/logo.png` exists in the repository, the `omeroweb` image build copies it into that static path.
+- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When `logo/logo.png` exists in the repository, the `omeroweb` image build copies it into that static path, and OMERO.web startup re-synchronizes the mounted `var/static/` tree from the image so existing installations also receive updated branding and plugin static assets.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
