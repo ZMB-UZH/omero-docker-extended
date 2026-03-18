@@ -48,6 +48,7 @@ CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DEL
 CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS:-900}"
 CROWDSEC_INSTALL_AUTO_RESTART_HELPER="${SCRIPT_DIR}/crowdsec_install_auto_restart.sh"
 CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
 
 set -euo pipefail
 
@@ -91,6 +92,11 @@ crowdsec_install_auto_restart_marker_path() {
 }
 
 
+crowdsec_install_enrollment_done_marker_path() {
+    printf '%s' "${CROWDSEC_DB_PATH%/}/.console-enrollment-install.done"
+}
+
+
 crowdsec_has_persisted_console_credentials() {
     local credentials_path
     credentials_path="$(crowdsec_console_credentials_path)"
@@ -98,10 +104,32 @@ crowdsec_has_persisted_console_credentials() {
 }
 
 
-mark_crowdsec_install_auto_restart_requirement() {
-    CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+crowdsec_has_install_enrollment_done_marker() {
+    [ -f "$(crowdsec_install_enrollment_done_marker_path)" ]
+}
 
-    if ! is_crowdsec_enabled; then
+
+persist_crowdsec_install_enrollment_done_marker_if_needed() {
+    local marker_path=""
+
+    if crowdsec_has_install_enrollment_done_marker; then
+        return 0
+    fi
+
+    if ! crowdsec_has_persisted_console_credentials; then
+        return 0
+    fi
+
+    marker_path="$(crowdsec_install_enrollment_done_marker_path)"
+    mkdir -p "$(dirname "${marker_path}")"
+    : > "${marker_path}"
+    chmod 0600 "${marker_path}" 2>/dev/null || true
+    return 0
+}
+
+
+crowdsec_install_enrollment_completed() {
+    if crowdsec_has_install_enrollment_done_marker; then
         return 0
     fi
 
@@ -109,7 +137,26 @@ mark_crowdsec_install_auto_restart_requirement() {
         return 0
     fi
 
+    return 1
+}
+
+
+prepare_crowdsec_install_bootstrap_enrollment() {
+    CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+    CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
+
+    if ! is_crowdsec_enabled; then
+        return 0
+    fi
+
+    persist_crowdsec_install_enrollment_done_marker_if_needed
+
+    if crowdsec_install_enrollment_completed; then
+        return 0
+    fi
+
     CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=1
+    CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=1
     return 0
 }
 
@@ -669,6 +716,8 @@ print_crowdsec_install_enrollment_notice() {
     echo "============================================================"
     echo "Approve the new CrowdSec engine in the CrowdSec dashboard"
     echo "within the next ${window_minutes} minute(s)."
+    echo "This enrollment request is created only during first"
+    echo "installation startup, not on ordinary CrowdSec restarts."
     echo "A one-time automatic restart of the 'crowdsec' container has"
     echo "been scheduled for this installation run only."
     if [ "${remaining_delay_seconds}" -eq 0 ]; then
@@ -719,8 +768,6 @@ container_name=crowdsec
 EOF
     chmod 0600 "${marker_path}" || true
 
-    print_crowdsec_install_enrollment_notice "${remaining_delay_seconds}"
-
     nohup env \
         CROWDSEC_AUTO_RESTART_MARKER="${marker_path}" \
         CROWDSEC_AUTO_RESTART_DELAY_SECONDS="${remaining_delay_seconds}" \
@@ -734,11 +781,12 @@ EOF
 compose_up_with_retries() {
     local compose_file="$1"
     local attempt=1
+    local crowdsec_bootstrap_enroll="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"
 
     while [ "${attempt}" -le "${COMPOSE_UP_RETRIES}" ]; do
         echo "Starting containers (attempt ${attempt}/${COMPOSE_UP_RETRIES})..."
 
-        if compose_with_installation_env "${compose_file}" up -d; then
+        if CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env "${compose_file}" up -d; then
             echo "Containers started successfully."
             return 0
         fi
@@ -3746,9 +3794,13 @@ install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
 
-mark_crowdsec_install_auto_restart_requirement
+prepare_crowdsec_install_bootstrap_enrollment
 
 if [ "${START_CONTAINERS}" -eq 1 ]; then
+    if [ "${CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}" = "1" ]; then
+        print_crowdsec_install_enrollment_notice "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"
+    fi
+
     repo_root_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
     schedule_crowdsec_install_auto_restart

@@ -272,10 +272,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"', script_text)
-        self.assertIn("crowdsec_has_persisted_console_credentials()", script_text)
+        self.assertIn("prepare_crowdsec_install_bootstrap_enrollment()", script_text)
+        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env', script_text)
         self.assertIn("schedule_crowdsec_install_auto_restart()", script_text)
         self.assertIn("CrowdSec Console Approval Required", script_text)
-        self.assertIn("Leaving the existing one-shot schedule in place", script_text)
+        self.assertIn("This enrollment request is created only during first", script_text)
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
     def test_crowdsec_restart_helper_is_single_shot(self) -> None:
@@ -286,14 +287,19 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('docker restart "${container_name}"', helper_text)
         self.assertNotIn("while ", helper_text)
 
-    def test_crowdsec_entrypoint_enrolls_only_without_persisted_credentials(self) -> None:
+    def test_crowdsec_entrypoint_enrolls_only_when_install_bootstrap_is_armed(self) -> None:
         entrypoint_text = (self.repo_root / "docker" / "crowdsec-entrypoint.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn('CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"', entrypoint_text)
-        self.assertIn("crowdsec_has_console_credentials()", entrypoint_text)
-        self.assertIn("CrowdSec Console credentials already exist. Skipping console enrollment.", entrypoint_text)
-        self.assertNotIn("--overwrite", entrypoint_text)
+        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"', entrypoint_text)
+        self.assertIn("crowdsec_install_enrollment_done_marker_path()", entrypoint_text)
+        self.assertIn("CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment.", entrypoint_text)
+        self.assertIn("--overwrite", entrypoint_text)
+
+    def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(self) -> None:
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL: "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"', compose_text)
 
 
 if __name__ == "__main__":
