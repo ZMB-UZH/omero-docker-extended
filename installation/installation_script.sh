@@ -44,6 +44,10 @@ LOKI_IMAGE="${LOKI_IMAGE:-}"
 DATABASE_IMAGE="${DATABASE_IMAGE:-}"
 DATABASE_PLUGIN_IMAGE="${DATABASE_PLUGIN_IMAGE:-}"
 CROWDSEC_IMAGE="${CROWDSEC_IMAGE:-crowdsec:custom}"
+CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"
+CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS:-900}"
+CROWDSEC_INSTALL_AUTO_RESTART_HELPER="${SCRIPT_DIR}/crowdsec_install_auto_restart.sh"
+CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
 
 set -euo pipefail
 
@@ -74,6 +78,39 @@ fi
 is_crowdsec_enabled() {
     local key="${CROWDSEC_ENROLL_KEY:-}"
     [[ -n "${key}" && "${key}" != "CHANGEVALUE2" && "${key}" != "CHANGEVALUE3" ]]
+}
+
+
+crowdsec_console_credentials_path() {
+    printf '%s' "${CROWDSEC_CONFIG_PATH%/}/online_api_credentials.yaml"
+}
+
+
+crowdsec_install_auto_restart_marker_path() {
+    printf '%s' "${CROWDSEC_DB_PATH%/}/.install-auto-restart.pending"
+}
+
+
+crowdsec_has_persisted_console_credentials() {
+    local credentials_path
+    credentials_path="$(crowdsec_console_credentials_path)"
+    [ -s "${credentials_path}" ]
+}
+
+
+mark_crowdsec_install_auto_restart_requirement() {
+    CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
+
+    if ! is_crowdsec_enabled; then
+        return 0
+    fi
+
+    if crowdsec_has_persisted_console_credentials; then
+        return 0
+    fi
+
+    CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=1
+    return 0
 }
 
 
@@ -226,6 +263,20 @@ validate_retry_config() {
 
     if ! [[ "${COMPOSE_UP_RETRY_DELAY_SECONDS}" =~ ^[0-9]+$ ]]; then
         echo "ERROR: COMPOSE_UP_RETRY_DELAY_SECONDS must be an integer >= 0. Got: ${COMPOSE_UP_RETRY_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+validate_crowdsec_install_auto_restart_config() {
+    if ! [[ "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" =~ ^[0-9]+$ ]] || [ "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" -lt 0 ]; then
+        echo "ERROR: CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS must be an integer >= 0. Got: ${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" >&2
+        return 1
+    fi
+
+    if ! [[ "${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" =~ ^[0-9]+$ ]] || [ "${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" -lt 0 ]; then
+        echo "ERROR: CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS must be an integer >= 0. Got: ${CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS}" >&2
         return 1
     fi
 
@@ -544,6 +595,140 @@ print_compose_failure_context() {
         compose_with_installation_env "${compose_file}" logs --tail 120 "${service_name}" >&2 || true
         echo "----- END LOGS: ${service_name} -----" >&2
     done <<< "${failed_services}"
+}
+
+remove_stale_crowdsec_install_auto_restart_marker() {
+    local marker_path="${1:?BUG: remove_stale_crowdsec_install_auto_restart_marker requires a path}"
+    local target_epoch=""
+    local now_epoch=""
+
+    if [ ! -f "${marker_path}" ]; then
+        return 0
+    fi
+
+    target_epoch="$(awk -F= '/^target_epoch=/{print $2; exit}' "${marker_path}" 2>/dev/null || true)"
+    if ! [[ "${target_epoch}" =~ ^[0-9]+$ ]]; then
+        rm -f "${marker_path}" || true
+        return 0
+    fi
+
+    now_epoch="$(date -u +%s)"
+    if [ "${now_epoch}" -gt $((target_epoch + CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS)) ]; then
+        rm -f "${marker_path}" || true
+    fi
+
+    return 0
+}
+
+resolve_crowdsec_install_auto_restart_remaining_delay() {
+    local total_delay_seconds="${1:?BUG: resolve_crowdsec_install_auto_restart_remaining_delay requires total delay}"
+    local container_name="${2:-crowdsec}"
+    local started_at=""
+    local start_epoch=""
+    local now_epoch=""
+    local elapsed_seconds=0
+    local remaining_delay_seconds="${total_delay_seconds}"
+
+    started_at="$(docker inspect --format '{{.State.StartedAt}}' "${container_name}" 2>/dev/null || true)"
+    if [ -z "${started_at}" ]; then
+        printf '%s' "${remaining_delay_seconds}"
+        return 0
+    fi
+
+    start_epoch="$(date -u -d "${started_at}" +%s 2>/dev/null || true)"
+    now_epoch="$(date -u +%s)"
+    if ! [[ "${start_epoch}" =~ ^[0-9]+$ ]] || [ "${start_epoch}" -gt "${now_epoch}" ]; then
+        printf '%s' "${remaining_delay_seconds}"
+        return 0
+    fi
+
+    elapsed_seconds=$((now_epoch - start_epoch))
+    if [ "${elapsed_seconds}" -ge "${total_delay_seconds}" ]; then
+        printf '0'
+        return 0
+    fi
+
+    remaining_delay_seconds=$((total_delay_seconds - elapsed_seconds))
+    printf '%s' "${remaining_delay_seconds}"
+    return 0
+}
+
+print_crowdsec_install_enrollment_notice() {
+    local remaining_delay_seconds="${1:?BUG: print_crowdsec_install_enrollment_notice requires delay}"
+    local window_minutes=0
+
+    if [ "${remaining_delay_seconds}" -eq 0 ]; then
+        window_minutes=0
+    else
+        window_minutes=$(((remaining_delay_seconds + 59) / 60))
+    fi
+
+    echo ""
+    echo "============================================================"
+    echo "CrowdSec Console Approval Required"
+    echo "============================================================"
+    echo "Approve the new CrowdSec engine in the CrowdSec dashboard"
+    echo "within the next ${window_minutes} minute(s)."
+    echo "A one-time automatic restart of the 'crowdsec' container has"
+    echo "been scheduled for this installation run only."
+    if [ "${remaining_delay_seconds}" -eq 0 ]; then
+        echo "The 10-minute approval window has already elapsed, so the"
+        echo "automatic restart will run immediately."
+    else
+        echo "The restart will run about ${window_minutes} minute(s) after"
+        echo "CrowdSec first started during this installation."
+    fi
+    echo "If approval happens after that window, restart 'crowdsec'"
+    echo "manually once."
+    echo "============================================================"
+    echo ""
+}
+
+schedule_crowdsec_install_auto_restart() {
+    local helper_path="${CROWDSEC_INSTALL_AUTO_RESTART_HELPER}"
+    local marker_path=""
+    local remaining_delay_seconds="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"
+    local scheduled_epoch=""
+    local target_epoch=""
+
+    if [ "${CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}" != "1" ]; then
+        return 0
+    fi
+
+    if [ ! -x "${helper_path}" ]; then
+        echo "WARNING: CrowdSec install auto-restart helper is missing or not executable: ${helper_path}" >&2
+        return 0
+    fi
+
+    marker_path="$(crowdsec_install_auto_restart_marker_path)"
+    remove_stale_crowdsec_install_auto_restart_marker "${marker_path}"
+
+    if [ -f "${marker_path}" ]; then
+        echo "CrowdSec install-only auto-restart is already scheduled. Leaving the existing one-shot schedule in place."
+        return 0
+    fi
+
+    remaining_delay_seconds="$(resolve_crowdsec_install_auto_restart_remaining_delay "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}" "crowdsec")"
+    scheduled_epoch="$(date -u +%s)"
+    target_epoch=$((scheduled_epoch + remaining_delay_seconds))
+
+    cat > "${marker_path}" <<EOF
+scheduled_epoch=${scheduled_epoch}
+target_epoch=${target_epoch}
+container_name=crowdsec
+EOF
+    chmod 0600 "${marker_path}" || true
+
+    print_crowdsec_install_enrollment_notice "${remaining_delay_seconds}"
+
+    nohup env \
+        CROWDSEC_AUTO_RESTART_MARKER="${marker_path}" \
+        CROWDSEC_AUTO_RESTART_DELAY_SECONDS="${remaining_delay_seconds}" \
+        CROWDSEC_AUTO_RESTART_CONTAINER_NAME="crowdsec" \
+        bash "${helper_path}" >/dev/null 2>&1 &
+
+    echo "Scheduled one-time CrowdSec install auto-restart in ${remaining_delay_seconds}s."
+    return 0
 }
 
 compose_up_with_retries() {
@@ -2216,6 +2401,10 @@ if ! validate_retry_config; then
     exit 1
 fi
 
+if ! validate_crowdsec_install_auto_restart_config; then
+    exit 1
+fi
+
 if [ -n "${OMERO_SERVER_UID}" ]; then
     if ! validate_numeric_id "OMERO_SERVER_UID" "${OMERO_SERVER_UID}"; then exit 1; fi
 fi
@@ -3557,9 +3746,12 @@ install_tmp_cleaner_if_available "${OMERO_TMP_PATH}" || true
 echo "================================================"
 echo ""
 
+mark_crowdsec_install_auto_restart_requirement
+
 if [ "${START_CONTAINERS}" -eq 1 ]; then
     repo_root_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
+    schedule_crowdsec_install_auto_restart
 
     if ! create_omero_groups_from_list "${COMPOSE_FILE}" "${OMERO_INSTALL_GROUP_LIST:-}"; then
         exit 1
