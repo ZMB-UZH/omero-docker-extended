@@ -78,6 +78,23 @@ Quota helper:
   - sets `.admin-tools` and `.admin-tools/quota` to `0777`,
   - sets `group-quotas.json` to `0666` so host root and non-root `omeroweb` can both update quota state.
 
+Managed-repository shared-prefix bridge:
+- `startup/10-server-bootstrap.sh`
+  - derives the managed-repository path prefixes that appear before `%user%`,
+  - seeds its group list from both live OMERO group discovery and `OMERO_INSTALL_GROUP_LIST`,
+  - creates missing shared prefixes with `omero fs mkdir --parents`,
+  - reassigns those shared prefix directory objects to `root`,
+  - repeats the same repair in the background on
+    `OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS`,
+  - writes the latest cycle status to
+    `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`.
+
+Installer readiness gate:
+- `installation/installation_script.sh`
+  - waits for a successful current-cycle
+    `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`
+    before reporting startup success when the repository template contains `%group%`.
+
 ### `OMERO_SERVER_VAR_PATH`
 
 Intent:
@@ -172,6 +189,25 @@ Host-side installer:
 - `installation/installation_script.sh`
   - recursively re-owns these paths using detected image UIDs/GIDs such as `PROMETHEUS_UID`, `GRAFANA_UID`, and `LOKI_UID`.
 
+### Installation transcript path
+
+Path:
+- `${OMERO_DATA_PATH}/installation_logs`
+
+Intent:
+- root-owned archive of the exact visible terminal session from
+  `github_pull_project_bash`,
+  `github_pull_private_project_bash`,
+  and `installation/installation_script.sh`.
+
+Host-side installer / pull helpers:
+- `installation/install_transcript_utils.sh`
+  - starts transcript capture before clone/update output begins,
+  - finalizes the destination only after `installation_paths.env` resolves
+    `OMERO_DATA_PATH`,
+  - creates `${OMERO_DATA_PATH}/installation_logs` with mode `0700`,
+  - writes transcript files with mode `0600`.
+
 ### CrowdSec paths
 
 Paths:
@@ -222,7 +258,10 @@ Behavior:
 - preserve runtime files and data paths derived from `installation_paths.env`,
 - protect `installation_paths.env` and runtime env files from overwrite,
 - create/update a temporary clone,
-- execute the installation script afterward.
+- execute the installation script afterward,
+- save the exact visible terminal session to
+  `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log`
+  when the run ends.
 
 Important:
 - these scripts do not directly normalize host bind-mount ownership.
@@ -281,6 +320,19 @@ Relevant files:
 - `scripts/install-quota-enforcer.sh`
 - `startup/10-web-bootstrap.sh`
 
+### Symptom: uploads fail with `No annotate access for parent directory`
+
+Likely cause:
+- the shared managed-repository prefix for a group (for example `users_private`)
+  already exists in OMERO metadata but is still owned by a different user.
+- the recurring repo-root sync has not run successfully yet, or an older
+  deployment still has one-shot bootstrap behavior.
+
+Relevant files:
+- `startup/10-server-bootstrap.sh`
+- `installation/installation_script.sh`
+- `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`
+
 ## 7. Audit Checklist
 
 When debugging permission faults, check in this order:
@@ -296,7 +348,10 @@ When debugging permission faults, check in this order:
    - plugin temp subtrees such as `omeroweb-upload`,
    - any stale `omero_<user>` lock namespaces.
 6. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
-7. Re-check logs through the Admin Tools/Loki path after repair, not only raw container logs.
+7. For managed-repository import failures, inspect
+   `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status` before assuming the latest
+   startup actually normalized the shared prefix.
+8. Re-check logs through the Admin Tools/Loki path after repair, not only raw container logs.
 
 ## 8. Related Documents
 

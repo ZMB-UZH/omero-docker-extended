@@ -334,9 +334,26 @@ Expected result:
 
 Next step:
 
-- Restart `omeroserver` after deploying the repository patch from this repo.
+- Deploy the current repository patch and restart `omeroserver`.
 - `startup/10-server-bootstrap.sh` now auto-normalizes the shared managed-repository prefixes before `%user%` by discovering OMERO groups, creating any missing shared prefix directories, and reassigning their OMERO ownership metadata to `root`.
 - The repair is non-destructive: it does not change the configured repository template and does not delete repository payload files.
+- The repair is no longer one-shot. A background sync loop continues running on `OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS` and writes its latest result to `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`.
+- `installation/installation_script.sh` now waits for a successful current-cycle `repo-root-sync.status` before it reports startup success, so new installs and updates do not finish before the shared group prefixes are normalized.
+
+Validation:
+
+```bash
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroserver \
+  cat /opt/omero/server/OMERO.server/var/repo-root-sync.status
+
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroserver \
+  | rg 'repo-root-bootstrap|normalized_prefix_count|failed_prefix_count'
+```
+
+Expected result:
+
+- `repo-root-sync.status` reports `status=ok` with a recent `last_success_epoch`.
+- The server logs show the shared-prefix normalization cycle completing without failures for the affected group.
 
 ## 15. `omeroserver` restart loop with `ERROR: OMERO_TMP_PATH is required for server bootstrap temp files but is not set.`
 
@@ -396,3 +413,44 @@ Expected result:
 - Bootstrap continues successfully using `${OMERO_TMP_PATH}/${OMERO_CLI_USER}/tmp` as `TMPDIR`.
 - If ownership/permissions are corrected, the legacy warning disappears.
 - Current installer/bootstrap logic also reclaims stale `${OMERO_TMP_PATH}/omero-server/tmp/omero_omero-server` lock namespaces so repeated `github_pull...` reinstall runs do not reintroduce `PermissionError` on `.lock` files.
+
+## 17. Host-side `pytest` fails with `ModuleNotFoundError: No module named 'django'`
+
+Symptom:
+
+- `python3 -m pytest ...` fails immediately while loading `/opt/omero/conftest.py`.
+- The traceback includes:
+  - `ImportError while loading conftest '/opt/omero/conftest.py'`
+  - `ModuleNotFoundError: No module named 'django'`
+
+Cause:
+
+- The host interpreter does not include the OMERO.web test/runtime dependencies.
+- Repository-level `conftest.py` imports Django during collection, so repeating the same host-side `pytest` command will keep failing until you switch environments.
+
+Fix:
+
+1. Prefer the OMERO.web runtime interpreter for full pytest runs.
+2. If a test module is intentionally self-contained, run it directly with `python3 <path-to-test>.py` so it bypasses repository `conftest.py`.
+3. For in-container pytest, unset deprecated `OMERO_TEMPDIR` and set `OMERO_TMPDIR` plus `TMPDIR` to a writable temp path before collecting tests.
+
+Example full-runtime pattern:
+
+```bash
+docker exec -i omero-omeroweb-1 bash -lc '
+  unset OMERO_TEMPDIR
+  export OMERO_TMPDIR=/tmp/omero-web-pytest
+  export TMPDIR=/tmp/omero-web-pytest
+  mkdir -p "$OMERO_TMPDIR"
+  chown omero-web:omero-web "$OMERO_TMPDIR"
+  su omero-web -s /bin/bash -c "
+    cd /opt/omero &&
+    /opt/omero/web/venv-3.12/bin/python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
+  "
+'
+```
+
+Expected result:
+
+- Pytest collects with the runtime environment that already has Django installed.
+- If you still need a quick targeted regression check outside that environment, direct-module execution remains valid for self-contained tests only.

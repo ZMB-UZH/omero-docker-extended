@@ -92,7 +92,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('path_list="$(collect_repo_root_bootstrap_paths)"', script_text)
         self.assertIn('run_omero fs mkdir --parents "${repo_dir_path}"', script_text)
         self.assertIn('run_omero chown root "OriginalFile:${root_dir_id}" --force', script_text)
-        self.assertIn("schedule_repo_root_bootstrap", script_text)
+        self.assertIn('REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"', script_text)
+        self.assertIn("write_repo_root_sync_status()", script_text)
+        self.assertIn("run_repo_root_bootstrap_once()", script_text)
+        self.assertIn("schedule_repo_root_sync()", script_text)
+        self.assertIn("validate_repo_root_sync_configuration()", script_text)
 
     def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
@@ -100,6 +104,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('venv_py="$(resolve_server_venv_python)"', script_text)
         self.assertIn('resolve_cli_home()', script_text)
+        self.assertIn('chown "${OMERO_CLI_USER}" "${lookup_py}"', script_text)
+        self.assertIn('chmod 0600 "${lookup_py}"', script_text)
         self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"', script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
@@ -175,6 +181,30 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"', script_text)
         self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"', script_text)
         self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
+
+    def test_pull_scripts_enable_transcript_capture(self) -> None:
+        public_text = (self.repo_root / "github_pull_project_bash_example").read_text(
+            encoding="utf-8"
+        )
+        private_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', public_text)
+        self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', public_text)
+        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', private_text)
+        self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', private_text)
+
+    def test_installation_script_publishes_transcript_destination_after_path_resolution(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"', script_text)
+        self.assertIn('install_transcript_enable "${REPO_ROOT_DIR}/installation_paths.env" "$0" "$@"', script_text)
+        self.assertIn('install_transcript_publish_final_path_if_needed \\', script_text)
+        self.assertIn('tty_echo()', script_text)
+        self.assertIn('tty_read_line()', script_text)
 
     def test_public_pull_script_defaults_to_public_repo(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
