@@ -49,6 +49,7 @@ CROWDSEC_INSTALL_AUTO_RESTART_STALE_GRACE_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTA
 CROWDSEC_INSTALL_AUTO_RESTART_HELPER="${SCRIPT_DIR}/crowdsec_install_auto_restart.sh"
 CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
+CROWDSEC_INSTALL_BOOTSTRAP_STATUS=""
 
 set -euo pipefail
 
@@ -82,11 +83,6 @@ is_crowdsec_enabled() {
 }
 
 
-crowdsec_console_credentials_path() {
-    printf '%s' "${CROWDSEC_CONFIG_PATH%/}/online_api_credentials.yaml"
-}
-
-
 crowdsec_install_auto_restart_marker_path() {
     printf '%s' "${CROWDSEC_DB_PATH%/}/.install-auto-restart.pending"
 }
@@ -97,43 +93,37 @@ crowdsec_install_enrollment_done_marker_path() {
 }
 
 
-crowdsec_has_persisted_console_credentials() {
-    local credentials_path
-    credentials_path="$(crowdsec_console_credentials_path)"
-    [ -s "${credentials_path}" ]
-}
-
-
 crowdsec_has_install_enrollment_done_marker() {
     [ -f "$(crowdsec_install_enrollment_done_marker_path)" ]
 }
 
 
-persist_crowdsec_install_enrollment_done_marker_if_needed() {
-    local marker_path=""
+crowdsec_directory_has_runtime_state() {
+    local directory_path="${1:?BUG: crowdsec_directory_has_runtime_state requires a path}"
 
-    if crowdsec_has_install_enrollment_done_marker; then
+    if [ ! -d "${directory_path}" ]; then
+        return 1
+    fi
+
+    if find "${directory_path}" \
+        -mindepth 1 \
+        -maxdepth 1 \
+        ! -name '.console-enrollment-install.done' \
+        ! -name '.install-auto-restart.pending' \
+        -print -quit | grep -q .; then
         return 0
     fi
 
-    if ! crowdsec_has_persisted_console_credentials; then
-        return 0
-    fi
-
-    marker_path="$(crowdsec_install_enrollment_done_marker_path)"
-    mkdir -p "$(dirname "${marker_path}")"
-    : > "${marker_path}"
-    chmod 0600 "${marker_path}" 2>/dev/null || true
-    return 0
+    return 1
 }
 
 
-crowdsec_install_enrollment_completed() {
-    if crowdsec_has_install_enrollment_done_marker; then
+crowdsec_has_preexisting_runtime_state() {
+    if crowdsec_directory_has_runtime_state "${CROWDSEC_CONFIG_PATH}"; then
         return 0
     fi
 
-    if crowdsec_has_persisted_console_credentials; then
+    if crowdsec_directory_has_runtime_state "${CROWDSEC_DB_PATH}"; then
         return 0
     fi
 
@@ -144,19 +134,29 @@ crowdsec_install_enrollment_completed() {
 prepare_crowdsec_install_bootstrap_enrollment() {
     CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
     CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
+    CROWDSEC_INSTALL_BOOTSTRAP_STATUS="disabled"
 
     if ! is_crowdsec_enabled; then
         return 0
     fi
 
-    persist_crowdsec_install_enrollment_done_marker_if_needed
+    if crowdsec_has_install_enrollment_done_marker; then
+        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="already_completed"
+        echo "CrowdSec install enrollment already completed ($(crowdsec_install_enrollment_done_marker_path) exists)."
+        echo "Skipping CrowdSec dashboard enrollment and install-only auto-restart for this run."
+        return 0
+    fi
 
-    if crowdsec_install_enrollment_completed; then
+    if crowdsec_has_preexisting_runtime_state; then
+        CROWDSEC_INSTALL_BOOTSTRAP_STATUS="existing_runtime_state"
+        echo "CrowdSec runtime state already exists under ${CROWDSEC_CONFIG_PATH} and/or ${CROWDSEC_DB_PATH}."
+        echo "No new CrowdSec dashboard enrollment request or install-only auto-restart will be triggered on this run."
         return 0
     fi
 
     CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=1
     CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=1
+    CROWDSEC_INSTALL_BOOTSTRAP_STATUS="fresh_install"
     return 0
 }
 
