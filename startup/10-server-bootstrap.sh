@@ -1121,12 +1121,14 @@ run_repo_root_bootstrap_once() {
     local root_pass="$1"
     local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
     local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+    local lookup_retry_limit=5
     local attempt=1
     local login_ok=0
     local path_list=""
     local repo_dir_path=""
     local -a repo_root_groups=()
     local lookup_output=""
+    local lookup_attempt=1
     local root_dir_id=""
     local root_dir_owner=""
     local venv_py=""
@@ -1223,11 +1225,24 @@ PY
         [[ -n "${repo_dir_path}" ]] || continue
         inspected_prefix_count=$((inspected_prefix_count + 1))
         echo "[$(date -u)] INFO: ensuring managed-repository shared prefix ${repo_dir_path}"
-        run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
+        lookup_output=""
 
-        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+        # Retry the exact same OMERO mkdir+lookup flow a few times because the
+        # new shared-prefix row is not always queryable immediately.
+        for lookup_attempt in $(seq 1 "${lookup_retry_limit}"); do
+            run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
+            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+            if [[ "${lookup_output}" == FOUND\|* ]]; then
+                break
+            fi
+
+            if [[ "${lookup_attempt}" -lt "${lookup_retry_limit}" ]]; then
+                sleep "${retry_delay_seconds}"
+            fi
+        done
+
         if [[ "${lookup_output}" == MISSING* ]]; then
-            echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir"
+            echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir retries"
             failed_prefix_count=$((failed_prefix_count + 1))
             continue
         fi
@@ -1239,6 +1254,7 @@ PY
         fi
 
         IFS='|' read -r _found_marker root_dir_id root_dir_owner <<< "${lookup_output}"
+
         echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner}"
 
         if [[ "${root_dir_owner}" == "root" ]]; then

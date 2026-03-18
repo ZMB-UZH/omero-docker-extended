@@ -109,6 +109,88 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
             self._run_bash(script)
 
+    def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "run_repo_root_bootstrap_once() {",
+            "schedule_repo_root_sync() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            status_file = Path(tmpdir) / "repo-root-sync.status"
+            lookup_state_file = Path(tmpdir) / "lookup-count"
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                TMPDIR="{tmpdir}"
+                OMERO_CLI_USER=omero-server
+                OMERO_REPO_ROOT_BOOTSTRAP_RETRIES=1
+                OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS=0
+                printf '0\\n' > "{lookup_state_file}"
+
+                run_omero() {{
+                    if [[ "${{1}}" == "-C" ]]; then
+                        return 0
+                    fi
+                    if [[ "${{1}}" == "fs" && "${{2}}" == "mkdir" ]]; then
+                        return 0
+                    fi
+                    if [[ "${{1}}" == "chown" ]]; then
+                        return 0
+                    fi
+                    echo "unexpected run_omero call: $*" >&2
+                    return 1
+                }}
+
+                list_repo_root_bootstrap_groups() {{
+                    printf '%s\\n' users_ldap
+                }}
+
+                collect_repo_root_bootstrap_paths() {{
+                    printf '%s\\n' users_ldap
+                }}
+
+                resolve_server_venv_python() {{
+                    printf '%s\\n' /bin/true
+                }}
+
+                resolve_cli_home() {{
+                    printf '%s\\n' /tmp
+                }}
+
+                write_repo_root_sync_status() {{
+                    printf 'status=%s\\nlast_success_epoch=%s\\ninspected_prefix_count=%s\\nnormalized_prefix_count=%s\\nfailed_prefix_count=%s\\n' \
+                        "$1" "$2" "$3" "$4" "$5" > "{status_file}"
+                }}
+
+                runuser() {{
+                    local lookup_calls
+                    lookup_calls="$(cat "{lookup_state_file}")"
+                    lookup_calls=$((lookup_calls + 1))
+                    printf '%s\\n' "${{lookup_calls}}" > "{lookup_state_file}"
+                    if [[ "${{lookup_calls}}" -eq 1 ]]; then
+                        printf '%s\\n' MISSING
+                        return 0
+                    fi
+                    printf '%s\\n' FOUND\\|42\\|root
+                }}
+
+                chown() {{ :; }}
+                chmod() {{ :; }}
+
+                {function_text}
+                run_repo_root_bootstrap_once secret
+                printf 'lookup_calls=%s\\n' "$(cat "{lookup_state_file}")"
+                cat "{status_file}"
+                """
+            )
+
+            result = self._run_bash(script)
+
+        self.assertIn("lookup_calls=2", result.stdout)
+        self.assertIn("status=ok", result.stdout)
+        self.assertIn("failed_prefix_count=0", result.stdout)
+
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", "-lc", script],

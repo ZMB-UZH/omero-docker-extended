@@ -3,6 +3,7 @@
 Catalog of design documents capturing architectural decisions and operating principles.
 
 - `core-beliefs.md` -- agent-first and repository-legibility operating principles. Defines the foundational rules for knowledge management, configuration, versioning, and documentation structure.
+- `acquisition-metadata-search-options.md` -- feasibility study and three implementation paths for making OMERO.web acquisition metadata searchable.
 
 When adding a new design document:
 1. Create the file in `docs/design-docs/`.
