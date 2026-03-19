@@ -91,7 +91,7 @@ Filename parsing and metadata annotation workflow:
 - Rate limiting: 6 major actions per 60 seconds per user.
 - Database: stores variable sets, AI credentials, user settings in the OMERO plugin database (`database_plugin`) via psycopg2.
 
-### Upload Plugin (`omeroweb_upload`)
+### Upload Plugin (`omeroweb_import`)
 
 Staged file upload and OMERO import:
 - Job lifecycle: start session, transfer files, CLI import with batching, confirm, prune.
