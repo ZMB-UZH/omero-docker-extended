@@ -2287,11 +2287,19 @@ def _create_dataset_via_cli(
     name: str,
     project_id: Optional[int] = None,
 ) -> Optional[int]:
-    """Create a Dataset in OMERO using the CLI and the user's session key.
+    """Create a Dataset in OMERO using the job-service account.
+
+    Uses the service account instead of the user's session key because
+    the omero CLI destroys joined sessions on exit.
 
     Returns the dataset ID on success, or ``None`` on failure.
     """
-    cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+    service_user, service_pass, _, _ = _get_job_service_credentials()
+    if not service_pass:
+        logger.warning("Cannot create dataset via CLI: job-service password not configured")
+        return None
+    cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
+           "-s", host, "-p", str(port),
            "obj", "new", "Dataset", f"name={name}"]
     env = _build_cli_env()
     try:
@@ -2308,8 +2316,8 @@ def _create_dataset_via_cli(
         # Output: "DatasetI:1234"
         ds_id = _parse_cli_id(result.stdout, "Dataset")
         if ds_id is not None and project_id is not None:
-            # Link dataset to project
-            link_cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+            link_cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
+                        "-s", host, "-p", str(port),
                         "obj", "new", "ProjectDatasetLink",
                         f"parent=Project:{project_id}",
                         f"child=Dataset:{ds_id}"]
@@ -3969,8 +3977,13 @@ def _import_zarr_via_cli(
         }
 
     # --- Run omero zarr import ---------------------------------------------
-    # Login arguments (-k, -s, -p) must precede the "zarr" subcommand.
-    cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+    # Use the job-service account instead of the user's session key.
+    # The omero CLI destroys the joined session on exit, which would
+    # kill the user's web login.  The job-service account creates its
+    # own disposable session.
+    service_user, service_pass, _, _ = _get_job_service_credentials()
+    cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
+           "-s", host, "-p", str(port),
            "zarr", "import"]
     if dataset_id:
         cmd.extend(["--target", f"Dataset:{dataset_id}"])
