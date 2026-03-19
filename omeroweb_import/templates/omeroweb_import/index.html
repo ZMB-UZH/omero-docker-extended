@@ -4450,6 +4450,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                     status: job.status,
                     created: job.created || index,
                 }));
+                jobs.__orangeHighWaterMark = orangeHighWaterMark;
                 storage.setItem(importJobsStorageKey, JSON.stringify(jobs));
                 storage.setItem(
                     importLogsStorageKey,
@@ -4510,8 +4511,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                         });
                     }
                 }
-                // Set the high-water mark from restored progress so the bar doesn't
-                // drop below its previous position on refresh.
+                // Restore the exact high-water mark so the orange bar never
+                // drops below its previous position on refresh.  The mark
+                // captures the time-based estimate which can be ahead of
+                // the I/O bytes — recalculating from bytes alone would
+                // cause a visible backwards jump.
+                const savedHWM = typeof savedJobs.__orangeHighWaterMark === 'number'
+                    ? savedJobs.__orangeHighWaterMark : -1;
                 const restoredJobs = Array.from(importJobs.values());
                 const restoredTotalBytes = restoredJobs.reduce((acc, j) => acc + (j.total_bytes || 0), 0);
                 const restoredProgressBytes = restoredJobs.reduce((acc, j) => acc + (j.import_progress_bytes || 0), 0);
@@ -4519,7 +4525,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 if (restoredTotalBytes > 0) {
                     const restoredBlue = Math.floor((restoredImportedBytes / restoredTotalBytes) * 100);
                     const restoredIo = Math.min(95, Math.round((restoredProgressBytes / restoredTotalBytes) * 100));
-                    orangeHighWaterMark = Math.max(restoredBlue, restoredIo, 0);
+                    orangeHighWaterMark = Math.max(savedHWM, restoredBlue, restoredIo, 0);
                 }
                 if (!hasActiveImport() && (importJobs.size || restoredLogs)) {
                     clearImportState();
