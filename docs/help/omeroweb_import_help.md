@@ -1,8 +1,8 @@
-# OMERO.web Help — Upload Plugin (`omeroweb_import`)
+# OMERO.web Help — Import Plugin (`omeroweb_import`)
 
 ## Overview
 
-The Upload plugin provides staged browser-based upload into server-side storage, followed by controlled OMERO import. It supports project targeting, progress tracking, and optional special-method workflows.
+The Import plugin provides staged browser-based upload into server-side storage, followed by controlled OMERO import. It supports project targeting, progress tracking, and optional special-method workflows.
 
 ## Intended users
 
@@ -11,7 +11,7 @@ The Upload plugin provides staged browser-based upload into server-side storage,
 
 ## Main workflow
 
-1. Open Upload plugin.
+1. Open Import plugin.
 2. Select target project.
 3. Optionally choose a special method profile.
 4. Drag-and-drop files/folders or choose from storage.

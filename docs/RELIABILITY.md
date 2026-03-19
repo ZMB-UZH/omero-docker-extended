@@ -48,8 +48,8 @@ Both processes have dedicated log files with rotation (20MB max, 3 backups).
 
 - **Celery task timeout**: Imaris export tasks have configurable time limits (`OMERO_IMS_CELERY_TIME_LIMIT`). Timed-out tasks are reported as failures.
 - **Imaris export startup failures**: The Imaris connector launches `IMS_Export.py` through the OMERO CLI inside the `omeroweb` container. If exports stall, first verify `Processor-0` is active in `omero admin diagnostics`, then validate direct `omero script launch` from both `omeroserver` and `omeroweb`.
-- **Upload cleanup**: The Upload plugin prunes stale temporary files based on configurable age thresholds to prevent disk growth.
-- **Job file locking**: OMP and Upload plugins use `portalocker` for safe concurrent access to job JSON files on tmpfs.
+- **Upload cleanup**: The Import plugin prunes stale temporary files based on configurable age thresholds to prevent disk growth.
+- **Job file locking**: OMP and Import plugins use `portalocker` for safe concurrent access to job JSON files on tmpfs.
 - **Rate limiting**: OMP plugin enforces per-user rate limits on major actions (6 actions / 60 seconds) to prevent misuse.
 
 ## Incident documentation

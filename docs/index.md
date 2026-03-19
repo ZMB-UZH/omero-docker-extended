@@ -15,14 +15,14 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 3. Plugin Guides
 
 - `plugins/omp-plugin.md` -- filename parsing, metadata annotation, AI-assisted regex, variable sets
-- `plugins/upload-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
+- `plugins/import-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
 - `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, OMERO CLI launch path
 
 ## 4. Plugin Help
 
 - `help/omeroweb_omp_plugin_help.md` -- end-user help for Filename & Metadata Manager
-- `help/omeroweb_import_help.md` -- end-user help for Upload plugin
+- `help/omeroweb_import_help.md` -- end-user help for Import plugin
 - `help/omeroweb_admin_tools_help.md` -- end-user help for Admin Tools
 
 ## 5. Operations

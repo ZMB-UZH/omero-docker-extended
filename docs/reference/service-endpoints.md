@@ -46,7 +46,7 @@ Base: `/omeroweb_omp_plugin/`
 | `/user-data/delete-api-keys/`, `/user-data/delete-variable-sets/`, `/user-data/delete-all/` | User data deletion |
 | `/help/` | Help Markdown document download |
 
-### Upload Plugin
+### Import Plugin
 
 Base: `/omeroweb_import/`
 
