@@ -487,6 +487,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         let orangeStartTime = null;
         let orangeLastBluePercent = 0;
         let orangeLastBlueTime = null;
+        let orangeHighWaterMark = 0;
         const currentUserId = {{ user_id|default:"null"|safe }};
         const storage =
             (() => {
@@ -2184,7 +2185,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             ));
 
             // Use the HIGHER of both signals so the bar never gets stuck.
-            return Math.max(ioPercent, timePercent, bluePercent);
+            const result = Math.max(ioPercent, timePercent, bluePercent);
+            orangeHighWaterMark = Math.max(orangeHighWaterMark, result);
+            return orangeHighWaterMark;
         }
 
         function showNonBlockingModal(message) {
@@ -4442,6 +4445,8 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                     confirm_url: job.confirm_url || null,
                     compatibility_enabled: job.compatibility_enabled !== false,
                     total_bytes: job.total_bytes,
+                    imported_bytes: job.imported_bytes || 0,
+                    import_progress_bytes: job.import_progress_bytes || 0,
                     status: job.status,
                     created: job.created || index,
                 }));
@@ -4479,7 +4484,8 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                                 confirm_url: job.confirm_url || null,
                                 status: job.status || 'pending',
                                 compatibility_enabled: job.compatibility_enabled !== false,
-                                imported_bytes: 0,
+                                imported_bytes: job.imported_bytes || 0,
+                                import_progress_bytes: job.import_progress_bytes || 0,
                                 total_bytes: job.total_bytes || 0,
                                 messages: [],
                                 errors: [],
@@ -4503,6 +4509,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                             }
                         });
                     }
+                }
+                // Set the high-water mark from restored progress so the bar doesn't
+                // drop below its previous position on refresh.
+                const restoredJobs = Array.from(importJobs.values());
+                const restoredTotalBytes = restoredJobs.reduce((acc, j) => acc + (j.total_bytes || 0), 0);
+                const restoredProgressBytes = restoredJobs.reduce((acc, j) => acc + (j.import_progress_bytes || 0), 0);
+                const restoredImportedBytes = restoredJobs.reduce((acc, j) => acc + (j.imported_bytes || 0), 0);
+                if (restoredTotalBytes > 0) {
+                    const restoredBlue = Math.floor((restoredImportedBytes / restoredTotalBytes) * 100);
+                    const restoredIo = Math.min(95, Math.round((restoredProgressBytes / restoredTotalBytes) * 100));
+                    orangeHighWaterMark = Math.max(restoredBlue, restoredIo, 0);
                 }
                 if (!hasActiveImport() && (importJobs.size || restoredLogs)) {
                     clearImportState();
@@ -4566,7 +4583,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const totalBytes = jobs.reduce((acc, job) => acc + (job.total_bytes || 0), 0);
             const importedBytes = jobs.reduce((acc, job) => acc + (job.imported_bytes || 0), 0);
             const hasErrors = jobs.some((job) => job.status === 'error');
-            const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
+            const allDone = jobs.every((job) => job.status === 'done' || job.status === 'error');
+            const rawPercent = totalBytes ? Math.floor((importedBytes / totalBytes) * 100) : 0;
+            const percent = allDone ? Math.min(100, rawPercent) : Math.min(99, rawPercent);
             const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
 
             // When restoring from a browser refresh, suppress CSS transitions

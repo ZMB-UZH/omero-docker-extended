@@ -3886,6 +3886,57 @@ def _recompress_chunk_tree(array_dir: Path, old_codec, new_codec):
                 pass  # best-effort; corrupt chunks are left as-is
 
 
+def _verify_import_via_api(
+    session_key: str,
+    host: str,
+    port: int,
+    dataset_id: int,
+    import_name: Optional[str],
+    file_name: str,
+) -> list[str]:
+    """Query OMERO for images matching *import_name* (or *file_name*) in the
+    target dataset.  Returns a list of Image ID strings if found, else [].
+
+    This is a lightweight fallback for cases where the OMERO CLI returns
+    non-zero or produces no object-ID output despite having committed the
+    Image on the server side.
+    """
+    conn = None
+    try:
+        conn = _open_session_connection(session_key, host, port)
+        if not conn:
+            return []
+        params = omero.sys.ParametersI()
+        params.addId(dataset_id)
+        # Search for the exact import name or file name in this dataset.
+        candidates = [n for n in (import_name, file_name) if n]
+        if not candidates:
+            return []
+        placeholders = " OR ".join(["i.name = :n%d" % idx for idx in range(len(candidates))])
+        for idx, name in enumerate(candidates):
+            params.add("n%d" % idx, omero.rtypes.rstring(name))
+        query = (
+            "SELECT i.id FROM Image i "
+            "JOIN i.datasetLinks dl "
+            "WHERE dl.parent.id = :id AND (%s)" % placeholders
+        )
+        qs = conn.getQueryService()
+        rows = qs.projection(query, params, conn.SERVICE_OPTS)
+        return [str(row[0].val) for row in rows] if rows else []
+    except Exception as exc:
+        logger.debug(
+            "OMERO API verification failed for dataset %s: %s",
+            dataset_id, sanitize_log_value(exc),
+        )
+        return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _import_job_entry(
     entry,
     upload_root,
@@ -4021,26 +4072,45 @@ def _import_job_entry(
             stdout = ""
             stderr = ""
 
-        if not success:
-            # The CLI exited non-zero, but OMERO may have already committed
-            # the Image/Fileset before the process errored (e.g. during
-            # post-import thumbnail generation).  Check stdout for created
-            # objects before declaring failure.
-            salvaged_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
-            if salvaged_objects:
-                logger.warning(
-                    "Import CLI returned non-zero for %s but stdout contains "
-                    "created objects (%s); treating as success.  stderr=%r",
+        # ------------------------------------------------------------------
+        # Detect created objects.  The OMERO CLI prints object IDs to stdout
+        # for most formats, but some (e.g. zarr via Bio-Formats) emit them
+        # only on stderr.  Search both streams.  As a final fallback, query
+        # the OMERO API directly — the server may have committed the Image
+        # before the CLI process crashed (exit-code != 0).
+        # ------------------------------------------------------------------
+        combined_output = (stdout or "") + "\n" + (stderr or "")
+        imported_objects = _IMPORT_OBJECT_PATTERN.findall(combined_output)
+
+        if not imported_objects and dataset_id:
+            # Last resort: ask the OMERO server whether an image was created
+            # in the target dataset during this import window.
+            api_objects = _verify_import_via_api(
+                session_key, host, port, dataset_id, import_name, file_path.name,
+            )
+            if api_objects:
+                imported_objects = api_objects
+                logger.info(
+                    "OMERO API verification found objects for %s: %s",
                     sanitize_log_value(rel_path),
-                    sanitize_log_value(salvaged_objects[:5]),
+                    sanitize_log_value(imported_objects[:5]),
+                )
+
+        if not success:
+            if imported_objects:
+                logger.warning(
+                    "Import CLI returned non-zero for %s but %d objects "
+                    "confirmed; treating as success.  stderr=%r",
+                    sanitize_log_value(rel_path),
+                    len(imported_objects),
                     sanitize_log_value(str(stderr).strip()[:500]),
                 )
             else:
                 logger.warning(
                     "Import failed for %s (stdout=%r, stderr=%r).",
                     sanitize_log_value(rel_path),
-                    sanitize_log_value(str(stdout).strip()),
-                    sanitize_log_value(str(stderr).strip()),
+                    sanitize_log_value(str(stdout).strip()[:500]),
+                    sanitize_log_value(str(stderr).strip()[:500]),
                 )
                 error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
                 job_error = messages.job_error_with_path(rel_path, error_msg)
@@ -4055,15 +4125,10 @@ def _import_job_entry(
                     "job_message": job_error,
                 }
 
-        # Server-side validation: the CLI exited 0, but verify that at least one
-        # OMERO object (Image, Fileset, etc.) was actually created.  The CLI can
-        # return exit-code 0 without creating any objects for unsupported formats
-        # or corrupt data — reporting "success" in that case is misleading.
-        imported_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
         if not imported_objects:
             logger.error(
-                "Import CLI returned success for %s but stdout contains no imported "
-                "objects.  stdout=%r stderr=%r",
+                "Import CLI returned success for %s but no objects found in "
+                "output or via API.  stdout=%r stderr=%r",
                 sanitize_log_value(rel_path),
                 sanitize_log_value(str(stdout).strip()[:500]),
                 sanitize_log_value(str(stderr).strip()[:500]),
