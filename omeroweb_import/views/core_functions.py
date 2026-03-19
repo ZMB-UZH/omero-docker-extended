@@ -3299,6 +3299,18 @@ def _probe_import_path(
     except OSError:
         path_resolved = path
 
+    # OME-NGFF zarrs are imported via omero-cli-zarr, not Bio-Formats.
+    # Skip the expensive Bio-Formats scan and return empty so the caller
+    # falls through to the extension-based directory-package grouping.
+    if (
+        path.is_dir()
+        and any(path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+        and _is_ome_ngff_zarr(path)
+    ):
+        cached = {"coverage": set(), "groups": (), "returncode": 0, "stderr": "", "stdout": ""}
+        cache[cache_key] = cached
+        return cached
+
     try:
         result = _run_local_import_scan(path)
     except Exception as exc:
@@ -3561,6 +3573,20 @@ def _check_import_compatibility(
             "stdout": "",
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
+        }
+
+    # OME-NGFF zarrs are imported via omero-cli-zarr — always compatible.
+    if (
+        file_path.is_dir()
+        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+        and _is_ome_ngff_zarr(file_path)
+    ):
+        return {
+            "status": "compatible",
+            "relative_path": relative_path,
+            "stdout": "",
+            "stderr": "",
+            "details": "OME-NGFF zarr (imported via omero-cli-zarr)",
         }
 
     try:
