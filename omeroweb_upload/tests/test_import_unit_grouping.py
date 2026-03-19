@@ -1149,6 +1149,43 @@ def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(tm
     assert result["status"] == "imported"
 
 
+def test_import_job_entry_salvages_success_when_objects_in_stderr(tmp_path: Path, monkeypatch):
+    """Some import formats (e.g. zarr) print object IDs only to stderr.
+    The plugin must check both streams."""
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        # CLI returned non-zero, stdout empty, but stderr has the object IDs
+        return False, "", "Lots of debug output\nImage:805\nFileset:300\nMore output"
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
+
+
 def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(tmp_path: Path, monkeypatch):
     """When the CLI returns non-zero and stdout has no objects, the import
     must report failure."""
