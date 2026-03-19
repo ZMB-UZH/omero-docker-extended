@@ -21,7 +21,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
-- Upload plugin (`omeroweb_import`)
+- Import plugin (`omeroweb_import`)
 - Admin tools (`omeroweb_admin_tools`)
 
 ### 🛠️ Works partially / under active development
@@ -143,7 +143,7 @@ Filename-to-metadata extraction workflow. Parses scientific image filenames into
 - Rate limiting on major actions
 - REMBI-aligned default variable names with scientific nomenclature-aware hyphen protection
 
-### Upload Plugin (`omeroweb_import`)
+### Import Plugin (`omeroweb_import`)
 
 Staged file upload and controlled import into OMERO.
 

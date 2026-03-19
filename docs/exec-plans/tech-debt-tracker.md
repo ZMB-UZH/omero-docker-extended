@@ -5,7 +5,7 @@ Known technical debt items. Review before planning new work to avoid compounding
 | Item | Priority | Owner | Status |
 |---|---|---|---|
 | Add unit test coverage for OMP plugin views and services | High | Unassigned | Open |
-| Add unit test coverage for Upload plugin views and services | High | Unassigned | Open |
+| Add unit test coverage for Import plugin views and services | High | Unassigned | Open |
 | Define SLO targets for OMERO.web response time and import success rate | Medium | Unassigned | Open |
 | Add Prometheus alert rules for critical service failures | Medium | Unassigned | Open |
 | Expand automated linting coverage for docs references and cross-links | Medium | Unassigned | Open |

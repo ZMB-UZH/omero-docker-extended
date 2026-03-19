@@ -7,7 +7,7 @@ Understanding who uses this platform and what matters to them.
 ### Microscopy researchers
 Primary users who interact with OMERO.web plugins daily. They need:
 - Reliable metadata workflows (OMP plugin) that correctly parse complex scientific filenames.
-- Straightforward file upload and import (Upload plugin) that handles specialized formats like SEM-EDX.
+- Straightforward file upload and import (Import plugin) that handles specialized formats like SEM-EDX.
 - Imaris export (Imaris connector) that works asynchronously without blocking their session.
 - Predictable behavior: the same inputs should produce the same outputs every time.
 
