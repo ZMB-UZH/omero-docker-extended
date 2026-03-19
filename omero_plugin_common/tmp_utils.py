@@ -60,10 +60,10 @@ def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
 
     Examples
     --------
-    Called from ``omeroweb_upload/utils/file_helpers.py``::
+    Called from ``omeroweb_import/utils/file_helpers.py``::
 
         get_plugin_tmp_dir("data")
-        # → /opt/omero/omero_temp/omeroweb-upload/data
+        # → /opt/omero/omero_temp/omeroweb-import/data
 
     Called from ``omeroweb_omp_plugin/constants.py``::
 
@@ -81,8 +81,8 @@ def get_plugin_tmp_dir(subdir: str | None = None) -> Path:
 def _detect_caller_plugin() -> str:
     """Walk the call stack to find the calling plugin's package name.
 
-    Returns a hyphenated directory-safe name such as ``omeroweb-upload``
-    derived from the top-level Python package ``omeroweb_upload``.
+    Returns a hyphenated directory-safe name such as ``omeroweb-import``
+    derived from the top-level Python package ``omeroweb_import``.
     """
     for frame_info in inspect.stack():
         module = inspect.getmodule(frame_info[0])

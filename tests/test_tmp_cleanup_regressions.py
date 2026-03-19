@@ -55,7 +55,7 @@ class TmpCleanupRegressionTests(TestCase):
     def test_tmp_cleaner_respects_active_directory_retention_marker(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            target_dir = root / "omeroweb-upload" / "data" / "job123"
+            target_dir = root / "omeroweb-import" / "data" / "job123"
             target_dir.mkdir(parents=True)
             payload = target_dir / "payload.bin"
             payload.write_text("payload", encoding="utf-8")
@@ -81,7 +81,7 @@ class TmpCleanupRegressionTests(TestCase):
     def test_tmp_cleaner_respects_active_file_retention_marker(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            job_file = root / "omeroweb-upload" / "jobs" / "job123.json"
+            job_file = root / "omeroweb-import" / "jobs" / "job123.json"
             job_file.parent.mkdir(parents=True)
             job_file.write_text("{}", encoding="utf-8")
             tmp_cleanup.safe_mark_path_for_deferred_cleanup(
@@ -107,7 +107,7 @@ class TmpCleanupRegressionTests(TestCase):
     def test_tmp_cleaner_deletes_expired_retained_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            job_file = root / "omeroweb-upload" / "jobs" / "job123.json"
+            job_file = root / "omeroweb-import" / "jobs" / "job123.json"
             job_file.parent.mkdir(parents=True)
             job_file.write_text("{}", encoding="utf-8")
             tmp_cleanup.safe_mark_path_for_deferred_cleanup(

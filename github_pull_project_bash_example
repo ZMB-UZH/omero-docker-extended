@@ -82,7 +82,7 @@ resolve_all_data_paths() {
             "${OMERO_DATA_PATH:-}" \
             "${OMERO_TMP_PATH:-}" \
             "${OMERO_USER_DATA_PATH:-}" \
-            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_IMPORT_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
             "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \
@@ -171,7 +171,7 @@ collect_sentinel_dir_names() {
             "${OMERO_DATA_PATH:-}" \
             "${OMERO_TMP_PATH:-}" \
             "${OMERO_USER_DATA_PATH:-}" \
-            "${OMERO_UPLOAD_PATH:-}" \
+            "${OMERO_IMPORT_PATH:-}" \
             "${OMERO_SERVER_VAR_PATH:-}" \
             "${OMERO_WEB_VAR_PATH:-}" \
             "${OMERO_SERVER_LOGS_PATH:-}" \

@@ -48,7 +48,7 @@ Base: `/omeroweb_omp_plugin/`
 
 ### Upload Plugin
 
-Base: `/omeroweb_upload/`
+Base: `/omeroweb_import/`
 
 | Route | Purpose |
 |---|---|

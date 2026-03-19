@@ -22,7 +22,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 4. Plugin Help
 
 - `help/omeroweb_omp_plugin_help.md` -- end-user help for Filename & Metadata Manager
-- `help/omeroweb_upload_help.md` -- end-user help for Upload plugin
+- `help/omeroweb_import_help.md` -- end-user help for Upload plugin
 - `help/omeroweb_admin_tools_help.md` -- end-user help for Admin Tools
 
 ## 5. Operations

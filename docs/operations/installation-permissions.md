@@ -156,7 +156,7 @@ Intent:
 Code path:
 - `omero_plugin_common/tmp_utils.py`
   - all plugin temp directories derive from `OMERO_TMP_PATH`.
-  - calling packages such as `omeroweb_upload` map to host subtrees like `omeroweb-upload`.
+  - calling packages such as `omeroweb_import` map to host subtrees like `omeroweb-import`.
 
 Installer expectation:
 - non-server top-level temp/plugin subtrees are normalized to the web UID/GID by `ensure_omero_tmp_layout()`.
@@ -345,7 +345,7 @@ When debugging permission faults, check in this order:
    - root,
    - `omero-server`,
    - `omero-web`,
-   - plugin temp subtrees such as `omeroweb-upload`,
+   - plugin temp subtrees such as `omeroweb-import`,
    - any stale `omero_<user>` lock namespaces.
 6. If the fault appeared after `github_pull...`, review the installation script path normalization logic first.
 7. For managed-repository import failures, inspect

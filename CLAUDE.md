@@ -11,7 +11,7 @@ This is **OMERO Docker Extended**: a production containerized OMERO imaging plat
 Start with `AGENTS.md` for the full domain map. Key entry points:
 
 - Service orchestration: `docker-compose.yml`
-- Plugin code: `omeroweb_omp_plugin/`, `omeroweb_upload/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`
+- Plugin code: `omeroweb_omp_plugin/`, `omeroweb_import/`, `omeroweb_admin_tools/`, `omeroweb_imaris_connector/`
 - Shared library: `omero_plugin_common/`
 - Configuration: `env/*.env` files, `installation_paths.env`
 - Startup logic: `startup/*.sh`
@@ -99,7 +99,7 @@ python3 -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
 python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
-python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
+python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 ```
 
 ## Build and deploy

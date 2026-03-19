@@ -65,7 +65,7 @@ Example runtime layout:
 
 ```
 ${OMERO_TMP_PATH}/
-├── omeroweb-upload/
+├── omeroweb-import/
 │   ├── data/         # staged upload files
 │   ├── jobs/         # upload job state JSON
 │   └── compat-check/ # transient OMERO CLI isolation dirs

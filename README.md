@@ -21,7 +21,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 - All official OMERO software components
 - All base installation and orchestration layers
 - Official and third-party scripts included in this repository
-- Upload plugin (`omeroweb_upload`)
+- Upload plugin (`omeroweb_import`)
 - Admin tools (`omeroweb_admin_tools`)
 
 ### 🛠️ Works partially / under active development
@@ -67,7 +67,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── 51-install-imarisconvert.sh    #   ImarisConvertBioformats compilation
 ├── omero_plugin_common/               # Shared Python library for all plugins
 ├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
-├── omeroweb_upload/                   # Upload and import plugin
+├── omeroweb_import/                   # Upload and import plugin
 ├── omeroweb_admin_tools/              # Admin observability plugin
 ├── omeroweb_imaris_connector/         # Imaris export plugin
 ├── monitoring/                        # Observability stack configuration
@@ -143,7 +143,7 @@ Filename-to-metadata extraction workflow. Parses scientific image filenames into
 - Rate limiting on major actions
 - REMBI-aligned default variable names with scientific nomenclature-aware hyphen protection
 
-### Upload Plugin (`omeroweb_upload`)
+### Upload Plugin (`omeroweb_import`)
 
 Staged file upload and controlled import into OMERO.
 

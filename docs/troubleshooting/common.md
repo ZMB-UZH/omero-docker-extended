@@ -477,7 +477,7 @@ docker exec -i omero-omeroweb-1 bash -lc '
   chown omero-web:omero-web "$OMERO_TMPDIR"
   su omero-web -s /bin/bash -c "
     cd /opt/omero &&
-    /opt/omero/web/venv-3.12/bin/python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
+    /opt/omero/web/venv-3.12/bin/python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
   "
 '
 ```

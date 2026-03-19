@@ -43,7 +43,7 @@ It is intentionally short. Deep context lives in the files it points to.
 
 ### Web plugins (Django apps in omeroweb container)
 - **`omeroweb_omp_plugin/`** -- filename parsing, metadata annotation, AI-assisted regex, variable sets, job execution
-- **`omeroweb_upload/`** -- staged upload, OMERO CLI import, SEM-EDX spectrum parsing, file attachment
+- **`omeroweb_import/`** -- staged upload, OMERO CLI import, SEM-EDX spectrum parsing, file attachment
 - **`omeroweb_admin_tools/`** -- log query (Loki), resource monitoring, Grafana/Prometheus proxy, storage analytics
 - **`omeroweb_imaris_connector/`** -- Imaris export via Celery tasks, OMERO CLI launch from `omeroweb`, job-service account
 - **`omero_plugin_common/`** -- shared env_utils, logging_utils, omero_helpers, request_utils, string_utils
@@ -139,7 +139,7 @@ omeroweb_<name>/
   ```
 - For OMERO CLI, keep connection/auth flags before the subcommand. Example: `omero -s localhost -p 4064 -u root -w "$ROOTPASS" delete Image:123 --wait 120`. Do not place `-s/-p/-u/-w` after `delete`, `import`, or other subcommands.
 - When the exact virtualenv path is uncertain, resolve it first as the service user and then run the command as that same service user. Do not probe by executing OMERO CLI as `root`.
-- For live OMERO.web upload tests, authenticate as a regular OMERO user. The upload plugin intentionally blocks `root`, so using `root` for `/omeroweb_upload/` validation is an invalid test procedure.
+- For live OMERO.web upload tests, authenticate as a regular OMERO user. The upload plugin intentionally blocks `root`, so using `root` for `/omeroweb_import/` validation is an invalid test procedure.
 
 ### Nested shell / heredoc procedure
 - Do not nest multiline heredocs inside `docker exec ... bash -lc "..."` when the payload contains Python, regexes, JSON, or mixed quotes. That pattern is fragile and wastes time on shell-escaping failures.
@@ -159,7 +159,7 @@ omeroweb_<name>/
 
 ### Container Python imports
 - Do not assume repository modules are importable from `/opt/omero` inside containers. In this deployment they are typically available from the active virtualenv site-packages, for example `/opt/omero/web/venv-*/lib/python*/site-packages`.
-- Before running container-local Python that imports `omeroweb_upload`, `omeroweb_admin_tools`, or `omero_plugin_common`, first resolve the runtime interpreter/module location with `python -c 'import module; print(module.__file__)'` or inspect the active `venv*/site-packages`.
+- Before running container-local Python that imports `omeroweb_import`, `omeroweb_admin_tools`, or `omero_plugin_common`, first resolve the runtime interpreter/module location with `python -c 'import module; print(module.__file__)'` or inspect the active `venv*/site-packages`.
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
 ### Testing
@@ -179,7 +179,7 @@ omeroweb_<name>/
   python3 -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
-  python3 -m pytest omeroweb_upload/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
   ```
 - Always also run: `python3 tools/lint_docs_structure.py`
 
