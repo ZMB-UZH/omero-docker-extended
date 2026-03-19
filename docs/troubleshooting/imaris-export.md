@@ -130,7 +130,7 @@ Root cause:
   image visibility as the requesting user session for this export,
 - the standalone connector was already passing the requesting user's OMERO
   session key into the task,
-- the upload plugin already uses the requesting user's OMERO session key for
+- the Import plugin already uses the requesting user's OMERO session key for
   OMERO CLI imports.
 
 Fix:
@@ -306,9 +306,9 @@ After server-side checks pass:
 If this path still fails while direct CLI export works, the problem is in the
 worker or connector glue code, not in the server-side export toolchain.
 
-### 9. Compare session selection with the upload plugin
+### 9. Compare session selection with the Import plugin
 
-For OMERO CLI work, the upload plugin is the reference pattern:
+For OMERO CLI work, the Import plugin is the reference pattern:
 
 - user-initiated OMERO CLI operations use the requesting user's OMERO session
   key,

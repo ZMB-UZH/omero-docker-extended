@@ -587,7 +587,7 @@ def _refresh_job_status(job_dict):
     elif compatibility_status == "error":
         # Compatibility check errors (CLI crash, timeout, etc.) should NOT block the
         # import.  The actual import will surface real errors.  Blocking here caused
-        # the upload plugin to freeze when the frontend had compatibility checking
+        # the Import plugin to freeze when the frontend had compatibility checking
         # disabled (no-one would ever send the confirmation request).
         logger.warning(
             "Compatibility check had errors for job %s – proceeding to import anyway",

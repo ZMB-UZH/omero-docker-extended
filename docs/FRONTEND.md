@@ -15,7 +15,7 @@ Plugins register in OMERO.web via `CONFIG_omero_web_apps` in `env/omeroweb.env` 
 ## Current plugin UIs
 
 - **OMP Plugin** (`/omeroweb_omp_plugin/`): project/dataset selector, variable configuration, parsing preview, job progress, settings management. Template: `index.html` with extensive JavaScript for AJAX interactions.
-- **Upload Plugin** (`/omeroweb_import/`): upload session management, file transfer, import progress, SEM-EDX method settings. Template: `index.html` with `upload.js` for file handling.
+- **Import Plugin** (`/omeroweb_import/`): upload session management, file transfer, import progress, SEM-EDX method settings. Template: `index.html` with `upload.js` for file handling.
 - **Admin Tools** (`/omeroweb_admin_tools/`): multi-page interface with tabs for logs, resource monitoring, storage, and server diagnostics. Templates: `index.html`, `logs.html`, `resource_monitoring.html`, `storage.html`, `server_database_testing.html`. Embeds Grafana iframes via proxy endpoints.
 - **Imaris Connector**: API-only endpoint (`/imaris-export/`), no dedicated UI template.
 

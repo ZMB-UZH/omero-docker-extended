@@ -13,7 +13,7 @@ The OMERO plugin database (`omero-plugin` on port 5433) stores per-user data for
 - AI credentials: per-user, per-provider API key storage.
 - User settings: per-user plugin preferences.
 
-**Upload Plugin (`omeroweb_import/services/data_store.py`):**
+**Import Plugin (`omeroweb_import/services/data_store.py`):**
 - User settings: per-user upload preferences.
 - Special method settings: per-user SEM-EDX method configurations.
 

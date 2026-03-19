@@ -299,7 +299,7 @@ Symptom:
   - `Current group: users_ldap`
   - `No annotate access for parent directory: 227`
 - `Blitz-0.log` shows the server failing in `RepositoryDaoImpl.makeDirs` while creating a path such as `users_ldap/<username>`.
-- The same upload plugin can still work for non-LDAP users or for one specific LDAP user.
+- The same Import plugin can still work for non-LDAP users or for one specific LDAP user.
 
 Verified diagnosis pattern:
 
@@ -366,7 +366,7 @@ Symptom:
 
 Cause:
 
-- The upload plugin always lets OMERO CLI/Bio-Formats build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
+- The Import plugin always lets OMERO CLI/Bio-Formats build the logical import plan before import starts, even when browser-side compatibility checking is disabled.
 - Compatibility-disabled jobs use that background step for planning only: it persists `planned_import_units`, but it does not run the first-batch compatibility scan.
 - Dataset creation must still happen on the request path with the live user-owned OMERO connection. If the import thread reaches background dataset preparation instead, OMERO.web can no longer safely reuse the browser session and the job falls back to the generic destination-preparation error.
 

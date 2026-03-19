@@ -79,7 +79,7 @@ Each plugin follows a standard layout: `apps.py` (AppConfig), `config.py` (env-d
 **Plugin data flow patterns:**
 
 - **OMP Plugin**: user selects project/dataset -> filenames fetched from OMERO -> regex/AI parsing -> preview -> background job writes MapAnnotations with hash-based ownership tracking. Per-user data (variable sets, AI credentials, settings) persisted in the OMERO plugin database (`database_plugin`) via psycopg2.
-- **Upload Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in the OMERO plugin database (`database_plugin`).
+- **Import Plugin**: user starts upload session -> files transferred to tmpfs job directory -> OMERO CLI import with batching -> file attachments linked -> confirm/prune lifecycle. SEM-EDX files parsed (EMSA format) with matplotlib visualization. Settings persisted in the OMERO plugin database (`database_plugin`).
 - **Admin Tools**: proxies Loki LogQL queries, Grafana dashboards, Prometheus metrics. Queries Docker socket for container stats. Computes storage usage from OMERO API. Root-only diagnostic scripts.
 - **Imaris Connector**: export request -> Celery task dispatched to Redis queue -> worker opens OMERO session (user session or job-service account) -> finds and runs IMS export script -> polls for completion -> returns result with download path.
 

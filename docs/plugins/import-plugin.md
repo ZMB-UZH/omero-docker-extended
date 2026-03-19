@@ -1,8 +1,8 @@
-# Upload Plugin Guide (`omeroweb_import`)
+# Import Plugin Guide (`omeroweb_import`)
 
 ## Purpose
 
-The upload plugin manages staged file upload and controlled import into OMERO, including job lifecycle tracking, SEM-EDX spectrum processing, file attachment support, and configurable upload behavior.
+The Import plugin manages staged file upload and controlled import into OMERO, including job lifecycle tracking, SEM-EDX spectrum processing, file attachment support, and configurable upload behavior.
 
 ## Main capabilities
 
@@ -43,7 +43,7 @@ Temporary artifacts live under `OMERO_TMP_PATH`.
 Cleanup is performed by two mechanisms:
 
 - **Immediate**: the upload payload directory for a job is deleted right after a successful import finishes (job JSON remains for UI status).
-- **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours by default. The upload plugin writes deferred-cleanup markers for failed jobs so their payload directory and job JSON are retained for 48 hours unless `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` overrides that window.
+- **Sweep**: a host-side systemd timer (`omero-tmp-cleaner.timer`) runs periodically and deletes anything under `OMERO_TMP_PATH` older than 24 hours by default. The Import plugin writes deferred-cleanup markers for failed jobs so their payload directory and job JSON are retained for 48 hours unless `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` overrides that window.
 
 Useful commands (host):
 
@@ -109,7 +109,7 @@ omeroweb_import/
 
 ## SEM-EDX processing
 
-The upload plugin includes specialized support for SEM-EDX (Scanning Electron Microscopy - Energy Dispersive X-ray) data:
+The Import plugin includes specialized support for SEM-EDX (Scanning Electron Microscopy - Energy Dispersive X-ray) data:
 
 - Parses EMSA/MSA format spectrum files with metadata extraction.
 - Generates matplotlib spectrum visualizations with element identification.
