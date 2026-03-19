@@ -12,7 +12,7 @@
     <div id="root-user-warning" class="root-user-warning" role="alert"></div>
     <div class="upload-page">
         <h1 class="upload-title">Import</h1>
-        <p class="upload-intro">Drag & drop or choose folders and files to upload/import into your user space in OMERO. Selecting a project is suggested.</p>
+        <p class="upload-intro">Drag & drop or choose folders and files to import into your user space in OMERO. Selecting a project is suggested.</p>
         <p class="upload-intro">All orphan files in base path will be imported into a dataset named "Orphaned_images_base_path_import" with a random suffix.</p>
         <p class="upload-intro">Folder names are translated into dataset names. Nested folders become datasets named with backslashes (e.g. <code>folderA\subfolderB</code>).</p>
         <div class="upload-utilities">
@@ -127,7 +127,7 @@
                         </div>
                     </div>
                     <div class="upload-actions__buttons">
-                        <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Upload &amp; Import</button>
+                        <button id="upload-btn" type="button" {% if not upload_enabled %}disabled{% endif %}>Import</button>
                         <button id="previous-step-btn" type="button" class="step-btn is-hidden">Previous step</button>
                         <button id="next-step-btn" type="button" class="step-btn is-hidden">Next step</button>
                         <button id="clear-all-btn" type="button" class="clear-all-btn">Clear all</button>
@@ -532,7 +532,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             'Multiple txt files can be appended to a single image.',
         ];
         const semEdxStep3Lines = [
-            '3) Adjust the import settings of the SEM EDX spectra, or directly proceed with the next step (Upload & Import).',
+            '3) Adjust the import settings of the SEM EDX spectra, or directly proceed with the next step (Import).',
             'The special method settings can be saved in the user database for automatic retrieval in subsequent imports.',
         ];
         const semEdxSettingsDefaults = {
@@ -909,7 +909,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             if (window.pendingImportJob) {
                 uploadBtn.textContent = 'Continue Import';
             } else {
-                uploadBtn.textContent = hasActiveImport() ? 'Upload & append to Import' : 'Upload & Import';
+                uploadBtn.textContent = hasActiveImport() ? 'Append to Import' : 'Import';
             }
         }
 
@@ -4450,6 +4450,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                     status: job.status,
                     created: job.created || index,
                 }));
+                jobs.__orangeHighWaterMark = orangeHighWaterMark;
                 storage.setItem(importJobsStorageKey, JSON.stringify(jobs));
                 storage.setItem(
                     importLogsStorageKey,
@@ -4510,8 +4511,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                         });
                     }
                 }
-                // Set the high-water mark from restored progress so the bar doesn't
-                // drop below its previous position on refresh.
+                // Restore the exact high-water mark so the orange bar never
+                // drops below its previous position on refresh.  The mark
+                // captures the time-based estimate which can be ahead of
+                // the I/O bytes — recalculating from bytes alone would
+                // cause a visible backwards jump.
+                const savedHWM = typeof savedJobs.__orangeHighWaterMark === 'number'
+                    ? savedJobs.__orangeHighWaterMark : -1;
                 const restoredJobs = Array.from(importJobs.values());
                 const restoredTotalBytes = restoredJobs.reduce((acc, j) => acc + (j.total_bytes || 0), 0);
                 const restoredProgressBytes = restoredJobs.reduce((acc, j) => acc + (j.import_progress_bytes || 0), 0);
@@ -4519,7 +4525,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 if (restoredTotalBytes > 0) {
                     const restoredBlue = Math.floor((restoredImportedBytes / restoredTotalBytes) * 100);
                     const restoredIo = Math.min(95, Math.round((restoredProgressBytes / restoredTotalBytes) * 100));
-                    orangeHighWaterMark = Math.max(restoredBlue, restoredIo, 0);
+                    orangeHighWaterMark = Math.max(savedHWM, restoredBlue, restoredIo, 0);
                 }
                 if (!hasActiveImport() && (importJobs.size || restoredLogs)) {
                     clearImportState();
@@ -5136,7 +5142,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 }
 
                 const proceed = await showSemEdxConfirmPopup(
-                    'Are you sure you want to proceed with Upload & Import? The selected SEM images will be imported into OMERO and the associated spectra will be appended.'
+                    'Are you sure you want to proceed with Import? The selected SEM images will be imported into OMERO and the associated spectra will be appended.'
                 );
                 if (proceed) {
                     uploadBtn?.click();
