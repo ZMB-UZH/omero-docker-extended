@@ -67,7 +67,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 │   └── 51-install-imarisconvert.sh    #   ImarisConvertBioformats compilation
 ├── omero_plugin_common/               # Shared Python library for all plugins
 ├── omeroweb_omp_plugin/               # Metadata filename parsing plugin
-├── omeroweb_import/                   # Upload and import plugin
+├── omeroweb_import/                   # Import plugin
 ├── omeroweb_admin_tools/              # Admin observability plugin
 ├── omeroweb_imaris_connector/         # Imaris export plugin
 ├── monitoring/                        # Observability stack configuration
