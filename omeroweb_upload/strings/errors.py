@@ -140,6 +140,13 @@ def import_failed():
     return "Import failed."
 
 
+def import_no_objects_created():
+    return (
+        "Import command succeeded but no images were created in OMERO. "
+        "The file format may not be supported, or the data may be corrupt."
+    )
+
+
 def import_session_expired():
     return "Import failed because the OMERO session expired during a long-running import."
 

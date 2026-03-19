@@ -470,6 +470,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         const importLogEntries = [];
         const importLogState = new Map();
         let importPollTimer = null;
+        // Flag: when true, progress bar width changes skip CSS transitions
+        // so restored state jumps instantly instead of animating from 0%.
+        let _suppressBarTransition = false;
         let isUploading = false;
         let isPreparingFiles = false;
         let cancelUploadRequested = false;
@@ -2162,25 +2165,26 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 orangeLastBlueTime = now;
             }
 
-            // Primary signal: real I/O progress from the backend
+            // Signal 1: real I/O progress from the backend
             // (import_progress_bytes from /proc/{pid}/io monitoring).
+            let ioPercent = 0;
             if (totalBytes > 0 && progressBytes > 0) {
-                const realPercent = Math.min(95, Math.round((progressBytes / totalBytes) * 100));
-                if (realPercent > bluePercent) {
-                    return realPercent;
-                }
+                ioPercent = Math.min(95, Math.round((progressBytes / totalBytes) * 100));
             }
 
-            // Fallback: time-based asymptotic estimate when no /proc data
-            // is available (e.g. process just started, or /proc unreadable).
+            // Signal 2: time-based asymptotic estimate — ensures the bar
+            // keeps moving even when I/O tracking underestimates progress
+            // (e.g. zarr imports where rchar doesn't reflect actual progress).
             const POLL_INTERVAL_S = 4;
             const elapsed = (now - orangeLastBlueTime) / 1000 + POLL_INTERVAL_S;
             const remaining = 100 - bluePercent;
-            // Exponential decay: fills ~60% of remaining after 5 min,
-            // ~83% after 10 min, ~97% after 20 min. Never reaches 100.
             const K = 0.003;
-            const estimate = bluePercent + remaining * 0.95 * (1 - Math.exp(-K * elapsed));
-            return Math.min(95, Math.round(estimate));
+            const timePercent = Math.min(95, Math.round(
+                bluePercent + remaining * 0.95 * (1 - Math.exp(-K * elapsed))
+            ));
+
+            // Use the HIGHER of both signals so the bar never gets stuck.
+            return Math.max(ioPercent, timePercent, bluePercent);
         }
 
         function showNonBlockingModal(message) {
@@ -4564,9 +4568,19 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
             const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
-            // Orange bar: real I/O progress from /proc/{pid}/io monitoring on
-            // the backend, with time-based asymptotic fallback when no data
-            // is available.  Animated diagonal stripes indicate work-in-progress.
+
+            // When restoring from a browser refresh, suppress CSS transitions
+            // so bars jump instantly to the server-reported position.
+            const suppressTransition = _suppressBarTransition;
+            if (suppressTransition) {
+                if (progressBarUpload) progressBarUpload.style.transition = 'none';
+                progressBar.style.transition = 'none';
+            }
+
+            // Orange bar: MAX of real I/O progress (/proc/{pid}/io monitoring)
+            // and time-based asymptotic estimate — ensures the bar never gets
+            // stuck when one signal underestimates.  Animated diagonal stripes
+            // indicate work-in-progress.
             const progressBytes = jobs.reduce((acc, job) => acc + (job.import_progress_bytes || 0), 0);
             if (progressBarUpload) {
                 if (hasActiveImport() && !anyAwaiting) {
@@ -4610,6 +4624,17 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             updateUploadButtonLabel();
             persistImportState();
             updateCancelButtons();
+
+            // Restore transitions after the browser has painted the instant
+            // position (double rAF ensures layout is flushed).
+            if (suppressTransition) {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        if (progressBarUpload) progressBarUpload.style.transition = '';
+                        progressBar.style.transition = '';
+                    });
+                });
+            }
         }
 
         async function pollImportJobs() {
@@ -4666,6 +4691,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 console.warn('Import poll round failed:', err);
             }
             updateProgressFromJobs();
+            // After the first real server poll, disable transition suppression
+            // so subsequent updates animate smoothly.
+            _suppressBarTransition = false;
             if (hasActiveImport()) {
                 importPollTimer = window.setTimeout(pollImportJobs, 4000);
             } else {
@@ -5242,6 +5270,10 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         restoreSpecialUploadSelection();
         restoreImportState();
         if (importJobs.size) {
+            // Suppress CSS transition so restored progress bars jump
+            // instantly to their current position instead of animating
+            // from 0% (which is useless and misleading on refresh).
+            _suppressBarTransition = true;
             updateProgressFromJobs();
             ensureImportPolling();
         }

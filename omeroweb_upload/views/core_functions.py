@@ -79,6 +79,7 @@ __all__ = [
     'UPLOAD_BATCH_FILES_ENV',
     'UPLOAD_CONCURRENCY_ENV',
     '_CLI_ID_PATTERN',
+    '_IMPORT_OBJECT_PATTERN',
     '_DIRS_INITIALIZED',
     '_IMPORT_LOCKS',
     '_IMPORT_LOCKS_GUARD',
@@ -1625,6 +1626,10 @@ def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[Bli
 
 
 _CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
+
+# Pattern to detect successfully imported OMERO objects in CLI stdout.
+# The CLI outputs lines like "Image:123" or "Fileset:456" for each created object.
+_IMPORT_OBJECT_PATTERN = re.compile(r"\b(?:Image|Fileset|Plate|Screen|Dataset|OriginalFile):(\d+)\b")
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
@@ -3860,6 +3865,32 @@ def _import_job_entry(
             sanitize_log_value(str(stderr).strip()),
         )
         error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    # Server-side validation: the CLI exited 0, but verify that at least one
+    # OMERO object (Image, Fileset, etc.) was actually created.  The CLI can
+    # return exit-code 0 without creating any objects for unsupported formats
+    # or corrupt data — reporting "success" in that case is misleading.
+    imported_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
+    if not imported_objects:
+        logger.error(
+            "Import CLI returned success for %s but stdout contains no imported "
+            "objects.  stdout=%r stderr=%r",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(str(stdout).strip()[:500]),
+            sanitize_log_value(str(stderr).strip()[:500]),
+        )
+        error_msg = errors.import_no_objects_created()
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
