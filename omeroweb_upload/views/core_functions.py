@@ -3835,6 +3835,53 @@ def _import_job_entry(
     if normalization_context:
         import_name = (normalization_context.get("desired_name") or "").strip() or None
 
+    # Pre-flight check for .zarr directories: ask Bio-Formats (via the
+    # native ``omero import -f`` scan) whether it recognises the format
+    # BEFORE spending time on the real import.  Pure OME-NGFF zarrs
+    # (e.g. created by ome-zarr-py) lack the bioformats2raw layout and
+    # will be silently ignored by the standard importer — catch this early.
+    if (
+        file_path.is_dir()
+        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+    ):
+        try:
+            scan_result = _run_local_import_scan(file_path, timeout=60)
+            scan_groups = _parse_import_groups(scan_result.stdout)
+            if not scan_groups:
+                logger.error(
+                    "Pre-flight scan: Bio-Formats found 0 importable groups "
+                    "for %s (returncode=%d, stderr=%r). "
+                    "This zarr is likely not in bioformats2raw layout.",
+                    sanitize_log_value(rel_path),
+                    scan_result.returncode,
+                    sanitize_log_value((scan_result.stderr or "").strip()[:300]),
+                )
+                error_msg = errors.import_zarr_not_recognized()
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
+        except subprocess.TimeoutExpired:
+            # Scan timed out — proceed with the import anyway; the
+            # post-import validation will catch a silent failure.
+            logger.warning(
+                "Pre-flight scan timed out for %s; proceeding with import.",
+                sanitize_log_value(rel_path),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Pre-flight scan error for %s: %s; proceeding with import.",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+            )
+
     try:
         success, stdout, stderr = _import_file(
             conn=None,
