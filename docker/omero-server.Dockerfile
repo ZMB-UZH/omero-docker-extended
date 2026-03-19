@@ -49,6 +49,37 @@ RUN set -euo pipefail; \
     ln -sf "${VENV_DIR}/bin/python" "${SERVER_DIR}/bin/python"; \
     echo "Created symlink: ${SERVER_DIR}/bin/python -> ${VENV_DIR}/bin/python"
 
+# Upgrade OMEZarrReader and JZarr to support modern OME-NGFF zarrs
+# -----------------------------------------------------------------
+# The base image ships OMEZarrReader 0.3.1 (Mar 2023) and JZarr 0.3.4 (Aug 2021).
+# These are too old to handle many zarr layouts produced by modern tools.
+# Update to OMEZarrReader 0.6.0 (Jan 2025) + JZarr 0.4.2 (Oct 2023).
+ARG OMEZARR_READER_VERSION=0.6.0
+ARG JZARR_VERSION=0.4.2
+RUN set -euo pipefail; \
+    SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${SERVER_DIR}" ]]; then \
+        echo "ERROR: Could not find OMERO.server directory" >&2; \
+        exit 1; \
+    fi; \
+    OMEZARR_URL="https://artifacts.openmicroscopy.org/artifactory/ome.releases/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
+    JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
+    echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION} from ${OMEZARR_URL}"; \
+    curl -fsSL -o /tmp/OMEZarrReader.jar "${OMEZARR_URL}"; \
+    echo "Downloading JZarr ${JZARR_VERSION} from ${JZARR_URL}"; \
+    curl -fsSL -o /tmp/jzarr.jar "${JZARR_URL}"; \
+    for subdir in lib/client lib/server; do \
+        target="${SERVER_DIR}/${subdir}"; \
+        if [[ -d "${target}" ]]; then \
+            cp /tmp/OMEZarrReader.jar "${target}/OMEZarrReader.jar"; \
+            cp /tmp/jzarr.jar "${target}/jzarr.jar"; \
+            chown omero-server:omero-server "${target}/OMEZarrReader.jar" "${target}/jzarr.jar"; \
+            echo "Updated ${target}/OMEZarrReader.jar and jzarr.jar"; \
+        fi; \
+    done; \
+    rm -f /tmp/OMEZarrReader.jar /tmp/jzarr.jar; \
+    echo "OMEZarrReader ${OMEZARR_READER_VERSION} + JZarr ${JZARR_VERSION} installed"
+
 # Optional (off by default): vulnerability-testing updates for OMERO.server venv Python tooling
 # WARNING:
 # - Affects OMERO.server Python gateway
