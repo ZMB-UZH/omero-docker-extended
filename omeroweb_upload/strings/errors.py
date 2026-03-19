@@ -150,10 +150,9 @@ def import_no_objects_created():
 def import_zarr_not_recognized():
     return (
         "This .zarr folder is not in a format that OMERO can import. "
-        "OMERO requires the bioformats2raw layout (with OME/METADATA.ome.xml and "
-        "supported compression). Pure OME-NGFF zarrs (e.g. from ome-zarr-py with "
-        "gzip/zstd compression or s0/s1/... resolution levels) are not supported. "
-        "Convert using bioformats2raw before uploading."
+        "Automatic re-compression to zlib was attempted but the resulting "
+        "zarr is still not recognised by Bio-Formats.  The zarr may use an "
+        "unsupported layout or contain no importable image data."
     )
 
 
