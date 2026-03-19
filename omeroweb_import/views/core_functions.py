@@ -1563,8 +1563,9 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
             session_key = job_dict.get("session_key")
             if session_key and host and port:
                 for dataset_name in missing_dataset_names:
-                    ds_id = _create_dataset_via_cli(
+                    ds_id = _create_dataset_via_session(
                         session_key, host, port, dataset_name,
+                        group_id=job_dict.get("group_id"),
                         project_id=job_dict.get("project_id"),
                     )
                     if ds_id is not None:
@@ -2280,55 +2281,58 @@ def _get_job_service_credentials():
     return user, passwd, group_override, secure
 
 
-def _create_dataset_via_cli(
+def _create_dataset_via_session(
     session_key: str,
     host: str,
     port: int,
     name: str,
+    group_id: Optional[int] = None,
     project_id: Optional[int] = None,
 ) -> Optional[int]:
-    """Create a Dataset in OMERO using the job-service account.
+    """Create a Dataset using the user's session without destroying it.
 
-    Uses the service account instead of the user's session key because
-    the omero CLI destroys joined sessions on exit.
+    Joins the session via BlitzGateway with ``detachOnDestroy`` so the
+    session stays alive after the gateway is closed.
 
     Returns the dataset ID on success, or ``None`` on failure.
     """
-    service_user, service_pass, _, _ = _get_job_service_credentials()
-    if not service_pass:
-        logger.warning("Cannot create dataset via CLI: job-service password not configured")
-        return None
-    cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
-           "-s", host, "-p", str(port),
-           "obj", "new", "Dataset", f"name={name}"]
-    env = _build_cli_env()
+    import omero.rtypes as rtypes
+    from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
+
+    conn = BlitzGateway(host=host, port=int(port), secure=True)
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, check=False,
-            timeout=30, env=env, stdin=subprocess.DEVNULL,
-        )
-        if result.returncode != 0:
-            logger.warning(
-                "CLI dataset creation failed: %s",
-                sanitize_log_value((result.stderr or "").strip()[:300]),
-            )
+        ok = conn.connect(sUuid=session_key)
+        if not ok:
+            logger.warning("Cannot join session for dataset creation")
             return None
-        # Output: "DatasetI:1234"
-        ds_id = _parse_cli_id(result.stdout, "Dataset")
-        if ds_id is not None and project_id is not None:
-            link_cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
-                        "-s", host, "-p", str(port),
-                        "obj", "new", "ProjectDatasetLink",
-                        f"parent=Project:{project_id}",
-                        f"child=Dataset:{ds_id}"]
-            subprocess.run(
-                link_cmd, capture_output=True, text=True, check=False,
-                timeout=30, env=env, stdin=subprocess.DEVNULL,
-            )
+
+        if group_id is not None:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+
+        ds = DatasetI()
+        ds.setName(rtypes.rstring(name))
+        ds = conn.getUpdateService().saveAndReturnObject(ds, conn.SERVICE_OPTS)
+        ds_id = ds.getId().getValue()
+
+        if project_id is not None:
+            link = ProjectDatasetLinkI()
+            link.setParent(ProjectI(int(project_id), False))
+            link.setChild(DatasetI(ds_id, False))
+            conn.getUpdateService().saveObject(link, conn.SERVICE_OPTS)
+
+        logger.info("Created dataset %s (id=%d) via session gateway", sanitize_log_value(name), ds_id)
         return ds_id
     except Exception as exc:
-        logger.warning("CLI dataset creation error: %s", sanitize_log_value(exc))
+        logger.warning("Dataset creation via session failed: %s", sanitize_log_value(exc))
         return None
+    finally:
+        # Destroy the Ice communicator locally WITHOUT sending a
+        # closeSession RPC to the server.  This releases network
+        # resources while keeping the user's session alive.
+        try:
+            conn.c.getCommunicator().destroy()
+        except Exception:
+            pass
 
 
 
