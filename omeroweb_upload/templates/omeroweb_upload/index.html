@@ -185,6 +185,7 @@
             <p id="progress-stage">Stage: Waiting to start…</p>
             <p id="progress-text">Waiting to start…</p>
             <div id="progress-bar-container">
+                <div id="progress-bar-upload"></div>
                 <div id="progress-bar">0%</div>
             </div>
             <pre id="progress-log"></pre>
@@ -406,6 +407,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
 
         const progressSection = document.getElementById('progress-section');
         const progressBar = document.getElementById('progress-bar');
+        const progressBarUpload = document.getElementById('progress-bar-upload');
         const progressStage = document.getElementById('progress-stage');
         const progressText = document.getElementById('progress-text');
         const progressLog = document.getElementById('progress-log');
@@ -4500,6 +4502,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         function updateProgressFromJobs() {
             if (!importJobs.size) {
                 progressSection.style.display = 'none';
+                if (progressBarUpload) {
+                    progressBarUpload.style.width = '0%';
+                }
                 updateUploadButtonLabel();
                 updateCancelButtons();
                 return;
@@ -4512,6 +4517,11 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
             const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
+            // Orange bar: all bytes are on the server, ready for OMERO to import.
+            // Visible only in the gap beyond the blue bar.
+            if (progressBarUpload) {
+                progressBarUpload.style.width = '100%';
+            }
             let progressLabel;
             if (anyAwaiting) {
                 progressLabel = 'Preparing import...';

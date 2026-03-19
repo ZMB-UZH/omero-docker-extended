@@ -1005,3 +1005,309 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
     assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
     assert captured["import_name"] == "plate.zarr"
+
+
+# ---------------------------------------------------------------------------
+# Tests for scan-failure resilience (probe exception safety + fallback
+# directory package grouping).
+# ---------------------------------------------------------------------------
+
+
+def test_probe_import_path_returns_empty_result_on_scan_timeout(tmp_path: Path, monkeypatch):
+    """_probe_import_path must NOT crash the caller when _run_local_import_scan
+    raises (e.g. subprocess.TimeoutExpired).  It should return an empty result."""
+    upload_root = tmp_path / "job-root"
+    _, staged_members = _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
+    staged_root = upload_root / "_staged"
+
+    def timeout_scan(path: Path, timeout: int = 45):
+        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", timeout_scan)
+
+    cache = {}
+    result = core_functions._probe_import_path(
+        staged_root / "data.zarr",
+        staged_root,
+        ["data.zarr/.zattrs"],
+        cache,
+    )
+
+    assert result["coverage"] == set()
+    assert result["groups"] == ()
+    assert result["returncode"] == -1
+    assert "timed out" in result["stderr"]
+    # Cached so repeated calls do not re-run the scan.
+    assert str(staged_root / "data.zarr") in cache
+
+
+def test_probe_import_path_returns_empty_result_on_scan_oserror(tmp_path: Path, monkeypatch):
+    """Same as above but for OSError (e.g. disk full, permission denied)."""
+    upload_root = tmp_path / "job-root"
+    _, staged_members = _stage_relative_paths(upload_root, ["data.zarr/.zattrs"])
+    staged_root = upload_root / "_staged"
+
+    def oserror_scan(path: Path, timeout: int = 45):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", oserror_scan)
+
+    cache = {}
+    result = core_functions._probe_import_path(
+        staged_root / "data.zarr",
+        staged_root,
+        ["data.zarr/.zattrs"],
+        cache,
+    )
+
+    assert result["coverage"] == set()
+    assert result["groups"] == ()
+    assert result["returncode"] == -1
+
+
+def test_build_import_units_groups_zarr_by_extension_when_scan_fails(tmp_path: Path, monkeypatch):
+    """When the OMERO CLI scan fails for every probe, _build_import_units must
+    still group files under a known directory package root (.zarr) into a
+    single import unit instead of creating per-file units."""
+    upload_root = tmp_path / "job-root"
+    job, staged_members = _stage_relative_paths(
+        upload_root,
+        [
+            "data.zarr/.zattrs",
+            "data.zarr/0/0/0",
+            "data.zarr/0/0/1",
+        ],
+    )
+
+    def failing_scan(path: Path, timeout: int = 45):
+        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
+
+    units = core_functions._build_import_units(job, upload_root)
+
+    assert len(units) == 1
+    unit = units[0]
+    assert unit["relative_path"] == "data.zarr"
+    assert unit["staged_path"] == "_staged/data.zarr"
+    assert unit["dataset_relative_path"] == "data.zarr"
+    assert sorted(unit["covered_relative_paths"]) == sorted(
+        ["data.zarr/.zattrs", "data.zarr/0/0/0", "data.zarr/0/0/1"]
+    )
+    assert unit["cleanup_staged_paths"] == ["_staged/data.zarr"]
+
+
+def test_build_import_units_does_not_use_extension_fallback_when_probe_grouped(
+    tmp_path: Path, monkeypatch
+):
+    """When the probe DID find groups covering some zarr files, the
+    extension fallback must NOT re-group files that the probe excluded."""
+    upload_root = tmp_path / "job-root"
+    job, staged_members = _stage_relative_paths(
+        upload_root,
+        [
+            "plate.zarr/.zattrs",
+            "plate.zarr/0/0/0",
+            "plate.zarr/extra/notes.txt",
+        ],
+    )
+
+    package_root = upload_root / "_staged" / "plate.zarr"
+
+    def partial_scan(path: Path, timeout: int = 45):
+        stdout = ""
+        if path == package_root:
+            stdout = _group_stdout(
+                staged_members["plate.zarr/.zattrs"],
+                [
+                    staged_members["plate.zarr/.zattrs"],
+                    staged_members["plate.zarr/0/0/0"],
+                ],
+            )
+        return subprocess.CompletedProcess(
+            args=["omero", "import"], returncode=0, stdout=stdout, stderr=""
+        )
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", partial_scan)
+
+    units = core_functions._build_import_units(job, upload_root)
+
+    # The probe covered 2 files. The 3rd was NOT covered by any probe group
+    # but since siblings WERE covered, the extension fallback must NOT fire.
+    assert len(units) == 2
+    grouped_rel_paths = [rp for u in units for rp in u["covered_relative_paths"]]
+    assert "plate.zarr/extra/notes.txt" in grouped_rel_paths
+    # notes.txt must be its own individual unit
+    individual = [u for u in units if "plate.zarr/extra/notes.txt" in u["covered_relative_paths"]]
+    assert len(individual) == 1
+    assert individual[0]["relative_path"] == "plate.zarr/extra/notes.txt"
+
+
+def test_build_import_units_groups_mixed_zarr_and_regular_files_when_scan_fails(
+    tmp_path: Path, monkeypatch
+):
+    """A job with both zarr files and regular files.  The scan fails.
+    Zarr files should be grouped; regular files should remain individual."""
+    upload_root = tmp_path / "job-root"
+    job, staged_members = _stage_relative_paths(
+        upload_root,
+        [
+            "data.zarr/.zattrs",
+            "data.zarr/0/0/0",
+            "images/photo.tif",
+        ],
+    )
+
+    def failing_scan(path: Path, timeout: int = 45):
+        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
+
+    units = core_functions._build_import_units(job, upload_root)
+
+    assert len(units) == 2
+    zarr_unit = [u for u in units if u["relative_path"] == "data.zarr"]
+    tif_unit = [u for u in units if u["relative_path"] == "images/photo.tif"]
+    assert len(zarr_unit) == 1
+    assert len(tif_unit) == 1
+    assert sorted(zarr_unit[0]["covered_relative_paths"]) == sorted(
+        ["data.zarr/.zattrs", "data.zarr/0/0/0"]
+    )
+
+
+def test_build_import_units_groups_multiple_zarrs_when_scan_fails(
+    tmp_path: Path, monkeypatch
+):
+    """Two separate zarr directories in one upload.  Both must be grouped
+    independently when the scan fails."""
+    upload_root = tmp_path / "job-root"
+    job, staged_members = _stage_relative_paths(
+        upload_root,
+        [
+            "a.zarr/.zattrs",
+            "a.zarr/0/0",
+            "b.zarr/.zgroup",
+            "b.zarr/1/0",
+        ],
+    )
+
+    def failing_scan(path: Path, timeout: int = 45):
+        raise subprocess.TimeoutExpired(cmd=["omero", "import"], timeout=timeout)
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", failing_scan)
+
+    units = core_functions._build_import_units(job, upload_root)
+
+    assert len(units) == 2
+    unit_a = [u for u in units if u["relative_path"] == "a.zarr"]
+    unit_b = [u for u in units if u["relative_path"] == "b.zarr"]
+    assert len(unit_a) == 1
+    assert len(unit_b) == 1
+    assert sorted(unit_a[0]["covered_relative_paths"]) == ["a.zarr/.zattrs", "a.zarr/0/0"]
+    assert sorted(unit_b[0]["covered_relative_paths"]) == ["b.zarr/.zgroup", "b.zarr/1/0"]
+
+
+def test_build_import_units_groups_zarr_when_scan_returns_no_groups(
+    tmp_path: Path, monkeypatch
+):
+    """Scan succeeds (no exception, exit code 0) but returns no import groups
+    (e.g. JVM OOM wrote nothing to stdout, or Bio-Formats didn't recognize the
+    format).  The extension fallback must still group zarr files."""
+    upload_root = tmp_path / "job-root"
+    job, _ = _stage_relative_paths(
+        upload_root,
+        [
+            "data.zarr/.zattrs",
+            "data.zarr/0/0/0",
+            "data.zarr/0/0/1",
+        ],
+    )
+
+    def empty_scan(path: Path, timeout: int = 45):
+        return subprocess.CompletedProcess(
+            args=["omero", "import"], returncode=1, stdout="", stderr="Java heap space"
+        )
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", empty_scan)
+
+    units = core_functions._build_import_units(job, upload_root)
+
+    assert len(units) == 1
+    unit = units[0]
+    assert unit["relative_path"] == "data.zarr"
+    assert unit["staged_path"] == "_staged/data.zarr"
+    assert sorted(unit["covered_relative_paths"]) == sorted(
+        ["data.zarr/.zattrs", "data.zarr/0/0/0", "data.zarr/0/0/1"]
+    )
+
+
+def test_compatibility_thread_resets_flag_on_crash(tmp_path: Path, monkeypatch):
+    """If _run_compatibility_check_inner crashes, the wrapper must reset
+    compatibility_thread_active so the job is not stuck forever."""
+    jobs_root = tmp_path / "jobs"
+    upload_root = tmp_path / "uploads"
+    jobs_root.mkdir()
+    upload_root.mkdir()
+
+    import time as _time
+    job_id = "deadbeef" * 4
+    job = {
+        "job_id": job_id,
+        "username": "test",
+        "session_key": "sk",
+        "host": "omeroserver",
+        "port": 4064,
+        "files": [
+            {
+                "upload_id": "u0",
+                "relative_path": "data.zarr/.zattrs",
+                "staged_path": "_staged/data.zarr/.zattrs",
+                "size": 1,
+                "status": "uploaded",
+                "errors": [],
+            }
+        ],
+        "total_bytes": 1,
+        "uploaded_bytes": 1,
+        "imported_bytes": 0,
+        "status": "checking",
+        "errors": [],
+        "created": _time.time(),
+        "updated": _time.time(),
+        "compatibility_thread_active": True,
+        "compatibility_enabled": True,
+        "compatibility_status": "checking",
+        "incompatible_files": [],
+        "planned_import_units": [],
+        "dataset_map": {},
+        "orphan_dataset_name": None,
+        "import_index": 0,
+        "messages": [],
+        "import_thread_started": False,
+        "job_batch_size": 5,
+        "compatibility_confirmed": False,
+        "special_upload": "",
+        "sem_edx_associations": {},
+        "sem_edx_settings": {},
+    }
+
+    monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    core_functions._save_job(job)
+
+    # Inject a crash into _build_import_units to simulate a scan failure
+    # that propagates.
+    def crashing_build(*args, **kwargs):
+        raise RuntimeError("simulated JVM crash")
+
+    monkeypatch.setattr(core_functions, "_build_import_units", crashing_build)
+
+    # This must NOT raise; it should catch and reset the flag.
+    core_functions._run_compatibility_check(job_id)
+
+    reloaded = core_functions._load_job(job_id)
+    assert reloaded is not None
+    assert reloaded["compatibility_thread_active"] is False
+    assert reloaded["compatibility_status"] == "error"
+    # The job should transition to "ready" (errors don't block import)
+    assert reloaded["status"] == "ready"

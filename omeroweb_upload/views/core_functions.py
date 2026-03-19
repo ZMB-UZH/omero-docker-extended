@@ -3076,7 +3076,24 @@ def _probe_import_path(
     except OSError:
         path_resolved = path
 
-    result = _run_local_import_scan(path)
+    try:
+        result = _run_local_import_scan(path)
+    except Exception as exc:
+        logger.warning(
+            "Import scan failed for %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
+        cached = {
+            "coverage": set(),
+            "groups": (),
+            "returncode": -1,
+            "stderr": str(exc),
+            "stdout": "",
+        }
+        cache[cache_key] = cached
+        return cached
+
     active_relative_path_set = set(active_relative_paths)
     groups = []
     coverage = set()
@@ -3240,6 +3257,53 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
                 units.append(unit)
                 continue
 
+        # Fallback: if the probe found no group but this file belongs to a
+        # known directory package (e.g. .zarr), group all uncovered files
+        # under the same package root into one import unit.  This fires when
+        # the OMERO CLI scan failed (timeout, OOM, crash) and prevents
+        # individual zarr chunks from being imported as standalone files.
+        #
+        # Only activate when NO sibling under the same package root was
+        # already covered by a probe group — if the probe did produce groups,
+        # it intentionally excluded this file.
+        package_root = _directory_package_root_for_relative_path(rel_path)
+        if package_root:
+            any_sibling_covered_by_probe = any(
+                _directory_package_root_for_relative_path(covered_rp) == package_root
+                for covered_rp in covered_relative_paths
+            )
+            if not any_sibling_covered_by_probe:
+                package_entries = [
+                    rp
+                    for rp in active_relative_paths
+                    if rp not in covered_relative_paths
+                    and _directory_package_root_for_relative_path(rp) == package_root
+                ]
+                if package_entries:
+                    logger.info(
+                        "Probe-based grouping unavailable for directory package %s; "
+                        "grouping %d file(s) by extension fallback.",
+                        sanitize_log_value(package_root),
+                        len(package_entries),
+                    )
+                    covered_relative_paths.update(package_entries)
+                    staged_path = _build_staged_relative_path(package_root)
+                    units.append(
+                        {
+                            "cleanup_staged_paths": [staged_path],
+                            "covered_indexes": [
+                                entry_by_relative_path[rp]["index"]
+                                for rp in package_entries
+                            ],
+                            "covered_relative_paths": package_entries,
+                            "dataset_relative_path": package_root,
+                            "index": entry_by_relative_path[package_entries[0]]["index"],
+                            "relative_path": package_root,
+                            "staged_path": staged_path,
+                        }
+                    )
+                    continue
+
         entry = entry_by_relative_path[rel_path]
         covered_relative_paths.add(rel_path)
         units.append(_single_entry_import_unit(entry))
@@ -3331,6 +3395,27 @@ def _check_import_compatibility(
     }
 
 def _run_compatibility_check(job_id: str):
+    try:
+        _run_compatibility_check_inner(job_id)
+    except Exception as exc:
+        logger.error(
+            "Compatibility check crashed for job %s: %s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+
+        def reset_thread(job_dict):
+            job_dict["compatibility_thread_active"] = False
+            job_dict["compatibility_status"] = "error"
+            _refresh_job_status(job_dict)
+            job_dict["updated"] = time.time()
+            return job_dict
+
+        _update_job(job_id, reset_thread)
+
+
+def _run_compatibility_check_inner(job_id: str):
     job = _load_job(job_id)
     if not job:
         return
