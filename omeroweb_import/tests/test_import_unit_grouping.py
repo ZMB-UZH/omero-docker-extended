@@ -1267,34 +1267,49 @@ def test_import_job_entry_sets_import_name_for_zarr_directory(tmp_path: Path, mo
 # ---------------------------------------------------------------------------
 
 
-def test_preflight_scan_rejects_zarr_when_bioformats_finds_zero_groups(tmp_path: Path, monkeypatch):
-    """When ``omero import -f`` finds 0 importable groups for a .zarr
-    directory, the import must fail immediately with a clear message instead
-    of proceeding to an import that silently creates nothing."""
+def test_ome_ngff_zarr_uses_cli_zarr_import(tmp_path: Path, monkeypatch):
+    """OME-NGFF zarrs (multiscales, no bioformats2raw) must be imported via
+    ``omero zarr import`` instead of the standard Bio-Formats path."""
     upload_root = tmp_path / "job-root"
-    zarr_dir = upload_root / "_staged" / "unsupported.ome.zarr"
-    (zarr_dir / "s0" / "0" / "0").mkdir(parents=True, exist_ok=True)
-    (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
+    zarr_dir = upload_root / "_staged" / "image.ome.zarr"
+    (zarr_dir / "0").mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text(
+        '{"multiscales": [{"version": "0.4", "axes": [], "datasets": [{"path": "0"}]}]}',
+        encoding="utf-8",
+    )
+    (zarr_dir / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
 
-    # Mock the scan to return 0 groups (like Bio-Formats does for pure OME-NGFF)
-    scan_mock = type("Result", (), {"stdout": "", "stderr": "gzip not supported", "returncode": 0})()
-    monkeypatch.setattr(core_functions, "_run_local_import_scan", lambda path, timeout=None: scan_mock)
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
-    # _import_file should NOT be called — if it is, fail the test
+    # _import_file should NOT be called — OME-NGFF uses cli-zarr
     def must_not_be_called(*args, **kwargs):
-        raise AssertionError("_import_file should not be called when pre-flight scan rejects")
+        raise AssertionError("_import_file should not be called for OME-NGFF zarr")
     monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
+
+    # Mock _import_zarr_via_cli to verify it is called
+    called = {"value": False}
+    def mock_zarr_import(**kwargs):
+        called["value"] = True
+        return {
+            "cleanup_staged_paths": kwargs.get("cleanup_staged_paths", []),
+            "covered_indexes": kwargs.get("covered_indexes", []),
+            "covered_relative_paths": kwargs.get("covered_relative_paths", []),
+            "index": kwargs.get("entry", {}).get("index"),
+            "status": "imported",
+            "rel_path": "image.ome.zarr",
+            "file_path": zarr_dir,
+        }
+    monkeypatch.setattr(core_functions, "_import_zarr_via_cli", mock_zarr_import)
 
     result = core_functions._import_job_entry(
         {
-            "relative_path": "unsupported.ome.zarr",
-            "staged_path": "_staged/unsupported.ome.zarr",
+            "relative_path": "image.ome.zarr",
+            "staged_path": "_staged/image.ome.zarr",
             "covered_indexes": [0],
-            "covered_relative_paths": ["unsupported.ome.zarr/.zattrs"],
+            "covered_relative_paths": ["image.ome.zarr/.zattrs"],
         },
         upload_root,
         "session-key",
@@ -1304,8 +1319,8 @@ def test_preflight_scan_rejects_zarr_when_bioformats_finds_zero_groups(tmp_path:
         None,
     )
 
-    assert result["status"] == "error"
-    assert "not in a format" in result["entry_error"].lower()
+    assert called["value"], "_import_zarr_via_cli was not called for OME-NGFF zarr"
+    assert result["status"] == "imported"
 
 
 def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(tmp_path: Path, monkeypatch):

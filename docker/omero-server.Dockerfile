@@ -80,6 +80,26 @@ RUN set -euo pipefail; \
     rm -f /tmp/OMEZarrReader.jar /tmp/jzarr.jar; \
     echo "OMEZarrReader ${OMEZARR_READER_VERSION} + JZarr ${JZARR_VERSION} installed"
 
+# Install omero-zarr-pixel-buffer for serving OME-NGFF zarr pixel data
+# ---------------------------------------------------------------------
+# Required by omero-cli-zarr imported images.  Without this server-side
+# plugin, zarr-imported images have no accessible pixel data.
+ARG OMERO_ZARR_PIXEL_BUFFER_VERSION=0.6.1
+RUN set -euo pipefail; \
+    SERVER_DIR="$(find /opt/omero/server -maxdepth 1 -type d -name 'OMERO.server-*' 2>/dev/null | sort -V | tail -n 1)"; \
+    if [[ -z "${SERVER_DIR}" ]]; then \
+        echo "ERROR: Could not find OMERO.server directory" >&2; \
+        exit 1; \
+    fi; \
+    PIXEL_BUFFER_URL="https://artifacts.glencoesoftware.com/artifactory/gs-omero-snapshots-local/com/glencoesoftware/omero/omero-zarr-pixel-buffer/${OMERO_ZARR_PIXEL_BUFFER_VERSION}/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar"; \
+    echo "Downloading omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION}"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${PIXEL_BUFFER_URL}"; \
+    CAFFEINE_URL="https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar"; \
+    echo "Downloading caffeine 3.1.8 (pixel buffer dependency)"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" "${CAFFEINE_URL}"; \
+    chown omero-server:omero-server "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar"; \
+    echo "omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION} installed"
+
 # Optional (off by default): vulnerability-testing updates for OMERO.server venv Python tooling
 # WARNING:
 # - Affects OMERO.server Python gateway

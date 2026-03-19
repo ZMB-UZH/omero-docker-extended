@@ -1557,9 +1557,28 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
             purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
         )
         if not user_conn:
+            # suConn unavailable (job-service is not admin).  Create
+            # datasets using the OMERO CLI with the user's own session
+            # key — same mechanism the import CLI uses.
+            session_key = job_dict.get("session_key")
+            if session_key and host and port:
+                for dataset_name in missing_dataset_names:
+                    ds_id = _create_dataset_via_cli(
+                        session_key, host, port, dataset_name,
+                        project_id=job_dict.get("project_id"),
+                    )
+                    if ds_id is not None:
+                        dataset_map[dataset_name] = ds_id
+                    else:
+                        logger.warning(
+                            "Failed to create dataset %s via CLI for job %s.",
+                            sanitize_log_value(dataset_name),
+                            sanitize_log_value(job_dict.get("job_id")),
+                        )
+                        return False, generic_error
+                return True, None
             logger.warning(
-                "Background dataset preparation for job %s cannot reuse the live OMERO.web session. "
-                "Prepare dataset targets on the request path or provide an admin-capable job-service account.",
+                "Background dataset preparation for job %s: no session key available.",
                 sanitize_log_value(job_dict.get("job_id")),
             )
             return False, generic_error
@@ -2261,6 +2280,47 @@ def _get_job_service_credentials():
     return user, passwd, group_override, secure
 
 
+def _create_dataset_via_cli(
+    session_key: str,
+    host: str,
+    port: int,
+    name: str,
+    project_id: Optional[int] = None,
+) -> Optional[int]:
+    """Create a Dataset in OMERO using the CLI and the user's session key.
+
+    Returns the dataset ID on success, or ``None`` on failure.
+    """
+    cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+           "obj", "new", "Dataset", f"name={name}"]
+    env = _build_cli_env()
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False,
+            timeout=30, env=env, stdin=subprocess.DEVNULL,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "CLI dataset creation failed: %s",
+                sanitize_log_value((result.stderr or "").strip()[:300]),
+            )
+            return None
+        # Output: "DatasetI:1234"
+        ds_id = _parse_cli_id(result.stdout, "Dataset")
+        if ds_id is not None and project_id is not None:
+            # Link dataset to project
+            link_cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+                        "obj", "new", "ProjectDatasetLink",
+                        f"parent=Project:{project_id}",
+                        f"child=Dataset:{ds_id}"]
+            subprocess.run(
+                link_cmd, capture_output=True, text=True, check=False,
+                timeout=30, env=env, stdin=subprocess.DEVNULL,
+            )
+        return ds_id
+    except Exception as exc:
+        logger.warning("CLI dataset creation error: %s", sanitize_log_value(exc))
+        return None
 
 
 
@@ -3781,6 +3841,210 @@ def _start_compatibility_check_thread(job_id: str):
     worker.start()
 
 
+def _is_ome_ngff_zarr(zarr_path: Path) -> bool:
+    """Return *True* if *zarr_path* is a standard OME-NGFF zarr.
+
+    Returns *False* for bioformats2raw-layout zarrs (which have
+    ``bioformats2raw.layout`` in their ``.zattrs``) — those work fine
+    via the standard Bio-Formats import path.
+    """
+    zattrs_path = zarr_path / ".zattrs"
+    if not zattrs_path.is_file():
+        return False
+    try:
+        with open(zattrs_path) as fh:
+            attrs = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return False
+    if "bioformats2raw.layout" in attrs:
+        return False
+    return isinstance(attrs.get("multiscales"), list)
+
+
+# Root directory for permanently stored OME-NGFF zarrs.
+# Must be accessible to both the web container (writes) and the
+# server container (omero-zarr-pixel-buffer reads).
+OMERO_ZARR_STORE_ROOT = Path(os.environ.get("OMERO_ZARR_STORE_ROOT", "/OMERO/OME-Zarr"))
+
+
+def _import_zarr_via_cli(
+    file_path: Path,
+    session_key: str,
+    host: str,
+    port: int,
+    dataset_id: Optional[int],
+    import_name: Optional[str],
+    rel_path: str,
+    entry: dict,
+    cleanup_staged_paths: list,
+    covered_indexes: list,
+    covered_relative_paths: list,
+    progress_job: Optional[dict] = None,
+    username: Optional[str] = None,
+    group_name: Optional[str] = None,
+) -> dict:
+    """Import an OME-NGFF zarr using ``omero zarr import``.
+
+    Copies the zarr to permanent storage under :data:`OMERO_ZARR_STORE_ROOT`
+    (default ``/OMERO/OME-Zarr/``) and runs ``omero zarr import`` to register
+    it in OMERO.  The pixel data is served at display time by
+    omero-zarr-pixel-buffer directly from the permanent location.
+    """
+    from datetime import datetime
+
+    # Build permanent storage path following ManagedRepository convention.
+    _user = (username or "unknown").strip()
+    _group = (group_name or "unknown").strip()
+    now = datetime.now()
+    dest_dir = (
+        OMERO_ZARR_STORE_ROOT
+        / _group
+        / _user
+        / now.strftime("%Y-%m-%d")
+        / now.strftime("%H-%M-%S.%f")[:-3]
+    )
+    dest_zarr = dest_dir / file_path.name
+
+    # --- Copy to permanent storage -----------------------------------------
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(file_path, dest_zarr)
+        # Ensure readable by the OMERO server process.
+        for dirpath, dirnames, filenames in os.walk(dest_zarr):
+            os.chmod(dirpath, 0o755)
+            for fn in filenames:
+                os.chmod(os.path.join(dirpath, fn), 0o644)
+        os.chmod(str(dest_dir), 0o755)
+        logger.info(
+            "Copied OME-NGFF zarr %s → %s for omero-cli-zarr import",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(dest_zarr),
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to copy zarr %s to permanent storage %s: %s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(dest_dir),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        error_msg = f"Failed to copy zarr to permanent storage: {exc}"
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    # --- Run omero zarr import ---------------------------------------------
+    # Login arguments (-k, -s, -p) must precede the "zarr" subcommand.
+    cmd = [OMERO_CLI, "-k", session_key, "-s", host, "-p", str(port),
+           "zarr", "import"]
+    if dataset_id:
+        cmd.extend(["--target", f"Dataset:{dataset_id}"])
+    if import_name:
+        cmd.extend(["--name", import_name])
+    cmd.append(str(dest_zarr))
+
+    env = _build_cli_env()
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=600,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        success = result.returncode == 0
+
+        logger.info(
+            "omero zarr import for %s: returncode=%d stdout=%r stderr=%r",
+            sanitize_log_value(rel_path),
+            result.returncode,
+            sanitize_log_value(stdout.strip()[:500]),
+            sanitize_log_value(stderr.strip()[:500]),
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("omero zarr import timed out for %s", sanitize_log_value(rel_path))
+        success = False
+        stdout = ""
+        stderr = "Import timed out after 600 seconds"
+    except Exception as exc:
+        logger.error(
+            "omero zarr import failed for %s: %s",
+            sanitize_log_value(rel_path),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        success = False
+        stdout = ""
+        stderr = str(exc)
+
+    # --- Detect created objects --------------------------------------------
+    combined_output = stdout + "\n" + stderr
+    imported_objects = _IMPORT_OBJECT_PATTERN.findall(combined_output)
+
+    if not imported_objects and dataset_id:
+        api_objects = _verify_import_via_api(
+            session_key, host, port, dataset_id, import_name, file_path.name,
+        )
+        if api_objects:
+            imported_objects = api_objects
+            logger.info(
+                "OMERO API verification found objects for zarr %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(imported_objects[:5]),
+            )
+
+    if not success and not imported_objects:
+        error_msg = _classify_import_failure(stdout.strip(), stderr.strip())
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    if not imported_objects:
+        error_msg = errors.import_no_objects_created()
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    return {
+        "cleanup_staged_paths": cleanup_staged_paths,
+        "covered_indexes": covered_indexes,
+        "covered_relative_paths": covered_relative_paths,
+        "index": entry.get("index"),
+        "status": "imported",
+        "rel_path": rel_path,
+        "file_path": dest_zarr,
+    }
+
+
 def _needs_multiscale_flattening(zarr_path: Path) -> bool:
     """Return *True* if *zarr_path* is an OME-NGFF zarr with multiple
     resolution levels that must be flattened before OMERO import.
@@ -3861,6 +4125,35 @@ def _flatten_multiscale_zarr(zarr_path: Path) -> bool:
         with open(zattrs_path, "w") as fh:
             json.dump(attrs, fh, indent=4)
     return modified
+
+
+def _strip_non_image_subgroups(zarr_path: Path) -> bool:
+    """Remove non-image subgroups (e.g. ``tables/``, ``labels/``) from a zarr.
+
+    Fractal and other tools embed AnnData tables or label arrays inside the
+    zarr.  These subgroups may contain arrays with dtypes that JZarr cannot
+    parse (e.g. ``|O`` for Python object/string columns), causing
+    ``IllegalArgumentException: No enum constant com.bc.zarr.DataType.O``
+    which kills the entire Bio-Formats scan.
+
+    Operates **in-place** on *zarr_path*.  Returns *True* if any subgroups
+    were removed.
+    """
+    # Subgroup names that are never image data per the OME-NGFF spec.
+    NON_IMAGE_SUBGROUPS = {"tables", "labels"}
+
+    removed = False
+    for name in NON_IMAGE_SUBGROUPS:
+        target = zarr_path / name
+        if target.is_dir():
+            shutil.rmtree(target)
+            logger.info(
+                "Stripped non-image subgroup %s from zarr %s",
+                sanitize_log_value(name),
+                sanitize_log_value(zarr_path.name),
+            )
+            removed = True
+    return removed
 
 
 def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
@@ -4029,6 +4322,8 @@ def _import_job_entry(
     orphan_dataset_name,
     group_id=None,
     progress_job=None,
+    username=None,
+    group_name=None,
 ):
     rel_path = entry.get("relative_path")
     if not rel_path:
@@ -4085,84 +4380,39 @@ def _import_job_entry(
         import_name = file_path.name
 
     # ------------------------------------------------------------------
-    # Pre-flight zarr compatibility: Bio-Formats (JZarr) cannot read
-    # gzip/zstd-compressed zarrs.  When ``omero import -f`` finds 0
-    # importable groups, re-compress to zlib (supported by JZarr) and
-    # import the converted copy.  Temp copy is cleaned up in ``finally``.
+    # OME-NGFF zarr import via omero-cli-zarr.
+    #
+    # Standard OME-NGFF zarrs (multiscales metadata, no bioformats2raw
+    # layout) are imported using ``omero zarr import`` which bypasses
+    # Bio-Formats entirely.  The zarr is moved to permanent storage
+    # under /OMERO/OME-Zarr/ and omero-zarr-pixel-buffer serves pixels
+    # directly from there.
+    #
+    # bioformats2raw-layout zarrs (with OME/METADATA.ome.xml) continue
+    # to use the standard Bio-Formats import path below.
     # ------------------------------------------------------------------
     _zarr_temp_path = None
     if (
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+        and _is_ome_ngff_zarr(file_path)
     ):
-        try:
-            scan_result = _run_local_import_scan(file_path, timeout=60)
-            if not _parse_import_groups(scan_result.stdout):
-                logger.warning(
-                    "Pre-flight: Bio-Formats found 0 groups for %s "
-                    "— re-compressing to zlib.",
-                    sanitize_log_value(rel_path),
-                )
-                converted_parent = _recompress_zarr_for_import(file_path)
-                if converted_parent is not None:
-                    converted_zarr = converted_parent / file_path.name
-                    rescan = _run_local_import_scan(converted_zarr, timeout=60)
-                    if _parse_import_groups(rescan.stdout):
-                        _zarr_temp_path = converted_parent
-                        file_path = converted_zarr
-                    else:
-                        shutil.rmtree(converted_parent, ignore_errors=True)
-                # If conversion failed or rescan still found 0 groups → error
-                if _zarr_temp_path is None:
-                    error_msg = errors.import_zarr_not_recognized()
-                    job_error = messages.job_error_with_path(rel_path, error_msg)
-                    return {
-                        "cleanup_staged_paths": cleanup_staged_paths,
-                        "covered_indexes": covered_indexes,
-                        "covered_relative_paths": covered_relative_paths,
-                        "index": entry.get("index"),
-                        "status": "error",
-                        "entry_error": error_msg,
-                        "job_error": job_error,
-                        "job_message": job_error,
-                    }
-
-            # ----------------------------------------------------------
-            # Flatten multi-resolution OME-NGFF zarrs.  OMERO's rendering
-            # engine (BfPixelBuffer) reads the wrong resolution level from
-            # multi-resolution OME-NGFF zarrs, causing
-            # DimensionsOutOfBoundsException at thumbnail time.  Strip
-            # lower resolution levels so only full-res remains.  Zarrs
-            # using bioformats2raw.layout are unaffected (handled by the
-            # check inside _needs_multiscale_flattening).
-            # ----------------------------------------------------------
-            if _needs_multiscale_flattening(file_path):
-                if _zarr_temp_path is None:
-                    # No working copy yet — create one so the original is
-                    # never modified.
-                    copy_parent = file_path.parent / (
-                        f"__zarr_flatten_{uuid.uuid4().hex[:8]}__"
-                    )
-                    copy_dst = copy_parent / file_path.name
-                    try:
-                        shutil.copytree(file_path, copy_dst)
-                        _zarr_temp_path = copy_parent
-                        file_path = copy_dst
-                    except Exception as exc:
-                        logger.warning(
-                            "Failed to copy zarr for flattening %s: %s; "
-                            "proceeding without flattening.",
-                            sanitize_log_value(rel_path),
-                            sanitize_log_value(exc),
-                        )
-                        shutil.rmtree(copy_parent, ignore_errors=True)
-                if _zarr_temp_path is not None:
-                    _flatten_multiscale_zarr(file_path)
-
-        except subprocess.TimeoutExpired:
-            logger.warning("Pre-flight scan timed out for %s; proceeding.", sanitize_log_value(rel_path))
-        except Exception as exc:
-            logger.warning("Pre-flight scan error for %s: %s; proceeding.", sanitize_log_value(rel_path), sanitize_log_value(exc))
+        return _import_zarr_via_cli(
+            file_path=file_path,
+            session_key=session_key,
+            host=host,
+            port=port,
+            dataset_id=dataset_id,
+            import_name=import_name,
+            rel_path=rel_path,
+            entry=entry,
+            cleanup_staged_paths=cleanup_staged_paths,
+            covered_indexes=covered_indexes,
+            covered_relative_paths=covered_relative_paths,
+            progress_job=progress_job,
+            username=username,
+            group_name=group_name,
+        )
 
     try:
         try:
@@ -4450,6 +4700,8 @@ def _process_import_job(job_id: str):
                             orphan_dataset_name,
                             group_id=job.get("group_id"),
                             progress_job=job,
+                            username=job.get("username"),
+                            group_name=job.get("group_name"),
                         )
                     except Exception as exc:
                         logger.error(
@@ -4818,6 +5070,8 @@ def _process_import_job(job_id: str):
                                             dataset_map,
                                             orphan_dataset_name,
                                             progress_job=job,
+                                            username=job.get("username"),
+                                            group_name=job.get("group_name"),
                                         )
                                         if import_result.get("status") == "error":
                                             if import_result.get("job_error"):

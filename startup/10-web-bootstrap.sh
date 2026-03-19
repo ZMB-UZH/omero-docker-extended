@@ -354,3 +354,11 @@ upgrade_zarr_jars() {
 }
 
 upgrade_zarr_jars
+
+# ── Ensure OME-Zarr permanent storage directory exists ─────────────────────────
+omero_zarr_store="${OMERO_ZARR_STORE_ROOT:-/OMERO/OME-Zarr}"
+if [[ ! -d "${omero_zarr_store}" ]]; then
+    mkdir -p "${omero_zarr_store}"
+    echo "[web-bootstrap] Created OME-Zarr store: ${omero_zarr_store}"
+fi
+chmod 1777 "${omero_zarr_store}" 2>/dev/null || true

@@ -185,7 +185,6 @@
             <p id="progress-stage">Stage: Waiting to start…</p>
             <p id="progress-text">Waiting to start…</p>
             <div id="progress-bar-container">
-                <div id="progress-bar-upload"></div>
                 <div id="progress-bar">0%</div>
             </div>
             <pre id="progress-log"></pre>
@@ -407,7 +406,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
 
         const progressSection = document.getElementById('progress-section');
         const progressBar = document.getElementById('progress-bar');
-        const progressBarUpload = document.getElementById('progress-bar-upload');
         const progressStage = document.getElementById('progress-stage');
         const progressText = document.getElementById('progress-text');
         const progressLog = document.getElementById('progress-log');
@@ -484,10 +482,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         let uploadCompletedBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
-        let orangeStartTime = null;
-        let orangeLastBluePercent = 0;
-        let orangeLastBlueTime = null;
-        let orangeHighWaterMark = 0;
         const currentUserId = {{ user_id|default:"null"|safe }};
         const storage =
             (() => {
@@ -2143,51 +2137,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             progressBar.style.width = `${percent}%`;
             progressBar.textContent = `${percent}%`;
             progressText.textContent = text;
-        }
-
-        function resetOrangeProgress() {
-            orangeStartTime = null;
-            orangeLastBluePercent = 0;
-            orangeLastBlueTime = null;
-        }
-
-        function estimateOrangePercent(bluePercent, progressBytes, totalBytes) {
-            if (bluePercent >= 100) {
-                return 100;
-            }
-            const now = Date.now();
-            if (orangeStartTime === null) {
-                orangeStartTime = now;
-                orangeLastBluePercent = bluePercent;
-                orangeLastBlueTime = now;
-            }
-            if (bluePercent > orangeLastBluePercent) {
-                orangeLastBluePercent = bluePercent;
-                orangeLastBlueTime = now;
-            }
-
-            // Signal 1: real I/O progress from the backend
-            // (import_progress_bytes from /proc/{pid}/io monitoring).
-            let ioPercent = 0;
-            if (totalBytes > 0 && progressBytes > 0) {
-                ioPercent = Math.min(95, Math.round((progressBytes / totalBytes) * 100));
-            }
-
-            // Signal 2: time-based asymptotic estimate — ensures the bar
-            // keeps moving even when I/O tracking underestimates progress
-            // (e.g. zarr imports where rchar doesn't reflect actual progress).
-            const POLL_INTERVAL_S = 4;
-            const elapsed = (now - orangeLastBlueTime) / 1000 + POLL_INTERVAL_S;
-            const remaining = 100 - bluePercent;
-            const K = 0.003;
-            const timePercent = Math.min(95, Math.round(
-                bluePercent + remaining * 0.95 * (1 - Math.exp(-K * elapsed))
-            ));
-
-            // Use the HIGHER of both signals so the bar never gets stuck.
-            const result = Math.max(ioPercent, timePercent, bluePercent);
-            orangeHighWaterMark = Math.max(orangeHighWaterMark, result);
-            return orangeHighWaterMark;
         }
 
         function showNonBlockingModal(message) {
@@ -4450,7 +4399,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                     status: job.status,
                     created: job.created || index,
                 }));
-                jobs.__orangeHighWaterMark = orangeHighWaterMark;
                 storage.setItem(importJobsStorageKey, JSON.stringify(jobs));
                 storage.setItem(
                     importLogsStorageKey,
@@ -4511,22 +4459,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                         });
                     }
                 }
-                // Restore the exact high-water mark so the orange bar never
-                // drops below its previous position on refresh.  The mark
-                // captures the time-based estimate which can be ahead of
-                // the I/O bytes — recalculating from bytes alone would
-                // cause a visible backwards jump.
-                const savedHWM = typeof savedJobs.__orangeHighWaterMark === 'number'
-                    ? savedJobs.__orangeHighWaterMark : -1;
-                const restoredJobs = Array.from(importJobs.values());
-                const restoredTotalBytes = restoredJobs.reduce((acc, j) => acc + (j.total_bytes || 0), 0);
-                const restoredProgressBytes = restoredJobs.reduce((acc, j) => acc + (j.import_progress_bytes || 0), 0);
-                const restoredImportedBytes = restoredJobs.reduce((acc, j) => acc + (j.imported_bytes || 0), 0);
-                if (restoredTotalBytes > 0) {
-                    const restoredBlue = Math.floor((restoredImportedBytes / restoredTotalBytes) * 100);
-                    const restoredIo = Math.min(95, Math.round((restoredProgressBytes / restoredTotalBytes) * 100));
-                    orangeHighWaterMark = Math.max(savedHWM, restoredBlue, restoredIo, 0);
-                }
                 if (!hasActiveImport() && (importJobs.size || restoredLogs)) {
                     clearImportState();
                     setStatus('');
@@ -4574,11 +4506,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
         function updateProgressFromJobs() {
             if (!importJobs.size) {
                 progressSection.style.display = 'none';
-                if (progressBarUpload) {
-                    progressBarUpload.style.width = '0%';
-                    progressBarUpload.classList.remove('importing-active');
-                }
-                resetOrangeProgress();
                 updateUploadButtonLabel();
                 updateCancelButtons();
                 return;
@@ -4598,31 +4525,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             // so bars jump instantly to the server-reported position.
             const suppressTransition = _suppressBarTransition;
             if (suppressTransition) {
-                if (progressBarUpload) progressBarUpload.style.transition = 'none';
                 progressBar.style.transition = 'none';
             }
 
-            // Orange bar: MAX of real I/O progress (/proc/{pid}/io monitoring)
-            // and time-based asymptotic estimate — ensures the bar never gets
-            // stuck when one signal underestimates.  Animated diagonal stripes
-            // indicate work-in-progress.
-            const progressBytes = jobs.reduce((acc, job) => acc + (job.import_progress_bytes || 0), 0);
-            if (progressBarUpload) {
-                if (hasActiveImport() && !anyAwaiting) {
-                    const orangePercent = estimateOrangePercent(percent, progressBytes, totalBytes);
-                    progressBarUpload.style.width = `${orangePercent}%`;
-                    progressBarUpload.classList.add('importing-active');
-                } else {
-                    progressBarUpload.classList.remove('importing-active');
-                    if (anyAwaiting) {
-                        resetOrangeProgress();
-                        progressBarUpload.style.width = '0%';
-                    } else {
-                        resetOrangeProgress();
-                        progressBarUpload.style.width = `${percent}%`;
-                    }
-                }
-            }
             let progressLabel;
             if (anyAwaiting) {
                 progressLabel = 'Preparing import...';
@@ -4655,7 +4560,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
             if (suppressTransition) {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        if (progressBarUpload) progressBarUpload.style.transition = '';
                         progressBar.style.transition = '';
                     });
                 });
@@ -4746,7 +4650,6 @@ const rootStatusUrl = new URL('{% url "omeroweb_import_root_status" %}', window.
                 errors: [],
                 created: Date.now(),
             });
-            resetOrangeProgress();
             updateProgressFromJobs();
             ensureImportPolling();
         }
