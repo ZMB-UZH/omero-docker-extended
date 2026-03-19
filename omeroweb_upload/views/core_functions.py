@@ -3784,39 +3784,74 @@ def _start_compatibility_check_thread(job_id: str):
 def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
     """Re-compress a .zarr directory from an unsupported codec (e.g. gzip) to
     zlib, which JZarr / Bio-Formats can read.  Returns the path to the
-    temporary re-compressed copy, or ``None`` on failure.
+    temporary re-compressed parent directory, or ``None`` on failure.
+
+    The approach copies the entire directory tree first (preserving structure,
+    dimension separators, metadata files, and nested groups), then walks the
+    copy to re-compress only the chunk data in-place.  This handles any zarr
+    layout — flat or nested, ``/`` or ``.`` dimension separator, bioformats2raw
+    or OME-NGFF — without loading full arrays into memory.
     """
     try:
-        import zarr as zarr_lib
+        import numcodecs
         from numcodecs import Zlib
     except ImportError:
-        logger.warning("zarr/numcodecs not installed; cannot re-compress %s", zarr_path)
+        logger.warning("numcodecs not installed; cannot re-compress %s", zarr_path)
         return None
 
     # Keep the original .zarr name so Bio-Formats recognises the extension.
     dst_parent = zarr_path.parent / f"__zarr_recompress_{uuid.uuid4().hex[:8]}__"
     dst = dst_parent / zarr_path.name
+    new_compressor = Zlib(level=1)
+    new_compressor_config = {"id": "zlib", "level": 1}
+
     try:
-        dst_parent.mkdir(parents=True, exist_ok=True)
-        src_root = zarr_lib.open(str(zarr_path), mode="r")
-        dst_root = zarr_lib.open(str(dst), mode="w")
-        dst_root.attrs.update(dict(src_root.attrs))
-        for key in src_root.keys():
-            src_arr = src_root[key]
-            if not hasattr(src_arr, "shape"):
+        # Step 1: copy the entire directory tree (structure + all files).
+        shutil.copytree(zarr_path, dst)
+
+        # Step 2: walk the copy and re-compress arrays whose codec is not zlib.
+        recompressed_count = 0
+        for dirpath, _dirnames, filenames in os.walk(dst):
+            if ".zarray" not in filenames:
                 continue
-            dst_arr = dst_root.create_dataset(
-                key,
-                shape=src_arr.shape,
-                chunks=src_arr.chunks,
-                dtype=src_arr.dtype,
-                compressor=Zlib(level=1),
-            )
-            dst_arr[:] = src_arr[:]
+
+            zarray_file = Path(dirpath) / ".zarray"
+            try:
+                with open(zarray_file) as fh:
+                    meta = json.load(fh)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            old_spec = meta.get("compressor")
+            if old_spec is None:
+                continue  # uncompressed data — nothing to do
+            if old_spec.get("id") == "zlib":
+                continue  # already zlib — skip
+
+            try:
+                old_codec = numcodecs.get_codec(old_spec)
+            except Exception:
+                logger.warning(
+                    "Unknown zarr compressor %r in %s; skipping array",
+                    sanitize_log_value(old_spec.get("id", "?")),
+                    sanitize_log_value(zarray_file),
+                )
+                continue
+
+            # Re-compress every chunk file under this array directory.
+            _recompress_chunk_tree(Path(dirpath), old_codec, new_compressor)
+
+            # Update the .zarray metadata to reflect the new compressor.
+            meta["compressor"] = new_compressor_config
+            with open(zarray_file, "w") as fh:
+                json.dump(meta, fh, indent=4)
+            recompressed_count += 1
+
         logger.info(
-            "Re-compressed zarr %s → %s (zlib level 1)",
+            "Re-compressed zarr %s → %s (zlib level 1, %d arrays recompressed)",
             sanitize_log_value(zarr_path.name),
             sanitize_log_value(dst),
+            recompressed_count,
         )
         return dst_parent  # return the parent dir for easy cleanup
     except Exception as exc:
@@ -3828,6 +3863,27 @@ def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
         )
         shutil.rmtree(dst_parent, ignore_errors=True)
         return None
+
+
+def _recompress_chunk_tree(array_dir: Path, old_codec, new_codec):
+    """Re-compress all chunk files under *array_dir* in-place.
+
+    Handles both ``.`` dimension separator (chunks as files in *array_dir*)
+    and ``/`` dimension separator (chunks nested in sub-directories).
+    Metadata files (names starting with ``.``) are left untouched.
+    """
+    for item in array_dir.iterdir():
+        if item.name.startswith("."):
+            continue  # .zarray, .zattrs, .zgroup — skip metadata
+        if item.is_dir():
+            _recompress_chunk_tree(item, old_codec, new_codec)
+        elif item.is_file():
+            try:
+                raw = item.read_bytes()
+                decompressed = old_codec.decode(raw)
+                item.write_bytes(new_codec.encode(decompressed))
+            except Exception:
+                pass  # best-effort; corrupt chunks are left as-is
 
 
 def _import_job_entry(
@@ -3883,6 +3939,17 @@ def _import_job_entry(
     import_name = None
     if normalization_context:
         import_name = (normalization_context.get("desired_name") or "").strip() or None
+
+    # For directory packages (.zarr), ensure the import name is set to the
+    # directory name so OMERO doesn't fall back to an internal chunk
+    # filename.  Uses the full name including extension — consistent with
+    # _logical_import_entry_display_name() which returns PurePosixPath.name.
+    if (
+        import_name is None
+        and file_path.is_dir()
+        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+    ):
+        import_name = file_path.name
 
     # ------------------------------------------------------------------
     # Pre-flight zarr compatibility: Bio-Formats (JZarr) cannot read
@@ -3955,24 +4022,38 @@ def _import_job_entry(
             stderr = ""
 
         if not success:
-            logger.warning(
-                "Import failed for %s (stdout=%r, stderr=%r).",
-                sanitize_log_value(rel_path),
-                sanitize_log_value(str(stdout).strip()),
-                sanitize_log_value(str(stderr).strip()),
-            )
-            error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
-            job_error = messages.job_error_with_path(rel_path, error_msg)
-            return {
-                "cleanup_staged_paths": cleanup_staged_paths,
-                "covered_indexes": covered_indexes,
-                "covered_relative_paths": covered_relative_paths,
-                "index": entry.get("index"),
-                "status": "error",
-                "entry_error": error_msg,
-                "job_error": job_error,
-                "job_message": job_error,
-            }
+            # The CLI exited non-zero, but OMERO may have already committed
+            # the Image/Fileset before the process errored (e.g. during
+            # post-import thumbnail generation).  Check stdout for created
+            # objects before declaring failure.
+            salvaged_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
+            if salvaged_objects:
+                logger.warning(
+                    "Import CLI returned non-zero for %s but stdout contains "
+                    "created objects (%s); treating as success.  stderr=%r",
+                    sanitize_log_value(rel_path),
+                    sanitize_log_value(salvaged_objects[:5]),
+                    sanitize_log_value(str(stderr).strip()[:500]),
+                )
+            else:
+                logger.warning(
+                    "Import failed for %s (stdout=%r, stderr=%r).",
+                    sanitize_log_value(rel_path),
+                    sanitize_log_value(str(stdout).strip()),
+                    sanitize_log_value(str(stderr).strip()),
+                )
+                error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
 
         # Server-side validation: the CLI exited 0, but verify that at least one
         # OMERO object (Image, Fileset, etc.) was actually created.  The CLI can

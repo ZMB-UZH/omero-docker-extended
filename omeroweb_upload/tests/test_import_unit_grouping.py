@@ -775,7 +775,10 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
     assert result["status"] == "imported"
     assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
-    assert captured["import_name"] is None
+    # Directory packages always derive an import name from the folder name
+    # (including extension) so Bio-Formats doesn't fall back to an internal
+    # chunk filename.  Consistent with _logical_import_entry_display_name().
+    assert captured["import_name"] == "plate.zarr"
 
 
 def test_entry_requires_name_normalization_only_for_grouped_internal_header():
@@ -1108,6 +1111,120 @@ def test_import_job_entry_succeeds_when_stdout_contains_image_id(tmp_path: Path,
     assert result["status"] == "imported"
 
 
+def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(tmp_path: Path, monkeypatch):
+    """When the OMERO CLI returns non-zero but stdout contains created
+    object IDs, the import should be treated as success — the server
+    committed the data before the CLI errored (e.g. thumbnail generation)."""
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        # CLI returned non-zero but did create objects
+        return False, "Image:751\nFileset:200\n", "Some error during post-processing"
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
+
+
+def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(tmp_path: Path, monkeypatch):
+    """When the CLI returns non-zero and stdout has no objects, the import
+    must report failure."""
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        return False, "Some diagnostic output\n", "Fatal error"
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "error"
+
+
+def test_import_job_entry_sets_import_name_for_zarr_directory(tmp_path: Path, monkeypatch):
+    """Zarr directory imports must always set an import name derived from
+    the folder name so Bio-Formats doesn't use a chunk coordinate."""
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "myimage.ome.zarr"
+    zarr_dir.mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
+
+    captured = {}
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        captured["import_name"] = import_name
+        return True, "Image:1\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "myimage.ome.zarr",
+            "staged_path": "_staged/myimage.ome.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["myimage.ome.zarr/.zattrs"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
+    assert captured["import_name"] == "myimage.ome.zarr"
+
+
 # ---------------------------------------------------------------------------
 # Tests for pre-flight zarr scan (native CLI detection of unsupported formats)
 # ---------------------------------------------------------------------------
@@ -1151,7 +1268,7 @@ def test_preflight_scan_rejects_zarr_when_bioformats_finds_zero_groups(tmp_path:
     )
 
     assert result["status"] == "error"
-    assert "bioformats2raw" in result["entry_error"].lower()
+    assert "not in a format" in result["entry_error"].lower()
 
 
 def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(tmp_path: Path, monkeypatch):
