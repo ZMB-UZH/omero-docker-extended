@@ -345,6 +345,9 @@ services:
     build:
       context: .
       dockerfile: docker/omero-server.Dockerfile
+      args:
+        OMEZARR_READER_VERSION: "${OMEZARR_READER_VERSION:-0.6.0}"
+        JZARR_VERSION: "${JZARR_VERSION:-0.4.2}"
     restart: unless-stopped
     depends_on:
       database:
@@ -434,6 +437,9 @@ services:
     build:
       context: .
       dockerfile: docker/omero-web.Dockerfile
+      args:
+        OMEZARR_READER_VERSION: "${OMEZARR_READER_VERSION:-0.6.0}"
+        JZARR_VERSION: "${JZARR_VERSION:-0.4.2}"
     restart: unless-stopped
     depends_on:
       omeroserver:
