@@ -742,7 +742,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
         captured["path"] = path
         captured["dataset_id"] = dataset_id
         captured["import_name"] = import_name
-        return True, "", ""
+        return True, "Image:123\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
     monkeypatch.setattr(
@@ -1005,6 +1005,107 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
     assert captured["path"] == package_root
     assert captured["dataset_id"] == 77
     assert captured["import_name"] == "plate.zarr"
+
+
+# ---------------------------------------------------------------------------
+# Tests for server-side import validation (CLI exit-code 0 but no objects)
+# ---------------------------------------------------------------------------
+
+
+def test_import_object_pattern_matches_standard_cli_output():
+    """The regex must detect Image, Fileset, Plate, Dataset, and
+    OriginalFile object IDs in typical OMERO CLI stdout."""
+    pattern = core_functions._IMPORT_OBJECT_PATTERN
+    stdout = (
+        "Other:1\n"
+        "Image:42\n"
+        "Fileset:10\n"
+        "Plate:7\n"
+        "OriginalFile:100\n"
+        "Screen:3\n"
+        "Dataset:99\n"
+    )
+    matches = pattern.findall(stdout)
+    assert len(matches) == 6
+    assert "42" in matches
+    assert "10" in matches
+
+    # Empty stdout: no matches
+    assert pattern.findall("") == []
+    assert pattern.findall("Some diagnostic output") == []
+
+
+def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_path: Path, monkeypatch):
+    """When the OMERO CLI returns exit-code 0 but stdout contains no imported
+    object IDs, the result must be an error, not a false success."""
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "broken.zarr" / ".zattrs"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        # CLI returned success (exit 0) but produced no object IDs in stdout
+        return True, "Some diagnostic output with no objects\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "broken.zarr",
+            "staged_path": "_staged/broken.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["broken.zarr/.zattrs"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "error"
+    assert "no images were created" in result["entry_error"].lower()
+
+
+def test_import_job_entry_succeeds_when_stdout_contains_image_id(tmp_path: Path, monkeypatch):
+    """Normal successful import: CLI exit-code 0 with Image IDs in stdout."""
+    upload_root = tmp_path / "job-root"
+    staged_file = upload_root / "_staged" / "test.tif"
+    staged_file.parent.mkdir(parents=True, exist_ok=True)
+    staged_file.write_text("x", encoding="utf-8")
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        return True, "OriginalFile:100\nImage:42\nFileset:10\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "test.tif",
+            "staged_path": "_staged/test.tif",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["test.tif"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
 
 
 # ---------------------------------------------------------------------------
