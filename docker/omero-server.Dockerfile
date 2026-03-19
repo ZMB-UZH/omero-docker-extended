@@ -94,11 +94,25 @@ RUN set -euo pipefail; \
     PIXEL_BUFFER_URL="https://artifacts.glencoesoftware.com/artifactory/gs-omero-snapshots-local/com/glencoesoftware/omero/omero-zarr-pixel-buffer/${OMERO_ZARR_PIXEL_BUFFER_VERSION}/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar"; \
     echo "Downloading omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION}"; \
     curl -fsSL -o "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${PIXEL_BUFFER_URL}"; \
-    CAFFEINE_URL="https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar"; \
-    echo "Downloading caffeine 3.1.8 (pixel buffer dependency)"; \
-    curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" "${CAFFEINE_URL}"; \
-    chown omero-server:omero-server "${SERVER_DIR}/lib/server/omero-zarr-pixel-buffer-${OMERO_ZARR_PIXEL_BUFFER_VERSION}.jar" "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar"; \
-    echo "omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION} installed"
+    echo "Downloading omero-zarr-pixel-buffer runtime dependencies"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/caffeine-3.1.8.jar" \
+        "https://repo1.maven.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-s3-1.12.659.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.659/aws-java-sdk-s3-1.12.659.jar"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-core-1.12.659.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.12.659/aws-java-sdk-core-1.12.659.jar"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/aws-java-sdk-kms-1.12.659.jar" \
+        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-kms/1.12.659/aws-java-sdk-kms-1.12.659.jar"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/s3fs-2.2.3.jar" \
+        "https://repo1.maven.org/maven2/org/lasersonlab/s3fs/2.2.3/s3fs-2.2.3.jar"; \
+    curl -fsSL -o "${SERVER_DIR}/lib/server/tika-core-1.28.5.jar" \
+        "https://repo1.maven.org/maven2/org/apache/tika/tika-core/1.28.5/tika-core-1.28.5.jar"; \
+    chown omero-server:omero-server "${SERVER_DIR}"/lib/server/omero-zarr-pixel-buffer-*.jar \
+        "${SERVER_DIR}"/lib/server/caffeine-*.jar \
+        "${SERVER_DIR}"/lib/server/aws-java-sdk-*.jar \
+        "${SERVER_DIR}"/lib/server/s3fs-*.jar \
+        "${SERVER_DIR}"/lib/server/tika-core-*.jar; \
+    echo "omero-zarr-pixel-buffer ${OMERO_ZARR_PIXEL_BUFFER_VERSION} + dependencies installed"
 
 # Optional (off by default): vulnerability-testing updates for OMERO.server venv Python tooling
 # WARNING:
