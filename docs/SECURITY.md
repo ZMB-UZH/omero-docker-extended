@@ -53,7 +53,7 @@ Locale data is intentionally preserved across the hardened images for compatibil
 - Plugin views use `omero_plugin_common.request_utils.parse_json_body()` for safe JSON parsing.
 - OMERO permissions are checked for every data access operation (project, dataset, image).
 - The OMP plugin validates regex patterns before applying them to filenames.
-- The Upload plugin sanitizes filenames and validates file paths before import.
+- The Import plugin sanitizes filenames and validates file paths before import.
 - The Admin Tools plugin restricts access to root users via `_require_root_user()`.
 
 ## Annotation ownership
