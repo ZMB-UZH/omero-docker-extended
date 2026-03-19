@@ -3781,6 +3781,88 @@ def _start_compatibility_check_thread(job_id: str):
     worker.start()
 
 
+def _needs_multiscale_flattening(zarr_path: Path) -> bool:
+    """Return *True* if *zarr_path* is an OME-NGFF zarr with multiple
+    resolution levels that must be flattened before OMERO import.
+
+    Zarrs using ``bioformats2raw.layout`` are handled correctly by OMERO's
+    rendering engine and are excluded.
+    """
+    zattrs_path = zarr_path / ".zattrs"
+    if not zattrs_path.is_file():
+        return False
+    try:
+        with open(zattrs_path) as fh:
+            attrs = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return False
+    # bioformats2raw layout zarrs work fine in OMERO — skip.
+    if "bioformats2raw.layout" in attrs:
+        return False
+    multiscales = attrs.get("multiscales")
+    if not isinstance(multiscales, list):
+        return False
+    return any(len(ms.get("datasets", [])) > 1 for ms in multiscales)
+
+
+def _flatten_multiscale_zarr(zarr_path: Path) -> bool:
+    """Strip lower resolution levels from a multi-resolution OME-NGFF zarr.
+
+    OMERO's rendering engine (``BfPixelBuffer``) may read from the wrong
+    resolution level of multi-resolution OME-NGFF zarrs, causing
+    ``DimensionsOutOfBoundsException`` when generating thumbnails.  This
+    function keeps only the highest-resolution dataset (first entry in the
+    ``multiscales.datasets`` list, per the OME-NGFF spec) and removes all
+    lower-resolution arrays so Bio-Formats reads the correct data.
+
+    Operates **in-place** on *zarr_path*.  Returns *True* if changes were
+    made.
+    """
+    zattrs_path = zarr_path / ".zattrs"
+    if not zattrs_path.is_file():
+        return False
+    try:
+        with open(zattrs_path) as fh:
+            attrs = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return False
+    # bioformats2raw layout zarrs work fine in OMERO — never flatten them.
+    if "bioformats2raw.layout" in attrs:
+        return False
+    multiscales = attrs.get("multiscales")
+    if not isinstance(multiscales, list):
+        return False
+
+    modified = False
+    for ms in multiscales:
+        datasets = ms.get("datasets", [])
+        if len(datasets) <= 1:
+            continue
+        # OME-NGFF spec: datasets are ordered highest → lowest resolution.
+        keep_path = datasets[0].get("path")
+        remove_paths = [d.get("path") for d in datasets[1:] if d.get("path")]
+        for rpath in remove_paths:
+            target = zarr_path / rpath
+            if target.is_dir():
+                shutil.rmtree(target)
+            elif target.is_file():
+                target.unlink()
+        ms["datasets"] = [datasets[0]]
+        modified = True
+        logger.info(
+            "Flattened multiscale zarr %s: kept %s, removed %d lower "
+            "resolution level(s)",
+            sanitize_log_value(zarr_path.name),
+            sanitize_log_value(keep_path),
+            len(remove_paths),
+        )
+
+    if modified:
+        with open(zattrs_path, "w") as fh:
+            json.dump(attrs, fh, indent=4)
+    return modified
+
+
 def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
     """Re-compress a .zarr directory from an unsupported codec (e.g. gzip) to
     zlib, which JZarr / Bio-Formats can read.  Returns the path to the
@@ -4008,7 +4090,7 @@ def _import_job_entry(
     # importable groups, re-compress to zlib (supported by JZarr) and
     # import the converted copy.  Temp copy is cleaned up in ``finally``.
     # ------------------------------------------------------------------
-    _zarr_recompressed_path = None
+    _zarr_temp_path = None
     if (
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
@@ -4026,12 +4108,12 @@ def _import_job_entry(
                     converted_zarr = converted_parent / file_path.name
                     rescan = _run_local_import_scan(converted_zarr, timeout=60)
                     if _parse_import_groups(rescan.stdout):
-                        _zarr_recompressed_path = converted_parent
+                        _zarr_temp_path = converted_parent
                         file_path = converted_zarr
                     else:
                         shutil.rmtree(converted_parent, ignore_errors=True)
                 # If conversion failed or rescan still found 0 groups → error
-                if _zarr_recompressed_path is None:
+                if _zarr_temp_path is None:
                     error_msg = errors.import_zarr_not_recognized()
                     job_error = messages.job_error_with_path(rel_path, error_msg)
                     return {
@@ -4044,6 +4126,39 @@ def _import_job_entry(
                         "job_error": job_error,
                         "job_message": job_error,
                     }
+
+            # ----------------------------------------------------------
+            # Flatten multi-resolution OME-NGFF zarrs.  OMERO's rendering
+            # engine (BfPixelBuffer) reads the wrong resolution level from
+            # multi-resolution OME-NGFF zarrs, causing
+            # DimensionsOutOfBoundsException at thumbnail time.  Strip
+            # lower resolution levels so only full-res remains.  Zarrs
+            # using bioformats2raw.layout are unaffected (handled by the
+            # check inside _needs_multiscale_flattening).
+            # ----------------------------------------------------------
+            if _needs_multiscale_flattening(file_path):
+                if _zarr_temp_path is None:
+                    # No working copy yet — create one so the original is
+                    # never modified.
+                    copy_parent = file_path.parent / (
+                        f"__zarr_flatten_{uuid.uuid4().hex[:8]}__"
+                    )
+                    copy_dst = copy_parent / file_path.name
+                    try:
+                        shutil.copytree(file_path, copy_dst)
+                        _zarr_temp_path = copy_parent
+                        file_path = copy_dst
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to copy zarr for flattening %s: %s; "
+                            "proceeding without flattening.",
+                            sanitize_log_value(rel_path),
+                            sanitize_log_value(exc),
+                        )
+                        shutil.rmtree(copy_parent, ignore_errors=True)
+                if _zarr_temp_path is not None:
+                    _flatten_multiscale_zarr(file_path)
+
         except subprocess.TimeoutExpired:
             logger.warning("Pre-flight scan timed out for %s; proceeding.", sanitize_log_value(rel_path))
         except Exception as exc:
@@ -4156,9 +4271,9 @@ def _import_job_entry(
             "file_path": file_path,
         }
     finally:
-        # Clean up temporary re-compressed zarr copy (if created).
-        if _zarr_recompressed_path is not None:
-            shutil.rmtree(_zarr_recompressed_path, ignore_errors=True)
+        # Clean up temporary zarr copy (recompressed and/or flattened).
+        if _zarr_temp_path is not None:
+            shutil.rmtree(_zarr_temp_path, ignore_errors=True)
 
 
 def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
