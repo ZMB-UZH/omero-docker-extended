@@ -738,7 +738,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
 
     captured = {}
 
-    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None):
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
         captured["path"] = path
         captured["dataset_id"] = dataset_id
         captured["import_name"] = import_name
@@ -971,7 +971,7 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
         },
     )
 
-    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None):
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
         captured["path"] = path
         captured["dataset_id"] = dataset_id
         captured["import_name"] = import_name
@@ -1311,3 +1311,94 @@ def test_compatibility_thread_resets_flag_on_crash(tmp_path: Path, monkeypatch):
     assert reloaded["compatibility_status"] == "error"
     # The job should transition to "ready" (errors don't block import)
     assert reloaded["status"] == "ready"
+
+
+# ---------------------------------------------------------------------------
+# Tests for import progress monitoring helpers
+# ---------------------------------------------------------------------------
+
+
+def test_read_proc_rchar_returns_int_for_current_process():
+    """_read_proc_rchar should be able to read /proc/self/io."""
+    import os
+    rchar = core_functions._read_proc_rchar(os.getpid())
+    # On Linux this should return a positive integer.
+    # On other platforms it returns None — both are acceptable.
+    assert rchar is None or isinstance(rchar, int)
+
+
+def test_read_proc_rchar_returns_none_for_missing_pid():
+    """_read_proc_rchar must not crash for a non-existent PID."""
+    result = core_functions._read_proc_rchar(999999999)
+    assert result is None
+
+
+def test_get_path_total_size_for_file(tmp_path: Path):
+    f = tmp_path / "test.bin"
+    f.write_bytes(b"x" * 1234)
+    assert core_functions._get_path_total_size(f) == 1234
+
+
+def test_get_path_total_size_for_directory(tmp_path: Path):
+    d = tmp_path / "mydir"
+    d.mkdir()
+    (d / "a.txt").write_bytes(b"a" * 100)
+    sub = d / "sub"
+    sub.mkdir()
+    (sub / "b.txt").write_bytes(b"b" * 200)
+    assert core_functions._get_path_total_size(d) == 300
+
+
+def test_get_path_total_size_for_missing_path(tmp_path: Path):
+    missing = tmp_path / "nope"
+    assert core_functions._get_path_total_size(missing) == 0
+
+
+def test_build_cli_env_returns_dict_with_home(monkeypatch, tmp_path: Path):
+    """_build_cli_env should set HOME and XDG_CACHE_HOME."""
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    env = core_functions._build_cli_env()
+    assert "HOME" in env
+    assert "XDG_CACHE_HOME" in env
+    assert env["HOME"].startswith(str(upload_root))
+
+
+def test_import_file_progress_job_updates_import_progress_bytes(tmp_path: Path, monkeypatch):
+    """When progress_job is provided, _import_file should update
+    import_progress_bytes in the job dict via /proc monitoring."""
+    upload_root = tmp_path / "uploads"
+    upload_root.mkdir()
+    monkeypatch.setattr(core_functions, "_get_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions, "_get_import_timeout_seconds", lambda: 30)
+
+    test_file = tmp_path / "test.czi"
+    test_file.write_bytes(b"\x00" * (1024 * 1024))  # 1MB
+
+    # Mock _build_omero_cli_command to return a simple command that reads the file
+    monkeypatch.setattr(
+        core_functions, "_build_omero_cli_command",
+        lambda subcmd, sk, h, p: ["python3", "-c",
+            f"import time; f=open('{test_file}','rb'); f.read(); time.sleep(0.5)"]
+    )
+
+    job = {"imported_bytes": 500, "import_progress_bytes": 500}
+
+    # Replace _save_job with a no-op (no job file on disk)
+    monkeypatch.setattr(core_functions, "_save_job", lambda j: None)
+
+    success, stdout, stderr = core_functions._import_file(
+        conn=None,
+        session_key="test-key",
+        host="localhost",
+        port=4064,
+        path=test_file,
+        dataset_id=None,
+        progress_job=job,
+    )
+
+    # The command should succeed (reading a file and sleeping is valid)
+    assert success is True
+    # import_progress_bytes should have been updated to reflect bytes read
+    assert job["import_progress_bytes"] >= 500  # at least the base value

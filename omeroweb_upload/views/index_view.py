@@ -863,6 +863,7 @@ def job_status(request, job_id, conn=None, url=None, **kwargs):
             "status": job.get("status"),
             "uploaded_bytes": job.get("uploaded_bytes", 0),
             "imported_bytes": job.get("imported_bytes", 0),
+            "import_progress_bytes": job.get("import_progress_bytes", 0),
             "total_bytes": job.get("total_bytes", 0),
             "errors": job.get("errors", []),
             "messages": job.get("messages", []),
