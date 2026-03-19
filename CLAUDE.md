@@ -27,6 +27,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Assume corresponding non-example files are provisioned by the sysadmin and match template structure unless explicitly documented otherwise.
 - Use `omero_plugin_common.env_utils` for typed env var access in Python code.
 - Never hard-code paths, credentials, hostnames, or ports.
+- All environment variables and version pins go into the appropriate `env/*_example.env` file(s), not into `docker-compose.yml` or inline in scripts, unless absolutely necessary. Dockerfile `ARG` defaults are acceptable for build-time version pins (e.g. `ARG OMEZARR_READER_VERSION=0.6.0`), but `docker-compose.yml` must not carry redundant `args:` blocks or fallback defaults for values already defined elsewhere.
 - Reference the correct `env_file` constant (`ENV_FILE_OMEROWEB`, `ENV_FILE_OMERO_CELERY`, etc.) in error messages.
 
 ### Plugin architecture
@@ -39,6 +40,7 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 
 ### Docker and infrastructure
 - Pin all image tags in `docker-compose.yml` and Dockerfiles. Never use `:latest`.
+- Do not add build `args:`, environment variables, or version pins to `docker-compose.yml`. Keep it minimal — configuration belongs in `env/*_example.env` files and Dockerfile `ARG` defaults.
 - Every service must have a `healthcheck:` block and `security_opt: no-new-privileges:true`.
 - Startup scripts must only consume environment variables; they must not import Python modules.
 - The `omeroweb` container runs two processes via supervisord (OMERO.web + Celery worker).
