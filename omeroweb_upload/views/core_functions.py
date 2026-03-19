@@ -3781,6 +3781,55 @@ def _start_compatibility_check_thread(job_id: str):
     worker.start()
 
 
+def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
+    """Re-compress a .zarr directory from an unsupported codec (e.g. gzip) to
+    zlib, which JZarr / Bio-Formats can read.  Returns the path to the
+    temporary re-compressed copy, or ``None`` on failure.
+    """
+    try:
+        import zarr as zarr_lib
+        from numcodecs import Zlib
+    except ImportError:
+        logger.warning("zarr/numcodecs not installed; cannot re-compress %s", zarr_path)
+        return None
+
+    # Keep the original .zarr name so Bio-Formats recognises the extension.
+    dst_parent = zarr_path.parent / f"__zarr_recompress_{uuid.uuid4().hex[:8]}__"
+    dst = dst_parent / zarr_path.name
+    try:
+        dst_parent.mkdir(parents=True, exist_ok=True)
+        src_root = zarr_lib.open(str(zarr_path), mode="r")
+        dst_root = zarr_lib.open(str(dst), mode="w")
+        dst_root.attrs.update(dict(src_root.attrs))
+        for key in src_root.keys():
+            src_arr = src_root[key]
+            if not hasattr(src_arr, "shape"):
+                continue
+            dst_arr = dst_root.create_dataset(
+                key,
+                shape=src_arr.shape,
+                chunks=src_arr.chunks,
+                dtype=src_arr.dtype,
+                compressor=Zlib(level=1),
+            )
+            dst_arr[:] = src_arr[:]
+        logger.info(
+            "Re-compressed zarr %s → %s (zlib level 1)",
+            sanitize_log_value(zarr_path.name),
+            sanitize_log_value(dst),
+        )
+        return dst_parent  # return the parent dir for easy cleanup
+    except Exception as exc:
+        logger.error(
+            "Failed to re-compress zarr %s: %s",
+            sanitize_log_value(zarr_path.name),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        shutil.rmtree(dst_parent, ignore_errors=True)
+        return None
+
+
 def _import_job_entry(
     entry,
     upload_root,
@@ -3835,130 +3884,135 @@ def _import_job_entry(
     if normalization_context:
         import_name = (normalization_context.get("desired_name") or "").strip() or None
 
-    # Pre-flight check for .zarr directories: ask Bio-Formats (via the
-    # native ``omero import -f`` scan) whether it recognises the format
-    # BEFORE spending time on the real import.  Pure OME-NGFF zarrs
-    # (e.g. created by ome-zarr-py) lack the bioformats2raw layout and
-    # will be silently ignored by the standard importer — catch this early.
+    # ------------------------------------------------------------------
+    # Pre-flight zarr compatibility: Bio-Formats (JZarr) cannot read
+    # gzip/zstd-compressed zarrs.  When ``omero import -f`` finds 0
+    # importable groups, re-compress to zlib (supported by JZarr) and
+    # import the converted copy.  Temp copy is cleaned up in ``finally``.
+    # ------------------------------------------------------------------
+    _zarr_recompressed_path = None
     if (
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
     ):
         try:
             scan_result = _run_local_import_scan(file_path, timeout=60)
-            scan_groups = _parse_import_groups(scan_result.stdout)
-            if not scan_groups:
-                logger.error(
-                    "Pre-flight scan: Bio-Formats found 0 importable groups "
-                    "for %s (returncode=%d, stderr=%r). "
-                    "This zarr is likely not in bioformats2raw layout.",
+            if not _parse_import_groups(scan_result.stdout):
+                logger.warning(
+                    "Pre-flight: Bio-Formats found 0 groups for %s "
+                    "— re-compressing to zlib.",
                     sanitize_log_value(rel_path),
-                    scan_result.returncode,
-                    sanitize_log_value((scan_result.stderr or "").strip()[:300]),
                 )
-                error_msg = errors.import_zarr_not_recognized()
-                job_error = messages.job_error_with_path(rel_path, error_msg)
-                return {
-                    "cleanup_staged_paths": cleanup_staged_paths,
-                    "covered_indexes": covered_indexes,
-                    "covered_relative_paths": covered_relative_paths,
-                    "index": entry.get("index"),
-                    "status": "error",
-                    "entry_error": error_msg,
-                    "job_error": job_error,
-                    "job_message": job_error,
-                }
+                converted_parent = _recompress_zarr_for_import(file_path)
+                if converted_parent is not None:
+                    converted_zarr = converted_parent / file_path.name
+                    rescan = _run_local_import_scan(converted_zarr, timeout=60)
+                    if _parse_import_groups(rescan.stdout):
+                        _zarr_recompressed_path = converted_parent
+                        file_path = converted_zarr
+                    else:
+                        shutil.rmtree(converted_parent, ignore_errors=True)
+                # If conversion failed or rescan still found 0 groups → error
+                if _zarr_recompressed_path is None:
+                    error_msg = errors.import_zarr_not_recognized()
+                    job_error = messages.job_error_with_path(rel_path, error_msg)
+                    return {
+                        "cleanup_staged_paths": cleanup_staged_paths,
+                        "covered_indexes": covered_indexes,
+                        "covered_relative_paths": covered_relative_paths,
+                        "index": entry.get("index"),
+                        "status": "error",
+                        "entry_error": error_msg,
+                        "job_error": job_error,
+                        "job_message": job_error,
+                    }
         except subprocess.TimeoutExpired:
-            # Scan timed out — proceed with the import anyway; the
-            # post-import validation will catch a silent failure.
-            logger.warning(
-                "Pre-flight scan timed out for %s; proceeding with import.",
-                sanitize_log_value(rel_path),
-            )
+            logger.warning("Pre-flight scan timed out for %s; proceeding.", sanitize_log_value(rel_path))
         except Exception as exc:
-            logger.warning(
-                "Pre-flight scan error for %s: %s; proceeding with import.",
-                sanitize_log_value(rel_path),
-                sanitize_log_value(exc),
-            )
+            logger.warning("Pre-flight scan error for %s: %s; proceeding.", sanitize_log_value(rel_path), sanitize_log_value(exc))
 
     try:
-        success, stdout, stderr = _import_file(
-            conn=None,
-            session_key=session_key,
-            host=host,
-            port=port,
-            path=file_path,
-            dataset_id=dataset_id,
-            import_name=import_name,
-            progress_job=progress_job,
-        )
-    except Exception as exc:
-        logger.error(
-            "Import failed for %s: %s",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(exc),
-            exc_info=sanitized_exc_info(exc),
-        )
-        success = False
-        stdout = ""
-        stderr = ""
+        try:
+            success, stdout, stderr = _import_file(
+                conn=None,
+                session_key=session_key,
+                host=host,
+                port=port,
+                path=file_path,
+                dataset_id=dataset_id,
+                import_name=import_name,
+                progress_job=progress_job,
+            )
+        except Exception as exc:
+            logger.error(
+                "Import failed for %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+                exc_info=sanitized_exc_info(exc),
+            )
+            success = False
+            stdout = ""
+            stderr = ""
 
-    if not success:
-        logger.warning(
-            "Import failed for %s (stdout=%r, stderr=%r).",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(str(stdout).strip()),
-            sanitize_log_value(str(stderr).strip()),
-        )
-        error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
-        job_error = messages.job_error_with_path(rel_path, error_msg)
+        if not success:
+            logger.warning(
+                "Import failed for %s (stdout=%r, stderr=%r).",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(str(stdout).strip()),
+                sanitize_log_value(str(stderr).strip()),
+            )
+            error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+
+        # Server-side validation: the CLI exited 0, but verify that at least one
+        # OMERO object (Image, Fileset, etc.) was actually created.  The CLI can
+        # return exit-code 0 without creating any objects for unsupported formats
+        # or corrupt data — reporting "success" in that case is misleading.
+        imported_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
+        if not imported_objects:
+            logger.error(
+                "Import CLI returned success for %s but stdout contains no imported "
+                "objects.  stdout=%r stderr=%r",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(str(stdout).strip()[:500]),
+                sanitize_log_value(str(stderr).strip()[:500]),
+            )
+            error_msg = errors.import_no_objects_created()
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
             "covered_indexes": covered_indexes,
             "covered_relative_paths": covered_relative_paths,
             "index": entry.get("index"),
-            "status": "error",
-            "entry_error": error_msg,
-            "job_error": job_error,
-            "job_message": job_error,
+            "status": "imported",
+            "rel_path": rel_path,
+            "file_path": file_path,
         }
-
-    # Server-side validation: the CLI exited 0, but verify that at least one
-    # OMERO object (Image, Fileset, etc.) was actually created.  The CLI can
-    # return exit-code 0 without creating any objects for unsupported formats
-    # or corrupt data — reporting "success" in that case is misleading.
-    imported_objects = _IMPORT_OBJECT_PATTERN.findall(stdout or "")
-    if not imported_objects:
-        logger.error(
-            "Import CLI returned success for %s but stdout contains no imported "
-            "objects.  stdout=%r stderr=%r",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(str(stdout).strip()[:500]),
-            sanitize_log_value(str(stderr).strip()[:500]),
-        )
-        error_msg = errors.import_no_objects_created()
-        job_error = messages.job_error_with_path(rel_path, error_msg)
-        return {
-            "cleanup_staged_paths": cleanup_staged_paths,
-            "covered_indexes": covered_indexes,
-            "covered_relative_paths": covered_relative_paths,
-            "index": entry.get("index"),
-            "status": "error",
-            "entry_error": error_msg,
-            "job_error": job_error,
-            "job_message": job_error,
-        }
-
-    return {
-        "cleanup_staged_paths": cleanup_staged_paths,
-        "covered_indexes": covered_indexes,
-        "covered_relative_paths": covered_relative_paths,
-        "index": entry.get("index"),
-        "status": "imported",
-        "rel_path": rel_path,
-        "file_path": file_path,
-    }
+    finally:
+        # Clean up temporary re-compressed zarr copy (if created).
+        if _zarr_recompressed_path is not None:
+            shutil.rmtree(_zarr_recompressed_path, ignore_errors=True)
 
 
 def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:
