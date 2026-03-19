@@ -147,6 +147,16 @@ def import_no_objects_created():
     )
 
 
+def import_zarr_not_recognized():
+    return (
+        "This .zarr folder is not in a format that OMERO can import. "
+        "OMERO requires the bioformats2raw layout (with OME/METADATA.ome.xml and "
+        "supported compression). Pure OME-NGFF zarrs (e.g. from ome-zarr-py with "
+        "gzip/zstd compression or s0/s1/... resolution levels) are not supported. "
+        "Convert using bioformats2raw before uploading."
+    )
+
+
 def import_session_expired():
     return "Import failed because the OMERO session expired during a long-running import."
 
