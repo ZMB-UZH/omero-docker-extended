@@ -481,6 +481,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
         let uploadCompletedBytes = 0;
         const uploadProgressEntries = new Map();
         const activeUploadRequests = new Set();
+        let orangeStartTime = null;
+        let orangeLastBluePercent = 0;
+        let orangeLastBlueTime = null;
         const currentUserId = {{ user_id|default:"null"|safe }};
         const storage =
             (() => {
@@ -2136,6 +2139,48 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             progressBar.style.width = `${percent}%`;
             progressBar.textContent = `${percent}%`;
             progressText.textContent = text;
+        }
+
+        function resetOrangeProgress() {
+            orangeStartTime = null;
+            orangeLastBluePercent = 0;
+            orangeLastBlueTime = null;
+        }
+
+        function estimateOrangePercent(bluePercent, progressBytes, totalBytes) {
+            if (bluePercent >= 100) {
+                return 100;
+            }
+            const now = Date.now();
+            if (orangeStartTime === null) {
+                orangeStartTime = now;
+                orangeLastBluePercent = bluePercent;
+                orangeLastBlueTime = now;
+            }
+            if (bluePercent > orangeLastBluePercent) {
+                orangeLastBluePercent = bluePercent;
+                orangeLastBlueTime = now;
+            }
+
+            // Primary signal: real I/O progress from the backend
+            // (import_progress_bytes from /proc/{pid}/io monitoring).
+            if (totalBytes > 0 && progressBytes > 0) {
+                const realPercent = Math.min(95, Math.round((progressBytes / totalBytes) * 100));
+                if (realPercent > bluePercent) {
+                    return realPercent;
+                }
+            }
+
+            // Fallback: time-based asymptotic estimate when no /proc data
+            // is available (e.g. process just started, or /proc unreadable).
+            const POLL_INTERVAL_S = 4;
+            const elapsed = (now - orangeLastBlueTime) / 1000 + POLL_INTERVAL_S;
+            const remaining = 100 - bluePercent;
+            // Exponential decay: fills ~60% of remaining after 5 min,
+            // ~83% after 10 min, ~97% after 20 min. Never reaches 100.
+            const K = 0.003;
+            const estimate = bluePercent + remaining * 0.95 * (1 - Math.exp(-K * elapsed));
+            return Math.min(95, Math.round(estimate));
         }
 
         function showNonBlockingModal(message) {
@@ -4504,7 +4549,9 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 progressSection.style.display = 'none';
                 if (progressBarUpload) {
                     progressBarUpload.style.width = '0%';
+                    progressBarUpload.classList.remove('importing-active');
                 }
+                resetOrangeProgress();
                 updateUploadButtonLabel();
                 updateCancelButtons();
                 return;
@@ -4517,10 +4564,25 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
             const hasErrors = jobs.some((job) => job.status === 'error');
             const percent = totalBytes ? Math.min(100, Math.round((importedBytes / totalBytes) * 100)) : 0;
             const anyAwaiting = jobs.some((job) => job.status === 'awaiting_confirmation');
-            // Orange bar: all bytes are on the server, ready for OMERO to import.
-            // Visible only in the gap beyond the blue bar.
+            // Orange bar: real I/O progress from /proc/{pid}/io monitoring on
+            // the backend, with time-based asymptotic fallback when no data
+            // is available.  Animated diagonal stripes indicate work-in-progress.
+            const progressBytes = jobs.reduce((acc, job) => acc + (job.import_progress_bytes || 0), 0);
             if (progressBarUpload) {
-                progressBarUpload.style.width = '100%';
+                if (hasActiveImport() && !anyAwaiting) {
+                    const orangePercent = estimateOrangePercent(percent, progressBytes, totalBytes);
+                    progressBarUpload.style.width = `${orangePercent}%`;
+                    progressBarUpload.classList.add('importing-active');
+                } else {
+                    progressBarUpload.classList.remove('importing-active');
+                    if (anyAwaiting) {
+                        resetOrangeProgress();
+                        progressBarUpload.style.width = '0%';
+                    } else {
+                        resetOrangeProgress();
+                        progressBarUpload.style.width = `${percent}%`;
+                    }
+                }
             }
             let progressLabel;
             if (anyAwaiting) {
@@ -4590,6 +4652,7 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                                 compatibility_enabled: data.compatibility_enabled !== false,
                                 uploaded_bytes: data.uploaded_bytes,
                                 imported_bytes: data.imported_bytes,
+                                import_progress_bytes: data.import_progress_bytes || 0,
                                 total_bytes: data.total_bytes,
                                 messages: data.messages || job.messages,
                                 errors: data.errors || job.errors,
@@ -4624,11 +4687,13 @@ const rootStatusUrl = new URL('{% url "omeroweb_upload_root_status" %}', window.
                 status: 'ready',
                 compatibility_enabled: job.compatibility_enabled !== false,
                 imported_bytes: 0,
+                import_progress_bytes: 0,
                 total_bytes: job.totalBytes,
                 messages: [],
                 errors: [],
                 created: Date.now(),
             });
+            resetOrangeProgress();
             updateProgressFromJobs();
             ensureImportPolling();
         }

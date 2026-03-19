@@ -1095,6 +1095,22 @@ body {
             transition: width 0.3s ease;
             z-index: 0;
         }
+        #progress-bar-upload.importing-active {
+            transition: width 3.8s linear;
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(251, 146, 60, 0.28),
+                rgba(251, 146, 60, 0.28) 10px,
+                rgba(251, 146, 60, 0.42) 10px,
+                rgba(251, 146, 60, 0.42) 20px
+            );
+            background-size: 28.28px 28.28px;
+            animation: import-stripe 0.8s linear infinite;
+        }
+        @keyframes import-stripe {
+            0% { background-position: 0 0; }
+            100% { background-position: 28.28px 0; }
+        }
         #progress-bar {
             position: relative;
             height: 100%;

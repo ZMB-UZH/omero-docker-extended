@@ -1741,28 +1741,6 @@ def _classify_import_failure(stdout: str, stderr: str) -> str:
 
 
 def _run_omero_cli(cmd, timeout=None):
-    cli_env = os.environ.copy()
-
-    # OMERO CLI imports may need to download OMERO.java and write under the
-    # current user's cache/home. In containerized deployments HOME can resolve
-    # to a non-writable path (for example /root when running as a non-root
-    # service account), which causes import failures before OMERO is contacted.
-    # Force a deterministic writable HOME/cache rooted in the upload workspace.
-    cli_home = _get_upload_root() / ".omero-cli-home"
-    cli_cache = cli_home / ".cache"
-    _ensure_dir_with_permissions(cli_home, 0o700)
-    _ensure_dir_with_permissions(cli_cache, 0o700)
-
-    cli_env["HOME"] = str(cli_home)
-    cli_env["XDG_CACHE_HOME"] = str(cli_cache)
-    cli_ice_config = _write_cli_ice_config(
-        cli_home,
-        _get_cli_keepalive_seconds(),
-        cli_env.get("ICE_CONFIG", ""),
-    )
-    if cli_ice_config is not None:
-        cli_env["ICE_CONFIG"] = str(cli_ice_config)
-
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -1770,7 +1748,7 @@ def _run_omero_cli(cmd, timeout=None):
         check=False,
         timeout=timeout,
         stdin=subprocess.DEVNULL,
-        env=cli_env,
+        env=_build_cli_env(),
     )
 
 
@@ -1813,6 +1791,66 @@ def _parse_cli_id(output: str, expected_type: str):
     return None
 
 
+def _read_proc_rchar(pid):
+    """Read *rchar* (total bytes read via read syscalls) from ``/proc/{pid}/io``.
+
+    Returns ``None`` when the file cannot be read (process exited, permissions,
+    non-Linux OS, etc.).
+    """
+    try:
+        with open(f"/proc/{pid}/io", "r") as fh:
+            for line in fh:
+                if line.startswith("rchar:"):
+                    return int(line.split(":", 1)[1].strip())
+    except (OSError, ValueError, PermissionError):
+        pass
+    return None
+
+
+def _get_path_total_size(path: Path) -> int:
+    """Return the total byte size of *path* (file or directory, recursive)."""
+    if path.is_file():
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+    total = 0
+    try:
+        for p in path.rglob("*"):
+            if p.is_file():
+                total += p.stat().st_size
+    except OSError:
+        pass
+    return total
+
+
+def _build_cli_env():
+    """Build the environment dict for OMERO CLI sub-processes.
+
+    Factored out of ``_run_omero_cli`` so that ``_import_file`` can re-use it
+    for both the blocking *subprocess.run* path and the streaming *Popen* path.
+    """
+    cli_env = os.environ.copy()
+    cli_home = _get_upload_root() / ".omero-cli-home"
+    cli_cache = cli_home / ".cache"
+    _ensure_dir_with_permissions(cli_home, 0o700)
+    _ensure_dir_with_permissions(cli_cache, 0o700)
+    cli_env["HOME"] = str(cli_home)
+    cli_env["XDG_CACHE_HOME"] = str(cli_cache)
+    cli_ice_config = _write_cli_ice_config(
+        cli_home,
+        _get_cli_keepalive_seconds(),
+        cli_env.get("ICE_CONFIG", ""),
+    )
+    if cli_ice_config is not None:
+        cli_env["ICE_CONFIG"] = str(cli_ice_config)
+    return cli_env
+
+
+# How often (seconds) the import progress monitor updates the job file.
+_IMPORT_PROGRESS_INTERVAL = 5
+
+
 def _import_file(
     conn,
     session_key: str,
@@ -1821,7 +1859,19 @@ def _import_file(
     path: Path,
     dataset_id=None,
     import_name: Optional[str] = None,
+    progress_job=None,
 ):
+    """Run ``omero import`` for *path*.
+
+    When *progress_job* is a mutable job dict the function uses
+    ``subprocess.Popen`` instead of ``subprocess.run`` and periodically writes
+    an estimated ``import_progress_bytes`` value into the dict (and persists it
+    to disk).  The estimate is derived from ``/proc/{pid}/io`` – the number of
+    bytes the CLI process has read so far – giving a real, data-driven progress
+    signal that the front-end can relay through the orange progress bar.
+
+    Returns ``(success, stdout, stderr)`` – the same contract as before.
+    """
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -1832,26 +1882,134 @@ def _import_file(
 
     logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
     import_start = time.time()
+
+    # ------------------------------------------------------------------
+    # Fast path: no progress tracking requested – keep the proven
+    # subprocess.run() behaviour unchanged.
+    # ------------------------------------------------------------------
+    if progress_job is None:
+        try:
+            result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
+        except subprocess.TimeoutExpired:
+            logger.error("Import CLI timed out after %ds for %s", _get_import_timeout_seconds(), path)
+            return False, "", f"Import timed out after {_get_import_timeout_seconds()} seconds"
+        elapsed = time.time() - import_start
+        success = result.returncode == 0
+        logger.info(
+            "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
+            "stdout_lines=%d, stderr_lines=%d)",
+            path.name, elapsed, success, result.returncode,
+            len((result.stdout or "").splitlines()),
+            len((result.stderr or "").splitlines()),
+        )
+        if not success:
+            logger.warning(
+                "Import CLI stderr for %s: %s",
+                path.name, (result.stderr or "").strip()[:500],
+            )
+        return success, result.stdout, result.stderr
+
+    # ------------------------------------------------------------------
+    # Progress-tracking path: use Popen so we can monitor /proc/{pid}/io
+    # while the CLI runs.
+    # ------------------------------------------------------------------
+    cli_env = _build_cli_env()
+    file_size = _get_path_total_size(path)
+    timeout_seconds = _get_import_timeout_seconds()
+    imported_base = progress_job.get("imported_bytes", 0)
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        text=True,
+        env=cli_env,
+    )
+
+    # Drain stdout/stderr in background threads to prevent pipe deadlock.
+    stdout_lines = []
+    stderr_lines = []
+
+    def _drain(pipe, dest):
+        try:
+            for line in pipe:
+                dest.append(line)
+        except Exception:
+            pass
+
+    t_out = threading.Thread(target=_drain, args=(proc.stdout, stdout_lines), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(proc.stderr, stderr_lines), daemon=True)
+    t_out.start()
+    t_err.start()
+
+    baseline_rchar = _read_proc_rchar(proc.pid)
+    last_save = 0.0  # force first save
+
     try:
-        result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
-    except subprocess.TimeoutExpired:
-        logger.error("Import CLI timed out after %ds for %s", _get_import_timeout_seconds(), path)
-        return False, "", f"Import timed out after {_get_import_timeout_seconds()} seconds"
+        while proc.poll() is None:
+            elapsed = time.time() - import_start
+            if elapsed > timeout_seconds:
+                proc.kill()
+                logger.error("Import CLI timed out after %ds for %s", timeout_seconds, path)
+                t_out.join(timeout=5)
+                t_err.join(timeout=5)
+                for pipe in (proc.stdout, proc.stderr):
+                    if pipe is not None:
+                        try:
+                            pipe.close()
+                        except Exception:
+                            pass
+                return False, "".join(stdout_lines), f"Import timed out after {timeout_seconds} seconds"
+
+            # Update progress from /proc I/O – lightweight read, max every
+            # _IMPORT_PROGRESS_INTERVAL seconds.
+            now = time.time()
+            if now - last_save >= _IMPORT_PROGRESS_INTERVAL and file_size > 0:
+                rchar = _read_proc_rchar(proc.pid)
+                if rchar is not None and baseline_rchar is not None:
+                    bytes_read = max(0, rchar - baseline_rchar)
+                    capped = min(file_size, bytes_read)
+                    progress_job["import_progress_bytes"] = imported_base + capped
+                    try:
+                        _save_job(progress_job)
+                    except Exception:
+                        pass  # best-effort; don't derail the import
+                    last_save = now
+
+            time.sleep(2)
+    except Exception:
+        proc.kill()
+        raise
+    finally:
+        t_out.join(timeout=10)
+        t_err.join(timeout=10)
+        # Close pipes to avoid ResourceWarning for unclosed file objects.
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except Exception:
+                    pass
+
+    stdout = "".join(stdout_lines)
+    stderr = "".join(stderr_lines)
     elapsed = time.time() - import_start
-    success = result.returncode == 0
+    success = proc.returncode == 0
+
     logger.info(
         "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
         "stdout_lines=%d, stderr_lines=%d)",
-        path.name, elapsed, success, result.returncode,
-        len((result.stdout or "").splitlines()),
-        len((result.stderr or "").splitlines()),
+        path.name, elapsed, success, proc.returncode,
+        len(stdout.splitlines()),
+        len(stderr.splitlines()),
     )
     if not success:
         logger.warning(
             "Import CLI stderr for %s: %s",
-            path.name, (result.stderr or "").strip()[:500],
+            path.name, stderr.strip()[:500],
         )
-    return success, result.stdout, result.stderr
+    return success, stdout, stderr
 
 
 def _validate_session(conn):
@@ -3627,6 +3785,7 @@ def _import_job_entry(
     dataset_map,
     orphan_dataset_name,
     group_id=None,
+    progress_job=None,
 ):
     rel_path = entry.get("relative_path")
     if not rel_path:
@@ -3680,6 +3839,7 @@ def _import_job_entry(
             path=file_path,
             dataset_id=dataset_id,
             import_name=import_name,
+            progress_job=progress_job,
         )
     except Exception as exc:
         logger.error(
@@ -3793,6 +3953,7 @@ def _process_import_job(job_id: str):
             job.setdefault("errors", [])
             job.setdefault("messages", [])
             job["status"] = "importing"
+            job["import_progress_bytes"] = job.get("imported_bytes", 0)
             _save_job(job)
 
             session_key = job.get("session_key")
@@ -3895,6 +4056,7 @@ def _process_import_job(job_id: str):
                             dataset_map,
                             orphan_dataset_name,
                             group_id=job.get("group_id"),
+                            progress_job=job,
                         )
                     except Exception as exc:
                         logger.error(
@@ -3931,6 +4093,7 @@ def _process_import_job(job_id: str):
                         job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
                             entry.get("size", 0) for entry in covered_entries
                         )
+                        job["import_progress_bytes"] = job["imported_bytes"]
                         _save_job(job)
                         continue
 
@@ -3941,6 +4104,7 @@ def _process_import_job(job_id: str):
                         job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
                             entry.get("size", 0) for entry in covered_entries
                         )
+                        job["import_progress_bytes"] = job["imported_bytes"]
                         if rel_path:
                             _append_job_message(job, messages.imported_file(rel_path))
                         cleanup_targets = []
@@ -4260,6 +4424,7 @@ def _process_import_job(job_id: str):
                                             port,
                                             dataset_map,
                                             orphan_dataset_name,
+                                            progress_job=job,
                                         )
                                         if import_result.get("status") == "error":
                                             if import_result.get("job_error"):
