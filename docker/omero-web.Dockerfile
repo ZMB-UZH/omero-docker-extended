@@ -293,6 +293,25 @@ RUN set -euo pipefail; \
 # -------------------------------------------------------------------------------
 RUN cp -a /opt/omero/web/OMERO.web/var/static /opt/omero/web/static_backup
 
+# Stage updated OMEZarrReader + JZarr for runtime upgrade of OMERO CLI JAR cache
+# -------------------------------------------------------------------------------
+# The OMERO CLI downloads OMERO.java JARs into the bind-mounted var/ directory on
+# first use.  The bundled OMEZarrReader 0.3.1 and JZarr 0.3.4 are too old for
+# modern OME-NGFF zarrs.  Stage the updated JARs here; the bootstrap script
+# (10-web-bootstrap.sh) copies them into the cache at container start.
+ARG OMEZARR_READER_VERSION=0.6.0
+ARG JZARR_VERSION=0.4.2
+RUN set -euo pipefail; \
+    mkdir -p /opt/omero/web/zarr-jar-upgrade; \
+    OMEZARR_URL="https://artifacts.openmicroscopy.org/artifactory/ome.releases/ome/OMEZarrReader/${OMEZARR_READER_VERSION}/OMEZarrReader-${OMEZARR_READER_VERSION}.jar"; \
+    JZARR_URL="https://repo1.maven.org/maven2/dev/zarr/jzarr/${JZARR_VERSION}/jzarr-${JZARR_VERSION}.jar"; \
+    echo "Downloading OMEZarrReader ${OMEZARR_READER_VERSION}"; \
+    curl -fsSL -o /opt/omero/web/zarr-jar-upgrade/OMEZarrReader.jar "${OMEZARR_URL}"; \
+    echo "Downloading JZarr ${JZARR_VERSION}"; \
+    curl -fsSL -o /opt/omero/web/zarr-jar-upgrade/jzarr.jar "${JZARR_URL}"; \
+    chown -R omero-web:omero-web /opt/omero/web/zarr-jar-upgrade; \
+    echo "Staged OMEZarrReader ${OMEZARR_READER_VERSION} + JZarr ${JZARR_VERSION} for runtime upgrade"
+
 # Optional (off by default): vulnerability-testing updates for OMERO.web venv Python tooling
 # WARNING:
 # - Affects OMERO.web Python runtime

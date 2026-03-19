@@ -308,3 +308,49 @@ sync_static_assets() {
 }
 
 sync_static_assets
+
+# ── Upgrade OMEZarrReader + JZarr in OMERO CLI JAR cache ──────────────────────
+# The OMERO CLI downloads OMERO.java JARs into the bind-mounted var/ directory
+# on first use.  The bundled OMEZarrReader and JZarr are outdated; replace them
+# with the versions staged by the Dockerfile at /opt/omero/web/zarr-jar-upgrade/.
+upgrade_zarr_jars() {
+    local staged_dir="/opt/omero/web/zarr-jar-upgrade"
+    local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
+    local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
+
+    if [[ ! -d "${staged_dir}" ]]; then
+        return 0
+    fi
+
+    local jar_cache
+    jar_cache="$(find "${var_dir}/.cache" -maxdepth 7 -type d -name "libs" -path "*/OMERO.java-*/libs" 2>/dev/null | head -n 1)"
+
+    if [[ -z "${jar_cache}" || ! -d "${jar_cache}" ]]; then
+        echo "[web-bootstrap] OMERO CLI JAR cache not yet created; zarr JAR upgrade will apply on next container restart"
+        return 0
+    fi
+
+    local updated=0
+    for jar_name in OMEZarrReader.jar jzarr.jar; do
+        local staged="${staged_dir}/${jar_name}"
+        local target="${jar_cache}/${jar_name}"
+        if [[ ! -f "${staged}" ]]; then
+            continue
+        fi
+        if [[ -f "${target}" ]] && cmp -s "${staged}" "${target}"; then
+            continue
+        fi
+        cp -f "${staged}" "${target}"
+        if id -u "${runtime_user}" >/dev/null 2>&1; then
+            chown "${runtime_user}:${runtime_user}" "${target}" 2>/dev/null || true
+        fi
+        echo "[web-bootstrap] Upgraded ${jar_name} in OMERO CLI JAR cache"
+        updated=$((updated + 1))
+    done
+
+    if [[ "${updated}" -gt 0 ]]; then
+        echo "[web-bootstrap] ✓ Zarr JAR upgrade complete (${updated} file(s) updated)"
+    fi
+}
+
+upgrade_zarr_jars
