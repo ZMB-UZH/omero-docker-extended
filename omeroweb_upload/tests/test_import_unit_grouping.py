@@ -1109,6 +1109,135 @@ def test_import_job_entry_succeeds_when_stdout_contains_image_id(tmp_path: Path,
 
 
 # ---------------------------------------------------------------------------
+# Tests for pre-flight zarr scan (native CLI detection of unsupported formats)
+# ---------------------------------------------------------------------------
+
+
+def test_preflight_scan_rejects_zarr_when_bioformats_finds_zero_groups(tmp_path: Path, monkeypatch):
+    """When ``omero import -f`` finds 0 importable groups for a .zarr
+    directory, the import must fail immediately with a clear message instead
+    of proceeding to an import that silently creates nothing."""
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "unsupported.ome.zarr"
+    (zarr_dir / "s0" / "0" / "0").mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
+
+    # Mock the scan to return 0 groups (like Bio-Formats does for pure OME-NGFF)
+    scan_mock = type("Result", (), {"stdout": "", "stderr": "gzip not supported", "returncode": 0})()
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", lambda path, timeout=None: scan_mock)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+    # _import_file should NOT be called — if it is, fail the test
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("_import_file should not be called when pre-flight scan rejects")
+    monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "unsupported.ome.zarr",
+            "staged_path": "_staged/unsupported.ome.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["unsupported.ome.zarr/.zattrs"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "error"
+    assert "bioformats2raw" in result["entry_error"].lower()
+
+
+def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(tmp_path: Path, monkeypatch):
+    """When ``omero import -f`` finds importable groups for a .zarr, the
+    pre-flight check passes and the actual import proceeds normally."""
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "valid.zarr"
+    (zarr_dir / "OME").mkdir(parents=True, exist_ok=True)
+    (zarr_dir / "OME" / "METADATA.ome.xml").write_text("<xml/>", encoding="utf-8")
+
+    # Mock the scan to return 1 group (like Bio-Formats does for bioformats2raw)
+    scan_stdout = f"# Group: {zarr_dir}\n{zarr_dir / 'OME' / 'METADATA.ome.xml'}\n"
+    scan_mock = type("Result", (), {"stdout": scan_stdout, "stderr": "", "returncode": 0})()
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", lambda path, timeout=None: scan_mock)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        return True, "Image:99\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "valid.zarr",
+            "staged_path": "_staged/valid.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["valid.zarr/OME/METADATA.ome.xml"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert result["status"] == "imported"
+
+
+def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatch):
+    """If the pre-flight scan times out, the import proceeds anyway (the
+    post-import validation is the safety net)."""
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "slow.zarr"
+    zarr_dir.mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
+
+    def timeout_scan(path, timeout=None):
+        raise subprocess.TimeoutExpired(cmd=["omero"], timeout=60)
+
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", timeout_scan)
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
+        return True, "Image:55\n", ""
+
+    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "slow.zarr",
+            "staged_path": "_staged/slow.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["slow.zarr/.zattrs"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    # Import should proceed despite scan timeout, succeeding thanks to Image:55
+    assert result["status"] == "imported"
+
+
+# ---------------------------------------------------------------------------
 # Tests for scan-failure resilience (probe exception safety + fallback
 # directory package grouping).
 # ---------------------------------------------------------------------------
