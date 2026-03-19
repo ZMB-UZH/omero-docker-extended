@@ -13,7 +13,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 │     Monitoring, alerting, database maintenance, runbooks        │
 ├─────────────────────────────────────────────────────────────────┤
 │  3. Application layer                                           │
-│     omeroweb_omp_plugin/  omeroweb_upload/                     │
+│     omeroweb_omp_plugin/  omeroweb_import/                     │
 │     omeroweb_admin_tools/  omeroweb_imaris_connector/          │
 │     omero_plugin_common/  XTOmeroConnector.py                  │
 │     Plugin business logic, OMERO API integration, UI           │
@@ -64,7 +64,7 @@ Four Django app plugins register in OMERO.web via `CONFIG_omero_web_apps`:
 
 ```
 omeroweb_omp_plugin ──────┐
-omeroweb_upload ──────────┤
+omeroweb_import ──────────┤
 omeroweb_admin_tools ─────┼──> omero_plugin_common
 omeroweb_imaris_connector ┘         │
                                     ├── env_utils (typed env var loading)
@@ -108,7 +108,7 @@ Database maintenance:
                                │ depends on
           ┌────────────────────┼────────────────────┐
           │                    │                     │
-   omeroweb_omp_plugin  omeroweb_upload  omeroweb_admin_tools
+   omeroweb_omp_plugin  omeroweb_import  omeroweb_admin_tools
           │
           └─── omeroweb_imaris_connector
 ```

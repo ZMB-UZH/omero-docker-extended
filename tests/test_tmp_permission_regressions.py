@@ -30,7 +30,7 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             current_uid = os.getuid()
             current_gid = os.getgid()
             server_lock_dir = tmp_root / "omero-server" / "tmp" / "omero_omero-server" / "1477"
-            web_plugin_dir = tmp_root / "omeroweb-upload" / "jobs"
+            web_plugin_dir = tmp_root / "omeroweb-import" / "jobs"
             server_lock_dir.mkdir(parents=True, exist_ok=True)
             web_plugin_dir.mkdir(parents=True, exist_ok=True)
             lock_file = server_lock_dir / ".lock"
