@@ -169,6 +169,7 @@ COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
+ARG OMERO_CLI_ZARR_VERSION=0.8.0
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
@@ -190,8 +191,8 @@ RUN set -euo pipefail; \
         omero-fpbioimage \
         omero-gallery \
         omero-parade \
-        "zarr<3" \
-        omero-web-zarr; \
+        omero-web-zarr \
+        "omero-cli-zarr==${OMERO_CLI_ZARR_VERSION}"; \
     rm -rf "${SITE_PACKAGES}/omero_web_zarr"; \
     cp -a /tmp/omero_web_zarr "${SITE_PACKAGES}/omero_web_zarr"; \
     chown -R omero-web:omero-web \

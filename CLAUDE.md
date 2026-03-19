@@ -38,6 +38,10 @@ Start with `AGENTS.md` for the full domain map. Key entry points:
 - Error and message strings live in `strings/errors.py` and `strings/messages.py` as functions, not bare strings.
 - Views import from `omero_plugin_common.request_utils` for JSON parsing and username resolution.
 
+### OMERO connections
+- Never use `BlitzGateway.suConn()` for user impersonation. The `job-service` account is intentionally non-admin, so `suConn` always returns `None`. Use the service connection directly with the correct group context (`SERVICE_OPTS.setOmeroGroup`) instead. The import CLI runs under the real user's session, so dataset ownership is resolved at import time.
+- When the user's request connection (`conn`) is available, prefer it for dataset creation and OMERO API calls. Fall back to the service connection only when `conn` is `None` (background threads).
+
 ### Docker and infrastructure
 - Pin all image tags in `docker-compose.yml` and Dockerfiles. Never use `:latest`.
 - Do not add build `args:`, environment variables, or version pins to `docker-compose.yml`. Keep it minimal — configuration belongs in `env/*_example.env` files and Dockerfile `ARG` defaults.
