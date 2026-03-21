@@ -436,7 +436,7 @@ sync_static_assets() {
     local effective_runtime_group="${runtime_group}"
     local branding_logo_path="${static_dir}/branding/logo.png"
     local branding_fallback_marker_path="${static_dir}/branding/.generated-logo-fallback"
-    local repo_logo_path="/opt/omero/logo/logo.png"
+    local local_logo_path="/opt/omero/logo/logo.png"
     local preserved_logo_path=""
 
     if [[ ! -d "${static_backup_dir}" ]]; then
@@ -444,7 +444,7 @@ sync_static_assets() {
         exit 1
     fi
 
-    # A generated fallback should never block a newly provided repository logo
+    # A generated fallback should never block a newly provided site-local logo
     # or a manually replaced site-local logo on later restarts.
     if branding_logo_uses_generated_fallback "${branding_logo_path}" "${branding_fallback_marker_path}"; then
         rm -f "${branding_logo_path}" "${branding_fallback_marker_path}" || true
@@ -484,13 +484,13 @@ sync_static_assets() {
         rm -f "${preserved_logo_path}" || true
     fi
 
-    if [[ ! -f "${branding_logo_path}" && -f "${repo_logo_path}" ]]; then
+    if [[ ! -f "${branding_logo_path}" && -f "${local_logo_path}" ]]; then
         mkdir -p "${static_dir}/branding"
-        if cp -f "${repo_logo_path}" "${branding_logo_path}"; then
-            echo "[web-bootstrap] Restored branding logo from repository logo path: ${repo_logo_path}"
+        if cp -f "${local_logo_path}" "${branding_logo_path}"; then
+            echo "[web-bootstrap] Restored branding logo from site-local logo path: ${local_logo_path}"
             rm -f "${branding_fallback_marker_path}" || true
         else
-            echo "[web-bootstrap] WARNING: Failed to restore branding logo from repository logo path: ${repo_logo_path}" >&2
+            echo "[web-bootstrap] WARNING: Failed to restore branding logo from site-local logo path: ${local_logo_path}" >&2
         fi
     fi
 

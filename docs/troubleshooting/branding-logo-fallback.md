@@ -11,7 +11,7 @@ When the env does point at `/static/branding/logo.png`, bootstrap follows this
 order:
 
 1. Preserve a real existing `branding/logo.png` across static sync.
-2. Restore the repository-managed `logo/logo.png` if the image contains one.
+2. Restore a site-local `logo/logo.png` if the image contains one.
 3. Generate a deterministic fallback icon only if no real logo is available.
 
 ## Runtime details
@@ -28,16 +28,18 @@ order:
 - Real operator-provided logos remain authoritative and are not overwritten by
   the fallback refresh path.
 
-## Repository logo recovery
+## Site-local logo recovery
 
-On March 22, 2026, the historical repository logo was recovered from local git
-history and restored to `logo/logo.png` from commit
+On March 22, 2026, the historical logo was recovered from local git history and
+restored to the deployment-local `logo/logo.png` path from commit
 `b01dbe8c7e055483e88afd903adb83fded1a574c`.
 
-The restored file is now the canonical repository-managed logo asset:
+That restored file is intended to remain local to the deployment and not live
+in version control:
 
 - Path: `logo/logo.png`
 - Mode: `0644`
+- Git status: ignored by `.gitignore`
 
 ## Objective benchmark
 

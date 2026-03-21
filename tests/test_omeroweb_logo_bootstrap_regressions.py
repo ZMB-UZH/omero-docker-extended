@@ -25,6 +25,10 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
             self.assertIn('active_protected_files+=("logo/logo.png")', script_text)
             self.assertIn('clone_move_find_args+=( ! -name \'logo\' )', script_text)
 
+    def test_gitignore_keeps_real_logo_local_only(self) -> None:
+        gitignore_text = (self.repo_root / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("/logo/logo.png", gitignore_text)
+
     def test_web_bootstrap_preserves_logo_and_does_not_fail_when_missing(self) -> None:
         self.assertIn("repair_branding_logo_permissions()", self.web_bootstrap_text)
         self.assertIn("branding_logo_fallback_enabled()", self.web_bootstrap_text)
@@ -36,7 +40,7 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
         self.assertIn('if ! branding_logo_fallback_enabled; then', self.web_bootstrap_text)
         self.assertIn('Preserving existing branding logo across static sync', self.web_bootstrap_text)
         self.assertIn('Restored pre-existing branding logo after static sync', self.web_bootstrap_text)
-        self.assertIn('Restored branding logo from repository logo path', self.web_bootstrap_text)
+        self.assertIn('Restored branding logo from site-local logo path', self.web_bootstrap_text)
         self.assertIn('WARNING: Branding logo missing after static sync', self.web_bootstrap_text)
         self.assertIn('Installing generated fallback icon', self.web_bootstrap_text)
         self.assertIn('Installed generated branding fallback icon', self.web_bootstrap_text)
