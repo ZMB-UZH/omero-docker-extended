@@ -50,6 +50,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 7. Troubleshooting
 
 - `troubleshooting/common.md` -- service health, plugin routes, uploads, admin tools, database, Docker
+- `troubleshooting/branding-logo-fallback.md` -- login-logo fallback rules, repository logo recovery, and measured before/after validation
 - `troubleshooting/imaris-export.md` -- auth regressions, processor diagnostics, CLI validation, recovery
 
 ## 8. Reference

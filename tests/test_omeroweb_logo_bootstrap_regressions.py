@@ -50,6 +50,28 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     def test_web_bootstrap_uses_deterministic_fallback_writer(self) -> None:
         self.assertIn('/opt/omero/tools/write_branding_logo_fallback.py', self.web_bootstrap_text)
         self.assertIn('cmp -s "${generated_fallback_path}" "${logo_path}"', self.web_bootstrap_text)
+        self.assertIn("branding_logo_is_known_generated_fallback()", self.web_bootstrap_text)
+        self.assertIn("Refreshing legacy generated branding fallback icon", self.web_bootstrap_text)
+        self.assertIn('if [[ ! -f "${logo_path}" || ! -f "${fallback_writer_path}" ]]; then', self.web_bootstrap_text)
+        self.assertIn('if [[ -f "${marker_path}" ]]; then', self.web_bootstrap_text)
+        self.assertIn(
+            "a755d0d82d51c3292bb7047b7bdfbb92c6f430b6d99cd91c463510b43b462e84",
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
+            "fed3805fd27203cb1d2d80df346d625ee5b9fa127e7f5408c0ede31eeb148bc7",
+            self.web_bootstrap_text,
+        )
+        self.assertIn(
+            "4962acc5fbf52f8ef72721990487fdc9a1e76c862e8e0676acd4aa0dad867286",
+            self.web_bootstrap_text,
+        )
+
+    def test_web_bootstrap_skips_zarr_jar_scan_until_cache_exists(self) -> None:
+        self.assertIn('local cache_root="${var_dir}/.cache"', self.web_bootstrap_text)
+        self.assertIn('if [[ ! -d "${cache_root}" ]]; then', self.web_bootstrap_text)
+        self.assertIn('OMERO CLI cache directory not yet created; zarr JAR upgrade will apply on next container restart', self.web_bootstrap_text)
+        self.assertIn('find "${cache_root}" -maxdepth 7 -type d -name "libs"', self.web_bootstrap_text)
 
 
 if __name__ == "__main__":

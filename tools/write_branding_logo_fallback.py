@@ -79,6 +79,20 @@ def _distance_to_segment(
     return ((px - nearest_x) ** 2 + (py - nearest_y) ** 2) ** 0.5
 
 
+def _point_on_circle_border(
+    px: float,
+    py: float,
+    cx: float,
+    cy: float,
+    radius: float,
+    stroke_width: float,
+) -> bool:
+    """Return True when the point lies on a circle outline."""
+    distance = ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+    half_stroke = stroke_width / 2.0
+    return (radius - half_stroke) <= distance <= (radius + half_stroke)
+
+
 def _pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
     """Render a small neutral placeholder icon on a transparent canvas."""
     px = x + 0.5
@@ -89,20 +103,10 @@ def _pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
     ):
         return STROKE
 
-    if ((px - 61.0) ** 2) + ((py - 38.0) ** 2) <= 5.0**2:
+    if _point_on_circle_border(px, py, cx=48.0, cy=47.0, radius=12.0, stroke_width=3.2):
         return DETAIL
 
-    mountain_segments = (
-        (30.0, 60.0, 42.0, 48.0),
-        (42.0, 48.0, 51.0, 56.0),
-        (51.0, 56.0, 63.0, 45.0),
-        (63.0, 45.0, 71.0, 53.0),
-    )
-    for ax, ay, bx, by in mountain_segments:
-        if _distance_to_segment(px, py, ax, ay, bx, by) <= 2.1:
-            return DETAIL
-
-    if abs(py - 60.0) <= 1.2 and 30.0 <= px <= 71.0:
+    if _distance_to_segment(px, py, 39.0, 56.0, 57.0, 38.0) <= 2.3:
         return DETAIL
 
     return TRANSPARENT

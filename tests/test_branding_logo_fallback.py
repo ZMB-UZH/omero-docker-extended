@@ -65,6 +65,12 @@ class BrandingLogoFallbackTests(unittest.TestCase):
             raw_rows = zlib.decompress(compressed_payload)
             self.assertEqual(len(raw_rows), 96 * (1 + (96 * 4)))
 
+            def pixel_rgba(x: int, y: int) -> tuple[int, int, int, int]:
+                row_start = y * (1 + (96 * 4))
+                row_bytes = raw_rows[row_start + 1 : row_start + 1 + (96 * 4)]
+                pixel_start = x * 4
+                return tuple(row_bytes[pixel_start : pixel_start + 4])
+
             opaque_pixels = 0
             for row_index in range(96):
                 row_start = row_index * (1 + (96 * 4))
@@ -75,6 +81,12 @@ class BrandingLogoFallbackTests(unittest.TestCase):
                         opaque_pixels += 1
 
             self.assertGreater(opaque_pixels, 250)
+            self.assertEqual(pixel_rgba(24, 30), (107, 121, 134, 255))
+            self.assertEqual(pixel_rgba(48, 35), (107, 121, 134, 208))
+            self.assertEqual(pixel_rgba(48, 42), (0, 0, 0, 0))
+            self.assertEqual(pixel_rgba(48, 47), (107, 121, 134, 208))
+            self.assertEqual(pixel_rgba(54, 47), (0, 0, 0, 0))
+            self.assertEqual(pixel_rgba(70, 68), (0, 0, 0, 0))
 
 
 if __name__ == "__main__":
