@@ -247,7 +247,7 @@ RUN set -euo pipefail; \
         /opt/omero/web/OMERO.web/var/static/omero_web_zarr; \
     chown -R omero-web:omero-web /opt/omero/web/OMERO.web/var
 
-# Copy branding logo (skip cleanly if it doesn't exist)
+# Copy a site-local branding logo (skip cleanly if it doesn't exist)
 # -----------------------------------------------------
 # NOTE: The source repo may be updated by workflows that temporarily remove
 # the local logo/ directory. Mounting the full build context avoids hard
@@ -258,9 +258,9 @@ RUN --mount=type=bind,source=.,target=/tmp/build-context,readonly \
         cp /tmp/build-context/logo/logo.png /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chown omero-web:omero-web /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
         chmod 0444 /opt/omero/web/OMERO.web/var/static/branding/logo.png; \
-        echo "Logo copied to final static directory"; \
+        echo "Site-local logo copied to final static directory"; \
     else \
-        echo "No logo/logo.png found in build context, skipping logo setup"; \
+        echo "No site-local logo/logo.png found in build context, skipping logo setup"; \
     fi
 
 # Pre-create a strict temp root for build-time OMERO CLI commands.
