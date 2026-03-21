@@ -135,7 +135,7 @@ Web bootstrap:
   - sets `var/omero/tmp` to `1777`,
   - generates `django_secret_key` with `0600`,
   - preserves a real `branding/logo.png` across static sync,
-  - restores `logo/logo.png` from the image when present,
+  - restores a site-local `logo/logo.png` from the image when present,
   - only generates a fallback `branding/logo.png` when the login-logo env
     explicitly targets `/static/branding/logo.png` and no real logo is available.
 
