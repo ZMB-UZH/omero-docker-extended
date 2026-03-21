@@ -376,25 +376,27 @@ RUN set -euo pipefail; \
 # ---------------------------------------------------------------
 COPY supervisord.conf /etc/supervisord.conf
 COPY startup/40-start-imaris-celery-worker.sh /opt/omero/web/bin/start-imaris-celery-worker.sh
+RUN set -euo pipefail; \
+    rm -f /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /startup/99-run.sh
 COPY startup/10-web-bootstrap.sh /startup/10-web-bootstrap.sh
+COPY startup/50-config.py /startup/50-config.py
+COPY startup/60-default-web-config.sh /startup/60-default-web-config.sh
+COPY startup/98-cleanprevious.sh /startup/98-cleanprevious.sh
 COPY startup/60-enforce-ext4-project-quota.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh
 COPY startup/61-storage-quota-reconcile-loop.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh
 RUN set -euo pipefail; \
     mkdir -p /opt/omero/web/bin /opt/omero/web/logs; \
-    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/10-web-bootstrap.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
+    chmod 0555 /opt/omero/web/bin/start-imaris-celery-worker.sh /startup/10-web-bootstrap.sh /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /opt/omero/web/bin/enforce-ext4-project-quota.sh /opt/omero/web/bin/storage-quota-reconcile-loop.sh; \
     chown -R omero-web:omero-web /opt/omero/web/logs
 
-# FIX: The base image's /startup/99-run.sh executes
-#   "omero web start --foreground"
-# which blocks forever. The base image entrypoint loops over /startup/* and
-# never reaches exec "$@", so our CMD (supervisord) never runs.
+# FIX: Take ownership of the base image startup chain.
 #
 # Solution:
-#  1. Delete 99-run.sh — supervisord manages gunicorn instead.
-#  2. Replace entrypoint with one that exec's "$@" after startup scripts.
+#  1. Remove inherited startup scripts that hardcode stale paths such as venv3.
+#  2. Replace them with repo-tracked startup scripts.
+#  3. Replace entrypoint with one that execs "$@" after startup scripts.
 # -----------------------------------------------------------------------
 RUN set -euo pipefail; \
-    rm -f /startup/99-run.sh; \
     printf '%s\n' \
         '#!/usr/local/bin/dumb-init /bin/bash' \
         'set -e' \
