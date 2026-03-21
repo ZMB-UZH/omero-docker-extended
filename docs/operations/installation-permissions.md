@@ -133,7 +133,11 @@ Web bootstrap:
   - recursively `chown -R` the web var tree to `omero-web`,
   - sets `var` and `var/omero` to `0755`,
   - sets `var/omero/tmp` to `1777`,
-  - generates `django_secret_key` with `0600`.
+  - generates `django_secret_key` with `0600`,
+  - preserves a real `branding/logo.png` across static sync,
+  - restores `logo/logo.png` from the image when present,
+  - only generates a fallback `branding/logo.png` when the login-logo env
+    explicitly targets `/static/branding/logo.png` and no real logo is available.
 
 ### `OMERO_WEB_LOGS_PATH` and `OMERO_WEB_SUPERVISOR_LOGS_PATH`
 
@@ -147,6 +151,12 @@ Host-side installer:
 Image build:
 - `docker/omero-web.Dockerfile`
   - ensures `/opt/omero/web/logs` is owned by `omero-web`.
+
+Web bootstrap:
+- `startup/10-web-bootstrap.sh`
+  - revalidates both mounted log trees after container start,
+  - repairs stale file ownership in existing log files,
+  - parses `supervisord.conf` and prepares every declared `logfile`, `stdout_logfile`, and `stderr_logfile` target for the runtime user before supervisord drops privileges.
 
 ### Upload / plugin temp subtrees
 
