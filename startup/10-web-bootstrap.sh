@@ -242,6 +242,64 @@ repair_branding_logo_permissions() {
     return 0
 }
 
+branding_logo_uses_generated_fallback() {
+    local logo_path="${1:?BUG: branding_logo_uses_generated_fallback requires a logo path}"
+    local marker_path="${2:?BUG: branding_logo_uses_generated_fallback requires a marker path}"
+    local fallback_writer_path="/opt/omero/tools/write_branding_logo_fallback.py"
+    local generated_fallback_path=""
+
+    if [[ ! -f "${marker_path}" || ! -f "${logo_path}" || ! -f "${fallback_writer_path}" ]]; then
+        return 1
+    fi
+
+    generated_fallback_path="$(mktemp "${TMPDIR:-/tmp}/omero-web-branding-logo-fallback.XXXXXX.png")"
+    if python3 "${fallback_writer_path}" "${generated_fallback_path}" && cmp -s "${generated_fallback_path}" "${logo_path}"; then
+        rm -f "${generated_fallback_path}" || true
+        return 0
+    fi
+
+    rm -f "${generated_fallback_path}" || true
+    echo "[web-bootstrap] WARNING: Branding fallback marker is stale; preserving non-generated logo at ${logo_path}" >&2
+    rm -f "${marker_path}" || true
+    return 1
+}
+
+branding_logo_fallback_enabled() {
+    local configured_login_logo="${CONFIG_omero_web_login__logo:-}"
+    [[ "${configured_login_logo}" == "/static/branding/logo.png" ]]
+}
+
+install_branding_logo_fallback() {
+    local logo_path="${1:?BUG: install_branding_logo_fallback requires a logo path}"
+    local marker_path="${2:?BUG: install_branding_logo_fallback requires a marker path}"
+    local runtime_user="${3:-omero-web}"
+    local runtime_group="${4:-${runtime_user}}"
+    local fallback_writer_path="/opt/omero/tools/write_branding_logo_fallback.py"
+
+    mkdir -p "$(dirname "${logo_path}")"
+
+    if [[ ! -f "${fallback_writer_path}" ]]; then
+        echo "[web-bootstrap] WARNING: Branding fallback writer missing: ${fallback_writer_path}" >&2
+        return 1
+    fi
+
+    if ! python3 "${fallback_writer_path}" "${logo_path}"; then
+        echo "[web-bootstrap] WARNING: Failed to generate branding fallback icon: ${logo_path}" >&2
+        return 1
+    fi
+
+    printf '%s\n' "generated-fallback" > "${marker_path}"
+    repair_branding_logo_permissions "${logo_path}" "${runtime_user}" "${runtime_group}" || true
+
+    if id -u "${runtime_user}" >/dev/null 2>&1; then
+        chown "${runtime_user}:${runtime_group}" "${marker_path}" 2>/dev/null || true
+    fi
+    chmod 0644 "${marker_path}" 2>/dev/null || true
+
+    echo "[web-bootstrap] Installed generated branding fallback icon: ${logo_path}"
+    return 0
+}
+
 sync_static_assets() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local static_dir="${var_dir}/static"
@@ -249,12 +307,19 @@ sync_static_assets() {
     local runtime_user="${OMERO_WEB_RUNTIME_USER:-omero-web}"
     local runtime_group="${OMERO_WEB_RUNTIME_GROUP:-${runtime_user}}"
     local branding_logo_path="${static_dir}/branding/logo.png"
+    local branding_fallback_marker_path="${static_dir}/branding/.generated-logo-fallback"
     local repo_logo_path="/opt/omero/logo/logo.png"
     local preserved_logo_path=""
 
     if [[ ! -d "${static_backup_dir}" ]]; then
         echo "[web-bootstrap] ERROR: Static backup directory missing: ${static_backup_dir}" >&2
         exit 1
+    fi
+
+    # A generated fallback should never block a newly provided repository logo
+    # or a manually replaced site-local logo on later restarts.
+    if branding_logo_uses_generated_fallback "${branding_logo_path}" "${branding_fallback_marker_path}"; then
+        rm -f "${branding_logo_path}" "${branding_fallback_marker_path}" || true
     fi
 
     if [[ -f "${branding_logo_path}" ]]; then
@@ -276,10 +341,15 @@ sync_static_assets() {
         chown -R "${runtime_user}:${runtime_group}" "${static_dir}" || true
     fi
 
+    if ! branding_logo_fallback_enabled; then
+        return 0
+    fi
+
     if [[ -n "${preserved_logo_path}" && -f "${preserved_logo_path}" ]]; then
         mkdir -p "${static_dir}/branding"
         if cp -f "${preserved_logo_path}" "${branding_logo_path}"; then
             echo "[web-bootstrap] Restored pre-existing branding logo after static sync: ${branding_logo_path}"
+            rm -f "${branding_fallback_marker_path}" || true
         else
             echo "[web-bootstrap] WARNING: Failed to restore preserved branding logo after static sync: ${branding_logo_path}" >&2
         fi
@@ -290,15 +360,18 @@ sync_static_assets() {
         mkdir -p "${static_dir}/branding"
         if cp -f "${repo_logo_path}" "${branding_logo_path}"; then
             echo "[web-bootstrap] Restored branding logo from repository logo path: ${repo_logo_path}"
+            rm -f "${branding_fallback_marker_path}" || true
         else
             echo "[web-bootstrap] WARNING: Failed to restore branding logo from repository logo path: ${repo_logo_path}" >&2
         fi
     fi
 
     if [[ -f "${branding_logo_path}" ]]; then
+        rm -f "${branding_fallback_marker_path}" || true
         repair_branding_logo_permissions "${branding_logo_path}" "${runtime_user}" "${runtime_group}" || true
     else
-        echo "[web-bootstrap] WARNING: Branding logo missing after static sync: ${branding_logo_path}. Continuing without a custom login logo." >&2
+        echo "[web-bootstrap] WARNING: Branding logo missing after static sync: ${branding_logo_path}. Installing generated fallback icon." >&2
+        install_branding_logo_fallback "${branding_logo_path}" "${branding_fallback_marker_path}" "${runtime_user}" "${runtime_group}" || true
     fi
 
     if [[ ! -f "${static_dir}/omero_web_zarr/openwith.js" ]]; then

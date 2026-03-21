@@ -165,6 +165,7 @@ COPY omero_web_zarr /tmp/omero_web_zarr
 COPY docs/help /tmp/omero_plugin_help_docs
 COPY docker/patch_omeroweb_logo_context.py /tmp/patch_omeroweb_logo_context.py
 
+COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_fallback.py
 # Install psycopg2-binary
 # Add redis and django-redis for shared cache across workers
 # Fix permissions in the end (plugin should be owned by omero-web)
