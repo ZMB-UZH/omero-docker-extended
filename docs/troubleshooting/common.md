@@ -100,7 +100,7 @@ If you run compose commands manually, always include both env files for
 
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
 `COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors
-`OMERO_DB_PASS` plus `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
+`OMERO_DATA_DIR`, `OMERO_DB_PASS`, and `OMP_PLUGIN_DB_PASS` (mode `0600`), so plain
 `docker compose <command>` works from the installation root.
 
 If you run the installer with `sudo`, the script now assigns `.env` ownership to

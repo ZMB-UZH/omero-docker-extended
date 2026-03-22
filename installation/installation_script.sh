@@ -562,6 +562,7 @@ export_compose_interpolation_env() {
         OMERO_PLUGIN_DATABASE_PATH
         OMERO_DATA_PATH
         OMERO_TMP_PATH
+        OMERO_DATA_DIR
         OMERO_USER_DATA_PATH
         OMERO_IMPORT_PATH
         OMERO_SERVER_VAR_PATH
@@ -1197,7 +1198,8 @@ stop_old_installation_containers() {
     local old_database_path="$2"
     local old_plugin_database_path="$3"
     local old_data_path="${4%/}"
-    local keep_images="$5"
+    local old_omero_data_dir="$5"
+    local keep_images="$6"
     local old_compose_file="${old_install_path}/docker-compose.yml"
     local old_dot_env="${old_install_path}/.env"
     local created_temp_dot_env=false
@@ -1215,6 +1217,7 @@ OMERO_DATABASE_PATH=${old_database_path}
 OMERO_PLUGIN_DATABASE_PATH=${old_plugin_database_path}
 OMERO_DATA_PATH=${old_data_path}
 OMERO_TMP_PATH=${old_install_path}/omero_temp
+OMERO_DATA_DIR=${old_omero_data_dir}
 OMERO_USER_DATA_PATH=${old_data_path}/omero_user_data
 OMERO_IMPORT_PATH=${old_install_path}/omero_temp/omeroweb-import
 OMERO_SERVER_VAR_PATH=${old_data_path}/omero_server_var
@@ -1668,6 +1671,7 @@ OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
 OMERO_TMP_PATH=${OMERO_TMP_PATH}
+OMERO_DATA_DIR=${OMERO_DATA_DIR}
 OMERO_USER_DATA_PATH=${OMERO_USER_DATA_PATH}
 OMERO_IMPORT_PATH=${OMERO_IMPORT_PATH}
 OMERO_SERVER_VAR_PATH=${OMERO_SERVER_VAR_PATH}
@@ -1749,7 +1753,7 @@ OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}
 OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}
 OMERO_DATA_PATH=${OMERO_DATA_PATH}
 OMERO_TMP_PATH=${OMERO_TMP_PATH}
-OMERO_DATA_DIR=/OMERO
+OMERO_DATA_DIR=${OMERO_DATA_DIR}
 #
 OMERO_USER_DATA_PATH=\${OMERO_DATA_PATH}/omero_user_data
 OMERO_IMPORT_PATH=\${OMERO_TMP_PATH}/omeroweb-import
@@ -2419,6 +2423,7 @@ DEFAULT_OMERO_DATABASE_PATH="${OMERO_DATABASE_PATH}"
 DEFAULT_OMERO_PLUGIN_DATABASE_PATH="${OMERO_PLUGIN_DATABASE_PATH}"
 DEFAULT_OMERO_DATA_PATH="${OMERO_DATA_PATH}"
 DEFAULT_OMERO_TMP_PATH="${OMERO_TMP_PATH}"
+DEFAULT_OMERO_DATA_DIR="${OMERO_DATA_DIR}"
 
 OMERO_INSTALLATION_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_INSTALLATION_PATH}" "OMERO installation path")"
 OMERO_DATABASE_PATH="$(prompt_for_preparable_path "${DEFAULT_OMERO_DATABASE_PATH}" "OMERO database path")"
@@ -2517,6 +2522,7 @@ require_path_config_var "OMERO_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_PLUGIN_DATABASE_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_DATA_PATH" "${SCRIPT_ENV_FILE}"
 require_path_config_var "OMERO_TMP_PATH" "${SCRIPT_ENV_FILE}"
+require_path_config_var "OMERO_DATA_DIR" "${SCRIPT_ENV_FILE}"
 require_nonempty_config_var "OMERO_DB_PASS" "${SECRETS_ENV_FILE}"
 require_nonempty_config_var "OMP_PLUGIN_DB_PASS" "${SECRETS_ENV_FILE}"
 
@@ -2552,6 +2558,7 @@ echo "OMERO_DATABASE_PATH=${OMERO_DATABASE_PATH}"
 echo "OMERO_PLUGIN_DATABASE_PATH=${OMERO_PLUGIN_DATABASE_PATH}"
 echo "OMERO_DATA_PATH=${OMERO_DATA_PATH}"
 echo "OMERO_TMP_PATH=${OMERO_TMP_PATH}"
+echo "OMERO_DATA_DIR=${OMERO_DATA_DIR}"
 
 if ! ensure_installation_path "${OMERO_INSTALLATION_PATH}"; then
     echo "ERROR: Unable to prepare OMERO installation path: ${OMERO_INSTALLATION_PATH}" >&2
@@ -2596,6 +2603,7 @@ if [ "${DEFAULT_OMERO_INSTALLATION_PATH%/}" != "${OMERO_INSTALLATION_PATH%/}" ];
         "${DEFAULT_OMERO_DATABASE_PATH}" \
         "${DEFAULT_OMERO_PLUGIN_DATABASE_PATH}" \
         "${DEFAULT_OMERO_DATA_PATH}" \
+        "${DEFAULT_OMERO_DATA_DIR}" \
         "${KEEP_IMAGES}"
 fi
 

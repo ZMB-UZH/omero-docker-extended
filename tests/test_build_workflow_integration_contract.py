@@ -41,6 +41,19 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
+    def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(self) -> None:
+        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "        OMERO_TMP_PATH\n        OMERO_DATA_DIR\n        OMERO_USER_DATA_PATH\n",
+            script_text,
+        )
+        self.assertGreaterEqual(script_text.count("OMERO_DATA_DIR=${OMERO_DATA_DIR}"), 2)
+        self.assertIn("OMERO_DATA_DIR=${old_omero_data_dir}", script_text)
+        self.assertIn('DEFAULT_OMERO_DATA_DIR="${OMERO_DATA_DIR}"', script_text)
+        self.assertIn('require_path_config_var "OMERO_DATA_DIR" "${SCRIPT_ENV_FILE}"', script_text)
+
     def test_installation_script_does_not_inject_top_logo_defaults(self) -> None:
         script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
             encoding="utf-8"
@@ -171,7 +184,11 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('--chdir /opt/omero/web/OMERO.web/var/run', supervisord_text)
         self.assertIn('OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run', env_text)
         self.assertIn('local run_dir="${var_dir}/run"', web_bootstrap_text)
-        self.assertIn('mkdir -p "${var_dir}" "${var_dir}/omero/tmp" "${var_dir}/static" "${run_dir}"', web_bootstrap_text)
+        self.assertIn('local static_dir="${var_dir}/static"', web_bootstrap_text)
+        self.assertIn('ensure_runtime_directory "${var_dir}" "OMERO.web var directory" 0755', web_bootstrap_text)
+        self.assertIn('ensure_runtime_directory "${var_dir}/omero/tmp" "OMERO.web tmp directory" 1777', web_bootstrap_text)
+        self.assertIn('ensure_runtime_directory "${run_dir}" "OMERO.web runtime directory" 0755', web_bootstrap_text)
+        self.assertIn('ensure_runtime_directory "${static_dir}" "OMERO.web static directory" 0755', web_bootstrap_text)
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(

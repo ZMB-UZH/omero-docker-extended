@@ -213,6 +213,10 @@ MAX_UPLOAD_RELATIVE_PATH_BYTES = 2048
 MAX_UPLOAD_STAGED_TARGET_BYTES = 4096
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
+JOB_LOCK_RETRIES = 12
+JOB_LOCK_TIMEOUT_SECONDS = 2.0
+JOB_LOCK_RETRY_SLEEP_MIN_SECONDS = 0.05
+JOB_LOCK_RETRY_SLEEP_MAX_SECONDS = 0.2
 ORPHAN_DATASET_PREFIX = "Orphaned_images_base_path_import"
 ORPHAN_SUFFIX_LENGTH = 6
 ORPHAN_SUFFIX_ALPHANUM = string.ascii_uppercase + string.digits
@@ -615,11 +619,11 @@ def _load_job(job_id: str):
     if not path.exists():
         return None
     last_lock_error = None
-    for attempt in range(5):
+    for attempt in range(JOB_LOCK_RETRIES):
         if attempt:
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
         try:
-            with portalocker.Lock(lock_path, "a+", timeout=1):
+            with portalocker.Lock(lock_path, "a+", timeout=JOB_LOCK_TIMEOUT_SECONDS):
                 if not path.exists():
                     return None
                 return _read_job_file(job_id)
@@ -632,7 +636,7 @@ def _load_job(job_id: str):
                 "Unable to lock job file %s for read (attempt %s/%s): %s",
                 path,
                 attempt + 1,
-                5,
+                JOB_LOCK_RETRIES,
                 exc,
             )
     if last_lock_error is None:
@@ -651,7 +655,7 @@ def _load_job(job_id: str):
     return None
 
 
-def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
+def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     job_id = job_dict.get("job_id")
     if not _safe_job_id(job_id):
         logger.warning("Refusing to save upload job with invalid id: %s", job_id)
@@ -661,7 +665,7 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 _write_job_file(job_id, job_dict)
@@ -678,7 +682,7 @@ def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
     return False
 
 
-def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
+def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     if not _safe_job_id(job_id):
         logger.warning(
             "Refusing to update upload job with invalid id: %s",
@@ -689,7 +693,7 @@ def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float 
     lock_path = _job_lock_path(job_id)
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 if not path.exists():

@@ -17,6 +17,10 @@ INT_SANITIZER = re.compile(r"[^0-9]")
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
+JOB_LOCK_RETRIES = 12
+JOB_LOCK_TIMEOUT_SECONDS = 2.0
+JOB_LOCK_RETRY_SLEEP_MIN_SECONDS = 0.05
+JOB_LOCK_RETRY_SLEEP_MAX_SECONDS = 0.2
 
 
 def get_job_path(job_id: str, jobs_root: Path) -> Path:
@@ -132,7 +136,7 @@ def load_job(job_id: str, jobs_root: Path):
     if not path.exists():
         return None
     try:
-        with portalocker.Lock(path, "r", timeout=1) as handle:
+        with portalocker.Lock(path, "r", timeout=JOB_LOCK_TIMEOUT_SECONDS) as handle:
             return json.load(handle)
     except (portalocker.exceptions.LockException, OSError, json.JSONDecodeError) as exc:
         logger.warning("Unable to lock or read job file %s: %s", path, exc)
@@ -144,13 +148,13 @@ def load_job(job_id: str, jobs_root: Path):
     return None
 
 
-def save_job(job_dict, jobs_root: Path, retries: int = 5, timeout: float = 2.0):
+def save_job(job_dict, jobs_root: Path, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     """Save job data to filesystem with retry logic."""
     path = get_job_path(job_dict["job_id"], jobs_root)
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
         try:
             with portalocker.Lock(path, "w", timeout=timeout) as handle:
                 json.dump(job_dict, handle)
@@ -169,7 +173,7 @@ def save_job(job_dict, jobs_root: Path, retries: int = 5, timeout: float = 2.0):
     return False
 
 
-def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = 5, timeout: float = 2.0):
+def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     """Atomically update job with function."""
     try:
         path = get_job_path(job_id, jobs_root)
@@ -177,7 +181,7 @@ def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = 5,
         return None
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(0.05, 0.2))
+            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
         try:
             with portalocker.Lock(path, "r+", timeout=timeout) as handle:
                 job_dict = json.load(handle)
