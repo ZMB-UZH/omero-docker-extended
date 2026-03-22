@@ -5,9 +5,9 @@
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env ps
-docker compose --env-file installation_paths.env logs --since=10m omeroserver
-docker compose --env-file installation_paths.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env ps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroserver
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroweb
 ```
 
 Focus on:
@@ -22,8 +22,8 @@ Focus on:
 Checks:
 
 ```bash
-docker compose --env-file installation_paths.env exec omeroweb env | rg CONFIG_omero_web_apps
-docker compose --env-file installation_paths.env logs --since=10m omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec omeroweb env | rg CONFIG_omero_web_apps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m omeroweb
 ```
 
 Ensure the plugin app name exists in `CONFIG_omero_web_apps` and OMERO.web was restarted after config change.
@@ -95,8 +95,8 @@ Security rationale:
 docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
 ```
 
-If you run compose commands manually, always include the same `--env-file` value for
-`build`, `up`, `down`, `ps`, and `logs`.
+If you run compose commands manually, always include both env files for
+`build`, `up`, `down`, `ps`, `logs`, and `exec`.
 
 If you installed with `installation/installation_script.sh`, generated `.env` already sets
 `COMPOSE_ENV_FILES=installation_paths.env:env/omero_secrets.env` and mirrors
@@ -147,8 +147,8 @@ Security rationale:
 - Use the standard compose `tmpfs:` key to override `/dev/disk`, which blocks anonymous volume creation without exposing host block-device topology.
 
 ```bash
-docker compose --env-file installation_paths.env down
-docker compose --env-file installation_paths.env up -d
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d
 
 docker volume ls
 # If a leftover anonymous volume still exists and is unused:
@@ -182,13 +182,13 @@ Check/verify commands:
 
 ```bash
 # 1) Recreate only cAdvisor with current compose config
-docker compose --env-file installation_paths.env up -d cadvisor
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d cadvisor
 
 # 2) Confirm startup no longer prints usage/help
-docker compose --env-file installation_paths.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=2m cadvisor | rg -n 'Starting cAdvisor version|Usage of|flag provided but not defined'
 
 # 3) Confirm metrics endpoint is reachable inside the container network
-docker compose --env-file installation_paths.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env exec -T cadvisor wget --no-verbose --tries=1 --spider http://localhost:8080/metrics
 ```
 
 Expected result:
