@@ -180,6 +180,289 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(rel_path)
         self.assertIn("Filename is too long", error)
 
+    def test_get_text_falls_back_to_private_rstring_value(self):
+        value_obj = types.SimpleNamespace(val=None, _val="/managed/path/sample.ome.zarr")
+
+        text = core_functions._get_text(value_obj)
+
+        self.assertEqual("/managed/path/sample.ome.zarr", text)
+
+    def test_external_info_text_uses_getter_when_attribute_is_unloaded(self):
+        external_info = types.SimpleNamespace(
+            lsid=types.SimpleNamespace(val=None, _val=None),
+            getLsid=lambda: types.SimpleNamespace(val=None, _val="/managed/path/from-getter.ome.zarr"),
+        )
+
+        text = core_functions._external_info_text(external_info, "lsid", "getLsid")
+
+        self.assertEqual("/managed/path/from-getter.ome.zarr", text)
+
+    def test_query_image_external_info_reads_projection_values(self):
+        params_seen = {}
+        fake_query = mock.Mock()
+        fake_query.projection.return_value = [[
+            types.SimpleNamespace(val=None, _val="/managed/path/from-query.ome.zarr"),
+            types.SimpleNamespace(val=None, _val="com.glencoesoftware.ngff:multiscales"),
+        ]]
+        fake_conn = types.SimpleNamespace(
+            getQueryService=lambda: fake_query,
+            SERVICE_OPTS=object(),
+        )
+        with mock.patch.object(
+            core_functions.omero,
+            "sys",
+            types.SimpleNamespace(
+                ParametersI=lambda: types.SimpleNamespace(addId=lambda value: params_seen.setdefault("id", value))
+            ),
+            create=True,
+        ):
+            lsid, entity_type = core_functions._query_image_external_info(fake_conn, 42)
+
+        self.assertEqual(42, params_seen["id"])
+        self.assertEqual("/managed/path/from-query.ome.zarr", lsid)
+        self.assertEqual("com.glencoesoftware.ngff:multiscales", entity_type)
+
+    def test_native_zarr_image_relative_path_from_lsid_handles_root_and_series(self):
+        managed_root = Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr")
+
+        root_relative = core_functions._native_zarr_image_relative_path_from_lsid(
+            managed_root,
+            str(managed_root),
+        )
+        series_relative = core_functions._native_zarr_image_relative_path_from_lsid(
+            managed_root,
+            str(managed_root / "1"),
+        )
+
+        self.assertIsNone(root_relative)
+        self.assertEqual("1", series_relative)
+
+    def test_finalize_imported_zarr_image_metadata_persists_source_pixel_sizes(self):
+        class _FakeUnit:
+            def __init__(self, name):
+                self.name = name
+
+        class _FakeLength:
+            def __init__(self, value, unit_name):
+                self._value = float(value)
+                self._unit = _FakeUnit(unit_name)
+
+            def getValue(self):
+                return self._value
+
+            def getUnit(self):
+                return self._unit
+
+        class _FakePixelsModel:
+            def __init__(self):
+                self._x = None
+                self._y = None
+                self._z = None
+
+            def setPhysicalSizeX(self, value):
+                self._x = value
+
+            def setPhysicalSizeY(self, value):
+                self._y = value
+
+            def setPhysicalSizeZ(self, value):
+                self._z = value
+
+        class _FakePixelsWrapper:
+            def __init__(self, model):
+                self._obj = model
+
+            def getPhysicalSizeX(self):
+                return self._obj._x
+
+            def getPhysicalSizeY(self):
+                return self._obj._y
+
+            def getPhysicalSizeZ(self):
+                return self._obj._z
+
+        class _FakeImage:
+            def __init__(self, image_id, pixels_wrapper):
+                self._image_id = image_id
+                self._pixels_wrapper = pixels_wrapper
+
+            def getId(self):
+                return self._image_id
+
+            def getPrimaryPixels(self):
+                return self._pixels_wrapper
+
+        class _FakeUpdateService:
+            def __init__(self):
+                self.saved = []
+
+            def saveAndReturnObject(self, obj):
+                self.saved.append(obj)
+                return obj
+
+        class _FakeConn:
+            def __init__(self, image):
+                self._image = image
+                self._update_service = _FakeUpdateService()
+                self.SERVICE_OPTS = types.SimpleNamespace(
+                    setOmeroGroup=lambda value: setattr(self, "_group", value)
+                )
+                self.closed = False
+
+            def getObject(self, obj_type, image_id):
+                self._last_lookup = (obj_type, image_id)
+                return self._image
+
+            def getUpdateService(self):
+                return self._update_service
+
+            def close(self):
+                self.closed = True
+
+        class _FakeAdminConn:
+            def __init__(self, conn):
+                self._conn = conn
+                self.closed = False
+
+            def suConn(self, username):
+                self._username = username
+                return self._conn
+
+            def close(self):
+                self.closed = True
+
+        pixels_model = _FakePixelsModel()
+        pixels_wrapper = _FakePixelsWrapper(pixels_model)
+        image = _FakeImage(51, pixels_wrapper)
+        fake_conn = _FakeConn(image)
+        fake_admin_conn = _FakeAdminConn(fake_conn)
+        expected_sizes = {
+            "x": _FakeLength(0.5, "MICROMETER"),
+            "y": _FakeLength(0.75, "MICROMETER"),
+            "z": _FakeLength(1.25, "MICROMETER"),
+        }
+
+        with mock.patch.object(
+            core_functions,
+            "_open_admin_connection",
+            return_value=fake_admin_conn,
+        ), mock.patch.object(
+            core_functions,
+            "_query_image_external_info",
+            return_value=(
+                "/OMERO/ManagedRepository/user/test/sample.ome.zarr/0",
+                "com.glencoesoftware.ngff:multiscales",
+            ),
+        ), mock.patch.object(
+            core_functions,
+            "_runtime_native_zarr_physical_sizes",
+            return_value=(expected_sizes, None),
+        ):
+            ok, errors = core_functions._finalize_imported_zarr_image_metadata(
+                "test",
+                "omeroserver",
+                4064,
+                ["51"],
+                managed_zarr=Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr"),
+                group_name="private",
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual([], errors)
+        self.assertEqual(
+            core_functions._native_zarr_length_signature(expected_sizes["x"]),
+            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeX()),
+        )
+        self.assertEqual(
+            core_functions._native_zarr_length_signature(expected_sizes["y"]),
+            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeY()),
+        )
+        self.assertEqual(
+            core_functions._native_zarr_length_signature(expected_sizes["z"]),
+            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeZ()),
+        )
+        self.assertEqual([pixels_model], fake_conn.getUpdateService().saved)
+        self.assertTrue(fake_conn.closed)
+        self.assertTrue(fake_admin_conn.closed)
+
+    def test_runtime_native_zarr_physical_sizes_normalizes_ngff_unit_symbols(self):
+        class _FakeUnit:
+            def __init__(self, name):
+                self.name = name
+
+        class _FakeLength:
+            def __init__(self, value, unit):
+                self._value = float(value)
+                self._unit = unit
+
+            def getValue(self):
+                return self._value
+
+            def getUnit(self):
+                return self._unit
+
+        unit_names = (
+            "METER",
+            "MICROMETER",
+            "NANOMETER",
+            "PIXEL",
+        )
+        fake_units = {name: _FakeUnit(name) for name in unit_names}
+
+        class _FakeUnitsLength:
+            _enumerators = {index: fake_units[name] for index, name in enumerate(unit_names)}
+
+        for name, unit in fake_units.items():
+            setattr(_FakeUnitsLength, name, unit)
+
+        fake_enums_module = types.ModuleType("omero.model.enums")
+        fake_enums_module.UnitsLength = _FakeUnitsLength
+
+        fake_runtime = types.SimpleNamespace(
+            open_group=lambda path, mode="r": types.SimpleNamespace(store="store"),
+            load_attrs=lambda store, image_relative_path: {"multiscales": []},
+            parse_image_metadata=lambda store, attrs, image_relative_path: (
+                {},
+                "uint8",
+                {
+                    "x": ("10.0", "nm"),
+                    "y": ("5.0", "µm"),
+                    "z": ("2.5", "um"),
+                },
+            ),
+            create_length=lambda value_unit: _FakeLength(value_unit[0], _FakeUnitsLength.PIXEL),
+        )
+
+        core_functions._units_length_for_name.cache_clear()
+        core_functions._units_length_by_normalized_name.cache_clear()
+        core_functions._units_length_symbol_aliases.cache_clear()
+        self.addCleanup(core_functions._units_length_for_name.cache_clear)
+        self.addCleanup(core_functions._units_length_by_normalized_name.cache_clear)
+        self.addCleanup(core_functions._units_length_symbol_aliases.cache_clear)
+
+        with mock.patch.dict(
+            sys.modules,
+            {"omero.model.enums": fake_enums_module},
+        ), mock.patch.object(
+            sys.modules["omero.model"],
+            "LengthI",
+            _FakeLength,
+            create=True,
+        ), mock.patch.object(
+            core_functions,
+            "_runtime_zarr_import_module",
+            return_value=fake_runtime,
+        ):
+            sizes, error = core_functions._runtime_native_zarr_physical_sizes(
+                Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr"),
+                "0",
+            )
+
+        self.assertIsNone(error)
+        self.assertEqual((10.0, "nanometer"), core_functions._native_zarr_length_signature(sizes["x"]))
+        self.assertEqual((5.0, "micrometer"), core_functions._native_zarr_length_signature(sizes["y"]))
+        self.assertEqual((2.5, "micrometer"), core_functions._native_zarr_length_signature(sizes["z"]))
+
     def test_validate_staged_target_path_rejects_excessive_target_length(self):
         upload_root = Path("/tmp/upload-root")
         staged_path = "_staged/job/" + ("a" * 5000) + ".tif"
@@ -566,7 +849,7 @@ class ImportPluginRegressionTests(TestCase):
             ),
         ), mock.patch.object(
             core_functions,
-            "_verify_import_via_api",
+            "_verify_zarr_import_via_api",
             return_value=[],
         ), mock.patch.object(
             core_functions,
@@ -588,6 +871,10 @@ class ImportPluginRegressionTests(TestCase):
                 progress_job=None,
                 username="test",
                 group_name="users_private",
+                native_plan=core_functions._NativeZarrImportPlan(
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
+                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                ),
             )
 
         self.assertEqual("error", result["status"])
@@ -601,13 +888,282 @@ class ImportPluginRegressionTests(TestCase):
             managed_path=managed_path,
         )
 
+    def test_import_zarr_via_cli_rolls_back_when_render_verification_fails(self):
+        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_parent = shared_source.parent
+
+        with mock.patch.object(
+            core_functions,
+            "_prepare_server_readable_zarr_source",
+            return_value=(shared_source, shared_parent, None),
+        ), mock.patch.object(
+            core_functions,
+            "_run_zarr_managed_repo_script",
+            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_shared_zarr_transfer",
+        ), mock.patch.object(
+            core_functions,
+            "_build_omero_cli_command",
+            return_value=["omero", "zarr", "import"],
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={"TEST_ENV": "1"},
+        ), mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                args=["omero", "zarr", "import"],
+                returncode=0,
+                stdout="Created Image 51\n",
+                stderr="",
+            ),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_zarr_import_via_api",
+            return_value=["51"],
+        ), mock.patch.object(
+            core_functions,
+            "_finalize_imported_zarr_image_metadata",
+            return_value=(True, []),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_imported_zarr_images_renderable",
+            return_value=(False, ["thumbnail failed"]),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_imported_images",
+        ) as cleanup_images_mock, mock.patch.object(
+            core_functions,
+            "_cleanup_managed_zarr_path",
+        ) as cleanup_managed_mock:
+            result = core_functions._import_zarr_via_cli(
+                file_path=Path("/tmp/job/sample.zarr"),
+                session_key="session-key",
+                host="omeroserver",
+                port=4064,
+                dataset_id=7,
+                import_name="sample.zarr",
+                rel_path="sample.zarr",
+                entry={"index": 3},
+                cleanup_staged_paths=["_staged/sample.zarr"],
+                covered_indexes=[3],
+                covered_relative_paths=["sample.zarr/.zattrs"],
+                group_id=4,
+                progress_job=None,
+                username="test",
+                group_name="users_private",
+                native_plan=core_functions._NativeZarrImportPlan(
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
+                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                ),
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("render verification", result["entry_error"].lower())
+        cleanup_images_mock.assert_called_once_with("omeroserver", 4064, ["51"])
+        cleanup_managed_mock.assert_called_once_with(
+            "omeroserver",
+            4064,
+            username="test",
+            group_name="users_private",
+            managed_path=managed_path,
+        )
+
+    def test_import_zarr_via_cli_rolls_back_when_metadata_finalization_fails(self):
+        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_parent = shared_source.parent
+
+        with mock.patch.object(
+            core_functions,
+            "_prepare_server_readable_zarr_source",
+            return_value=(shared_source, shared_parent, None),
+        ), mock.patch.object(
+            core_functions,
+            "_run_zarr_managed_repo_script",
+            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_shared_zarr_transfer",
+        ), mock.patch.object(
+            core_functions,
+            "_build_omero_cli_command",
+            return_value=["omero", "zarr", "import"],
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={"TEST_ENV": "1"},
+        ), mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                args=["omero", "zarr", "import"],
+                returncode=0,
+                stdout="Created Image 61\n",
+                stderr="",
+            ),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_zarr_import_via_api",
+            return_value=["61"],
+        ), mock.patch.object(
+            core_functions,
+            "_finalize_imported_zarr_image_metadata",
+            return_value=(False, ["physical size save failed"]),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_imported_zarr_images_renderable",
+        ) as render_verify_mock, mock.patch.object(
+            core_functions,
+            "_cleanup_imported_images",
+        ) as cleanup_images_mock, mock.patch.object(
+            core_functions,
+            "_cleanup_managed_zarr_path",
+        ) as cleanup_managed_mock:
+            result = core_functions._import_zarr_via_cli(
+                file_path=Path("/tmp/job/sample.zarr"),
+                session_key="session-key",
+                host="omeroserver",
+                port=4064,
+                dataset_id=7,
+                import_name="sample.zarr",
+                rel_path="sample.zarr",
+                entry={"index": 3},
+                cleanup_staged_paths=["_staged/sample.zarr"],
+                covered_indexes=[3],
+                covered_relative_paths=["sample.zarr/.zattrs"],
+                group_id=4,
+                progress_job=None,
+                username="test",
+                group_name="users_private",
+                native_plan=core_functions._NativeZarrImportPlan(
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
+                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                ),
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("metadata finalization", result["entry_error"].lower())
+        cleanup_images_mock.assert_called_once_with("omeroserver", 4064, ["61"])
+        cleanup_managed_mock.assert_called_once_with(
+            "omeroserver",
+            4064,
+            username="test",
+            group_name="users_private",
+            managed_path=managed_path,
+        )
+        render_verify_mock.assert_not_called()
+
+    def test_import_zarr_via_cli_accepts_only_renderable_images(self):
+        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_parent = shared_source.parent
+
+        with mock.patch.object(
+            core_functions,
+            "_prepare_server_readable_zarr_source",
+            return_value=(shared_source, shared_parent, None),
+        ), mock.patch.object(
+            core_functions,
+            "_run_zarr_managed_repo_script",
+            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_shared_zarr_transfer",
+        ), mock.patch.object(
+            core_functions,
+            "_build_omero_cli_command",
+            return_value=["omero", "zarr", "import"],
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={"TEST_ENV": "1"},
+        ), mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                args=["omero", "zarr", "import"],
+                returncode=0,
+                stdout="Created Image 52\n",
+                stderr="",
+            ),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_zarr_import_via_api",
+            return_value=["52"],
+        ), mock.patch.object(
+            core_functions,
+            "_finalize_imported_zarr_image_metadata",
+            return_value=(True, []),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_imported_zarr_images_renderable",
+            return_value=(True, []),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_imported_images",
+        ) as cleanup_images_mock, mock.patch.object(
+            core_functions,
+            "_cleanup_managed_zarr_path",
+        ) as cleanup_managed_mock:
+            result = core_functions._import_zarr_via_cli(
+                file_path=Path("/tmp/job/sample.zarr"),
+                session_key="session-key",
+                host="omeroserver",
+                port=4064,
+                dataset_id=7,
+                import_name="sample.zarr",
+                rel_path="sample.zarr",
+                entry={"index": 3},
+                cleanup_staged_paths=["_staged/sample.zarr"],
+                covered_indexes=[3],
+                covered_relative_paths=["sample.zarr/.zattrs"],
+                group_id=4,
+                progress_job=None,
+                username="test",
+                group_name="users_private",
+                native_plan=core_functions._NativeZarrImportPlan(
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
+                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                ),
+            )
+
+        self.assertEqual("imported", result["status"])
+        self.assertEqual(managed_path, result["file_path"])
+        cleanup_images_mock.assert_not_called()
+        cleanup_managed_mock.assert_not_called()
+
     def test_prepare_server_readable_zarr_source_copies_into_shared_transfer_root(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir)
             source = tmp_root / "upload" / "sample.zarr"
-            (source / "nested").mkdir(parents=True)
-            (source / ".zattrs").write_text("{}", encoding="utf-8")
-            (source / "nested" / "0.bin").write_bytes(b"abc")
+            (source / "0").mkdir(parents=True)
+            (source / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "axes": [{"name": "y"}, {"name": "x"}],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0]}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (source / "0" / ".zarray").write_text('{"shape":[1,1],"dtype":"<u2"}', encoding="utf-8")
+            (source / "0" / "0.0").write_bytes(b"abc")
             transfer_root = tmp_root / "shared-transfer"
             transfer_root.mkdir()
 
@@ -619,11 +1175,312 @@ class ImportPluginRegressionTests(TestCase):
             self.assertIsNotNone(shared_parent)
             self.assertTrue(shared_source.is_dir())
             self.assertEqual("sample.zarr", shared_source.name)
-            self.assertEqual("{}", (shared_source / ".zattrs").read_text(encoding="utf-8"))
-            self.assertEqual(b"abc", (shared_source / "nested" / "0.bin").read_bytes())
+            self.assertIn('"multiscales"', (shared_source / ".zattrs").read_text(encoding="utf-8"))
+            self.assertEqual(b"abc", (shared_source / "0" / "0.0").read_bytes())
             self.assertEqual(0o711, shared_parent.stat().st_mode & 0o777)
             self.assertEqual(0o755, shared_source.stat().st_mode & 0o777)
-            self.assertEqual(0o644, (shared_source / "nested" / "0.bin").stat().st_mode & 0o777)
+            self.assertEqual(0o644, (shared_source / "0" / "0.0").stat().st_mode & 0o777)
+
+    def test_prepare_server_readable_zarr_source_preserves_multiscale_copy(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            source = tmp_root / "upload" / "sample.zarr"
+            transfer_root = tmp_root / "shared-transfer"
+            transfer_root.mkdir()
+
+            source.mkdir(parents=True)
+            (source / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+            (source / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "version": "0.4",
+                                "axes": [{"name": "y"}, {"name": "x"}],
+                                "datasets": [
+                                    {
+                                        "path": "s0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0]}
+                                        ],
+                                    },
+                                    {
+                                        "path": "s1",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [2.0, 2.0]}
+                                        ],
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            for name in ("s0", "s1"):
+                subdir = source / name
+                subdir.mkdir()
+                (subdir / ".zarray").write_text('{"shape":[4,4],"dtype":"<u2"}', encoding="utf-8")
+                (subdir / "0.0").write_bytes(b"chunk")
+
+            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root):
+                shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
+
+            self.assertIsNone(error)
+            self.assertIsNotNone(shared_source)
+            self.assertTrue((source / "s1").exists(), "original upload must not be modified")
+            self.assertTrue((shared_source / "s1").exists(), "shared copy must preserve native levels")
+            with open(shared_source / ".zattrs", encoding="utf-8") as fh:
+                attrs = json.load(fh)
+            self.assertEqual(["s0", "s1"], [d["path"] for d in attrs["multiscales"][0]["datasets"]])
+
+    def test_check_import_compatibility_accepts_ome_wrapped_native_zarr_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "wrapped.ome.zarr"
+            zarr_dir.mkdir()
+            (zarr_dir / "s0").mkdir()
+            (zarr_dir / "s0" / ".zarray").write_text(
+                '{"shape":[1,1],"dtype":"<u2"}',
+                encoding="utf-8",
+            )
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "ome": {
+                            "multiscales": [
+                                {
+                                    "version": "0.4",
+                                    "axes": [{"name": "y"}, {"name": "x"}],
+                                    "datasets": [
+                                        {
+                                            "path": "s0",
+                                            "coordinateTransformations": [
+                                                {"type": "scale", "scale": [1.0, 1.0]}
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="wrapped.ome.zarr",
+            )
+
+        self.assertEqual("compatible", result["status"])
+        self.assertIn("omero-cli-zarr", result["details"])
+
+    def test_check_import_compatibility_accepts_bioformats2raw_layout_via_native_cli(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "bf2raw.ome.zarr"
+            series_dir = zarr_dir / "0"
+            array_dir = series_dir / "0"
+            array_dir.mkdir(parents=True)
+            (array_dir / ".zarray").write_text(
+                '{"shape":[1,1],"dtype":"<u2"}',
+                encoding="utf-8",
+            )
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps({"bioformats2raw.layout": 3}),
+                encoding="utf-8",
+            )
+            (series_dir / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "version": "0.4",
+                                "axes": [{"name": "y"}, {"name": "x"}],
+                                "datasets": [
+                                    {
+                                        "path": "0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0]}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="bf2raw.ome.zarr",
+            )
+
+        self.assertEqual("compatible", result["status"])
+        self.assertIn("bioformats2raw", result["details"])
+
+    def test_check_import_compatibility_rejects_invalid_native_zarr_layout(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "broken.ome.zarr"
+            zarr_dir.mkdir()
+            (zarr_dir / "s0").mkdir()
+            (zarr_dir / "s0" / ".zarray").write_text('{"shape":[1,1]}', encoding="utf-8")
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "datasets": [{"path": "s0"}],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="broken.ome.zarr",
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("axes", result["details"])
+
+    def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "broken-scale.ome.zarr"
+            zarr_dir.mkdir()
+            (zarr_dir / "s0").mkdir()
+            (zarr_dir / "s0" / ".zarray").write_text(
+                '{"shape":[1,1],"dtype":"<u2"}',
+                encoding="utf-8",
+            )
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "axes": [{"name": "y"}, {"name": "x"}],
+                                "datasets": [{"path": "s0"}],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="broken-scale.ome.zarr",
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("coordinateTransformations", result["details"])
+
+    def test_check_import_compatibility_rejects_native_zarr_string_axes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "string-axes.ome.zarr"
+            zarr_dir.mkdir()
+            (zarr_dir / "s0").mkdir()
+            (zarr_dir / "s0" / ".zarray").write_text(
+                '{"shape":[1,1],"dtype":"<u2"}',
+                encoding="utf-8",
+            )
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps(
+                    {
+                        "multiscales": [
+                            {
+                                "axes": ["y", "x"],
+                                "datasets": [
+                                    {
+                                        "path": "s0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0]}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="string-axes.ome.zarr",
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("axes must use object metadata", result["details"])
+
+    def test_check_import_compatibility_rejects_sparse_bioformats2raw_series(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zarr_dir = Path(tmpdir) / "bf2raw-gap.ome.zarr"
+            for series_name in ("0", "2"):
+                array_dir = zarr_dir / series_name / "0"
+                array_dir.mkdir(parents=True)
+                (array_dir / ".zarray").write_text(
+                    '{"shape":[1,1],"dtype":"<u2"}',
+                    encoding="utf-8",
+                )
+                (zarr_dir / series_name / ".zattrs").write_text(
+                    json.dumps(
+                        {
+                            "multiscales": [
+                                {
+                                    "axes": [{"name": "y"}, {"name": "x"}],
+                                    "datasets": [
+                                        {
+                                            "path": "0",
+                                            "coordinateTransformations": [
+                                                {"type": "scale", "scale": [1.0, 1.0]}
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            (zarr_dir / ".zattrs").write_text(
+                json.dumps({"bioformats2raw.layout": 3}),
+                encoding="utf-8",
+            )
+
+            result = core_functions._check_import_compatibility(
+                "session-key",
+                "omeroserver",
+                4064,
+                zarr_dir,
+                dataset_id=None,
+                relative_path="bf2raw-gap.ome.zarr",
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("contiguous and zero-based", result["details"])
 
     def test_background_import_session_closes_created_session_object(self):
         fake_session = types.SimpleNamespace(
@@ -1327,8 +2184,9 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         with self.assertRaisesRegex(RuntimeError, "omero.web.import.shared_tmp_path"):
             manage_script._shared_tmp_root({})
 
-    def test_stage_zarr_requires_server_created_user_prefix(self):
+    def test_stage_zarr_creates_missing_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()
+        fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_root = Path(tmpdir) / "tmp"
@@ -1339,8 +2197,20 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             managed_root.mkdir(parents=True, exist_ok=True)
             server_config = self._server_config(tmpdir, tmp_root)
 
-            with self.assertRaisesRegex(RuntimeError, "must be created by OMERO.server first"):
-                manage_script._stage_zarr(server_config, str(source), "users_private", "test")
+            with mock.patch.object(manage_script, "datetime") as mock_datetime:
+                mock_datetime.now.return_value = fixed_now
+                destination = manage_script._stage_zarr(
+                    server_config,
+                    str(source),
+                    "users_private",
+                    "test",
+                )
+
+            self.assertEqual(
+                managed_root / "users_private" / "test" / "2026-03-22" / "09-51-15" / "sample.zarr",
+                destination,
+            )
+            self.assertTrue((managed_root / "users_private" / "test").is_dir())
 
     def test_cleanup_zarr_rejects_path_outside_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()

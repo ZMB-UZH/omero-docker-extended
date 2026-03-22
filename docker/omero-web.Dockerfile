@@ -108,6 +108,7 @@ RUN set -euo pipefail; \
         gcc \
         gcc-c++ \
         make \
+        blosc \
         python3-devel \
         supervisor \
         quota \
@@ -171,6 +172,7 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
 ARG OMERO_CLI_ZARR_VERSION=0.8.0
+ARG BIOFORMATS2RAW_VERSION=0.11.0
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
     PY_VER="$("${VENV_DIR}/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
@@ -205,6 +207,23 @@ RUN set -euo pipefail; \
         "${SITE_PACKAGES}/omero_plugin_common" \
         "${SITE_PACKAGES}/docs/help"; \
     rm -rf /tmp/omeroweb_omp_plugin /tmp/omero_web_zarr /tmp/omeroweb_import /tmp/omeroweb_admin_tools /tmp/omeroweb_imaris_connector /tmp/omero_plugin_common /tmp/omero_plugin_help_docs
+
+RUN set -euo pipefail; \
+    archive="/tmp/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip"; \
+    install_dir="/opt/bioformats2raw-${BIOFORMATS2RAW_VERSION}"; \
+    stable_link="/opt/bioformats2raw"; \
+    curl -fsSL "https://github.com/glencoesoftware/bioformats2raw/releases/download/v${BIOFORMATS2RAW_VERSION}/bioformats2raw-${BIOFORMATS2RAW_VERSION}.zip" -o "${archive}"; \
+    rm -rf "${install_dir}" "${stable_link}"; \
+    unzip -q "${archive}" -d /opt; \
+    if [[ ! -d "${install_dir}" ]]; then \
+        echo "ERROR: Expected extracted directory ${install_dir} was not created" >&2; \
+        exit 1; \
+    fi; \
+    ln -s "${install_dir}" "${stable_link}"; \
+    ln -sf "${stable_link}/bin/bioformats2raw" /usr/local/bin/bioformats2raw; \
+    chmod 0755 "${install_dir}/bin/bioformats2raw"; \
+    /usr/local/bin/bioformats2raw --help >/dev/null; \
+    rm -f "${archive}"
 
 # Patch OMERO.web to keep optional top-logo context keys defined when unset.
 # This preserves the documented login-logo path while avoiding noisy debug
