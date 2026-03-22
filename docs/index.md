@@ -44,6 +44,9 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `design-docs/index.md` -- design document catalog
 - `design-docs/acquisition-metadata-search-options.md` -- feasibility study and three options for OMERO.web acquisition-metadata search
 - `exec-plans/active/knowledge-base-bootstrap.md` -- active execution plan
+- `exec-plans/active/repo-feature-capability-roadmap.md` -- grounded roadmap of candidate new product and platform capabilities
+- `exec-plans/active/repo-quality-skills-hooks-actions.md` -- skills, git hooks, GitHub Actions, and repo settings to raise quality
+- `exec-plans/active/repo-improvements-and-fixes-backlog.md` -- prioritized backlog of concrete fixes and maintainability work
 - `exec-plans/tech-debt-tracker.md` -- known technical debt items
 - `product-specs/index.md` -- product specification catalog
 
