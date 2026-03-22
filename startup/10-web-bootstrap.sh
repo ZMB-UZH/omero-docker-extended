@@ -230,13 +230,14 @@ configure_docker_socket_access() {
 ensure_web_var_layout() {
     local var_dir="${OMERO_WEB_VAR_DIR:-/opt/omero/web/OMERO.web/var}"
     local run_dir="${var_dir}/run"
+    local static_dir="${var_dir}/static"
 
     echo "[web-bootstrap] Checking OMERO.web var directory: ${var_dir}"
     ensure_runtime_directory "${var_dir}" "OMERO.web var directory" 0755
     ensure_runtime_directory "${var_dir}/omero" "OMERO.web runtime directory" 0755
     ensure_runtime_directory "${var_dir}/omero/tmp" "OMERO.web tmp directory" 1777
     ensure_runtime_directory "${run_dir}" "OMERO.web runtime directory" 0755
-    mkdir -p "${var_dir}/static"
+    ensure_runtime_directory "${static_dir}" "OMERO.web static directory" 0755
 
     if [[ ! -f "${var_dir}/django_secret_key" ]]; then
         if command -v openssl >/dev/null 2>&1; then
