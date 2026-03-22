@@ -32,20 +32,20 @@ bash installation/installation_script.sh
 Or manually:
 
 ```bash
-docker compose --env-file installation_paths.env build
-docker compose --env-file installation_paths.env up -d
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env build
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d
 ```
 
 ### 3. Verify service health
 
 ```bash
-docker compose --env-file installation_paths.env ps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env ps
 ```
 
 All services should show `healthy` or `running` status. Check logs if any service is unhealthy:
 
 ```bash
-docker compose --env-file installation_paths.env logs --since=10m <service-name>
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs --since=10m <service-name>
 ```
 
 ### 4. Verify plugin availability

@@ -45,7 +45,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (19 runtime containers + helper init container)
+├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec, plus redis-sysctl-init startup helper)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
@@ -103,7 +103,9 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-The platform runs **19 runtime containers** on a single Docker bridge network (`omero`):
+`docker-compose.yml` declares **20 Compose services total** on a single Docker bridge network (`omero`): **18 long-running runtime containers by default**, **19 when the profile-gated `crowdsec` service is enabled**, plus the one-shot `redis-sysctl-init` helper during Redis startup.
+
+The table below lists the long-running services available in the full profile set:
 
 | Service | Image | Purpose | Port |
 |---|---|---|---|
@@ -125,7 +127,7 @@ The platform runs **19 runtime containers** on a single Docker bridge network (`
 | `postgres-exporter-plugin` | postgres-exporter:v0.19.0 | Plugin database metrics | 9187 (internal) |
 | `redis-exporter` | redis_exporter:v1.81.0 | Redis metrics | 9121 (internal) |
 | `path-usage-exporter` | Custom (python:3.12-slim) | Exposes OMERO/data path usage metrics to node-exporter textfile collector | none |
-| `crowdsec` | Custom (crowdsecurity/crowdsec:v1.7.6) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
+| `crowdsec` (profile-gated) | Custom (crowdsecurity/crowdsec:v1.7.6) | Host-wide cybersecurity engine (host syslog, SSH auth, and Docker log analysis) | 8080 |
 
 </details>
 
@@ -292,17 +294,17 @@ Create deployment-local runtime files by copying these templates and removing `_
 
 ```bash
 # Stop services without removing resources
-docker compose --env-file installation_paths.env stop
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env stop
 
 # Stop and remove containers
-docker compose --env-file installation_paths.env down
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
 
 # Follow logs for a specific service
-docker compose --env-file installation_paths.env logs -f omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs -f omeroweb
 
 # Rebuild a single service
-docker compose --env-file installation_paths.env build omeroweb
-docker compose --env-file installation_paths.env up -d omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env build omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d omeroweb
 # Remove optional post-build leftovers (redis-sysctl-init + buildx buildkit)
 bash installation/cleanup_build_containers.sh
 ```
