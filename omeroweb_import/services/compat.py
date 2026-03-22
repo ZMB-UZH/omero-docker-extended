@@ -3,6 +3,8 @@ Compatibility layer - wraps refactored services to maintain original function si
 This allows views to call functions without passing jobs_root parameter.
 """
 from .jobs.job_storage import (
+    JOB_LOCK_RETRIES,
+    JOB_LOCK_TIMEOUT_SECONDS,
     get_job_path as _get_job_path_internal,
     load_job as _load_job_internal,
     save_job as _save_job_internal,
@@ -43,12 +45,12 @@ def _load_job(job_id: str):
     return _load_job_internal(job_id, get_jobs_root())
 
 
-def _save_job(job_dict, retries: int = 5, timeout: float = 2.0):
+def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     """Save job without needing to pass jobs_root."""
     return _save_job_internal(job_dict, get_jobs_root(), retries, timeout)
 
 
-def _robust_update_job(job_id: str, update_fn, retries: int = 5, timeout: float = 2.0):
+def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
     """Update job without needing to pass jobs_root."""
     return _robust_update_job_internal(job_id, update_fn, get_jobs_root(), retries, timeout)
 
