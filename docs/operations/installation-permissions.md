@@ -89,6 +89,23 @@ Managed-repository shared-prefix bridge:
   - writes the latest cycle status to
     `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`.
 
+Managed-repository Zarr staging:
+- `omeroweb_import/omero_scripts/Manage_Zarr_ManagedRepository.py`
+  - runs on OMERO.server, not in the OMERO.web request process,
+  - stages `.zarr` directories only inside
+    `${OMERO_DATA_DIR}/${CONFIG_omero_managed_dir}`,
+  - reads the managed-repository root and repository template from persisted
+    OMERO config (`omero.data.dir`, `omero.managed.dir`,
+    `omero.fs.repo.path`) and reads the env-derived shared tmp root from the
+    bootstrap-written runtime state file
+    `OMERO.server/var/managed-zarr-runtime.env` rather than relying on
+    hardcoded paths,
+  - requires the `%user%` prefix from `CONFIG_omero_fs_repo_path` to already
+    exist, so the web plugin does not create group/user repository roots with
+    the wrong owner,
+  - creates only the suffix directories after `%user%` and normalizes the
+    copied tree to repository-safe `0755` directories and `0644` files.
+
 Installer readiness gate:
 - `installation/installation_script.sh`
   - waits for a successful current-cycle
@@ -162,6 +179,9 @@ Web bootstrap:
 
 Intent:
 - plugin temp folders under `OMERO_TMP_PATH` are owned by `omero-web`.
+- the original staged upload tree remains private to `omero-web`,
+- any server-readable bridge for Zarr staging must be a separate transient copy,
+  not a permission broadening of the main upload tree.
 
 Code path:
 - `omero_plugin_common/tmp_utils.py`
@@ -170,6 +190,16 @@ Code path:
 
 Installer expectation:
 - non-server top-level temp/plugin subtrees are normalized to the web UID/GID by `ensure_omero_tmp_layout()`.
+
+Import-plugin Zarr bridge:
+- `omeroweb_import/views/core_functions.py`
+  - creates `${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer` as a
+    traversal-only handoff root for OMERO.server,
+  - creates each per-transfer parent directory with `0711`,
+  - normalizes copied Zarr directories to `0755` and files to `0644`,
+  - removes the transfer subtree immediately after the server-side staging step,
+  - leaves `${OMERO_TMP_PATH}/omeroweb-import/data` and the original `_staged/`
+    upload tree under OMERO.web ownership.
 
 ### Database paths
 

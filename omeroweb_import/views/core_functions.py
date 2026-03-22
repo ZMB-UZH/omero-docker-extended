@@ -1679,6 +1679,10 @@ FAILED_IMPORT_RETENTION_SECONDS_DEFAULT = 48 * 60 * 60
 FAILED_IMPORT_RETENTION_SECONDS_ENV = "OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS"
 LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT = 2 * 60 * 60
 LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_LOCAL_SCAN_TIMEOUT_SECONDS"
+SCRIPT_START_TIMEOUT_SECONDS_DEFAULT = 180
+SCRIPT_START_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS"
+SCRIPT_START_RETRY_SECONDS_DEFAULT = 5
+SCRIPT_START_RETRY_SECONDS_ENV = "OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS"
 
 
 def _get_cli_keepalive_seconds() -> int:
@@ -1696,6 +1700,24 @@ def _get_local_import_scan_timeout_seconds() -> int:
         LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_DEFAULT,
         30,
         24 * 60 * 60,
+    )
+
+
+def _get_script_start_timeout_seconds() -> int:
+    return _get_env_int(
+        SCRIPT_START_TIMEOUT_SECONDS_ENV,
+        SCRIPT_START_TIMEOUT_SECONDS_DEFAULT,
+        1,
+        24 * 60 * 60,
+    )
+
+
+def _get_script_start_retry_seconds() -> int:
+    return _get_env_int(
+        SCRIPT_START_RETRY_SECONDS_ENV,
+        SCRIPT_START_RETRY_SECONDS_DEFAULT,
+        1,
+        300,
     )
 
 
@@ -1731,6 +1753,12 @@ def _extract_imported_object_ids(output: str) -> list[str]:
             seen.add(object_id)
             created_ids.append(object_id)
     return created_ids
+
+
+def _reports_no_processor_available(stdout: str, stderr: str) -> bool:
+    combined = "\n".join(part for part in (stdout, stderr) if part)
+    lowered = combined.lower()
+    return "noprocessoravailable" in combined or "no processor available" in lowered
 
 
 BACKGROUND_IMPORT_SESSION_TTL_SLACK_SECONDS = 10 * 60
@@ -4083,32 +4111,288 @@ def _is_ome_ngff_zarr(zarr_path: Path) -> bool:
     return isinstance(attrs.get("multiscales"), list)
 
 
-# Root directory for permanently stored OME-NGFF zarrs.
-# Must be accessible to both the web container (writes) and the
-# server container (omero-zarr-pixel-buffer reads).
-OMERO_ZARR_STORE_ROOT = Path(os.environ.get("OMERO_ZARR_STORE_ROOT", "/OMERO/OME-Zarr"))
+ZARR_MANAGED_REPO_SCRIPT_NAME = "Manage_Zarr_ManagedRepository.py"
+ZARR_SHARED_TRANSFER_SUBDIR = "managed-zarr-transfer"
+ZARR_SHARED_TRANSFER_ROOT_MODE = 0o711
+ZARR_SHARED_TRANSFER_TOKEN_MODE = 0o711
+ZARR_SHARED_TRANSFER_DIR_MODE = 0o755
+ZARR_SHARED_TRANSFER_FILE_MODE = 0o644
 
 
-_ZARR_STORE_COMPONENT_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
+_SCRIPT_OUTPUT_PATTERN = re.compile(r"^\s*\*?\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$")
 
 
-def _sanitize_zarr_store_component(value: str) -> str:
-    """Return a filesystem-safe OME-Zarr store path component."""
-    cleaned = _ZARR_STORE_COMPONENT_SANITIZER.sub("_", (value or "").strip())
-    cleaned = cleaned.strip("._-")
-    return cleaned or "unknown"
+def _extract_script_outputs(text: str) -> dict[str, str]:
+    outputs = {}
+    for line in (text or "").splitlines():
+        match = _SCRIPT_OUTPUT_PATTERN.match(line)
+        if not match:
+            continue
+        key = (match.group(1) or "").strip()
+        value = (match.group(2) or "").strip()
+        if key:
+            outputs[key] = value
+    return outputs
 
 
-def _build_zarr_store_destination_dir(username: str, group_name: str) -> Path:
-    """Allocate a unique writable directory directly under the store root.
+def _shared_zarr_transfer_root() -> Path:
+    root = get_plugin_tmp_dir(ZARR_SHARED_TRANSFER_SUBDIR)
+    root.chmod(ZARR_SHARED_TRANSFER_ROOT_MODE)
+    return root.resolve(strict=False)
 
-    Avoid nested ``group/user/...`` parents so stale ownership on an
-    intermediate directory cannot block later imports for the same user/group.
-    """
-    safe_group = _sanitize_zarr_store_component(group_name)
-    safe_user = _sanitize_zarr_store_component(username)
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S.%f")[:-3]
-    return OMERO_ZARR_STORE_ROOT / f"{safe_group}__{safe_user}__{timestamp}__{uuid.uuid4().hex[:8]}"
+
+def _normalize_shared_zarr_permissions(path: Path) -> None:
+    path = Path(path)
+    if not path.exists():
+        return
+    path.chmod(ZARR_SHARED_TRANSFER_DIR_MODE)
+    for dirpath, dirnames, filenames in os.walk(path, followlinks=False):
+        current_dir = Path(dirpath)
+        if not current_dir.is_symlink():
+            current_dir.chmod(ZARR_SHARED_TRANSFER_DIR_MODE)
+        for name in dirnames:
+            current_path = current_dir / name
+            if current_path.is_symlink():
+                continue
+            current_path.chmod(ZARR_SHARED_TRANSFER_DIR_MODE)
+        for name in filenames:
+            current_path = current_dir / name
+            if current_path.is_symlink():
+                continue
+            current_path.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
+
+
+def _prepare_server_readable_zarr_source(file_path: Path) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
+    try:
+        source = Path(file_path).resolve(strict=True)
+    except OSError as exc:
+        return None, None, f"Failed to resolve staged Zarr source: {exc}"
+
+    if not source.is_dir():
+        return None, None, f"Staged Zarr source is not a directory: {source}"
+
+    transfer_root = _shared_zarr_transfer_root()
+    transfer_parent = transfer_root / uuid.uuid4().hex
+    try:
+        transfer_parent.mkdir(mode=ZARR_SHARED_TRANSFER_TOKEN_MODE, exist_ok=False)
+        transfer_parent.chmod(ZARR_SHARED_TRANSFER_TOKEN_MODE)
+        shared_source = transfer_parent / source.name
+        shutil.copytree(source, shared_source, symlinks=True)
+        _normalize_shared_zarr_permissions(shared_source)
+        return shared_source, transfer_parent, None
+    except Exception as exc:
+        try:
+            if transfer_parent.exists():
+                shutil.rmtree(transfer_parent)
+        except Exception:
+            pass
+        return None, None, f"Failed to prepare server-readable Zarr staging copy: {exc}"
+
+
+def _cleanup_shared_zarr_transfer(path: Optional[Path]) -> None:
+    if path is None:
+        return
+    transfer_root = _shared_zarr_transfer_root()
+    target = Path(path).resolve(strict=False)
+    try:
+        target.relative_to(transfer_root)
+    except ValueError:
+        logger.warning(
+            "Refusing to remove shared Zarr transfer path outside %s: %s",
+            sanitize_log_value(transfer_root),
+            sanitize_log_value(target),
+        )
+        return
+    if target == transfer_root:
+        logger.warning(
+            "Refusing to remove shared Zarr transfer root directly: %s",
+            sanitize_log_value(target),
+        )
+        return
+    try:
+        if target.exists():
+            shutil.rmtree(target)
+    except Exception as exc:
+        logger.warning(
+            "Failed to remove shared Zarr transfer path %s: %s",
+            sanitize_log_value(target),
+            sanitize_log_value(exc),
+        )
+
+
+def _iter_script_services(conn):
+    if conn is None:
+        return
+    seen = set()
+    for svc_getter in (
+        lambda: conn.getScriptService(),
+        lambda: conn.c.sf.getScriptService(),
+    ):
+        try:
+            svc = svc_getter()
+        except Exception:
+            continue
+        if svc is None or id(svc) in seen:
+            continue
+        seen.add(id(svc))
+        yield svc
+
+
+def _find_script_id_by_name(conn, script_name: str, *, preferred_path_fragment: Optional[str] = None) -> Optional[int]:
+    if conn is None or not script_name:
+        return None
+
+    best_sid = None
+    best_preferred = False
+    for svc in _iter_script_services(conn):
+        try:
+            scripts = svc.getScripts()
+        except Exception:
+            continue
+
+        for script in scripts:
+            try:
+                name = str(getattr(getattr(script, "name", None), "val", getattr(script, "name", "")) or "")
+                path = str(getattr(getattr(script, "path", None), "val", getattr(script, "path", "")) or "")
+                sid = getattr(getattr(script, "id", None), "val", getattr(script, "id", None))
+                sid = int(sid) if sid is not None else None
+            except Exception:
+                continue
+
+            if sid is None:
+                continue
+
+            basename = os.path.basename(name or path)
+            if script_name not in {name, basename, path}:
+                continue
+
+            path_match = bool(preferred_path_fragment and preferred_path_fragment in path)
+            if path_match and not best_preferred:
+                best_sid = sid
+                best_preferred = True
+                continue
+            if path_match == best_preferred and (best_sid is None or sid > best_sid):
+                best_sid = sid
+
+    return best_sid
+
+
+def _run_zarr_managed_repo_script(
+    action: str,
+    host: str,
+    port: int,
+    *,
+    username: str,
+    group_name: str,
+    source_path: Optional[Path] = None,
+    managed_path: Optional[Path] = None,
+) -> tuple[bool, dict[str, str], str]:
+    admin_conn = _open_admin_connection(host, port)
+    if admin_conn is None:
+        return False, {}, "Unable to open an admin OMERO session for managed-repository Zarr staging."
+
+    script_id = None
+    try:
+        script_id = _find_script_id_by_name(
+            admin_conn,
+            ZARR_MANAGED_REPO_SCRIPT_NAME,
+            preferred_path_fragment="omero/import_scripts",
+        )
+    finally:
+        try:
+            admin_conn.close()
+        except Exception:
+            pass
+
+    if script_id is None:
+        return False, {}, f"OMERO script not found: {ZARR_MANAGED_REPO_SCRIPT_NAME}"
+
+    root_pass = _get_root_password()
+    if not root_pass:
+        return False, {}, "ROOTPASS is missing; cannot launch the managed-repository Zarr helper."
+
+    cmd = [OMERO_CLI, "-q"]
+    if host:
+        cmd.extend(["-s", host])
+    if port:
+        cmd.extend(["-p", str(port)])
+    cmd.extend(["-u", "root", "script", "launch", str(int(script_id))])
+    cmd.extend(
+        [
+            f"Action={action}",
+            f"Group_Name={group_name}",
+            f"Username={username}",
+        ]
+    )
+    if source_path is not None:
+        cmd.append(f"Source_Path={source_path}")
+    if managed_path is not None:
+        cmd.append(f"Managed_Path={managed_path}")
+
+    env = _build_cli_env()
+    env["OMERO_PASSWORD"] = root_pass
+    helper_timeout = _get_import_timeout_seconds()
+    retry_deadline = time.time() + _get_script_start_timeout_seconds()
+    retry_sleep = _get_script_start_retry_seconds()
+
+    while True:
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=helper_timeout,
+                env=env,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.TimeoutExpired:
+            return False, {}, "Managed-repository Zarr helper timed out."
+        except Exception as exc:
+            return False, {}, str(exc)
+
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        combined = "\n".join(part for part in (stdout, stderr) if part)
+        outputs = _extract_script_outputs(combined)
+        if result.returncode == 0:
+            return True, outputs, outputs.get("Message") or combined
+
+        if _reports_no_processor_available(stdout, stderr) and time.time() < retry_deadline:
+            time.sleep(retry_sleep)
+            continue
+
+        return (
+            False,
+            outputs,
+            combined or f"Managed-repository Zarr helper failed with exit code {result.returncode}.",
+        )
+
+
+def _cleanup_managed_zarr_path(
+    host: str,
+    port: int,
+    *,
+    username: str,
+    group_name: str,
+    managed_path: Optional[Path],
+) -> None:
+    if managed_path is None:
+        return
+    success, _outputs, message = _run_zarr_managed_repo_script(
+        "cleanup",
+        host,
+        port,
+        username=username,
+        group_name=group_name,
+        managed_path=managed_path,
+    )
+    if not success:
+        logger.warning(
+            "Failed to clean staged managed-repository Zarr path %s: %s",
+            sanitize_log_value(managed_path),
+            _sanitize_cli_output_for_logging(message[:500]),
+        )
 
 
 def _import_zarr_via_cli(
@@ -4130,39 +4414,65 @@ def _import_zarr_via_cli(
 ) -> dict:
     """Import an OME-NGFF zarr using ``omero zarr import``.
 
-    Copies the zarr to permanent storage under :data:`OMERO_ZARR_STORE_ROOT`
-    (default ``/OMERO/OME-Zarr/``) and runs ``omero zarr import`` to register
-    it in OMERO.  The pixel data is served at display time by
-    omero-zarr-pixel-buffer directly from the permanent location.
+    Stages the zarr into the OMERO managed repository via a server-side OMERO
+    script, then runs ``omero zarr import`` against that final managed path.
     """
-    dest_dir = _build_zarr_store_destination_dir(username, group_name)
-    dest_zarr = dest_dir / file_path.name
+    if not username or not group_name:
+        error_msg = "Missing username or group name for managed-repository Zarr staging."
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
 
-    # --- Copy to permanent storage -----------------------------------------
+    shared_source = None
+    shared_transfer_parent = None
+    prepare_error = None
+    shared_source, shared_transfer_parent, prepare_error = _prepare_server_readable_zarr_source(file_path)
+    if shared_source is None:
+        error_msg = prepare_error or "Failed to prepare a server-readable Zarr staging copy."
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    managed_zarr = None
     try:
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(file_path, dest_zarr)
-        # Ensure readable by the OMERO server process.
-        for dirpath, dirnames, filenames in os.walk(dest_zarr):
-            os.chmod(dirpath, 0o755)
-            for fn in filenames:
-                os.chmod(os.path.join(dirpath, fn), 0o644)
-        os.chmod(str(dest_dir), 0o755)
-        logger.info(
-            "Copied OME-NGFF zarr %s → %s for omero-cli-zarr import",
-            sanitize_log_value(rel_path),
-            sanitize_log_value(dest_zarr),
+        stage_success, stage_outputs, stage_message = _run_zarr_managed_repo_script(
+            "stage",
+            host,
+            port,
+            username=username,
+            group_name=group_name,
+            source_path=shared_source,
         )
-    except Exception as exc:
+        if stage_success:
+            managed_path_raw = (stage_outputs.get("Managed_Path") or "").strip()
+            if managed_path_raw:
+                managed_zarr = Path(managed_path_raw)
+    finally:
+        _cleanup_shared_zarr_transfer(shared_transfer_parent)
+
+    if managed_zarr is None:
+        error_msg = stage_message or "Failed to stage Zarr into the managed repository."
         logger.error(
-            "Failed to copy zarr %s to permanent storage %s: %s",
+            "Failed to stage zarr %s into managed repository: %s",
             sanitize_log_value(rel_path),
-            sanitize_log_value(dest_dir),
-            sanitize_log_value(exc),
-            exc_info=sanitized_exc_info(exc),
+            _sanitize_cli_output_for_logging(error_msg[:500]),
         )
-        shutil.rmtree(dest_dir, ignore_errors=True)
-        error_msg = f"Failed to copy zarr to permanent storage: {exc}"
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -4185,7 +4495,7 @@ def _import_zarr_via_cli(
         cmd.extend(["--target", f"Dataset:{dataset_id}"])
     if import_name:
         cmd.extend(["--name", import_name])
-    cmd.append(str(dest_zarr))
+    cmd.append(str(managed_zarr))
 
     env = _build_cli_env()
     try:
@@ -4250,6 +4560,13 @@ def _import_zarr_via_cli(
 
     if not success and not imported_objects:
         error_msg = _classify_import_failure(stdout.strip(), stderr.strip())
+        _cleanup_managed_zarr_path(
+            host,
+            port,
+            username=username,
+            group_name=group_name,
+            managed_path=managed_zarr,
+        )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -4264,6 +4581,13 @@ def _import_zarr_via_cli(
 
     if not imported_objects:
         error_msg = errors.import_no_objects_created()
+        _cleanup_managed_zarr_path(
+            host,
+            port,
+            username=username,
+            group_name=group_name,
+            managed_path=managed_zarr,
+        )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -4283,7 +4607,7 @@ def _import_zarr_via_cli(
         "index": entry.get("index"),
         "status": "imported",
         "rel_path": rel_path,
-        "file_path": dest_zarr,
+        "file_path": managed_zarr,
     }
 
 
@@ -4643,9 +4967,10 @@ def _import_job_entry(
     #
     # Standard OME-NGFF zarrs (multiscales metadata, no bioformats2raw
     # layout) are imported using ``omero zarr import`` which bypasses
-    # Bio-Formats entirely.  The zarr is moved to permanent storage
-    # under /OMERO/OME-Zarr/ and omero-zarr-pixel-buffer serves pixels
-    # directly from there.
+    # Bio-Formats entirely. The staged directory is first copied into the
+    # configured OMERO managed repository via a server-side OMERO script so
+    # the final pixel path follows the same repository template as normal
+    # imports and remains owned by the OMERO.server runtime user.
     #
     # bioformats2raw-layout zarrs (with OME/METADATA.ome.xml) continue
     # to use the standard Bio-Formats import path below.
