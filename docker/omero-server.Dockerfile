@@ -408,6 +408,11 @@ RUN set -euo pipefail; \
     chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py; \
     chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/export_scripts/IMS_Export.py
 
+COPY omeroweb_import/omero_scripts/Manage_Zarr_ManagedRepository.py /opt/omero/server/OMERO.server/lib/scripts/omero/import_scripts/Manage_Zarr_ManagedRepository.py
+RUN set -euo pipefail; \
+    chown omero-server:omero-server /opt/omero/server/OMERO.server/lib/scripts/omero/import_scripts/Manage_Zarr_ManagedRepository.py; \
+    chmod 0644 /opt/omero/server/OMERO.server/lib/scripts/omero/import_scripts/Manage_Zarr_ManagedRepository.py
+
 # Install shared plugin utilities into OMERO.server venv (used by scripts)
 # ------------------------------------------------------------------------
 COPY omero_plugin_common /tmp/omero_plugin_common
