@@ -65,13 +65,13 @@ def _get_jobs_root() -> Path:
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     cmd = [OMERO_CLI]
-    cmd.extend(subcommand)
     if session_key:
         cmd.extend(["-k", session_key])
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
+    cmd.extend(subcommand)
     return cmd
 
 

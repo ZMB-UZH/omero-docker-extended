@@ -16,6 +16,8 @@ import threading
 import time
 import tempfile
 import uuid
+from contextlib import contextmanager
+from datetime import datetime
 import omero
 
 import portalocker
@@ -1557,15 +1559,15 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
             purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
         )
         if not user_conn:
-            # suConn unavailable (job-service is not admin).  Create
-            # datasets using the OMERO CLI with the user's own session
-            # key — same mechanism the import CLI uses.
-            session_key = job_dict.get("session_key")
-            if session_key and host and port:
+            if host and port and username:
                 for dataset_name in missing_dataset_names:
-                    ds_id = _create_dataset_via_session(
-                        session_key, host, port, dataset_name,
+                    ds_id = _create_dataset_via_admin_connection(
+                        username,
+                        host,
+                        port,
+                        dataset_name,
                         group_id=job_dict.get("group_id"),
+                        group_name=job_dict.get("group_name"),
                         project_id=job_dict.get("project_id"),
                     )
                     if ds_id is not None:
@@ -1579,7 +1581,7 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
                         return False, generic_error
                 return True, None
             logger.warning(
-                "Background dataset preparation for job %s: no session key available.",
+                "Background dataset preparation for job %s is missing host/port/username.",
                 sanitize_log_value(job_dict.get("job_id")),
             )
             return False, generic_error
@@ -1647,20 +1649,25 @@ def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[Bli
 
 _CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
 
-# Pattern to detect successfully imported OMERO objects in CLI stdout.
-# The CLI outputs lines like "Image:123" or "Fileset:456" for each created object.
-_IMPORT_OBJECT_PATTERN = re.compile(r"\b(?:Image|Fileset|Plate|Screen|Dataset|OriginalFile):(\d+)\b")
+# Patterns to detect successfully imported OMERO objects in CLI output.
+# Different OMERO CLI commands report created objects using different formats
+# such as ``Image:123`` or ``Created Image 123``.
+_IMPORT_OBJECT_PATTERNS = (
+    re.compile(r"\b(?:Image|Fileset|Plate|Screen|Dataset|OriginalFile):(\d+)\b"),
+    re.compile(r"\bCreated (?:Image|Fileset|Plate|Screen|Dataset|OriginalFile)\s+(\d+)\b"),
+)
+_IMPORT_OBJECT_PATTERN = _IMPORT_OBJECT_PATTERNS[0]
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     cmd = [OMERO_CLI]
-    cmd.extend(subcommand)
     if session_key:
         cmd.extend(["-k", session_key])
     if host:
         cmd.extend(["-s", host])
     if port:
         cmd.extend(["-p", str(port)])
+    cmd.extend(subcommand)
     return cmd
 
 
@@ -1699,6 +1706,171 @@ def _get_failed_import_retention_seconds() -> int:
         60,
         30 * 24 * 60 * 60,
     )
+
+
+def _sanitize_cli_output_for_logging(text: str) -> str:
+    sanitized = sanitize_log_value(text)
+    return re.sub(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        "***",
+        sanitized,
+        flags=re.IGNORECASE,
+    )
+
+
+def _extract_imported_object_ids(output: str) -> list[str]:
+    if not output:
+        return []
+    created_ids = []
+    seen = set()
+    for pattern in _IMPORT_OBJECT_PATTERNS:
+        for match in pattern.finditer(output):
+            object_id = match.group(1)
+            if not object_id or object_id in seen:
+                continue
+            seen.add(object_id)
+            created_ids.append(object_id)
+    return created_ids
+
+
+BACKGROUND_IMPORT_SESSION_TTL_SLACK_SECONDS = 10 * 60
+BACKGROUND_IMPORT_SESSION_MIN_SECONDS = 60 * 60
+BACKGROUND_IMPORT_SESSION_MAX_SECONDS = 7 * 24 * 60 * 60
+
+
+def _get_background_import_session_timeout_seconds(timeout_hint_seconds: Optional[int] = None) -> int:
+    base_seconds = timeout_hint_seconds if timeout_hint_seconds is not None else _get_import_timeout_seconds()
+    requested = int(base_seconds) + BACKGROUND_IMPORT_SESSION_TTL_SLACK_SECONDS
+    return max(
+        BACKGROUND_IMPORT_SESSION_MIN_SECONDS,
+        min(BACKGROUND_IMPORT_SESSION_MAX_SECONDS, requested),
+    )
+
+
+def _get_root_password() -> str:
+    return (os.environ.get("ROOTPASS") or "").strip()
+
+
+def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
+    root_pass = _get_root_password()
+    if not root_pass:
+        logger.error("ROOTPASS is missing; cannot create independent background OMERO sessions.")
+        return None
+
+    _, _, _, secure = _get_job_service_credentials()
+    conn = BlitzGateway("root", root_pass, host=host, port=int(port), secure=secure)
+    try:
+        if not conn.connect():
+            last_err = None
+            try:
+                last_err = conn.getLastError()
+            except Exception:
+                last_err = None
+            logger.error(
+                "root connect() failed for background import sessions: host=%s port=%s secure=%s lastError=%r",
+                sanitize_log_value(host),
+                sanitize_log_value(port),
+                secure,
+                last_err,
+            )
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return None
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+        return conn
+    except Exception as exc:
+        logger.error(
+            "root connect() raised for background import sessions: host=%s port=%s error=%s",
+            sanitize_log_value(host),
+            sanitize_log_value(port),
+            sanitize_log_value(exc),
+        )
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return None
+
+
+def _resolve_group_name(
+    conn: Optional[BlitzGateway],
+    group_id: Optional[int],
+    group_name: Optional[str] = None,
+) -> Optional[str]:
+    cached_name = (group_name or "").strip()
+    if cached_name:
+        return cached_name
+    if conn is None or group_id is None:
+        return None
+    try:
+        group = conn.getObject("ExperimenterGroup", int(group_id))
+    except Exception as exc:
+        logger.warning(
+            "Failed to resolve group %s for background import session creation: %s",
+            sanitize_log_value(group_id),
+            sanitize_log_value(exc),
+        )
+        return None
+    if group is None:
+        return None
+    try:
+        return (group.getName() or "").strip() or None
+    except Exception:
+        return None
+
+
+@contextmanager
+def _background_import_session(
+    username: str,
+    host: str,
+    port: int,
+    *,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
+    timeout_hint_seconds: Optional[int] = None,
+):
+    admin_conn = _open_admin_connection(host, port)
+    if admin_conn is None:
+        yield None
+        return
+
+    session = None
+    session_key = None
+    try:
+        resolved_group_name = _resolve_group_name(admin_conn, group_id, group_name=group_name)
+        principal = omero.sys.Principal(
+            (username or "").strip(),
+            resolved_group_name or "",
+            "User",
+        )
+        timeout_ms = _get_background_import_session_timeout_seconds(timeout_hint_seconds) * 1000
+        session = admin_conn.c.sf.getSessionService().createSessionWithTimeouts(
+            principal,
+            timeout_ms,
+            timeout_ms,
+        )
+        session_key = session.getUuid().getValue()
+        yield session_key
+    except Exception as exc:
+        logger.error(
+            "Failed to create independent background OMERO session for user %s: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
+        yield None
+    finally:
+        if session is not None:
+            try:
+                admin_conn.c.sf.getSessionService().closeSession(session)
+            except Exception:
+                pass
+        try:
+            admin_conn.close()
+        except Exception:
+            pass
 
 
 def _write_cli_ice_config(cli_home: Path, keepalive_seconds: int, base_config_path: str = "") -> Optional[Path]:
@@ -1930,7 +2102,8 @@ def _import_file(
         if not success:
             logger.warning(
                 "Import CLI stderr for %s: %s",
-                path.name, (result.stderr or "").strip()[:500],
+                path.name,
+                _sanitize_cli_output_for_logging((result.stderr or "").strip()[:500]),
             )
         return success, result.stdout, result.stderr
 
@@ -2032,7 +2205,8 @@ def _import_file(
     if not success:
         logger.warning(
             "Import CLI stderr for %s: %s",
-            path.name, stderr.strip()[:500],
+            path.name,
+            _sanitize_cli_output_for_logging(stderr.strip()[:500]),
         )
     return success, stdout, stderr
 
@@ -2281,33 +2455,37 @@ def _get_job_service_credentials():
     return user, passwd, group_override, secure
 
 
-def _create_dataset_via_session(
-    session_key: str,
+def _create_dataset_via_admin_connection(
+    username: str,
     host: str,
     port: int,
     name: str,
     group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
     project_id: Optional[int] = None,
 ) -> Optional[int]:
-    """Create a Dataset using the user's session without destroying it.
-
-    Joins the session via BlitzGateway with ``detachOnDestroy`` so the
-    session stays alive after the gateway is closed.
-
-    Returns the dataset ID on success, or ``None`` on failure.
-    """
+    """Create a Dataset using an independent admin impersonation path."""
     import omero.rtypes as rtypes
     from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 
-    conn = BlitzGateway(host=host, port=int(port), secure=True)
+    admin_conn = _open_admin_connection(host, port)
+    if admin_conn is None:
+        return None
+
+    conn = None
     try:
-        ok = conn.connect(sUuid=session_key)
-        if not ok:
-            logger.warning("Cannot join session for dataset creation")
+        conn = admin_conn.suConn(username)
+        if conn is None:
+            logger.warning(
+                "Cannot switch to user %s for dataset creation via admin connection.",
+                sanitize_log_value(username),
+            )
             return None
 
         if group_id is not None:
             conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        elif group_name:
+            conn.SERVICE_OPTS.setOmeroGroup(group_name)
 
         ds = DatasetI()
         ds.setName(rtypes.rstring(name))
@@ -2320,17 +2498,23 @@ def _create_dataset_via_session(
             link.setChild(DatasetI(ds_id, False))
             conn.getUpdateService().saveObject(link, conn.SERVICE_OPTS)
 
-        logger.info("Created dataset %s (id=%d) via session gateway", sanitize_log_value(name), ds_id)
+        logger.info(
+            "Created dataset %s (id=%d) via independent admin-backed connection",
+            sanitize_log_value(name),
+            ds_id,
+        )
         return ds_id
     except Exception as exc:
-        logger.warning("Dataset creation via session failed: %s", sanitize_log_value(exc))
+        logger.warning("Dataset creation via admin connection failed: %s", sanitize_log_value(exc))
         return None
     finally:
-        # Destroy the Ice communicator locally WITHOUT sending a
-        # closeSession RPC to the server.  This releases network
-        # resources while keeping the user's session alive.
         try:
-            conn.c.getCommunicator().destroy()
+            if conn is not None:
+                conn.close()
+        except Exception:
+            pass
+        try:
+            admin_conn.close()
         except Exception:
             pass
 
@@ -3905,6 +4089,28 @@ def _is_ome_ngff_zarr(zarr_path: Path) -> bool:
 OMERO_ZARR_STORE_ROOT = Path(os.environ.get("OMERO_ZARR_STORE_ROOT", "/OMERO/OME-Zarr"))
 
 
+_ZARR_STORE_COMPONENT_SANITIZER = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _sanitize_zarr_store_component(value: str) -> str:
+    """Return a filesystem-safe OME-Zarr store path component."""
+    cleaned = _ZARR_STORE_COMPONENT_SANITIZER.sub("_", (value or "").strip())
+    cleaned = cleaned.strip("._-")
+    return cleaned or "unknown"
+
+
+def _build_zarr_store_destination_dir(username: str, group_name: str) -> Path:
+    """Allocate a unique writable directory directly under the store root.
+
+    Avoid nested ``group/user/...`` parents so stale ownership on an
+    intermediate directory cannot block later imports for the same user/group.
+    """
+    safe_group = _sanitize_zarr_store_component(group_name)
+    safe_user = _sanitize_zarr_store_component(username)
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S.%f")[:-3]
+    return OMERO_ZARR_STORE_ROOT / f"{safe_group}__{safe_user}__{timestamp}__{uuid.uuid4().hex[:8]}"
+
+
 def _import_zarr_via_cli(
     file_path: Path,
     session_key: str,
@@ -3917,6 +4123,7 @@ def _import_zarr_via_cli(
     cleanup_staged_paths: list,
     covered_indexes: list,
     covered_relative_paths: list,
+    group_id: Optional[int] = None,
     progress_job: Optional[dict] = None,
     username: Optional[str] = None,
     group_name: Optional[str] = None,
@@ -3928,19 +4135,7 @@ def _import_zarr_via_cli(
     it in OMERO.  The pixel data is served at display time by
     omero-zarr-pixel-buffer directly from the permanent location.
     """
-    from datetime import datetime
-
-    # Build permanent storage path following ManagedRepository convention.
-    _user = (username or "unknown").strip()
-    _group = (group_name or "unknown").strip()
-    now = datetime.now()
-    dest_dir = (
-        OMERO_ZARR_STORE_ROOT
-        / _group
-        / _user
-        / now.strftime("%Y-%m-%d")
-        / now.strftime("%H-%M-%S.%f")[:-3]
-    )
+    dest_dir = _build_zarr_store_destination_dir(username, group_name)
     dest_zarr = dest_dir / file_path.name
 
     # --- Copy to permanent storage -----------------------------------------
@@ -3981,14 +4176,11 @@ def _import_zarr_via_cli(
         }
 
     # --- Run omero zarr import ---------------------------------------------
-    # Use the job-service account instead of the user's session key.
-    # The omero CLI destroys the joined session on exit, which would
-    # kill the user's web login.  The job-service account creates its
-    # own disposable session.
-    service_user, service_pass, _, _ = _get_job_service_credentials()
-    cmd = [OMERO_CLI, "-u", service_user, "-w", service_pass,
-           "-s", host, "-p", str(port),
-           "zarr", "import"]
+    # Use an independent server-created user session, not the browser session
+    # and not the shared job-service account, so ownership and target-dataset
+    # permissions remain aligned with the importing user even if the browser
+    # logs out mid-job.
+    cmd = _build_omero_cli_command(["zarr", "import"], session_key, host, port)
     if dataset_id:
         cmd.extend(["--target", f"Dataset:{dataset_id}"])
     if import_name:
@@ -4002,7 +4194,7 @@ def _import_zarr_via_cli(
             capture_output=True,
             text=True,
             check=False,
-            timeout=600,
+            timeout=_get_import_timeout_seconds(),
             env=env,
             stdin=subprocess.DEVNULL,
         )
@@ -4014,14 +4206,14 @@ def _import_zarr_via_cli(
             "omero zarr import for %s: returncode=%d stdout=%r stderr=%r",
             sanitize_log_value(rel_path),
             result.returncode,
-            sanitize_log_value(stdout.strip()[:500]),
-            sanitize_log_value(stderr.strip()[:500]),
+            _sanitize_cli_output_for_logging(stdout.strip()[:500]),
+            _sanitize_cli_output_for_logging(stderr.strip()[:500]),
         )
     except subprocess.TimeoutExpired:
         logger.error("omero zarr import timed out for %s", sanitize_log_value(rel_path))
         success = False
         stdout = ""
-        stderr = "Import timed out after 600 seconds"
+        stderr = f"Import timed out after {_get_import_timeout_seconds()} seconds"
     except Exception as exc:
         logger.error(
             "omero zarr import failed for %s: %s",
@@ -4035,11 +4227,18 @@ def _import_zarr_via_cli(
 
     # --- Detect created objects --------------------------------------------
     combined_output = stdout + "\n" + stderr
-    imported_objects = _IMPORT_OBJECT_PATTERN.findall(combined_output)
+    imported_objects = _extract_imported_object_ids(combined_output)
 
-    if not imported_objects and dataset_id:
+    if not imported_objects and dataset_id and username:
         api_objects = _verify_import_via_api(
-            session_key, host, port, dataset_id, import_name, file_path.name,
+            username,
+            host,
+            port,
+            dataset_id,
+            import_name,
+            file_path.name,
+            group_id=group_id,
+            group_name=group_name,
         )
         if api_objects:
             imported_objects = api_objects
@@ -4305,12 +4504,14 @@ def _recompress_chunk_tree(array_dir: Path, old_codec, new_codec):
 
 
 def _verify_import_via_api(
-    session_key: str,
+    username: str,
     host: str,
     port: int,
     dataset_id: int,
     import_name: Optional[str],
     file_name: str,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
 ) -> list[str]:
     """Query OMERO for images matching *import_name* (or *file_name*) in the
     target dataset.  Returns a list of Image ID strings if found, else [].
@@ -4319,11 +4520,21 @@ def _verify_import_via_api(
     non-zero or produces no object-ID output despite having committed the
     Image on the server side.
     """
+    if not username:
+        return []
+    admin_conn = None
     conn = None
     try:
-        conn = _open_session_connection(session_key, host, port)
+        admin_conn = _open_admin_connection(host, port)
+        if admin_conn is None:
+            return []
+        conn = admin_conn.suConn(username)
         if not conn:
             return []
+        if group_id is not None:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        elif group_name:
+            conn.SERVICE_OPTS.setOmeroGroup(group_name)
         params = omero.sys.ParametersI()
         params.addId(dataset_id)
         # Search for the exact import name or file name in this dataset.
@@ -4351,6 +4562,11 @@ def _verify_import_via_api(
         if conn:
             try:
                 conn.close()
+            except Exception:
+                pass
+        if admin_conn:
+            try:
+                admin_conn.close()
             except Exception:
                 pass
 
@@ -4435,92 +4651,17 @@ def _import_job_entry(
     # to use the standard Bio-Formats import path below.
     # ------------------------------------------------------------------
     _zarr_temp_path = None
-    if (
-        file_path.is_dir()
-        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
-        and _is_ome_ngff_zarr(file_path)
-    ):
-        return _import_zarr_via_cli(
-            file_path=file_path,
-            session_key=session_key,
-            host=host,
-            port=port,
-            dataset_id=dataset_id,
-            import_name=import_name,
-            rel_path=rel_path,
-            entry=entry,
-            cleanup_staged_paths=cleanup_staged_paths,
-            covered_indexes=covered_indexes,
-            covered_relative_paths=covered_relative_paths,
-            progress_job=progress_job,
-            username=username,
-            group_name=group_name,
-        )
-
     try:
-        try:
-            success, stdout, stderr = _import_file(
-                conn=None,
-                session_key=session_key,
-                host=host,
-                port=port,
-                path=file_path,
-                dataset_id=dataset_id,
-                import_name=import_name,
-                progress_job=progress_job,
-            )
-        except Exception as exc:
-            logger.error(
-                "Import failed for %s: %s",
-                sanitize_log_value(rel_path),
-                sanitize_log_value(exc),
-                exc_info=sanitized_exc_info(exc),
-            )
-            success = False
-            stdout = ""
-            stderr = ""
-
-        # ------------------------------------------------------------------
-        # Detect created objects.  The OMERO CLI prints object IDs to stdout
-        # for most formats, but some (e.g. zarr via Bio-Formats) emit them
-        # only on stderr.  Search both streams.  As a final fallback, query
-        # the OMERO API directly — the server may have committed the Image
-        # before the CLI process crashed (exit-code != 0).
-        # ------------------------------------------------------------------
-        combined_output = (stdout or "") + "\n" + (stderr or "")
-        imported_objects = _IMPORT_OBJECT_PATTERN.findall(combined_output)
-
-        if not imported_objects and dataset_id:
-            # Last resort: ask the OMERO server whether an image was created
-            # in the target dataset during this import window.
-            api_objects = _verify_import_via_api(
-                session_key, host, port, dataset_id, import_name, file_path.name,
-            )
-            if api_objects:
-                imported_objects = api_objects
-                logger.info(
-                    "OMERO API verification found objects for %s: %s",
-                    sanitize_log_value(rel_path),
-                    sanitize_log_value(imported_objects[:5]),
-                )
-
-        if not success:
-            if imported_objects:
-                logger.warning(
-                    "Import CLI returned non-zero for %s but %d objects "
-                    "confirmed; treating as success.  stderr=%r",
-                    sanitize_log_value(rel_path),
-                    len(imported_objects),
-                    sanitize_log_value(str(stderr).strip()[:500]),
-                )
-            else:
-                logger.warning(
-                    "Import failed for %s (stdout=%r, stderr=%r).",
-                    sanitize_log_value(rel_path),
-                    sanitize_log_value(str(stdout).strip()[:500]),
-                    sanitize_log_value(str(stderr).strip()[:500]),
-                )
-                error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+        with _background_import_session(
+            username or "",
+            host,
+            port,
+            group_id=group_id,
+            group_name=group_name,
+            timeout_hint_seconds=_get_import_timeout_seconds(),
+        ) as background_session_key:
+            if not background_session_key:
+                error_msg = errors.missing_omero_connection_details()
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
@@ -4533,36 +4674,138 @@ def _import_job_entry(
                     "job_message": job_error,
                 }
 
-        if not imported_objects:
-            logger.error(
-                "Import CLI returned success for %s but no objects found in "
-                "output or via API.  stdout=%r stderr=%r",
-                sanitize_log_value(rel_path),
-                sanitize_log_value(str(stdout).strip()[:500]),
-                sanitize_log_value(str(stderr).strip()[:500]),
-            )
-            error_msg = errors.import_no_objects_created()
-            job_error = messages.job_error_with_path(rel_path, error_msg)
+            if (
+                file_path.is_dir()
+                and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+                and _is_ome_ngff_zarr(file_path)
+            ):
+                return _import_zarr_via_cli(
+                    file_path=file_path,
+                    session_key=background_session_key,
+                    host=host,
+                    port=port,
+                    dataset_id=dataset_id,
+                    import_name=import_name,
+                    rel_path=rel_path,
+                    entry=entry,
+                    cleanup_staged_paths=cleanup_staged_paths,
+                    covered_indexes=covered_indexes,
+                    covered_relative_paths=covered_relative_paths,
+                    group_id=group_id,
+                    progress_job=progress_job,
+                    username=username,
+                    group_name=group_name,
+                )
+
+            try:
+                success, stdout, stderr = _import_file(
+                    conn=None,
+                    session_key=background_session_key,
+                    host=host,
+                    port=port,
+                    path=file_path,
+                    dataset_id=dataset_id,
+                    import_name=import_name,
+                    progress_job=progress_job,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Import failed for %s: %s",
+                    sanitize_log_value(rel_path),
+                    sanitize_log_value(exc),
+                    exc_info=sanitized_exc_info(exc),
+                )
+                success = False
+                stdout = ""
+                stderr = ""
+
+            # ------------------------------------------------------------------
+            # Detect created objects.  The OMERO CLI prints object IDs to stdout
+            # for most formats, but some formats/plugins use "Created Image 123".
+            # Search both streams.  As a final fallback, query the OMERO API
+            # through an independent admin-backed user connection.
+            # ------------------------------------------------------------------
+            combined_output = (stdout or "") + "\n" + (stderr or "")
+            imported_objects = _extract_imported_object_ids(combined_output)
+
+            if not imported_objects and dataset_id:
+                api_objects = _verify_import_via_api(
+                    username or "",
+                    host,
+                    port,
+                    dataset_id,
+                    import_name,
+                    file_path.name,
+                    group_id=group_id,
+                    group_name=group_name,
+                )
+                if api_objects:
+                    imported_objects = api_objects
+                    logger.info(
+                        "OMERO API verification found objects for %s: %s",
+                        sanitize_log_value(rel_path),
+                        sanitize_log_value(imported_objects[:5]),
+                    )
+
+            if not success:
+                if imported_objects:
+                    logger.warning(
+                        "Import CLI returned non-zero for %s but %d objects "
+                        "confirmed; treating as success.  stderr=%r",
+                        sanitize_log_value(rel_path),
+                        len(imported_objects),
+                        _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                    )
+                else:
+                    logger.warning(
+                        "Import failed for %s (stdout=%r, stderr=%r).",
+                        sanitize_log_value(rel_path),
+                        _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
+                        _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                    )
+                    error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+                    job_error = messages.job_error_with_path(rel_path, error_msg)
+                    return {
+                        "cleanup_staged_paths": cleanup_staged_paths,
+                        "covered_indexes": covered_indexes,
+                        "covered_relative_paths": covered_relative_paths,
+                        "index": entry.get("index"),
+                        "status": "error",
+                        "entry_error": error_msg,
+                        "job_error": job_error,
+                        "job_message": job_error,
+                    }
+
+            if not imported_objects:
+                logger.error(
+                    "Import CLI returned success for %s but no objects found in "
+                    "output or via API.  stdout=%r stderr=%r",
+                    sanitize_log_value(rel_path),
+                    _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
+                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                )
+                error_msg = errors.import_no_objects_created()
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
+
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
                 "covered_relative_paths": covered_relative_paths,
                 "index": entry.get("index"),
-                "status": "error",
-                "entry_error": error_msg,
-                "job_error": job_error,
-                "job_message": job_error,
+                "status": "imported",
+                "rel_path": rel_path,
+                "file_path": file_path,
             }
-
-        return {
-            "cleanup_staged_paths": cleanup_staged_paths,
-            "covered_indexes": covered_indexes,
-            "covered_relative_paths": covered_relative_paths,
-            "index": entry.get("index"),
-            "status": "imported",
-            "rel_path": rel_path,
-            "file_path": file_path,
-        }
     finally:
         # Clean up temporary zarr copy (recompressed and/or flattened).
         if _zarr_temp_path is not None:
@@ -4642,14 +4885,30 @@ def _process_import_job(job_id: str):
             job["import_progress_bytes"] = job.get("imported_bytes", 0)
             _save_job(job)
 
-            session_key = job.get("session_key")
             host = job.get("host")
             port = job.get("port")
-            if not session_key or not host or not port:
+            if not username or not host or not port:
                 job["status"] = "error"
                 job["errors"].append(errors.missing_omero_connection_details())
                 _save_job(job)
                 return
+
+            if not job.get("group_name") and job.get("group_id") is not None:
+                admin_conn = _open_admin_connection(host, port)
+                if admin_conn is not None:
+                    try:
+                        job["group_name"] = _resolve_group_name(
+                            admin_conn,
+                            job.get("group_id"),
+                            group_name=job.get("group_name"),
+                        )
+                        _save_job(job)
+                    finally:
+                        try:
+                            admin_conn.close()
+                        except Exception:
+                            pass
+            session_key = job.get("session_key")
 
             # IMPORTANT: never join/close the user's active OMERO.web session here.
             # Doing so can terminate their login. We validate session indirectly by
@@ -4736,7 +4995,7 @@ def _process_import_job(job_id: str):
                         result = _import_job_entry(
                             entry_payload,
                             upload_root,
-                            session_key,
+                            None,
                             host,
                             port,
                             dataset_map,

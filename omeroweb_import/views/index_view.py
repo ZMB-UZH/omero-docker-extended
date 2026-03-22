@@ -115,11 +115,6 @@ def _start_upload(request, conn):
     default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
     batch_size = _normalize_job_batch_size(payload.get("batch_size"), default_batch_size)
 
-    session_key = _get_session_key(conn)
-    if not session_key:
-        logger.warning("Unable to resolve OMERO session key for upload start.")
-        return json_error(errors.unable_resolve_session())
-
     host, port = _resolve_omero_host_port(conn)
     if not host or not port:
         logger.warning("Unable to resolve OMERO host/port for upload start.")
@@ -231,24 +226,35 @@ def _start_upload(request, conn):
     job_id = uuid.uuid4().hex
     username = current_username(request, conn)
     current_group_id = None
+    current_group_name = None
     try:
-        # CRITICAL FIX: Get the user's actual group, not -1 (all groups)
-        # The -1 group causes OptimisticLockException when job-service tries to save annotations
         event_context = conn.getEventContext()
         current_group_id = event_context.groupId
+        current_group_name = getattr(event_context, "groupName", None)
+        if current_group_name:
+            current_group_name = str(current_group_name).strip() or None
+        if not current_group_name and current_group_id is not None:
+            try:
+                group_obj = conn.getObject("ExperimenterGroup", int(current_group_id))
+            except Exception:
+                group_obj = None
+            if group_obj is not None:
+                current_group_name = _get_text(group_obj.getName()) or None
         logger.debug(
-            "Captured user's group_id: %s for user: %s",
+            "Captured user's group context for upload start: group_id=%s group_name=%s user=%s",
             current_group_id,
+            sanitize_log_value(current_group_name),
             sanitize_log_value(username),
         )
     except Exception as exc:
         logger.warning("Unable to get user's group context: %s", sanitize_log_value(exc))
         current_group_id = None
+        current_group_name = None
     job = {
         "job_id": job_id,
         "username": username,
-        "session_key": session_key,
         "group_id": current_group_id,
+        "group_name": current_group_name,
         "host": host,
         "port": port,
         "project_id": project_id,

@@ -205,7 +205,7 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 
         assert ok is True
         depth_index = captured["cmd"].index("--depth")
-        assert captured["cmd"][depth_index + 1] == "10"
+        assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
         assert captured["cmd"][-3:] == ["-d", "17", "/tmp/sample.czi"]
 
 
@@ -238,7 +238,7 @@ def test_service_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Pa
 
     assert result["status"] == "compatible"
     depth_index = captured["cmd"].index("--depth")
-    assert captured["cmd"][depth_index + 1] == "10"
+    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
     assert captured["cmd"][:4] == [workflow_service.OMERO_CLI, "import", "-f", "--depth"]
     assert captured["cmd"][-1] == str(file_path)
 
