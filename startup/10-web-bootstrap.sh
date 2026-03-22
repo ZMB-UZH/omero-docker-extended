@@ -271,7 +271,11 @@ ensure_runtime_directory "${log_dir}" "OMERO.web log directory" 0755
 prepare_supervisor_logs_from_config "${supervisord_config_path}"
 
 # ── Ensure .admin-tools directory is writable for quota state persistence ──
-omero_data_dir="${OMERO_DATA_DIR:-/OMERO}"
+omero_data_dir="${OMERO_DATA_DIR:-}"
+if [[ -z "${omero_data_dir}" ]]; then
+    echo "[web-bootstrap] ERROR: OMERO_DATA_DIR is required for quota state paths." >&2
+    exit 1
+fi
 admin_tools_dir="${omero_data_dir}/.admin-tools"
 quota_state_path="${ADMIN_TOOLS_QUOTA_STATE_PATH:-${admin_tools_dir}/group-quotas.json}"
 quota_projects_file="${ADMIN_TOOLS_QUOTA_PROJECTS_FILE:-${admin_tools_dir}/quota/projects}"
@@ -562,11 +566,3 @@ upgrade_zarr_jars() {
 }
 
 upgrade_zarr_jars
-
-# ── Ensure OME-Zarr permanent storage directory exists ─────────────────────────
-omero_zarr_store="${OMERO_ZARR_STORE_ROOT:-/OMERO/OME-Zarr}"
-if [[ ! -d "${omero_zarr_store}" ]]; then
-    mkdir -p "${omero_zarr_store}"
-    echo "[web-bootstrap] Created OME-Zarr store: ${omero_zarr_store}"
-fi
-chmod 1777 "${omero_zarr_store}" 2>/dev/null || true

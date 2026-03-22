@@ -671,6 +671,26 @@ configure_script_python() {
     log "Configured omero.scripts.python=${venv_py}"
 }
 
+configure_import_runtime_paths() {
+    local shared_tmp_path="${OMERO_TMP_PATH:-}"
+    local runtime_state_path="${SERVER_VAR_DIR%/}/managed-zarr-runtime.env"
+    local runtime_state_tmp="${runtime_state_path}.tmp"
+
+    if [[ -z "${shared_tmp_path}" ]]; then
+        echo "ERROR: OMERO_TMP_PATH is required for import runtime configuration." >&2
+        exit 1
+    fi
+
+    printf '%s\n' \
+        "omero.web.import.shared_tmp_path=${shared_tmp_path}" \
+        > "${runtime_state_tmp}"
+    mv -f "${runtime_state_tmp}" "${runtime_state_path}"
+    chown "$(id -u "${OMERO_CLI_USER}")":"$(id -g "${OMERO_CLI_USER}")" "${runtime_state_path}" 2>/dev/null || true
+    chmod 0644 "${runtime_state_path}" 2>/dev/null || true
+
+    log "Wrote import runtime path state to ${runtime_state_path}"
+}
+
 ensure_certificate_sans() {
     local cert_pem="${CERTS_DIR}/server.pem"
     local san_value="DNS:localhost,DNS:omeroserver"
@@ -1777,6 +1797,7 @@ main() {
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
     configure_script_python
+    configure_import_runtime_paths
     ensure_certificate_sans
     cleanup_stale_repository_lock_files
     install_figure_script

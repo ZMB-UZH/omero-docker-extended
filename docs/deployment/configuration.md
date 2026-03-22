@@ -6,8 +6,8 @@ This repository uses environment variables as the primary configuration surface.
 
 Tracked files in git are templates (`*_example*`). Deployments must create runtime copies without `_example`.
 
-- `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions.
-- `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, and script processor options.
+- `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions, including `OMERO_DATA_DIR` for the in-container OMERO data root.
+- `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, script processor options, and managed-repository settings such as `CONFIG_omero_managed_dir` and `CONFIG_omero_fs_repo_path`.
 - `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local `logo/logo.png` exists at build time, the `omeroweb` image build copies it into that static path, and OMERO.web startup re-synchronizes the mounted `var/static/` tree from the image so existing installations also receive updated branding and plugin static assets. `logo/logo.png` is a site-local asset and is intentionally gitignored.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
@@ -119,6 +119,20 @@ The pull/update helpers store full visible terminal transcripts under
 `${OMERO_DATA_PATH}/installation_logs/`. The final transcript path is written
 only after the installation paths are resolved, so changes to `OMERO_DATA_PATH`
 during the run still place the log in the selected data root.
+
+The Import plugin's OME-Zarr path handling uses the same managed repository.
+It stages `.zarr` directories into `${OMERO_DATA_DIR}/${CONFIG_omero_managed_dir}`
+through a server-side OMERO script and renders the destination with
+`CONFIG_omero_fs_repo_path`. `startup/10-server-bootstrap.sh` also writes
+`${OMERO_TMP_PATH}` into `OMERO.server/var/managed-zarr-runtime.env` so the
+server-side helper can validate staged sources without any hardcoded path
+fallback. OMERO.web hands the server only a transient copy under
+`${OMERO_TMP_PATH}/omeroweb-import/managed-zarr-transfer`; it does not relax
+permissions on the original `_staged/` upload tree. If script processors are
+slow to come up, helper launch retries are controlled by
+`OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` and
+`OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`. No plugin-specific permanent-store
+path is used.
 
 If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
 without trailing `%`), OMERO treats those strings literally and creates
