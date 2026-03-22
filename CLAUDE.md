@@ -112,18 +112,18 @@ python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
 
 ```bash
 # Build all images
-docker compose --env-file installation_paths.env build
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env build
 
 # Start all services
-docker compose --env-file installation_paths.env up -d
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d
 
 # Check service health (requires secrets env files to be provisioned)
-docker compose --env-file installation_paths.env ps
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env ps
 # Fallback if secrets env files are missing:
 docker ps --format "table {{.Names}}\t{{.Status}}"
 
 # View logs for a service
-docker compose --env-file installation_paths.env logs -f omeroweb
+docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs -f omeroweb
 ```
 
 ## Git operations
