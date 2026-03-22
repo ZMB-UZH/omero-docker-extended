@@ -4,6 +4,7 @@ import types
 import json
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime as real_datetime
 from pathlib import Path
 from unittest import TestCase, mock, main as unittest_main
 import threading
@@ -256,6 +257,97 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual({"host": "omeroserver", "port": 4064, "session_key": "session-key"}, client_calls)
         self.assertEqual(["detached"], detach_calls)
         self.assertEqual(["-1"], group_calls)
+
+    def test_build_omero_cli_command_places_connection_flags_before_subcommand(self):
+        command = core_functions._build_omero_cli_command(
+            ["import", "--depth", "15"],
+            "session-key",
+            "omeroserver",
+            4064,
+        )
+
+        self.assertEqual(
+            [
+                core_functions.OMERO_CLI,
+                "-k",
+                "session-key",
+                "-s",
+                "omeroserver",
+                "-p",
+                "4064",
+                "import",
+                "--depth",
+                "15",
+            ],
+            command,
+        )
+
+    def test_extract_imported_object_ids_supports_created_image_output(self):
+        output = "\n".join(
+            [
+                "Importing: Image",
+                "Created Image 51",
+                "Image:52",
+                "Created Image 51",
+            ]
+        )
+
+        self.assertEqual(["51", "52"], sorted(core_functions._extract_imported_object_ids(output)))
+
+    def test_sanitize_cli_output_for_logging_redacts_uuid_tokens(self):
+        raw = "Bad session key. Cannot join 12345678-1234-1234-1234-123456789abc on omeroserver:4064."
+
+        sanitized = core_functions._sanitize_cli_output_for_logging(raw)
+
+        self.assertIn("Cannot join ***", sanitized)
+        self.assertNotIn("12345678-1234-1234-1234-123456789abc", sanitized)
+
+    def test_build_zarr_store_destination_dir_uses_flat_sanitized_child(self):
+        fixed_now = real_datetime(2026, 3, 22, 9, 51, 15, 243000)
+
+        with mock.patch.object(core_functions, "OMERO_ZARR_STORE_ROOT", Path("/OMERO/OME-Zarr")), \
+            mock.patch.object(core_functions, "datetime") as mock_datetime, \
+            mock.patch.object(core_functions.uuid, "uuid4", return_value=types.SimpleNamespace(hex="deadbeefcafebabe")):
+            mock_datetime.now.return_value = fixed_now
+
+            path = core_functions._build_zarr_store_destination_dir(
+                "te/st user",
+                "users private",
+            )
+
+        self.assertEqual(Path("/OMERO/OME-Zarr"), path.parent)
+        self.assertEqual(
+            "users_private__te_st_user__2026-03-22T09-51-15.243__deadbeef",
+            path.name,
+        )
+
+    def test_background_import_session_closes_created_session_object(self):
+        fake_session = types.SimpleNamespace(
+            getUuid=lambda: types.SimpleNamespace(getValue=lambda: "session-key")
+        )
+        fake_service = mock.Mock()
+        fake_service.createSessionWithTimeouts.return_value = fake_session
+        fake_admin_conn = mock.Mock()
+        fake_admin_conn.c.sf.getSessionService.return_value = fake_service
+
+        with mock.patch.object(core_functions, "_open_admin_connection", return_value=fake_admin_conn), \
+            mock.patch.object(core_functions, "_resolve_group_name", return_value="users_private"), \
+            mock.patch.object(core_functions, "_get_background_import_session_timeout_seconds", return_value=3600), \
+            mock.patch.object(
+                core_functions.omero,
+                "sys",
+                types.SimpleNamespace(Principal=lambda *args: ("Principal", args)),
+                create=True,
+            ):
+            with core_functions._background_import_session(
+                "test",
+                "omeroserver",
+                4064,
+                group_name="users_private",
+            ) as session_key:
+                self.assertEqual("session-key", session_key)
+
+        fake_service.closeSession.assert_called_once_with(fake_session)
 
     def test_load_job_falls_back_to_unlocked_read_after_lock_contention(self):
         job_id = "b" * 32

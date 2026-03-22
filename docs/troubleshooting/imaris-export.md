@@ -130,8 +130,8 @@ Root cause:
   image visibility as the requesting user session for this export,
 - the standalone connector was already passing the requesting user's OMERO
   session key into the task,
-- the Import plugin already uses the requesting user's OMERO session key for
-  OMERO CLI imports.
+- the Import plugin now uses independent admin-created background sessions for
+  OMERO CLI imports so it does not depend on the browser's live session.
 
 Fix:
 
