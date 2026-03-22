@@ -17,7 +17,9 @@ import time
 import tempfile
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 import omero
 
 import portalocker
@@ -910,12 +912,431 @@ def _build_sem_edx_associations_from_entries(entries):
 
 
 def _get_text(value_obj):
+    if value_obj is None:
+        return ""
     try:
-        return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
-            value_obj, "val", str(value_obj)
-        )
+        if hasattr(value_obj, "getValue"):
+            value = value_obj.getValue()
+            if value is not None:
+                return value
+        saw_value_attr = False
+        for attr_name in ("val", "_val"):
+            if hasattr(value_obj, attr_name):
+                saw_value_attr = True
+                value = getattr(value_obj, attr_name)
+                if value is not None:
+                    return value
+        if saw_value_attr:
+            return ""
+        return str(value_obj)
     except Exception:
         return str(value_obj)
+
+
+def _external_info_text(external_info, attribute_name: str, getter_name: str) -> str:
+    if external_info is None:
+        return ""
+
+    value = _get_text(getattr(external_info, attribute_name, None)).strip()
+    if value:
+        return value
+
+    getter = getattr(external_info, getter_name, None)
+    if callable(getter):
+        try:
+            return _get_text(getter()).strip()
+        except Exception:
+            pass
+    return value
+
+
+def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
+    if conn is None:
+        return "", ""
+
+    try:
+        qs = conn.getQueryService()
+        params = omero.sys.ParametersI()
+        params.addId(int(image_id))
+        rows = qs.projection(
+            "SELECT i.details.externalInfo.lsid, i.details.externalInfo.entityType "
+            "FROM Image i WHERE i.id = :id",
+            params,
+            conn.SERVICE_OPTS,
+        )
+    except Exception:
+        return "", ""
+
+    if not rows:
+        return "", ""
+
+    row = rows[0]
+    lsid = _get_text(row[0] if len(row) > 0 else None).strip()
+    entity_type = _get_text(row[1] if len(row) > 1 else None).strip()
+    return lsid, entity_type
+
+
+@lru_cache(maxsize=1)
+def _runtime_zarr_import_module():
+    try:
+        from omero_zarr import zarr_import as runtime_module
+    except Exception:
+        return None
+    return runtime_module
+
+
+@lru_cache(maxsize=None)
+def _units_length_for_name(unit_name: str):
+    from omero.model.enums import UnitsLength
+
+    raw_name = str(unit_name or "").strip()
+    if not raw_name:
+        return UnitsLength.PIXEL
+
+    alias = _units_length_symbol_aliases().get(raw_name.replace("μ", "µ"))
+    if alias is not None:
+        return alias
+
+    normalized_name = _normalize_units_length_name(raw_name)
+    return _units_length_by_normalized_name().get(normalized_name, UnitsLength.PIXEL)
+
+
+def _normalize_units_length_name(unit_name: str) -> str:
+    normalized_name = str(unit_name or "").strip().replace("μ", "µ").lower()
+    normalized_name = normalized_name.replace("-", "").replace("_", "").replace(" ", "")
+    normalized_name = normalized_name.replace("metres", "meters").replace("metre", "meter")
+    if normalized_name.endswith("s"):
+        normalized_name = normalized_name[:-1]
+    return normalized_name
+
+
+@lru_cache(maxsize=1)
+def _units_length_by_normalized_name():
+    from omero.model.enums import UnitsLength
+
+    return {
+        _normalize_units_length_name(unit.name): unit
+        for unit in sorted(
+            UnitsLength._enumerators.values(),
+            key=lambda enum_value: getattr(enum_value, "name", str(enum_value)),
+        )
+    }
+
+
+@lru_cache(maxsize=1)
+def _units_length_symbol_aliases():
+    units = _units_length_by_normalized_name()
+    alias_map = {}
+
+    si_prefix_symbols = {
+        "yotta": "Y",
+        "zetta": "Z",
+        "exa": "E",
+        "peta": "P",
+        "tera": "T",
+        "giga": "G",
+        "mega": "M",
+        "kilo": "k",
+        "hecto": "h",
+        "deca": "da",
+        "": "",
+        "deci": "d",
+        "centi": "c",
+        "milli": "m",
+        "micro": "u",
+        "nano": "n",
+        "pico": "p",
+        "femto": "f",
+        "atto": "a",
+        "zepto": "z",
+        "yocto": "y",
+    }
+    for prefix_name, symbol in si_prefix_symbols.items():
+        unit = units.get(f"{prefix_name}meter")
+        if unit is not None:
+            alias_map[f"{symbol}m" if symbol else "m"] = unit
+    if "um" in alias_map:
+        alias_map["µm"] = alias_map["um"]
+        alias_map["μm"] = alias_map["um"]
+
+    fixed_symbol_aliases = {
+        "angstrom": ("Å", "Å"),
+        "astronomicalunit": ("au",),
+        "lightyear": ("ly",),
+        "parsec": ("pc",),
+        "thou": ("thou",),
+        "inch": ("in",),
+        "foot": ("ft",),
+        "yard": ("yd",),
+        "mile": ("mi",),
+        "point": ("pt",),
+        "pixel": ("px",),
+    }
+    for unit_name, symbols in fixed_symbol_aliases.items():
+        unit = units.get(unit_name)
+        if unit is None:
+            continue
+        for symbol in symbols:
+            alias_map[symbol] = unit
+    return alias_map
+
+
+def _native_zarr_length_from_value_unit(value_unit):
+    if not isinstance(value_unit, (list, tuple)) or not value_unit:
+        return None
+
+    try:
+        numeric_value = float(value_unit[0])
+    except (TypeError, ValueError):
+        return None
+
+    from omero.model import LengthI
+
+    unit_name = ""
+    if len(value_unit) > 1 and value_unit[1]:
+        unit_name = str(value_unit[1]).strip()
+    return LengthI(numeric_value, _units_length_for_name(unit_name))
+
+
+def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
+    if length is None:
+        return None
+
+    try:
+        value = float(length.getValue())
+    except Exception:
+        raw_value = getattr(length, "val", None)
+        if raw_value is None:
+            return None
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+    unit_name = ""
+    try:
+        unit = length.getUnit()
+        if unit is not None:
+            unit_name = str(getattr(unit, "name", None) or unit).strip().lower()
+    except Exception:
+        pass
+    return round(value, 9), unit_name
+
+
+def _native_zarr_image_relative_path_from_lsid(managed_zarr: Path, lsid: str) -> Optional[str]:
+    root_path = Path(managed_zarr).resolve(strict=False)
+    lsid_text = str(lsid or "").strip()
+    if not lsid_text:
+        raise ValueError("empty externalInfo.lsid")
+
+    lsid_path = Path(lsid_text.split("?", 1)[0]).resolve(strict=False)
+    if lsid_path == root_path:
+        return None
+
+    relative_path = lsid_path.relative_to(root_path)
+    relative_text = relative_path.as_posix().strip()
+    return relative_text or None
+
+
+def _runtime_native_zarr_physical_sizes(
+    managed_zarr: Path,
+    image_relative_path: Optional[str],
+) -> tuple[dict[str, object], Optional[str]]:
+    runtime_module = _runtime_zarr_import_module()
+    if runtime_module is None:
+        return {}, "Installed omero-cli-zarr runtime could not be imported."
+
+    try:
+        root_group = runtime_module.open_group(str(managed_zarr), mode="r")
+        store = root_group.store
+        attrs = runtime_module.load_attrs(store, image_relative_path)
+        _sizes, _pixels_type, pixel_size = runtime_module.parse_image_metadata(
+            store,
+            attrs,
+            image_relative_path,
+        )
+    except Exception as exc:
+        return {}, f"Failed to parse native Zarr image metadata: {exc}"
+
+    if not isinstance(pixel_size, dict):
+        return {}, None
+
+    normalized_sizes = {}
+    for axis_name in ("x", "y", "z"):
+        raw_value = pixel_size.get(axis_name)
+        if raw_value is None:
+            continue
+        try:
+            # The installed omero-cli-zarr runtime does not normalize NGFF
+            # shorthand units such as "nm" and "um"; resolve them here before
+            # persisting OMERO PhysicalSizeX/Y/Z.
+            length_value = _native_zarr_length_from_value_unit(raw_value)
+        except Exception as exc:
+            return {}, f"Failed to normalize native Zarr pixel size for axis {axis_name}: {exc}"
+        if length_value is not None:
+            normalized_sizes[axis_name] = length_value
+    return normalized_sizes, None
+
+
+def _finalize_imported_zarr_image_metadata(
+    username: str,
+    host: str,
+    port: int,
+    image_ids: list[str],
+    *,
+    managed_zarr: Path,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
+) -> tuple[bool, list[str]]:
+    """Reconcile source-derived metadata onto Images created by native Zarr import.
+
+    ``omero-cli-zarr`` creates pure NGFF images through the OMERO API. The
+    installed runtime does not persist physical pixel sizes on that path even
+    though it parses them from the Zarr metadata. Use the managed-store LSID to
+    resolve the imported image back to its source group, parse metadata with the
+    installed runtime parser, and save canonical pixel sizes onto OMERO's
+    ``Pixels`` object before declaring the import successful.
+    """
+    if not username:
+        return False, ["Missing importing username for native Zarr metadata finalization."]
+
+    unique_ids = []
+    seen_ids = set()
+    for image_id in image_ids:
+        text_id = str(image_id).strip()
+        if not text_id or text_id in seen_ids:
+            continue
+        seen_ids.add(text_id)
+        unique_ids.append(text_id)
+    if not unique_ids:
+        return False, ["No imported Image IDs were available for native Zarr metadata finalization."]
+
+    admin_conn = None
+    conn = None
+    errors_found = []
+    try:
+        admin_conn = _open_admin_connection(host, port)
+        if admin_conn is None:
+            return False, ["Failed to open an admin connection for native Zarr metadata finalization."]
+        conn = admin_conn.suConn(username)
+        if conn is None:
+            return False, ["Failed to open the importing user's session for native Zarr metadata finalization."]
+        if group_id is not None:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        elif group_name:
+            conn.SERVICE_OPTS.setOmeroGroup(group_name)
+
+        update_service = conn.getUpdateService()
+        for image_id in unique_ids:
+            try:
+                image = conn.getObject("Image", int(image_id))
+            except Exception as exc:
+                errors_found.append(f"Image:{image_id} lookup failed during metadata finalization: {exc}")
+                continue
+            if image is None:
+                errors_found.append(
+                    f"Image:{image_id} could not be loaded during native Zarr metadata finalization."
+                )
+                continue
+
+            lsid, _entity_type = _query_image_external_info(conn, int(image_id))
+            if not lsid:
+                errors_found.append(
+                    f"Image:{image_id} is missing externalInfo.lsid during native Zarr metadata finalization."
+                )
+                continue
+
+            try:
+                image_relative_path = _native_zarr_image_relative_path_from_lsid(managed_zarr, lsid)
+            except Exception:
+                errors_found.append(
+                    f"Image:{image_id} resolved to unexpected externalInfo.lsid {lsid!r}."
+                )
+                continue
+
+            expected_sizes, metadata_error = _runtime_native_zarr_physical_sizes(
+                managed_zarr,
+                image_relative_path,
+            )
+            if metadata_error:
+                errors_found.append(f"Image:{image_id} metadata finalization failed: {metadata_error}")
+                continue
+            if not expected_sizes:
+                continue
+
+            try:
+                pixels = image.getPrimaryPixels()
+            except Exception as exc:
+                errors_found.append(
+                    f"Image:{image_id} primary Pixels lookup failed during metadata finalization: {exc}"
+                )
+                continue
+            pixels_obj = getattr(pixels, "_obj", None)
+            if pixels_obj is None:
+                errors_found.append(
+                    f"Image:{image_id} primary Pixels object was unavailable during metadata finalization."
+                )
+                continue
+
+            changed = False
+            setter_error = None
+            for axis_name, expected_length in expected_sizes.items():
+                getter = getattr(pixels, f"getPhysicalSize{axis_name.upper()}", None)
+                current_length = getter() if callable(getter) else None
+                if _native_zarr_length_signature(current_length) == _native_zarr_length_signature(
+                    expected_length
+                ):
+                    continue
+                setter = getattr(pixels_obj, f"setPhysicalSize{axis_name.upper()}", None)
+                if not callable(setter):
+                    setter_error = axis_name.upper()
+                    break
+                setter(expected_length)
+                changed = True
+            if setter_error:
+                errors_found.append(
+                    f"Image:{image_id} Pixels object is missing a physical-size setter for axis {setter_error}."
+                )
+                continue
+            if changed:
+                try:
+                    update_service.saveAndReturnObject(pixels_obj)
+                except Exception as exc:
+                    errors_found.append(
+                        f"Image:{image_id} physical pixel-size save failed during metadata finalization: {exc}"
+                    )
+                    continue
+
+            refreshed_image = conn.getObject("Image", int(image_id))
+            if refreshed_image is None:
+                errors_found.append(
+                    f"Image:{image_id} could not be reloaded after native Zarr metadata finalization."
+                )
+                continue
+            refreshed_pixels = refreshed_image.getPrimaryPixels()
+            for axis_name, expected_length in expected_sizes.items():
+                getter = getattr(refreshed_pixels, f"getPhysicalSize{axis_name.upper()}", None)
+                actual_length = getter() if callable(getter) else None
+                if _native_zarr_length_signature(actual_length) != _native_zarr_length_signature(
+                    expected_length
+                ):
+                    errors_found.append(
+                        f"Image:{image_id} physicalSize{axis_name.upper()} did not persist from native Zarr metadata."
+                    )
+                    break
+
+        return len(errors_found) == 0, errors_found
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if admin_conn:
+            try:
+                admin_conn.close()
+            except Exception:
+                pass
 
 
 def _get_id(obj):
@@ -3803,19 +4224,40 @@ def _check_import_compatibility(
             "details": f"Missing staged file: {file_path.name}",
         }
 
-    # OME-NGFF zarrs are imported via omero-cli-zarr — always compatible.
+    # Zarr image layouts supported by the installed omero-cli-zarr runtime are
+    # validated and imported natively; unsupported recognized Zarr layouts fail
+    # early with a deterministic message.
     if (
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
-        and _is_ome_ngff_zarr(file_path)
     ):
-        return {
-            "status": "compatible",
-            "relative_path": relative_path,
-            "stdout": "",
-            "stderr": "",
-            "details": "OME-NGFF zarr (imported via omero-cli-zarr)",
-        }
+        native_plan = _native_zarr_import_plan(file_path)
+        if native_plan.kind:
+            if native_plan.validation_error:
+                return {
+                    "status": "error",
+                    "relative_path": relative_path,
+                    "stdout": "",
+                    "stderr": native_plan.validation_error,
+                    "details": native_plan.validation_error,
+                }
+            details = native_plan.compatibility_details
+            return {
+                "status": "compatible",
+                "relative_path": relative_path,
+                "stdout": "",
+                "stderr": "",
+                "details": details,
+            }
+
+        if native_plan.recognized_zarr and native_plan.validation_error:
+            return {
+                "status": "error",
+                "relative_path": relative_path,
+                "stdout": "",
+                "stderr": native_plan.validation_error,
+                "details": native_plan.validation_error,
+            }
 
     try:
         result = _run_local_import_scan(file_path)
@@ -4095,24 +4537,365 @@ def _start_compatibility_check_thread(job_id: str):
     worker.start()
 
 
+@dataclass(frozen=True)
+class _NativeZarrImportPlan:
+    kind: Optional[str] = None
+    recognized_zarr: bool = False
+    validation_error: Optional[str] = None
+    verify_lsid_prefix: bool = False
+    compatibility_details: str = ""
+
+
+_NATIVE_ZARR_KIND_OME_NGFF = "ome_ngff_image"
+_NATIVE_ZARR_KIND_BIOFORMATS2RAW = "bioformats2raw_v3"
+_SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK = frozenset(
+    {
+        "int8",
+        "int16",
+        "uint8",
+        "uint16",
+        "int32",
+        "uint32",
+        "float_",
+        "float16",
+        "float32",
+        "float64",
+        "complex_",
+        "complex64",
+    }
+)
+
+
+@lru_cache(maxsize=1)
+def _supported_native_zarr_pixel_types() -> frozenset[str]:
+    try:
+        from omero_zarr.zarr_import import PIXELS_TYPE as runtime_pixels_type
+    except Exception:
+        return _SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK
+
+    if isinstance(runtime_pixels_type, dict) and runtime_pixels_type:
+        return frozenset(str(name) for name in runtime_pixels_type.keys())
+    return _SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK
+
+
+def _coerce_int(value) -> Optional[int]:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_zarr_attrs_payload(group_dir: Path) -> tuple[Optional[dict], Optional[dict], Optional[str]]:
+    zattrs_path = group_dir / ".zattrs"
+    if not zattrs_path.is_file():
+        if (group_dir / "zarr.json").is_file():
+            return None, None, (
+                "Zarr v3 stores are not supported by the installed OMERO render stack: "
+                f"{group_dir.name}"
+            )
+        return None, None, f"Missing .zattrs in Zarr source: {group_dir.name}"
+
+    try:
+        with open(zattrs_path, encoding="utf-8") as fh:
+            raw_attrs = json.load(fh)
+    except (json.JSONDecodeError, OSError) as exc:
+        return None, None, f"Failed to read Zarr metadata for native import: {exc}"
+
+    if not isinstance(raw_attrs, dict):
+        return None, None, f"Invalid Zarr metadata payload in {zattrs_path}"
+
+    ome_attrs = raw_attrs.get("ome")
+    if isinstance(ome_attrs, dict):
+        return raw_attrs, ome_attrs, None
+    return raw_attrs, raw_attrs, None
+
+
+def _normalized_zarr_attrs(group_dir: Path) -> Optional[dict]:
+    _raw_attrs, attrs, _error = _read_zarr_attrs_payload(group_dir)
+    return attrs
+
+
+def _extract_axis_names(axes) -> Optional[list[str]]:
+    if not isinstance(axes, list) or not axes:
+        return None
+
+    names = []
+    for axis in axes:
+        if isinstance(axis, str):
+            name = axis.strip().lower()
+        elif isinstance(axis, dict):
+            name = str(axis.get("name") or "").strip().lower()
+        else:
+            name = ""
+        if not name:
+            return None
+        names.append(name)
+    return names
+
+
+def _normalized_axis_objects(axes) -> Optional[list[dict]]:
+    if not isinstance(axes, list) or not axes:
+        return None
+
+    normalized = []
+    for axis in axes:
+        if not isinstance(axis, dict):
+            return None
+        name = str(axis.get("name") or "").strip().lower()
+        if not name:
+            return None
+        normalized.append(axis)
+    return normalized
+
+
+def _normalize_zarr_dtype_name(raw_dtype) -> str:
+    text = str(raw_dtype or "").strip()
+    alias_map = {
+        "|u1": "uint8",
+        "<u1": "uint8",
+        ">u1": "uint8",
+        "|i1": "int8",
+        "<i1": "int8",
+        ">i1": "int8",
+        "<u2": "uint16",
+        ">u2": "uint16",
+        "<i2": "int16",
+        ">i2": "int16",
+        "<u4": "uint32",
+        ">u4": "uint32",
+        "<i4": "int32",
+        ">i4": "int32",
+        "<f2": "float16",
+        ">f2": "float16",
+        "<f4": "float32",
+        ">f4": "float32",
+        "<f8": "float64",
+        ">f8": "float64",
+        "<c8": "complex64",
+        ">c8": "complex64",
+    }
+    if text in alias_map:
+        return alias_map[text]
+    try:
+        import numpy as np
+
+        return np.dtype(raw_dtype).name
+    except Exception:
+        return text
+
+
+def _primary_multiscale_components(attrs: dict) -> tuple[Optional[dict], Optional[dict], Optional[str]]:
+    multiscales = attrs.get("multiscales")
+    if not isinstance(multiscales, list) or not multiscales:
+        return None, None, "OME-Zarr source is missing root multiscales metadata."
+
+    primary_multiscale = multiscales[0]
+    if not isinstance(primary_multiscale, dict):
+        return None, None, "OME-Zarr multiscales metadata is malformed."
+
+    datasets = primary_multiscale.get("datasets")
+    if not isinstance(datasets, list) or not datasets:
+        return None, None, "OME-Zarr source is missing multiscales.datasets metadata."
+
+    primary_dataset = datasets[0]
+    if not isinstance(primary_dataset, dict):
+        return None, None, "OME-Zarr primary dataset metadata is malformed."
+
+    return primary_multiscale, primary_dataset, None
+
+
+def _validate_native_ome_ngff_group(store_root: Path, attrs: dict, *, display_name: str) -> Optional[str]:
+    primary_multiscale, primary_dataset, metadata_error = _primary_multiscale_components(attrs)
+    if metadata_error:
+        return metadata_error
+
+    axes = primary_multiscale.get("axes")
+    axis_objects = _normalized_axis_objects(axes)
+    if not axis_objects:
+        return (
+            "OME-Zarr axes must use object metadata with axis names for the installed "
+            f"omero-cli-zarr runtime: {display_name}"
+        )
+    axis_names = _extract_axis_names(axes)
+    if not axis_names:
+        return f"OME-Zarr source is missing valid multiscales.axes metadata: {display_name}"
+    if "x" not in axis_names or "y" not in axis_names:
+        return f"OME-Zarr axes must include x and y for native import: {display_name}"
+
+    primary_path = str(primary_dataset.get("path") or "").strip()
+    if not primary_path:
+        return "OME-Zarr source is missing the primary multiscale dataset path."
+
+    array_dir = (store_root / primary_path).resolve(strict=False)
+    try:
+        array_dir.relative_to(store_root.resolve(strict=False))
+    except ValueError:
+        return f"OME-Zarr dataset path escapes the store root: {primary_path}"
+
+    if not array_dir.exists():
+        return f"OME-Zarr dataset path does not exist: {primary_path}"
+    if not array_dir.is_dir():
+        return f"OME-Zarr dataset path is not a directory-backed array: {primary_path}"
+    if (array_dir / "zarr.json").is_file() and not (array_dir / ".zarray").is_file():
+        return f"Zarr v3 arrays are not supported by the installed OMERO render stack: {primary_path}"
+
+    zarray_path = array_dir / ".zarray"
+    if not zarray_path.is_file():
+        return f"OME-Zarr dataset path is not a readable array: {primary_path}"
+
+    try:
+        with open(zarray_path, encoding="utf-8") as fh:
+            zarray = json.load(fh)
+    except (json.JSONDecodeError, OSError) as exc:
+        return f"Failed to read primary Zarr array metadata for native import: {exc}"
+
+    shape = zarray.get("shape")
+    if not isinstance(shape, list) or not shape:
+        return f"OME-Zarr array shape metadata is invalid for native import: {primary_path}"
+    if len(shape) != len(axis_names):
+        return (
+            "OME-Zarr axes and primary array rank do not match for native import: "
+            f"{primary_path}"
+        )
+    try:
+        if any(int(length) <= 0 for length in shape):
+            return f"OME-Zarr array shape contains non-positive dimensions: {primary_path}"
+    except (TypeError, ValueError):
+        return f"OME-Zarr array shape is malformed: {primary_path}"
+
+    dtype_name = _normalize_zarr_dtype_name(zarray.get("dtype"))
+    if dtype_name not in _supported_native_zarr_pixel_types():
+        return (
+            "OME-Zarr pixel dtype is not supported by the installed omero-cli-zarr "
+            f"runtime: {dtype_name or '?'}"
+        )
+
+    coordinate_transforms = primary_dataset.get("coordinateTransformations")
+    if not isinstance(coordinate_transforms, list) or not coordinate_transforms:
+        return (
+            "OME-Zarr primary dataset is missing coordinateTransformations metadata "
+            f"required by the installed omero-cli-zarr runtime: {primary_path}"
+        )
+
+    found_scale = False
+    for transform in coordinate_transforms:
+        if not isinstance(transform, dict) or transform.get("type") != "scale":
+            continue
+        scale = transform.get("scale")
+        if not isinstance(scale, list) or len(scale) != len(axis_names):
+            return (
+                "OME-Zarr scale transform does not match the primary array rank: "
+                f"{primary_path}"
+            )
+        try:
+            if any(float(value) <= 0 for value in scale):
+                return f"OME-Zarr scale transform contains non-positive values: {primary_path}"
+        except (TypeError, ValueError):
+            return f"OME-Zarr scale transform is malformed: {primary_path}"
+        found_scale = True
+        break
+    if not found_scale:
+        return (
+            "OME-Zarr primary dataset is missing a scale transform required by the "
+            f"installed omero-cli-zarr runtime: {primary_path}"
+        )
+
+    return None
+
+
+def _validate_native_bioformats2raw_zarr(zarr_path: Path, attrs: dict) -> Optional[str]:
+    layout_version = _coerce_int(attrs.get("bioformats2raw.layout"))
+    if layout_version != 3:
+        return (
+            "bioformats2raw-layout OME-Zarr is not supported by the installed "
+            f"omero-cli-zarr runtime: {attrs.get('bioformats2raw.layout')!r}"
+        )
+
+    series_dirs = sorted(
+        (path for path in zarr_path.iterdir() if path.is_dir() and path.name.isdigit()),
+        key=lambda path: int(path.name),
+    )
+    if not series_dirs:
+        return "bioformats2raw-layout OME-Zarr is missing numeric image series groups."
+
+    expected_series = list(range(len(series_dirs)))
+    actual_series = [int(path.name) for path in series_dirs]
+    if actual_series != expected_series:
+        return (
+            "bioformats2raw-layout OME-Zarr series groups must be contiguous and "
+            f"zero-based for the installed omero-cli-zarr runtime: {actual_series}"
+        )
+
+    for series_dir in series_dirs:
+        _series_raw, series_attrs, series_error = _read_zarr_attrs_payload(series_dir)
+        if series_error:
+            return series_error
+        validation_error = _validate_native_ome_ngff_group(
+            series_dir,
+            series_attrs or {},
+            display_name=f"{zarr_path.name}/{series_dir.name}",
+        )
+        if validation_error:
+            return validation_error
+    return None
+
+
+def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
+    if not zarr_path.is_dir():
+        return _NativeZarrImportPlan()
+
+    _raw_attrs, attrs, attrs_error = _read_zarr_attrs_payload(zarr_path)
+    if attrs_error:
+        if (zarr_path / ".zattrs").exists() or (zarr_path / "zarr.json").exists():
+            return _NativeZarrImportPlan(recognized_zarr=True, validation_error=attrs_error)
+        return _NativeZarrImportPlan()
+    if not isinstance(attrs, dict):
+        return _NativeZarrImportPlan()
+
+    if "plate" in attrs:
+        return _NativeZarrImportPlan(
+            recognized_zarr=True,
+            validation_error=(
+                "OME-Zarr plate imports are not supported by the installed "
+                "omero-cli-zarr runtime."
+            ),
+        )
+
+    if attrs.get("bioformats2raw.layout") is not None:
+        validation_error = _validate_native_bioformats2raw_zarr(zarr_path, attrs)
+        return _NativeZarrImportPlan(
+            kind=_NATIVE_ZARR_KIND_BIOFORMATS2RAW,
+            recognized_zarr=True,
+            validation_error=validation_error,
+            verify_lsid_prefix=True,
+            compatibility_details="bioformats2raw-layout OME-Zarr (imported via omero-cli-zarr)",
+        )
+
+    if isinstance(attrs.get("multiscales"), list):
+        validation_error = _validate_native_ome_ngff_group(
+            zarr_path,
+            attrs,
+            display_name=zarr_path.name,
+        )
+        return _NativeZarrImportPlan(
+            kind=_NATIVE_ZARR_KIND_OME_NGFF,
+            recognized_zarr=True,
+            validation_error=validation_error,
+            compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+        )
+
+    return _NativeZarrImportPlan(recognized_zarr=True)
+
+
 def _is_ome_ngff_zarr(zarr_path: Path) -> bool:
     """Return *True* if *zarr_path* is a standard OME-NGFF zarr.
 
     Returns *False* for bioformats2raw-layout zarrs (which have
-    ``bioformats2raw.layout`` in their ``.zattrs``) — those work fine
-    via the standard Bio-Formats import path.
+    ``bioformats2raw.layout`` in their metadata) and for non-image/unsupported
+    OME-Zarr layouts.
     """
-    zattrs_path = zarr_path / ".zattrs"
-    if not zattrs_path.is_file():
-        return False
-    try:
-        with open(zattrs_path) as fh:
-            attrs = json.load(fh)
-    except (json.JSONDecodeError, OSError):
-        return False
-    if "bioformats2raw.layout" in attrs:
-        return False
-    return isinstance(attrs.get("multiscales"), list)
+    plan = _native_zarr_import_plan(zarr_path)
+    return plan.kind == _NATIVE_ZARR_KIND_OME_NGFF
 
 
 ZARR_MANAGED_REPO_SCRIPT_NAME = "Manage_Zarr_ManagedRepository.py"
@@ -4182,6 +4965,9 @@ def _prepare_server_readable_zarr_source(file_path: Path) -> tuple[Optional[Path
         transfer_parent.chmod(ZARR_SHARED_TRANSFER_TOKEN_MODE)
         shared_source = transfer_parent / source.name
         shutil.copytree(source, shared_source, symlinks=True)
+        prepare_error = _prepare_native_zarr_copy(shared_source)
+        if prepare_error:
+            raise RuntimeError(prepare_error)
         _normalize_shared_zarr_permissions(shared_source)
         return shared_source, transfer_parent, None
     except Exception as exc:
@@ -4415,14 +5201,43 @@ def _import_zarr_via_cli(
     progress_job: Optional[dict] = None,
     username: Optional[str] = None,
     group_name: Optional[str] = None,
+    native_plan: Optional[_NativeZarrImportPlan] = None,
 ) -> dict:
-    """Import an OME-NGFF zarr using ``omero zarr import``.
+    """Import a Zarr image store using ``omero zarr import``.
 
     Stages the zarr into the OMERO managed repository via a server-side OMERO
     script, then runs ``omero zarr import`` against that final managed path.
     """
     if not username or not group_name:
         error_msg = "Missing username or group name for managed-repository Zarr staging."
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    native_plan = native_plan or _native_zarr_import_plan(file_path)
+    if not native_plan.kind:
+        error_msg = "Zarr source is not supported by the installed omero-cli-zarr runtime."
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+    if native_plan.validation_error:
+        error_msg = native_plan.validation_error
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -4542,22 +5357,26 @@ def _import_zarr_via_cli(
     # --- Detect created objects --------------------------------------------
     combined_output = stdout + "\n" + stderr
     imported_objects = _extract_imported_object_ids(combined_output)
+    expected_lsid = None if native_plan.verify_lsid_prefix else str(managed_zarr)
+    expected_lsid_prefix = str(managed_zarr) if native_plan.verify_lsid_prefix else None
 
-    if not imported_objects and dataset_id and username:
-        api_objects = _verify_import_via_api(
+    if username:
+        api_objects = _verify_zarr_import_via_api(
             username,
             host,
             port,
-            dataset_id,
             import_name,
             file_path.name,
+            expected_lsid=expected_lsid,
+            expected_lsid_prefix=expected_lsid_prefix,
+            dataset_id=dataset_id,
             group_id=group_id,
             group_name=group_name,
         )
         if api_objects:
             imported_objects = api_objects
             logger.info(
-                "OMERO API verification found objects for zarr %s: %s",
+                "OMERO API verification found native-zarr images for %s: %s",
                 sanitize_log_value(rel_path),
                 sanitize_log_value(imported_objects[:5]),
             )
@@ -4604,6 +5423,75 @@ def _import_zarr_via_cli(
             "job_message": job_error,
         }
 
+    metadata_ok, metadata_errors = _finalize_imported_zarr_image_metadata(
+        username or "",
+        host,
+        port,
+        imported_objects,
+        managed_zarr=managed_zarr,
+        group_id=group_id,
+        group_name=group_name,
+    )
+    if not metadata_ok:
+        _cleanup_imported_images(host, port, imported_objects)
+        _cleanup_managed_zarr_path(
+            host,
+            port,
+            username=username,
+            group_name=group_name,
+            managed_path=managed_zarr,
+        )
+        error_msg = (
+            "Native Zarr import failed metadata finalization: "
+            + "; ".join(str(error) for error in metadata_errors[:3])
+        )
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
+    render_ok, render_errors = _verify_imported_zarr_images_renderable(
+        username or "",
+        host,
+        port,
+        imported_objects,
+        expected_lsid=expected_lsid,
+        expected_lsid_prefix=expected_lsid_prefix,
+        group_id=group_id,
+        group_name=group_name,
+    )
+    if not render_ok:
+        _cleanup_imported_images(host, port, imported_objects)
+        _cleanup_managed_zarr_path(
+            host,
+            port,
+            username=username,
+            group_name=group_name,
+            managed_path=managed_zarr,
+        )
+        error_msg = (
+            "Native Zarr import failed post-import render verification: "
+            + "; ".join(str(error) for error in render_errors[:3])
+        )
+        job_error = messages.job_error_with_path(rel_path, error_msg)
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "error",
+            "entry_error": error_msg,
+            "job_error": job_error,
+            "job_message": job_error,
+        }
+
     return {
         "cleanup_staged_paths": cleanup_staged_paths,
         "covered_indexes": covered_indexes,
@@ -4613,88 +5501,6 @@ def _import_zarr_via_cli(
         "rel_path": rel_path,
         "file_path": managed_zarr,
     }
-
-
-def _needs_multiscale_flattening(zarr_path: Path) -> bool:
-    """Return *True* if *zarr_path* is an OME-NGFF zarr with multiple
-    resolution levels that must be flattened before OMERO import.
-
-    Zarrs using ``bioformats2raw.layout`` are handled correctly by OMERO's
-    rendering engine and are excluded.
-    """
-    zattrs_path = zarr_path / ".zattrs"
-    if not zattrs_path.is_file():
-        return False
-    try:
-        with open(zattrs_path) as fh:
-            attrs = json.load(fh)
-    except (json.JSONDecodeError, OSError):
-        return False
-    # bioformats2raw layout zarrs work fine in OMERO — skip.
-    if "bioformats2raw.layout" in attrs:
-        return False
-    multiscales = attrs.get("multiscales")
-    if not isinstance(multiscales, list):
-        return False
-    return any(len(ms.get("datasets", [])) > 1 for ms in multiscales)
-
-
-def _flatten_multiscale_zarr(zarr_path: Path) -> bool:
-    """Strip lower resolution levels from a multi-resolution OME-NGFF zarr.
-
-    OMERO's rendering engine (``BfPixelBuffer``) may read from the wrong
-    resolution level of multi-resolution OME-NGFF zarrs, causing
-    ``DimensionsOutOfBoundsException`` when generating thumbnails.  This
-    function keeps only the highest-resolution dataset (first entry in the
-    ``multiscales.datasets`` list, per the OME-NGFF spec) and removes all
-    lower-resolution arrays so Bio-Formats reads the correct data.
-
-    Operates **in-place** on *zarr_path*.  Returns *True* if changes were
-    made.
-    """
-    zattrs_path = zarr_path / ".zattrs"
-    if not zattrs_path.is_file():
-        return False
-    try:
-        with open(zattrs_path) as fh:
-            attrs = json.load(fh)
-    except (json.JSONDecodeError, OSError):
-        return False
-    # bioformats2raw layout zarrs work fine in OMERO — never flatten them.
-    if "bioformats2raw.layout" in attrs:
-        return False
-    multiscales = attrs.get("multiscales")
-    if not isinstance(multiscales, list):
-        return False
-
-    modified = False
-    for ms in multiscales:
-        datasets = ms.get("datasets", [])
-        if len(datasets) <= 1:
-            continue
-        # OME-NGFF spec: datasets are ordered highest → lowest resolution.
-        keep_path = datasets[0].get("path")
-        remove_paths = [d.get("path") for d in datasets[1:] if d.get("path")]
-        for rpath in remove_paths:
-            target = zarr_path / rpath
-            if target.is_dir():
-                shutil.rmtree(target)
-            elif target.is_file():
-                target.unlink()
-        ms["datasets"] = [datasets[0]]
-        modified = True
-        logger.info(
-            "Flattened multiscale zarr %s: kept %s, removed %d lower "
-            "resolution level(s)",
-            sanitize_log_value(zarr_path.name),
-            sanitize_log_value(keep_path),
-            len(remove_paths),
-        )
-
-    if modified:
-        with open(zattrs_path, "w") as fh:
-            json.dump(attrs, fh, indent=4)
-    return modified
 
 
 def _strip_non_image_subgroups(zarr_path: Path) -> bool:
@@ -4829,6 +5635,282 @@ def _recompress_chunk_tree(array_dir: Path, old_codec, new_codec):
                 item.write_bytes(new_codec.encode(decompressed))
             except Exception:
                 pass  # best-effort; corrupt chunks are left as-is
+
+
+def _validate_native_ome_ngff_zarr(zarr_path: Path) -> Optional[str]:
+    """Return an error string when *zarr_path* is not a safe native
+    ``omero zarr import`` candidate, else ``None``.
+
+    The native importer is reference-based and the OMERO render path later
+    re-opens the same store. Validate the primary multiscale array structure
+    before registering the store with OMERO so malformed stores fail early and
+    predictably.
+    """
+    _raw_attrs, attrs, attrs_error = _read_zarr_attrs_payload(zarr_path)
+    if attrs_error:
+        return attrs_error
+    if not isinstance(attrs, dict):
+        return f"Invalid Zarr metadata payload in {zarr_path / '.zattrs'}"
+    if "plate" in attrs:
+        return "OME-Zarr plate imports are not supported by the installed omero-cli-zarr runtime."
+    if attrs.get("bioformats2raw.layout") is not None:
+        return "bioformats2raw-layout Zarrs are validated separately from pure OME-NGFF image stores."
+    return _validate_native_ome_ngff_group(zarr_path, attrs, display_name=zarr_path.name)
+
+
+def _prepare_native_zarr_copy(zarr_path: Path) -> Optional[str]:
+    """Validate an ephemeral copy for native Zarr import.
+
+    The copy is safe to mutate because it is discarded after the managed
+    repository handoff, but supported OME-NGFF layouts must remain faithful to
+    the source contract. The current OMERO stack renders staged raw
+    multiscale NGFF correctly; mutating those stores before native import can
+    break thumbnail generation.
+    """
+    plan = _native_zarr_import_plan(zarr_path)
+    if not plan.kind:
+        return plan.validation_error or (
+            "Zarr source is not supported by the installed omero-cli-zarr runtime."
+        )
+    if plan.validation_error:
+        return plan.validation_error
+
+    return _native_zarr_import_plan(zarr_path).validation_error
+
+
+def _verify_zarr_import_via_api(
+    username: str,
+    host: str,
+    port: int,
+    import_name: Optional[str],
+    file_name: str,
+    *,
+    expected_lsid: Optional[str] = None,
+    expected_lsid_prefix: Optional[str] = None,
+    dataset_id: Optional[int] = None,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
+) -> list[str]:
+    """Return imported Image IDs for a native Zarr import.
+
+    Prefer an ``externalInfo.lsid`` match so duplicate image names do not cause
+    false positives. Fall back to the legacy name-based lookup only when an
+    expected native Zarr LSID match is unavailable.
+    """
+    if not username:
+        return []
+    admin_conn = None
+    conn = None
+    try:
+        admin_conn = _open_admin_connection(host, port)
+        if admin_conn is None:
+            return []
+        conn = admin_conn.suConn(username)
+        if not conn:
+            return []
+        if group_id is not None:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        elif group_name:
+            conn.SERVICE_OPTS.setOmeroGroup(group_name)
+
+        qs = conn.getQueryService()
+        if expected_lsid or expected_lsid_prefix:
+            params = omero.sys.ParametersI()
+            query_parts = ["SELECT i.id FROM Image i"]
+            where_parts = []
+            if dataset_id is not None:
+                query_parts.append("JOIN i.datasetLinks dl")
+                params.addId(int(dataset_id))
+                where_parts.insert(0, "dl.parent.id = :id")
+            if expected_lsid:
+                params.add("lsid", omero.rtypes.rstring(str(expected_lsid)))
+                where_parts.append("i.details.externalInfo.lsid = :lsid")
+            elif expected_lsid_prefix:
+                prefix_value = str(expected_lsid_prefix).rstrip("/") + "/%"
+                params.add("lsid_prefix", omero.rtypes.rstring(prefix_value))
+                where_parts.append("i.details.externalInfo.lsid like :lsid_prefix")
+            query_parts.append("WHERE " + " AND ".join(where_parts))
+            rows = qs.projection(" ".join(query_parts), params, conn.SERVICE_OPTS)
+            exact_ids = [str(row[0].val) for row in rows] if rows else []
+            if exact_ids:
+                return exact_ids
+
+        if dataset_id is not None:
+            return _verify_import_via_api(
+                username,
+                host,
+                port,
+                int(dataset_id),
+                import_name,
+                file_name,
+                group_id=group_id,
+                group_name=group_name,
+            )
+        return []
+    except Exception as exc:
+        logger.debug(
+            "Native Zarr API verification failed for %s: %s",
+            sanitize_log_value(expected_lsid or expected_lsid_prefix or file_name),
+            sanitize_log_value(exc),
+        )
+        return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if admin_conn:
+            try:
+                admin_conn.close()
+            except Exception:
+                pass
+
+
+def _verify_imported_zarr_images_renderable(
+    username: str,
+    host: str,
+    port: int,
+    image_ids: list[str],
+    *,
+    expected_lsid: Optional[str] = None,
+    expected_lsid_prefix: Optional[str] = None,
+    group_id: Optional[int] = None,
+    group_name: Optional[str] = None,
+) -> tuple[bool, list[str]]:
+    """Exercise OMERO's thumbnail/render path for newly imported Zarr images."""
+    if not username:
+        return False, ["Missing importing username for post-import render verification."]
+
+    unique_ids = []
+    seen_ids = set()
+    for image_id in image_ids:
+        text_id = str(image_id).strip()
+        if not text_id or text_id in seen_ids:
+            continue
+        seen_ids.add(text_id)
+        unique_ids.append(text_id)
+    if not unique_ids:
+        return False, ["No imported Image IDs were available for render verification."]
+
+    admin_conn = None
+    conn = None
+    errors_found = []
+    try:
+        admin_conn = _open_admin_connection(host, port)
+        if admin_conn is None:
+            return False, ["Failed to open an admin connection for render verification."]
+        conn = admin_conn.suConn(username)
+        if conn is None:
+            return False, ["Failed to open the importing user's session for render verification."]
+        if group_id is not None:
+            conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
+        elif group_name:
+            conn.SERVICE_OPTS.setOmeroGroup(group_name)
+
+        for image_id in unique_ids:
+            try:
+                image = conn.getObject("Image", int(image_id))
+            except Exception as exc:
+                errors_found.append(f"Image:{image_id} lookup failed: {exc}")
+                continue
+            if image is None:
+                errors_found.append(f"Image:{image_id} could not be loaded after import.")
+                continue
+
+            sizes = (
+                int(image.getSizeX() or 0),
+                int(image.getSizeY() or 0),
+                int(image.getSizeZ() or 0),
+                int(image.getSizeC() or 0),
+                int(image.getSizeT() or 0),
+            )
+            if any(size <= 0 for size in sizes):
+                errors_found.append(
+                    "Image:%s has invalid dimensions after import: x=%d y=%d z=%d c=%d t=%d"
+                    % ((image_id,) + sizes)
+                )
+                continue
+
+            details = getattr(getattr(image, "_obj", None), "details", None)
+            external_info = getattr(details, "externalInfo", None)
+            if external_info is None:
+                errors_found.append(f"Image:{image_id} is missing externalInfo after native Zarr import.")
+                continue
+            lsid, _entity_type = _query_image_external_info(conn, int(image_id))
+            if not lsid:
+                lsid = _external_info_text(external_info, "lsid", "getLsid")
+            if expected_lsid and lsid != str(expected_lsid):
+                errors_found.append(
+                    f"Image:{image_id} resolved to unexpected externalInfo.lsid {lsid!r}."
+                )
+                continue
+            if expected_lsid_prefix:
+                expected_prefix = str(expected_lsid_prefix).rstrip("/")
+                if not lsid.startswith(expected_prefix + "/"):
+                    errors_found.append(
+                        f"Image:{image_id} resolved to unexpected externalInfo.lsid {lsid!r}."
+                    )
+                    continue
+
+            for thumb_size in ((96, 96), (256, 256)):
+                try:
+                    thumbnail = image.getThumbnail(size=thumb_size, direct=True)
+                except Exception as exc:
+                    errors_found.append(
+                        f"Image:{image_id} thumbnail {thumb_size[0]}x{thumb_size[1]} failed: {exc}"
+                    )
+                    break
+                if not thumbnail:
+                    errors_found.append(
+                        f"Image:{image_id} thumbnail {thumb_size[0]}x{thumb_size[1]} returned no data."
+                    )
+                    break
+
+        return len(errors_found) == 0, errors_found
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        if admin_conn:
+            try:
+                admin_conn.close()
+            except Exception:
+                pass
+
+
+def _cleanup_imported_images(host: str, port: int, image_ids: list[str]) -> None:
+    """Best-effort cleanup for images created by a failed native Zarr import."""
+    cleaned_ids = []
+    for image_id in image_ids:
+        try:
+            cleaned_ids.append(int(str(image_id)))
+        except (TypeError, ValueError):
+            continue
+    if not cleaned_ids:
+        return
+
+    admin_conn = None
+    try:
+        admin_conn = _open_admin_connection(host, port)
+        if admin_conn is None:
+            return
+        admin_conn.SERVICE_OPTS.setOmeroGroup("-1")
+        admin_conn.deleteObjects("Image", cleaned_ids, wait=True)
+    except Exception as exc:
+        logger.warning(
+            "Failed to delete imported native-Zarr images %s: %s",
+            sanitize_log_value(cleaned_ids),
+            sanitize_log_value(exc),
+        )
+    finally:
+        if admin_conn:
+            try:
+                admin_conn.close()
+            except Exception:
+                pass
 
 
 def _verify_import_via_api(
@@ -4967,17 +6049,12 @@ def _import_job_entry(
         import_name = file_path.name
 
     # ------------------------------------------------------------------
-    # OME-NGFF zarr import via omero-cli-zarr.
+    # Zarr import via omero-cli-zarr.
     #
-    # Standard OME-NGFF zarrs (multiscales metadata, no bioformats2raw
-    # layout) are imported using ``omero zarr import`` which bypasses
-    # Bio-Formats entirely. The staged directory is first copied into the
-    # configured OMERO managed repository via a server-side OMERO script so
-    # the final pixel path follows the same repository template as normal
-    # imports and remains owned by the OMERO.server runtime user.
-    #
-    # bioformats2raw-layout zarrs (with OME/METADATA.ome.xml) continue
-    # to use the standard Bio-Formats import path below.
+    # Route every Zarr image layout that is actually supported by the
+    # installed omero-cli-zarr runtime through the native path. That keeps
+    # pure OME-NGFF images and bioformats2raw-layout stores on one contract:
+    # the managed-repository handoff plus post-import render verification.
     # ------------------------------------------------------------------
     _zarr_temp_path = None
     try:
@@ -5003,11 +6080,27 @@ def _import_job_entry(
                     "job_message": job_error,
                 }
 
+            native_plan = None
             if (
                 file_path.is_dir()
                 and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
-                and _is_ome_ngff_zarr(file_path)
             ):
+                native_plan = _native_zarr_import_plan(file_path)
+
+            if native_plan and native_plan.kind:
+                if native_plan.validation_error:
+                    error_msg = native_plan.validation_error
+                    job_error = messages.job_error_with_path(rel_path, error_msg)
+                    return {
+                        "cleanup_staged_paths": cleanup_staged_paths,
+                        "covered_indexes": covered_indexes,
+                        "covered_relative_paths": covered_relative_paths,
+                        "index": entry.get("index"),
+                        "status": "error",
+                        "entry_error": error_msg,
+                        "job_error": job_error,
+                        "job_message": job_error,
+                    }
                 return _import_zarr_via_cli(
                     file_path=file_path,
                     session_key=background_session_key,
@@ -5024,7 +6117,21 @@ def _import_job_entry(
                     progress_job=progress_job,
                     username=username,
                     group_name=group_name,
+                    native_plan=native_plan,
                 )
+            if native_plan and native_plan.recognized_zarr and native_plan.validation_error:
+                error_msg = native_plan.validation_error
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
 
             try:
                 success, stdout, stderr = _import_file(
@@ -5136,7 +6243,7 @@ def _import_job_entry(
                 "file_path": file_path,
             }
     finally:
-        # Clean up temporary zarr copy (recompressed and/or flattened).
+        # Clean up any temporary zarr copy created for import preparation.
         if _zarr_temp_path is not None:
             shutil.rmtree(_zarr_temp_path, ignore_errors=True)
 
