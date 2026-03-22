@@ -1,6 +1,7 @@
 """Tests for grouped import planning and tree-preserving staging."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import subprocess
 import sys
@@ -27,6 +28,18 @@ if str(REPO_ROOT) not in sys.path:
 
 from omeroweb_import.strings import errors
 from omeroweb_import.views import core_functions, index_view
+
+
+def _patch_background_import_session(monkeypatch, session_key: str = "background-session"):
+    @contextmanager
+    def fake_background_import_session(*args, **kwargs):
+        yield session_key
+
+    monkeypatch.setattr(
+        core_functions,
+        "_background_import_session",
+        fake_background_import_session,
+    )
 
 
 def _stage_relative_paths(upload_root: Path, relative_paths: list[str]):
@@ -499,6 +512,11 @@ def test_ensure_job_dataset_targets_creates_only_logical_datasets(monkeypatch):
         "_open_service_connection",
         lambda host, port, group_id=None: fake_service_conn,
     )
+    monkeypatch.setattr(
+        core_functions,
+        "_create_dataset_via_admin_connection",
+        lambda *args, **kwargs: None,
+    )
 
     def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
         created.append((name, project_id))
@@ -750,6 +768,7 @@ def test_import_job_entry_uses_directory_package_dataset_id(tmp_path: Path, monk
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -981,6 +1000,7 @@ def test_import_job_entry_applies_name_normalization_for_grouped_package(tmp_pat
         return True, "Image:99", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1056,6 +1076,7 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_pat
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1092,6 +1113,7 @@ def test_import_job_entry_succeeds_when_stdout_contains_image_id(tmp_path: Path,
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1130,6 +1152,7 @@ def test_import_job_entry_salvages_success_when_cli_nonzero_but_objects_exist(tm
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1167,6 +1190,7 @@ def test_import_job_entry_salvages_success_when_objects_in_stderr(tmp_path: Path
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1203,6 +1227,7 @@ def test_import_job_entry_fails_when_cli_nonzero_and_no_objects(tmp_path: Path, 
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1242,6 +1267,7 @@ def test_import_job_entry_sets_import_name_for_zarr_directory(tmp_path: Path, mo
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1288,6 +1314,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import(tmp_path: Path, monkeypatch):
     def must_not_be_called(*args, **kwargs):
         raise AssertionError("_import_file should not be called for OME-NGFF zarr")
     monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
+    _patch_background_import_session(monkeypatch)
 
     # Mock _import_zarr_via_cli to verify it is called
     called = {"value": False}
@@ -1345,6 +1372,7 @@ def test_preflight_scan_passes_zarr_when_bioformats_finds_groups(tmp_path: Path,
         return True, "Image:99\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
@@ -1386,6 +1414,7 @@ def test_preflight_scan_timeout_does_not_block_import(tmp_path: Path, monkeypatc
         return True, "Image:55\n", ""
 
     monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(
         {
