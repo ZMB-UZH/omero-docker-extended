@@ -32,7 +32,7 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 **Files:** `docker-compose.yml`, `docker/`, `env/`, `installation_paths.env`
 
-Defines the complete service topology: 20 containers on a single `omero` bridge network. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
+Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled; the one-shot `redis-sysctl-init` helper exits after Redis startup. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
 
 Key design decisions:
 - Two PostgreSQL instances: `database` (OMERO core, port 5432) and `database_plugin` (OMERO plugin data, port 5433) for isolation.

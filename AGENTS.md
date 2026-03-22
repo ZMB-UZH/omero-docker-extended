@@ -24,7 +24,7 @@ It is intentionally short. Deep context lives in the files it points to.
 
 ## Where to look first
 
-1. **`README.md`** -- deployment scope, service topology (17 containers), plugin summaries, quick start.
+1. **`README.md`** -- deployment scope, service topology (20 Compose services total: 18 long-running runtime containers by default, 19 when the profile-gated `crowdsec` service is enabled, plus the `redis-sysctl-init` startup helper), plugin summaries, quick start.
 2. **`ARCHITECTURE.md`** -- layer model, dependency boundaries, data flow, plugin structure.
 3. **`docs/index.md`** -- full documentation index with cross-links to every doc.
 4. **`docs/QUALITY_SCORE.md`** -- current quality grades and debt priorities.
@@ -34,7 +34,7 @@ It is intentionally short. Deep context lives in the files it points to.
 ## Domain map
 
 ### Infrastructure (Docker + runtime)
-- Service orchestration: `docker-compose.yml` (17 services, single `omero` network)
+- Service orchestration: `docker-compose.yml` (20 Compose services total: 18 long-running runtime containers by default, 19 when the profile-gated `crowdsec` service is enabled, plus the `redis-sysctl-init` startup helper; single `omero` network)
 - Image builds: `docker/omero-server.Dockerfile`, `docker/omero-web.Dockerfile`, `docker/omero-celery-worker.Dockerfile`, `docker/pg-maintenance.Dockerfile`, `docker/redis-sysctl-init.Dockerfile`
 - Bootstrap scripts: `startup/10-server-bootstrap.sh`, `startup/10-web-bootstrap.sh`, `startup/40-start-imaris-celery-worker.sh`, `startup/50-install-omero-downloader.sh`, `startup/51-install-imarisconvert.sh`
 - Process manager: `supervisord.conf` (OMERO.web + Celery worker in omeroweb container)

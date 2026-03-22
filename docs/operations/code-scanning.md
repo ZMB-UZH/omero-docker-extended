@@ -93,7 +93,7 @@ Last updated: 2026-03-15. Total open alerts: **~940** pre-config, **~370** post-
 |---|---|---|
 | `PinnedDependenciesID` (Scorecard) | 32 | Unpinned GitHub Actions, Dockerfiles, or pip installs |
 | `py/stack-trace-exposure` | 4 | Exception details exposed to users |
-| `SecurityPolicyID` (Scorecard) | 1 | No SECURITY.md in repository root |
+| `SecurityPolicyID` (Scorecard) | 1 | Repository root `SECURITY.md` was missing in the 2026-03-15 scan snapshot; fixed in-tree now and should clear on the next workflow refresh |
 | `FuzzingID` (Scorecard) | 1 | No fuzzing integration detected |
 
 ### Warning findings (192 alerts)
@@ -181,7 +181,7 @@ These categories may contain genuine issues that should be reviewed:
 1. Add branch protection requiring all security scanning checks to pass on pull requests.
 2. Add CI policy to fail builds when new `CRITICAL` or `HIGH` alerts are introduced.
 3. Pin all GitHub Actions to full commit SHAs (addresses 32 Scorecard `PinnedDependenciesID` findings).
-4. Add a `SECURITY.md` to the repository root (addresses Scorecard `SecurityPolicyID`).
+4. ~~Add a `SECURITY.md` to the repository root.~~ **Done in-tree**: the repository root now includes `SECURITY.md`, which points GitHub-native security surfaces at the canonical `docs/SECURITY.md` guidance. The Scorecard `SecurityPolicyID` finding should clear on the next workflow refresh.
 5. ~~Add image-level vulnerability scans for each built Docker image.~~ **Done**: Docker Scout two-phase scanning (pre-build baseline + post-build report) covers all images in `docker-compose.yml` — both custom-built and third-party. Interactive installs default security hardening to enabled, vulnerability scanning remains opt-in, and the hardening pass preserves locale data while applying OS and Python package upgrades. See `docs/SECURITY.md`.
 6. Evaluate adding fuzz testing for parser code (`filename_parser.py`, `sem_edx_parser.py`).
 

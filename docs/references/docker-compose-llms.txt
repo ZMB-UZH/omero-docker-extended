@@ -1,7 +1,7 @@
 Docker Compose reference notes for AI agent workflows.
 
 Service topology (docker-compose.yml):
-- 20 services on a single "omero" bridge network.
+- 20 Compose services total on a single "omero" bridge network: 18 long-running runtime containers by default, 19 when the profile-gated crowdsec service is enabled, plus the one-shot redis-sysctl-init helper during Redis startup.
 - All services have explicit healthcheck: blocks (interval 10s, timeout 10s, retries 30).
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
@@ -31,7 +31,7 @@ Monitoring services:
 - postgres-exporter-plugin: plugin database metrics.
 - redis-exporter: Redis metrics.
 - path-usage-exporter: custom Python 3.12 service exporting host path usage metrics via node-exporter textfile collector.
-- crowdsec (port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
+- crowdsec (profile-gated, port 8080): host-wide cybersecurity engine for host syslog/auth and Docker log analysis.
 
 Environment files:
 - installation_paths.env: 15 host filesystem path variables consumed by volume mounts.
@@ -48,12 +48,12 @@ Volume mount patterns:
 - Docker socket mounted read-only in omeroweb for admin tools container stats.
 - Monitoring configs mounted read-only from ./monitoring/ directories.
 
-Compose commands (always include --env-file):
-- docker compose --env-file installation_paths.env build
-- docker compose --env-file installation_paths.env up -d
-- docker compose --env-file installation_paths.env ps
-- docker compose --env-file installation_paths.env down
-- docker compose --env-file installation_paths.env logs -f <service>
+Compose commands (explicit manual form: include both env files when not relying on repo-root `.env`):
+- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env build
+- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env up -d
+- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env ps
+- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env down
+- docker compose --env-file installation_paths.env --env-file env/omero_secrets.env logs -f <service>
 
 Network: single "omero" bridge network. All services communicate by service name/alias.
 Only 7 services expose host ports: omeroserver (4064), omeroweb (4090), portainer (9000/9443), prometheus (9090), grafana (3000), loki (3100), crowdsec (8080).
