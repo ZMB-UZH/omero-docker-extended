@@ -1059,18 +1059,17 @@ def test_import_object_pattern_matches_standard_cli_output():
 
 
 def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_path: Path, monkeypatch):
-    """When the OMERO CLI returns exit-code 0 but stdout contains no imported
-    object IDs, the result must be an error, not a false success."""
+    """Malformed Zarr metadata must fail before any fallback import path is
+    attempted."""
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "broken.zarr" / ".zattrs"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
     staged_file.write_text("x", encoding="utf-8")
 
-    def fake_import_file(conn, session_key, host, port, path, dataset_id, import_name=None, progress_job=None):
-        # CLI returned success (exit 0) but produced no object IDs in stdout
-        return True, "Some diagnostic output with no objects\n", ""
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("_import_file should not be called for malformed zarr metadata")
 
-    monkeypatch.setattr(core_functions, "_import_file", fake_import_file)
+    monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
     monkeypatch.setattr(
         core_functions,
         "_build_import_name_normalization_context",
@@ -1094,7 +1093,7 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_pat
     )
 
     assert result["status"] == "error"
-    assert "no images were created" in result["entry_error"].lower()
+    assert "failed to read zarr metadata" in result["entry_error"].lower()
 
 
 def test_import_job_entry_succeeds_when_stdout_contains_image_id(tmp_path: Path, monkeypatch):
@@ -1300,10 +1299,11 @@ def test_ome_ngff_zarr_uses_cli_zarr_import(tmp_path: Path, monkeypatch):
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
     (zarr_dir / "0").mkdir(parents=True, exist_ok=True)
     (zarr_dir / ".zattrs").write_text(
-        '{"multiscales": [{"version": "0.4", "axes": [], "datasets": [{"path": "0"}]}]}',
+        '{"multiscales": [{"version": "0.4", "axes": [{"name": "y"}, {"name": "x"}], "datasets": [{"path": "0", "coordinateTransformations": [{"type": "scale", "scale": [1.0, 1.0]}]}]}]}',
         encoding="utf-8",
     )
     (zarr_dir / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+    (zarr_dir / "0" / ".zarray").write_text('{"shape":[1,1],"dtype":"<u2"}', encoding="utf-8")
 
     monkeypatch.setattr(
         core_functions,
@@ -1347,6 +1347,68 @@ def test_ome_ngff_zarr_uses_cli_zarr_import(tmp_path: Path, monkeypatch):
     )
 
     assert called["value"], "_import_zarr_via_cli was not called for OME-NGFF zarr"
+    assert result["status"] == "imported"
+
+
+def test_bioformats2raw_zarr_uses_cli_zarr_import(tmp_path: Path, monkeypatch):
+    """bioformats2raw-layout image stores supported by omero-cli-zarr must
+    also use the native ``omero zarr import`` path."""
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "bf2raw.ome.zarr"
+    series_dir = zarr_dir / "0"
+    array_dir = series_dir / "0"
+    array_dir.mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text('{"bioformats2raw.layout": 3}', encoding="utf-8")
+    (series_dir / ".zattrs").write_text(
+        '{"multiscales": [{"version": "0.4", "axes": [{"name": "y"}, {"name": "x"}], "datasets": [{"path": "0", "coordinateTransformations": [{"type": "scale", "scale": [1.0, 1.0]}]}]}]}',
+        encoding="utf-8",
+    )
+    (array_dir / ".zarray").write_text('{"shape":[1,1],"dtype":"<u2"}', encoding="utf-8")
+
+    monkeypatch.setattr(
+        core_functions,
+        "_build_import_name_normalization_context",
+        lambda entry, dataset_id: None,
+    )
+
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("_import_file should not be called for bioformats2raw zarr")
+
+    monkeypatch.setattr(core_functions, "_import_file", must_not_be_called)
+    _patch_background_import_session(monkeypatch)
+
+    called = {"value": False}
+
+    def mock_zarr_import(**kwargs):
+        called["value"] = True
+        return {
+            "cleanup_staged_paths": kwargs.get("cleanup_staged_paths", []),
+            "covered_indexes": kwargs.get("covered_indexes", []),
+            "covered_relative_paths": kwargs.get("covered_relative_paths", []),
+            "index": kwargs.get("entry", {}).get("index"),
+            "status": "imported",
+            "rel_path": "bf2raw.ome.zarr",
+            "file_path": zarr_dir,
+        }
+
+    monkeypatch.setattr(core_functions, "_import_zarr_via_cli", mock_zarr_import)
+
+    result = core_functions._import_job_entry(
+        {
+            "relative_path": "bf2raw.ome.zarr",
+            "staged_path": "_staged/bf2raw.ome.zarr",
+            "covered_indexes": [0],
+            "covered_relative_paths": ["bf2raw.ome.zarr/.zattrs"],
+        },
+        upload_root,
+        "session-key",
+        "omeroserver",
+        4064,
+        {},
+        None,
+    )
+
+    assert called["value"], "_import_zarr_via_cli was not called for bioformats2raw zarr"
     assert result["status"] == "imported"
 
 

@@ -205,26 +205,35 @@ def _reject_symlinks(path: Path) -> None:
                 raise RuntimeError(f"Symlinks are not allowed in staged Zarrs: {current_path}")
 
 
-def _existing_user_prefix_dir(
+def _user_prefix_dir(
     config: dict[str, str],
     group_name: str,
     username: str,
     when: datetime,
+    *,
+    create_missing: bool,
 ) -> tuple[Path, list[str]]:
     managed_root = _managed_repository_root(config)
     prefix_parts, suffix_parts = _render_repo_template(config, group_name, username, when)
-    prefix_dir = (managed_root / Path(*prefix_parts)).resolve(strict=False)
-    try:
-        prefix_dir.relative_to(managed_root)
-    except ValueError as exc:
-        raise RuntimeError(
-            f"Managed-repository prefix escaped its root: {prefix_dir}"
-        ) from exc
-    if not prefix_dir.exists() or not prefix_dir.is_dir():
-        raise RuntimeError(
-            "Managed-repository user prefix does not exist yet and must be created "
-            f"by OMERO.server first: {prefix_dir}"
-        )
+    prefix_dir = managed_root
+    for part in prefix_parts:
+        prefix_dir = (prefix_dir / part).resolve(strict=False)
+        try:
+            prefix_dir.relative_to(managed_root)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Managed-repository prefix escaped its root: {prefix_dir}"
+            ) from exc
+        if create_missing:
+            prefix_dir.mkdir(parents=False, exist_ok=True)
+        elif not prefix_dir.exists() or not prefix_dir.is_dir():
+            raise RuntimeError(
+                "Managed-repository user prefix does not exist yet and must be created "
+                f"by OMERO.server first: {prefix_dir}"
+            )
+        if not prefix_dir.is_dir():
+            raise RuntimeError(f"Managed-repository prefix path is not a directory: {prefix_dir}")
+        os.chmod(prefix_dir, 0o755)
     return prefix_dir, suffix_parts
 
 
@@ -280,7 +289,13 @@ def _stage_zarr(config: dict[str, str], source_path: str, group_name: str, usern
     source = _validate_source_path(config, source_path)
     _reject_symlinks(source)
     managed_root = _managed_repository_root(config)
-    prefix_dir, suffix_parts = _existing_user_prefix_dir(config, group_name, username, when)
+    prefix_dir, suffix_parts = _user_prefix_dir(
+        config,
+        group_name,
+        username,
+        when,
+        create_missing=True,
+    )
     target_dir = _ensure_suffix_dir(managed_root, prefix_dir, suffix_parts)
     destination = _allocate_destination_dir(target_dir, source.name)
     shutil.copytree(source, destination)
@@ -291,7 +306,13 @@ def _stage_zarr(config: dict[str, str], source_path: str, group_name: str, usern
 def _cleanup_zarr(config: dict[str, str], managed_path: str, group_name: str, username: str) -> Path:
     when = datetime.now()
     managed_root = _managed_repository_root(config)
-    prefix_dir, _ = _existing_user_prefix_dir(config, group_name, username, when)
+    prefix_dir, _ = _user_prefix_dir(
+        config,
+        group_name,
+        username,
+        when,
+        create_missing=False,
+    )
     target = Path(str(managed_path or "")).resolve(strict=False)
     try:
         target.relative_to(managed_root)
