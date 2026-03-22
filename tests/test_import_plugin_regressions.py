@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import tempfile
 import types
@@ -48,6 +49,7 @@ def _install_import_stubs():
 
     if "omero" not in sys.modules:
         omero_module = types.ModuleType("omero")
+        omero_module.__path__ = []
         omero_gateway = types.ModuleType("omero.gateway")
         omero_gateway.BlitzGateway = type("BlitzGateway", (), {})
         omero_model = types.ModuleType("omero.model")
@@ -55,11 +57,17 @@ def _install_import_stubs():
         omero_model.ProjectDatasetLinkI = type("ProjectDatasetLinkI", (), {})
         omero_model.ProjectI = type("ProjectI", (), {})
         omero_rtypes = types.ModuleType("omero.rtypes")
+        omero_rtypes.rint = lambda value: value
         omero_rtypes.rstring = lambda value: value
+        omero_scripts = types.ModuleType("omero.scripts")
+        omero_scripts.String = lambda *args, **kwargs: ("String", args, kwargs)
+        omero_scripts.client = lambda *args, **kwargs: None
         sys.modules["omero"] = omero_module
         sys.modules["omero.gateway"] = omero_gateway
         sys.modules["omero.model"] = omero_model
         sys.modules["omero.rtypes"] = omero_rtypes
+        sys.modules["omero.scripts"] = omero_scripts
+        omero_module.scripts = omero_scripts
 
     if "omeroweb.decorators" not in sys.modules:
         omeroweb_module = types.ModuleType("omeroweb")
@@ -140,6 +148,22 @@ _install_import_stubs()
 
 from omeroweb_import.views import core_functions
 from omeroweb_import.views import index_view
+
+
+def _load_manage_zarr_script_module():
+    module_path = (
+        REPO_ROOT
+        / "omeroweb_import"
+        / "omero_scripts"
+        / "Manage_Zarr_ManagedRepository.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "manage_zarr_managed_repository_test_module",
+        module_path,
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class ImportPluginRegressionTests(TestCase):
@@ -302,24 +326,304 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("Cannot join ***", sanitized)
         self.assertNotIn("12345678-1234-1234-1234-123456789abc", sanitized)
 
-    def test_build_zarr_store_destination_dir_uses_flat_sanitized_child(self):
-        fixed_now = real_datetime(2026, 3, 22, 9, 51, 15, 243000)
+    def test_extract_script_outputs_parses_named_lines(self):
+        outputs = core_functions._extract_script_outputs(
+            "\n".join(
+                [
+                    "Managed_Path=/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr",
+                    "* Message=staged",
+                    "ignored line",
+                ]
+            )
+        )
 
-        with mock.patch.object(core_functions, "OMERO_ZARR_STORE_ROOT", Path("/OMERO/OME-Zarr")), \
-            mock.patch.object(core_functions, "datetime") as mock_datetime, \
-            mock.patch.object(core_functions.uuid, "uuid4", return_value=types.SimpleNamespace(hex="deadbeefcafebabe")):
-            mock_datetime.now.return_value = fixed_now
+        self.assertEqual(
+            {
+                "Managed_Path": "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr",
+                "Message": "staged",
+            },
+            outputs,
+        )
 
-            path = core_functions._build_zarr_store_destination_dir(
-                "te/st user",
-                "users private",
+    def test_find_script_id_by_name_prefers_import_scripts_path(self):
+        def script(name, path, sid):
+            return types.SimpleNamespace(
+                name=types.SimpleNamespace(val=name),
+                path=types.SimpleNamespace(val=path),
+                id=types.SimpleNamespace(val=sid),
             )
 
-        self.assertEqual(Path("/OMERO/OME-Zarr"), path.parent)
-        self.assertEqual(
-            "users_private__te_st_user__2026-03-22T09-51-15.243__deadbeef",
-            path.name,
+        scripts = [
+            script(
+                "Manage_Zarr_ManagedRepository.py",
+                "/OMERO/other/Manage_Zarr_ManagedRepository.py",
+                11,
+            ),
+            script(
+                "Manage_Zarr_ManagedRepository.py",
+                "/OMERO/omero/import_scripts/Manage_Zarr_ManagedRepository.py",
+                37,
+            ),
+            script(
+                "Manage_Zarr_ManagedRepository.py",
+                "/OMERO/omero/import_scripts/Manage_Zarr_ManagedRepository.py",
+                18,
+            ),
+        ]
+        conn = types.SimpleNamespace(
+            getScriptService=lambda: types.SimpleNamespace(getScripts=lambda: scripts),
+            c=types.SimpleNamespace(sf=types.SimpleNamespace(getScriptService=lambda: None)),
         )
+
+        script_id = core_functions._find_script_id_by_name(
+            conn,
+            "Manage_Zarr_ManagedRepository.py",
+            preferred_path_fragment="omero/import_scripts",
+        )
+
+        self.assertEqual(37, script_id)
+
+    def test_run_zarr_managed_repo_script_launches_expected_cli_command(self):
+        completed = subprocess.CompletedProcess(
+            args=["omero"],
+            returncode=0,
+            stdout="\n".join(
+                [
+                    "Managed_Path=/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr",
+                    "Message=staged",
+                ]
+            ),
+            stderr="",
+        )
+        admin_conn = types.SimpleNamespace(close=lambda: None)
+
+        with mock.patch.object(
+            core_functions,
+            "_open_admin_connection",
+            return_value=admin_conn,
+        ), mock.patch.object(
+            core_functions,
+            "_find_script_id_by_name",
+            return_value=42,
+        ), mock.patch.object(
+            core_functions,
+            "_get_import_timeout_seconds",
+            return_value=120,
+        ), mock.patch.object(
+            core_functions,
+            "_get_root_password",
+            return_value="root-secret",
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={"TEST_ENV": "1"},
+        ), mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            return_value=completed,
+        ) as run_mock:
+            ok, outputs, message = core_functions._run_zarr_managed_repo_script(
+                "stage",
+                "omeroserver",
+                4064,
+                username="test",
+                group_name="users_private",
+                source_path=Path("/tmp/job/sample.zarr"),
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(
+            "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr",
+            outputs["Managed_Path"],
+        )
+        self.assertEqual("staged", message)
+
+        command = run_mock.call_args.args[0]
+        env = run_mock.call_args.kwargs["env"]
+        self.assertEqual(core_functions.OMERO_CLI, command[0])
+        self.assertEqual(
+            [
+                "-q",
+                "-s",
+                "omeroserver",
+                "-p",
+                "4064",
+                "-u",
+                "root",
+                "script",
+                "launch",
+                "42",
+            ],
+            command[1:11],
+        )
+        self.assertEqual("root-secret", env["OMERO_PASSWORD"])
+        self.assertEqual("stage", command[11].split("=", 1)[1])
+        self.assertEqual("users_private", command[12].split("=", 1)[1])
+        self.assertEqual("test", command[13].split("=", 1)[1])
+        self.assertEqual("/tmp/job/sample.zarr", command[14].split("=", 1)[1])
+
+    def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(self):
+        admin_conn = types.SimpleNamespace(close=lambda: None)
+        results = [
+            subprocess.CompletedProcess(
+                args=["omero"],
+                returncode=1,
+                stdout="",
+                stderr="omero.NoProcessorAvailable: No processor available! [1 response(s)]",
+            ),
+            subprocess.CompletedProcess(
+                args=["omero"],
+                returncode=0,
+                stdout="Managed_Path=/OMERO/ManagedRepository/users_private/test/retried.zarr\nMessage=staged",
+                stderr="",
+            ),
+        ]
+
+        with mock.patch.object(
+            core_functions,
+            "_open_admin_connection",
+            return_value=admin_conn,
+        ), mock.patch.object(
+            core_functions,
+            "_find_script_id_by_name",
+            return_value=42,
+        ), mock.patch.object(
+            core_functions,
+            "_get_root_password",
+            return_value="root-secret",
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={},
+        ), mock.patch.object(
+            core_functions,
+            "_get_import_timeout_seconds",
+            return_value=120,
+        ), mock.patch.object(
+            core_functions,
+            "_get_script_start_timeout_seconds",
+            return_value=60,
+        ), mock.patch.object(
+            core_functions,
+            "_get_script_start_retry_seconds",
+            return_value=1,
+        ), mock.patch.object(
+            core_functions.time,
+            "sleep",
+            return_value=None,
+        ) as sleep_mock, mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            side_effect=results,
+        ) as run_mock:
+            ok, outputs, message = core_functions._run_zarr_managed_repo_script(
+                "stage",
+                "omeroserver",
+                4064,
+                username="test",
+                group_name="users_private",
+                source_path=Path("/tmp/job/sample.zarr"),
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual("/OMERO/ManagedRepository/users_private/test/retried.zarr", outputs["Managed_Path"])
+        self.assertEqual("staged", message)
+        self.assertEqual(2, run_mock.call_count)
+        sleep_mock.assert_called_once_with(1)
+
+    def test_import_zarr_via_cli_cleans_managed_path_when_no_objects_are_created(self):
+        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_parent = shared_source.parent
+
+        with mock.patch.object(
+            core_functions,
+            "_prepare_server_readable_zarr_source",
+            return_value=(shared_source, shared_parent, None),
+        ), mock.patch.object(
+            core_functions,
+            "_run_zarr_managed_repo_script",
+            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_shared_zarr_transfer",
+        ) as cleanup_transfer_mock, mock.patch.object(
+            core_functions,
+            "_build_omero_cli_command",
+            return_value=["omero", "zarr", "import"],
+        ), mock.patch.object(
+            core_functions,
+            "_build_cli_env",
+            return_value={"TEST_ENV": "1"},
+        ), mock.patch.object(
+            core_functions.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                args=["omero", "zarr", "import"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ), mock.patch.object(
+            core_functions,
+            "_verify_import_via_api",
+            return_value=[],
+        ), mock.patch.object(
+            core_functions,
+            "_cleanup_managed_zarr_path",
+        ) as cleanup_mock:
+            result = core_functions._import_zarr_via_cli(
+                file_path=Path("/tmp/job/sample.zarr"),
+                session_key="session-key",
+                host="omeroserver",
+                port=4064,
+                dataset_id=7,
+                import_name="sample.zarr",
+                rel_path="sample.zarr",
+                entry={"index": 3},
+                cleanup_staged_paths=["_staged/sample.zarr"],
+                covered_indexes=[3],
+                covered_relative_paths=["sample.zarr/.zattrs"],
+                group_id=4,
+                progress_job=None,
+                username="test",
+                group_name="users_private",
+            )
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("no images were created", result["entry_error"].lower())
+        cleanup_transfer_mock.assert_called_once_with(shared_parent)
+        cleanup_mock.assert_called_once_with(
+            "omeroserver",
+            4064,
+            username="test",
+            group_name="users_private",
+            managed_path=managed_path,
+        )
+
+    def test_prepare_server_readable_zarr_source_copies_into_shared_transfer_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            source = tmp_root / "upload" / "sample.zarr"
+            (source / "nested").mkdir(parents=True)
+            (source / ".zattrs").write_text("{}", encoding="utf-8")
+            (source / "nested" / "0.bin").write_bytes(b"abc")
+            transfer_root = tmp_root / "shared-transfer"
+            transfer_root.mkdir()
+
+            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root):
+                shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
+
+            self.assertIsNone(error)
+            self.assertIsNotNone(shared_source)
+            self.assertIsNotNone(shared_parent)
+            self.assertTrue(shared_source.is_dir())
+            self.assertEqual("sample.zarr", shared_source.name)
+            self.assertEqual("{}", (shared_source / ".zattrs").read_text(encoding="utf-8"))
+            self.assertEqual(b"abc", (shared_source / "nested" / "0.bin").read_bytes())
+            self.assertEqual(0o711, shared_parent.stat().st_mode & 0o777)
+            self.assertEqual(0o755, shared_source.stat().st_mode & 0o777)
+            self.assertEqual(0o644, (shared_source / "nested" / "0.bin").stat().st_mode & 0o777)
 
     def test_background_import_session_closes_created_session_object(self):
         fake_session = types.SimpleNamespace(
@@ -973,6 +1277,82 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("word-break: break-word;", styles)
         self.assertIn("margin-left: 0;", styles)
         self.assertIn("padding-left: 0;", styles)
+
+
+class ManageZarrManagedRepositoryScriptTests(TestCase):
+    @staticmethod
+    def _server_config(tmpdir: str, tmp_root: Path) -> dict[str, str]:
+        return {
+            "omero.data.dir": str(Path(tmpdir) / "data"),
+            "omero.managed.dir": "ManagedRepository",
+            "omero.fs.repo.path": "%group%/%user%/%year%-%month%-%day%/%time%",
+            "omero.web.import.shared_tmp_path": str(tmp_root),
+        }
+
+    def test_stage_zarr_uses_existing_user_prefix_and_template_suffix(self):
+        manage_script = _load_manage_zarr_script_module()
+        fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir) / "tmp"
+            source = tmp_root / "job-1" / "sample.ome.zarr"
+            payload_file = source / "0" / "0"
+            payload_file.parent.mkdir(parents=True, exist_ok=True)
+            payload_file.write_text("pixels", encoding="utf-8")
+
+            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
+            user_prefix = managed_root / "users_private" / "test"
+            user_prefix.mkdir(parents=True, exist_ok=True)
+            server_config = self._server_config(tmpdir, tmp_root)
+
+            with mock.patch.object(manage_script, "datetime") as mock_datetime:
+                mock_datetime.now.return_value = fixed_now
+                destination = manage_script._stage_zarr(
+                    server_config,
+                    str(source),
+                    "users_private",
+                    "test",
+                )
+
+            self.assertEqual(
+                user_prefix / "2026-03-22" / "09-51-15" / "sample.ome.zarr",
+                destination,
+            )
+            self.assertTrue((destination / "0" / "0").is_file())
+            self.assertEqual(0o755, destination.stat().st_mode & 0o777)
+            self.assertEqual(0o644, (destination / "0" / "0").stat().st_mode & 0o777)
+
+    def test_shared_tmp_root_requires_persisted_server_config(self):
+        manage_script = _load_manage_zarr_script_module()
+        with self.assertRaisesRegex(RuntimeError, "omero.web.import.shared_tmp_path"):
+            manage_script._shared_tmp_root({})
+
+    def test_stage_zarr_requires_server_created_user_prefix(self):
+        manage_script = _load_manage_zarr_script_module()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir) / "tmp"
+            source = tmp_root / "job-1" / "sample.zarr"
+            (source / "0").mkdir(parents=True, exist_ok=True)
+            (source / "0" / "0").write_text("pixels", encoding="utf-8")
+            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
+            managed_root.mkdir(parents=True, exist_ok=True)
+            server_config = self._server_config(tmpdir, tmp_root)
+
+            with self.assertRaisesRegex(RuntimeError, "must be created by OMERO.server first"):
+                manage_script._stage_zarr(server_config, str(source), "users_private", "test")
+
+    def test_cleanup_zarr_rejects_path_outside_user_prefix(self):
+        manage_script = _load_manage_zarr_script_module()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
+            (managed_root / "users_private" / "test").mkdir(parents=True, exist_ok=True)
+            outside_path = managed_root / "users_private" / "other" / "2026-03-22" / "09-51-15" / "sample.zarr"
+            server_config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
+
+            with self.assertRaisesRegex(RuntimeError, "outside the allowed user prefix"):
+                manage_script._cleanup_zarr(server_config, str(outside_path), "users_private", "test")
 
 
 if __name__ == "__main__":
