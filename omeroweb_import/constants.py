@@ -13,4 +13,4 @@ OMERO_WEB_ROOT = os.environ.get("OMERO_WEB_ROOT", "/opt/omero/web")
 OMERO_WEB_VENV = os.environ.get("OMERO_WEB_VENV", "venv-3.12")
 
 OMERO_CLI = os.path.join(OMERO_WEB_ROOT, OMERO_WEB_VENV, "bin", "omero")
-OMERO_IMPORT_SCAN_DEPTH = 10
+OMERO_IMPORT_SCAN_DEPTH = 15
