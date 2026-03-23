@@ -110,6 +110,7 @@ def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(monkeypatch, 
 def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(monkeypatch, tmp_path) -> None:
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
+    monkeypatch.setenv("BIOFORMATS_VERSION", "8.5.0")
 
     install_dir = tmp_path / "imarisconvert"
 

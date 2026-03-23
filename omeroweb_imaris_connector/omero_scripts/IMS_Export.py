@@ -15,14 +15,12 @@ import re
 import hashlib
 from datetime import datetime
 
-from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, get_env
+from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, ENV_FILE_OMEROSERVER, get_env
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
 BIOFORMATS_ARTIFACTS_SUBDIR = os.path.join("artifacts", BIOFORMATS_SUBDIR)
 BIOFORMATS_JAR_NAME = "bioformats_package.jar"
-# Keep this in sync with startup/51-install-imarisconvert.sh
-BIOFORMATS_URL = "https://downloads.openmicroscopy.org/bio-formats/8.4.0/artifacts/bioformats_package.jar"
 BIOFORMATS_MIN_SIZE_BYTES = 10_000_000
 DEFAULT_TIMEOUT_SECONDS = 600
 
@@ -105,6 +103,8 @@ def _ensure_bioformats_jar(install_dir):
             print(f"Restored Bio-Formats jar from local cache: {cache_path}")
             return jar_path
 
+    bf_version = get_env("BIOFORMATS_VERSION", env_file=ENV_FILE_OMEROSERVER)
+    bf_url = f"https://downloads.openmicroscopy.org/bio-formats/{bf_version}/artifacts/{BIOFORMATS_JAR_NAME}"
     print(f"ERROR: Missing Bio-Formats jar at: {jar_path}")
     print(
         "ERROR: Refusing runtime network download for security reasons. "
@@ -112,7 +112,7 @@ def _ensure_bioformats_jar(install_dir):
         "and its internal repair copy are auto-provisioned during startup."
     )
     print(f"ERROR: Expected local cache path: {cache_path}")
-    print(f"ERROR: Expected Bio-Formats source URL during build time: {BIOFORMATS_URL}")
+    print(f"ERROR: Expected Bio-Formats source URL during build time: {bf_url}")
     return None
 
 
