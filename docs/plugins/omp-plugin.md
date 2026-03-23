@@ -8,7 +8,7 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 
 - Project and dataset selection for target images.
 - Filename parsing via configurable regex patterns with separator detection.
-- AI-assisted parsing support (OpenAI, Anthropic, Google, Mistral) for regex suggestions and value extraction.
+- AI-assisted parsing support (Claude, Gemini, Groq, Perplexity, xAI, Cohere, Local) for regex suggestions and value extraction.
 - Variable set save/load/delete with per-user PostgreSQL persistence in `database_plugin`.
 - Progress-tracked background jobs for metadata writing and deletion.
 - Hash-based annotation ownership for safe plugin-only deletion (`omp_hash` / `omphash_v1:` prefix).
@@ -27,6 +27,8 @@ The OMP plugin provides a workflow for parsing scientific image filenames into s
 | `/omeroweb_omp_plugin/start_acq_job/` | POST | Start acquisition metadata job |
 | `/omeroweb_omp_plugin/start_delete_all_job/` | POST | Start delete-all annotations job |
 | `/omeroweb_omp_plugin/start_delete_plugin_job/` | POST | Start delete plugin-owned annotations job |
+| `/omeroweb_omp_plugin/delete_all/` | POST | Delete all MapAnnotations from selected images (direct, non-job) |
+| `/omeroweb_omp_plugin/delete_plugin/` | POST | Delete plugin-owned MapAnnotations from selected images (direct, non-job) |
 | `/omeroweb_omp_plugin/progress/<job_id>/` | GET | Poll job progress |
 | `/omeroweb_omp_plugin/varsets/` | GET | List saved variable sets |
 | `/omeroweb_omp_plugin/varsets/save/` | POST | Save a variable set |
@@ -71,7 +73,7 @@ omeroweb_omp_plugin/
 │   ├── core.py                # Backward compatibility layer
 │   ├── data_store.py          # PostgreSQL persistence (variable sets, credentials, settings)
 │   ├── ai_assist.py           # AI-powered parsing orchestration
-│   ├── ai_providers.py        # Provider-specific API clients (OpenAI, Anthropic, Google, Mistral)
+│   ├── ai_providers.py        # Provider-specific API clients (Claude, Gemini, Groq, Perplexity, xAI, Cohere, Local)
 │   ├── filename_utils.py      # Separator detection and regex generation
 │   ├── http_utils.py          # HTTP client helpers
 │   ├── rate_limit.py          # Per-user rate limiting

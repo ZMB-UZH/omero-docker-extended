@@ -38,7 +38,13 @@ Base: `/omeroweb_omp_plugin/`
 |---|---|
 | `/` | Main plugin page |
 | `/projects/` | Project and dataset listing |
+| `/root-status/` | Check if current user is OMERO root |
 | `/start_job/` | Start metadata write job |
+| `/start_acq_job/` | Start acquisition metadata job |
+| `/start_delete_all_job/` | Start delete-all annotations job |
+| `/start_delete_plugin_job/` | Start delete plugin-owned annotations job |
+| `/delete_all/` | Delete all MapAnnotations (direct, non-job) |
+| `/delete_plugin/` | Delete plugin-owned MapAnnotations (direct, non-job) |
 | `/progress/<job_id>/` | Poll job progress |
 | `/varsets/`, `/varsets/save/`, `/varsets/load/`, `/varsets/delete/` | Variable set CRUD |
 | `/ai-credentials/`, `/ai-credentials/save/`, `/ai-credentials/test/`, `/ai-credentials/models/` | AI credential management |
@@ -59,8 +65,11 @@ Base: `/omeroweb_import/`
 | `/confirm/<job_id>/` | Confirm import completion |
 | `/prune/<job_id>/` | Remove temporary files |
 | `/status/<job_id>/` | Poll job status |
+| `/projects/` | List accessible projects |
+| `/root-status/` | Check if current user is OMERO root |
 | `/user-settings/save/` | Save upload preferences |
-| `/special-method-settings/save/`, `/load/`, `/delete/` | SEM-EDX method settings |
+| `/special-method-settings/save/`, `/load/` | SEM-EDX method settings |
+| `/help/` | Help Markdown document download |
 
 ### OMERO.web Zarr Plugin
 
@@ -68,6 +77,7 @@ Base: `/zarr/`
 
 | Route | Purpose |
 |---|---|
+| `/` | Landing page |
 | `/preview/image/<image_id>/` | Zarr-aware right-panel preview page for store-backed images |
 | `/download/image/<image_id>/original/` | Download original managed-repository Zarr store as a zip archive |
 | `/download/image/<image_id>/metadata/` | Download consolidated metadata manifest for the managed store |
@@ -90,14 +100,22 @@ Base: `/omeroweb_admin_tools/`
 | Route | Purpose |
 |---|---|
 | `/` | Main admin dashboard |
+| `/root-status/` | Check if current user is OMERO root |
 | `/logs/`, `/logs/data/`, `/logs/internal-labels/` | Log exploration and data |
 | `/resource-monitoring/`, `/resource-monitoring/data/` | Container stats and system info |
 | `/resource-monitoring/grafana-proxy/<subpath>` | Grafana API proxy |
 | `/resource-monitoring/prometheus-proxy/<subpath>` | Prometheus API proxy |
 | `/storage/`, `/storage/data/` | Storage analytics |
+| `/storage/quota/data/` | Fetch persisted group quota state |
+| `/storage/quota/update/` | Update quota values |
+| `/storage/quota/import/` | Import quota values from CSV |
+| `/storage/quota/template/` | Download CSV template for quota import |
 | `/server-database-testing/`, `/server-database-testing/run/` | Diagnostic scripts |
+| `/help/` | Help Markdown document download |
 
 ### Imaris Connector
+
+Base: `/omeroweb_imaris_connector/`
 
 | Route | Purpose |
 |---|---|
