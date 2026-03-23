@@ -1,4 +1,5 @@
 import base64
+import importlib
 import logging
 import time
 import traceback
@@ -436,6 +437,52 @@ def _select_marshaled_key(payload, key):
     return None if result == {} else result
 
 
+def _safe_regular_image_marshal(original_image_marshal, image, key=None, request=None):
+    try:
+        return original_image_marshal(image, key=key, request=request)
+    except Exception as exc:
+        if not is_known_tile_size_failure(exc):
+            raise
+        payload = _marshal_regular_image_data_with_safe_tile_size(image, request)
+        if key is not None:
+            payload = _select_marshaled_key(payload, key)
+        return payload
+
+
+def _install_safe_image_marshal_overrides(webgateway_marshal):
+    if getattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False):
+        return webgateway_marshal.imageMarshal
+
+    original_image_marshal = webgateway_marshal.imageMarshal
+
+    @wraps(original_image_marshal)
+    def safe_image_marshal(image, key=None, request=None):
+        return _safe_regular_image_marshal(
+            original_image_marshal,
+            image,
+            key=key,
+            request=request,
+        )
+
+    webgateway_marshal.imageMarshal = safe_image_marshal
+    webgateway_marshal._omero_web_zarr_original_image_marshal = original_image_marshal
+    webgateway_marshal._omero_web_zarr_safe_image_marshal_installed = True
+
+    for module_name in (
+        "omeroweb.webgateway.views",
+        "omero_iviewer.views",
+        "omero_figure.views",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        if getattr(module, "imageMarshal", None) is not None:
+            module.imageMarshal = safe_image_marshal
+
+    return safe_image_marshal
+
+
 def _store_backed_image_data(image, request):
     node = load_store_backed_image_node(image)
     channels = _decorate_store_backed_channels(image, image.getChannels(noRE=True))
@@ -630,6 +677,7 @@ def _patch_urlpatterns(urlpatterns, replacements):
 
 def install_webgateway_overrides():
     try:
+        from omeroweb.webgateway import marshal as webgateway_marshal
         from omeroweb.webgateway import urls as webgateway_urls
         from omeroweb.webgateway import views as webgateway_views
         from omeroweb.webclient import webclient_gateway
@@ -638,6 +686,8 @@ def install_webgateway_overrides():
 
     if getattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False):
         return
+
+    _install_safe_image_marshal_overrides(webgateway_marshal)
 
     original_get_channels = webclient_gateway.ImageWrapper.getChannels
     original_image_data_json = webgateway_views.imageData_json
