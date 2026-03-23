@@ -147,7 +147,6 @@ def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
 def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_path, monkeypatch):
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=502, name="10150")
-    request = RequestFactory().get("/zarr/preview/image/502/")
     def fake_reverse(name, args=None, kwargs=None):
         if name == "omero_web_zarr_index":
             return "/zarr/"
@@ -163,7 +162,7 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_p
         fake_reverse,
     )
 
-    context = views._build_store_backed_preview_context(request, image)
+    context = views._build_store_backed_preview_context(None, image)
 
     assert context["image"] is image
     assert context["thumbnail_url"].endswith("/webclient/render_thumbnail/502/")
@@ -355,11 +354,14 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     views._fetch_remote_app_shell.cache_clear()
     monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
 
-    shell_request = RequestFactory().get("/zarr/vizarr/", {"source": "https://example.test/image.zarr"})
+    shell_request = RequestFactory().get("/zarr/vizarr/", {"source": "/zarr/v0.4/image/9.zarr"})
     shell_response = views.apps(shell_request, "vizarr", "")
+    shell_html = shell_response.content.decode("utf-8")
 
     assert shell_response.status_code == 200
-    assert '<base href="https://hms-dbmi.github.io/vizarr/">' in shell_response.content.decode("utf-8")
+    assert '<base href="https://hms-dbmi.github.io/vizarr/">' in shell_html
+    assert "window.location.origin" in shell_html
+    assert "history.replaceState" in shell_html
     assert shell_response["Cache-Control"] == "private, max-age=300"
 
     asset_request = RequestFactory().get("/zarr/vizarr/static/index.js")
@@ -367,3 +369,26 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
 
     assert asset_response.status_code == 302
     assert asset_response["Location"] == "https://hms-dbmi.github.io/vizarr/static/index.js"
+
+
+def test_inject_launcher_head_replaces_existing_base_tag():
+    html = '<html><head><base href="https://stale.example/"></head><body>validator</body></html>'
+
+    updated = views._inject_launcher_head(html, "https://ome.github.io/ome-ngff-validator/")
+
+    assert 'https://stale.example/' not in updated
+    assert '<base href="https://ome.github.io/ome-ngff-validator/">' in updated
+    assert updated.count("<base ") == 1
+    assert "window.location.origin" in updated
+
+
+def test_build_app_launch_url_quotes_root_relative_source(monkeypatch):
+    monkeypatch.setattr(
+        views,
+        "reverse",
+        lambda name, kwargs=None: f"/zarr/{kwargs['app']}/",
+    )
+
+    url = views._build_app_launch_url("validator", "/zarr/v0.4/image/1101.zarr")
+
+    assert url == "/zarr/validator/?source=/zarr/v0.4/image/1101.zarr"

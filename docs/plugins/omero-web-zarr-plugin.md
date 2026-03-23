@@ -79,6 +79,7 @@ The `/zarr/vizarr/` and `/zarr/validator/` routes serve a thin OMERO-hosted laun
 
 - the initial HTML shell is fetched from the upstream static app origin and cached briefly in-process;
 - a `<base href="...">` tag is injected so the browser resolves the app's relative assets correctly;
+- root-relative `source=` parameters are normalized client-side against the browser's actual origin before the upstream app reads them, so reverse-proxy public HTTPS origins are preserved without server-side URL guessing;
 - static asset requests are redirected to the upstream origin instead of proxying every JS/CSS/font request through Gunicorn workers.
 
 This keeps launcher behavior generic while avoiding worker starvation from synchronous per-asset proxying.
