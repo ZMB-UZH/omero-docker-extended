@@ -4,6 +4,12 @@
 
 The Import plugin manages staged file upload and controlled import into OMERO, including job lifecycle tracking, SEM-EDX spectrum processing, file attachment support, and configurable upload behavior.
 
+Related docs:
+
+- `import-plugin-workflow.md`
+- `omero-web-zarr-plugin.md`
+- `omero-web-zarr-workflow.md`
+
 ## Main capabilities
 
 - Upload session creation and browser-to-server file transfer.
@@ -33,6 +39,7 @@ The Import plugin manages staged file upload and controlled import into OMERO, i
 - **Zarr helper startup retries**: if OMERO script processors are temporarily not ready, the managed-repository helper launch retries for `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` with a sleep interval of `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` before the import is failed.
 - **Native Zarr metadata finalization**: after `omero zarr import`, the plugin reopens each created Image through `externalInfo.lsid`, parses the source metadata with the installed `omero-cli-zarr` runtime, and persists canonical pixel sizes onto OMERO's `Pixels` object. This closes a real gap in the runtime's API-created image path, where renderable NGFF imports can still arrive without persisted `PhysicalSizeX/Y/Z`. The plugin also normalizes shorthand NGFF length units such as `nm` and `µm` before saving, because the installed runtime only resolves full OMERO enum names on that path.
 - **Import success validation**: after every `omero import` or `omero zarr import` call, the plugin searches both stdout and stderr for imported OMERO object IDs (Image, Fileset, Plate, etc.), including `Created Image 123` style output from `omero zarr import`. For native Zarr imports it then verifies the created images against `Image.details.externalInfo.lsid` using the managed store path (exact match for pure NGFF image stores, path-prefix match for `bioformats2raw.layout` series imports), finalizes source-derived pixel metadata, and finally exercises thumbnail generation before reporting success.
+- **Post-import web contract**: once a native store-backed image is imported successfully, OMERO.web access to the managed store is handled by `omero_web_zarr`. Raw NGFF routes remain available for validation, while browser-facing preview and Vizarr launch use the preview-safe endpoint contract so slice browsing does not accidentally traverse multiscale levels that downsample non-display axes.
 - **Progress bar accuracy**: the orange import progress bar uses the higher of two signals (real `/proc/{pid}/io` monitoring and time-based asymptotic estimate) and enforces a high-water mark so the bar never goes backwards — not on refresh, not when new files are added, not under any circumstance. On browser refresh, progress state is restored from localStorage and bars jump instantly to their previous position. The blue bar uses `Math.floor` and caps at 99% while any import is still active, only reaching 100% when all jobs have completed.
 - Job lifecycle: start, upload, import, confirm, prune.
 - Job status polling for progress tracking.

@@ -62,6 +62,27 @@ Base: `/omeroweb_import/`
 | `/user-settings/save/` | Save upload preferences |
 | `/special-method-settings/save/`, `/load/`, `/delete/` | SEM-EDX method settings |
 
+### OMERO.web Zarr Plugin
+
+Base: `/zarr/`
+
+| Route | Purpose |
+|---|---|
+| `/preview/image/<image_id>/` | Zarr-aware right-panel preview page for store-backed images |
+| `/download/image/<image_id>/original/` | Download original managed-repository Zarr store as a zip archive |
+| `/download/image/<image_id>/metadata/` | Download consolidated metadata manifest for the managed store |
+| `/download/image/<image_id>/ome-tiff/` | Create and download OME-TIFF directly from the managed store |
+| `/v0.4/image/<image_id>.zarr/...` | Raw authenticated NGFF contract that exposes the underlying managed store |
+| `/v0.4/preview/image/<image_id>.zarr/...` | Preview-safe NGFF contract for browser viewing and Vizarr integration |
+| `/vizarr/` | Vizarr launcher page |
+| `/validator/` | NGFF validator launcher page |
+
+Notes:
+
+- Raw routes preserve the original dataset keys declared in the managed store.
+- Preview routes may renumber visible levels for the browser, but they resolve those preview levels back to the underlying dataset keys from store metadata.
+- Store-backed rendering and download routes apply only to images whose `externalInfo.lsid` resolves to a managed-repository Zarr store.
+
 ### Admin Tools Plugin
 
 Base: `/omeroweb_admin_tools/`
