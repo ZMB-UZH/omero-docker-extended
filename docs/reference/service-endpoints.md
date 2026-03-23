@@ -92,7 +92,7 @@ Notes:
 - Raw routes preserve the original dataset keys declared in the managed store.
 - Preview routes may renumber visible levels for the browser, but they resolve those preview levels back to the underlying dataset keys from store metadata.
 - Store-backed rendering and download routes apply only to images whose `externalInfo.lsid` resolves to a managed-repository Zarr store.
-- `/vizarr/` and `/validator/` serve a thin launcher shell from OMERO.web and redirect static assets to the upstream app origin instead of proxying every asset request through Gunicorn.
+- `/vizarr/` and `/validator/` serve a thin launcher shell from OMERO.web, normalize root-relative `source=` parameters against the browser's public origin, and redirect static assets to the upstream app origin instead of proxying every asset request through Gunicorn.
 
 ### Admin Tools Plugin
 
