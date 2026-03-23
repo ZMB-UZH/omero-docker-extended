@@ -144,6 +144,89 @@ class _FakeImageDataImage:
         return None
 
 
+class _FakeConfigService:
+    def getConfigValue(self, key):
+        assert key == "omero.pixeldata.max_tile_length"
+        return "1024"
+
+
+class _FakeConnForTileSize:
+    def getConfigService(self):
+        return _FakeConfigService()
+
+
+class _FakeResolution:
+    def __init__(self, size_x, size_y):
+        self.sizeX = size_x
+        self.sizeY = size_y
+
+
+class _FailingResolutionEngine:
+    def getResolutionLevels(self):
+        return 2
+
+    def getTileSize(self):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+    def getResolutionDescriptions(self):
+        return [_FakeResolution(1024, 512), _FakeResolution(512, 256)]
+
+    def getDefaultZ(self):
+        return 0
+
+    def getDefaultT(self):
+        return 0
+
+
+class _FakeRegularTileFailureImage(_FakeImageDataImage):
+    def __init__(self):
+        super().__init__()
+        self._re = _FailingResolutionEngine()
+        self._conn = _FakeConnForTileSize()
+
+    def _prepareRenderingEngine(self):
+        return True
+
+    def getPixelRange(self):
+        return (0, 65535)
+
+    def isGreyscaleRenderingModel(self):
+        return False
+
+    def isInvertedAxis(self):
+        return False
+
+
+class _PreparedRegionImage:
+    def __init__(self):
+        self._re = _FailingResolutionEngine()
+        self.calls = []
+
+    def _prepareRenderingEngine(self):
+        return True
+
+    def getSizeX(self):
+        return 1024
+
+    def getSizeY(self):
+        return 512
+
+    def renderJpegRegion(self, z, t, x, y, width, height, level=None, compression=None):
+        self.calls.append(
+            {
+                "z": z,
+                "t": t,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "level": level,
+                "compression": compression,
+            }
+        )
+        return b"jpeg"
+
+
 def test_decorate_store_backed_channels_applies_metadata(monkeypatch):
     monkeypatch.setattr(
         integration,
@@ -335,3 +418,66 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
         "t": 0,
         "level": 1,
     }
+
+
+def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
+    request = RequestFactory().get("/webclient/imgData/7/")
+    request.session = {
+        "server_settings": {
+            "viewer": {
+                "initial_zoom_level": 0,
+                "interpolate_pixels": True,
+            }
+        }
+    }
+    image = _FakeRegularTileFailureImage()
+
+    payload = integration._marshal_regular_image_data_with_safe_tile_size(image, request)
+
+    assert payload["tiles"] is True
+    assert payload["tile_size"] == {"width": 1024, "height": 512}
+    assert payload["levels"] == 2
+    assert payload["resolutions"] == {
+        0: {"sizeX": 1024, "sizeY": 512},
+        1: {"sizeX": 512, "sizeY": 256},
+    }
+    assert payload["zoomLevelScaling"] == {0: 1.0, 1: 0.5}
+
+
+def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(monkeypatch):
+    request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/",
+        {"tile": "0,1,2"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    image = _PreparedRegionImage()
+
+    from omeroweb.webgateway import views as webgateway_views
+
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda request, iid, server_id=None, conn=None: (image, 0.85),
+    )
+
+    response = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        3,
+        0,
+        conn=_FakeConnForTileSize(),
+    )
+
+    assert response.status_code == 200
+    assert image.calls == [
+        {
+            "z": 3,
+            "t": 0,
+            "x": 1024,
+            "y": 1024,
+            "width": 1024,
+            "height": 512,
+            "level": 1,
+            "compression": 0.85,
+        }
+    ]

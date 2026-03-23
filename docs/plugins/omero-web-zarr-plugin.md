@@ -19,7 +19,7 @@ It serves two distinct contracts:
   - original Zarr store as a zip archive,
   - consolidated metadata manifest,
   - OME-TIFF export generated directly from the managed store.
-- Preserve stock OMERO.web behavior for non-store-backed images.
+- Preserve stock OMERO.web behavior for non-store-backed images, with one generic safeguard: if the current OMERO/Bio-Formats RenderingEngine fails while introspecting tile size, the image-data and tile-region paths fall back to the configured OMERO max tile length instead of failing the whole preview request.
 
 ## Key invariants
 
@@ -70,6 +70,18 @@ For store-backed images, the plugin can render directly from the managed Zarr st
 - JPEG/PNG/TIFF image responses used by OMERO.web viewers
 
 This avoids the fragile dependency on classic OMERO RenderingEngine pyramid files for external Zarr-backed images.
+
+For non-store-backed images, the plugin does not replace OMERO.web rendering. It only adds a generic compatibility guard around tile-size discovery so Bio-Formats-backed Zarrs continue using the default OMERO.web preview path when that upstream call fails.
+
+## Launcher behavior
+
+The `/zarr/vizarr/` and `/zarr/validator/` routes serve a thin OMERO-hosted launcher page:
+
+- the initial HTML shell is fetched from the upstream static app origin and cached briefly in-process;
+- a `<base href="...">` tag is injected so the browser resolves the app's relative assets correctly;
+- static asset requests are redirected to the upstream origin instead of proxying every JS/CSS/font request through Gunicorn workers.
+
+This keeps launcher behavior generic while avoiding worker starvation from synchronous per-asset proxying.
 
 The plugin also decorates OMERO.web channel metadata from Zarr display metadata where available, including:
 
