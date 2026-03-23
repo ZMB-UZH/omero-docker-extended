@@ -60,8 +60,7 @@
   <div class="zarr-preview-card__summary">
     <img class="zarr-preview-card__thumb" src="{{ thumbnail_url }}" alt="{{ image_name }}">
     <div class="zarr-preview-card__text">
-      <p>This image is stored as an external OME-Zarr reference in OMERO.</p>
-      <p>The standard OMERO preview viewer depends on internal pixel rendering paths that do not initialize reliably for these native Zarr-backed images. This preview uses Vizarr against the authenticated OMERO Zarr endpoint instead.</p>
+      <p>This image is stored as an external OME-Zarr reference in OMERO. The standard OMERO Preview viewer depends on internal pixel rendering paths that do not initialize reliably for most Zarr structures. This preview uses Vizarr as the viewer for such structures.</p>
     </div>
   </div>
 
