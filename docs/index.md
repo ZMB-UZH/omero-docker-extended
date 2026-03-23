@@ -15,10 +15,13 @@ Central navigation hub for all project documentation. Start here, then follow li
 ## 3. Plugin Guides
 
 - `plugins/omp-plugin.md` -- filename parsing, metadata annotation, AI-assisted regex, variable sets
+- `plugins/omp-plugin-workflow.md` -- end-to-end OMP workflow, parser configuration, job execution, annotation lifecycle
 - `plugins/import-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
 - `plugins/import-plugin-workflow.md` -- end-to-end import workflow, native OME-Zarr routing, managed-repository handoff
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
+- `plugins/admin-tools-workflow.md` -- quota enforcement lifecycle, log exploration pipeline, resource monitoring proxy
 - `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, OMERO CLI launch path
+- `plugins/imaris-connector-workflow.md` -- Celery task dispatch, script execution, status polling, download
 - `plugins/omero-web-zarr-plugin.md` -- store-backed OME-Zarr preview, rendering, raw/preview endpoint contracts, downloads
 - `plugins/omero-web-zarr-workflow.md` -- request/response workflow for preview-safe Vizarr browsing and store-backed downloads
 
@@ -52,6 +55,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `exec-plans/active/repo-improvements-and-fixes-backlog.md` -- prioritized backlog of concrete fixes and maintainability work
 - `exec-plans/tech-debt-tracker.md` -- known technical debt items
 - `product-specs/index.md` -- product specification catalog
+- `product-specs/new-user-onboarding.md` -- new user onboarding product specification
 
 ## 7. Troubleshooting
 

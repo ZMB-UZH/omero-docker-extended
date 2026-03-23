@@ -80,8 +80,7 @@ Useful commands (host):
 | `/omeroweb_import/status/<job_id>/` | GET | Poll job status |
 | `/omeroweb_import/user-settings/save/` | POST | Save user upload preferences |
 | `/omeroweb_import/special-method-settings/save/` | POST | Save SEM-EDX method settings |
-| `/omeroweb_import/special-method-settings/load/` | GET | Load SEM-EDX method settings |
-| `/omeroweb_import/special-method-settings/delete/` | POST | Delete SEM-EDX method settings |
+| `/omeroweb_import/special-method-settings/load/` | POST | Load SEM-EDX method settings |
 
 ## Typical user workflow
 
