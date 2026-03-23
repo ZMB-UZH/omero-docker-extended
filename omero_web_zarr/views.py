@@ -108,26 +108,18 @@ def _build_store_backed_preview_context(request, image):
         "image": image,
         "image_name": image.getName(),
         "thumbnail_url": reverse("render_thumbnail", args=(image.id,)),
-        "vizarr_url": "%s?source=%s"
-        % (
-            reverse("zarr_app", kwargs={"app": "vizarr", "url": ""}),
-            quote(zarr_root, safe="/:?=&"),
-        ),
-        "validator_url": "%s?source=%s"
-        % (
-            reverse("zarr_app", kwargs={"app": "validator", "url": ""}),
-            quote(validator_root, safe="/:?=&"),
-        ),
+        "vizarr_url": _build_app_launch_url("vizarr", zarr_root),
+        "validator_url": _build_app_launch_url("validator", validator_root),
     }
 
 
 @login_required()
 def index(request, conn=None, **kwargs):
-    home = request.build_absolute_uri(reverse("omero_web_zarr_index"))
-    vizarr = request.build_absolute_uri(reverse("zarr_app", kwargs={"app": "vizarr", "url": ""}))
+    home = reverse("omero_web_zarr_index")
+    vizarr = reverse("zarr_app", kwargs={"app": "vizarr", "url": ""})
     return HttpResponse(
         "To open an Image in Vizarr go to "
-        "%s?source=%simage/[IMAGE_ID].zarr" % (vizarr, home)
+        "%s?source=%sv0.4/image/[IMAGE_ID].zarr" % (vizarr, home)
     )
 
 
@@ -673,15 +665,39 @@ def _sanitize_app_asset_path(url):
     return "/".join(parts)
 
 
-def _inject_base_href(html, base_url):
-    base_tag = f'<base href="{base_url}">'
+def _build_app_launch_url(app, source):
+    return "%s?source=%s" % (
+        reverse("zarr_app", kwargs={"app": app, "url": ""}),
+        quote(source, safe="/:?=&"),
+    )
+
+
+def _inject_launcher_head(html, base_url):
+    head_fragment = (
+        f'<base href="{base_url}">'
+        "<script>"
+        "(function(){"
+        "try{"
+        "var currentUrl=new URL(window.location.href);"
+        "var source=currentUrl.searchParams.get('source');"
+        "if(!source||/^(?:[a-z][a-z0-9+.-]*:|\\/\\/)/i.test(source)){return;}"
+        "var base=source.charAt(0)==='/'?window.location.origin:window.location.href;"
+        "var normalized=new URL(source,base).toString();"
+        "if(normalized!==source){"
+        "currentUrl.searchParams.set('source',normalized);"
+        "window.history.replaceState(null,'',currentUrl.toString());"
+        "}"
+        "}catch(_err){}"
+        "})();"
+        "</script>"
+    )
     if re.search(r"<base\b", html, flags=re.IGNORECASE):
-        return re.sub(r"<base\b[^>]*>", base_tag, html, count=1, flags=re.IGNORECASE)
+        return re.sub(r"<base\b[^>]*>", head_fragment, html, count=1, flags=re.IGNORECASE)
 
     head_match = re.search(r"<head[^>]*>", html, flags=re.IGNORECASE)
     if head_match:
-        return f"{html[:head_match.end()]}{base_tag}{html[head_match.end():]}"
-    return f"{base_tag}{html}"
+        return f"{html[:head_match.end()]}{head_fragment}{html[head_match.end():]}"
+    return f"{head_fragment}{html}"
 
 
 @lru_cache(maxsize=16)
@@ -692,12 +708,6 @@ def _fetch_remote_app_shell(base_url, cache_bucket):
 
 
 def apps(request, app, url):
-    source = request.GET.get("source")
-    if source is not None and not source.startswith("http"):
-        source = request.build_absolute_uri(source)
-        new_url = reverse("zarr_app", kwargs={"url": "", "app": app})
-        return redirect(new_url + "?source=" + source)
-
     if app not in _APP_BASE_URLS:
         raise Http404("App: %s not found" % app)
 
@@ -713,6 +723,6 @@ def apps(request, app, url):
         LOGGER.warning("Failed to fetch remote app shell for %s", app, exc_info=True)
         return HttpResponse(status=502)
 
-    response = HttpResponse(_inject_base_href(html, base_url), content_type="text/html; charset=utf-8")
+    response = HttpResponse(_inject_launcher_head(html, base_url), content_type="text/html; charset=utf-8")
     response["Cache-Control"] = f"private, max-age={_APP_SHELL_CACHE_SECONDS}"
     return response
