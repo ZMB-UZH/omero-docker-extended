@@ -7,11 +7,11 @@ This document describes how `omero_web_zarr` serves managed-repository OME-Zarr 
 ```mermaid
 flowchart TD
     A[User selects image in OMERO.web] --> B{Image has store-backed externalInfo.lsid?}
-    B -->|No| C[Use stock OMERO.web behavior]
+    B -->|No| C[Keep OMERO.web rendering path; preview NGFF routes stay synthetic]
     B -->|Yes| D[Resolve managed-repository Zarr store from externalInfo.lsid]
 
     D --> E[Right-panel preview opens /zarr/preview/image/<id>/]
-    D --> F[Open with Vizarr builds source URL against preview endpoint]
+    A --> F[Open with Vizarr builds source URL against preview endpoint]
     D --> G[Validator uses raw /zarr/v0.4/image/<id>.zarr endpoint]
     D --> H[Download actions use store-backed routes]
 
@@ -62,6 +62,8 @@ Purpose:
 - expose only viewer-safe multiscale levels,
 - keep preview level numbers stable for the browser while resolving them back to underlying dataset keys.
 
+For non-store-backed images, preview `.zattrs` and `.zgroup` stay on the synthetic OMERO-backed path, while preview `.zarray` and chunk requests delegate directly to the raw synthetic responses instead of attempting managed-store dataset remapping.
+
 ## Preview level mapping
 
 The preview contract follows a strict rule:
@@ -89,7 +91,11 @@ For store-backed images, `omero_web_zarr` intercepts selected OMERO.web behavior
 - right-panel preview,
 - store-backed download actions.
 
-Non-store-backed images continue through the standard OMERO.web and OMERO RenderingEngine paths.
+For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path, except for a generic tile-size safeguard on the existing OMERO.web metadata and tile-region endpoints when the upstream RenderingEngine tile-size call fails.
+
+The OMERO.web right-panel preview page remains store-backed only. If an image is not store-backed, that page redirects back to the standard OMERO.web metadata preview. `Open with Vizarr` still targets the preview NGFF endpoint for all images, which is why the non-store-backed preview route delegation above matters.
+
+The `/zarr/vizarr/` and `/zarr/validator/` launchers are thin OMERO-hosted shells. They normalize root-relative `source=` parameters against the browser's actual public origin and redirect static app assets to the upstream app origin instead of proxying every asset through Gunicorn.
 
 ## Download workflow
 
@@ -112,6 +118,7 @@ These downloads are independent of the classic OMERO pyramid TIFF path and there
 - **Invalid raw path**: return `404` for missing metadata/chunk paths.
 - **Invalid preview level**: reject it before trying to access a non-existent backing dataset.
 - **Missing managed store**: fall back to stock behavior only for non-store-backed images; store-backed routes return explicit failure.
+- **Server-side Zarr reader failure**: if OMERO.server fails inside `loci.formats.in.ZarrReader` while reading raw bytes for a non-store-backed image, that is an upstream reader-stack failure. `omero_web_zarr` can keep the launcher and synthetic metadata routes correct, but it cannot make Vizarr browse data that OMERO.server itself cannot read through the standard path.
 - **Unsupported export axes**: OME-TIFF export rejects non-image-axis layouts explicitly instead of silently inventing output structure.
 
 ## Related docs
