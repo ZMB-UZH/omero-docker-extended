@@ -91,9 +91,11 @@ For store-backed images, `omero_web_zarr` intercepts selected OMERO.web behavior
 - right-panel preview,
 - store-backed download actions.
 
-For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path, except for a generic tile-size safeguard on the existing OMERO.web metadata and tile-region endpoints when the upstream RenderingEngine tile-size call fails.
+For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path, except for a generic tile-size safeguard on the shared image-metadata marshal path and the existing tile-region endpoints when the upstream RenderingEngine tile-size call fails.
 
 The OMERO.web right-panel preview page remains store-backed only. If an image is not store-backed, that page redirects back to the standard OMERO.web metadata preview. `Open with Vizarr` still targets the preview NGFF endpoint for all images, which is why the non-store-backed preview route delegation above matters.
+
+Because OMERO.iviewer and OMERO.figure also import the shared metadata marshal path, the same tile-size safeguard applies there as well; the fix is not limited to one webgateway URL.
 
 The `/zarr/vizarr/` and `/zarr/validator/` launchers are thin OMERO-hosted shells. They normalize root-relative `source=` parameters against the browser's actual public origin and redirect static app assets to the upstream app origin instead of proxying every asset through Gunicorn.
 
