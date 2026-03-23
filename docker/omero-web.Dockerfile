@@ -111,6 +111,7 @@ RUN set -euo pipefail; \
         blosc \
         python3-devel \
         supervisor \
+        procps-ng \
         quota \
         e2fsprogs \
         docker-ce-cli \

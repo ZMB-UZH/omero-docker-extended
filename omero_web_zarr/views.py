@@ -1,16 +1,20 @@
 import json
+import logging
 import os
+import re
 import tempfile
+import time
 import zipfile
 from copy import deepcopy
+from functools import lru_cache
 from itertools import product
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlsplit
 
 import numpy as np
 import requests
 import tifffile
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -28,6 +32,7 @@ from omeroweb.webgateway.marshal import channelMarshal
 from .utils import generate_coordinate_transformations
 from .utils import collect_store_metadata_documents
 from .utils import get_store_backed_axis_names
+from .utils import get_safe_image_tile_size
 from .utils import get_store_backed_viewer_safe_level_indices
 from .utils import load_store_backed_image_node
 from .utils import sanitize_download_basename
@@ -37,6 +42,13 @@ from .utils import is_store_metadata_path
 from .utils import open_compat_array
 from .utils import resolve_image_backing_zarr_store
 from .utils import resolve_local_zarr_file
+
+LOGGER = logging.getLogger(__name__)
+_APP_BASE_URLS = {
+    "vizarr": "https://hms-dbmi.github.io/vizarr/",
+    "validator": "https://ome.github.io/ome-ngff-validator/",
+}
+_APP_SHELL_CACHE_SECONDS = 300
 
 PIXEL_TYPES = {
     PixelsTypeint8: np.int8,
@@ -112,9 +124,10 @@ def _build_store_backed_preview_context(request, image):
 @login_required()
 def index(request, conn=None, **kwargs):
     home = request.build_absolute_uri(reverse("omero_web_zarr_index"))
+    vizarr = request.build_absolute_uri(reverse("zarr_app", kwargs={"app": "vizarr", "url": ""}))
     return HttpResponse(
         "To open an Image in Vizarr go to "
-        "https://hms-dbmi.github.io/vizarr/?source=%simage/[IMAGE_ID].zarr" % home
+        "%s?source=%simage/[IMAGE_ID].zarr" % (vizarr, home)
     )
 
 
@@ -203,10 +216,10 @@ def get_chunk_shape(image):
             chunks.append(1)
     if image.requiresPixelsPyramid():
         image.getZoomLevelScaling()
-        width, height = image._re.getTileSize()
+        width, height = get_safe_image_tile_size(image)
     else:
-        width = image.getSizeY()
-        height = image.getSizeX()
+        width = image.getSizeX()
+        height = image.getSizeY()
     chunks.extend([height, width])
     return chunks
 
@@ -645,6 +658,39 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
     return response
 
 
+def _sanitize_app_asset_path(url):
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+
+    parsed = urlsplit(raw)
+    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+        raise Http404("invalid app asset path")
+
+    parts = [part for part in Path(raw.lstrip("/")).parts if part not in ("", ".")]
+    if any(part == ".." for part in parts):
+        raise Http404("invalid app asset path")
+    return "/".join(parts)
+
+
+def _inject_base_href(html, base_url):
+    base_tag = f'<base href="{base_url}">'
+    if re.search(r"<base\b", html, flags=re.IGNORECASE):
+        return re.sub(r"<base\b[^>]*>", base_tag, html, count=1, flags=re.IGNORECASE)
+
+    head_match = re.search(r"<head[^>]*>", html, flags=re.IGNORECASE)
+    if head_match:
+        return f"{html[:head_match.end()]}{base_tag}{html[head_match.end():]}"
+    return f"{base_tag}{html}"
+
+
+@lru_cache(maxsize=16)
+def _fetch_remote_app_shell(base_url, cache_bucket):
+    response = requests.get(base_url, timeout=20)
+    response.raise_for_status()
+    return response.text
+
+
 def apps(request, app, url):
     source = request.GET.get("source")
     if source is not None and not source.startswith("http"):
@@ -652,19 +698,21 @@ def apps(request, app, url):
         new_url = reverse("zarr_app", kwargs={"url": "", "app": app})
         return redirect(new_url + "?source=" + source)
 
-    base_urls = {
-        "vizarr": "https://hms-dbmi.github.io/vizarr/",
-        "validator": "https://ome.github.io/ome-ngff-validator/",
-    }
-    if app not in base_urls:
+    if app not in _APP_BASE_URLS:
         raise Http404("App: %s not found" % app)
 
-    target_url = base_urls[app] + url
-    response = requests.get(target_url, timeout=20)
-    rsp = HttpResponse(response.content, status=response.status_code)
-    content_type = response.headers.get("content-type")
-    if content_type:
-        rsp["content-type"] = content_type
-    elif url.endswith(".js"):
-        rsp["content-type"] = "application/javascript"
-    return rsp
+    base_url = _APP_BASE_URLS[app]
+    asset_path = _sanitize_app_asset_path(url)
+    if asset_path:
+        return HttpResponseRedirect(urljoin(base_url, asset_path))
+
+    cache_bucket = int(time.time() // _APP_SHELL_CACHE_SECONDS)
+    try:
+        html = _fetch_remote_app_shell(base_url, cache_bucket)
+    except requests.RequestException:
+        LOGGER.warning("Failed to fetch remote app shell for %s", app, exc_info=True)
+        return HttpResponse(status=502)
+
+    response = HttpResponse(_inject_base_href(html, base_url), content_type="text/html; charset=utf-8")
+    response["Cache-Control"] = f"private, max-age={_APP_SHELL_CACHE_SECONDS}"
+    return response
