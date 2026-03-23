@@ -438,6 +438,7 @@ services:
       dockerfile: docker/omero-web.Dockerfile
       args:
         OMERO_CLI_ZARR_VERSION: "${OMERO_CLI_ZARR_VERSION:-0.8.0}"
+        OME_ZARR_PY_VERSION: "${OME_ZARR_PY_VERSION:-0.14.0}"
         BIOFORMATS2RAW_VERSION: "${BIOFORMATS2RAW_VERSION:-0.11.0}"
     restart: unless-stopped
     depends_on:
