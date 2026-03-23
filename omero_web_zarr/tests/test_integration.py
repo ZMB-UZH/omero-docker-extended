@@ -444,6 +444,71 @@ def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
     assert payload["zoomLevelScaling"] == {0: 1.0, 1: 0.5}
 
 
+def test_safe_regular_image_marshal_uses_generic_fallback_and_key_selection():
+    request = RequestFactory().get("/webclient/imgData/7/")
+    request.session = {
+        "server_settings": {
+            "viewer": {
+                "initial_zoom_level": 0,
+                "interpolate_pixels": True,
+            }
+        }
+    }
+    image = _FakeRegularTileFailureImage()
+
+    def failing_image_marshal(image, key=None, request=None):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+    payload = integration._safe_regular_image_marshal(
+        failing_image_marshal,
+        image,
+        request=request,
+    )
+    selected = integration._safe_regular_image_marshal(
+        failing_image_marshal,
+        image,
+        key="tile_size.width",
+        request=request,
+    )
+
+    assert payload["tile_size"] == {"width": 1024, "height": 512}
+    assert selected == 1024
+
+
+def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkeypatch):
+    from omero_figure import views as figure_views
+    from omero_iviewer import views as iviewer_views
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import views as webgateway_views
+
+    def original_image_marshal(image, key=None, request=None):
+        return {"id": getattr(image, "id", None)}
+
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(webgateway_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(iviewer_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(figure_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+
+    safe_image_marshal = integration._install_safe_image_marshal_overrides(webgateway_marshal)
+
+    assert webgateway_marshal.imageMarshal is safe_image_marshal
+    assert webgateway_views.imageMarshal is safe_image_marshal
+    assert iviewer_views.imageMarshal is safe_image_marshal
+    assert figure_views.imageMarshal is safe_image_marshal
+
+
 def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(monkeypatch):
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",

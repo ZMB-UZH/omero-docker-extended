@@ -19,7 +19,7 @@ It serves two distinct contracts:
   - original Zarr store as a zip archive,
   - consolidated metadata manifest,
   - OME-TIFF export generated directly from the managed store.
-- Preserve stock OMERO.web behavior for non-store-backed images, with one generic safeguard: if the current OMERO/Bio-Formats RenderingEngine fails while introspecting tile size, the image-data and tile-region paths fall back to the configured OMERO max tile length instead of failing the whole preview request.
+- Preserve stock OMERO.web behavior for non-store-backed images, with one generic safeguard: if the current OMERO/Bio-Formats RenderingEngine fails while introspecting tile size, the shared metadata marshal and tile-region paths fall back to the configured OMERO max tile length instead of failing the whole viewer request.
 
 ## Key invariants
 
@@ -73,7 +73,7 @@ For store-backed images, the plugin can render directly from the managed Zarr st
 
 This avoids the fragile dependency on classic OMERO RenderingEngine pyramid files for external Zarr-backed images.
 
-For non-store-backed images, the plugin does not replace OMERO.web rendering. It only adds a generic compatibility guard around tile-size discovery so Bio-Formats-backed Zarrs continue using the default OMERO.web preview path when that upstream call fails.
+For non-store-backed images, the plugin does not replace OMERO.web rendering. It only adds a generic compatibility guard around tile-size discovery so Bio-Formats-backed Zarrs continue using the default OMERO.web preview path when that upstream call fails. That safeguard now covers the shared `imageMarshal()` path used by OMERO.web, OMERO.iviewer, and OMERO.figure, plus the existing tile-region fallback in the classic webgateway render path.
 
 ## Launcher behavior
 
