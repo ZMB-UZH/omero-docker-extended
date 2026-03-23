@@ -1,0 +1,321 @@
+import os
+import json
+import warnings
+import zipfile
+from io import BytesIO
+
+import django
+import numpy as np
+from django.test import RequestFactory
+import tifffile
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "omeroweb.settings")
+warnings.filterwarnings(
+    "ignore",
+    message=r"Deprecated\. utils\.__version__",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"distutils Version classes are deprecated\. Use packaging\.version instead\.",
+    category=DeprecationWarning,
+)
+django.setup()
+
+from omero_web_zarr import views
+
+
+class _Value:
+    def __init__(self, value):
+        self.val = value
+
+
+class _ExternalInfo:
+    def __init__(self, lsid):
+        self.lsid = _Value(lsid)
+
+
+class _Details:
+    def __init__(self, lsid):
+        self.externalInfo = _ExternalInfo(lsid)
+
+
+class _FakeImage:
+    def __init__(self, lsid, image_id=1, name="store-backed"):
+        self._details = _Details(lsid)
+        self.id = image_id
+        self._name = name
+
+    def getDetails(self):
+        return self._details
+
+    def getName(self):
+        return self._name
+
+    def getPixelSizeX(self, units=True):
+        return None
+
+    def getPixelSizeY(self, units=True):
+        return None
+
+    def getPixelSizeZ(self, units=True):
+        return None
+
+
+def _write_store(root):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+    (root / ".zattrs").write_text(
+        json.dumps({"multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}]}),
+        encoding="utf-8",
+    )
+    (root / "0").mkdir()
+    (root / "0" / ".zarray").write_text(
+        json.dumps({"shape": [1, 1, 2, 2], "chunks": [1, 1, 2, 2], "zarr_format": 2}),
+        encoding="utf-8",
+    )
+    chunk_path = root / "0" / "0" / "0" / "0" / "0"
+    chunk_path.parent.mkdir(parents=True, exist_ok=True)
+    chunk_path.write_bytes(b"chunk-bytes")
+
+
+def test_store_backed_json_response_returns_canonical_metadata(tmp_path):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()))
+
+    response = views._store_backed_json_response(image, "0.4", ".zattrs")
+
+    assert response is not None
+    assert json.loads(response.content) == {
+        "multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}]
+    }
+
+
+def test_store_backed_json_response_skips_non_v04_requests(tmp_path):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()))
+
+    assert views._store_backed_json_response(image, "0.3", ".zattrs") is None
+
+
+def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()))
+
+    response = views._store_backed_chunk_response(image, "0.4", 0, "0/0/0/0")
+
+    assert response is not None
+    assert response.content == b"chunk-bytes"
+    assert response["Content-Disposition"] == "attachment; filename=0.0.0.0"
+
+
+def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
+    _write_store(tmp_path)
+    (tmp_path / "s0").mkdir()
+    (tmp_path / "s0" / ".zarray").write_text(
+        json.dumps({"shape": [1, 1, 2, 2], "chunks": [1, 1, 2, 2], "zarr_format": 2}),
+        encoding="utf-8",
+    )
+    image = _FakeImage(str(tmp_path.resolve()))
+
+    response = views._store_backed_response(image, "0.4", "s0", ".zarray")
+
+    assert response is not None
+    assert json.loads(response.content)["zarr_format"] == 2
+
+
+def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_path, monkeypatch):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=502, name="10150")
+    request = RequestFactory().get("/zarr/preview/image/502/")
+    def fake_reverse(name, args=None, kwargs=None):
+        if name == "omero_web_zarr_index":
+            return "/zarr/"
+        if name == "render_thumbnail":
+            return f"/webclient/render_thumbnail/{args[0]}/"
+        if name == "zarr_app":
+            return f"/zarr/{kwargs['app']}/"
+        raise AssertionError(f"Unexpected reverse() call: {name}")
+
+    monkeypatch.setattr(
+        views,
+        "reverse",
+        fake_reverse,
+    )
+
+    context = views._build_store_backed_preview_context(request, image)
+
+    assert context["image"] is image
+    assert context["thumbnail_url"].endswith("/webclient/render_thumbnail/502/")
+    assert "source=/zarr/v0.4/preview/image/502.zarr" in context["vizarr_url"]
+    assert "source=/zarr/v0.4/image/502.zarr" in context["validator_url"]
+
+
+def test_store_backed_preview_zattrs_filters_out_levels_that_downsample_z(tmp_path, monkeypatch):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=11, name="pyramid.zarr")
+    root_payload = {
+        "multiscales": [
+            {
+                "version": "0.4",
+                "datasets": [
+                    {"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [1, 1, 1]}]},
+                    {"path": "s1", "coordinateTransformations": [{"type": "scale", "scale": [2, 2, 2]}]},
+                ],
+            }
+        ],
+        "omero": {"channels": []},
+    }
+    monkeypatch.setattr(
+        views,
+        "_store_backed_json_response",
+        lambda image, version, *parts: type(
+            "Response",
+            (),
+            {"content": json.dumps(root_payload).encode("utf-8")},
+        )(),
+    )
+    fake_node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [
+                type("Array", (), {"shape": (543, 1612, 3528)})(),
+                type("Array", (), {"shape": (271, 806, 1764)})(),
+            ],
+            "metadata": {
+                "axes": ["z", "y", "x"],
+                "multiscales": root_payload["multiscales"],
+            },
+        },
+    )()
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
+
+    payload = views._store_backed_preview_zattrs(image, "0.4")
+
+    assert payload["multiscales"][0]["datasets"] == [
+        {"path": "0", "coordinateTransformations": [{"type": "scale", "scale": [1, 1, 1]}]}
+    ]
+
+
+def test_preview_dataset_path_preserves_underlying_dataset_key_names(tmp_path, monkeypatch):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
+    root_payload = {
+        "multiscales": [
+            {
+                "version": "0.4",
+                "datasets": [
+                    {"path": "s0"},
+                    {"path": "s1"},
+                ],
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        views,
+        "_store_backed_json_response",
+        lambda image, version, *parts: type(
+            "Response",
+            (),
+            {"content": json.dumps(root_payload).encode("utf-8")},
+        )(),
+    )
+    fake_node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [
+                type("Array", (), {"shape": (543, 1612, 3528)})(),
+                type("Array", (), {"shape": (271, 806, 1764)})(),
+            ],
+            "metadata": {
+                "axes": ["z", "y", "x"],
+                "multiscales": root_payload["multiscales"],
+            },
+        },
+    )()
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
+
+    assert views._get_store_backed_preview_dataset_path(image, 0) == "s0"
+
+
+class _FakeConn:
+    def __init__(self, image):
+        self._image = image
+        self.c = None
+
+    def getObject(self, object_type, iid):
+        assert object_type == "Image"
+        assert iid == self._image.id
+        return self._image
+
+
+def test_download_store_metadata_returns_json_manifest(tmp_path):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=7, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/7/metadata/")
+
+    response = views.download_store_metadata(request, 7, conn=_FakeConn(image))
+
+    payload = json.loads(response.content)
+    assert response["Content-Disposition"] == "attachment; filename=demo.zarr-metadata.json"
+    assert payload["store"] == tmp_path.name
+    assert payload["documents"][".zattrs"]["multiscales"][0]["datasets"] == [{"path": "0"}]
+
+
+def test_download_store_original_returns_zip_file(tmp_path):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=8, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/8/original/")
+
+    response = views.download_store_original(request, 8, conn=_FakeConn(image))
+    try:
+        payload = b"".join(response.streaming_content)
+
+        assert response["Content-Disposition"] == 'attachment; filename="demo.zarr.zip"'
+        with zipfile.ZipFile(BytesIO(payload), "r") as zf:
+            assert sorted(zf.namelist()) == [
+                f"{tmp_path.name}/.zattrs",
+                f"{tmp_path.name}/.zgroup",
+                f"{tmp_path.name}/0/.zarray",
+                f"{tmp_path.name}/0/0/0/0/0",
+            ]
+    finally:
+        response.close()
+
+
+def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
+    _write_store(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()), image_id=9, name="demo.zarr")
+    request = RequestFactory().get("/zarr/download/image/9/ome-tiff/")
+    fake_node = type(
+        "FakeNode",
+        (),
+        {
+            "data": [np.arange(4, dtype=np.uint16).reshape(1, 1, 2, 2)],
+            "metadata": {
+                "axes": [
+                    {"name": "c", "type": "channel"},
+                    {"name": "z", "type": "space"},
+                    {"name": "y", "type": "space"},
+                    {"name": "x", "type": "space"},
+                ],
+                "channel_names": ["C00"],
+            },
+        },
+    )()
+    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
+
+    response = views.download_store_ome_tiff(request, 9, conn=_FakeConn(image))
+    try:
+        payload = b"".join(response.streaming_content)
+
+        assert response["Content-Disposition"] == 'attachment; filename="demo.zarr.ome.tif"'
+        with tifffile.TiffFile(BytesIO(payload)) as tif:
+            assert tif.is_ome
+            assert tif.series[0].shape == (2, 2)
+            assert 'SizeC="1"' in tif.ome_metadata
+            assert 'SizeZ="1"' in tif.ome_metadata
+    finally:
+        response.close()

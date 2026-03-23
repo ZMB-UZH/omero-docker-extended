@@ -1,11 +1,18 @@
-from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import redirect
-from django.urls import reverse
 import json
-import numpy as np
 import os
-import requests
 import tempfile
+import zipfile
+from copy import deepcopy
+from itertools import product
+from pathlib import Path
+from urllib.parse import quote
+
+import numpy as np
+import requests
+import tifffile
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
 
 from omero.model.enums import PixelsTypedouble
 from omero.model.enums import PixelsTypefloat
@@ -19,9 +26,17 @@ from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.marshal import channelMarshal
 
 from .utils import generate_coordinate_transformations
+from .utils import collect_store_metadata_documents
+from .utils import get_store_backed_axis_names
+from .utils import get_store_backed_viewer_safe_level_indices
+from .utils import load_store_backed_image_node
+from .utils import sanitize_download_basename
 from .utils import marshal_axes
 from .utils import marshal_axes_v3
+from .utils import is_store_metadata_path
 from .utils import open_compat_array
+from .utils import resolve_image_backing_zarr_store
+from .utils import resolve_local_zarr_file
 
 PIXEL_TYPES = {
     PixelsTypeint8: np.int8,
@@ -33,6 +48,65 @@ PIXEL_TYPES = {
     PixelsTypefloat: np.float32,
     PixelsTypedouble: np.float64,
 }
+
+
+def _store_backed_response(image, version, *parts):
+    if version != "0.4":
+        return None
+
+    store_root = resolve_image_backing_zarr_store(image)
+    if store_root is None:
+        return None
+
+    source = resolve_local_zarr_file(store_root, *parts)
+    if is_store_metadata_path(source):
+        with open(source, "r", encoding="utf-8") as reader:
+            payload = json.load(reader)
+        return JsonResponse(payload)
+
+    data = source.read_bytes()
+    rsp = HttpResponse(data, content_type="application/octet-stream")
+    rsp["Content-Length"] = len(data)
+    filename = ".".join(source.relative_to(store_root).parts)
+    rsp["Content-Disposition"] = "attachment; filename=%s" % filename
+    return rsp
+
+
+def _store_backed_json_response(image, version, *parts):
+    response = _store_backed_response(image, version, *parts)
+    if response is None:
+        return None
+    if response.get("Content-Type") != "application/json":
+        raise Http404("zarr path not found")
+    return response
+
+
+def _store_backed_chunk_response(image, version, level, chunk):
+    response = _store_backed_response(image, version, str(level), *chunk.split("/"))
+    if response is None:
+        return None
+    response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace("/", ".")
+    return response
+
+
+def _build_store_backed_preview_context(request, image):
+    zarr_root = f"{reverse('omero_web_zarr_index')}v0.4/preview/image/{image.id}.zarr"
+    validator_root = f"{reverse('omero_web_zarr_index')}v0.4/image/{image.id}.zarr"
+    return {
+        "image": image,
+        "image_name": image.getName(),
+        "thumbnail_url": reverse("render_thumbnail", args=(image.id,)),
+        "vizarr_url": "%s?source=%s"
+        % (
+            reverse("zarr_app", kwargs={"app": "vizarr", "url": ""}),
+            quote(zarr_root, safe="/:?=&"),
+        ),
+        "validator_url": "%s?source=%s"
+        % (
+            reverse("zarr_app", kwargs={"app": "validator", "url": ""}),
+            quote(validator_root, safe="/:?=&"),
+        ),
+    }
 
 
 @login_required()
@@ -50,6 +124,9 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
         raise Http404("version not supported")
 
     image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_json_response(image, version, ".zattrs")
+    if store_rsp is not None:
+        return store_rsp
 
     levels = [0]
     if image.requiresPixelsPyramid():
@@ -87,6 +164,11 @@ def image_zattrs(request, iid, version, conn=None, **kwargs):
 
 
 def image_zgroup(request, **kwargs):
+    image = kwargs.get("conn") and kwargs["conn"].getObject("Image", kwargs["iid"])
+    if image is not None:
+        store_rsp = _store_backed_json_response(image, kwargs["version"], ".zgroup")
+        if store_rsp is not None:
+            return store_rsp
     return JsonResponse({"zarr_format": 2})
 
 
@@ -133,6 +215,10 @@ def get_chunk_shape(image):
 def image_zarray(request, iid, level, conn=None, **kwargs):
     level = int(level)
     image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_json_response(image, "0.4", str(level), ".zarray")
+    if store_rsp is not None:
+        return store_rsp
+
     shape = get_image_shape(image, level)
     chunks = get_chunk_shape(image)
 
@@ -162,6 +248,10 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     dims = [int(dim) for dim in chunk.split("/")]
 
     image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_chunk_response(image, "0.4", level, chunk)
+    if store_rsp is not None:
+        return store_rsp
+
     axes = marshal_axes_v3(image)
 
     if len(dims) != len(axes):
@@ -236,6 +326,323 @@ def image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     rsp["Content-Length"] = len(data)
     rsp["Content-Disposition"] = "attachment; filename=%s" % chunk_name
     return rsp
+
+
+@login_required()
+def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_response(image, version, *store_path.split("/"))
+    if store_rsp is None:
+        raise Http404("zarr path not found")
+    return store_rsp
+
+
+def _get_store_backed_preview_level_mapping(image):
+    cached = getattr(image, "_omero_web_zarr_preview_levels", None)
+    if cached is not None:
+        return cached
+
+    node = load_store_backed_image_node(image)
+    if node is None:
+        mapping = [0]
+    else:
+        mapping = get_store_backed_viewer_safe_level_indices(node)
+    setattr(image, "_omero_web_zarr_preview_levels", mapping)
+    return mapping
+
+
+def _get_store_backed_root_zattrs_payload(image, version="0.4"):
+    cached = getattr(image, "_omero_web_zarr_root_zattrs_payload", None)
+    if cached is not None:
+        return cached
+
+    response = _store_backed_json_response(image, version, ".zattrs")
+    payload = None if response is None else json.loads(response.content)
+    setattr(image, "_omero_web_zarr_root_zattrs_payload", payload)
+    return payload
+
+
+def _get_store_backed_raw_datasets(image, version="0.4"):
+    payload = _get_store_backed_root_zattrs_payload(image, version=version) or {}
+    multiscales = payload.get("multiscales") or []
+    if multiscales:
+        datasets = multiscales[0].get("datasets") or []
+        if datasets:
+            return datasets
+
+    node = load_store_backed_image_node(image)
+    level_count = len(getattr(node, "data", None) or ())
+    return [{"path": str(index)} for index in range(level_count or 1)]
+
+
+def _get_store_backed_preview_dataset_path(image, preview_level):
+    node = load_store_backed_image_node(image)
+    if node is None:
+        raise Http404("store-backed image data not found")
+
+    mapping = _get_store_backed_preview_level_mapping(image)
+    preview_index = int(preview_level)
+    if preview_index < 0 or preview_index >= len(mapping):
+        raise Http404("preview level not found")
+
+    datasets = _get_store_backed_raw_datasets(image)
+    actual_index = mapping[preview_index]
+    dataset = datasets[actual_index] if actual_index < len(datasets) else {"path": str(actual_index)}
+    return str(dataset.get("path") or actual_index)
+
+
+def _store_backed_preview_zattrs(image, version):
+    payload = _get_store_backed_root_zattrs_payload(image, version=version)
+    if payload is None:
+        return None
+
+    if version != "0.4":
+        return payload
+
+    node = load_store_backed_image_node(image)
+    if node is None:
+        return payload
+
+    multiscales = payload.get("multiscales") or []
+    if not multiscales:
+        return payload
+
+    mapping = _get_store_backed_preview_level_mapping(image)
+    datasets = _get_store_backed_raw_datasets(image, version=version)
+    preview_datasets = []
+    for preview_index, actual_index in enumerate(mapping):
+        source = datasets[actual_index] if actual_index < len(datasets) else {"path": str(actual_index)}
+        dataset = deepcopy(source)
+        dataset["path"] = str(preview_index)
+        preview_datasets.append(dataset)
+
+    payload = deepcopy(payload)
+    payload["multiscales"] = deepcopy(multiscales)
+    payload["multiscales"][0]["datasets"] = preview_datasets
+    return payload
+
+
+@login_required()
+def preview_image_zattrs(request, iid, version="0.4", conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    payload = _store_backed_preview_zattrs(image, version)
+    if payload is None:
+        return image_zattrs(request, iid, version, conn=conn, **kwargs)
+    return JsonResponse(payload)
+
+
+@login_required()
+def preview_image_zgroup(request, iid, version="0.4", conn=None, **kwargs):
+    return image_zgroup(request, iid=iid, version=version, conn=conn, **kwargs)
+
+
+@login_required()
+def preview_image_zarray(request, iid, level, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_response(
+        image,
+        "0.4",
+        _get_store_backed_preview_dataset_path(image, level),
+        ".zarray",
+    )
+    if store_rsp is not None:
+        return store_rsp
+    return image_zarray(request, iid, level, conn=conn, **kwargs)
+
+
+@login_required()
+def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    store_rsp = _store_backed_response(
+        image,
+        "0.4",
+        _get_store_backed_preview_dataset_path(image, level),
+        *chunk.split("/"),
+    )
+    if store_rsp is not None:
+        response = HttpResponse(store_rsp.content, content_type=store_rsp.get("Content-Type", "application/octet-stream"))
+        response["Content-Length"] = store_rsp["Content-Length"]
+        response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace("/", ".")
+        return response
+    return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
+
+
+@login_required()
+def preview_image_store_path(request, iid, version="0.4", store_path=None, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    parts = (store_path or "").split("/")
+    if parts and parts[0].isdigit():
+        try:
+            parts[0] = _get_store_backed_preview_dataset_path(image, int(parts[0]))
+        except Http404:
+            pass
+    store_rsp = _store_backed_response(image, version, *parts)
+    if store_rsp is None:
+        raise Http404("zarr path not found")
+    return store_rsp
+
+
+@login_required()
+def image_preview(request, iid, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    if image is None:
+        raise Http404("image not found")
+
+    if resolve_image_backing_zarr_store(image) is None:
+        return redirect(reverse("load_metadata_preview", kwargs={"c_type": "image", "c_id": iid}))
+
+    context = _build_store_backed_preview_context(request, image)
+    return render(request, "omero_web_zarr/image_preview.html", context)
+
+
+def _store_backed_download_name(image, suffix):
+    base_name = sanitize_download_basename(image.getName(), default=f"Image-{image.id}")
+    return f"{base_name}{suffix}"
+
+
+def _store_backed_ome_axes_and_array(node):
+    array = node.data[0]
+    axis_names = get_store_backed_axis_names(node, level=0)
+    supported_axes = {"t", "c", "z", "y", "x"}
+    unknown_axes = [axis for axis in axis_names if axis not in supported_axes]
+    if unknown_axes:
+        raise Http404("store-backed OME-TIFF export supports image axes only")
+
+    ordered_axes = [axis for axis in ("t", "c", "z", "y", "x") if axis in axis_names]
+    if axis_names != ordered_axes:
+        transpose = [axis_names.index(axis) for axis in ordered_axes]
+        array = np.transpose(array, axes=transpose)
+    return array, "".join(axis.upper() for axis in ordered_axes)
+
+
+def _iter_store_backed_ome_tiff_planes(array):
+    plane_shape = array.shape[-2:]
+    leading_shape = array.shape[:-2]
+    if not leading_shape:
+        yield np.asarray(array).reshape(plane_shape)
+        return
+
+    for index in product(*(range(size) for size in leading_shape)):
+        yield np.asarray(array[index]).reshape(plane_shape)
+
+
+def _store_backed_ome_tiff_metadata(image, node, axes):
+    metadata = {
+        "axes": axes,
+        "Name": image.getName(),
+    }
+
+    for dim, getter in (
+        ("X", image.getPixelSizeX),
+        ("Y", image.getPixelSizeY),
+        ("Z", image.getPixelSizeZ),
+    ):
+        length = getter(units=True)
+        if length is None:
+            continue
+        metadata[f"PhysicalSize{dim}"] = length.getValue()
+        metadata[f"PhysicalSize{dim}Unit"] = length.getSymbol()
+
+    channel_names = (getattr(node, "metadata", {}) or {}).get("channel_names") or []
+    if channel_names and "C" in axes:
+        metadata["Channel"] = {"Name": [str(name) for name in channel_names]}
+    return metadata
+
+
+@login_required()
+def download_store_original(request, iid, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    store_root = image is not None and resolve_image_backing_zarr_store(image)
+    if image is None or store_root is None:
+        raise Http404("store-backed image not found")
+
+    archive = tempfile.TemporaryFile()
+    with zipfile.ZipFile(
+        archive,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=1,
+    ) as zf:
+        for path in sorted(store_root.rglob("*")):
+            if not path.is_file():
+                continue
+            zf.write(path, arcname=str(Path(store_root.name) / path.relative_to(store_root)))
+
+    archive.seek(0)
+    return FileResponse(
+        archive,
+        as_attachment=True,
+        filename=_store_backed_download_name(image, ".zip"),
+    )
+
+
+@login_required()
+def download_store_metadata(request, iid, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    store_root = image is not None and resolve_image_backing_zarr_store(image)
+    if image is None or store_root is None:
+        raise Http404("store-backed image not found")
+
+    payload = {
+        "store": store_root.name,
+        "documents": collect_store_metadata_documents(image),
+    }
+    response = HttpResponse(
+        json.dumps(payload, indent=2, sort_keys=True),
+        content_type="application/json",
+    )
+    response["Content-Disposition"] = "attachment; filename=%s" % _store_backed_download_name(
+        image,
+        "-metadata.json",
+    )
+    return response
+
+
+@login_required()
+def download_store_ome_tiff(request, iid, conn=None, **kwargs):
+    image = conn.getObject("Image", iid)
+    if image is None or resolve_image_backing_zarr_store(image) is None:
+        raise Http404("store-backed image not found")
+
+    node = load_store_backed_image_node(image)
+    if node is None:
+        raise Http404("store-backed image data not found")
+
+    array, axes = _store_backed_ome_axes_and_array(node)
+    metadata = _store_backed_ome_tiff_metadata(image, node, axes)
+
+    target = tempfile.NamedTemporaryFile(suffix=".ome.tif", delete=False)
+    target_path = Path(target.name)
+    target.close()
+    try:
+        with tifffile.TiffWriter(target_path, bigtiff=True, ome=True) as writer:
+            writer.write(
+                _iter_store_backed_ome_tiff_planes(array),
+                shape=array.shape,
+                dtype=array.dtype,
+                metadata=metadata,
+                photometric="minisblack",
+                compression="adobe_deflate",
+                compressionargs={"level": 1},
+            )
+    except Exception:
+        target_path.unlink(missing_ok=True)
+        raise
+
+    stream = open(target_path, "rb")
+    size = target_path.stat().st_size
+    original_close = stream.close
+
+    def _close_and_unlink():
+        try:
+            original_close()
+        finally:
+            target_path.unlink(missing_ok=True)
+
+    stream.close = _close_and_unlink
+    response = FileResponse(stream, as_attachment=True, filename=_store_backed_download_name(image, ".ome.tif"))
+    response["Content-Length"] = size
+    return response
 
 
 def apps(request, app, url):

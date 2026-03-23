@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This platform packages an OMERO deployment and extends OMERO.web with domain-specific plugins for metadata workflows, uploads, administrative observability, and Imaris export automation. It runs as a fully containerized stack with integrated monitoring and automated database maintenance.
+This platform packages an OMERO deployment and extends OMERO.web with domain-specific plugins for metadata workflows, staged/native imports, store-backed OME-Zarr viewing, administrative observability, and Imaris export automation. It runs as a fully containerized stack with integrated monitoring and automated database maintenance.
 
 ## Core runtime components
 
@@ -95,10 +95,22 @@ Filename parsing and metadata annotation workflow:
 
 Staged file upload and OMERO import:
 - Job lifecycle: start session, transfer files, CLI import with batching, confirm, prune.
+- Uses Bio-Formats dry-run grouping as the universal logical import planner across formats.
+- Routes supported OME-Zarr image stores through a native `ome-zarr` + `omero-cli-zarr` branch only when Bio-Formats reports the staged store as incompatible.
+- Stages native Zarr imports into the managed repository through a server-side helper and validates post-import metadata/render readiness before reporting success.
 - SEM-EDX EMSA spectrum parsing with matplotlib visualization and genetic algorithm label placement.
 - File attachment support (link related files to imported OMERO images).
 - Configurable: concurrency, batch size, cleanup intervals, temp directory locations.
 - Database: stores user settings and special method configurations in the OMERO plugin database (`database_plugin`).
+
+### OMERO.web Zarr Plugin (`omero_web_zarr`)
+
+Authenticated OME-Zarr browsing and store-backed rendering:
+- Exposes managed-repository OME-Zarr stores through authenticated OMERO.web endpoints under `/zarr/`.
+- Distinguishes between a raw NGFF endpoint contract and a preview-safe endpoint contract for browser viewing.
+- Uses store-backed rendering overrides for thumbnails, image-data payloads, and tile-region responses so external Zarr-backed images do not rely on classic OMERO RenderingEngine pyramid files.
+- Adds store-backed downloads for original Zarr content, metadata manifests, and direct OME-TIFF export.
+- Preserves stock OMERO.web behavior for non-store-backed images.
 
 ### Admin Tools Plugin (`omeroweb_admin_tools`)
 

@@ -8,7 +8,7 @@ Tracked files in git are templates (`*_example*`). Deployments must create runti
 
 - `installation_paths_example.env` -> `installation_paths.env`: filesystem path definitions, including `OMERO_DATA_DIR` for the in-container OMERO data root.
 - `env/omeroserver_example.env` -> `env/omeroserver.env`: OMERO.server runtime, DB, script processor options, and managed-repository settings such as `CONFIG_omero_managed_dir` and `CONFIG_omero_fs_repo_path`.
-- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local `logo/logo.png` exists at build time, the `omeroweb` image build copies it into that static path, and OMERO.web startup re-synchronizes the mounted `var/static/` tree from the image so existing installations also receive updated branding and plugin static assets. `logo/logo.png` is a site-local asset and is intentionally gitignored.
+- `env/omeroweb_example.env` -> `env/omeroweb.env`: OMERO.web apps, UI links, Open With registrations, right-panel plugin entries, plugin settings, admin tool endpoints, the default login-logo setting (`CONFIG_omero_web_login__logo=/static/branding/logo.png`), and Gunicorn startup overrides such as `OMERO_WEB_WSGI_ARGS`. When a deployment-local `logo/logo.png` exists at build time, the `omeroweb` image build copies it into that static path, and OMERO.web startup re-synchronizes the mounted `var/static/` tree from the image so existing installations also receive updated branding and plugin static assets. `logo/logo.png` is a site-local asset and is intentionally gitignored.
 - `env/omeroserver.env` is also loaded by `omeroweb` for shared server-derived settings (for example `CONFIG_omero_fs_repo_path` consumed by admin-tools quota compatibility checks).
 - `env/omero-celery_example.env` -> `env/omero-celery.env`: Celery and Imaris connector processing controls.
 - `env/grafana_example.env` -> `env/grafana.env`: Grafana credentials and runtime options (renamed from `env/compose.env`).
@@ -41,6 +41,15 @@ When adding or removing a plugin:
 2. update URL mapping,
 3. restart OMERO.web,
 4. verify menu link visibility and route health.
+
+### OMERO.web Zarr UI registration
+
+`omero_web_zarr` has additional UI registration beyond `CONFIG_omero_web_apps`:
+
+- `CONFIG_omero_web_open__with` registers the Vizarr launcher.
+- `CONFIG_omero_web_ui_right__plugins` registers the Zarr-aware Preview tab.
+
+The tracked example env enables a Preview right-panel entry that loads `omero_web_zarr/right_plugin.preview.js.html`. That preview path is intended for store-backed OME-Zarr images whose browser viewing should use the authenticated `/zarr/v0.4/preview/image/<id>.zarr` contract instead of the classic OMERO preview viewport.
 
 ## Data, Temp, and Logs
 
@@ -141,6 +150,13 @@ build time alongside `OMERO_CLI_ZARR_VERSION` and `BIOFORMATS2RAW_VERSION`, and
 disposable managed-repository handoff copy must rewrite Blosc-backed image
 arrays for render-safe native import. Those normalizations apply only to the
 ephemeral handoff copy, never to the browser-staged source tree.
+
+After native import, OMERO.web access to the managed store is provided by
+`omero_web_zarr`. The raw `/zarr/v0.4/image/<id>.zarr/...` routes expose the
+underlying managed-repository store, while the preview
+`/zarr/v0.4/preview/image/<id>.zarr/...` routes expose only viewer-safe
+multiscale levels for browser viewing. This split is intentional and is derived
+from store metadata rather than filename or directory heuristics.
 
 If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
 without trailing `%`), OMERO treats those strings literally and creates
