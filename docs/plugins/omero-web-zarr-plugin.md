@@ -48,10 +48,12 @@ Raw routes preserve the original dataset keys and metadata documents from the ma
 
 Use the preview endpoint for browser viewing:
 
-- right-panel preview
-- Vizarr launched from OMERO.web for store-backed images
+- right-panel preview for store-backed images
+- Vizarr launched from OMERO.web
 
 The preview contract is intentionally conservative. If a multiscale level downsamples `z`, `c`, or `t`, it is excluded from preview. This prevents blurred or semantically wrong slice rendering in the browser.
+
+For non-store-backed images, the preview routes do not attempt preview-level remapping. They delegate to the raw synthetic OMERO-backed NGFF responses because there is no managed-store multiscale tree to filter.
 
 For example, if an image has:
 
