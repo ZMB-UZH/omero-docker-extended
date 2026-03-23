@@ -16,8 +16,11 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `plugins/omp-plugin.md` -- filename parsing, metadata annotation, AI-assisted regex, variable sets
 - `plugins/import-plugin.md` -- staged upload, OMERO CLI import, SEM-EDX parsing, job lifecycle
+- `plugins/import-plugin-workflow.md` -- end-to-end import workflow, native OME-Zarr routing, managed-repository handoff
 - `plugins/admin-tools-plugin.md` -- log exploration, resource monitoring, storage analytics, diagnostics
 - `plugins/imaris-connector-plugin.md` -- async Imaris export, Celery worker, OMERO CLI launch path
+- `plugins/omero-web-zarr-plugin.md` -- store-backed OME-Zarr preview, rendering, raw/preview endpoint contracts, downloads
+- `plugins/omero-web-zarr-workflow.md` -- request/response workflow for preview-safe Vizarr browsing and store-backed downloads
 
 ## 4. Plugin Help
 
