@@ -1,0 +1,75 @@
+<div class="zarr-preview-card">
+  <style>
+    .zarr-preview-card {
+      padding: 12px 14px 16px;
+    }
+    .zarr-preview-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .zarr-preview-card__title {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    .zarr-preview-card__links {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .zarr-preview-card__summary {
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+    .zarr-preview-card__thumb {
+      width: 128px;
+      height: 128px;
+      object-fit: contain;
+      border: 1px solid #d2d7df;
+      background: #f8fafc;
+    }
+    .zarr-preview-card__text {
+      font-size: 12px;
+      line-height: 1.45;
+      color: #465468;
+    }
+    .zarr-preview-card__viewer {
+      width: 100%;
+      min-height: 520px;
+      border: 1px solid #d2d7df;
+      background: #fff;
+    }
+  </style>
+
+  <div class="zarr-preview-card__header">
+    <h3 class="zarr-preview-card__title">{{ image_name }}</h3>
+    <div class="zarr-preview-card__links">
+      <a href="{{ vizarr_url }}" target="_blank" rel="noopener">Open Vizarr</a>
+      <a href="{{ validator_url }}" target="_blank" rel="noopener">Validate NGFF</a>
+    </div>
+  </div>
+
+  <div class="zarr-preview-card__summary">
+    <img class="zarr-preview-card__thumb" src="{{ thumbnail_url }}" alt="{{ image_name }}">
+    <div class="zarr-preview-card__text">
+      <p>This image is stored as an external OME-Zarr reference in OMERO.</p>
+      <p>The standard OMERO preview viewer depends on internal pixel rendering paths that do not initialize reliably for these native Zarr-backed images. This preview uses Vizarr against the authenticated OMERO Zarr endpoint instead.</p>
+    </div>
+  </div>
+
+  <iframe
+    class="zarr-preview-card__viewer"
+    src="{{ vizarr_url }}"
+    loading="lazy"
+    referrerpolicy="same-origin"
+    title="Zarr preview for {{ image_name }}">
+  </iframe>
+</div>

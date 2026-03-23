@@ -6,9 +6,34 @@ from . import views
 urlpatterns = [
     re_path(r"^$", views.index, name="omero_web_zarr_index"),
     re_path(
+        r"^preview/image/(?P<iid>[0-9]+)/$",
+        views.image_preview,
+        name="zarr_image_preview",
+    ),
+    re_path(
+        r"^download/image/(?P<iid>[0-9]+)/original/$",
+        views.download_store_original,
+        name="zarr_download_store_original",
+    ),
+    re_path(
+        r"^download/image/(?P<iid>[0-9]+)/metadata/$",
+        views.download_store_metadata,
+        name="zarr_download_store_metadata",
+    ),
+    re_path(
+        r"^download/image/(?P<iid>[0-9]+)/ome-tiff/$",
+        views.download_store_ome_tiff,
+        name="zarr_download_store_ome_tiff",
+    ),
+    re_path(
         r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/.zattrs$",
         views.image_zattrs,
         name="zarr_image_zattrs",
+    ),
+    re_path(
+        r"^v0\.4/preview/image/(?P<iid>[0-9]+).zarr/.zattrs$",
+        views.preview_image_zattrs,
+        name="zarr_preview_image_zattrs",
     ),
     re_path(
         r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/.zgroup$",
@@ -16,14 +41,39 @@ urlpatterns = [
         name="zarr_image_zgroup",
     ),
     re_path(
+        r"^v0\.4/preview/image/(?P<iid>[0-9]+).zarr/.zgroup$",
+        views.preview_image_zgroup,
+        name="zarr_preview_image_zgroup",
+    ),
+    re_path(
         r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/.zarray$",
         views.image_zarray,
         name="zarr_image_zarray",
     ),
     re_path(
+        r"^v0\.4/preview/image/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/.zarray$",
+        views.preview_image_zarray,
+        name="zarr_preview_image_zarray",
+    ),
+    re_path(
         r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/(?P<chunk>[0-9/]+)$",
         views.image_chunk,
         name="zarr_image_chunk",
+    ),
+    re_path(
+        r"^v0\.4/preview/image/(?P<iid>[0-9]+).zarr/(?P<level>[0-9]+)/(?P<chunk>[0-9/]+)$",
+        views.preview_image_chunk,
+        name="zarr_preview_image_chunk",
+    ),
+    re_path(
+        r"^v(?P<version>0\.[3-4]+)/image/(?P<iid>[0-9]+).zarr/(?P<store_path>.+)$",
+        views.image_store_path,
+        name="zarr_image_store_path",
+    ),
+    re_path(
+        r"^v0\.4/preview/image/(?P<iid>[0-9]+).zarr/(?P<store_path>.+)$",
+        views.preview_image_store_path,
+        name="zarr_preview_image_store_path",
     ),
     re_path(
         r"^(?P<app>vizarr|validator)/(?P<url>.*)$",
