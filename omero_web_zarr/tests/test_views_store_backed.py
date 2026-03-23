@@ -62,6 +62,26 @@ class _FakeImage:
         return None
 
 
+class _FakeChunkImage:
+    def requiresPixelsPyramid(self):
+        return False
+
+    def getSizeT(self):
+        return 1
+
+    def getSizeC(self):
+        return 1
+
+    def getSizeZ(self):
+        return 1
+
+    def getSizeY(self):
+        return 512
+
+    def getSizeX(self):
+        return 1024
+
+
 def _write_store(root):
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
@@ -240,6 +260,10 @@ def test_preview_dataset_path_preserves_underlying_dataset_key_names(tmp_path, m
     assert views._get_store_backed_preview_dataset_path(image, 0) == "s0"
 
 
+def test_get_chunk_shape_preserves_yx_order_for_non_pyramid_images():
+    assert views.get_chunk_shape(_FakeChunkImage()) == [512, 1024]
+
+
 class _FakeConn:
     def __init__(self, image):
         self._image = image
@@ -319,3 +343,27 @@ def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
             assert 'SizeZ="1"' in tif.ome_metadata
     finally:
         response.close()
+
+
+def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
+    class _FakeResponse:
+        text = "<html><head></head><body>vizarr</body></html>"
+
+        def raise_for_status(self):
+            return None
+
+    views._fetch_remote_app_shell.cache_clear()
+    monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
+
+    shell_request = RequestFactory().get("/zarr/vizarr/", {"source": "https://example.test/image.zarr"})
+    shell_response = views.apps(shell_request, "vizarr", "")
+
+    assert shell_response.status_code == 200
+    assert '<base href="https://hms-dbmi.github.io/vizarr/">' in shell_response.content.decode("utf-8")
+    assert shell_response["Cache-Control"] == "private, max-age=300"
+
+    asset_request = RequestFactory().get("/zarr/vizarr/static/index.js")
+    asset_response = views.apps(asset_request, "vizarr", "static/index.js")
+
+    assert asset_response.status_code == 302
+    assert asset_response["Location"] == "https://hms-dbmi.github.io/vizarr/static/index.js"

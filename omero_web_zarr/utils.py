@@ -1,6 +1,7 @@
 import json
 import logging
 import warnings
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -10,6 +11,7 @@ import zarr
 
 LOGGER = logging.getLogger(__name__)
 _MISSING = object()
+_STORE_BACKED_NODE_CACHE_SIZE = 64
 DEFAULT_CHANNEL_COLORS = (
     (255, 255, 255),
     (255, 0, 0),
@@ -254,10 +256,137 @@ def _read_store_root_attrs(store_root):
         return json.load(handle)
 
 
+def _read_store_json(path):
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _read_store_attrs(store_root):
+    zattrs_path = store_root / ".zattrs"
+    if zattrs_path.is_file():
+        return _read_store_json(zattrs_path)
+
+    zarr_json_path = store_root / "zarr.json"
+    if zarr_json_path.is_file():
+        payload = _read_store_json(zarr_json_path)
+        attributes = payload.get("attributes")
+        if isinstance(attributes, dict):
+            return attributes
+    return {}
+
+
+def _store_relative_metadata_path(store_root, dataset_path):
+    dataset_root = store_root if dataset_path in ("", ".") else store_root / dataset_path
+    if (dataset_root / ".zarray").is_file():
+        return str(Path(dataset_path) / ".zarray") if dataset_path not in ("", ".") else ".zarray"
+    if (dataset_root / "zarr.json").is_file():
+        return str(Path(dataset_path) / "zarr.json") if dataset_path not in ("", ".") else "zarr.json"
+    return None
+
+
+def _store_node_signature(store_root):
+    attrs = _read_store_attrs(store_root)
+    multiscales = attrs.get("multiscales") or []
+    documents = []
+    for candidate in (store_root / ".zattrs", store_root / "zarr.json", store_root / ".zgroup"):
+        if candidate.is_file():
+            documents.append(candidate)
+            break
+
+    if multiscales:
+        datasets = multiscales[0].get("datasets") or []
+        for dataset in datasets:
+            dataset_path = str(dataset.get("path") or "").strip("/")
+            relative_metadata_path = _store_relative_metadata_path(store_root, dataset_path)
+            if not relative_metadata_path:
+                continue
+            documents.append(store_root / relative_metadata_path)
+
+    signature = []
+    for document in documents:
+        stat = document.stat()
+        signature.append((str(document.relative_to(store_root)), stat.st_mtime_ns, stat.st_size))
+    return tuple(signature)
+
+
+class _StoreBackedNode:
+    __slots__ = ("data", "metadata")
+
+    def __init__(self, data, metadata):
+        self.data = data
+        self.metadata = metadata
+
+
+def _channel_limits_from_omero_channel(channel):
+    window = channel.get("window") or {}
+    start = window.get("start")
+    end = window.get("end")
+    if start is None or end is None:
+        return None
+    try:
+        return (float(start), float(end))
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_store_backed_metadata(attrs):
+    multiscales = attrs.get("multiscales") or []
+    axes = []
+    if multiscales:
+        axes = multiscales[0].get("axes") or []
+
+    omero_metadata = attrs.get("omero") or {}
+    channels = omero_metadata.get("channels") or []
+    channel_names = []
+    visible = []
+    contrast_limits = []
+    colormap = []
+    for channel in channels:
+        label = channel.get("label")
+        channel_names.append(None if label is None else str(label))
+        visible.append(bool(channel.get("active", True)))
+        contrast_limits.append(_channel_limits_from_omero_channel(channel))
+        colormap.append(channel.get("color"))
+
+    return {
+        "axes": axes,
+        "multiscales": multiscales,
+        "channel_names": channel_names,
+        "visible": visible,
+        "contrast_limits": contrast_limits,
+        "colormap": colormap,
+    }
+
+
+def _load_store_backed_image_node_from_metadata(store_root):
+    attrs = _read_store_attrs(store_root)
+    multiscales = attrs.get("multiscales") or []
+    if not multiscales:
+        return None
+
+    datasets = multiscales[0].get("datasets") or []
+    if not datasets:
+        return None
+
+    arrays = []
+    for dataset in datasets:
+        dataset_path = str(dataset.get("path") or "").strip("/")
+        array_root = store_root if dataset_path in ("", ".") else store_root / dataset_path
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Found an empty list of filters in the array metadata document\..*",
+                category=UserWarning,
+            )
+            arrays.append(zarr.open_array(array_root, mode="r"))
+
+    return _StoreBackedNode(tuple(arrays), _build_store_backed_metadata(attrs))
+
+
 def _resolve_ome_zarr_format(store_root):
     version = None
     try:
-        attrs = _read_store_root_attrs(store_root)
+        attrs = _read_store_attrs(store_root)
         multiscales = attrs.get("multiscales") or []
         if multiscales:
             version = str(multiscales[0].get("version") or "")
@@ -271,16 +400,7 @@ def _resolve_ome_zarr_format(store_root):
     return CurrentFormat()
 
 
-def load_store_backed_image_node(image):
-    cached = getattr(image, "_omero_web_zarr_node", _MISSING)
-    if cached is not _MISSING:
-        return cached
-
-    store_root = resolve_image_backing_zarr_store(image)
-    if store_root is None:
-        setattr(image, "_omero_web_zarr_node", None)
-        return None
-
+def _load_store_backed_image_node_with_reader(store_root):
     from ome_zarr.io import parse_url
     from ome_zarr.reader import Reader
 
@@ -293,12 +413,47 @@ def load_store_backed_image_node(image):
         )
         location = parse_url(store_root, fmt=fmt)
         if location is None:
-            setattr(image, "_omero_web_zarr_node", None)
             return None
         for node in Reader(location)():
             if getattr(node, "data", None):
-                setattr(image, "_omero_web_zarr_node", node)
                 return node
+    return None
+
+
+@lru_cache(maxsize=_STORE_BACKED_NODE_CACHE_SIZE)
+def _load_store_backed_image_node_cached(store_root_text, signature):
+    store_root = Path(store_root_text)
+    try:
+        node = _load_store_backed_image_node_from_metadata(store_root)
+    except Exception:
+        LOGGER.debug(
+            "Direct metadata load failed for store-backed image node %s",
+            store_root,
+            exc_info=True,
+        )
+    else:
+        if node is not None:
+            return node
+    return _load_store_backed_image_node_with_reader(store_root)
+
+
+def load_store_backed_image_node(image):
+    cached = getattr(image, "_omero_web_zarr_node", _MISSING)
+    if cached is not _MISSING:
+        return cached
+
+    store_root = resolve_image_backing_zarr_store(image)
+    if store_root is None:
+        setattr(image, "_omero_web_zarr_node", None)
+        return None
+
+    try:
+        signature = _store_node_signature(store_root)
+        node = _load_store_backed_image_node_cached(str(store_root), signature)
+        setattr(image, "_omero_web_zarr_node", node)
+        return node
+    except OSError:
+        LOGGER.debug("Failed to load store-backed image node for %s", store_root, exc_info=True)
     setattr(image, "_omero_web_zarr_node", None)
     return None
 
@@ -558,6 +713,17 @@ def read_store_backed_plane(node, *, level=0, z=None, t=None):
 
 
 def _channel_color(entry, index):
+    if isinstance(entry, str):
+        candidate = entry.strip().lstrip("#")
+        if len(candidate) >= 6:
+            try:
+                return (
+                    int(candidate[0:2], 16),
+                    int(candidate[2:4], 16),
+                    int(candidate[4:6], 16),
+                )
+            except ValueError:
+                LOGGER.debug("Invalid channel color string %r", entry, exc_info=True)
     if isinstance(entry, list) and entry:
         endpoint = entry[-1]
         if isinstance(endpoint, (list, tuple)) and len(endpoint) >= 3:
@@ -742,3 +908,60 @@ def render_store_backed_thumbnail_bytes(image, *, size=96, z=None, t=None):
     )
     data, _, _ = encode_store_backed_pil_image(pil_image, "jpeg")
     return data
+
+
+def _exception_text(exc):
+    parts = [
+        str(exc),
+        getattr(exc, "message", None),
+        getattr(exc, "serverStackTrace", None),
+    ]
+    return "\n".join(str(part) for part in parts if part)
+
+
+def is_known_tile_size_failure(exc):
+    text = _exception_text(exc)
+    return "ZarrReader" in text and ("getOptimalTileWidth" in text or "getTileSize" in text)
+
+
+def _configured_max_tile_length(conn, default=1024):
+    if conn is None:
+        return int(default)
+    try:
+        value = conn.getConfigService().getConfigValue("omero.pixeldata.max_tile_length")
+        return max(1, int(value))
+    except Exception:
+        LOGGER.debug("Failed to resolve max tile length from OMERO config", exc_info=True)
+        return int(default)
+
+
+def _fallback_tile_size(image, conn=None):
+    max_tile_length = _configured_max_tile_length(conn or getattr(image, "_conn", None))
+    return (
+        max(1, min(int(image.getSizeX()), max_tile_length)),
+        max(1, min(int(image.getSizeY()), max_tile_length)),
+    )
+
+
+def get_safe_image_tile_size(image, conn=None):
+    rendering_engine = getattr(image, "_re", None)
+    if rendering_engine is None:
+        prepare = getattr(image, "_prepareRenderingEngine", None)
+        if callable(prepare):
+            prepare()
+        rendering_engine = getattr(image, "_re", None)
+    if rendering_engine is None:
+        return _fallback_tile_size(image, conn=conn)
+
+    try:
+        width, height = rendering_engine.getTileSize()
+        return int(width), int(height)
+    except Exception as exc:
+        if not is_known_tile_size_failure(exc):
+            raise
+        width, height = _fallback_tile_size(image, conn=conn)
+        LOGGER.warning(
+            "Using fallback tile size for image %s after RenderingEngine failure",
+            getattr(image, "id", None) or getattr(image, "getId", lambda: "?")(),
+        )
+        return width, height
