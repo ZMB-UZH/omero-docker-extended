@@ -396,6 +396,12 @@ def _get_store_backed_preview_dataset_path(image, preview_level):
     return str(dataset.get("path") or actual_index)
 
 
+def _resolve_preview_dataset_path(image, preview_level):
+    if resolve_image_backing_zarr_store(image) is None:
+        return None
+    return _get_store_backed_preview_dataset_path(image, preview_level)
+
+
 def _store_backed_preview_zattrs(image, version):
     payload = _get_store_backed_root_zattrs_payload(image, version=version)
     if payload is None:
@@ -444,10 +450,13 @@ def preview_image_zgroup(request, iid, version="0.4", conn=None, **kwargs):
 @login_required()
 def preview_image_zarray(request, iid, level, conn=None, **kwargs):
     image = conn.getObject("Image", iid)
+    dataset_path = _resolve_preview_dataset_path(image, level)
+    if dataset_path is None:
+        return image_zarray(request, iid, level, conn=conn, **kwargs)
     store_rsp = _store_backed_response(
         image,
         "0.4",
-        _get_store_backed_preview_dataset_path(image, level),
+        dataset_path,
         ".zarray",
     )
     if store_rsp is not None:
@@ -458,10 +467,13 @@ def preview_image_zarray(request, iid, level, conn=None, **kwargs):
 @login_required()
 def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
     image = conn.getObject("Image", iid)
+    dataset_path = _resolve_preview_dataset_path(image, level)
+    if dataset_path is None:
+        return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
     store_rsp = _store_backed_response(
         image,
         "0.4",
-        _get_store_backed_preview_dataset_path(image, level),
+        dataset_path,
         *chunk.split("/"),
     )
     if store_rsp is not None:

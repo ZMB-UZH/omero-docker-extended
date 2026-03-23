@@ -6,6 +6,7 @@ from io import BytesIO
 
 import django
 import numpy as np
+from django.http import HttpResponse
 from django.test import RequestFactory
 import tifffile
 
@@ -272,6 +273,84 @@ class _FakeConn:
         assert object_type == "Image"
         assert iid == self._image.id
         return self._image
+
+
+def test_preview_image_zarray_falls_back_to_raw_path_for_non_store_backed(monkeypatch):
+    image = _FakeImage(None, image_id=41, name="bioformats.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/41.zarr/0/.zarray")
+    sentinel = HttpResponse("raw-zarray", content_type="application/json")
+
+    monkeypatch.setattr(
+        views,
+        "_get_store_backed_preview_dataset_path",
+        lambda image, level: (_ for _ in ()).throw(AssertionError("unexpected store-backed path lookup")),
+    )
+    monkeypatch.setattr(views, "image_zarray", lambda request, iid, level, conn=None, **kwargs: sentinel)
+
+    response = views.preview_image_zarray.__wrapped__(request, 41, 0, conn=_FakeConn(image))
+
+    assert response is sentinel
+
+
+def test_preview_image_chunk_falls_back_to_raw_path_for_non_store_backed(monkeypatch):
+    image = _FakeImage(None, image_id=42, name="bioformats.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/42.zarr/0/0/0/0/0")
+    sentinel = HttpResponse(b"raw-chunk", content_type="application/octet-stream")
+
+    monkeypatch.setattr(
+        views,
+        "_get_store_backed_preview_dataset_path",
+        lambda image, level: (_ for _ in ()).throw(AssertionError("unexpected store-backed path lookup")),
+    )
+    monkeypatch.setattr(
+        views,
+        "image_chunk",
+        lambda request, iid, level, chunk, conn=None, **kwargs: sentinel,
+    )
+
+    response = views.preview_image_chunk.__wrapped__(request, 42, 0, "0/0/0/0", conn=_FakeConn(image))
+
+    assert response is sentinel
+
+
+def test_preview_image_zarray_uses_store_backed_preview_dataset_path(monkeypatch):
+    image = _FakeImage("/managed/demo.ome.zarr", image_id=43, name="managed.ome.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/43.zarr/0/.zarray")
+    sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
+
+    monkeypatch.setattr(views, "_resolve_preview_dataset_path", lambda image, level: "s0")
+    monkeypatch.setattr(views, "_store_backed_response", lambda image, version, *parts: sentinel)
+    monkeypatch.setattr(
+        views,
+        "image_zarray",
+        lambda request, iid, level, conn=None, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected raw fallback")),
+    )
+
+    response = views.preview_image_zarray.__wrapped__(request, 43, 0, conn=_FakeConn(image))
+
+    assert response is sentinel
+
+
+def test_preview_image_chunk_uses_store_backed_preview_dataset_path(monkeypatch):
+    image = _FakeImage("/managed/demo.ome.zarr", image_id=44, name="managed.ome.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/44.zarr/0/0/0/0/0")
+    store_response = HttpResponse(b"store-chunk", content_type="application/octet-stream")
+    store_response["Content-Length"] = len(b"store-chunk")
+
+    monkeypatch.setattr(views, "_resolve_preview_dataset_path", lambda image, level: "s0")
+    monkeypatch.setattr(views, "_store_backed_response", lambda image, version, *parts: store_response)
+    monkeypatch.setattr(
+        views,
+        "image_chunk",
+        lambda request, iid, level, chunk, conn=None, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected raw fallback")),
+    )
+
+    response = views.preview_image_chunk.__wrapped__(request, 44, 0, "0/0/0/0", conn=_FakeConn(image))
+
+    assert response.status_code == 200
+    assert response.content == b"store-chunk"
+    assert response["Content-Length"] == str(len(b"store-chunk"))
+    assert response["Content-Disposition"] == "attachment; filename=0.0.0.0"
 
 
 def test_download_store_metadata_returns_json_manifest(tmp_path):
