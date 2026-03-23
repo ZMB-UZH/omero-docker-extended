@@ -418,21 +418,6 @@ class ImportPluginRegressionTests(TestCase):
         fake_enums_module = types.ModuleType("omero.model.enums")
         fake_enums_module.UnitsLength = _FakeUnitsLength
 
-        fake_runtime = types.SimpleNamespace(
-            open_group=lambda path, mode="r": types.SimpleNamespace(store="store"),
-            load_attrs=lambda store, image_relative_path: {"multiscales": []},
-            parse_image_metadata=lambda store, attrs, image_relative_path: (
-                {},
-                "uint8",
-                {
-                    "x": ("10.0", "nm"),
-                    "y": ("5.0", "µm"),
-                    "z": ("2.5", "um"),
-                },
-            ),
-            create_length=lambda value_unit: _FakeLength(value_unit[0], _FakeUnitsLength.PIXEL),
-        )
-
         core_functions._units_length_for_name.cache_clear()
         core_functions._units_length_by_normalized_name.cache_clear()
         core_functions._units_length_symbol_aliases.cache_clear()
@@ -450,8 +435,16 @@ class ImportPluginRegressionTests(TestCase):
             create=True,
         ), mock.patch.object(
             core_functions,
-            "_runtime_zarr_import_module",
-            return_value=fake_runtime,
+            "inspect_ome_zarr_image",
+            return_value=types.SimpleNamespace(
+                recognized=True,
+                support_error=None,
+                physical_sizes={
+                    "x": ("10.0", "nm"),
+                    "y": ("5.0", "µm"),
+                    "z": ("2.5", "um"),
+                },
+            ),
         ):
             sizes, error = core_functions._runtime_native_zarr_physical_sizes(
                 Path("/OMERO/ManagedRepository/user/test/sample.ome.zarr"),
@@ -872,8 +865,8 @@ class ImportPluginRegressionTests(TestCase):
                 username="test",
                 group_name="users_private",
                 native_plan=core_functions._NativeZarrImportPlan(
-                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
-                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_ZARR,
+                    compatibility_details="OME-Zarr image detected by ome-zarr",
                 ),
             )
 
@@ -957,8 +950,8 @@ class ImportPluginRegressionTests(TestCase):
                 username="test",
                 group_name="users_private",
                 native_plan=core_functions._NativeZarrImportPlan(
-                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
-                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_ZARR,
+                    compatibility_details="OME-Zarr image detected by ome-zarr",
                 ),
             )
 
@@ -1041,8 +1034,8 @@ class ImportPluginRegressionTests(TestCase):
                 username="test",
                 group_name="users_private",
                 native_plan=core_functions._NativeZarrImportPlan(
-                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
-                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_ZARR,
+                    compatibility_details="OME-Zarr image detected by ome-zarr",
                 ),
             )
 
@@ -1127,8 +1120,8 @@ class ImportPluginRegressionTests(TestCase):
                 username="test",
                 group_name="users_private",
                 native_plan=core_functions._NativeZarrImportPlan(
-                    kind=core_functions._NATIVE_ZARR_KIND_OME_NGFF,
-                    compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
+                    kind=core_functions._NATIVE_ZARR_KIND_OME_ZARR,
+                    compatibility_details="OME-Zarr image detected by ome-zarr",
                 ),
             )
 
@@ -1167,7 +1160,18 @@ class ImportPluginRegressionTests(TestCase):
             transfer_root = tmp_root / "shared-transfer"
             transfer_root.mkdir()
 
-            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root):
+            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=True,
+                        support_error=None,
+                        compatibility_details="OME-Zarr image detected by ome-zarr",
+                    ),
+                ), \
+                mock.patch.object(core_functions, "normalize_native_ome_zarr_copy", return_value=None):
                 shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
 
             self.assertIsNone(error)
@@ -1223,7 +1227,18 @@ class ImportPluginRegressionTests(TestCase):
                 (subdir / ".zarray").write_text('{"shape":[4,4],"dtype":"<u2"}', encoding="utf-8")
                 (subdir / "0.0").write_bytes(b"chunk")
 
-            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root):
+            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=True,
+                        support_error=None,
+                        compatibility_details="OME-Zarr image detected by ome-zarr",
+                    ),
+                ), \
+                mock.patch.object(core_functions, "normalize_native_ome_zarr_copy", return_value=None):
                 shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
 
             self.assertIsNone(error)
@@ -1234,52 +1249,68 @@ class ImportPluginRegressionTests(TestCase):
                 attrs = json.load(fh)
             self.assertEqual(["s0", "s1"], [d["path"] for d in attrs["multiscales"][0]["datasets"]])
 
-    def test_check_import_compatibility_accepts_ome_wrapped_native_zarr_metadata(self):
+    def test_check_import_compatibility_accepts_incompatible_ome_zarr_via_ome_zarr_support(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            zarr_dir = Path(tmpdir) / "wrapped.ome.zarr"
+            zarr_dir = Path(tmpdir) / "image.ome.zarr"
             zarr_dir.mkdir()
             (zarr_dir / "s0").mkdir()
             (zarr_dir / "s0" / ".zarray").write_text(
-                '{"shape":[1,1],"dtype":"<u2"}',
+                '{"zarr_format": 2, "shape":[1,1],"chunks":[1,1],"dtype":"|u1","compressor":null,"fill_value":0,"filters":null,"order":"C"}',
                 encoding="utf-8",
             )
+            (zarr_dir / "s0" / "0").write_bytes(b"\x00")
             (zarr_dir / ".zattrs").write_text(
                 json.dumps(
                     {
-                        "ome": {
-                            "multiscales": [
-                                {
-                                    "version": "0.4",
-                                    "axes": [{"name": "y"}, {"name": "x"}],
-                                    "datasets": [
-                                        {
-                                            "path": "s0",
-                                            "coordinateTransformations": [
-                                                {"type": "scale", "scale": [1.0, 1.0]}
-                                            ],
-                                        }
-                                    ],
-                                }
-                            ]
-                        }
+                        "multiscales": [
+                            {
+                                "version": "0.4",
+                                "axes": [{"name": "y"}, {"name": "x"}],
+                                "datasets": [
+                                    {
+                                        "path": "s0",
+                                        "coordinateTransformations": [
+                                            {"type": "scale", "scale": [1.0, 1.0]}
+                                        ],
+                                    }
+                                ],
+                            }
+                        ]
                     }
                 ),
                 encoding="utf-8",
             )
-
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="wrapped.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout="",
+                stderr="unsupported",
             )
 
-        self.assertEqual("compatible", result["status"])
-        self.assertIn("omero-cli-zarr", result["details"])
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=True,
+                        support_error=None,
+                        compatibility_details="OME-Zarr image detected by ome-zarr",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="image.ome.zarr",
+                )
 
-    def test_check_import_compatibility_accepts_bioformats2raw_layout_via_native_cli(self):
+        self.assertEqual("compatible", result["status"])
+        self.assertIn("ome-zarr", result["details"].lower())
+
+    def test_check_import_compatibility_uses_bioformats_when_scan_finds_groups(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "bf2raw.ome.zarr"
             series_dir = zarr_dir / "0"
@@ -1314,18 +1345,35 @@ class ImportPluginRegressionTests(TestCase):
                 ),
                 encoding="utf-8",
             )
-
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="bf2raw.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout=f"# Group: {zarr_dir}\n{array_dir}\n",
+                stderr="",
             )
 
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=False,
+                        support_error="OME-Zarr metadata is missing multiscale axes information.",
+                        compatibility_details="",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="bf2raw.ome.zarr",
+                )
+
         self.assertEqual("compatible", result["status"])
-        self.assertIn("bioformats2raw", result["details"])
+        self.assertEqual("File format supported by OMERO", result["details"])
 
     def test_check_import_compatibility_rejects_invalid_native_zarr_layout(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1346,17 +1394,35 @@ class ImportPluginRegressionTests(TestCase):
                 encoding="utf-8",
             )
 
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="broken.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout="",
+                stderr="unsupported",
             )
 
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=False,
+                        support_error="OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
+                        compatibility_details="",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="broken.ome.zarr",
+                )
+
         self.assertEqual("error", result["status"])
-        self.assertIn("axes", result["details"])
+        self.assertIn("coordinate transformations", result["details"].lower())
 
     def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1381,17 +1447,35 @@ class ImportPluginRegressionTests(TestCase):
                 encoding="utf-8",
             )
 
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="broken-scale.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout="",
+                stderr="unsupported",
             )
 
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=False,
+                        support_error="OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
+                        compatibility_details="",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="broken-scale.ome.zarr",
+                )
+
         self.assertEqual("error", result["status"])
-        self.assertIn("coordinateTransformations", result["details"])
+        self.assertIn("coordinate transformations", result["details"].lower())
 
     def test_check_import_compatibility_rejects_native_zarr_string_axes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1423,17 +1507,35 @@ class ImportPluginRegressionTests(TestCase):
                 encoding="utf-8",
             )
 
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="string-axes.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout="",
+                stderr="unsupported",
             )
 
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=False,
+                        support_error="OME-Zarr metadata was found, but ome-zarr did not expose a readable multiscale image node.",
+                        compatibility_details="",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="string-axes.ome.zarr",
+                )
+
         self.assertEqual("error", result["status"])
-        self.assertIn("axes must use object metadata", result["details"])
+        self.assertIn("readable multiscale image node", result["details"].lower())
 
     def test_check_import_compatibility_rejects_sparse_bioformats2raw_series(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1470,17 +1572,38 @@ class ImportPluginRegressionTests(TestCase):
                 encoding="utf-8",
             )
 
-            result = core_functions._check_import_compatibility(
-                "session-key",
-                "omeroserver",
-                4064,
-                zarr_dir,
-                dataset_id=None,
-                relative_path="bf2raw-gap.ome.zarr",
+            scan_result = subprocess.CompletedProcess(
+                args=["omero", "import", "-f"],
+                returncode=0,
+                stdout="",
+                stderr="unsupported",
             )
 
+            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+                mock.patch.object(
+                    core_functions,
+                    "inspect_ome_zarr_image",
+                    return_value=types.SimpleNamespace(
+                        recognized=True,
+                        supported=False,
+                        support_error=(
+                            "OME-Zarr metadata was found, but ome-zarr did not expose "
+                            "a readable multiscale image node."
+                        ),
+                        compatibility_details="",
+                    ),
+                ):
+                result = core_functions._check_import_compatibility(
+                    "session-key",
+                    "omeroserver",
+                    4064,
+                    zarr_dir,
+                    dataset_id=None,
+                    relative_path="bf2raw-gap.ome.zarr",
+                )
+
         self.assertEqual("error", result["status"])
-        self.assertIn("contiguous and zero-based", result["details"])
+        self.assertIn("readable multiscale image node", result["details"])
 
     def test_background_import_session_closes_created_session_object(self):
         fake_session = types.SimpleNamespace(

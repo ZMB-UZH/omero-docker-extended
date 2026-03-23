@@ -42,6 +42,12 @@ from ..constants import (
     OMERO_CLI,
     OMERO_IMPORT_SCAN_DEPTH,
 )
+from ..services.ome_zarr_support import (
+    OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW,
+    OME_ZARR_IMPORT_KIND_IMAGE,
+    inspect_ome_zarr_image,
+    normalize_native_ome_zarr_copy,
+)
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
@@ -976,15 +982,6 @@ def _query_image_external_info(conn, image_id: int) -> tuple[str, str]:
     return lsid, entity_type
 
 
-@lru_cache(maxsize=1)
-def _runtime_zarr_import_module():
-    try:
-        from omero_zarr import zarr_import as runtime_module
-    except Exception:
-        return None
-    return runtime_module
-
-
 @lru_cache(maxsize=None)
 def _units_length_for_name(unit_name: str):
     from omero.model.enums import UnitsLength
@@ -1142,34 +1139,19 @@ def _runtime_native_zarr_physical_sizes(
     managed_zarr: Path,
     image_relative_path: Optional[str],
 ) -> tuple[dict[str, object], Optional[str]]:
-    runtime_module = _runtime_zarr_import_module()
-    if runtime_module is None:
-        return {}, "Installed omero-cli-zarr runtime could not be imported."
+    target_path = managed_zarr
+    if image_relative_path:
+        target_path = managed_zarr / image_relative_path
 
-    try:
-        root_group = runtime_module.open_group(str(managed_zarr), mode="r")
-        store = root_group.store
-        attrs = runtime_module.load_attrs(store, image_relative_path)
-        _sizes, _pixels_type, pixel_size = runtime_module.parse_image_metadata(
-            store,
-            attrs,
-            image_relative_path,
-        )
-    except Exception as exc:
-        return {}, f"Failed to parse native Zarr image metadata: {exc}"
-
-    if not isinstance(pixel_size, dict):
-        return {}, None
+    inspection = inspect_ome_zarr_image(target_path)
+    if not inspection.recognized:
+        return {}, "ome-zarr did not recognize the imported store as a readable OME-Zarr image."
+    if inspection.support_error:
+        return {}, inspection.support_error
 
     normalized_sizes = {}
-    for axis_name in ("x", "y", "z"):
-        raw_value = pixel_size.get(axis_name)
-        if raw_value is None:
-            continue
+    for axis_name, raw_value in inspection.physical_sizes.items():
         try:
-            # The installed omero-cli-zarr runtime does not normalize NGFF
-            # shorthand units such as "nm" and "um"; resolve them here before
-            # persisting OMERO PhysicalSizeX/Y/Z.
             length_value = _native_zarr_length_from_value_unit(raw_value)
         except Exception as exc:
             return {}, f"Failed to normalize native Zarr pixel size for axis {axis_name}: {exc}"
@@ -3679,6 +3661,7 @@ def _has_import_candidates_in_output(
         expected_resolved = expected_file_path.resolve()
     except OSError:
         expected_resolved = expected_file_path
+    expected_is_dir = expected_file_path.is_dir()
 
     for candidate in candidates:
         candidate_path = _parse_candidate_path_line(candidate)
@@ -3689,6 +3672,24 @@ def _has_import_candidates_in_output(
         except OSError:
             resolved_candidate = candidate_path
         if resolved_candidate == expected_resolved:
+            return True
+        if expected_is_dir:
+            try:
+                resolved_candidate.relative_to(expected_resolved)
+            except ValueError:
+                pass
+            else:
+                return True
+
+    for parsed_group in _parse_import_groups(output):
+        group_path = parsed_group.get("group_path")
+        if group_path is None:
+            continue
+        try:
+            resolved_group = group_path.resolve()
+        except OSError:
+            resolved_group = group_path
+        if resolved_group == expected_resolved:
             return True
 
     return False
@@ -3948,18 +3949,6 @@ def _probe_import_path(
     except OSError:
         path_resolved = path
 
-    # OME-NGFF zarrs are imported via omero-cli-zarr, not Bio-Formats.
-    # Skip the expensive Bio-Formats scan and return empty so the caller
-    # falls through to the extension-based directory-package grouping.
-    if (
-        path.is_dir()
-        and any(path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
-        and _is_ome_ngff_zarr(path)
-    ):
-        cached = {"coverage": set(), "groups": (), "returncode": 0, "stderr": "", "stdout": ""}
-        cache[cache_key] = cached
-        return cached
-
     try:
         result = _run_local_import_scan(path)
     except Exception as exc:
@@ -4192,6 +4181,15 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
         covered_relative_paths.add(rel_path)
         units.append(_single_entry_import_unit(entry))
 
+    all_entries = job_dict.get("files", [])
+    for unit in units:
+        covered_entries = [
+            all_entries[entry_index]
+            for entry_index in unit.get("covered_indexes", [])
+            if isinstance(entry_index, int) and 0 <= entry_index < len(all_entries)
+        ]
+        _attach_import_routing_fields(unit, covered_entries)
+
     units.sort(key=lambda unit: unit["index"])
     return units
 
@@ -4224,68 +4222,58 @@ def _check_import_compatibility(
             "details": f"Missing staged file: {file_path.name}",
         }
 
-    # Zarr image layouts supported by the installed omero-cli-zarr runtime are
-    # validated and imported natively; unsupported recognized Zarr layouts fail
-    # early with a deterministic message.
-    if (
+    native_plan = None
+    native_plan_payload = None
+    is_directory_zarr = (
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
-    ):
+    )
+    if is_directory_zarr:
         native_plan = _native_zarr_import_plan(file_path)
-        if native_plan.kind:
-            if native_plan.validation_error:
-                return {
-                    "status": "error",
-                    "relative_path": relative_path,
-                    "stdout": "",
-                    "stderr": native_plan.validation_error,
-                    "details": native_plan.validation_error,
-                }
-            details = native_plan.compatibility_details
-            return {
-                "status": "compatible",
-                "relative_path": relative_path,
-                "stdout": "",
-                "stderr": "",
-                "details": details,
-            }
-
-        if native_plan.recognized_zarr and native_plan.validation_error:
-            return {
-                "status": "error",
-                "relative_path": relative_path,
-                "stdout": "",
-                "stderr": native_plan.validation_error,
-                "details": native_plan.validation_error,
-            }
+        native_plan_payload = _serialize_native_zarr_plan(native_plan)
 
     try:
         result = _run_local_import_scan(file_path)
     except subprocess.TimeoutExpired:
         timeout_seconds = _get_local_import_scan_timeout_seconds()
-        return {
+        response = {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
             "stderr": "Compatibility check timeout",
             "details": f"Compatibility check timeout after {timeout_seconds} seconds",
         }
+        if is_directory_zarr:
+            response["import_backend"] = _ZARR_IMPORT_BACKEND_BIOFORMATS
+            if native_plan_payload is not None:
+                response["native_zarr_plan"] = native_plan_payload
+        return response
     except FileNotFoundError as exc:
-        return {
+        response = {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
             "stderr": str(exc),
             "details": f"OMERO CLI not found: {exc}",
         }
+        if is_directory_zarr:
+            response["import_backend"] = _ZARR_IMPORT_BACKEND_BIOFORMATS
+            if native_plan_payload is not None:
+                response["native_zarr_plan"] = native_plan_payload
+        return response
     except Exception as exc:
-        return {
+        response = {
             "status": "error",
             "relative_path": relative_path,
             "stdout": "",
             "stderr": str(exc),
             "details": f"Unexpected error during compatibility check: {exc}",
         }
+        if is_directory_zarr:
+            response["import_backend"] = _ZARR_IMPORT_BACKEND_BIOFORMATS
+            if native_plan_payload is not None:
+                response["native_zarr_plan"] = native_plan_payload
+        return response
     
     # CRITICAL FIX: Classify based on stdout content, NOT return code
     status, details = _classify_compatibility_output(
@@ -4304,14 +4292,55 @@ def _check_import_compatibility(
         len((result.stdout or "").splitlines()),
         len((result.stderr or "").splitlines()),
     )
-    
-    return {
+
+    if status == "compatible":
+        response = {
+            "status": status,
+            "relative_path": relative_path,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "details": details or "Compatibility check completed.",
+        }
+        if is_directory_zarr:
+            response["import_backend"] = _ZARR_IMPORT_BACKEND_BIOFORMATS
+            if native_plan_payload is not None:
+                response["native_zarr_plan"] = native_plan_payload
+        return response
+
+    if status == "incompatible" and is_directory_zarr:
+        if native_plan and native_plan.kind:
+            return {
+                "status": "compatible",
+                "relative_path": relative_path,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "details": native_plan.compatibility_details or details,
+                "import_backend": _ZARR_IMPORT_BACKEND_NATIVE,
+                "native_zarr_plan": native_plan_payload,
+            }
+        if native_plan and native_plan.recognized_zarr and native_plan.validation_error:
+            return {
+                "status": "error",
+                "relative_path": relative_path,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "details": native_plan.validation_error,
+                "import_backend": _ZARR_IMPORT_BACKEND_NATIVE,
+                "native_zarr_plan": native_plan_payload,
+            }
+
+    response = {
         "status": status,
         "relative_path": relative_path,
         "stdout": result.stdout,
         "stderr": result.stderr,
         "details": details or "Compatibility check completed.",
     }
+    if is_directory_zarr:
+        response["import_backend"] = _ZARR_IMPORT_BACKEND_BIOFORMATS
+        if native_plan_payload is not None:
+            response["native_zarr_plan"] = native_plan_payload
+    return response
 
 def _run_compatibility_check(job_id: str):
     try:
@@ -4455,6 +4484,8 @@ def _run_compatibility_check_inner(job_id: str):
                     "relative_path": unit.get("relative_path"),
                     "status": result.get("status"),
                     "details": result.get("details", ""),
+                    "import_backend": result.get("import_backend"),
+                    "native_zarr_plan": result.get("native_zarr_plan"),
                 }
             )
 
@@ -4487,6 +4518,17 @@ def _run_compatibility_check_inner(job_id: str):
                     entry.setdefault("compatibility_errors", []).append(
                         result.get("details") or "Compatibility check failed."
                     )
+                entry["compatibility_details"] = result.get("details", "") or ""
+                import_backend = result.get("import_backend")
+                if import_backend:
+                    entry["import_backend"] = import_backend
+                else:
+                    entry.pop("import_backend", None)
+                native_zarr_plan = result.get("native_zarr_plan")
+                if native_zarr_plan is not None:
+                    entry["native_zarr_plan"] = native_zarr_plan
+                else:
+                    entry.pop("native_zarr_plan", None)
 
         existing_incompatible = set(job_dict.get("incompatible_files", []))
         existing_incompatible.update(filter(None, new_incompatible))
@@ -4546,356 +4588,85 @@ class _NativeZarrImportPlan:
     compatibility_details: str = ""
 
 
-_NATIVE_ZARR_KIND_OME_NGFF = "ome_ngff_image"
-_NATIVE_ZARR_KIND_BIOFORMATS2RAW = "bioformats2raw_v3"
-_SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK = frozenset(
-    {
-        "int8",
-        "int16",
-        "uint8",
-        "uint16",
-        "int32",
-        "uint32",
-        "float_",
-        "float16",
-        "float32",
-        "float64",
-        "complex_",
-        "complex64",
-    }
+_NATIVE_ZARR_KIND_OME_ZARR = OME_ZARR_IMPORT_KIND_IMAGE
+_NATIVE_ZARR_KIND_BIOFORMATS2RAW = OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW
+_ZARR_IMPORT_BACKEND_BIOFORMATS = "bioformats"
+_ZARR_IMPORT_BACKEND_NATIVE = "native_zarr"
+_IMPORT_ROUTING_ENTRY_FIELDS = (
+    "compatibility",
+    "compatibility_details",
+    "import_backend",
+    "native_zarr_plan",
 )
 
 
-@lru_cache(maxsize=1)
-def _supported_native_zarr_pixel_types() -> frozenset[str]:
-    try:
-        from omero_zarr.zarr_import import PIXELS_TYPE as runtime_pixels_type
-    except Exception:
-        return _SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK
-
-    if isinstance(runtime_pixels_type, dict) and runtime_pixels_type:
-        return frozenset(str(name) for name in runtime_pixels_type.keys())
-    return _SUPPORTED_NATIVE_ZARR_PIXEL_TYPES_FALLBACK
-
-
-def _coerce_int(value) -> Optional[int]:
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-
-
-def _read_zarr_attrs_payload(group_dir: Path) -> tuple[Optional[dict], Optional[dict], Optional[str]]:
-    zattrs_path = group_dir / ".zattrs"
-    if not zattrs_path.is_file():
-        if (group_dir / "zarr.json").is_file():
-            return None, None, (
-                "Zarr v3 stores are not supported by the installed OMERO render stack: "
-                f"{group_dir.name}"
-            )
-        return None, None, f"Missing .zattrs in Zarr source: {group_dir.name}"
-
-    try:
-        with open(zattrs_path, encoding="utf-8") as fh:
-            raw_attrs = json.load(fh)
-    except (json.JSONDecodeError, OSError) as exc:
-        return None, None, f"Failed to read Zarr metadata for native import: {exc}"
-
-    if not isinstance(raw_attrs, dict):
-        return None, None, f"Invalid Zarr metadata payload in {zattrs_path}"
-
-    ome_attrs = raw_attrs.get("ome")
-    if isinstance(ome_attrs, dict):
-        return raw_attrs, ome_attrs, None
-    return raw_attrs, raw_attrs, None
-
-
-def _normalized_zarr_attrs(group_dir: Path) -> Optional[dict]:
-    _raw_attrs, attrs, _error = _read_zarr_attrs_payload(group_dir)
-    return attrs
-
-
-def _extract_axis_names(axes) -> Optional[list[str]]:
-    if not isinstance(axes, list) or not axes:
-        return None
-
-    names = []
-    for axis in axes:
-        if isinstance(axis, str):
-            name = axis.strip().lower()
-        elif isinstance(axis, dict):
-            name = str(axis.get("name") or "").strip().lower()
-        else:
-            name = ""
-        if not name:
-            return None
-        names.append(name)
-    return names
-
-
-def _normalized_axis_objects(axes) -> Optional[list[dict]]:
-    if not isinstance(axes, list) or not axes:
-        return None
-
-    normalized = []
-    for axis in axes:
-        if not isinstance(axis, dict):
-            return None
-        name = str(axis.get("name") or "").strip().lower()
-        if not name:
-            return None
-        normalized.append(axis)
-    return normalized
-
-
-def _normalize_zarr_dtype_name(raw_dtype) -> str:
-    text = str(raw_dtype or "").strip()
-    alias_map = {
-        "|u1": "uint8",
-        "<u1": "uint8",
-        ">u1": "uint8",
-        "|i1": "int8",
-        "<i1": "int8",
-        ">i1": "int8",
-        "<u2": "uint16",
-        ">u2": "uint16",
-        "<i2": "int16",
-        ">i2": "int16",
-        "<u4": "uint32",
-        ">u4": "uint32",
-        "<i4": "int32",
-        ">i4": "int32",
-        "<f2": "float16",
-        ">f2": "float16",
-        "<f4": "float32",
-        ">f4": "float32",
-        "<f8": "float64",
-        ">f8": "float64",
-        "<c8": "complex64",
-        ">c8": "complex64",
-    }
-    if text in alias_map:
-        return alias_map[text]
-    try:
-        import numpy as np
-
-        return np.dtype(raw_dtype).name
-    except Exception:
-        return text
-
-
-def _primary_multiscale_components(attrs: dict) -> tuple[Optional[dict], Optional[dict], Optional[str]]:
-    multiscales = attrs.get("multiscales")
-    if not isinstance(multiscales, list) or not multiscales:
-        return None, None, "OME-Zarr source is missing root multiscales metadata."
-
-    primary_multiscale = multiscales[0]
-    if not isinstance(primary_multiscale, dict):
-        return None, None, "OME-Zarr multiscales metadata is malformed."
-
-    datasets = primary_multiscale.get("datasets")
-    if not isinstance(datasets, list) or not datasets:
-        return None, None, "OME-Zarr source is missing multiscales.datasets metadata."
-
-    primary_dataset = datasets[0]
-    if not isinstance(primary_dataset, dict):
-        return None, None, "OME-Zarr primary dataset metadata is malformed."
-
-    return primary_multiscale, primary_dataset, None
-
-
-def _validate_native_ome_ngff_group(store_root: Path, attrs: dict, *, display_name: str) -> Optional[str]:
-    primary_multiscale, primary_dataset, metadata_error = _primary_multiscale_components(attrs)
-    if metadata_error:
-        return metadata_error
-
-    axes = primary_multiscale.get("axes")
-    axis_objects = _normalized_axis_objects(axes)
-    if not axis_objects:
-        return (
-            "OME-Zarr axes must use object metadata with axis names for the installed "
-            f"omero-cli-zarr runtime: {display_name}"
-        )
-    axis_names = _extract_axis_names(axes)
-    if not axis_names:
-        return f"OME-Zarr source is missing valid multiscales.axes metadata: {display_name}"
-    if "x" not in axis_names or "y" not in axis_names:
-        return f"OME-Zarr axes must include x and y for native import: {display_name}"
-
-    primary_path = str(primary_dataset.get("path") or "").strip()
-    if not primary_path:
-        return "OME-Zarr source is missing the primary multiscale dataset path."
-
-    array_dir = (store_root / primary_path).resolve(strict=False)
-    try:
-        array_dir.relative_to(store_root.resolve(strict=False))
-    except ValueError:
-        return f"OME-Zarr dataset path escapes the store root: {primary_path}"
-
-    if not array_dir.exists():
-        return f"OME-Zarr dataset path does not exist: {primary_path}"
-    if not array_dir.is_dir():
-        return f"OME-Zarr dataset path is not a directory-backed array: {primary_path}"
-    if (array_dir / "zarr.json").is_file() and not (array_dir / ".zarray").is_file():
-        return f"Zarr v3 arrays are not supported by the installed OMERO render stack: {primary_path}"
-
-    zarray_path = array_dir / ".zarray"
-    if not zarray_path.is_file():
-        return f"OME-Zarr dataset path is not a readable array: {primary_path}"
-
-    try:
-        with open(zarray_path, encoding="utf-8") as fh:
-            zarray = json.load(fh)
-    except (json.JSONDecodeError, OSError) as exc:
-        return f"Failed to read primary Zarr array metadata for native import: {exc}"
-
-    shape = zarray.get("shape")
-    if not isinstance(shape, list) or not shape:
-        return f"OME-Zarr array shape metadata is invalid for native import: {primary_path}"
-    if len(shape) != len(axis_names):
-        return (
-            "OME-Zarr axes and primary array rank do not match for native import: "
-            f"{primary_path}"
-        )
-    try:
-        if any(int(length) <= 0 for length in shape):
-            return f"OME-Zarr array shape contains non-positive dimensions: {primary_path}"
-    except (TypeError, ValueError):
-        return f"OME-Zarr array shape is malformed: {primary_path}"
-
-    dtype_name = _normalize_zarr_dtype_name(zarray.get("dtype"))
-    if dtype_name not in _supported_native_zarr_pixel_types():
-        return (
-            "OME-Zarr pixel dtype is not supported by the installed omero-cli-zarr "
-            f"runtime: {dtype_name or '?'}"
-        )
-
-    coordinate_transforms = primary_dataset.get("coordinateTransformations")
-    if not isinstance(coordinate_transforms, list) or not coordinate_transforms:
-        return (
-            "OME-Zarr primary dataset is missing coordinateTransformations metadata "
-            f"required by the installed omero-cli-zarr runtime: {primary_path}"
-        )
-
-    found_scale = False
-    for transform in coordinate_transforms:
-        if not isinstance(transform, dict) or transform.get("type") != "scale":
-            continue
-        scale = transform.get("scale")
-        if not isinstance(scale, list) or len(scale) != len(axis_names):
-            return (
-                "OME-Zarr scale transform does not match the primary array rank: "
-                f"{primary_path}"
-            )
-        try:
-            if any(float(value) <= 0 for value in scale):
-                return f"OME-Zarr scale transform contains non-positive values: {primary_path}"
-        except (TypeError, ValueError):
-            return f"OME-Zarr scale transform is malformed: {primary_path}"
-        found_scale = True
-        break
-    if not found_scale:
-        return (
-            "OME-Zarr primary dataset is missing a scale transform required by the "
-            f"installed omero-cli-zarr runtime: {primary_path}"
-        )
-
-    return None
-
-
-def _validate_native_bioformats2raw_zarr(zarr_path: Path, attrs: dict) -> Optional[str]:
-    layout_version = _coerce_int(attrs.get("bioformats2raw.layout"))
-    if layout_version != 3:
-        return (
-            "bioformats2raw-layout OME-Zarr is not supported by the installed "
-            f"omero-cli-zarr runtime: {attrs.get('bioformats2raw.layout')!r}"
-        )
-
-    series_dirs = sorted(
-        (path for path in zarr_path.iterdir() if path.is_dir() and path.name.isdigit()),
-        key=lambda path: int(path.name),
-    )
-    if not series_dirs:
-        return "bioformats2raw-layout OME-Zarr is missing numeric image series groups."
-
-    expected_series = list(range(len(series_dirs)))
-    actual_series = [int(path.name) for path in series_dirs]
-    if actual_series != expected_series:
-        return (
-            "bioformats2raw-layout OME-Zarr series groups must be contiguous and "
-            f"zero-based for the installed omero-cli-zarr runtime: {actual_series}"
-        )
-
-    for series_dir in series_dirs:
-        _series_raw, series_attrs, series_error = _read_zarr_attrs_payload(series_dir)
-        if series_error:
-            return series_error
-        validation_error = _validate_native_ome_ngff_group(
-            series_dir,
-            series_attrs or {},
-            display_name=f"{zarr_path.name}/{series_dir.name}",
-        )
-        if validation_error:
-            return validation_error
-    return None
-
-
 def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
-    if not zarr_path.is_dir():
+    inspection = inspect_ome_zarr_image(zarr_path)
+    recognized_zarr = bool(getattr(inspection, "recognized", False))
+    if not recognized_zarr:
         return _NativeZarrImportPlan()
+    supported = bool(getattr(inspection, "supported", False))
+    inspection_kind = getattr(inspection, "kind", None)
+    if supported and not inspection_kind:
+        inspection_kind = _NATIVE_ZARR_KIND_OME_ZARR
+    return _NativeZarrImportPlan(
+        kind=inspection_kind if supported else None,
+        recognized_zarr=True,
+        validation_error=getattr(inspection, "support_error", None),
+        verify_lsid_prefix=bool(getattr(inspection, "verify_lsid_prefix", False)),
+        compatibility_details=getattr(inspection, "compatibility_details", ""),
+    )
 
-    _raw_attrs, attrs, attrs_error = _read_zarr_attrs_payload(zarr_path)
-    if attrs_error:
-        if (zarr_path / ".zattrs").exists() or (zarr_path / "zarr.json").exists():
-            return _NativeZarrImportPlan(recognized_zarr=True, validation_error=attrs_error)
+
+def _serialize_native_zarr_plan(plan: Optional[_NativeZarrImportPlan]) -> Optional[dict]:
+    if not isinstance(plan, _NativeZarrImportPlan):
+        return None
+    if not (
+        plan.kind
+        or plan.recognized_zarr
+        or plan.validation_error
+        or plan.verify_lsid_prefix
+        or plan.compatibility_details
+    ):
+        return None
+    return {
+        "kind": plan.kind,
+        "recognized_zarr": bool(plan.recognized_zarr),
+        "validation_error": plan.validation_error,
+        "verify_lsid_prefix": bool(plan.verify_lsid_prefix),
+        "compatibility_details": plan.compatibility_details,
+    }
+
+
+def _deserialize_native_zarr_plan(payload) -> _NativeZarrImportPlan:
+    if isinstance(payload, _NativeZarrImportPlan):
+        return payload
+    if not isinstance(payload, dict):
         return _NativeZarrImportPlan()
-    if not isinstance(attrs, dict):
-        return _NativeZarrImportPlan()
-
-    if "plate" in attrs:
-        return _NativeZarrImportPlan(
-            recognized_zarr=True,
-            validation_error=(
-                "OME-Zarr plate imports are not supported by the installed "
-                "omero-cli-zarr runtime."
-            ),
-        )
-
-    if attrs.get("bioformats2raw.layout") is not None:
-        validation_error = _validate_native_bioformats2raw_zarr(zarr_path, attrs)
-        return _NativeZarrImportPlan(
-            kind=_NATIVE_ZARR_KIND_BIOFORMATS2RAW,
-            recognized_zarr=True,
-            validation_error=validation_error,
-            verify_lsid_prefix=True,
-            compatibility_details="bioformats2raw-layout OME-Zarr (imported via omero-cli-zarr)",
-        )
-
-    if isinstance(attrs.get("multiscales"), list):
-        validation_error = _validate_native_ome_ngff_group(
-            zarr_path,
-            attrs,
-            display_name=zarr_path.name,
-        )
-        return _NativeZarrImportPlan(
-            kind=_NATIVE_ZARR_KIND_OME_NGFF,
-            recognized_zarr=True,
-            validation_error=validation_error,
-            compatibility_details="OME-Zarr image (imported via omero-cli-zarr)",
-        )
-
-    return _NativeZarrImportPlan(recognized_zarr=True)
+    return _NativeZarrImportPlan(
+        kind=payload.get("kind"),
+        recognized_zarr=bool(payload.get("recognized_zarr", False)),
+        validation_error=payload.get("validation_error"),
+        verify_lsid_prefix=bool(payload.get("verify_lsid_prefix", False)),
+        compatibility_details=payload.get("compatibility_details", "") or "",
+    )
 
 
-def _is_ome_ngff_zarr(zarr_path: Path) -> bool:
-    """Return *True* if *zarr_path* is a standard OME-NGFF zarr.
+def _attach_import_routing_fields(unit: dict, covered_entries: list[dict]) -> None:
+    if not covered_entries:
+        return
 
-    Returns *False* for bioformats2raw-layout zarrs (which have
-    ``bioformats2raw.layout`` in their metadata) and for non-image/unsupported
-    OME-Zarr layouts.
-    """
-    plan = _native_zarr_import_plan(zarr_path)
-    return plan.kind == _NATIVE_ZARR_KIND_OME_NGFF
+    for field_name in _IMPORT_ROUTING_ENTRY_FIELDS:
+        values = [
+            entry.get(field_name)
+            for entry in covered_entries
+            if field_name in entry
+        ]
+        if not values:
+            continue
+        first_value = values[0]
+        if all(value == first_value for value in values):
+            unit[field_name] = first_value
 
 
 ZARR_MANAGED_REPO_SCRIPT_NAME = "Manage_Zarr_ManagedRepository.py"
@@ -5503,159 +5274,13 @@ def _import_zarr_via_cli(
     }
 
 
-def _strip_non_image_subgroups(zarr_path: Path) -> bool:
-    """Remove non-image subgroups (e.g. ``tables/``, ``labels/``) from a zarr.
-
-    Fractal and other tools embed AnnData tables or label arrays inside the
-    zarr.  These subgroups may contain arrays with dtypes that JZarr cannot
-    parse (e.g. ``|O`` for Python object/string columns), causing
-    ``IllegalArgumentException: No enum constant com.bc.zarr.DataType.O``
-    which kills the entire Bio-Formats scan.
-
-    Operates **in-place** on *zarr_path*.  Returns *True* if any subgroups
-    were removed.
-    """
-    # Subgroup names that are never image data per the OME-NGFF spec.
-    NON_IMAGE_SUBGROUPS = {"tables", "labels"}
-
-    removed = False
-    for name in NON_IMAGE_SUBGROUPS:
-        target = zarr_path / name
-        if target.is_dir():
-            shutil.rmtree(target)
-            logger.info(
-                "Stripped non-image subgroup %s from zarr %s",
-                sanitize_log_value(name),
-                sanitize_log_value(zarr_path.name),
-            )
-            removed = True
-    return removed
-
-
-def _recompress_zarr_for_import(zarr_path: Path) -> Optional[Path]:
-    """Re-compress a .zarr directory from an unsupported codec (e.g. gzip) to
-    zlib, which JZarr / Bio-Formats can read.  Returns the path to the
-    temporary re-compressed parent directory, or ``None`` on failure.
-
-    The approach copies the entire directory tree first (preserving structure,
-    dimension separators, metadata files, and nested groups), then walks the
-    copy to re-compress only the chunk data in-place.  This handles any zarr
-    layout — flat or nested, ``/`` or ``.`` dimension separator, bioformats2raw
-    or OME-NGFF — without loading full arrays into memory.
-    """
-    try:
-        import numcodecs
-        from numcodecs import Zlib
-    except ImportError:
-        logger.warning("numcodecs not installed; cannot re-compress %s", zarr_path)
-        return None
-
-    # Keep the original .zarr name so Bio-Formats recognises the extension.
-    dst_parent = zarr_path.parent / f"__zarr_recompress_{uuid.uuid4().hex[:8]}__"
-    dst = dst_parent / zarr_path.name
-    new_compressor = Zlib(level=1)
-    new_compressor_config = {"id": "zlib", "level": 1}
-
-    try:
-        # Step 1: copy the entire directory tree (structure + all files).
-        shutil.copytree(zarr_path, dst)
-
-        # Step 2: walk the copy and re-compress arrays whose codec is not zlib.
-        recompressed_count = 0
-        for dirpath, _dirnames, filenames in os.walk(dst):
-            if ".zarray" not in filenames:
-                continue
-
-            zarray_file = Path(dirpath) / ".zarray"
-            try:
-                with open(zarray_file) as fh:
-                    meta = json.load(fh)
-            except (json.JSONDecodeError, OSError):
-                continue
-
-            old_spec = meta.get("compressor")
-            if old_spec is None:
-                continue  # uncompressed data — nothing to do
-            if old_spec.get("id") == "zlib":
-                continue  # already zlib — skip
-
-            try:
-                old_codec = numcodecs.get_codec(old_spec)
-            except Exception:
-                logger.warning(
-                    "Unknown zarr compressor %r in %s; skipping array",
-                    sanitize_log_value(old_spec.get("id", "?")),
-                    sanitize_log_value(zarray_file),
-                )
-                continue
-
-            # Re-compress every chunk file under this array directory.
-            _recompress_chunk_tree(Path(dirpath), old_codec, new_compressor)
-
-            # Update the .zarray metadata to reflect the new compressor.
-            meta["compressor"] = new_compressor_config
-            with open(zarray_file, "w") as fh:
-                json.dump(meta, fh, indent=4)
-            recompressed_count += 1
-
-        logger.info(
-            "Re-compressed zarr %s → %s (zlib level 1, %d arrays recompressed)",
-            sanitize_log_value(zarr_path.name),
-            sanitize_log_value(dst),
-            recompressed_count,
-        )
-        return dst_parent  # return the parent dir for easy cleanup
-    except Exception as exc:
-        logger.error(
-            "Failed to re-compress zarr %s: %s",
-            sanitize_log_value(zarr_path.name),
-            sanitize_log_value(exc),
-            exc_info=sanitized_exc_info(exc),
-        )
-        shutil.rmtree(dst_parent, ignore_errors=True)
-        return None
-
-
-def _recompress_chunk_tree(array_dir: Path, old_codec, new_codec):
-    """Re-compress all chunk files under *array_dir* in-place.
-
-    Handles both ``.`` dimension separator (chunks as files in *array_dir*)
-    and ``/`` dimension separator (chunks nested in sub-directories).
-    Metadata files (names starting with ``.``) are left untouched.
-    """
-    for item in array_dir.iterdir():
-        if item.name.startswith("."):
-            continue  # .zarray, .zattrs, .zgroup — skip metadata
-        if item.is_dir():
-            _recompress_chunk_tree(item, old_codec, new_codec)
-        elif item.is_file():
-            try:
-                raw = item.read_bytes()
-                decompressed = old_codec.decode(raw)
-                item.write_bytes(new_codec.encode(decompressed))
-            except Exception:
-                pass  # best-effort; corrupt chunks are left as-is
-
-
 def _validate_native_ome_ngff_zarr(zarr_path: Path) -> Optional[str]:
     """Return an error string when *zarr_path* is not a safe native
     ``omero zarr import`` candidate, else ``None``.
 
-    The native importer is reference-based and the OMERO render path later
-    re-opens the same store. Validate the primary multiscale array structure
-    before registering the store with OMERO so malformed stores fail early and
-    predictably.
+    The authoritative interpretation comes from ``ome-zarr`` itself.
     """
-    _raw_attrs, attrs, attrs_error = _read_zarr_attrs_payload(zarr_path)
-    if attrs_error:
-        return attrs_error
-    if not isinstance(attrs, dict):
-        return f"Invalid Zarr metadata payload in {zarr_path / '.zattrs'}"
-    if "plate" in attrs:
-        return "OME-Zarr plate imports are not supported by the installed omero-cli-zarr runtime."
-    if attrs.get("bioformats2raw.layout") is not None:
-        return "bioformats2raw-layout Zarrs are validated separately from pure OME-NGFF image stores."
-    return _validate_native_ome_ngff_group(zarr_path, attrs, display_name=zarr_path.name)
+    return _native_zarr_import_plan(zarr_path).validation_error
 
 
 def _prepare_native_zarr_copy(zarr_path: Path) -> Optional[str]:
@@ -5675,7 +5300,7 @@ def _prepare_native_zarr_copy(zarr_path: Path) -> Optional[str]:
     if plan.validation_error:
         return plan.validation_error
 
-    return _native_zarr_import_plan(zarr_path).validation_error
+    return normalize_native_ome_zarr_copy(zarr_path)
 
 
 def _verify_zarr_import_via_api(
@@ -6048,13 +5673,66 @@ def _import_job_entry(
     ):
         import_name = file_path.name
 
+    is_directory_zarr = (
+        file_path.is_dir()
+        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+    )
+    native_plan = (
+        _deserialize_native_zarr_plan(entry.get("native_zarr_plan"))
+        if is_directory_zarr
+        else _NativeZarrImportPlan()
+    )
+    zarr_scan_status = None
+    zarr_scan_details = ""
+    zarr_import_backend = None
+    has_precomputed_zarr_routing = (
+        is_directory_zarr
+        and entry.get("compatibility") in {"compatible", "incompatible", "error"}
+        and entry.get("import_backend") in {
+            _ZARR_IMPORT_BACKEND_BIOFORMATS,
+            _ZARR_IMPORT_BACKEND_NATIVE,
+        }
+    )
+    if has_precomputed_zarr_routing:
+        zarr_scan_status = entry.get("compatibility")
+        zarr_scan_details = entry.get("compatibility_details", "") or ""
+        zarr_import_backend = entry.get("import_backend")
+        if zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE and not native_plan.kind:
+            native_plan = _native_zarr_import_plan(file_path)
+    elif is_directory_zarr:
+        native_plan = _native_zarr_import_plan(file_path)
+        try:
+            zarr_scan_result = _run_local_import_scan(file_path)
+        except subprocess.TimeoutExpired:
+            timeout_seconds = _get_local_import_scan_timeout_seconds()
+            zarr_scan_status = "error"
+            zarr_scan_details = f"Compatibility check timeout after {timeout_seconds} seconds"
+        except FileNotFoundError as exc:
+            zarr_scan_status = "error"
+            zarr_scan_details = f"OMERO CLI not found: {exc}"
+        except Exception as exc:
+            zarr_scan_status = "error"
+            zarr_scan_details = f"Unexpected error during compatibility check: {exc}"
+        else:
+            zarr_scan_status, zarr_scan_details = _classify_compatibility_output(
+                zarr_scan_result.returncode,
+                zarr_scan_result.stdout,
+                zarr_scan_result.stderr,
+                expected_file_path=file_path,
+            )
+            if zarr_scan_status == "compatible":
+                zarr_import_backend = _ZARR_IMPORT_BACKEND_BIOFORMATS
+            elif zarr_scan_status == "incompatible" and native_plan and native_plan.kind:
+                zarr_import_backend = _ZARR_IMPORT_BACKEND_NATIVE
+
     # ------------------------------------------------------------------
-    # Zarr import via omero-cli-zarr.
+    # Native OME-Zarr import path.
     #
-    # Route every Zarr image layout that is actually supported by the
-    # installed omero-cli-zarr runtime through the native path. That keeps
-    # pure OME-NGFF images and bioformats2raw-layout stores on one contract:
-    # the managed-repository handoff plus post-import render verification.
+    # Parse .zarr stores with ome-zarr first so routing stays grounded in the
+    # upstream metadata model. Bio-Formats still remains the default import
+    # path; the native branch only takes over when Bio-Formats explicitly
+    # reports the staged .zarr as incompatible and ome-zarr recognizes it as a
+    # layout supported by the installed omero-cli-zarr runtime.
     # ------------------------------------------------------------------
     _zarr_temp_path = None
     try:
@@ -6079,15 +5757,30 @@ def _import_job_entry(
                     "job_error": job_error,
                     "job_message": job_error,
                 }
-
-            native_plan = None
             if (
-                file_path.is_dir()
-                and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+                is_directory_zarr
+                and zarr_scan_status == "compatible"
+                and zarr_import_backend == _ZARR_IMPORT_BACKEND_BIOFORMATS
             ):
-                native_plan = _native_zarr_import_plan(file_path)
-
-            if native_plan and native_plan.kind:
+                pass
+            elif (
+                is_directory_zarr
+                and zarr_scan_status in {"compatible", "incompatible"}
+                and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE
+            ):
+                if not native_plan or not native_plan.kind:
+                    error_msg = "Native OME-Zarr routing metadata is missing for the staged .zarr store."
+                    job_error = messages.job_error_with_path(rel_path, error_msg)
+                    return {
+                        "cleanup_staged_paths": cleanup_staged_paths,
+                        "covered_indexes": covered_indexes,
+                        "covered_relative_paths": covered_relative_paths,
+                        "index": entry.get("index"),
+                        "status": "error",
+                        "entry_error": error_msg,
+                        "job_error": job_error,
+                        "job_message": job_error,
+                    }
                 if native_plan.validation_error:
                     error_msg = native_plan.validation_error
                     job_error = messages.job_error_with_path(rel_path, error_msg)
@@ -6119,8 +5812,41 @@ def _import_job_entry(
                     group_name=group_name,
                     native_plan=native_plan,
                 )
-            if native_plan and native_plan.recognized_zarr and native_plan.validation_error:
+            if has_precomputed_zarr_routing and is_directory_zarr and zarr_scan_status == "error":
+                error_msg = zarr_scan_details or "Compatibility check failed."
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
+            if (
+                is_directory_zarr
+                and not has_precomputed_zarr_routing
+                and zarr_scan_status == "incompatible"
+                and native_plan
+                and native_plan.recognized_zarr
+                and native_plan.validation_error
+            ):
                 error_msg = native_plan.validation_error
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
+            if is_directory_zarr and zarr_scan_status == "incompatible":
+                error_msg = zarr_scan_details or "Bio-Formats did not recognize the staged .zarr store."
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,

@@ -134,6 +134,14 @@ slow to come up, helper launch retries are controlled by
 `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`. No plugin-specific permanent-store
 path is used.
 
+The native OME-Zarr parser/runtime baked into `omeroweb` is also environment
+driven. `OME_ZARR_PY_VERSION` pins the installed `ome-zarr` package version at
+build time alongside `OMERO_CLI_ZARR_VERSION` and `BIOFORMATS2RAW_VERSION`, and
+`OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` controls the gzip level used when the
+disposable managed-repository handoff copy must rewrite Blosc-backed image
+arrays for render-safe native import. Those normalizations apply only to the
+ephemeral handoff copy, never to the browser-staged source tree.
+
 If token syntax is malformed (for example `%group/%user/%year-%month-%day/%time`
 without trailing `%`), OMERO treats those strings literally and creates
 directories named with `%...` segments.
