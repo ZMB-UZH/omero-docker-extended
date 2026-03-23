@@ -1071,7 +1071,8 @@ def test_import_object_pattern_matches_standard_cli_output():
 
 def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_path: Path, monkeypatch):
     """Malformed Zarr metadata must fail before any fallback import path is
-    attempted."""
+    attempted.  Bio-Formats also rejects the store as incompatible, and the
+    native OME-Zarr branch surfaces the validation error from ome-zarr."""
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "broken.zarr" / ".zattrs"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1086,6 +1087,13 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(tmp_pat
         "_build_import_name_normalization_context",
         lambda entry, dataset_id: None,
     )
+    # Bio-Formats also rejects the malformed store as incompatible.
+    scan_mock = type(
+        "Result",
+        (),
+        {"stdout": "", "stderr": "unsupported", "returncode": 0},
+    )()
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", lambda path, timeout=None: scan_mock)
     _patch_background_import_session(monkeypatch)
 
     result = core_functions._import_job_entry(

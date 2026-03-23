@@ -56,7 +56,7 @@ The Celery worker runs inside the `omeroweb` container, managed by supervisord a
 - OMERO script `IMS_Export.py` registered in the OMERO script service (done by `startup/10-server-bootstrap.sh`).
 - Valid OMERO session context for the requesting user, or job-service account configured.
 - ImarisConvertBioformats installed on OMERO.server (done by `startup/51-install-imarisconvert.sh`).
-- Bio-Formats JAR is downloaded and provisioned automatically by `startup/51-install-imarisconvert.sh` at `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`, with an internal local repair copy at `/opt/omero/imarisconvert/artifacts/bioformats/bioformats_package.jar`; `IMS_Export.py` can restore from that copy but refuses ad-hoc runtime network download for security.
+- Bio-Formats JAR is downloaded and provisioned automatically by `startup/51-install-imarisconvert.sh` at `/opt/omero/imarisconvert/bioformats/bioformats_package.jar`, with an internal local repair copy at `/opt/omero/imarisconvert/artifacts/bioformats/bioformats_package.jar`; `IMS_Export.py` can restore from that copy but refuses ad-hoc runtime network download for security. The Bio-Formats version is controlled exclusively by `BIOFORMATS_VERSION` in `env/omeroserver.env`.
 
 ## Environment variables
 
@@ -76,6 +76,13 @@ Defined in `env/omero-celery.env`:
 | `OMERO_IMS_EXPORT_TIMEOUT` | Sync mode timeout in seconds | `3600` |
 | `OMERO_IMS_EXPORT_POLL_INTERVAL` | Status poll interval in seconds | `2.0` |
 | `OMERO_IMS_SCRIPT_NAME` | Export script name | `IMS_Export.py` |
+
+Defined in `env/omeroserver.env`:
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `BIOFORMATS_VERSION` | Bio-Formats release version for `bioformats_package.jar` | `8.5.0` |
+| `OMERO_IMS_EXPORT_DIR` | IMS export output directory | `/OMERO/ImarisExports` |
 
 Job-service account variables (in `env/omero-celery.env` or `env/omeroserver.env`):
 - `OMERO_WEB_JOB_SERVICE_USERNAME` / `OMERO_JOB_SERVICE_USERNAME`
