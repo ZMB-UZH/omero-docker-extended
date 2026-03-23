@@ -172,6 +172,7 @@ COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_
 # Fix permissions in the end (plugin should be owned by omero-web)
 # ----------------------------------------------------------------
 ARG OMERO_CLI_ZARR_VERSION=0.8.0
+ARG OME_ZARR_PY_VERSION=0.14.0
 ARG BIOFORMATS2RAW_VERSION=0.11.0
 RUN set -euo pipefail; \
     VENV_DIR="$(find /opt/omero/web -maxdepth 1 -type d -name 'venv*' 2>/dev/null | sort -V | tail -n 1)"; \
@@ -195,6 +196,7 @@ RUN set -euo pipefail; \
         omero-gallery \
         omero-parade \
         omero-web-zarr \
+        "ome-zarr==${OME_ZARR_PY_VERSION}" \
         "omero-cli-zarr==${OMERO_CLI_ZARR_VERSION}"; \
     rm -rf "${SITE_PACKAGES}/omero_web_zarr"; \
     cp -a /tmp/omero_web_zarr "${SITE_PACKAGES}/omero_web_zarr"; \
