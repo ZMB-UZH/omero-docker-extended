@@ -100,6 +100,7 @@ omeroweb_<name>/
 
 ### File ownership
 - `/opt/omero` is typically owned by `root`. Git operations (fetch, checkout, stash, push) will fail with `Permission denied` unless the agent's user has write access. Request `sudo chown -R <user>:<user> /opt/omero/.git` for git-only access, or `sudo chown -R <user>:<user> /opt/omero` for full file operations.
+- In these root-owned deployment clones, read-only `git` commands can also fail with `fatal: detected dubious ownership in repository at '/opt/omero'`. For one-off inspection commands, use `git -c safe.directory=/opt/omero ...` instead of retrying the plain command.
 - **Do not** `chown` bind-mounted data directories (`postgresdb/`, `omero_data/`, `omero_temp/`) to a non-service user — this breaks container runtime permissions. If you must `chown` the repo root, restore data directory ownership afterward via `installation/installation_script.sh` or targeted `chown` commands matching the UIDs in `docker-compose.yml`.
 
 ### Git worktrees and finding commits

@@ -1,3 +1,5 @@
+import json
+import sys
 from django.http import Http404
 from io import BytesIO
 from pathlib import Path
@@ -8,12 +10,14 @@ from PIL import Image
 
 from omero_web_zarr.utils import collect_store_metadata_documents
 from omero_web_zarr.utils import encode_store_backed_pil_image
+from omero_web_zarr.utils import get_safe_image_tile_size
 from omero_web_zarr.utils import open_compat_array
 from omero_web_zarr.utils import is_store_metadata_path
 from omero_web_zarr.utils import get_store_backed_channel_overrides
 from omero_web_zarr.utils import get_store_backed_level_sizes
 from omero_web_zarr.utils import get_store_backed_tile_size
 from omero_web_zarr.utils import get_store_backed_zoom_level_scaling
+from omero_web_zarr.utils import load_store_backed_image_node
 from omero_web_zarr.utils import read_store_backed_plane
 from omero_web_zarr.utils import render_store_backed_pil_image
 from omero_web_zarr.utils import render_store_backed_plane
@@ -98,6 +102,23 @@ class _FakeConnForExternalInfo:
         return self._query_service
 
 
+class _FakeConfigService:
+    def __init__(self, value):
+        self._value = value
+
+    def getConfigValue(self, key):
+        assert key == "omero.pixeldata.max_tile_length"
+        return str(self._value)
+
+
+class _FakeConnForTileSize:
+    def __init__(self, value):
+        self._config = _FakeConfigService(value)
+
+    def getConfigService(self):
+        return self._config
+
+
 class _FakeChannel:
     def __init__(self, *, window_start=None, window_end=None, window_min=0.0, window_max=1.0):
         self._window_start = window_start
@@ -116,6 +137,47 @@ class _FakeChannel:
 
     def getWindowMax(self):
         return self._window_max
+
+
+class _TileFailureRenderingEngine:
+    def getTileSize(self):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+
+class _TileFailureImage:
+    def __init__(self, *, size_x, size_y, max_tile_length):
+        self.id = 99
+        self._size_x = size_x
+        self._size_y = size_y
+        self._conn = _FakeConnForTileSize(max_tile_length)
+        self._re = _TileFailureRenderingEngine()
+
+    def getSizeX(self):
+        return self._size_x
+
+    def getSizeY(self):
+        return self._size_y
+
+
+def _write_multiscale_store(root, *, attrs=None, data=None):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+    payload = {
+        "multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}],
+    }
+    if attrs:
+        payload.update(attrs)
+    (root / ".zattrs").write_text(json.dumps(payload), encoding="utf-8")
+    array = open_compat_array(
+        root / "0",
+        mode="w",
+        shape=(1, 2, 2),
+        chunks=(1, 2, 2),
+        dtype=np.uint16,
+    )
+    if data is None:
+        data = np.arange(4, dtype=np.uint16).reshape(1, 2, 2)
+    array[:] = data
 
 
 def test_open_compat_array_writes_v2_array_metadata_under_zarr3(tmp_path):
@@ -215,7 +277,18 @@ def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
     assert resolve_local_zarr_store(str(tmp_path)) is None
 
 
-def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(tmp_path):
+def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(tmp_path, monkeypatch):
+    class _FakeParametersI:
+        def addId(self, image_id):
+            self.image_id = image_id
+            return self
+
+    fake_omero = type(
+        "FakeOmeroModule",
+        (),
+        {"sys": type("FakeSys", (), {"ParametersI": _FakeParametersI})},
+    )()
+    monkeypatch.setitem(sys.modules, "omero", fake_omero)
     _write_minimal_zarr_group(tmp_path)
     image = _FakeImage(None, query_lsid=str(tmp_path.resolve()))
 
@@ -315,6 +388,39 @@ def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkey
             "inverted": False,
         }
     ]
+
+
+def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(tmp_path):
+    _write_multiscale_store(
+        tmp_path,
+        attrs={
+            "omero": {
+                "channels": [
+                    {"active": True},
+                    {
+                        "label": "DNA",
+                        "active": False,
+                        "window": {"start": 5, "end": 15},
+                        "color": "00FF00",
+                    },
+                ]
+            }
+        },
+    )
+    image = _FakeImage(str(tmp_path.resolve()))
+
+    node = load_store_backed_image_node(image)
+
+    assert node.metadata["channel_names"] == [None, "DNA"]
+    assert node.metadata["visible"] == [True, False]
+    assert node.metadata["contrast_limits"] == [None, (5.0, 15.0)]
+    assert node.metadata["colormap"] == [None, "00FF00"]
+
+
+def test_get_safe_image_tile_size_falls_back_to_configured_maximum():
+    image = _TileFailureImage(size_x=2048, size_y=512, max_tile_length=1024)
+
+    assert get_safe_image_tile_size(image) == (1024, 512)
 
 
 def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
