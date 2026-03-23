@@ -439,6 +439,7 @@ bolt
 bridge-utils
 btop
 btrfs-progs
+bubblewrap
 build-essential
 busybox
 ca-certificates
