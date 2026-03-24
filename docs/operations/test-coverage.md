@@ -30,6 +30,7 @@ Every `tests` workflow run now emits:
   - `coverage.json`
   - `coverage-report.txt`
   - `coverage-summary.md`
+  - `coverage-suites/`
   - `coverage-html/`
 
 The HTML report is the authoritative line-by-line drill-down. Use it when you need exact executed vs missing lines inside a file.
@@ -39,6 +40,13 @@ The HTML report is the authoritative line-by-line drill-down. Use it when you ne
 This repository keeps Codecov enabled for the default branch and uses it for longer-lived coverage visibility:
 
 - overall project coverage status
+- suite-level flag uploads for:
+  - `root-regressions`
+  - `plugin-common-tests`
+  - `imaris-connector-tests`
+  - `admin-tools-tests`
+  - `omp-plugin-tests`
+  - `import-plugin-tests`
 - package-scoped project status checks
 - component views for:
   - `omero_plugin_common`
@@ -50,6 +58,7 @@ This repository keeps Codecov enabled for the default branch and uses it for lon
   - the summary header
   - the diff
   - components
+  - flags
   - files
 
 GitHub Checks annotations are disabled in `codecov.yml` on purpose. Codecov's current documentation warns that annotations conflict with Components, and the component/file drill-down is more useful for this repository than noisy line annotations in the check view.
@@ -62,8 +71,8 @@ Use the outputs in this order:
    It tells you which package families are weakest and which files are currently least covered.
 2. **`coverage-artifacts` download** for exact file and line inspection.
    Open `coverage-html/index.html` locally and navigate from package to module to line.
-3. **Codecov UI** for history and component trends on the default branch.
-   Use Components when deciding where to add the next meaningful tests instead of chasing whichever file happens to appear in a badge delta.
+3. **Codecov UI** for history and drill-down on the default branch.
+   Use Components to answer "which code area is weak?" and Flags to answer "which suite is exercising it?".
 
 ## Local reproduction
 
