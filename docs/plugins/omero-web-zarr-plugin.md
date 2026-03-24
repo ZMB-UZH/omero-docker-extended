@@ -4,10 +4,10 @@
 
 `omero_web_zarr` provides authenticated OMERO.web access to OME-Zarr image data and adds a store-backed rendering path for images whose source of truth is an external managed-repository Zarr store.
 
-It serves two distinct contracts:
+It serves two complementary URL contracts:
 
 - the **raw NGFF contract**, which exposes the original managed-repository store as faithfully as possible for validation and standards-oriented tooling;
-- the **preview contract**, which keeps browser viewing correct for slice browsing by exposing only viewer-safe multiscale levels and by bypassing classic OMERO rendering paths that are not reliable for these store-backed images.
+- the **preview URL contract**, which gives OMERO.web preview launchers a stable authenticated Vizarr source without falling back to the classic OMERO preview widget for store-backed images.
 
 ## Main capabilities
 
@@ -19,7 +19,7 @@ It serves two distinct contracts:
   - original Zarr store as a zip archive,
   - consolidated metadata manifest,
   - OME-TIFF export generated directly from the managed store.
-- Preserve stock OMERO.web behavior for non-store-backed images, with one generic safeguard: if the current OMERO/Bio-Formats RenderingEngine fails while introspecting tile size, the shared metadata marshal and tile-region paths fall back to the configured OMERO max tile length instead of failing the whole viewer request.
+- Preserve stock OMERO.web behavior for non-store-backed images.
 
 ## Key invariants
 
@@ -27,8 +27,7 @@ It serves two distinct contracts:
 - **No hardcoded dataset keys**: dataset paths are taken from the store's root `multiscales[].datasets[].path` metadata. Stores using `0`, `1`, `2`, `s0`, `s1`, `s2`, or other valid dataset names are handled through the same code path.
 - **Raw and preview contracts stay separate**:
   - raw routes expose the underlying store structure;
-  - preview routes may renumber visible levels to `0..N-1`, but they still resolve those preview levels back to the underlying dataset keys from root metadata.
-- **Viewer-safe multiscales only**: preview routes expose only levels that preserve non-display axes (`t`, `c`, `z`) so browser slice browsing does not silently jump onto a level that has downsampled the current plane axis.
+  - preview routes use the same store-backed NGFF payload while keeping a preview-specific URL namespace for OMERO.web launchers.
 - **Non-Zarr images remain untouched**: the integration overrides activate only for store-backed images.
 
 ## Raw vs preview behavior
@@ -51,16 +50,9 @@ Use the preview endpoint for browser viewing:
 - right-panel preview for store-backed images
 - Vizarr launched from OMERO.web
 
-The preview contract is intentionally conservative. If a multiscale level downsamples `z`, `c`, or `t`, it is excluded from preview. This prevents blurred or semantically wrong slice rendering in the browser.
-
 For non-store-backed images, the preview routes do not attempt preview-level remapping. They delegate to the raw synthetic OMERO-backed NGFF responses because there is no managed-store multiscale tree to filter.
 
-For example, if an image has:
-
-- `s0`: full-resolution `z/y/x`
-- `s1..sN`: downsampled `z/y/x`
-
-then preview can safely expose only the full-resolution level, even if the raw store contains many multiscale levels. That is a correctness rule, not a special case.
+For store-backed images, preview routes forward the same `.zattrs`, `.zgroup`, `.zarray`, and chunk payloads that the raw endpoint serves. The preview path exists so OMERO.web can target a dedicated preview/Vizarr namespace without changing the underlying store contract.
 
 ## Rendering model
 
@@ -73,7 +65,7 @@ For store-backed images, the plugin can render directly from the managed Zarr st
 
 This avoids the fragile dependency on classic OMERO RenderingEngine pyramid files for external Zarr-backed images.
 
-For non-store-backed images, the plugin does not replace OMERO.web rendering. It only adds a generic compatibility guard around tile-size discovery so Bio-Formats-backed Zarrs continue using the default OMERO.web preview path when that upstream call fails. That safeguard now covers the shared `imageMarshal()` path used by OMERO.web, OMERO.iviewer, and OMERO.figure, plus the existing tile-region fallback in the classic webgateway render path.
+For non-store-backed images, the plugin does not replace OMERO.web rendering.
 
 ## Launcher behavior
 
