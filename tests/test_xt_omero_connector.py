@@ -3,8 +3,14 @@ from __future__ import annotations
 import importlib.util
 import builtins
 import ntpath
+import os
 import sys
 import types
+
+_XT_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "XTOmeroConnector.py",
+)
 
 
 def _load_xt_module():
@@ -14,7 +20,7 @@ def _load_xt_module():
 
     spec = importlib.util.spec_from_file_location(
         "xt_omero_connector",
-        "/opt/omero/XTOmeroConnector.py",
+        _XT_SCRIPT,
     )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
