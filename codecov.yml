@@ -19,9 +19,13 @@ ignore:
 coverage:
   status:
     # Per-component project-level checks.  ``default`` is disabled so that
-    # only the explicitly listed components post commit statuses.
+    # Codecov still evaluates the full tracked codebase in addition to the
+    # component-specific breakdowns below. This keeps test-only coverage gains
+    # visible even when no production file changed in the diff.
     project:
-      default: false
+      default:
+        target: auto
+        threshold: 1%
       plugin-common:
         target: auto
         paths:
@@ -63,5 +67,5 @@ codecov:
     after_n_builds: 1
 
 comment:
-  require_changes: true
+  require_changes: false
   after_n_builds: 1
