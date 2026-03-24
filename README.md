@@ -160,7 +160,7 @@ Staged file upload and controlled import into OMERO.
 - Stale upload cleanup automation
 - Per-user settings and special method configurations
 
-### Admin Tools Plugin (`omeroweb_admin_tools`)
+### Admin Tools (`omeroweb_admin_tools`)
 
 Operational observability interfaces embedded in OMERO.web.
 
@@ -171,7 +171,7 @@ Operational observability interfaces embedded in OMERO.web.
 - Server and database diagnostic scripts
 - Root-only access controls
 
-### Imaris Connector Plugin (`omeroweb_imaris_connector`)
+### Imaris Connector (`omeroweb_imaris_connector`)
 
 OMERO image export to Imaris (.ims) format.
 
