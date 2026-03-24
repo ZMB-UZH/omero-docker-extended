@@ -90,8 +90,8 @@ Base: `/zarr/`
 Notes:
 
 - Raw routes preserve the original dataset keys declared in the managed store.
-- Preview routes may renumber visible levels for the browser, but they resolve those preview levels back to the underlying dataset keys from store metadata.
-- For non-store-backed images, preview `.zarray` and chunk routes delegate to the raw synthetic OMERO-backed responses instead of attempting managed-store dataset remapping.
+- Preview routes forward the same NGFF payload as the raw routes under a separate URL namespace for OMERO.web launcher integration.
+- For non-store-backed images, preview routes delegate to the synthetic OMERO-backed NGFF responses.
 - Store-backed rendering and download routes apply only to images whose `externalInfo.lsid` resolves to a managed-repository Zarr store.
 - `/vizarr/` and `/validator/` serve a thin launcher shell from OMERO.web, normalize root-relative `source=` parameters against the browser's public origin, and redirect static assets to the upstream app origin instead of proxying every asset request through Gunicorn.
 

@@ -178,7 +178,9 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
     from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
     from omeroweb.webgateway import urls as webgateway_urls
     from omeroweb.webgateway import views as webgateway_views
 
@@ -205,6 +207,21 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
     monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
     monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
@@ -226,7 +243,9 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
     from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
     from omeroweb.webgateway import urls as webgateway_urls
     from omeroweb.webgateway import views as webgateway_views
 
@@ -260,6 +279,21 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
     monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
     monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
@@ -282,7 +316,9 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(monk
         return lambda func: func
 
     from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
     from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
     from omeroweb.webgateway import urls as webgateway_urls
     from omeroweb.webgateway import views as webgateway_views
 
@@ -317,6 +353,21 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(monk
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
     monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
     monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
@@ -449,3 +500,353 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
         "t": 0,
         "level": 1,
     }
+
+
+class _FakeConfigService:
+    def getConfigValue(self, key):
+        assert key == "omero.pixeldata.max_tile_length"
+        return "1024"
+
+
+class _FakeConnForTileSize:
+    def getConfigService(self):
+        return _FakeConfigService()
+
+
+class _FakeResolution:
+    def __init__(self, size_x, size_y):
+        self.sizeX = size_x
+        self.sizeY = size_y
+
+
+class _FailingResolutionEngine:
+    def getResolutionLevels(self):
+        return 2
+
+    def getTileSize(self):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+    def getResolutionDescriptions(self):
+        return [_FakeResolution(1024, 512), _FakeResolution(512, 256)]
+
+    def getDefaultZ(self):
+        return 0
+
+    def getDefaultT(self):
+        return 0
+
+
+class _FakeRegularTileFailureImage(_FakeImageDataImage):
+    def __init__(self):
+        super().__init__()
+        self._re = _FailingResolutionEngine()
+        self._conn = _FakeConnForTileSize()
+
+    def _prepareRenderingEngine(self):
+        return True
+
+    def getPixelRange(self):
+        return (0, 65535)
+
+    def isGreyscaleRenderingModel(self):
+        return False
+
+    def isInvertedAxis(self):
+        return False
+
+
+class _PreparedRegionImage:
+    def __init__(self):
+        self._re = _FailingResolutionEngine()
+        self.calls = []
+
+    def _prepareRenderingEngine(self):
+        return True
+
+    def getSizeX(self):
+        return 1024
+
+    def getSizeY(self):
+        return 512
+
+    def renderJpegRegion(self, z, t, x, y, width, height, level=None, compression=None):
+        self.calls.append(
+            {
+                "z": z,
+                "t": t,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
+                "level": level,
+                "compression": compression,
+            }
+        )
+        return b"jpeg"
+
+
+class _FakeMetadataPreviewImage:
+    id = 1061
+
+    def getAllRenderingDefs(self):
+        raise RuntimeError(
+            "Error instantiating pixel buffer: managed/path\n"
+            "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
+        )
+
+    def getRenderingDefId(self):
+        raise AssertionError("rendering definition lookup should not run after failure")
+
+    def getSizeX(self):
+        return 4096
+
+    def getSizeY(self):
+        return 2048
+
+
+class _FakeMetadataPreviewContainer:
+    def __init__(self, conn, **kwargs):
+        self.conn = conn
+        self.kwargs = kwargs
+        self.image = _FakeMetadataPreviewImage()
+
+
+class _FakeMetadataPreviewConn:
+    def getMaxPlaneSize(self):
+        return (1024, 1024)
+
+
+def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
+    request = RequestFactory().get("/webclient/imgData/7/")
+    request.session = {
+        "server_settings": {
+            "viewer": {
+                "initial_zoom_level": 0,
+                "interpolate_pixels": True,
+            }
+        }
+    }
+    image = _FakeRegularTileFailureImage()
+
+    payload = integration._marshal_regular_image_data_with_safe_tile_size(image, request)
+
+    assert payload["tiles"] is True
+    assert payload["tile_size"] == {"width": 1024, "height": 512}
+    assert payload["levels"] == 2
+    assert payload["resolutions"] == {
+        0: {"sizeX": 1024, "sizeY": 512},
+        1: {"sizeX": 512, "sizeY": 256},
+    }
+    assert payload["zoomLevelScaling"] == {0: 1.0, 1: 0.5}
+
+
+def test_safe_regular_image_marshal_uses_generic_fallback_and_key_selection():
+    request = RequestFactory().get("/webclient/imgData/7/")
+    request.session = {
+        "server_settings": {
+            "viewer": {
+                "initial_zoom_level": 0,
+                "interpolate_pixels": True,
+            }
+        }
+    }
+    image = _FakeRegularTileFailureImage()
+
+    def failing_image_marshal(image, key=None, request=None):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+    payload = integration._safe_regular_image_marshal(
+        failing_image_marshal,
+        image,
+        request=request,
+    )
+    selected = integration._safe_regular_image_marshal(
+        failing_image_marshal,
+        image,
+        key="tile_size.width",
+        request=request,
+    )
+
+    assert payload["tile_size"] == {"width": 1024, "height": 512}
+    assert selected == 1024
+
+
+def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkeypatch):
+    from omero_figure import views as figure_views
+    from omero_iviewer import views as iviewer_views
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import views as webgateway_views
+
+    def original_image_marshal(image, key=None, request=None):
+        return {"id": getattr(image, "id", None)}
+
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(webgateway_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(iviewer_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(figure_views, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+
+    safe_image_marshal = integration._install_safe_image_marshal_overrides(webgateway_marshal)
+
+    assert webgateway_marshal.imageMarshal is safe_image_marshal
+    assert webgateway_views.imageMarshal is safe_image_marshal
+    assert iviewer_views.imageMarshal is safe_image_marshal
+    assert figure_views.imageMarshal is safe_image_marshal
+
+
+def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(monkeypatch):
+    request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/",
+        {"tile": "0,1,2"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    image = _PreparedRegionImage()
+
+    from omeroweb.webgateway import views as webgateway_views
+
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda request, iid, server_id=None, conn=None: (image, 0.85),
+    )
+
+    response = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        3,
+        0,
+        conn=_FakeConnForTileSize(),
+    )
+
+    assert response.status_code == 200
+    assert image.calls == [
+        {
+            "z": 3,
+            "t": 0,
+            "x": 1024,
+            "y": 1024,
+            "width": 1024,
+            "height": 512,
+            "level": 1,
+            "compression": 0.85,
+        }
+    ]
+
+
+def test_load_metadata_preview_with_safe_rendering_returns_empty_rdefs(monkeypatch):
+    request = RequestFactory().get("/webclient/metadata_preview/image/1061/")
+    request.session = {}
+
+    from omeroweb.webclient import views as webclient_views
+
+    monkeypatch.setattr(
+        webclient_views,
+        "BaseContainer",
+        lambda conn, **kwargs: _FakeMetadataPreviewContainer(conn, **kwargs),
+    )
+    monkeypatch.setattr(webclient_views, "BaseShare", lambda conn, share_id: object())
+    monkeypatch.setattr(
+        webclient_views,
+        "getIntOrDefault",
+        lambda request, key, default: default,
+    )
+
+    context = integration._load_metadata_preview_with_safe_rendering(
+        request,
+        "image",
+        "1061",
+        conn=_FakeMetadataPreviewConn(),
+    )
+
+    assert context["template"] == "webclient/annotations/metadata_preview.html"
+    assert context["rdefs"] == []
+    assert context["rdefsJson"] == "[]"
+    assert context["tiledImage"] is True
+    assert isinstance(context["manager"], _FakeMetadataPreviewContainer)
+
+
+def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_failure(monkeypatch):
+    def _identity_decorator():
+        return lambda func: func
+
+    request = RequestFactory().get("/webclient/metadata_preview/image/1061/")
+    request.session = {}
+
+    from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
+    from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import urls as webgateway_urls
+    from omeroweb.webgateway import views as webgateway_views
+
+    monkeypatch.setattr(integration, "login_required", _identity_decorator)
+    monkeypatch.setattr(
+        integration,
+        "is_store_backed_image",
+        lambda image: getattr(image, "store_backed", False),
+    )
+    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
+    monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "BaseContainer", _FakeMetadataPreviewContainer)
+    monkeypatch.setattr(webclient_views, "BaseShare", lambda conn, share_id: object())
+    monkeypatch.setattr(
+        webclient_views,
+        "getIntOrDefault",
+        lambda request, key, default: default,
+    )
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
+
+    def failing_load_metadata_preview(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+        raise RuntimeError(
+            "Error instantiating pixel buffer: managed/path\n"
+            "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
+        )
+
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", failing_load_metadata_preview)
+    monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
+    monkeypatch.setattr(webclient_urls, "urlpatterns", [])
+    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+
+    integration.install_webgateway_overrides()
+
+    context = webclient_views.load_metadata_preview(
+        request,
+        "image",
+        "1061",
+        conn=_FakeMetadataPreviewConn(),
+    )
+
+    assert context["rdefs"] == []
+    assert context["rdefsJson"] == "[]"
+    assert context["tiledImage"] is True
