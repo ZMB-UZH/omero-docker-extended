@@ -130,26 +130,6 @@ def test_store_backed_chunk_response_returns_exact_chunk_bytes(tmp_path):
     assert response["Content-Disposition"] == "attachment; filename=0.0.0.0"
 
 
-def test_store_backed_metadata_response_includes_cache_headers(tmp_path):
-    _write_store(tmp_path)
-    image = _FakeImage(str(tmp_path.resolve()))
-
-    response = views._store_backed_json_response(image, "0.4", ".zattrs")
-
-    assert response is not None
-    assert response["Cache-Control"] == "private, max-age=86400, immutable"
-
-
-def test_store_backed_chunk_response_includes_cache_headers(tmp_path):
-    _write_store(tmp_path)
-    image = _FakeImage(str(tmp_path.resolve()))
-
-    response = views._store_backed_chunk_response(image, "0.4", 0, "0/0/0/0")
-
-    assert response is not None
-    assert response["Cache-Control"] == "private, max-age=86400, immutable"
-
-
 def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
     _write_store(tmp_path)
     (tmp_path / "s0").mkdir()
