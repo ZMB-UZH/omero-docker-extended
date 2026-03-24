@@ -5,7 +5,6 @@ import re
 import tempfile
 import time
 import zipfile
-from copy import deepcopy
 from functools import lru_cache
 from itertools import product
 from pathlib import Path
@@ -33,7 +32,6 @@ from .utils import generate_coordinate_transformations
 from .utils import collect_store_metadata_documents
 from .utils import get_store_backed_axis_names
 from .utils import get_safe_image_tile_size
-from .utils import get_store_backed_viewer_safe_level_indices
 from .utils import load_store_backed_image_node
 from .utils import sanitize_download_basename
 from .utils import marshal_axes
@@ -342,104 +340,9 @@ def image_store_path(request, iid, version, store_path, conn=None, **kwargs):
     return store_rsp
 
 
-def _get_store_backed_preview_level_mapping(image):
-    cached = getattr(image, "_omero_web_zarr_preview_levels", None)
-    if cached is not None:
-        return cached
-
-    node = load_store_backed_image_node(image)
-    if node is None:
-        mapping = [0]
-    else:
-        mapping = get_store_backed_viewer_safe_level_indices(node)
-    setattr(image, "_omero_web_zarr_preview_levels", mapping)
-    return mapping
-
-
-def _get_store_backed_root_zattrs_payload(image, version="0.4"):
-    cached = getattr(image, "_omero_web_zarr_root_zattrs_payload", None)
-    if cached is not None:
-        return cached
-
-    response = _store_backed_json_response(image, version, ".zattrs")
-    payload = None if response is None else json.loads(response.content)
-    setattr(image, "_omero_web_zarr_root_zattrs_payload", payload)
-    return payload
-
-
-def _get_store_backed_raw_datasets(image, version="0.4"):
-    payload = _get_store_backed_root_zattrs_payload(image, version=version) or {}
-    multiscales = payload.get("multiscales") or []
-    if multiscales:
-        datasets = multiscales[0].get("datasets") or []
-        if datasets:
-            return datasets
-
-    node = load_store_backed_image_node(image)
-    level_count = len(getattr(node, "data", None) or ())
-    return [{"path": str(index)} for index in range(level_count or 1)]
-
-
-def _get_store_backed_preview_dataset_path(image, preview_level):
-    node = load_store_backed_image_node(image)
-    if node is None:
-        raise Http404("store-backed image data not found")
-
-    mapping = _get_store_backed_preview_level_mapping(image)
-    preview_index = int(preview_level)
-    if preview_index < 0 or preview_index >= len(mapping):
-        raise Http404("preview level not found")
-
-    datasets = _get_store_backed_raw_datasets(image)
-    actual_index = mapping[preview_index]
-    dataset = datasets[actual_index] if actual_index < len(datasets) else {"path": str(actual_index)}
-    return str(dataset.get("path") or actual_index)
-
-
-def _resolve_preview_dataset_path(image, preview_level):
-    if resolve_image_backing_zarr_store(image) is None:
-        return None
-    return _get_store_backed_preview_dataset_path(image, preview_level)
-
-
-def _store_backed_preview_zattrs(image, version):
-    payload = _get_store_backed_root_zattrs_payload(image, version=version)
-    if payload is None:
-        return None
-
-    if version != "0.4":
-        return payload
-
-    node = load_store_backed_image_node(image)
-    if node is None:
-        return payload
-
-    multiscales = payload.get("multiscales") or []
-    if not multiscales:
-        return payload
-
-    mapping = _get_store_backed_preview_level_mapping(image)
-    datasets = _get_store_backed_raw_datasets(image, version=version)
-    preview_datasets = []
-    for preview_index, actual_index in enumerate(mapping):
-        source = datasets[actual_index] if actual_index < len(datasets) else {"path": str(actual_index)}
-        dataset = deepcopy(source)
-        dataset["path"] = str(preview_index)
-        preview_datasets.append(dataset)
-
-    payload = deepcopy(payload)
-    payload["multiscales"] = deepcopy(multiscales)
-    payload["multiscales"][0]["datasets"] = preview_datasets
-    return payload
-
-
 @login_required()
 def preview_image_zattrs(request, iid, version="0.4", conn=None, **kwargs):
-    image = conn.getObject("Image", iid)
-    payload = _store_backed_preview_zattrs(image, version)
-    if payload is None:
-        return image_zattrs(request, iid, version, conn=conn, **kwargs)
-    return JsonResponse(payload)
+    return image_zattrs(request, iid, version, conn=conn, **kwargs)
 
 
 @login_required()
@@ -449,54 +352,24 @@ def preview_image_zgroup(request, iid, version="0.4", conn=None, **kwargs):
 
 @login_required()
 def preview_image_zarray(request, iid, level, conn=None, **kwargs):
-    image = conn.getObject("Image", iid)
-    dataset_path = _resolve_preview_dataset_path(image, level)
-    if dataset_path is None:
-        return image_zarray(request, iid, level, conn=conn, **kwargs)
-    store_rsp = _store_backed_response(
-        image,
-        "0.4",
-        dataset_path,
-        ".zarray",
-    )
-    if store_rsp is not None:
-        return store_rsp
     return image_zarray(request, iid, level, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
-    image = conn.getObject("Image", iid)
-    dataset_path = _resolve_preview_dataset_path(image, level)
-    if dataset_path is None:
-        return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
-    store_rsp = _store_backed_response(
-        image,
-        "0.4",
-        dataset_path,
-        *chunk.split("/"),
-    )
-    if store_rsp is not None:
-        response = HttpResponse(store_rsp.content, content_type=store_rsp.get("Content-Type", "application/octet-stream"))
-        response["Content-Length"] = store_rsp["Content-Length"]
-        response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace("/", ".")
-        return response
     return image_chunk(request, iid, level, chunk, conn=conn, **kwargs)
 
 
 @login_required()
 def preview_image_store_path(request, iid, version="0.4", store_path=None, conn=None, **kwargs):
-    image = conn.getObject("Image", iid)
-    parts = (store_path or "").split("/")
-    if parts and parts[0].isdigit():
-        try:
-            parts[0] = _get_store_backed_preview_dataset_path(image, int(parts[0]))
-        except Http404:
-            pass
-    store_rsp = _store_backed_response(image, version, *parts)
-    if store_rsp is None:
-        raise Http404("zarr path not found")
-    return store_rsp
+    return image_store_path(
+        request,
+        iid,
+        version,
+        store_path or "",
+        conn=conn,
+        **kwargs,
+    )
 
 
 @login_required()

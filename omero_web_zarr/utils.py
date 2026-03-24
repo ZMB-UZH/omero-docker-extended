@@ -617,23 +617,6 @@ def get_store_backed_zoom_level_scaling(node):
     }
 
 
-def get_store_backed_viewer_safe_level_indices(node):
-    data = getattr(node, "data", None) or ()
-    if not data:
-        return [0]
-
-    axis_names = get_store_backed_axis_names(node, level=0)
-    non_display_axes = [axis for axis in axis_names if axis not in {"y", "x"}]
-    full_shape = dict(zip(axis_names, data[0].shape))
-
-    safe = []
-    for index, array in enumerate(data):
-        shape = dict(zip(axis_names, array.shape))
-        if all(int(shape.get(axis, 1)) == int(full_shape.get(axis, 1)) for axis in non_display_axes):
-            safe.append(index)
-    return safe or [0]
-
-
 def select_store_backed_level(node, max_width=None, max_height=None):
     if not getattr(node, "data", None):
         return 0
