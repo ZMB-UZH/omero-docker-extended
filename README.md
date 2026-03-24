@@ -1,5 +1,8 @@
 # OMERO Docker Extended
 
+[![Tests](https://github.com/strmt7/omero-docker-extended/actions/workflows/tests.yml/badge.svg)](https://github.com/strmt7/omero-docker-extended/actions/workflows/tests.yml)
+[![Code coverage](https://codecov.io/gh/strmt7/omero-docker-extended/branch/main/graph/badge.svg)](https://codecov.io/gh/strmt7/omero-docker-extended)
+
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
 
 <details open>
