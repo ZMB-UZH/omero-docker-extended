@@ -13,14 +13,13 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
         )
 
     def test_pull_scripts_preserve_site_local_logo_png(self) -> None:
-        public_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
-        )
-        private_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
-            encoding="utf-8"
-        )
+        scripts = [self.repo_root / "github_pull_project_bash_example"]
+        private_script = self.repo_root / "github_pull_private_project_bash_example"
+        if private_script.exists():
+            scripts.append(private_script)
 
-        for script_text in (public_text, private_text):
+        for script in scripts:
+            script_text = script.read_text(encoding="utf-8")
             self.assertIn('if [ -f "${current_repo_dir}/logo/logo.png" ]; then', script_text)
             self.assertIn('active_protected_files+=("logo/logo.png")', script_text)
             self.assertIn('clone_move_find_args+=( ! -name \'logo\' )', script_text)

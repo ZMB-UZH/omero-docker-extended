@@ -118,7 +118,7 @@ bash installation/installation_script.sh
 - `github_pull_project_bash` defaults to `REPO_BRANCH=main` only for that script; branch defaults for other pull scripts are script-specific.
 - For unattended automation, you can explicitly set `INSTALLATION_AUTOMATION_MODE=1`.
 - `installation/installation_script.sh` rewrites `installation_paths.env` only after path prompts are resolved (installation path, database path, plugin database path, data path, and tmp path), so selected non-default paths are persisted immediately for future pull/update runs.
-- `github_pull_project_bash` and `github_pull_private_project_bash` now save the visible terminal session to `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` after the run finishes.
+- `github_pull_project_bash` and its variants now save the visible terminal session to `${OMERO_DATA_PATH}/installation_logs/<script>_<UTC timestamp>.log` after the run finishes.
 
 - To integrate with the pull/update workflow, run:
 

@@ -4,7 +4,7 @@ Authoritative map of ownership, mode bits, and writable-path assumptions during 
 
 Use this document when investigating:
 - permission-denied startup failures,
-- ownership drift after `github_pull_project_bash` / `github_pull_private_project_bash`,
+- ownership drift after `github_pull_project_bash`,
 - missing writable directories,
 - Docker socket access problems,
 - quota metadata write failures,
@@ -236,8 +236,7 @@ Path:
 
 Intent:
 - root-owned archive of the exact visible terminal session from
-  `github_pull_project_bash`,
-  `github_pull_private_project_bash`,
+  `github_pull_project_bash`
   and `installation/installation_script.sh`.
 
 Host-side installer / pull helpers:
@@ -292,7 +291,6 @@ This is one of the few intentionally broad write-permission exceptions in the st
 ## 4. Pull / Update Scripts
 
 ### `github_pull_project_bash_example`
-### `github_pull_private_project_bash_example`
 
 Behavior:
 - preserve runtime files and data paths derived from `installation_paths.env`,
