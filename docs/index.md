@@ -36,6 +36,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `operations/monitoring.md` -- Prometheus, Grafana, Loki, Alloy, exporters, dashboards, alerts
 - `operations/installation-permissions.md` -- ownership, modes, writable paths, and install/update/bootstrap permission model
 - `operations/postgres-maintenance.md` -- VACUUM ANALYZE, REINDEX CONCURRENTLY, cron schedule
+- `operations/test-coverage.md` -- GitHub Actions coverage artifacts, Codecov component views, and line-level drill-down workflow
 - `operations/code-scanning.md` -- GitHub code scanning workflow, SARIF uploads, triage and rollout guidance
 - `RELIABILITY.md` -- startup determinism, health checks, incident classes
 - `SECURITY.md` -- secrets management, image pinning, input validation, access control, post-build vulnerability scanning, security hardening
