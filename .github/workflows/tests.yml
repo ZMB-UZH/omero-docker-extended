@@ -101,7 +101,7 @@ jobs:
           python3 -m coverage report --rcfile=.coveragerc
 
       - name: Validate Codecov token
-        if: always()
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/alpha'
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         run: |
@@ -111,7 +111,7 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        if: always()
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/alpha'
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
