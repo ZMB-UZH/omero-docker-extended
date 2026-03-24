@@ -1,0 +1,27 @@
+# Coverage.py configuration for omero-docker-extended
+#
+# Each test suite is executed as a separate ``coverage run`` invocation
+# (required because the root conftest.py installs mock stubs that
+# interfere across test modules).  The individual data files are merged
+# with ``coverage combine`` before reporting.
+
+[run]
+# Use directory paths (with ./ prefix) so coverage.py resolves them as
+# filesystem paths without attempting to import the packages — the
+# conftest mocks are not yet loaded at tracer-start time.
+source =
+    ./omero_plugin_common
+    ./omeroweb_omp_plugin
+    ./omeroweb_import
+    ./omeroweb_admin_tools
+    ./omeroweb_imaris_connector
+omit =
+    */tests/*
+    conftest.py
+
+[report]
+skip_empty = true
+show_missing = true
+
+[xml]
+output = coverage.xml
