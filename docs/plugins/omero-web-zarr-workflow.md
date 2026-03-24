@@ -54,7 +54,7 @@ Purpose:
 - keep browser preview and Vizarr browsing on a preview-specific OMERO.web URL namespace,
 - expose the same underlying store-backed NGFF payload used by the raw endpoint.
 
-For non-store-backed images, preview `.zattrs` and `.zgroup` stay on the synthetic OMERO-backed path, while preview `.zarray` and chunk requests delegate directly to the raw synthetic responses instead of attempting managed-store dataset remapping.
+For non-store-backed images, all preview routes delegate to the synthetic OMERO-backed NGFF responses.
 
 ## Rendering and UI integration
 
@@ -67,7 +67,11 @@ For store-backed images, `omero_web_zarr` intercepts selected OMERO.web behavior
 - right-panel preview,
 - store-backed download actions.
 
-For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path.
+For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path by default. The only exceptions are narrow fallbacks for known OMERO.server reader regressions that can leak into classic viewers:
+
+- image-data marshaling falls back to safe generic tile-size metadata when OMERO raises the known `ZarrReader.getOptimalTileWidth()` tile-size failure,
+- classic tile-region responses fall back to the same safe tile-size calculation for that same known failure,
+- metadata-preview rendering falls back to an empty rendering-definition list when OMERO fails to instantiate the rendering engine with the known `ZarrPixelsService.getPixelBuffer` / pixel-buffer error path.
 
 The OMERO.web right-panel preview page remains store-backed only. If an image is not store-backed, that page redirects back to the standard OMERO.web metadata preview. `Open with Vizarr` still targets the preview NGFF endpoint for all images, which is why the non-store-backed preview route delegation above matters.
 
@@ -92,8 +96,10 @@ These downloads are independent of the classic OMERO pyramid TIFF path and there
 ## Failure model
 
 - **Invalid raw path**: return `404` for missing metadata/chunk paths.
-- **Invalid preview level**: reject it before trying to access a non-existent backing dataset.
+- **Invalid preview level**: requests for non-existent backing dataset paths return `404`.
 - **Missing managed store**: fall back to stock behavior only for non-store-backed images; store-backed routes return explicit failure.
+- **Known classic-viewer tile-size regression on non-store-backed images**: `omero_web_zarr` now catches the specific OMERO failure signatures around `ZarrReader.getOptimalTileWidth()` and uses a safe generic tile-size fallback so classic OMERO.web image metadata and region requests do not 500 just because the server-side reader stack misreports tile size.
+- **Known classic metadata-preview rendering-engine regression on non-store-backed images**: when OMERO.web cannot load rendering definitions because OMERO.server fails while instantiating the pixel buffer through `ZarrPixelsService.getPixelBuffer`, the metadata preview now returns a degraded but working preview context instead of crashing the whole panel.
 - **Server-side Zarr reader failure**: if OMERO.server fails inside `loci.formats.in.ZarrReader` while reading raw bytes for a non-store-backed image, that is an upstream reader-stack failure. `omero_web_zarr` can keep the launcher and synthetic metadata routes correct, but it cannot make Vizarr browse data that OMERO.server itself cannot read through the standard path.
 - **Unsupported export axes**: OME-TIFF export rejects non-image-axis layouts explicitly instead of silently inventing output structure.
 
