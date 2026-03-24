@@ -369,7 +369,6 @@ def run_script():
         ),
         namespaces=["omero.import"],
         version="1.0.0",
-        authors=["OpenAI"],
         institutions=["OMERO"],
         contact="n/a",
     )
