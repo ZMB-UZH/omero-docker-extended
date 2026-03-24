@@ -72,11 +72,14 @@ def _store_backed_response(image, version, *parts):
     if is_store_metadata_path(source):
         with open(source, "r", encoding="utf-8") as reader:
             payload = json.load(reader)
-        return JsonResponse(payload)
+        rsp = JsonResponse(payload)
+        rsp["Cache-Control"] = "private, max-age=86400, immutable"
+        return rsp
 
     data = source.read_bytes()
     rsp = HttpResponse(data, content_type="application/octet-stream")
     rsp["Content-Length"] = len(data)
+    rsp["Cache-Control"] = "private, max-age=86400, immutable"
     filename = ".".join(source.relative_to(store_root).parts)
     rsp["Content-Disposition"] = "attachment; filename=%s" % filename
     return rsp
