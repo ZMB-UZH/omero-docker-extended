@@ -171,9 +171,10 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_p
     assert "source=/zarr/v0.4/image/502.zarr" in context["validator_url"]
 
 
-def test_store_backed_preview_zattrs_filters_out_levels_that_downsample_z(tmp_path, monkeypatch):
+def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(tmp_path, monkeypatch):
     _write_store(tmp_path)
-    image = _FakeImage(str(tmp_path.resolve()), image_id=11, name="pyramid.zarr")
+    image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/12.zarr/.zattrs")
     root_payload = {
         "multiscales": [
             {
@@ -189,75 +190,16 @@ def test_store_backed_preview_zattrs_filters_out_levels_that_downsample_z(tmp_pa
     monkeypatch.setattr(
         views,
         "_store_backed_json_response",
-        lambda image, version, *parts: type(
-            "Response",
-            (),
-            {"content": json.dumps(root_payload).encode("utf-8")},
-        )(),
+        lambda image, version, *parts: HttpResponse(
+            json.dumps(root_payload),
+            content_type="application/json",
+        ),
     )
-    fake_node = type(
-        "FakeNode",
-        (),
-        {
-            "data": [
-                type("Array", (), {"shape": (543, 1612, 3528)})(),
-                type("Array", (), {"shape": (271, 806, 1764)})(),
-            ],
-            "metadata": {
-                "axes": ["z", "y", "x"],
-                "multiscales": root_payload["multiscales"],
-            },
-        },
-    )()
-    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
 
-    payload = views._store_backed_preview_zattrs(image, "0.4")
+    response = views.preview_image_zattrs.__wrapped__(request, 12, conn=_FakeConn(image))
 
-    assert payload["multiscales"][0]["datasets"] == [
-        {"path": "0", "coordinateTransformations": [{"type": "scale", "scale": [1, 1, 1]}]}
-    ]
-
-
-def test_preview_dataset_path_preserves_underlying_dataset_key_names(tmp_path, monkeypatch):
-    _write_store(tmp_path)
-    image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
-    root_payload = {
-        "multiscales": [
-            {
-                "version": "0.4",
-                "datasets": [
-                    {"path": "s0"},
-                    {"path": "s1"},
-                ],
-            }
-        ]
-    }
-    monkeypatch.setattr(
-        views,
-        "_store_backed_json_response",
-        lambda image, version, *parts: type(
-            "Response",
-            (),
-            {"content": json.dumps(root_payload).encode("utf-8")},
-        )(),
-    )
-    fake_node = type(
-        "FakeNode",
-        (),
-        {
-            "data": [
-                type("Array", (), {"shape": (543, 1612, 3528)})(),
-                type("Array", (), {"shape": (271, 806, 1764)})(),
-            ],
-            "metadata": {
-                "axes": ["z", "y", "x"],
-                "multiscales": root_payload["multiscales"],
-            },
-        },
-    )()
-    monkeypatch.setattr(views, "load_store_backed_image_node", lambda image: fake_node)
-
-    assert views._get_store_backed_preview_dataset_path(image, 0) == "s0"
+    assert response.status_code == 200
+    assert json.loads(response.content) == root_payload
 
 
 def test_get_chunk_shape_preserves_yx_order_for_non_pyramid_images():
@@ -275,82 +217,66 @@ class _FakeConn:
         return self._image
 
 
-def test_preview_image_zarray_falls_back_to_raw_path_for_non_store_backed(monkeypatch):
-    image = _FakeImage(None, image_id=41, name="bioformats.zarr")
-    request = RequestFactory().get("/zarr/v0.4/preview/image/41.zarr/0/.zarray")
-    sentinel = HttpResponse("raw-zarray", content_type="application/json")
-
-    monkeypatch.setattr(
-        views,
-        "_get_store_backed_preview_dataset_path",
-        lambda image, level: (_ for _ in ()).throw(AssertionError("unexpected store-backed path lookup")),
-    )
-    monkeypatch.setattr(views, "image_zarray", lambda request, iid, level, conn=None, **kwargs: sentinel)
-
-    response = views.preview_image_zarray.__wrapped__(request, 41, 0, conn=_FakeConn(image))
-
-    assert response is sentinel
-
-
-def test_preview_image_chunk_falls_back_to_raw_path_for_non_store_backed(monkeypatch):
-    image = _FakeImage(None, image_id=42, name="bioformats.zarr")
-    request = RequestFactory().get("/zarr/v0.4/preview/image/42.zarr/0/0/0/0/0")
-    sentinel = HttpResponse(b"raw-chunk", content_type="application/octet-stream")
-
-    monkeypatch.setattr(
-        views,
-        "_get_store_backed_preview_dataset_path",
-        lambda image, level: (_ for _ in ()).throw(AssertionError("unexpected store-backed path lookup")),
-    )
-    monkeypatch.setattr(
-        views,
-        "image_chunk",
-        lambda request, iid, level, chunk, conn=None, **kwargs: sentinel,
-    )
-
-    response = views.preview_image_chunk.__wrapped__(request, 42, 0, "0/0/0/0", conn=_FakeConn(image))
-
-    assert response is sentinel
-
-
-def test_preview_image_zarray_uses_store_backed_preview_dataset_path(monkeypatch):
+def test_preview_image_zarray_delegates_to_raw_endpoint(monkeypatch):
     image = _FakeImage("/managed/demo.ome.zarr", image_id=43, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/43.zarr/0/.zarray")
     sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
+    captured = {}
+    conn = _FakeConn(image)
 
-    monkeypatch.setattr(views, "_resolve_preview_dataset_path", lambda image, level: "s0")
-    monkeypatch.setattr(views, "_store_backed_response", lambda image, version, *parts: sentinel)
-    monkeypatch.setattr(
-        views,
-        "image_zarray",
-        lambda request, iid, level, conn=None, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected raw fallback")),
-    )
+    def fake_image_zarray(request, iid, level, conn=None, **kwargs):
+        captured["call"] = (request, iid, level, conn, kwargs)
+        return sentinel
 
-    response = views.preview_image_zarray.__wrapped__(request, 43, 0, conn=_FakeConn(image))
+    monkeypatch.setattr(views, "image_zarray", fake_image_zarray)
+
+    response = views.preview_image_zarray.__wrapped__(request, 43, 0, conn=conn)
 
     assert response is sentinel
+    assert captured["call"][1:4] == (43, 0, conn)
 
 
-def test_preview_image_chunk_uses_store_backed_preview_dataset_path(monkeypatch):
+def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
     image = _FakeImage("/managed/demo.ome.zarr", image_id=44, name="managed.ome.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/44.zarr/0/0/0/0/0")
-    store_response = HttpResponse(b"store-chunk", content_type="application/octet-stream")
-    store_response["Content-Length"] = len(b"store-chunk")
+    sentinel = HttpResponse(b"store-chunk", content_type="application/octet-stream")
+    captured = {}
+    conn = _FakeConn(image)
 
-    monkeypatch.setattr(views, "_resolve_preview_dataset_path", lambda image, level: "s0")
-    monkeypatch.setattr(views, "_store_backed_response", lambda image, version, *parts: store_response)
-    monkeypatch.setattr(
-        views,
-        "image_chunk",
-        lambda request, iid, level, chunk, conn=None, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected raw fallback")),
+    def fake_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
+        captured["call"] = (request, iid, level, chunk, conn, kwargs)
+        return sentinel
+
+    monkeypatch.setattr(views, "image_chunk", fake_image_chunk)
+
+    response = views.preview_image_chunk.__wrapped__(request, 44, 0, "0/0/0/0", conn=conn)
+
+    assert response is sentinel
+    assert captured["call"][1:5] == (44, 0, "0/0/0/0", conn)
+
+
+def test_preview_image_store_path_delegates_to_raw_endpoint(monkeypatch):
+    image = _FakeImage("/managed/demo.ome.zarr", image_id=45, name="managed.ome.zarr")
+    request = RequestFactory().get("/zarr/v0.4/preview/image/45.zarr/s1/.zarray")
+    sentinel = HttpResponse('{"zarr_format": 2}', content_type="application/json")
+    captured = {}
+    conn = _FakeConn(image)
+
+    def fake_image_store_path(request, iid, version, store_path, conn=None, **kwargs):
+        captured["call"] = (request, iid, version, store_path, conn, kwargs)
+        return sentinel
+
+    monkeypatch.setattr(views, "image_store_path", fake_image_store_path)
+
+    response = views.preview_image_store_path.__wrapped__(
+        request,
+        45,
+        store_path="s1/.zarray",
+        conn=conn,
     )
 
-    response = views.preview_image_chunk.__wrapped__(request, 44, 0, "0/0/0/0", conn=_FakeConn(image))
-
-    assert response.status_code == 200
-    assert response.content == b"store-chunk"
-    assert response["Content-Length"] == str(len(b"store-chunk"))
-    assert response["Content-Disposition"] == "attachment; filename=0.0.0.0"
+    assert response is sentinel
+    assert captured["call"][1:5] == (45, "0.4", "s1/.zarray", conn)
 
 
 def test_download_store_metadata_returns_json_manifest(tmp_path):
