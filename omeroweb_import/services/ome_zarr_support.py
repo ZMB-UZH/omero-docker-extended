@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
 import os
+import shutil
 from dataclasses import dataclass, field
 from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Optional
+
+LOGGER = logging.getLogger(__name__)
 
 OME_ZARR_IMPORT_KIND_IMAGE = "ome_zarr_image"
 OME_ZARR_IMPORT_KIND_BIOFORMATS2RAW = "bioformats2raw_layout3"
@@ -69,8 +74,18 @@ def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
 
     The installed OMERO render stack can import some valid OME-Zarr stores but
     later fail to render thumbnails when image arrays are backed by large
-    Blosc-compressed chunks. Normalize only the image arrays referenced by the
-    parsed OME-Zarr metadata and keep the logical image layout intact.
+    Blosc-compressed chunks.  Additionally, 3D stores whose pyramids
+    downsample the z-axis produce blurry slices in 2D viewers like Vizarr
+    that select resolution level based on XY viewport zoom.
+
+    This function:
+
+    1. Rewrites Blosc-compressed chunks to gzip so the OMERO render stack
+       can read them.
+    2. Regenerates pyramid levels that downsample all three spatial axes
+       (z, y, x) so that only y and x are downsampled — matching the
+       approach used by ``ome-zarr-py``'s ``Scaler.local_mean`` and
+       napari's dimension-aware multiscale level selection.
     """
 
     inspection = inspect_ome_zarr_image(store_root)
@@ -82,6 +97,10 @@ def normalize_native_ome_zarr_copy(store_root: Path) -> Optional[str]:
     rewrite_error = _rewrite_problematic_native_image_arrays(store_root, inspection)
     if rewrite_error:
         return rewrite_error
+
+    pyramid_error = _regenerate_xy_only_pyramid(store_root)
+    if pyramid_error:
+        return pyramid_error
 
     normalized = inspect_ome_zarr_image(store_root)
     if not normalized.supported:
@@ -512,6 +531,274 @@ def _iter_zarr_chunk_files(array_dir: Path):
         if path.name.startswith("."):
             continue
         yield path
+
+
+def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
+    """Detect if a zarr store downsamples the z-axis between pyramid levels.
+
+    3D-downsampled pyramids cause blurry z-slices in 2D viewers (Vizarr)
+    that select resolution level based on XY viewport zoom.  Returns a
+    metadata dict when 3D downsampling is detected, ``None`` otherwise.
+    """
+    metadata_payload, _ = _read_store_metadata_payload(store_root)
+    if not isinstance(metadata_payload, dict):
+        return None
+
+    multiscales = metadata_payload.get("multiscales")
+    if not isinstance(multiscales, list) or not multiscales:
+        return None
+
+    ms = multiscales[0]
+    if not isinstance(ms, dict):
+        return None
+    axes = ms.get("axes")
+    datasets = ms.get("datasets")
+    if not isinstance(axes, list) or not isinstance(datasets, list) or len(datasets) < 2:
+        return None
+
+    z_axis_index = None
+    yx_indices = []
+    for i, axis in enumerate(axes):
+        if not isinstance(axis, dict):
+            continue
+        name = str(axis.get("name") or "").strip().lower()
+        if name == "z":
+            z_axis_index = i
+        elif name in ("y", "x"):
+            yx_indices.append(i)
+
+    if z_axis_index is None or len(yx_indices) < 2:
+        return None
+
+    s0_path = datasets[0].get("path", "")
+    s1_path = datasets[1].get("path", "")
+    s0_zarray = store_root / s0_path / ".zarray"
+    s1_zarray = store_root / s1_path / ".zarray"
+    if not s0_zarray.is_file() or not s1_zarray.is_file():
+        return None
+
+    try:
+        s0_shape = json.loads(s0_zarray.read_text(encoding="utf-8")).get("shape", [])
+        s1_shape = json.loads(s1_zarray.read_text(encoding="utf-8")).get("shape", [])
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    ndim = len(axes)
+    if len(s0_shape) != ndim or len(s1_shape) != ndim:
+        return None
+
+    if s0_shape[z_axis_index] == s1_shape[z_axis_index]:
+        return None
+
+    return {
+        "metadata_payload": metadata_payload,
+        "multiscale": ms,
+        "axes": axes,
+        "datasets": datasets,
+        "z_axis_index": z_axis_index,
+        "yx_indices": yx_indices,
+        "s0_path": s0_path,
+    }
+
+
+def _regenerate_xy_only_pyramid(store_root: Path, downscale_factor: int = 2) -> Optional[str]:
+    """Regenerate pyramid levels so only YX axes are downsampled.
+
+    Preserves ``s0`` (full resolution) unchanged.  Removes old
+    downsampled levels and writes new ones using ``local_mean``
+    downsampling on the YX axes only — the same strategy used by
+    ``ome-zarr-py``'s ``Scaler.local_mean`` and by napari's
+    dimension-aware level selection.
+
+    Returns ``None`` on success or an error string on failure.
+    """
+    try:
+        import numcodecs
+        import numpy as np
+        from skimage.transform import downscale_local_mean
+    except Exception as exc:
+        return f"Missing dependency for pyramid regeneration: {exc}"
+
+    detection = _has_3d_pyramid_downsampling(store_root)
+    if detection is None:
+        return None
+
+    ms = detection["multiscale"]
+    axes = detection["axes"]
+    datasets = detection["datasets"]
+    yx_indices = detection["yx_indices"]
+    s0_path = detection["s0_path"]
+    ndim = len(axes)
+
+    s0_zarray_path = store_root / s0_path / ".zarray"
+    try:
+        s0_meta = json.loads(s0_zarray_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return f"Failed to read s0 .zarray metadata: {exc}"
+
+    s0_chunks = s0_meta["chunks"]
+    s0_dtype = np.dtype(s0_meta["dtype"])
+    s0_compressor = s0_meta.get("compressor")
+    s0_filters = s0_meta.get("filters")
+
+    if isinstance(s0_filters, list) and len(s0_filters) == 0:
+        s0_filters = None
+        s0_meta["filters"] = None
+        try:
+            s0_zarray_path.write_text(json.dumps(s0_meta), encoding="utf-8")
+        except OSError:
+            pass
+
+    s0_transforms = datasets[0].get("coordinateTransformations", [])
+    s0_scale = None
+    s0_translation = None
+    for t in s0_transforms:
+        if isinstance(t, dict) and t.get("type") == "scale":
+            s0_scale = list(t["scale"])
+        elif isinstance(t, dict) and t.get("type") == "translation":
+            s0_translation = list(t["translation"])
+    if s0_scale is None or len(s0_scale) != ndim:
+        return "Cannot regenerate pyramid: s0 scale transform is missing or malformed."
+
+    try:
+        import zarr as _zarr
+        s0_array = _zarr.open_array(str(store_root / s0_path), mode="r")
+        s0_data = np.asarray(s0_array)
+    except Exception as exc:
+        return f"Failed to read full-resolution data: {exc}"
+
+    base_factors = tuple(
+        downscale_factor if i in yx_indices else 1
+        for i in range(ndim)
+    )
+
+    for ds in datasets[1:]:
+        old_dir = store_root / ds["path"]
+        if old_dir.is_dir():
+            shutil.rmtree(old_dir)
+
+    codec = None
+    if s0_compressor:
+        try:
+            codec = numcodecs.get_codec(s0_compressor)
+        except Exception as exc:
+            return f"Failed to load compressor for pyramid regeneration: {exc}"
+
+    new_datasets = [datasets[0]]
+    current_data = s0_data
+    current_scale = list(s0_scale)
+    current_translation = list(s0_translation) if s0_translation else [0.0] * ndim
+
+    for level_idx in range(1, len(datasets)):
+        next_yx = [current_data.shape[i] // downscale_factor for i in yx_indices]
+        if any(s < 2 for s in next_yx):
+            break
+
+        downsampled = downscale_local_mean(current_data, factors=base_factors).astype(s0_dtype)
+        new_scale = list(current_scale)
+        new_translation = list(current_translation)
+        for ax_i in yx_indices:
+            new_scale[ax_i] = current_scale[ax_i] * downscale_factor
+            new_translation[ax_i] = (
+                current_translation[ax_i]
+                + (current_scale[ax_i] * (downscale_factor - 1)) / 2
+            )
+
+        level_path = datasets[level_idx]["path"]
+        level_dir = store_root / level_path
+        error = _write_zarr_v2_level(level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec)
+        if error:
+            return error
+
+        transforms = [{"type": "scale", "scale": new_scale}]
+        if s0_translation is not None:
+            transforms.append({"type": "translation", "translation": new_translation})
+        new_datasets.append({"path": level_path, "coordinateTransformations": transforms})
+
+        current_data = downsampled
+        current_scale = new_scale
+        current_translation = new_translation
+
+    ms["datasets"] = new_datasets
+    if "coordinateTransformations" in ms and not ms["coordinateTransformations"]:
+        del ms["coordinateTransformations"]
+
+    payload = detection["metadata_payload"]
+    payload["multiscales"] = [ms]
+    try:
+        (store_root / ".zattrs").write_text(json.dumps(payload), encoding="utf-8")
+    except OSError as exc:
+        return f"Failed to write updated .zattrs: {exc}"
+
+    return None
+
+
+def _write_zarr_v2_level(
+    output_dir: Path,
+    data,
+    chunks: list,
+    compressor_spec: Optional[dict],
+    filters_spec,
+    codec,
+) -> Optional[str]:
+    """Write a numpy array as zarr v2 chunk files."""
+    import numpy as np
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shape = list(data.shape)
+    ndim = len(shape)
+
+    zarray_meta = {
+        "zarr_format": 2,
+        "shape": shape,
+        "chunks": chunks,
+        "dtype": data.dtype.str,
+        "compressor": compressor_spec,
+        "fill_value": 0,
+        "filters": filters_spec,
+        "order": "C",
+        "dimension_separator": "/",
+    }
+    try:
+        (output_dir / ".zarray").write_text(json.dumps(zarray_meta), encoding="utf-8")
+    except OSError as exc:
+        return f"Failed to write .zarray for {output_dir.name}: {exc}"
+
+    chunk_grid = [math.ceil(s / c) for s, c in zip(shape, chunks)]
+    total_chunks = 1
+    for g in chunk_grid:
+        total_chunks *= g
+
+    for flat_idx in range(total_chunks):
+        coords = []
+        remainder = flat_idx
+        for dim in range(ndim - 1, -1, -1):
+            coords.insert(0, remainder % chunk_grid[dim])
+            remainder //= chunk_grid[dim]
+
+        slices = tuple(
+            slice(coords[d] * chunks[d], min(coords[d] * chunks[d] + chunks[d], shape[d]))
+            for d in range(ndim)
+        )
+        chunk_data = data[slices]
+
+        if chunk_data.shape != tuple(chunks):
+            padded = np.zeros(chunks, dtype=data.dtype)
+            padded[tuple(slice(0, s) for s in chunk_data.shape)] = chunk_data
+            chunk_data = padded
+
+        raw_bytes = chunk_data.tobytes(order="C")
+        if codec is not None:
+            raw_bytes = codec.encode(raw_bytes)
+
+        chunk_path = output_dir / "/".join(str(c) for c in coords)
+        chunk_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            chunk_path.write_bytes(raw_bytes)
+        except OSError as exc:
+            return f"Failed to write chunk {'/'.join(str(c) for c in coords)}: {exc}"
+
+    return None
 
 
 @lru_cache(maxsize=1)
