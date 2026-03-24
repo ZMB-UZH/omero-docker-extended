@@ -1899,14 +1899,21 @@ tty_printf() {
 
 tty_read_line() {
     local __result_var="${1:?BUG: tty_read_line requires target variable name}"
-    local reply=""
+    local __tty_read_value=""
 
-    if ! IFS= read -r reply < /dev/tty; then
+    if ! [[ "${__result_var}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        echo "ERROR: tty_read_line target must be a valid shell variable name: ${__result_var}" >&2
         return 1
     fi
 
-    install_transcript_record_line "${reply}"
-    printf -v "${__result_var}" '%s' "${reply}"
+    # Keep the internal buffer name distinct from common caller locals like
+    # "reply" so write-back targets never collide with this function scope.
+    if ! IFS= read -r __tty_read_value < /dev/tty; then
+        return 1
+    fi
+
+    install_transcript_record_line "${__tty_read_value}"
+    printf -v "${__result_var}" '%s' "${__tty_read_value}"
     return 0
 }
 
@@ -2018,30 +2025,14 @@ resolve_delete_images_choice() {
         return 0
     fi
 
-    echo "Delete all container images? Y/n (Default: n)"
+    reply="$(prompt_yes_no "Delete all container images? Y/n (Default: n)" "no")"
+    if [ "${reply}" = "yes" ]; then
+        KEEP_IMAGES=0
+    else
+        KEEP_IMAGES=1
+    fi
 
-    while true; do
-        tty_printf '> '
-        if ! tty_read_line reply; then
-            KEEP_IMAGES=1
-            echo "WARNING: Could not read confirmation input; defaulting to keep existing images." >&2
-            return 0
-        fi
-
-        reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
-
-        if [ -z "${reply}" ] || [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
-            KEEP_IMAGES=1
-            return 0
-        fi
-
-        if [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
-            KEEP_IMAGES=0
-            return 0
-        fi
-
-        tty_echo "Wrong choice. Please type Y or n."
-    done
+    return 0
 }
 
 resolve_path_with_default_prompt() {
@@ -2050,50 +2041,33 @@ resolve_path_with_default_prompt() {
     local reply=""
     local chosen_path=""
 
-    if [ "${INSTALLATION_AUTOMATION_MODE}" = "1" ] || [ ! -r /dev/tty ]; then
-        printf '%s' "${default_path}"
-        return 0
-    fi
-
     while true; do
-        tty_echo "Use default ${path_label} (${default_path})? Y/n (Default: Y)"
-        tty_printf '> '
+        reply="$(prompt_yes_no "Use default ${path_label} (${default_path})? Y/n (Default: Y)" "yes")"
 
-        if ! tty_read_line reply; then
+        if [ "${reply}" = "yes" ]; then
             printf '%s' "${default_path}"
             return 0
         fi
 
-        reply="$(printf '%s' "${reply}" | tr '[:upper:]' '[:lower:]')"
+        while true; do
+            tty_printf '%s: (Current: %s) ' "${path_label}" "${default_path}"
 
-        if [ -z "${reply}" ] || [ "${reply}" = "y" ] || [ "${reply}" = "yes" ]; then
-            printf '%s' "${default_path}"
-            return 0
-        fi
+            if ! tty_read_line chosen_path; then
+                printf '%s' "${default_path}"
+                return 0
+            fi
 
-        if [ "${reply}" = "n" ] || [ "${reply}" = "no" ]; then
-            while true; do
-                tty_printf '%s: (Current: %s) ' "${path_label}" "${default_path}"
+            if [ -z "${chosen_path}" ]; then
+                chosen_path="${default_path}"
+            fi
 
-                if ! tty_read_line chosen_path; then
-                    printf '%s' "${default_path}"
-                    return 0
-                fi
+            if is_valid_linux_path "${chosen_path}"; then
+                printf '%s' "${chosen_path}"
+                return 0
+            fi
 
-                if [ -z "${chosen_path}" ]; then
-                    chosen_path="${default_path}"
-                fi
-
-                if is_valid_linux_path "${chosen_path}"; then
-                    printf '%s' "${chosen_path}"
-                    return 0
-                fi
-
-                tty_echo "Wrong ${path_label}, try again: (Current: ${default_path})"
-            done
-        fi
-
-        tty_echo "Wrong choice. Please type Y or n."
+            tty_echo "Wrong ${path_label}, try again: (Current: ${default_path})"
+        done
     done
 }
 
