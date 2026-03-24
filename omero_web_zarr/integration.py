@@ -1,12 +1,16 @@
 import base64
+import importlib
+import json
 import logging
 import time
 import traceback
 from functools import wraps
 
 from django.conf import settings
+from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
+import omero
 from django.urls.resolvers import URLPattern, URLResolver
 import numpy as np
 from omero.rtypes import rlong
@@ -15,11 +19,13 @@ from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.marshal import channelMarshal
 
 from .utils import encode_store_backed_pil_image
+from .utils import get_safe_image_tile_size
 from .utils import get_store_backed_channel_overrides
 from .utils import get_store_backed_level_count
 from .utils import get_store_backed_level_sizes
 from .utils import get_store_backed_tile_size
 from .utils import get_store_backed_zoom_level_scaling
+from .utils import is_known_tile_size_failure
 from .utils import is_store_backed_image
 from .utils import load_store_backed_image_node
 from .utils import render_store_backed_pil_image
@@ -196,6 +202,149 @@ def _store_backed_metadata(image):
         "pixelsType": image.getPixelsType(),
     }
 
+
+def _exception_text(exc):
+    parts = [
+        str(exc),
+        getattr(exc, "message", None),
+        getattr(exc, "serverStackTrace", None),
+    ]
+    return "\n".join(str(part) for part in parts if part)
+
+
+def _is_known_rendering_engine_failure(exc):
+    text = _exception_text(exc)
+    return is_known_tile_size_failure(exc) or (
+        "Error instantiating pixel buffer" in text
+        and "ZarrPixelsService.getPixelBuffer" in text
+    )
+
+
+def _pixel_size_in_microns(image):
+    pixel_size = {}
+    for axis, getter in (
+        ("x", image.getPixelSizeX),
+        ("y", image.getPixelSizeY),
+        ("z", image.getPixelSizeZ),
+    ):
+        try:
+            size = getter("MICROMETER")
+            pixel_size[axis] = size.getValue() if size is not None else None
+        except Exception:
+            LOGGER.debug(
+                "Unable to convert physical pixel size to microns",
+                exc_info=True,
+            )
+            pixel_size[axis] = None
+    return pixel_size
+
+
+def _marshal_regular_image_data_with_safe_tile_size(image, request):
+    payload = {
+        "id": image.id,
+        "meta": _store_backed_metadata(image),
+        "perms": {
+            "canAnnotate": image.canAnnotate(),
+            "canEdit": image.canEdit(),
+            "canDelete": image.canDelete(),
+            "canLink": image.canLink(),
+        },
+    }
+    try:
+        rendering_engine_ready = image._prepareRenderingEngine()
+        if not rendering_engine_ready:
+            LOGGER.debug("Failed to prepare Rendering Engine for imageMarshal")
+            return payload
+    except omero.ConcurrencyException as concurrency_error:
+        return {"ConcurrencyException": {"backOff": concurrency_error.backOff}}
+    except Exception as exc:
+        payload["Exception"] = getattr(exc, "message", str(exc))
+        LOGGER.error(traceback.format_exc())
+        return payload
+
+    levels = image._re.getResolutionLevels()
+    tiles = levels > 1
+    payload["tiles"] = tiles
+    if tiles:
+        width, height = get_safe_image_tile_size(image, conn=getattr(image, "_conn", None))
+        payload.update(
+            {
+                "tile_size": {"width": width, "height": height},
+                "levels": levels,
+            }
+        )
+        resolution_descriptions = image._re.getResolutionDescriptions()
+        payload["resolutions"] = {
+            index: {"sizeX": resolution.sizeX, "sizeY": resolution.sizeY}
+            for index, resolution in enumerate(resolution_descriptions)
+        }
+        payload["zoomLevelScaling"] = {
+            index: resolution.sizeX / resolution_descriptions[0].sizeX
+            for index, resolution in enumerate(resolution_descriptions)
+        }
+
+    objective_settings = image.getObjectiveSettings()
+    nominal_magnification = (
+        objective_settings is not None
+        and objective_settings.getObjective().getNominalMagnification()
+        or None
+    )
+
+    try:
+        viewer_settings = request.session.get("server_settings", {}).get("viewer", {})
+    except Exception:
+        viewer_settings = {}
+    init_zoom = viewer_settings.get("initial_zoom_level", 0)
+    if init_zoom is not None and init_zoom < 0:
+        init_zoom = levels + init_zoom
+
+    try:
+        payload.update(
+            {
+                "interpolate": viewer_settings.get("interpolate_pixels", True),
+                "size": {
+                    "width": image.getSizeX(),
+                    "height": image.getSizeY(),
+                    "z": image.getSizeZ(),
+                    "t": image.getSizeT(),
+                    "c": image.getSizeC(),
+                },
+                "pixel_size": _pixel_size_in_microns(image),
+            }
+        )
+        if init_zoom is not None:
+            payload["init_zoom"] = init_zoom
+        if nominal_magnification is not None:
+            payload["nominalMagnification"] = nominal_magnification
+        try:
+            payload["pixel_range"] = image.getPixelRange()
+            payload["channels"] = [channelMarshal(channel) for channel in image.getChannels()]
+            payload["split_channel"] = image.splitChannelDims()
+            payload["rdefs"] = {
+                "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
+                "projection": image.getProjection(),
+                "defaultZ": image._re.getDefaultZ(),
+                "defaultT": image._re.getDefaultT(),
+                "invertAxis": image.isInvertedAxis(),
+            }
+        except TypeError:
+            LOGGER.error("imageMarshal", exc_info=True)
+            payload["pixel_range"] = (0, 0)
+            payload["channels"] = ()
+            payload["split_channel"] = ()
+            payload["rdefs"] = {
+                "model": "color",
+                "projection": image.getProjection(),
+                "defaultZ": 0,
+                "defaultT": 0,
+                "invertAxis": image.isInvertedAxis(),
+            }
+    except AttributeError:
+        raise
+
+    return payload
+
+
 def _select_marshaled_key(payload, key):
     result = payload
     for part in key.split("."):
@@ -203,6 +352,222 @@ def _select_marshaled_key(payload, key):
             return None
         result = result.get(part, {})
     return None if result == {} else result
+
+
+def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=None):
+    from omeroweb.webgateway import views as webgateway_views
+
+    server_id = request.session["connector"]["server_id"]
+    prepared_image = webgateway_views._get_prepared_image(
+        request,
+        iid,
+        server_id=server_id,
+        conn=conn,
+    )
+    if prepared_image is None:
+        raise Http404
+    image, compress_quality = prepared_image
+
+    tile = request.GET.get("tile")
+    region = request.GET.get("region")
+    level = None
+
+    if tile:
+        try:
+            image._prepareRenderingEngine()
+            width, height = get_safe_image_tile_size(image, conn=conn)
+            max_viewer_level = image._re.getResolutionLevels() - 1
+
+            fields = tile.split(",")
+            if len(fields) > 4:
+                requested_tile_size = [int(fields[3]), int(fields[4])]
+                defaults = [width, height]
+                max_tile_length = 1024
+                if conn is not None:
+                    try:
+                        max_tile_length = int(
+                            conn.getConfigService().getConfigValue(
+                                "omero.pixeldata.max_tile_length"
+                            )
+                        )
+                    except Exception:
+                        LOGGER.debug(
+                            "Failed to load max tile length from OMERO config",
+                            exc_info=True,
+                        )
+                for index, tile_length in enumerate(requested_tile_size):
+                    if tile_length <= 0:
+                        requested_tile_size[index] = defaults[index]
+                    if tile_length > max_tile_length:
+                        requested_tile_size[index] = max_tile_length
+                width, height = requested_tile_size
+
+            viewer_level = int(fields[0])
+            if viewer_level < 0:
+                message = "Invalid resolution level %s < 0" % viewer_level
+                LOGGER.debug(message, exc_info=True)
+                return HttpResponseBadRequest(message)
+
+            if max_viewer_level == 0:
+                if viewer_level > 0:
+                    message = "Invalid resolution level %s, non pyramid file" % viewer_level
+                    LOGGER.debug(message, exc_info=True)
+                    return HttpResponseBadRequest(message)
+                level = None
+            else:
+                level = max_viewer_level - viewer_level
+                if level < 0:
+                    message = (
+                        "Invalid resolution level, %s > number of available levels %s "
+                        % (viewer_level, max_viewer_level)
+                    )
+                    LOGGER.debug(message, exc_info=True)
+                    return HttpResponseBadRequest(message)
+
+            x = int(fields[1]) * width
+            y = int(fields[2]) * height
+        except Exception:
+            message = "malformed tile argument, tile=%s" % tile
+            LOGGER.debug(message, exc_info=True)
+            return HttpResponseBadRequest(message)
+    elif region:
+        try:
+            x, y, width, height = [int(value) for value in region.split(",")]
+        except Exception:
+            message = "malformed region argument, region=%s" % region
+            LOGGER.debug(message, exc_info=True)
+            return HttpResponseBadRequest(message)
+    else:
+        return HttpResponseBadRequest("tile or region argument required")
+
+    jpeg_data = image.renderJpegRegion(
+        z,
+        t,
+        x,
+        y,
+        width,
+        height,
+        level=level,
+        compression=compress_quality,
+    )
+    if jpeg_data is None:
+        raise Http404
+    return HttpResponse(jpeg_data, content_type="image/jpeg")
+
+
+def _safe_regular_image_marshal(original_image_marshal, image, key=None, request=None):
+    try:
+        return original_image_marshal(image, key=key, request=request)
+    except Exception as exc:
+        if not is_known_tile_size_failure(exc):
+            raise
+        payload = _marshal_regular_image_data_with_safe_tile_size(image, request)
+        if key is not None:
+            payload = _select_marshaled_key(payload, key)
+        return payload
+
+
+def _install_safe_image_marshal_overrides(webgateway_marshal):
+    if getattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False):
+        return webgateway_marshal.imageMarshal
+
+    original_image_marshal = webgateway_marshal.imageMarshal
+
+    @wraps(original_image_marshal)
+    def safe_image_marshal(image, key=None, request=None):
+        return _safe_regular_image_marshal(
+            original_image_marshal,
+            image,
+            key=key,
+            request=request,
+        )
+
+    webgateway_marshal.imageMarshal = safe_image_marshal
+    webgateway_marshal._omero_web_zarr_original_image_marshal = original_image_marshal
+    webgateway_marshal._omero_web_zarr_safe_image_marshal_installed = True
+
+    for module_name in (
+        "omeroweb.webgateway.views",
+        "omero_iviewer.views",
+        "omero_figure.views",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        if getattr(module, "imageMarshal", None) is not None:
+            module.imageMarshal = safe_image_marshal
+
+    return safe_image_marshal
+
+
+def _load_metadata_preview_with_safe_rendering(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+    from omeroweb.webclient import views as webclient_views
+
+    context = {}
+    index = webclient_views.getIntOrDefault(request, "index", 0)
+    manager = webclient_views.BaseContainer(conn, **{str(c_type): int(c_id)})
+    if share_id:
+        context["share"] = webclient_views.BaseShare(conn, share_id)
+    if c_type == "well":
+        manager.image = manager.well.getImage(index)
+
+    rdefs = []
+    rdef_queries = []
+    try:
+        all_rdefs = manager.image.getAllRenderingDefs()
+        current_rdef_id = manager.image.getRenderingDefId()
+    except Exception as exc:
+        if not _is_known_rendering_engine_failure(exc):
+            raise
+        LOGGER.warning(
+            "Using metadata preview fallback without rendering definitions for image %s",
+            getattr(manager.image, "id", c_id),
+        )
+    else:
+        deduped_rdefs = {}
+        for rendering_def in all_rdefs:
+            owner_id = rendering_def["owner"]["id"]
+            rendering_def["current"] = rendering_def["id"] == current_rdef_id
+            if owner_id not in deduped_rdefs or deduped_rdefs[owner_id]["id"] < rendering_def["id"]:
+                deduped_rdefs[owner_id] = rendering_def
+        rdefs = list(deduped_rdefs.values())
+        for rendering_def in rdefs:
+            channels = []
+            for index, channel in enumerate(rendering_def["c"]):
+                active_prefix = "" if channel["active"] else "-"
+                color = channel["lut"] if "lut" in channel else channel["color"]
+                reverse = "r" if channel["inverted"] else "-r"
+                channels.append(
+                    "%s%s|%s:%s%s$%s"
+                    % (
+                        active_prefix,
+                        index + 1,
+                        channel["start"],
+                        channel["end"],
+                        reverse,
+                        color,
+                    )
+                )
+            rdef_queries.append(
+                {
+                    "id": rendering_def["id"],
+                    "owner": rendering_def["owner"],
+                    "c": ",".join(channels),
+                    "m": rendering_def["model"] == "greyscale" and "g" or "c",
+                }
+            )
+
+    max_w, max_h = conn.getMaxPlaneSize()
+    size_x = manager.image.getSizeX()
+    size_y = manager.image.getSizeY()
+
+    context["tiledImage"] = (size_x * size_y) > (max_w * max_h)
+    context["manager"] = manager
+    context["rdefsJson"] = json.dumps(rdef_queries)
+    context["rdefs"] = rdefs
+    context["template"] = "webclient/annotations/metadata_preview.html"
+    return context
 
 
 def _store_backed_image_data(image, request):
@@ -401,6 +766,9 @@ def install_webgateway_overrides():
     try:
         from omeroweb.webgateway import urls as webgateway_urls
         from omeroweb.webgateway import views as webgateway_views
+        from omeroweb.webgateway import marshal as webgateway_marshal
+        from omeroweb.webclient import urls as webclient_urls
+        from omeroweb.webclient import views as webclient_views
         from omeroweb.webclient import webclient_gateway
     except ImportError:
         return
@@ -408,12 +776,15 @@ def install_webgateway_overrides():
     if getattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False):
         return
 
+    _install_safe_image_marshal_overrides(webgateway_marshal)
+
     original_get_channels = webclient_gateway.ImageWrapper.getChannels
     original_image_data_json = webgateway_views.imageData_json
     original_render_thumbnail = webgateway_views._render_thumbnail
     original_get_thumbnails_json = webgateway_views.get_thumbnails_json
     original_render_image = webgateway_views.render_image
     original_render_image_region = webgateway_views.render_image_region
+    original_load_metadata_preview = webclient_views.load_metadata_preview
     original_image_data_json_impl = getattr(
         getattr(original_image_data_json, "__wrapped__", None),
         "__wrapped__",
@@ -423,6 +794,11 @@ def install_webgateway_overrides():
         original_render_image_region,
         "__wrapped__",
         original_render_image_region,
+    )
+    original_load_metadata_preview_impl = getattr(
+        getattr(original_load_metadata_preview, "__wrapped__", None),
+        "__wrapped__",
+        original_load_metadata_preview,
     )
 
     @wraps(original_get_channels)
@@ -549,14 +925,25 @@ def install_webgateway_overrides():
     def render_image_region_override(request, iid, z, t, conn=None, **kwargs):
         image = _get_store_backed_image(conn, iid)
         if image is None:
-            return original_render_image_region_impl(
-                request,
-                iid,
-                z,
-                t,
-                conn=conn,
-                **kwargs,
-            )
+            try:
+                return original_render_image_region_impl(
+                    request,
+                    iid,
+                    z,
+                    t,
+                    conn=conn,
+                    **kwargs,
+                )
+            except Exception as exc:
+                if not is_known_tile_size_failure(exc):
+                    raise
+                return _render_regular_image_region_with_safe_tile_size(
+                    request,
+                    iid,
+                    z,
+                    t,
+                    conn=conn,
+                )
         return _store_backed_region_response(
             image,
             request,
@@ -576,12 +963,24 @@ def install_webgateway_overrides():
                 **kwargs,
             )
         if not is_store_backed_image(image):
-            return original_image_data_json_impl(
-                request,
-                conn=conn,
-                _internal=_internal,
-                **kwargs,
-            )
+            try:
+                return original_image_data_json_impl(
+                    request,
+                    conn=conn,
+                    _internal=_internal,
+                    **kwargs,
+                )
+            except Exception as exc:
+                if not is_known_tile_size_failure(exc):
+                    raise
+                payload = _marshal_regular_image_data_with_safe_tile_size(
+                    image,
+                    request,
+                )
+                key = kwargs.get("key")
+                if key is not None:
+                    payload = _select_marshaled_key(payload, key)
+                return payload
 
         payload = _store_backed_image_data(image, request)
         key = kwargs.get("key")
@@ -589,10 +988,36 @@ def install_webgateway_overrides():
             payload = _select_marshaled_key(payload, key)
         return payload
 
+    @wraps(original_load_metadata_preview)
+    def load_metadata_preview_override(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+        try:
+            return original_load_metadata_preview_impl(
+                request,
+                c_type,
+                c_id,
+                conn=conn,
+                share_id=share_id,
+                **kwargs,
+            )
+        except Exception as exc:
+            if not _is_known_rendering_engine_failure(exc):
+                raise
+            return _load_metadata_preview_with_safe_rendering(
+                request,
+                c_type,
+                c_id,
+                conn=conn,
+                share_id=share_id,
+                **kwargs,
+            )
+
     decorated_get_thumbnails_json = login_required()(webgateway_views.jsonp(get_thumbnails_json_override))
     decorated_image_data_json = login_required()(webgateway_views.jsonp(image_data_json_override))
     decorated_render_image = login_required()(render_image_override)
     decorated_render_image_region = login_required()(render_image_region_override)
+    decorated_load_metadata_preview = login_required()(
+        webclient_views.render_response()(load_metadata_preview_override)
+    )
 
     webclient_gateway.ImageWrapper.getChannels = get_channels_override
     webgateway_views.imageData_json = decorated_image_data_json
@@ -600,6 +1025,7 @@ def install_webgateway_overrides():
     webgateway_views.get_thumbnails_json = decorated_get_thumbnails_json
     webgateway_views.render_image = decorated_render_image
     webgateway_views.render_image_region = decorated_render_image_region
+    webclient_views.load_metadata_preview = decorated_load_metadata_preview
 
     _patch_urlpatterns(
         webgateway_urls.urlpatterns,
@@ -611,19 +1037,15 @@ def install_webgateway_overrides():
         },
     )
 
-    try:
-        from omeroweb.webclient import urls as webclient_urls
-    except ImportError:
-        webclient_urls = None
-    if webclient_urls is not None:
-        _patch_urlpatterns(
-            webclient_urls.urlpatterns,
-            {
-                "web_imageData_json": decorated_image_data_json,
-                "get_thumbnails_json": decorated_get_thumbnails_json,
-                "web_render_image_download": decorated_render_image,
-                "web_render_image_region": decorated_render_image_region,
-            },
-        )
+    _patch_urlpatterns(
+        webclient_urls.urlpatterns,
+        {
+            "web_imageData_json": decorated_image_data_json,
+            "get_thumbnails_json": decorated_get_thumbnails_json,
+            "web_render_image_download": decorated_render_image,
+            "web_render_image_region": decorated_render_image_region,
+            "load_metadata_preview": decorated_load_metadata_preview,
+        },
+    )
 
     webgateway_views._omero_web_zarr_store_backed_overrides = True
