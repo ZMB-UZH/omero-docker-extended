@@ -96,9 +96,10 @@ Notes:
 - When `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1` and `DOCKER_BUILD_PUSH_IMAGES=1`, the helper pushes the flattened final images via `docker push` after the flatten step. This preserves the single-layer result, but Buildx-specific output compression settings do not apply to that final publish step.
 - The installation workflow prompts whether to enable the compressed Buildx mode during each interactive run (default: `No`). If you disable it, the script falls back to `docker compose build`.
 - Immediately after the `Use build cache?` prompt, the installation workflow asks whether to flatten final images into single-layer outputs (default: `No`). In unattended automation, the same default applies unless you explicitly set `DOCKER_BUILD_FLATTEN_FINAL_IMAGE=1`. Run:
-- If you answer **No** to the installation prompt `Use build cache?`, the installer now performs deterministic local cache cleanup before rebuilding:
+- If you answer **No** to the installation prompt `Use build cache?`, the installer later prints a cache-cleanup notice just before the rebuild starts and performs deterministic local cache cleanup:
   - always prunes Docker builder cache (`docker builder prune -a -f`),
-  - and, when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`).
+  - when Buildx compressed workflow is enabled for that run, also removes the Buildx local cache directory (auto-detected from `BUILDX_DATA_PATH` or defaulting to `${OMERO_DATA_PATH}/buildx_cache`),
+  - and, for that Buildx run, forces Buildx local cache export off in addition to disabling Docker layer cache and Buildx inline cache.
   This keeps "no cache" runs consistent with operator expectations while avoiding unnecessary Buildx cache deletion when Buildx is disabled.
 
 ```bash

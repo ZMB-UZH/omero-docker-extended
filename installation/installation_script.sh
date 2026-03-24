@@ -393,6 +393,7 @@ resolve_build_provenance_setting() {
 run_image_build() {
     local inline_cache_setting=""
     local buildx_helper_path="${OMERO_INSTALLATION_PATH%/}/${BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH}"
+    local local_cache_enabled_setting="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}"
     local provenance_setting=""
 
     provenance_setting="$(resolve_build_provenance_setting)"
@@ -469,12 +470,14 @@ run_image_build() {
     local no_cache_setting="0"
     if [ "${inline_cache_setting}" = "0" ]; then
         no_cache_setting="1"
+        # Keep Buildx status/output aligned with the installer's no-cache choice.
+        local_cache_enabled_setting="0"
     fi
 
     if ! COMPOSE_FILE="${COMPOSE_FILE}" \
         DOCKER_BUILD_INLINE_CACHE="${inline_cache_setting}" \
         DOCKER_BUILD_NO_CACHE="${no_cache_setting}" \
-        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${DOCKER_BUILD_LOCAL_CACHE_ENABLED:-1}" \
+        DOCKER_BUILD_LOCAL_CACHE_ENABLED="${local_cache_enabled_setting}" \
         DOCKER_BUILD_LOCAL_CACHE_MODE="${DOCKER_BUILD_LOCAL_CACHE_MODE:-min}" \
         DOCKER_BUILD_PROVENANCE="${DOCKER_BUILD_PROVENANCE:-0}" \
         DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" \
