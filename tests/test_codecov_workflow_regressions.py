@@ -24,7 +24,7 @@ class CodecovWorkflowRegressionTests(unittest.TestCase):
         self.fail(f"Workflow step not found: {name}")
 
     def test_tests_workflow_can_refresh_codecov_from_manual_dispatch_on_default_branch(self) -> None:
-        upload_if = self._step("Upload coverage to Codecov")["if"]
+        upload_if = self._step("Upload root-regressions coverage to Codecov")["if"]
         validate_if = self._step("Validate Codecov token")["if"]
 
         self.assertIn("workflow_dispatch", upload_if)
@@ -54,6 +54,9 @@ class CodecovWorkflowRegressionTests(unittest.TestCase):
         artifact_link_step = self._step("Publish coverage artifact link")
 
         self.assertIn("No split coverage data files were produced", report_run)
+        self.assertIn("Missing coverage data file", report_run)
+        self.assertIn("coverage-suites/root-regressions.xml", report_run)
+        self.assertIn("coverage-suites/import-plugin-tests.xml", report_run)
         self.assertIn("python3 -m coverage json", report_run)
         self.assertIn("python3 -m coverage html", report_run)
         self.assertIn("tee coverage-report.txt", report_run)
@@ -65,10 +68,31 @@ class CodecovWorkflowRegressionTests(unittest.TestCase):
         self.assertIn("coverage.json", artifact_step["with"]["path"])
         self.assertIn("coverage-report.txt", artifact_step["with"]["path"])
         self.assertIn("coverage-summary.md", artifact_step["with"]["path"])
+        self.assertIn("coverage-suites/", artifact_step["with"]["path"])
         self.assertIn("coverage-html/", artifact_step["with"]["path"])
         self.assertEqual("error", artifact_step["with"]["if-no-files-found"])
         self.assertIn("artifact-url", artifact_link_step["run"])
         self.assertIn("GITHUB_STEP_SUMMARY", artifact_link_step["run"])
+
+    def test_tests_workflow_uploads_explicit_codecov_flags_per_suite(self) -> None:
+        suite_steps = {
+            "Upload root-regressions coverage to Codecov": "root-regressions",
+            "Upload plugin-common-tests coverage to Codecov": "plugin-common-tests",
+            "Upload imaris-connector-tests coverage to Codecov": "imaris-connector-tests",
+            "Upload admin-tools-tests coverage to Codecov": "admin-tools-tests",
+            "Upload omp-plugin-tests coverage to Codecov": "omp-plugin-tests",
+            "Upload import-plugin-tests coverage to Codecov": "import-plugin-tests",
+        }
+
+        for step_name, flag_name in suite_steps.items():
+            step = self._step(step_name)
+            self.assertEqual("codecov/codecov-action@v5", step["uses"])
+            self.assertEqual(flag_name, step["with"]["flags"])
+            self.assertEqual(flag_name, step["with"]["name"])
+            self.assertIn(f"./coverage-suites/{flag_name}.xml", step["with"]["files"])
+            self.assertTrue(step["with"]["disable_search"])
+            self.assertTrue(step["with"]["fail_ci_if_error"])
+            self.assertTrue(step["with"]["verbose"])
 
 
 if __name__ == "__main__":
