@@ -1,0 +1,14 @@
+# Pinned test/coverage dependency set for the public CI workflow.
+# Keep the native Zarr reader pinned to the same major/minor version as the
+# runtime image so coverage runs exercise the same metadata-routing behavior.
+coverage==7.13.5
+django==6.0.3
+matplotlib==3.10.8
+numcodecs==0.16.5
+numpy==2.4.3
+ome-zarr==0.14.0
+portalocker==3.2.0
+psycopg2-binary==2.9.11
+pytest==9.0.2
+PyYAML==6.0.3
+zarr==3.1.6
