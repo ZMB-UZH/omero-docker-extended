@@ -1,0 +1,109 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-with-coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install \
+            pytest \
+            coverage \
+            django \
+            pyyaml \
+            portalocker \
+            psycopg2-binary \
+            numpy \
+            numcodecs \
+            matplotlib
+
+      # Each test suite MUST be a separate invocation — the root
+      # conftest.py installs mock stubs that interfere across test
+      # modules when run in a single process.  Coverage data files
+      # are written with unique suffixes and combined afterwards.
+      - name: Run all test suites with coverage
+        id: tests
+        run: |
+          set +e
+          EXIT_FINAL=0
+
+          echo "::group::tests/"
+          COVERAGE_FILE=.coverage.root \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omero_plugin_common/tests/"
+          COVERAGE_FILE=.coverage.common \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_imaris_connector/tests/"
+          COVERAGE_FILE=.coverage.imaris \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_admin_tools/tests/"
+          COVERAGE_FILE=.coverage.admin \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_omp_plugin/tests/"
+          COVERAGE_FILE=.coverage.omp \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_import/tests/"
+          COVERAGE_FILE=.coverage.import \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          exit $EXIT_FINAL
+
+      - name: Combine coverage and generate report
+        if: always()
+        run: |
+          python3 -m coverage combine --rcfile=.coveragerc
+          python3 -m coverage xml --rcfile=.coveragerc
+          python3 -m coverage report --rcfile=.coveragerc
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
