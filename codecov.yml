@@ -80,6 +80,14 @@ component_management:
       paths:
         - "omeroweb_imaris_connector/**"
 
+flag_management:
+  default_rules:
+    carryforward: false
+    statuses:
+      - type: project
+        target: auto
+        threshold: 1%
+
 codecov:
   notify:
     after_n_builds: 1
@@ -91,7 +99,7 @@ github_checks:
   annotations: false
 
 comment:
-  layout: "header, diff, components, files"
+  layout: "header, diff, components, flags, files"
   behavior: default
   require_changes: false
   require_base: false
