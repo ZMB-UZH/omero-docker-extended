@@ -6,7 +6,7 @@ Current quality assessment by domain. Scores range from 1 (critical gaps) to 5 (
 |---|---|---|---|
 | Deployment reproducibility | 4 | 5 | Automated installation script, pinned versions, env templates. CI validates docs structure. Gap: no automated integration test suite for full deployment. |
 | Plugin maintainability | 4 | 5 | Consistent plugin layout, shared library, typed env helpers. Gap: limited unit test coverage for OMP and Import plugins. |
-| Operational clarity | 4 | 5 | Full monitoring stack (Prometheus, Grafana, Loki, Alloy), 4 dashboards, admin tools plugin. Gap: no documented SLO targets or alert rules. |
+| Operational clarity | 4 | 5 | Full monitoring stack (Prometheus, Grafana, Loki, Alloy), 4 dashboards, admin tools plugin, and workflow-published package/file-level coverage drill-down. Gap: no documented SLO targets or alert rules. |
 | Documentation legibility | 4 | 5 | Structured docs with CI-enforced linting, progressive disclosure via AGENTS.md. Gap: continue expanding troubleshooting coverage. |
 | Security posture | 4 | 5 | no-new-privileges on all containers, env-based secrets, rate limiting, input validation. Gap: no automated secret rotation tooling. |
 | Database maintenance | 5 | 5 | Automated VACUUM ANALYZE (weekly) and REINDEX CONCURRENTLY (monthly) via pg-maintenance sidecar. Both databases covered. |
@@ -15,6 +15,8 @@ Current quality assessment by domain. Scores range from 1 (critical gaps) to 5 (
 ## Tracking rule
 
 Update this table when major quality improvements or regressions land. Include the PR reference and date of the change.
+
+- 2026-03-24: The `tests` workflow began publishing package/file-level coverage summaries plus downloadable HTML/JSON artifacts, and `codecov.yml` now exposes runtime-package components for Codecov drill-down.
 
 ## Priority improvements
 
