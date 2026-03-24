@@ -95,6 +95,19 @@ jobs:
             echo "::error::No split coverage data files were produced."
             exit 1
           fi
+          for data_file in .coverage.root .coverage.common .coverage.imaris .coverage.admin .coverage.omp .coverage.import; do
+            if [ ! -f "$data_file" ]; then
+              echo "::error::Missing coverage data file: $data_file"
+              exit 1
+            fi
+          done
+          mkdir -p coverage-suites
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.root -o coverage-suites/root-regressions.xml
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.common -o coverage-suites/plugin-common-tests.xml
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.imaris -o coverage-suites/imaris-connector-tests.xml
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.admin -o coverage-suites/admin-tools-tests.xml
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.omp -o coverage-suites/omp-plugin-tests.xml
+          python3 -m coverage xml --rcfile=.coveragerc --data-file=.coverage.import -o coverage-suites/import-plugin-tests.xml
           python3 -m coverage combine --rcfile=.coveragerc
           python3 -m coverage xml --rcfile=.coveragerc
           python3 -m coverage json --rcfile=.coveragerc -o coverage.json --pretty-print
@@ -117,6 +130,7 @@ jobs:
             coverage.json
             coverage-report.txt
             coverage-summary.md
+            coverage-suites/
             coverage-html/
           if-no-files-found: error
           retention-days: 14
@@ -139,10 +153,74 @@ jobs:
             exit 1
           fi
 
-      - name: Upload coverage to Codecov
+      - name: Upload root-regressions coverage to Codecov
         if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.xml
+          files: ./coverage-suites/root-regressions.xml
+          flags: root-regressions
+          name: root-regressions
+          disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          verbose: true
+
+      - name: Upload plugin-common-tests coverage to Codecov
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-suites/plugin-common-tests.xml
+          flags: plugin-common-tests
+          name: plugin-common-tests
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Upload imaris-connector-tests coverage to Codecov
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-suites/imaris-connector-tests.xml
+          flags: imaris-connector-tests
+          name: imaris-connector-tests
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Upload admin-tools-tests coverage to Codecov
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-suites/admin-tools-tests.xml
+          flags: admin-tools-tests
+          name: admin-tools-tests
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Upload omp-plugin-tests coverage to Codecov
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-suites/omp-plugin-tests.xml
+          flags: omp-plugin-tests
+          name: omp-plugin-tests
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Upload import-plugin-tests coverage to Codecov
+        if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage-suites/import-plugin-tests.xml
+          flags: import-plugin-tests
+          name: import-plugin-tests
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
