@@ -15,16 +15,9 @@ flowchart TD
     D --> G[Validator uses raw /zarr/v0.4/image/<id>.zarr endpoint]
     D --> H[Download actions use store-backed routes]
 
-    E --> I[Preview contract reads root multiscales metadata]
+    E --> I[Preview routes delegate to raw store-backed NGFF responses]
     F --> I
-    I --> J[Compute viewer-safe level mapping]
-    J --> K{Level preserves non-display axes?}
-    K -->|Yes| L[Expose level in preview contract]
-    K -->|No| M[Hide level from preview contract]
-
-    L --> N[Preview renumbers visible levels to 0..N-1]
-    N --> O[Resolve preview level back to raw dataset key from root metadata]
-    O --> P[Serve .zattrs/.zgroup/.zarray/chunks directly from managed store]
+    I --> J[Serve .zattrs/.zgroup/.zarray/chunks directly from managed store]
 
     D --> Q[Store-backed rendering overrides]
     Q --> R[Image data JSON]
@@ -58,27 +51,10 @@ Base form:
 
 Purpose:
 
-- keep browser preview and Vizarr browsing correct for store-backed images,
-- expose only viewer-safe multiscale levels,
-- keep preview level numbers stable for the browser while resolving them back to underlying dataset keys.
+- keep browser preview and Vizarr browsing on a preview-specific OMERO.web URL namespace,
+- expose the same underlying store-backed NGFF payload used by the raw endpoint.
 
 For non-store-backed images, preview `.zattrs` and `.zgroup` stay on the synthetic OMERO-backed path, while preview `.zarray` and chunk requests delegate directly to the raw synthetic responses instead of attempting managed-store dataset remapping.
-
-## Preview level mapping
-
-The preview contract follows a strict rule:
-
-- `x` and `y` may downsample;
-- `z`, `c`, and `t` must remain unchanged for a level to be preview-safe.
-
-If the store contains only one viewer-safe level, preview exposes only that level. This can make browser viewing slower, but it prevents wrong-plane or blurred slice rendering.
-
-This rule is derived from store metadata and array shapes. It does not depend on:
-
-- filenames,
-- specific dataset keys,
-- directory names,
-- vendor-specific assumptions.
 
 ## Rendering and UI integration
 
@@ -91,11 +67,9 @@ For store-backed images, `omero_web_zarr` intercepts selected OMERO.web behavior
 - right-panel preview,
 - store-backed download actions.
 
-For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path, except for a generic tile-size safeguard on the shared image-metadata marshal path and the existing tile-region endpoints when the upstream RenderingEngine tile-size call fails.
+For non-store-backed images, the plugin keeps the standard OMERO.web and OMERO RenderingEngine data path.
 
 The OMERO.web right-panel preview page remains store-backed only. If an image is not store-backed, that page redirects back to the standard OMERO.web metadata preview. `Open with Vizarr` still targets the preview NGFF endpoint for all images, which is why the non-store-backed preview route delegation above matters.
-
-Because OMERO.iviewer and OMERO.figure also import the shared metadata marshal path, the same tile-size safeguard applies there as well; the fix is not limited to one webgateway URL.
 
 The `/zarr/vizarr/` and `/zarr/validator/` launchers are thin OMERO-hosted shells. They normalize root-relative `source=` parameters against the browser's actual public origin and redirect static app assets to the upstream app origin instead of proxying every asset through Gunicorn.
 
