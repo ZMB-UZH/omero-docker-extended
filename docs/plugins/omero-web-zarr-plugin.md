@@ -50,7 +50,7 @@ Use the preview endpoint for browser viewing:
 - right-panel preview for store-backed images
 - Vizarr launched from OMERO.web
 
-For non-store-backed images, the preview routes do not attempt preview-level remapping. They delegate to the raw synthetic OMERO-backed NGFF responses because there is no managed-store multiscale tree to filter.
+Preview routes do not remap multiscale levels. For non-store-backed images, they delegate to the synthetic OMERO-backed NGFF responses.
 
 For store-backed images, preview routes forward the same `.zattrs`, `.zgroup`, `.zarray`, and chunk payloads that the raw endpoint serves. The preview path exists so OMERO.web can target a dedicated preview/Vizarr namespace without changing the underlying store contract.
 

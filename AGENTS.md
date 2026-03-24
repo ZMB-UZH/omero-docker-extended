@@ -20,6 +20,8 @@ It is intentionally short. Deep context lives in the files it points to.
 - Keep agent commentary terse and action-first. Prefer short progress updates over long explanations.
 - When a general command fails for a reusable environment-specific reason, update `AGENTS.md` or the relevant doc in the same change so later agents do not repeat it.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
+- For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
+- When expressing OMERO properties in tracked env files, follow the existing repository naming pattern already used in `env/omeroserver*.env` and `env/omeroweb*.env` (for example `omero.pixeldata.threads` -> `CONFIG_omero_pixeldata_threads`).
 - For log triage, use the Admin Tools logging path first: prefer the Loki-backed backend used by `omeroweb_admin_tools/logs/` (for example `omeroweb_admin_tools/services/log_query.py`) over ad-hoc `docker logs` sweeps. Fall back to direct container logs, internal log files, or Docker inspection only when the Admin Tools/Loki mechanism returns no data, appears stale/inconsistent with service state, or is itself suspected to be unhealthy.
 
 ## Where to look first
