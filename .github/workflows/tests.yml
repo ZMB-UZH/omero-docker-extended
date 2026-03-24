@@ -38,7 +38,9 @@ jobs:
             psycopg2-binary \
             numpy \
             numcodecs \
-            matplotlib
+            matplotlib \
+            ome-zarr \
+            zarr
 
       # Each test suite MUST be a separate invocation — the root
       # conftest.py installs mock stubs that interfere across test

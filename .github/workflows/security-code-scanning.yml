@@ -37,16 +37,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
 
@@ -75,7 +75,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: fs
           format: sarif
@@ -85,7 +85,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
@@ -121,7 +121,7 @@ jobs:
         run: semgrep scan --sarif --config auto . > semgrep-results.sarif
 
       - name: Upload Semgrep results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -276,42 +276,54 @@ jobs:
           PY
 
       - name: Upload Bandit production results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: bandit-prod.sarif
           category: bandit-prod
         if: always() && steps.discover.outputs.scan_dirs != ''
 
       - name: Upload Bandit test results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: bandit-test.sarif
           category: bandit-test
         if: always() && steps.discover.outputs.test_dirs != ''
 
       - name: Upload Bandit legacy cleanup results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: bandit-legacy-cleanup.sarif
           # Keep the legacy category alive with zero results so stale pre-split alerts can close.
           category: bandit
         if: always() && (steps.discover.outputs.scan_dirs != '' || steps.discover.outputs.test_dirs != '')
 
+  hadolint-discover:
+    name: Discover Dockerfiles
+    runs-on: ubuntu-24.04
+    outputs:
+      dockerfiles: ${{ steps.find.outputs.dockerfiles }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: docker
+
+      - name: Find all Dockerfiles
+        id: find
+        run: |
+          FILES=$(find docker -name '*.Dockerfile' -type f | sort | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "dockerfiles=${FILES}" >> "$GITHUB_OUTPUT"
+          echo "Discovered Dockerfiles: ${FILES}"
+
   hadolint:
     name: Hadolint (${{ matrix.dockerfile }})
+    needs: hadolint-discover
+    if: needs.hadolint-discover.outputs.dockerfiles != '[]'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        dockerfile:
-          - docker/omero-web.Dockerfile
-          - docker/omero-server.Dockerfile
-          - docker/omero-celery-worker.Dockerfile
-          - docker/pg-maintenance.Dockerfile
-          - docker/redis-sysctl-init.Dockerfile
-          - docker/crowdsec.Dockerfile
-          - docker/firewall-bouncer.Dockerfile
-          - docker/path-usage-exporter.Dockerfile
+        dockerfile: ${{ fromJson(needs.hadolint-discover.outputs.dockerfiles) }}
 
     steps:
       - name: Checkout
@@ -333,7 +345,7 @@ jobs:
           no-fail: true
 
       - name: Upload Hadolint results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.dockerfile }}
@@ -374,7 +386,7 @@ jobs:
           exclude-rules: DS162092
 
       - name: Upload DevSkim results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: devskim-results.sarif
           category: devskim
@@ -439,7 +451,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Run OSSF Scorecard
-        uses: ossf/scorecard-action@v2.4.0
+        uses: ossf/scorecard-action@v2.4.3
         continue-on-error: true
         with:
           results_file: scorecard-results.sarif
@@ -447,7 +459,7 @@ jobs:
           publish_results: true
 
       - name: Upload Scorecard results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: scorecard-results.sarif
           category: scorecard
