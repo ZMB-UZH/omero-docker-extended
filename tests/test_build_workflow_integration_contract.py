@@ -200,17 +200,15 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
 
     def test_pull_scripts_enable_transcript_capture(self) -> None:
-        public_text = (self.repo_root / "github_pull_project_bash_example").read_text(
-            encoding="utf-8"
-        )
-        private_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
-            encoding="utf-8"
-        )
+        scripts = [self.repo_root / "github_pull_project_bash_example"]
+        private_script = self.repo_root / "github_pull_private_project_bash_example"
+        if private_script.exists():
+            scripts.append(private_script)
 
-        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', public_text)
-        self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', public_text)
-        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', private_text)
-        self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', private_text)
+        for script in scripts:
+            text = script.read_text(encoding="utf-8")
+            self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', text)
+            self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', text)
 
     def test_installation_script_publishes_transcript_destination_after_path_resolution(self) -> None:
         script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
@@ -233,6 +231,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
 
+    @unittest.skipUnless(
+        (Path(__file__).resolve().parents[1] / "github_pull_private_project_bash_example").exists(),
+        "private pull script not present in this checkout",
+    )
     def test_private_pull_script_branch_default_is_independent(self) -> None:
         script_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
             encoding="utf-8"
