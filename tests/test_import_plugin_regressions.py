@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import sys
 import tempfile
 import types
@@ -2111,7 +2112,7 @@ class ImportPluginRegressionTests(TestCase):
             "_load_job",
             return_value=job,
         ):
-            response = index_view.job_status.__wrapped__(request, job_id, conn=object())
+            response = inspect.unwrap(index_view.job_status)(request, job_id, conn=object())
 
         status, payload = self._json_status_and_payload(response)
         self.assertEqual(200, status)
