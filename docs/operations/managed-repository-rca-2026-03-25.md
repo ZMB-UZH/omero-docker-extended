@@ -27,49 +27,45 @@ This was a deployment/runtime contract failure, not a one-off import bug.
 - The shared-prefix sync and binary-repository-cleanse jobs then operated in a
   mixed-repository environment, which amplified the damage and confusion.
 
-## Root Cause Timeline
+## Root Cause
 
-### 1. Relative managed repository setting
+The `OMERO_DATA_DIR` and `OMERO_DIR` environment variables were removed from the
+`omeroserver` service `environment:` block in `docker-compose.yml`. Without these
+variables, the OMERO server has no knowledge of the bind-mounted data volume at
+`/OMERO` and resolves `CONFIG_omero_managed_dir` against its own install
+directory (`/opt/omero/server/OMERO.server-5.6.17-ice36/`).
 
-On 2026-03-22, commit
-`b277b2d4a9a7073b311cf50f021941f088bd31f3` changed the tracked server example
-configuration to:
+This created a second managed repository inside the container's ephemeral
+filesystem. Imported files landed there instead of the persistent bind-mounted
+`/OMERO/ManagedRepository`, and were lost on container restart.
 
-`CONFIG_omero_managed_dir=ManagedRepository`
+### Contributing factors
 
-That value is unsafe because OMERO resolves it relative to the server process
-working directory when it is not an absolute path.
+1. **Missing compose environment variables.** `OMERO_DATA_DIR` and `OMERO_DIR`
+   were accidentally removed from the `omeroserver` service `environment:` block
+   in `docker-compose.yml`. These variables are the only mechanism by which the
+   OMERO server learns where the bind-mounted data volume is mounted.
 
-### 2. Server startup from the install tree
+2. **Relative managed repository path.** `CONFIG_omero_managed_dir` was set to
+   the relative value `ManagedRepository` instead of the absolute
+   `/OMERO/ManagedRepository`. A relative value is inherently unsafe because
+   OMERO resolves it against `OMERODIR`, which defaults to the server install
+   directory when `OMERO_DIR` is not set in the container environment.
 
-The same runtime path became dangerous because OMERO.server was launched from the
-install tree. Two places made that possible:
+3. **No startup guard for environment variables.** While the bootstrap script
+   had a `validate_managed_repository_configuration()` function, the guard's
+   expected-root calculation depended on `OMERO_DIR` being set — the very
+   variable that was missing.
 
-- On 2026-03-19, commit
-  `cd835ced0e808a98d1937855b48c93c26b7a2ded` left the `omeroserver` container
-  with `working_dir: /opt/omero/server/OMERO.server`.
-- The generated `/startup/99-run.sh` in
-  `docker/omero-server.Dockerfile` contained `cd /opt/omero/server` before
-  `omero admin start --foreground`.
+4. **Amplification by maintenance jobs.** The shared-prefix sync and
+   `omero admin cleanse` continued to run after the repository had drifted.
+   These jobs did not create the second repository, but they operated against
+   wrong repository paths and accumulated stale database rows.
 
-With those two conditions combined, OMERO resolved the relative
-`ManagedRepository` path into the image-local server tree instead of the
-persistent bind mount.
-
-### 3. Amplification by follow-up maintenance jobs
-
-Existing bootstrap logic later normalized shared prefix ownership and ran
-`omero admin cleanse`. Those jobs did not create the second repository, but they
-were operating after the repository contract had already drifted. That allowed
-wrong repository UUIDs and stale repository-description rows to accumulate and
-made the incident harder to diagnose.
-
-### 4. Repository-object lookup was not repository-aware
-
-The shared-prefix bootstrap previously matched repository directory objects by
-path/name only. In a database that already contained more than one repository,
-that lookup could resolve the wrong `OriginalFile` row. The lookup needed to be
-anchored to the active repository UUID returned by OMERO.
+5. **Repository-object lookup was not repository-aware.** The shared-prefix
+   bootstrap previously matched repository directory objects by path/name only.
+   In a database that already contained more than one repository, that lookup
+   could resolve the wrong `OriginalFile` row.
 
 ## Observed Live Evidence
 
@@ -94,10 +90,17 @@ The repair was implemented as a hard failure on unsafe configuration plus a
 runtime verification loop. The system now refuses to start or continue cleanup
 work if the managed-repository contract drifts.
 
+### Docker Compose environment
+
+- `OMERO_DATA_DIR` and `OMERO_DIR` are restored to the `omeroserver` service
+  `environment:` block with required-variable syntax and a CRITICAL DO NOT REMOVE
+  comment block so future editors understand why these variables exist.
+
 ### Configuration and startup
 
 - `CONFIG_omero_managed_dir` is now tracked as the absolute path
-  `/OMERO/ManagedRepository`.
+  `/OMERO/ManagedRepository` with a critical comment in the env template
+  explaining why it must remain absolute.
 - The server launcher no longer changes directory into `/opt/omero/server`
   before starting OMERO.server.
 - The `omeroserver` service no longer declares
@@ -167,15 +170,20 @@ Results:
 The specific failure mode that created the second repository is now blocked by
 multiple independent safeguards:
 
-1. Tracked configuration uses an absolute managed-repository path.
-2. The server launcher no longer depends on a cwd inside the image tree.
-3. Bootstrap validation fails closed before startup proceeds.
-4. Runtime validation blocks background maintenance jobs if drift occurs.
-5. Container healthchecks fail if the repository path drifts or if a second
+1. `OMERO_DATA_DIR` and `OMERO_DIR` are required variables in `docker-compose.yml`
+   with fail-fast syntax and a CRITICAL DO NOT REMOVE comment block.
+2. Tracked configuration uses an absolute managed-repository path with a critical
+   comment in the env template explaining why.
+3. The server launcher no longer depends on a cwd inside the image tree.
+4. Bootstrap validation fails closed before startup proceeds.
+5. Runtime validation blocks background maintenance jobs if drift occurs.
+6. Container healthchecks fail if the repository path drifts or if a second
    image-local `ManagedRepository` appears.
-6. Repository bootstrap lookups are anchored to the active repository UUID.
-7. Plugin code rejects relative managed-repository values instead of silently
+7. Repository bootstrap lookups are anchored to the active repository UUID.
+8. Plugin code rejects relative managed-repository values instead of silently
    accepting them.
+9. Contract tests verify the compose environment variables, absolute env path,
+   and bootstrap guard presence in CI.
 
 ## Verification
 
