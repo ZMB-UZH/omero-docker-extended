@@ -344,6 +344,38 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         compose_text = (self.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
         self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL: "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"', compose_text)
 
+    # ------------------------------------------------------------------
+    # Managed repository data-volume binding
+    # ------------------------------------------------------------------
+
+    def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(self) -> None:
+        """The omeroserver service MUST pass OMERO_DATA_DIR and OMERO_DIR into
+        the container environment so the OMERO server resolves managed
+        repository paths against the bind-mounted data volume, not the
+        ephemeral server install directory.  Removing these causes imports
+        to land inside the container and be lost on restart."""
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            'OMERO_DATA_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR',
+            compose_text,
+        )
+        self.assertIn(
+            'OMERO_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR',
+            compose_text,
+        )
+
+    def test_server_bootstrap_validates_managed_repository_before_startup(self) -> None:
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("validate_managed_repository_configuration", script_text)
+        self.assertIn("expected_managed_repository_root()", script_text)
+        self.assertIn("find_unexpected_server_managed_repository_dirs()", script_text)
+        self.assertIn(
+            'CONFIG_omero_managed_dir must be an absolute path',
+            script_text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
