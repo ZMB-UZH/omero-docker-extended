@@ -17,6 +17,7 @@ Current quality assessment by domain. Scores range from 1 (critical gaps) to 5 (
 Update this table when major quality improvements or regressions land. Include the PR reference and date of the change.
 
 - 2026-03-24: The `tests` workflow began publishing package/file-level coverage summaries plus downloadable HTML/JSON artifacts, and `codecov.yml` now exposes runtime-package components for Codecov drill-down.
+- 2026-03-25: Targeted regression tests now cover previously unexercised Import service helpers (`dataset_service.py`, `sem_edx_parser.py`) plus thin plugin contract modules, and GitHub workflow actions were refreshed to Node 24-ready majors.
 
 ## Priority improvements
 

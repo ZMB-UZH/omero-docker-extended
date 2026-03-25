@@ -12,15 +12,15 @@ This backlog is grounded in the current repository state and documentation:
 - `README.md`, `ARCHITECTURE.md`, and plugin guides show a large, multi-container deployment with four major plugins and a shared library.
 - The codebase contains very large modules, especially `omeroweb_import/views/core_functions.py`, `omeroweb_admin_tools/views/index_view.py`, and `omeroweb_admin_tools/services/log_query.py`.
 - Test distribution is uneven: some packages have focused coverage, but the biggest plugin modules have the most work and the repo still relies heavily on top-level regression tests.
-- The GitHub workflow set is narrow: docs lint and security scanning exist, but there is no normal fast CI lane for plugin tests, no integration deployment validation workflow, and no hook layer for local hygiene.
+- The GitHub workflow set now includes docs lint, security scanning, and a normal split-coverage `tests` lane, but it still lacks integration deployment validation and a checked-in local hook layer for routine hygiene.
 - The repository metadata and docs still show some drift and overlap, including inconsistent container counts and legacy references to the removed `omeroweb_upload` plugin.
 
 ## P0 Now
 
 | Item | Evidence | Why it is P0 |
 |---|---|---|
-| Add a fast PR CI lane for split tests | Only `docs-knowledge-base.yml` and `security-code-scanning.yml` exist, while `AGENTS.md` already defines the exact split-pytest strategy. | The repo currently lacks a normal correctness gate for application changes. |
-| Pin GitHub Actions to commit SHAs and lint workflow files | Workflows use tag pins such as `actions/checkout@v4`, and `docs/operations/code-scanning.md` already records Scorecard pinning findings. | This is a concrete supply-chain gap in the checked-in automation. |
+| Add integration deployment validation alongside the split PR test lane | `tests.yml` now provides the normal correctness gate for code changes, but no workflow exercises install/update/bootstrap paths or a composed deployment. | Code-level regressions are gated now; runtime integration failures still are not. |
+| Pin GitHub Actions to commit SHAs and lint workflow files | Workflows now use Node 24-ready major tags such as `actions/checkout@v6` and `actions/setup-python@v6`, but they still rely on mutable tags rather than full commit SHAs. | This remains a concrete supply-chain gap in the checked-in automation. |
 | Add a root `SECURITY.md` | `docs/operations/code-scanning.md` explicitly records the missing root security policy as a live finding. | GitHub-native security surfaces expect it, and the repo already has the real content in `docs/SECURITY.md`. |
 | Close the documented critical SSRF findings | The runbook records critical `py/partial-ssrf` findings in `omeroweb_admin_tools/views/index_view.py` and `omeroweb_omp_plugin/services/ai_assist.py`. | These are the highest-severity findings in the repo's own tracker. |
 | Triage and close the documented high-severity path/log/raw-SQL/subprocess issues | The runbook also records high or error-level findings for path injection, log injection, raw SQL, subprocess injection, and regex injection. | These are active security/robustness risks in core workflow code. |
