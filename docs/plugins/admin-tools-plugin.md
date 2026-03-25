@@ -89,7 +89,7 @@ Server/database diagnostics resolve PostgreSQL connection settings from the live
 
 The quota compatibility check reads `CONFIG_omero_fs_repo_path` from the shared OMERO.server environment (`env/omeroserver.env`), which is also loaded into the `omeroweb` service in `docker-compose.yml` to keep a single source of truth for the repository template.
 
-ManagedRepository quota enforcement uses an environment-driven group root: `${ADMIN_TOOLS_MANAGED_GROUP_ROOT:-${OMERO_DATA_DIR}/ManagedRepository}` (no fallback scan paths are used).
+ManagedRepository quota enforcement uses an environment-driven group root: `${ADMIN_TOOLS_MANAGED_GROUP_ROOT}` when explicitly set, otherwise `CONFIG_omero_managed_dir` when that server setting is absolute, otherwise the legacy fallback `${OMERO_DATA_DIR}/ManagedRepository`. No fallback scan paths are used.
 
 To prevent quotas from affecting unrelated directories, enforcement is blocked unless the resolved root is an existing directory under `${OMERO_DATA_DIR}`; when this validation fails, quotas stay pending and an explicit error is recorded in quota logs (including detection reason metadata).
 

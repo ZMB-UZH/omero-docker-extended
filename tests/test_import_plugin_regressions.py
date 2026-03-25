@@ -124,6 +124,7 @@ def _install_import_stubs():
         env_utils = types.ModuleType("omero_plugin_common.env_utils")
         env_utils.ENV_FILE_OMEROWEB = ""
         env_utils.get_env = lambda key, env_file=None: ""
+        env_utils.get_bool_env = lambda key, default=False, env_file=None: default
         sys.modules["omero_plugin_common"] = common_module
         sys.modules["omero_plugin_common.logging_utils"] = logging_utils
         sys.modules["omero_plugin_common.tmp_utils"] = tmp_utils
@@ -2264,7 +2265,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
     def _server_config(tmpdir: str, tmp_root: Path) -> dict[str, str]:
         return {
             "omero.data.dir": str(Path(tmpdir) / "data"),
-            "omero.managed.dir": "ManagedRepository",
+            "omero.managed.dir": str(Path(tmpdir) / "data" / "ManagedRepository"),
             "omero.fs.repo.path": "%group%/%user%/%year%-%month%-%day%/%time%",
             "omero.web.import.shared_tmp_path": str(tmp_root),
         }
@@ -2306,6 +2307,15 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         manage_script = _load_manage_zarr_script_module()
         with self.assertRaisesRegex(RuntimeError, "omero.web.import.shared_tmp_path"):
             manage_script._shared_tmp_root({})
+
+    def test_managed_repository_root_rejects_relative_managed_dir(self):
+        manage_script = _load_manage_zarr_script_module()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
+            config["omero.managed.dir"] = "ManagedRepository"
+            with self.assertRaisesRegex(RuntimeError, "must be an absolute path"):
+                manage_script._managed_repository_root(config)
 
     def test_stage_zarr_creates_missing_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()

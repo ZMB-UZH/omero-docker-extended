@@ -360,7 +360,6 @@ services:
       OMERO_TEMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
       TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
     hostname: omeroserver
-    working_dir: /opt/omero/server/OMERO.server
     networks:
       omero:
         aliases:
@@ -381,7 +380,7 @@ services:
         - CMD-SHELL
         - >-
           runuser -p -m -u omero-server -- sh -c
-          'set -eu; resolve_omero_bin() { for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "$${candidate}" ] || continue; printf "%s" "$${candidate}"; return 0; done; return 1; }; omero_bin="$$(resolve_omero_bin || true)"; [ -n "$${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero" >&2; exit 127; }; HOME=/tmp "$${omero_bin}" -s 127.0.0.1 -p 4064 login -u root -w "$$ROOTPASS"'
+          'set -eu; resolve_omero_bin() { for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "$${candidate}" ] || continue; printf "%s" "$${candidate}"; return 0; done; return 1; }; normalize_dir_path() { path="$${1:-}"; while [ "$${path}" != "/" ] && [ "$${path%/}" != "$${path}" ]; do path="$${path%/}"; done; printf "%s" "$${path}"; }; omero_bin="$$(resolve_omero_bin || true)"; [ -n "$${omero_bin}" ] || { echo "FATAL: OMERO CLI executable not found under /opt/omero/server/venv*/bin/omero or /opt/omero/server/OMERO.server/bin/omero" >&2; exit 127; }; HOME=/tmp "$${omero_bin}" -s 127.0.0.1 -p 4064 login -u root -w "$$ROOTPASS" >/dev/null; expected_root="$$(normalize_dir_path "$$CONFIG_omero_managed_dir")"; actual_root="$$(HOME=/tmp "$${omero_bin}" config get omero.managed.dir 2>/dev/null | tr -d "\r\n")"; actual_root="$$(normalize_dir_path "$${actual_root}")"; [ "$${actual_root}" = "$${expected_root}" ] || { echo "FATAL: omero.managed.dir drifted from expected value: expected=$${expected_root} actual=$${actual_root}" >&2; exit 1; }; bad_root="$$(find /opt/omero/server -type d -name ManagedRepository -print -quit 2>/dev/null || true)"; [ -z "$${bad_root}" ] || { echo "FATAL: unexpected image-local ManagedRepository detected at $${bad_root}" >&2; exit 1; }'
       interval: 10s
       timeout: 10s
       retries: 30

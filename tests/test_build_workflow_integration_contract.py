@@ -169,6 +169,17 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("OMERO_BINARY_REPO_CLEANSE_DATA_DIR=/OMERO", env_text)
         self.assertIn("OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS=30", env_text)
         self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START=1", env_text)
+        self.assertIn("CONFIG_omero_managed_dir=/OMERO/ManagedRepository", env_text)
+
+    def test_omeroserver_runtime_does_not_force_server_tree_cwd(self) -> None:
+        dockerfile_text = (self.repo_root / "docker" / "omero-server.Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("'cd /opt/omero/server'", dockerfile_text)
+        self.assertNotIn("working_dir: /opt/omero/server/OMERO.server", compose_text)
 
     def test_supervisord_sets_writable_gunicorn_chdir_by_default(self) -> None:
         supervisord_text = (self.repo_root / "supervisord.conf").read_text(

@@ -461,7 +461,6 @@ RUN set -euo pipefail; \
         '    echo "FATAL: OMERO CLI executable not found at $omero" >&2' \
         '    exit 127' \
         'fi' \
-        'cd /opt/omero/server' \
         'echo "Starting OMERO.server as omero-server"' \
         'exec runuser -p -m -u omero-server -- "$omero" admin start --foreground' \
         > /startup/99-run.sh; \
