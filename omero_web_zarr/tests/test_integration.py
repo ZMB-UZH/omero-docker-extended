@@ -174,6 +174,8 @@ def test_decorate_store_backed_channels_applies_metadata(monkeypatch):
 
 
 def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkeypatch):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+
     def _identity_decorator():
         return lambda func: func
 
@@ -239,6 +241,8 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
 
 
 def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypatch):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+
     def _identity_decorator():
         return lambda func: func
 
@@ -312,6 +316,8 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
 
 
 def test_install_webgateway_overrides_preserves_regular_render_image_region(monkeypatch):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+
     def _identity_decorator():
         return lambda func: func
 
@@ -776,7 +782,136 @@ def test_load_metadata_preview_with_safe_rendering_returns_empty_rdefs(monkeypat
     assert isinstance(context["manager"], _FakeMetadataPreviewContainer)
 
 
+def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypatch):
+    """When OMERO_WEB_ZARR_ALTERNATIVE_RENDERING=false, the safe image
+    marshal override is NOT installed — OMERO's built-in imageMarshal
+    stays unpatched."""
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
+
+    def _identity_decorator():
+        return lambda func: func
+
+    from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
+    from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import urls as webgateway_urls
+    from omeroweb.webgateway import views as webgateway_views
+
+    original_image_marshal = lambda image, key=None, request=None: {"id": 999}
+
+    monkeypatch.setattr(integration, "login_required", _identity_decorator)
+    monkeypatch.setattr(
+        integration,
+        "is_store_backed_image",
+        lambda image: getattr(image, "store_backed", False),
+    )
+    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
+    monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
+    monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
+    monkeypatch.setattr(webclient_urls, "urlpatterns", [])
+    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+
+    integration.install_webgateway_overrides()
+
+    # imageMarshal must remain the original — NOT wrapped by safe marshal
+    assert webgateway_marshal.imageMarshal is original_image_marshal
+    assert not getattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False)
+
+
+def test_install_webgateway_overrides_propagates_tile_failure_when_safe_rendering_disabled(monkeypatch):
+    """When safe rendering is disabled, tile-size failures in regular images
+    must propagate as-is — OMERO's built-in error handling applies."""
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
+
+    def _identity_decorator():
+        return lambda func: func
+
+    from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
+    from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import urls as webgateway_urls
+    from omeroweb.webgateway import views as webgateway_views
+
+    regular_image = type("RegularImage", (), {"store_backed": False})()
+
+    class _FakeConn:
+        def getObject(self, object_type, iid):
+            return regular_image
+
+    def failing_image_data_json(request, conn=None, _internal=False, **kwargs):
+        raise RuntimeError("ZarrReader.getOptimalTileWidth failed during getTileSize")
+
+    monkeypatch.setattr(integration, "login_required", _identity_decorator)
+    monkeypatch.setattr(
+        integration,
+        "is_store_backed_image",
+        lambda image: getattr(image, "store_backed", False),
+    )
+    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "imageData_json", failing_image_data_json)
+    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
+    monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
+    monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
+    monkeypatch.setattr(webclient_urls, "urlpatterns", [])
+    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+
+    integration.install_webgateway_overrides()
+
+    import pytest
+    request = RequestFactory().get("/webclient/imgData/7/")
+    request.session = {}
+
+    with pytest.raises(RuntimeError, match="ZarrReader"):
+        webgateway_views.imageData_json(request, conn=_FakeConn(), iid=7)
+
+
 def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_failure(monkeypatch):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+
     def _identity_decorator():
         return lambda func: func
 
