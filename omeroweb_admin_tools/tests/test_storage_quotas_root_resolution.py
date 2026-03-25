@@ -47,6 +47,22 @@ def test_resolve_managed_group_root_reports_missing_fixed_path(
     assert reason == "configured managed repository root does not exist"
 
 
+def test_resolve_managed_group_root_uses_absolute_server_setting(
+    tmp_path, monkeypatch
+) -> None:
+    managed_root = tmp_path / "OMERO" / "ManagedRepository"
+    managed_root.mkdir(parents=True)
+
+    monkeypatch.delenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", raising=False)
+    monkeypatch.setenv("CONFIG_omero_managed_dir", str(managed_root))
+    monkeypatch.setenv("OMERO_DATA_DIR", str(tmp_path / "OTHER"))
+
+    root, reason = resolve_managed_group_root(["group-a"])
+
+    assert root == managed_root
+    assert reason == "using configured managed repository root"
+
+
 def test_reconcile_blocks_enforcement_for_unsafe_root(tmp_path, monkeypatch) -> None:
     state_path = tmp_path / "quotas.json"
     unsafe_root = tmp_path / "not-omero"

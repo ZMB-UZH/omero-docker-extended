@@ -81,6 +81,9 @@ Quota helper:
 Managed-repository shared-prefix bridge:
 - `startup/10-server-bootstrap.sh`
   - derives the managed-repository path prefixes that appear before `%user%`,
+  - requires `CONFIG_omero_managed_dir` to be an absolute path under `${OMERO_DIR}`,
+  - refuses startup if an unexpected image-local `ManagedRepository` already exists
+    under `/opt/omero/server`,
   - seeds its group list from both live OMERO group discovery and `OMERO_INSTALL_GROUP_LIST`,
   - creates missing shared prefixes with `omero fs mkdir --parents`,
   - reassigns those shared prefix directory objects to `root`,
@@ -93,7 +96,7 @@ Managed-repository Zarr staging:
 - `omeroweb_import/omero_scripts/Manage_Zarr_ManagedRepository.py`
   - runs on OMERO.server, not in the OMERO.web request process,
   - stages `.zarr` directories only inside
-    `${OMERO_DATA_DIR}/${CONFIG_omero_managed_dir}`,
+    `${CONFIG_omero_managed_dir}`,
   - reads the managed-repository root and repository template from persisted
     OMERO config (`omero.data.dir`, `omero.managed.dir`,
     `omero.fs.repo.path`) and reads the env-derived shared tmp root from the

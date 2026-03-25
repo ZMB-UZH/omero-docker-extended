@@ -95,6 +95,138 @@ trim_whitespace() {
     printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+normalize_dir_path() {
+    local path=""
+    path="$(trim_whitespace "$1")"
+    if [[ -z "${path}" ]]; then
+        return 1
+    fi
+    while [[ "${path}" == */ && "${path}" != "/" ]]; do
+        path="${path%/}"
+    done
+    printf "%s\n" "${path}"
+}
+
+expected_managed_repository_root() {
+    local configured_managed_dir=""
+    local normalized_omero_dir=""
+    local normalized_managed_dir=""
+
+    configured_managed_dir="$(trim_whitespace "${CONFIG_omero_managed_dir:-}")"
+    if [[ -z "${configured_managed_dir}" ]]; then
+        echo "ERROR: CONFIG_omero_managed_dir must be set and must not be empty." >&2
+        return 1
+    fi
+
+    normalized_omero_dir="$(normalize_dir_path "${OMERO_DIR}")" || {
+        echo "ERROR: OMERO_DIR must be a non-empty absolute path, got: '${OMERO_DIR}'" >&2
+        return 1
+    }
+    normalized_managed_dir="$(normalize_dir_path "${configured_managed_dir}")" || {
+        echo "ERROR: CONFIG_omero_managed_dir must be a non-empty absolute path, got: '${configured_managed_dir}'" >&2
+        return 1
+    }
+
+    if [[ "${normalized_managed_dir}" != /* ]]; then
+        echo "ERROR: CONFIG_omero_managed_dir must be an absolute path under ${normalized_omero_dir}, got: '${configured_managed_dir}'" >&2
+        return 1
+    fi
+
+    if [[ "${normalized_managed_dir}" != "${normalized_omero_dir}" ]] \
+        && [[ "${normalized_managed_dir}" != "${normalized_omero_dir}/"* ]]; then
+        echo "ERROR: CONFIG_omero_managed_dir must stay within ${normalized_omero_dir}, got: '${configured_managed_dir}'" >&2
+        return 1
+    fi
+
+    if [[ "${normalized_managed_dir}" == "${normalized_omero_dir}" ]]; then
+        echo "ERROR: CONFIG_omero_managed_dir must not point to OMERO_DIR directly: '${configured_managed_dir}'" >&2
+        return 1
+    fi
+
+    printf "%s\n" "${normalized_managed_dir}"
+}
+
+find_unexpected_server_managed_repository_dirs() {
+    local expected_root=""
+    local server_root=""
+    local expected_basename=""
+    local candidate=""
+    local -A seen=()
+
+    expected_root="$(expected_managed_repository_root)" || return 1
+    server_root="${SERVER_HOME%/*}"
+    expected_basename="$(basename "${expected_root}")"
+
+    [[ -d "${server_root}" ]] || return 0
+
+    while IFS= read -r candidate; do
+        [[ -n "${candidate}" ]] || continue
+        candidate="$(normalize_dir_path "${candidate}")" || continue
+        [[ "${candidate}" == "${expected_root}" ]] && continue
+        [[ -n "${seen[${candidate}]+x}" ]] && continue
+        seen["${candidate}"]=1
+        printf "%s\n" "${candidate}"
+    done < <(find "${server_root}" -type d \( -name "${expected_basename}" -o -name 'ManagedRepository' \) -print 2>/dev/null | sort -u)
+}
+
+validate_managed_repository_configuration() {
+    local expected_root=""
+    local -a unexpected_roots=()
+
+    expected_root="$(expected_managed_repository_root)" || exit 1
+
+    mkdir -p "${expected_root}" || {
+        echo "ERROR: Failed to create managed repository root: ${expected_root}" >&2
+        exit 1
+    }
+
+    mapfile -t unexpected_roots < <(find_unexpected_server_managed_repository_dirs)
+    if [[ "${#unexpected_roots[@]}" -gt 0 ]]; then
+        {
+            echo "ERROR: Refusing startup because unexpected image-local managed repository directories exist:"
+            printf ' - %s\n' "${unexpected_roots[@]}"
+            echo "ERROR: Only the bind-mounted managed repository under ${expected_root} is allowed."
+        } >&2
+        exit 1
+    fi
+}
+
+verify_managed_repository_runtime_safety() {
+    local expected_root=""
+    local actual_root=""
+    local -a unexpected_roots=()
+
+    expected_root="$(expected_managed_repository_root)" || return 1
+    actual_root="$(trim_whitespace "$(run_omero config get omero.managed.dir 2>/dev/null || true)")"
+    actual_root="$(normalize_dir_path "${actual_root}")" || actual_root=""
+
+    if [[ -z "${actual_root}" ]]; then
+        echo "ERROR: Failed to read persisted omero.managed.dir during runtime validation." >&2
+        return 1
+    fi
+
+    if [[ "${actual_root}" != "${expected_root}" ]]; then
+        echo "ERROR: Persisted omero.managed.dir drifted from expected managed repository root. Expected '${expected_root}', got '${actual_root}'." >&2
+        return 1
+    fi
+
+    if [[ ! -d "${expected_root}" ]]; then
+        echo "ERROR: Expected managed repository root does not exist at runtime: ${expected_root}" >&2
+        return 1
+    fi
+
+    mapfile -t unexpected_roots < <(find_unexpected_server_managed_repository_dirs)
+    if [[ "${#unexpected_roots[@]}" -gt 0 ]]; then
+        {
+            echo "ERROR: Unexpected image-local managed repository directories detected during runtime validation:"
+            printf ' - %s\n' "${unexpected_roots[@]}"
+        } >&2
+        return 1
+    fi
+
+    return 0
+}
+
 run_omero() {
     if [[ "$(id -u)" -ne 0 ]]; then
         "${OMERO_BIN}" "$@"
@@ -1271,6 +1403,7 @@ run_repo_root_bootstrap_once() {
     local venv_py=""
     local lookup_py=""
     local cli_home=""
+    local managed_repo_root=""
     local chown_output=""
     local chown_exit_code=1
     local inspected_prefix_count=0
@@ -1288,6 +1421,12 @@ run_repo_root_bootstrap_once() {
 
     if [[ "${login_ok}" -ne 1 ]]; then
         echo "[$(date -u)] ERROR: Timed out waiting for OMERO login before normalizing managed-repository prefixes"
+        write_repo_root_sync_status "error" "0" "0" "0" "1"
+        return 1
+    fi
+
+    if ! verify_managed_repository_runtime_safety; then
+        echo "[$(date -u)] ERROR: managed-repository runtime validation failed; aborting shared-prefix sync"
         write_repo_root_sync_status "error" "0" "0" "0" "1"
         return 1
     fi
@@ -1312,19 +1451,27 @@ run_repo_root_bootstrap_once() {
 
     venv_py="$(resolve_server_venv_python)"
     cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+    managed_repo_root="$(expected_managed_repository_root)"
     lookup_py="$(mktemp "${TMPDIR:-/tmp}/repo-root-lookup.XXXXXX.py")"
     cat >"${lookup_py}" <<'PY'
 import sys
 from omero.gateway import BlitzGateway
 
-if len(sys.argv) != 3:
-    print("usage: repo_root_lookup.py <root_pass> <repo_dir_path>", file=sys.stderr)
+if len(sys.argv) != 4:
+    print(
+        "usage: repo_root_lookup.py <root_pass> <repo_dir_path> <expected_managed_dir>",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 root_pass = sys.argv[1]
 repo_dir_path = sys.argv[2].strip("/")
+expected_managed_dir = sys.argv[3].rstrip("/")
 if not repo_dir_path:
     print("ERROR: empty repository path", file=sys.stderr)
+    sys.exit(2)
+if not expected_managed_dir.startswith("/"):
+    print("ERROR: expected managed dir must be absolute", file=sys.stderr)
     sys.exit(2)
 
 path_parts = repo_dir_path.split("/")
@@ -1333,22 +1480,65 @@ parent_path = "/"
 if len(path_parts) > 1:
     parent_path = "/" + "/".join(path_parts[:-1]) + "/"
 
+
+def unwrap_text(value):
+    if value is None:
+        return ""
+    inner = getattr(value, "val", value)
+    return "" if inner is None else str(inner)
+
+
+def model_attr(model_obj, attr_name):
+    value = getattr(model_obj, attr_name, None)
+    if value is None:
+        value = getattr(model_obj, f"_{attr_name}", None)
+    return value
+
+
+def repo_description_path(model_obj):
+    desc_path = unwrap_text(model_attr(model_obj, "path"))
+    desc_name = unwrap_text(model_attr(model_obj, "name"))
+    if not desc_name:
+        return ""
+    return (desc_path.rstrip("/") + "/" + desc_name).rstrip("/")
+
+
+def repo_description_uuid(model_obj):
+    return unwrap_text(model_attr(model_obj, "hash"))
+
 conn = BlitzGateway("root", root_pass, host="localhost", port=4064)
 try:
     if not conn.connect():
         print("ERROR: failed to connect as root", file=sys.stderr)
         sys.exit(1)
     conn.SERVICE_OPTS.setOmeroGroup("-1")
+
+    target_repo_uuid = ""
+    repo_map = conn.c.sf.sharedResources().repositories()
+    for description in getattr(repo_map, "descriptions", []):
+        if repo_description_path(description) != expected_managed_dir:
+            continue
+        target_repo_uuid = repo_description_uuid(description)
+        if target_repo_uuid:
+            break
+
+    if not target_repo_uuid:
+        print(
+            f"ERROR: failed to resolve active repository uuid for {expected_managed_dir}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     candidates = list(conn.getObjects("OriginalFile", attributes={"name": dir_name}))
     exact = None
     for obj in candidates:
-        if obj.getPath() == parent_path:
+        if obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid:
             exact = obj
             break
     if exact is None:
         print("MISSING")
         sys.exit(0)
-    print(f"FOUND|{exact.getId()}|{exact.getOwnerOmeName()}")
+    print(f"FOUND|{exact.getId()}|{exact.getOwnerOmeName()}|{exact.getRepo()}")
 finally:
     try:
         conn.close()
@@ -1368,7 +1558,7 @@ PY
         # new shared-prefix row is not always queryable immediately.
         for lookup_attempt in $(seq 1 "${lookup_retry_limit}"); do
             run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
-            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
             if [[ "${lookup_output}" == FOUND\|* ]]; then
                 break
             fi
@@ -1390,9 +1580,9 @@ PY
             continue
         fi
 
-        IFS='|' read -r _found_marker root_dir_id root_dir_owner <<< "${lookup_output}"
+        IFS='|' read -r _found_marker root_dir_id root_dir_owner root_dir_repo <<< "${lookup_output}"
 
-        echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner}"
+        echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} -> OriginalFile:${root_dir_id} owner=${root_dir_owner} repo=${root_dir_repo}"
 
         if [[ "${root_dir_owner}" == "root" ]]; then
             echo "[$(date -u)] INFO: repository prefix ${repo_dir_path} already normalized"
@@ -1418,7 +1608,7 @@ PY
         fi
 
         normalized_prefix_count=$((normalized_prefix_count + 1))
-        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" 2>&1)"
+        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
         echo "[$(date -u)] INFO: normalized repository prefix ${repo_dir_path}: ${lookup_output}"
     done <<< "${path_list}"
 
@@ -1526,8 +1716,9 @@ schedule_binary_repository_cleanse() {
             exit 1
         fi
 
-        if [[ -d "${server_root}" ]]; then
-            cd "${server_root}"
+        if ! verify_managed_repository_runtime_safety; then
+            echo "[$(date -u)] ERROR: managed-repository runtime validation failed; refusing binary repository cleanse"
+            exit 1
         fi
 
         local start_epoch="$(date +%s)"
@@ -1905,6 +2096,8 @@ main() {
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
     ensure_tmpdir_permissions "${OMERO_CLI_USER}"
 
+    validate_managed_repository_configuration
+    check_writable_dir "$(expected_managed_repository_root)" "OMERO managed repository"
     validate_ldap_configuration
     validate_ldap_new_user_group_configuration
     validate_job_service_bootstrap_configuration
