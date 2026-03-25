@@ -1,7 +1,5 @@
 # Codecov configuration for omero-docker-extended
 # https://docs.codecov.io/docs/codecov-yaml
-# Validate changes with:
-#   curl --data-binary @codecov.yml https://codecov.io/validate
 
 # Files and directories excluded from coverage analysis entirely.
 # These contain no testable Python source code (shell scripts, configs,
@@ -20,36 +18,39 @@ ignore:
 
 coverage:
   status:
-    # Keep an overall project gate plus package-scoped status checks so Codecov
-    # surfaces weak runtime areas directly in commit/PR status output.
+    # Per-component project-level checks.  ``default`` is disabled so that
+    # only the explicitly listed components post commit statuses.
     project:
-      default:
-        target: auto
-        threshold: 1%
+      default: false
       plugin-common:
         target: auto
         paths:
-          - "omero_plugin_common/"
+          - 'omero_plugin_common/'
+          - '!.*/tests/.*'
         threshold: 1%
       omp-plugin:
         target: auto
         paths:
-          - "omeroweb_omp_plugin/"
+          - 'omeroweb_omp_plugin/'
+          - '!.*/tests/.*'
         threshold: 1%
       import-plugin:
         target: auto
         paths:
-          - "omeroweb_import/"
+          - 'omeroweb_import/'
+          - '!.*/tests/.*'
         threshold: 1%
       admin-tools:
         target: auto
         paths:
-          - "omeroweb_admin_tools/"
+          - 'omeroweb_admin_tools/'
+          - '!.*/tests/.*'
         threshold: 1%
       imaris-connector:
         target: auto
         paths:
-          - "omeroweb_imaris_connector/"
+          - 'omeroweb_imaris_connector/'
+          - '!.*/tests/.*'
         threshold: 1%
     # Patch coverage: only newly added / changed lines are evaluated.
     patch:
@@ -57,51 +58,10 @@ coverage:
         target: 0%
         threshold: 1%
 
-component_management:
-  individual_components:
-    - component_id: omero_plugin_common
-      name: omero_plugin_common
-      paths:
-        - "omero_plugin_common/**"
-    - component_id: omeroweb_omp_plugin
-      name: omeroweb_omp_plugin
-      paths:
-        - "omeroweb_omp_plugin/**"
-    - component_id: omeroweb_import
-      name: omeroweb_import
-      paths:
-        - "omeroweb_import/**"
-    - component_id: omeroweb_admin_tools
-      name: omeroweb_admin_tools
-      paths:
-        - "omeroweb_admin_tools/**"
-    - component_id: omeroweb_imaris_connector
-      name: omeroweb_imaris_connector
-      paths:
-        - "omeroweb_imaris_connector/**"
-
-flag_management:
-  default_rules:
-    carryforward: false
-    statuses:
-      - type: project
-        target: auto
-        threshold: 1%
-
 codecov:
   notify:
     after_n_builds: 1
 
-# Codecov's current GitHub Checks annotations conflict with Components, so keep
-# the richer PR comment/UI component breakdown and turn annotations off
-# explicitly.
-github_checks:
-  annotations: false
-
 comment:
-  layout: "header, diff, components, flags, files"
-  behavior: default
-  require_changes: false
-  require_base: false
-  require_head: true
+  require_changes: true
   after_n_builds: 1

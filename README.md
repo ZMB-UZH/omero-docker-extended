@@ -1,6 +1,5 @@
 # OMERO Docker Extended
 
-[![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)
 [![Tests](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml/badge.svg)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![Code coverage](https://codecov.io/gh/ZMB-UZH/omero-docker-extended/graph/badge.svg)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
 
@@ -160,7 +159,7 @@ Staged file upload and controlled import into OMERO.
 - Stale upload cleanup automation
 - Per-user settings and special method configurations
 
-### Admin Tools (`omeroweb_admin_tools`)
+### Admin Tools Plugin (`omeroweb_admin_tools`)
 
 Operational observability interfaces embedded in OMERO.web.
 
@@ -171,7 +170,7 @@ Operational observability interfaces embedded in OMERO.web.
 - Server and database diagnostic scripts
 - Root-only access controls
 
-### Imaris Connector (`omeroweb_imaris_connector`)
+### Imaris Connector Plugin (`omeroweb_imaris_connector`)
 
 OMERO image export to Imaris (.ims) format.
 
