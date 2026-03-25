@@ -163,9 +163,21 @@ def _render_repo_template(config: dict[str, str], group_name: str, username: str
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
-    data_dir = _require_config_value(config, _CONFIG_DATA_DIR)
-    managed_dir = _require_config_value(config, _CONFIG_MANAGED_DIR)
-    root = (Path(data_dir) / managed_dir).resolve(strict=False)
+    data_dir = Path(_require_config_value(config, _CONFIG_DATA_DIR)).resolve(strict=False)
+    managed_dir_raw = _require_config_value(config, _CONFIG_MANAGED_DIR)
+    managed_dir = Path(managed_dir_raw)
+    if not managed_dir.is_absolute():
+        raise RuntimeError(
+            f"{_CONFIG_MANAGED_DIR} must be an absolute path inside {data_dir}, "
+            f"got: {managed_dir_raw}"
+        )
+    root = managed_dir.resolve(strict=False)
+    try:
+        root.relative_to(data_dir)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{_CONFIG_MANAGED_DIR} must stay within {data_dir}: {root}"
+        ) from exc
     if not root.exists() or not root.is_dir():
         raise RuntimeError(f"Managed repository root does not exist: {root}")
     return root
@@ -369,7 +381,6 @@ def run_script():
         ),
         namespaces=["omero.import"],
         version="1.0.0",
-        authors=["OpenAI"],
         institutions=["OMERO"],
         contact="n/a",
     )

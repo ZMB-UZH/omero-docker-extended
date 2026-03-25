@@ -110,6 +110,12 @@ At image build time, `docker/omero-server.Dockerfile` now also enforces writable
 In `env/omeroserver.env`, `CONFIG_omero_fs_repo_path` configures the managed
 repository import parent-directory template.
 
+`CONFIG_omero_managed_dir` must be an absolute path inside `${OMERO_DATA_DIR}`.
+The tracked runtime contract is `/OMERO/ManagedRepository`, not the relative
+string `ManagedRepository`. Relative values are unsafe because OMERO can resolve
+them against the server install tree and create an image-local second
+repository.
+
 OMERO expands supported terms automatically when written with surrounding `%`
 characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).
 
@@ -139,8 +145,8 @@ only after the installation paths are resolved, so changes to `OMERO_DATA_PATH`
 during the run still place the log in the selected data root.
 
 The Import plugin's OME-Zarr path handling uses the same managed repository.
-It stages `.zarr` directories into `${OMERO_DATA_DIR}/${CONFIG_omero_managed_dir}`
-through a server-side OMERO script and renders the destination with
+It stages `.zarr` directories into `${CONFIG_omero_managed_dir}` through a
+server-side OMERO script and renders the destination with
 `CONFIG_omero_fs_repo_path`. `startup/10-server-bootstrap.sh` also writes
 `${OMERO_TMP_PATH}` into `OMERO.server/var/managed-zarr-runtime.env` so the
 server-side helper can validate staged sources without any hardcoded path
@@ -151,6 +157,14 @@ slow to come up, helper launch retries are controlled by
 `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` and
 `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS`. No plugin-specific permanent-store
 path is used.
+
+`startup/10-server-bootstrap.sh` now fails closed when `CONFIG_omero_managed_dir`
+is relative, points outside `${OMERO_DIR}`, or when an unexpected image-local
+`ManagedRepository` already exists under `/opt/omero/server`. The background
+shared-prefix sync and startup `omero admin cleanse` also refuse to run unless
+runtime validation confirms OMERO still resolves the managed repository to the
+expected absolute path and no second repository has appeared under the server
+tree.
 
 The native OME-Zarr parser/runtime baked into `omeroweb` is also environment
 driven. `OME_ZARR_PY_VERSION` pins the installed `ome-zarr` package version at

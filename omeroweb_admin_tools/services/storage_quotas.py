@@ -170,9 +170,16 @@ def managed_group_root() -> Path:
     configured = os.environ.get("ADMIN_TOOLS_MANAGED_GROUP_ROOT", "").strip()
     if configured:
         return Path(configured).expanduser()
+    managed_dir = os.environ.get("CONFIG_omero_managed_dir", "").strip()
+    if managed_dir:
+        managed_path = Path(managed_dir).expanduser()
+        if managed_path.is_absolute():
+            return managed_path
     omero_data_dir = os.environ.get("OMERO_DATA_DIR", DEFAULT_OMERO_DATA_DIR).strip()
     if not omero_data_dir:
         omero_data_dir = DEFAULT_OMERO_DATA_DIR
+    if managed_dir:
+        return Path(omero_data_dir).expanduser() / managed_dir
     return Path(omero_data_dir).expanduser() / DEFAULT_MANAGED_REPOSITORY_SUBDIR
 
 
