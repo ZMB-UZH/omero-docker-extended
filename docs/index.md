@@ -38,6 +38,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 - `operations/repository-sync-safety.md` -- safe cross-repository file sync rules, branch-history guardrails, and recovery steps for recent branch-root drift
 - `operations/postgres-maintenance.md` -- VACUUM ANALYZE, REINDEX CONCURRENTLY, cron schedule
 - `operations/code-scanning.md` -- GitHub code scanning workflow, SARIF uploads, triage and rollout guidance
+- `operations/managed-repository-rca-2026-03-25.md` -- root cause analysis for managed repository path resolution incident (missing OMERO_DATA_DIR/OMERO_DIR)
 - `RELIABILITY.md` -- startup determinism, health checks, incident classes
 - `SECURITY.md` -- secrets management, image pinning, input validation, access control, post-build vulnerability scanning, security hardening
 
