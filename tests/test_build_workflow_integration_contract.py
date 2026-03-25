@@ -376,6 +376,117 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             script_text,
         )
 
+    def test_omeroserver_example_env_uses_absolute_managed_dir(self) -> None:
+        """CONFIG_omero_managed_dir in the tracked env template must be an
+        absolute path so OMERO never resolves it against the server install
+        directory.  A relative value causes silent data loss on restart."""
+        env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
+            encoding="utf-8"
+        )
+        for line in env_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("CONFIG_omero_managed_dir="):
+                value = stripped.split("=", 1)[1]
+                self.assertTrue(
+                    value.startswith("/"),
+                    f"CONFIG_omero_managed_dir must be absolute, got: {value!r}",
+                )
+                break
+        else:
+            self.fail("CONFIG_omero_managed_dir not found in omeroserver_example.env")
+
+    def test_server_bootstrap_rejects_managed_dir_outside_omero_dir(self) -> None:
+        """The managed-repository guard must check that the configured path
+        lives inside OMERO_DIR and must produce a clear error when it does
+        not, so the container refuses to start with a misconfigured path."""
+        script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("normalize_dir_path()", script_text)
+        self.assertIn(
+            "Refusing startup because unexpected image-local managed repository",
+            script_text,
+        )
+
+    # ------------------------------------------------------------------
+    # Coverage pipeline completeness
+    # ------------------------------------------------------------------
+
+    def test_coveragerc_tracks_all_python_source_directories(self) -> None:
+        """Every plugin/library directory that contains Python source must
+        appear in .coveragerc [run] source so coverage.py traces it."""
+        expected_dirs = [
+            "./omero_plugin_common",
+            "./omeroweb_omp_plugin",
+            "./omeroweb_import",
+            "./omeroweb_admin_tools",
+            "./omeroweb_imaris_connector",
+            "./omero_web_zarr",
+        ]
+        coveragerc_text = (self.repo_root / ".coveragerc").read_text(encoding="utf-8")
+        for d in expected_dirs:
+            self.assertIn(
+                d,
+                coveragerc_text,
+                f"{d} missing from .coveragerc [run] source",
+            )
+
+    def test_ci_workflow_runs_all_test_suites(self) -> None:
+        """The CI workflow must run every test suite as a separate coverage
+        invocation so the conftest mock stubs do not interfere."""
+        expected_suites = [
+            "tests/",
+            "omero_plugin_common/tests/",
+            "omeroweb_imaris_connector/tests/",
+            "omeroweb_admin_tools/tests/",
+            "omeroweb_omp_plugin/tests/",
+            "omeroweb_import/tests/",
+            "omero_web_zarr/tests/",
+        ]
+        ci_text = (self.repo_root / ".github" / "workflows" / "tests.yml").read_text(
+            encoding="utf-8"
+        )
+        for suite in expected_suites:
+            self.assertIn(
+                suite,
+                ci_text,
+                f"Test suite {suite!r} missing from CI workflow",
+            )
+
+    def test_codecov_yml_has_component_for_each_source_directory(self) -> None:
+        """Each plugin/library tracked in .coveragerc must have a matching
+        Codecov project component so per-module coverage is reported."""
+        import yaml  # noqa: F811  — available in CI
+
+        codecov_path = self.repo_root / "codecov.yml"
+        with open(codecov_path, encoding="utf-8") as fh:
+            codecov_cfg = yaml.safe_load(fh)
+
+        project_components = codecov_cfg["coverage"]["status"]["project"]
+        # Collect all path prefixes from all components (excluding negation patterns)
+        covered_prefixes = set()
+        for name, component in project_components.items():
+            if name == "default":
+                continue
+            for path_entry in component.get("paths", []):
+                if not path_entry.startswith("!"):
+                    covered_prefixes.add(path_entry.rstrip("/"))
+
+        expected_prefixes = {
+            "omero_plugin_common",
+            "omeroweb_omp_plugin",
+            "omeroweb_import",
+            "omeroweb_admin_tools",
+            "omeroweb_imaris_connector",
+            "omero_web_zarr",
+        }
+        for prefix in expected_prefixes:
+            self.assertIn(
+                prefix,
+                covered_prefixes,
+                f"Codecov component for {prefix!r} is missing",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
