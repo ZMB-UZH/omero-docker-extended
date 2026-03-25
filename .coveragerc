@@ -15,6 +15,7 @@ source =
     ./omeroweb_import
     ./omeroweb_admin_tools
     ./omeroweb_imaris_connector
+    ./omero_web_zarr
 omit =
     */tests/*
     conftest.py

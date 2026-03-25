@@ -95,6 +95,13 @@ jobs:
           [ $? -ne 0 ] && EXIT_FINAL=1
           echo "::endgroup::"
 
+          echo "::group::omero_web_zarr/tests/"
+          COVERAGE_FILE=.coverage.zarr \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
           exit $EXIT_FINAL
 
       - name: Combine coverage and generate report
