@@ -52,6 +52,12 @@ coverage:
           - 'omeroweb_imaris_connector/'
           - '!.*/tests/.*'
         threshold: 1%
+      web-zarr:
+        target: auto
+        paths:
+          - 'omero_web_zarr/'
+          - '!.*/tests/.*'
+        threshold: 1%
     # Patch coverage: only newly added / changed lines are evaluated.
     patch:
       default:
