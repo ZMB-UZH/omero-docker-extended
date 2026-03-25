@@ -335,7 +335,9 @@ Expected result:
 Next step:
 
 - Deploy the current repository patch and restart `omeroserver`.
+- Ensure `CONFIG_omero_managed_dir` is the absolute bind-mounted path `/OMERO/ManagedRepository`, not the relative string `ManagedRepository`.
 - `startup/10-server-bootstrap.sh` now auto-normalizes the shared managed-repository prefixes before `%user%` by discovering OMERO groups, creating any missing shared prefix directories, and reassigning their OMERO ownership metadata to `root`.
+- The same bootstrap now fails closed if OMERO is configured with a relative managed-repository path or if a second image-local `ManagedRepository` exists under `/opt/omero/server`.
 - The repair is non-destructive: it does not change the configured repository template and does not delete repository payload files.
 - The repair is no longer one-shot. A background sync loop continues running on `OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS` and writes its latest result to `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`.
 - `installation/installation_script.sh` now waits for a successful current-cycle `repo-root-sync.status` before it reports startup success, so new installs and updates do not finish before the shared group prefixes are normalized.

@@ -158,6 +158,14 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                     printf '%s\\n' /tmp
                 }}
 
+                expected_managed_repository_root() {{
+                    printf '%s\\n' /OMERO/ManagedRepository
+                }}
+
+                verify_managed_repository_runtime_safety() {{
+                    return 0
+                }}
+
                 write_repo_root_sync_status() {{
                     printf 'status=%s\\nlast_success_epoch=%s\\ninspected_prefix_count=%s\\nnormalized_prefix_count=%s\\nfailed_prefix_count=%s\\n' \
                         "$1" "$2" "$3" "$4" "$5" > "{status_file}"
@@ -190,6 +198,90 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("lookup_calls=2", result.stdout)
         self.assertIn("status=ok", result.stdout)
         self.assertIn("failed_prefix_count=0", result.stdout)
+
+    def test_repo_root_bootstrap_lookup_is_repo_aware(self) -> None:
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "run_repo_root_bootstrap_once() {",
+            "schedule_repo_root_sync() {",
+        )
+
+        self.assertIn('target_repo_uuid = ""', function_text)
+        self.assertIn("sharedResources().repositories()", function_text)
+        self.assertIn("repo_description_path(description) != expected_managed_dir", function_text)
+        self.assertIn('obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid', function_text)
+        self.assertIn('"${managed_repo_root}"', function_text)
+
+    def test_validate_managed_repository_configuration_rejects_relative_path(self) -> None:
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "normalize_dir_path() {",
+            "validate_binary_repository_cleanse_configuration() {",
+        )
+        script = textwrap.dedent(
+            """\
+            set -euo pipefail
+            OMERO_DIR=/OMERO
+            SERVER_HOME=/tmp/omero-server/OMERO.server
+            CONFIG_omero_managed_dir=ManagedRepository
+            trim_whitespace() {
+                printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+            }
+            """ + function_text + """
+            validate_managed_repository_configuration
+            """
+        )
+
+        result = subprocess.run(
+            ["bash", "-lc", script],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("absolute path", result.stderr)
+
+    def test_validate_managed_repository_configuration_rejects_image_local_repo(self) -> None:
+        function_text = self._slice_function(
+            self.server_bootstrap_script,
+            "normalize_dir_path() {",
+            "validate_binary_repository_cleanse_configuration() {",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            server_home = Path(tmpdir) / "server" / "OMERO.server"
+            unexpected_root = Path(tmpdir) / "server" / "OMERO.server-5.6.17-ice36" / "ManagedRepository"
+            omero_dir = Path(tmpdir) / "OMERO"
+            server_home.mkdir(parents=True, exist_ok=True)
+            unexpected_root.mkdir(parents=True, exist_ok=True)
+            omero_dir.mkdir(parents=True, exist_ok=True)
+
+            script = textwrap.dedent(
+                f"""\
+                set -euo pipefail
+                OMERO_DIR="{omero_dir}"
+                SERVER_HOME="{server_home}"
+                CONFIG_omero_managed_dir="{omero_dir}/ManagedRepository"
+                trim_whitespace() {{
+                    printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+                }}
+                {function_text}
+                validate_managed_repository_configuration
+                """
+            )
+
+            result = subprocess.run(
+                ["bash", "-lc", script],
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unexpected image-local managed repository", result.stderr)
 
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
