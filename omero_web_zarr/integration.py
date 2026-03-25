@@ -18,6 +18,8 @@ from omeroweb.httprsp import HttpJavascriptResponseServerError
 from omeroweb.webclient.decorators import login_required
 from omeroweb.webgateway.marshal import channelMarshal
 
+from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
+
 from .utils import encode_store_backed_pil_image
 from .utils import get_safe_image_tile_size
 from .utils import get_store_backed_channel_overrides
@@ -35,6 +37,12 @@ from .utils import sanitize_download_basename
 from .utils import select_store_backed_viewer_level
 
 LOGGER = logging.getLogger(__name__)
+
+_SAFE_RENDERING_ENV = "OMERO_WEB_ZARR_ALTERNATIVE_RENDERING"
+
+
+def _safe_rendering_enabled():
+    return get_bool_env(_SAFE_RENDERING_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 class _StoreBackedChannelWrapper:
@@ -776,7 +784,10 @@ def install_webgateway_overrides():
     if getattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False):
         return
 
-    _install_safe_image_marshal_overrides(webgateway_marshal)
+    _safe_rendering_on = _safe_rendering_enabled()
+
+    if _safe_rendering_on:
+        _install_safe_image_marshal_overrides(webgateway_marshal)
 
     original_get_channels = webclient_gateway.ImageWrapper.getChannels
     original_image_data_json = webgateway_views.imageData_json
@@ -935,7 +946,7 @@ def install_webgateway_overrides():
                     **kwargs,
                 )
             except Exception as exc:
-                if not is_known_tile_size_failure(exc):
+                if not _safe_rendering_on or not is_known_tile_size_failure(exc):
                     raise
                 return _render_regular_image_region_with_safe_tile_size(
                     request,
@@ -971,7 +982,7 @@ def install_webgateway_overrides():
                     **kwargs,
                 )
             except Exception as exc:
-                if not is_known_tile_size_failure(exc):
+                if not _safe_rendering_on or not is_known_tile_size_failure(exc):
                     raise
                 payload = _marshal_regular_image_data_with_safe_tile_size(
                     image,
@@ -1000,7 +1011,7 @@ def install_webgateway_overrides():
                 **kwargs,
             )
         except Exception as exc:
-            if not _is_known_rendering_engine_failure(exc):
+            if not _safe_rendering_on or not _is_known_rendering_engine_failure(exc):
                 raise
             return _load_metadata_preview_with_safe_rendering(
                 request,

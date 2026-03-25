@@ -1387,6 +1387,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
 def test_check_import_compatibility_marks_incompatible_ome_zarr_as_native_compatible(
     tmp_path: Path, monkeypatch
 ):
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
     (zarr_dir / "0").mkdir(parents=True, exist_ok=True)
@@ -1419,6 +1420,45 @@ def test_check_import_compatibility_marks_incompatible_ome_zarr_as_native_compat
 
     assert result["status"] == "compatible"
     assert "ome-zarr" in result["details"].lower()
+
+
+def test_check_import_compatibility_skips_native_zarr_when_disabled(
+    tmp_path: Path, monkeypatch
+):
+    """When OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT=false, an incompatible
+    .zarr stays incompatible — no native import override is applied."""
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "false")
+    upload_root = tmp_path / "job-root"
+    zarr_dir = upload_root / "_staged" / "image.ome.zarr"
+    (zarr_dir / "0").mkdir(parents=True, exist_ok=True)
+    (zarr_dir / ".zattrs").write_text(
+        '{"multiscales": [{"version": "0.4", "axes": [{"name": "y", "type": "space"}, {"name": "x", "type": "space"}], "datasets": [{"path": "0", "coordinateTransformations": [{"type": "scale", "scale": [1.0, 1.0]}]}]}]}',
+        encoding="utf-8",
+    )
+    (zarr_dir / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
+    (zarr_dir / "0" / ".zarray").write_text(
+        '{"zarr_format": 2, "shape": [1, 1], "chunks": [1, 1], "dtype": "|u1", "compressor": null, "fill_value": 0, "filters": null, "order": "C"}',
+        encoding="utf-8",
+    )
+    (zarr_dir / "0" / "0").write_bytes(b"\x00")
+
+    scan_mock = type(
+        "Result",
+        (),
+        {"stdout": "", "stderr": "unsupported", "returncode": 0},
+    )()
+    monkeypatch.setattr(core_functions, "_run_local_import_scan", lambda path, timeout=None: scan_mock)
+
+    result = core_functions._check_import_compatibility(
+        "session-key",
+        "omeroserver",
+        4064,
+        zarr_dir,
+        None,
+        "image.ome.zarr",
+    )
+
+    assert result["status"] == "incompatible"
 
 
 def test_bioformats_compatible_zarr_uses_standard_import_path(tmp_path: Path, monkeypatch):
