@@ -33,7 +33,12 @@ class CodecovWorkflowRegressionTests(unittest.TestCase):
         self.assertIn("github.event.repository.default_branch", validate_if)
 
     def test_tests_workflow_installs_pinned_requirements_file(self) -> None:
+        checkout_step = self._step("Checkout")
+        setup_step = self._step("Setup Python")
         install_run = self._step("Install dependencies")["run"]
+
+        self.assertEqual("actions/checkout@v6", checkout_step["uses"])
+        self.assertEqual("actions/setup-python@v6", setup_step["uses"])
         self.assertIn("python3 -m pip install -r requirements-tests.txt", install_run)
         self.assertTrue(self.requirements_path.exists(), "Pinned test requirements file is missing")
 
@@ -63,7 +68,7 @@ class CodecovWorkflowRegressionTests(unittest.TestCase):
         self.assertIn("tools/coverage_summary.py", report_run)
         self.assertIn("coverage-summary.md", report_run)
         self.assertIn("GITHUB_STEP_SUMMARY", report_run)
-        self.assertEqual("actions/upload-artifact@v4", artifact_step["uses"])
+        self.assertEqual("actions/upload-artifact@v7", artifact_step["uses"])
         self.assertEqual("upload_coverage_artifacts", artifact_step["id"])
         self.assertIn("coverage.json", artifact_step["with"]["path"])
         self.assertIn("coverage-report.txt", artifact_step["with"]["path"])
