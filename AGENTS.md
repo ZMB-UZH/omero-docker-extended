@@ -173,6 +173,7 @@ omeroweb_<name>/
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
 ### Testing
+- When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.
 - In root-owned deployment clones, disable the pytest cache provider so verification stays warning-free even when the repo root is not writable.
 - Before rerunning `pytest`, confirm the selected Python environment can import Django. If `python3 -m pytest ...` fails while loading `/opt/omero/conftest.py` with `ModuleNotFoundError: django`, do **not** keep retrying the same host-interpreter command.
