@@ -28,6 +28,8 @@ This repository expresses those OMERO properties in env files with the existing 
 - When `OMERO_JOB_SERVICE_JOIN_ALL_GROUPS=1` (in `env/omeroserver.env`) and both `OMERO_JOB_SERVICE_PASS` and `ROOTPASS` are set, the installation script automatically adds the job-service account (`OMERO_JOB_SERVICE_USERNAME`, default `job-service`) to every discovered OMERO group immediately after startup, including groups created later in the same installation flow. The job-service user is created if it does not already exist (default group: `user`). This ensures background plugin operations (uploads, Imaris exports) can access data in all groups from the moment installation completes. Exceptions: the `root`, `system`, and `user` groups are excluded. Group membership sync does not grant OMERO administrator privileges, and background workers must not reopen a browser user's live OMERO.web `session_key` as a fallback because closing that helper connection can destroy the login session. At runtime, `startup/10-server-bootstrap.sh` continues to synchronize the job-service account into any newly created groups on a configurable interval (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, default 3600 seconds). Runtime sync now targets configurable OMERO endpoint settings (`OMERO_JOB_SERVICE_HOST`, default `localhost`; `OMERO_JOB_SERVICE_PORT`, default `4064`) to match installation-time behavior in non-default deployments. The sync uses jitter (`OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`, default 20) and exponential backoff to avoid thundering-herd effects and does not affect active user sessions. To reduce false startup errors during initial database/schema migrations, only the first sync attempt in the first cycle uses the long readiness window (`OMERO_JOB_SERVICE_STARTUP_WAIT_SECONDS`); retries in the same cycle and all later cycles use a short readiness probe window (`12 * OMERO_JOB_SERVICE_READINESS_POLL_SECONDS`) so the loop actually executes all configured retries (`OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`, default 3). User creation also retries with `OMERO_JOB_SERVICE_USER_ENSURE_RETRIES`. All sync-loop variables (`OMERO_JOB_SERVICE_SYNC_INTERVAL_SECONDS`, `OMERO_JOB_SERVICE_SYNC_MAX_RETRIES`, `OMERO_JOB_SERVICE_SYNC_JITTER_SECONDS`) are defined in `env/omeroserver.env` and are the single source of truth. `startup/10-server-bootstrap.sh` validates the readiness and sync variables at startup and fails fast if any of them is missing, empty, non-numeric, or less than 1 (jitter allows zero).
 - `OMERO_BINARY_REPO_CLEANSE_ON_START=1` (in `env/omeroserver.env`) enables a background `omero admin cleanse` run on every `omeroserver` container start, including fresh installs, `docker start`, `docker restart`, and update-driven recreates. The startup hook waits for OMERO login readiness, runs against `OMERO_BINARY_REPO_CLEANSE_DATA_DIR` (default `/OMERO`), and applies a task-local `omero.keep_alive` setting from `OMERO_BINARY_REPO_CLEANSE_KEEPALIVE_SECONDS` (default `30`) through a temporary `ICE_CONFIG` file so long repository scans do not depend on a separate keepalive shell. `OMERO_BINARY_REPO_CLEANSE_STARTUP_WAIT_SECONDS` and `OMERO_BINARY_REPO_CLEANSE_READINESS_POLL_SECONDS` control the readiness window. The task is non-blocking for server startup and logs to `OMERO.server/var/log/binary-repository-cleanse.log`.
 - `OMERO_REPOSITORY_LOCK_CLEANUP_ON_START=1` (in `env/omeroserver.env`) removes stale repository lock files from `${OMERO_DIR}/.omero/repository/*/.lock` on every `omeroserver` container start before `omero admin start --foreground` runs. Disable it only if you intentionally share the same OMERO repository with another independently running server process.
+- `OMERO_RENDERING_CACHE_CLEANUP_ON_START=0` (in `env/omeroserver.env`) purges pyramid files, Bio-Formats memo cache, and thumbnail cache on container start. All regenerate automatically on first user access. No original data is deleted. Safe only when `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (the default), because the standard `PixelsService` handles pyramid regeneration. Reset to `0` after one successful cleanup cycle.
+- `OMERO_ZARR_PIXEL_BUFFER_ENABLED=false` (in `env/omeroserver.env`) controls whether the `omero-zarr-pixel-buffer` server-side plugin is active. When `false`, the plugin JAR is moved out of the classpath so the standard OMERO `PixelsService` handles all pixel buffer requests (including automatic pyramid regeneration). Must be `true` when alternative zarr import or rendering mechanisms are in use.
 
 ## Required Hardening Before Deployment
 
@@ -157,6 +159,22 @@ build time alongside `OMERO_CLI_ZARR_VERSION` and `BIOFORMATS2RAW_VERSION`, and
 disposable managed-repository handoff copy must rewrite Blosc-backed image
 arrays for render-safe native import. Those normalizations apply only to the
 ephemeral handoff copy, never to the browser-staged source tree.
+
+Two feature flags control the alternative zarr import and rendering mechanisms:
+
+| Variable | Purpose |
+|---|---|
+| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT` | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
+| `OMERO_WEB_ZARR_ALTERNATIVE_RENDERING` | Enable alternative zarr rendering overrides that patch OMERO's built-in rendering, preview, and pyramid handling for zarr images (default `false`). When `false`, OMERO's default built-in rendering pipeline applies without zarr-specific patches. |
+
+> **Recommendation:** When disabling either alternative zarr flag after it has
+> been active, set `OMERO_RENDERING_CACHE_CLEANUP_ON_START=1` in
+> `env/omeroserver.env` for one restart cycle. This purges stale pyramid files,
+> Bio-Formats memo cache entries, and thumbnails that were generated while the
+> alternative mechanisms were active and may cause rendering errors or broken
+> previews under the standard pipeline. OMERO regenerates all of these on
+> demand, so no original imaging data is lost. Reset the flag to `0` after the
+> cleanup restart.
 
 After native import, OMERO.web access to the managed store is provided by
 `omero_web_zarr`. The raw `/zarr/v0.4/image/<id>.zarr/...` routes expose the

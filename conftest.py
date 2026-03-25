@@ -21,6 +21,8 @@ os.environ.setdefault("OMERO_IMS_EXPORT_DIR", "/tmp/imaris-exports")
 os.environ.setdefault("OMERO_IMS_SCRIPT_START_TIMEOUT", "30")
 os.environ.setdefault("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "0.1")
 os.environ.setdefault("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "60")
+os.environ.setdefault("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
+os.environ.setdefault("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
 
 def _passthrough_login_required(*args, **kwargs):

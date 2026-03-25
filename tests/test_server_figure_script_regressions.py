@@ -43,6 +43,8 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
                 r"\s*configure_import_runtime_paths\n"
                 r"\s*ensure_certificate_sans\n"
                 r"\s*cleanup_stale_repository_lock_files\n"
+                r"\s*cleanup_rendering_caches\n"
+                r"\s*toggle_zarr_pixel_buffer_plugin\n"
                 r"\s*install_figure_script\n"
                 r"\s*schedule_script_registration\n",
                 re.DOTALL,

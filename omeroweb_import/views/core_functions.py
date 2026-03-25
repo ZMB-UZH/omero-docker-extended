@@ -51,6 +51,7 @@ from ..services.ome_zarr_support import (
 from ..strings import errors, messages
 from ..utils.file_helpers import resolve_upload_root, resolve_jobs_root
 from omero_plugin_common.tmp_utils import get_plugin_tmp_dir
+from omero_plugin_common.env_utils import get_bool_env, ENV_FILE_OMEROWEB
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 from omero_plugin_common.tmp_cleanup import (
     safe_mark_path_for_deferred_cleanup,
@@ -167,6 +168,7 @@ __all__ = [
     '_safe_job_id',
     '_safe_relative_path',
     '_save_job',
+    '_native_zarr_import_enabled',
     '_special_methods_enabled',
     '_should_auto_skip_import',
     '_should_start_compatibility_check',
@@ -215,6 +217,7 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 UPLOAD_BATCH_FILES_ENV = "OMERO_WEB_UPLOAD_BATCH_FILES"
 DEFAULT_UPLOAD_BATCH_FILES = 5
 SPECIAL_METHODS_DISABLED_ENV = "OMERO_WEB_UPLOAD_DISABLE_SPECIAL_METHODS"
+NATIVE_ZARR_IMPORT_ENABLED_ENV = "OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT"
 MAX_IMPORT_LOG_LINES = 1000
 MAX_UPLOAD_PATH_COMPONENT_BYTES = 255
 MAX_UPLOAD_RELATIVE_PATH_BYTES = 2048
@@ -504,6 +507,10 @@ def _get_import_timeout_seconds() -> int:
 
 def _special_methods_enabled() -> bool:
     return not _get_env_bool(SPECIAL_METHODS_DISABLED_ENV)
+
+
+def _native_zarr_import_enabled() -> bool:
+    return get_bool_env(NATIVE_ZARR_IMPORT_ENABLED_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def _normalize_job_batch_size(value, default: int) -> int:
@@ -4228,7 +4235,7 @@ def _check_import_compatibility(
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
     )
-    if is_directory_zarr:
+    if is_directory_zarr and _native_zarr_import_enabled():
         native_plan = _native_zarr_import_plan(file_path)
         native_plan_payload = _serialize_native_zarr_plan(native_plan)
 
@@ -5677,9 +5684,10 @@ def _import_job_entry(
         file_path.is_dir()
         and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
     )
+    _native_import_on = is_directory_zarr and _native_zarr_import_enabled()
     native_plan = (
         _deserialize_native_zarr_plan(entry.get("native_zarr_plan"))
-        if is_directory_zarr
+        if _native_import_on
         else _NativeZarrImportPlan()
     )
     zarr_scan_status = None
@@ -5697,10 +5705,14 @@ def _import_job_entry(
         zarr_scan_status = entry.get("compatibility")
         zarr_scan_details = entry.get("compatibility_details", "") or ""
         zarr_import_backend = entry.get("import_backend")
-        if zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE and not native_plan.kind:
+        if not _native_import_on and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE:
+            zarr_import_backend = None
+            zarr_scan_status = "incompatible"
+        elif zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE and not native_plan.kind:
             native_plan = _native_zarr_import_plan(file_path)
     elif is_directory_zarr:
-        native_plan = _native_zarr_import_plan(file_path)
+        if _native_import_on:
+            native_plan = _native_zarr_import_plan(file_path)
         try:
             zarr_scan_result = _run_local_import_scan(file_path)
         except subprocess.TimeoutExpired:
@@ -5722,7 +5734,7 @@ def _import_job_entry(
             )
             if zarr_scan_status == "compatible":
                 zarr_import_backend = _ZARR_IMPORT_BACKEND_BIOFORMATS
-            elif zarr_scan_status == "incompatible" and native_plan and native_plan.kind:
+            elif zarr_scan_status == "incompatible" and _native_import_on and native_plan and native_plan.kind:
                 zarr_import_backend = _ZARR_IMPORT_BACKEND_NATIVE
 
     # ------------------------------------------------------------------

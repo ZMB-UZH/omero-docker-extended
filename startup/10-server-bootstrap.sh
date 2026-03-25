@@ -530,6 +530,123 @@ validate_repository_lock_cleanup_configuration() {
     fi
 }
 
+validate_rendering_cache_cleanup_configuration() {
+    local enabled="${OMERO_RENDERING_CACHE_CLEANUP_ON_START:-0}"
+
+    if [[ "${enabled}" != "0" && "${enabled}" != "1" ]]; then
+        echo "ERROR: OMERO_RENDERING_CACHE_CLEANUP_ON_START must be 0 or 1, got: '${enabled}'" >&2
+        exit 1
+    fi
+}
+
+cleanup_rendering_caches() {
+    local enabled="${OMERO_RENDERING_CACHE_CLEANUP_ON_START:-0}"
+
+    if [[ "${enabled}" != "1" ]]; then
+        log "Skipping rendering cache cleanup (OMERO_RENDERING_CACHE_CLEANUP_ON_START != 1)."
+        return
+    fi
+
+    local omero_dir="${OMERO_DIR%/}"
+    local pyramids_dir="${omero_dir}/Pixels"
+    local bioformats_cache_dir="${omero_dir}/BioFormatsCache"
+    local thumbnails_dir="${omero_dir}/Thumbnails"
+    local total_removed=0
+
+    # Pyramid cleanup is safe ONLY when OMERO_ZARR_PIXEL_BUFFER_ENABLED=false
+    # (the default).  With ZarrPixelsService disabled, the standard OMERO
+    # PixelsService handles pyramid regeneration automatically on first access.
+    if [[ -d "${pyramids_dir}" ]]; then
+        local pyramid_count=0
+        while IFS= read -r -d '' pyramid_path; do
+            rm -rf "${pyramid_path}" && pyramid_count=$((pyramid_count + 1))
+        done < <(find "${pyramids_dir}" -maxdepth 2 -name '*_pyramid' -print0 2>/dev/null)
+        if [[ "${pyramid_count}" -gt 0 ]]; then
+            log "Removed ${pyramid_count} pyramid file(s) from ${pyramids_dir}"
+            total_removed=$((total_removed + pyramid_count))
+        fi
+    fi
+
+    # --- Bio-Formats memo cache ---
+    if [[ -d "${bioformats_cache_dir}" ]]; then
+        local bf_count=0
+        bf_count=$(find "${bioformats_cache_dir}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+        if [[ "${bf_count}" -gt 0 ]]; then
+            rm -rf "${bioformats_cache_dir:?}"/*
+            log "Cleared Bio-Formats memo cache (${bf_count} entries) from ${bioformats_cache_dir}"
+            total_removed=$((total_removed + bf_count))
+        fi
+    fi
+
+    # --- Thumbnail cache ---
+    if [[ -d "${thumbnails_dir}" ]]; then
+        local thumb_count=0
+        thumb_count=$(find "${thumbnails_dir}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+        if [[ "${thumb_count}" -gt 0 ]]; then
+            rm -rf "${thumbnails_dir:?}"/*
+            log "Cleared thumbnail cache (${thumb_count} entries) from ${thumbnails_dir}"
+            total_removed=$((total_removed + thumb_count))
+        fi
+    fi
+
+    if [[ "${total_removed}" -gt 0 ]]; then
+        log "Rendering cache cleanup finished: removed ${total_removed} total item(s)"
+        log "IMPORTANT: Set OMERO_RENDERING_CACHE_CLEANUP_ON_START=0 in env/omeroserver.env to avoid repeating the cleanup on subsequent starts."
+    else
+        log "Rendering cache cleanup: nothing to remove"
+    fi
+}
+
+validate_zarr_pixel_buffer_configuration() {
+    local enabled="${OMERO_ZARR_PIXEL_BUFFER_ENABLED:-false}"
+
+    if [[ "${enabled}" != "true" && "${enabled}" != "false" && "${enabled}" != "0" && "${enabled}" != "1" ]]; then
+        echo "ERROR: OMERO_ZARR_PIXEL_BUFFER_ENABLED must be true or false, got: '${enabled}'" >&2
+        exit 1
+    fi
+}
+
+toggle_zarr_pixel_buffer_plugin() {
+    local enabled="${OMERO_ZARR_PIXEL_BUFFER_ENABLED:-false}"
+    local server_lib="${SERVER_HOME}/lib/server"
+    local disabled_dir="${SERVER_HOME}/lib/server-disabled"
+
+    if [[ "${enabled}" == "true" || "${enabled}" == "1" ]]; then
+        # Restore plugin JARs from disabled directory if they were previously moved
+        if [[ -d "${disabled_dir}" ]]; then
+            local restored=0
+            for jar in "${disabled_dir}"/omero-zarr-pixel-buffer-*.jar "${disabled_dir}"/caffeine-*.jar \
+                        "${disabled_dir}"/aws-java-sdk-*.jar "${disabled_dir}"/s3fs-*.jar "${disabled_dir}"/tika-core-*.jar; do
+                if [[ -f "${jar}" ]]; then
+                    mv "${jar}" "${server_lib}/" && restored=$((restored + 1))
+                fi
+            done
+            if [[ "${restored}" -gt 0 ]]; then
+                log "Restored ${restored} omero-zarr-pixel-buffer JAR(s) to classpath (OMERO_ZARR_PIXEL_BUFFER_ENABLED=true)"
+            fi
+        fi
+    else
+        # Move plugin JARs out of classpath so standard PixelsService handles everything
+        local moved=0
+        for jar in "${server_lib}"/omero-zarr-pixel-buffer-*.jar; do
+            if [[ -f "${jar}" ]]; then
+                mkdir -p "${disabled_dir}"
+                mv "${jar}" "${disabled_dir}/" && moved=$((moved + 1))
+                # Move runtime dependencies too
+                for dep in "${server_lib}"/caffeine-*.jar "${server_lib}"/aws-java-sdk-*.jar \
+                           "${server_lib}"/s3fs-*.jar "${server_lib}"/tika-core-*.jar; do
+                    if [[ -f "${dep}" ]]; then
+                        mv "${dep}" "${disabled_dir}/" && moved=$((moved + 1))
+                    fi
+                done
+            fi
+        done
+        if [[ "${moved}" -gt 0 ]]; then
+            log "Moved ${moved} omero-zarr-pixel-buffer JAR(s) out of classpath (OMERO_ZARR_PIXEL_BUFFER_ENABLED=false)"
+        fi
+    fi
+}
+
 validate_repo_root_sync_configuration() {
     local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
     local jitter="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
@@ -1793,6 +1910,8 @@ main() {
     validate_job_service_bootstrap_configuration
     validate_binary_repository_cleanse_configuration
     validate_repository_lock_cleanup_configuration
+    validate_rendering_cache_cleanup_configuration
+    validate_zarr_pixel_buffer_configuration
     validate_repo_root_sync_configuration
     apply_ldap_runtime_configuration
     reset_runtime_if_requested
@@ -1800,6 +1919,8 @@ main() {
     configure_import_runtime_paths
     ensure_certificate_sans
     cleanup_stale_repository_lock_files
+    cleanup_rendering_caches
+    toggle_zarr_pixel_buffer_plugin
     install_figure_script
     schedule_script_registration
     schedule_job_service_bootstrap

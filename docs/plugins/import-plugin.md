@@ -144,6 +144,7 @@ Configuration values in `env/omeroweb.env`:
 | `OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS` | Per-import subprocess timeout in seconds (default `86400`) |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_TIMEOUT_SECONDS` | Total retry window when the server-side Zarr helper reports `NoProcessorAvailable` |
 | `OMERO_WEB_UPLOAD_SCRIPT_START_RETRY_SECONDS` | Sleep interval between managed-repository helper launch retries |
+| `OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT` | Enable the alternative native zarr import method for Bio-Formats-incompatible `.zarr` files (default `false`). When `false`, only the standard Bio-Formats import path is used and incompatible zarr files are skipped. |
 | `OMERO_WEB_UPLOAD_NATIVE_ZARR_GZIP_LEVEL` | Gzip level used when the disposable native-import copy must rewrite Blosc-backed image arrays for render-safe import |
 | `OMERO_WEB_UPLOAD_FAILED_IMPORT_RETENTION_SECONDS` | Failed-job deferred cleanup window (default `172800`) |
 

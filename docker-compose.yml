@@ -354,8 +354,6 @@ services:
       - ./env/omero_secrets.env
       - ./env/omero-celery.env
     environment:
-      OMERO_DATA_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR (run installation/installation_script.sh)}"
-      OMERO_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR (run installation/installation_script.sh)}"
       CONFIG_omero_db_pass: "${OMERO_DB_PASS:?Set OMERO_DB_PASS in env/omero_secrets.env}"
       OMERO_TMP_PATH: "${OMERO_TMP_PATH:?Set OMERO_TMP_PATH}"
       OMERO_TMPDIR: "${OMERO_TMP_PATH}/omero-server/tmp"
