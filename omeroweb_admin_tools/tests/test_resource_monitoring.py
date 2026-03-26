@@ -536,7 +536,8 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
     payload = json.loads(response.content.decode("utf-8"))
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
     assert (
-        payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
+        payload["prometheus"]["targets_url"]
+        == "http://testserver:9090/targets"  # DevSkim: ignore DS137138
     )  # DevSkim: ignore DS137138 -- Django test request uses http by default
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload[
@@ -814,7 +815,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert (
-        captured["base_url"] == "http://grafana:3000"
+        captured["base_url"] == "http://grafana:3000"  # DevSkim: ignore DS137138
     )  # DevSkim: ignore DS137138 -- production default for internal Docker service
     assert captured["path"] == "d/omero-infrastructure/server-infrastructure"
     assert captured["query"] == "refresh=10s"
