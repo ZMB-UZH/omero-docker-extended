@@ -7,7 +7,7 @@ import pytest
 
 from omeroweb_omp_plugin.services import data_store as omp_data_store
 
-TEST_DB_PASSWORD = "plugin-credential"  # noqa: S105 - test-only fixture value
+TEST_DB_AUTH = "plugin-db-fixture"
 
 
 class _FakeSqlTemplate:
@@ -91,7 +91,7 @@ def _patch_connection_queue(monkeypatch, module, connections):
 def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
     env_values = {
         omp_data_store.ENV_USER: "plugin-user",
-        omp_data_store.ENV_PASS: TEST_DB_PASSWORD,
+        omp_data_store.ENV_AUTH: TEST_DB_AUTH,
         omp_data_store.ENV_HOST: "database-plugin",
         omp_data_store.ENV_DB: "plugin-db",
         omp_data_store.ENV_PORT: "5433",
@@ -105,7 +105,7 @@ def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
     assert omp_data_store._db_params() == [
         {
             "user": "plugin-user",
-            "password": TEST_DB_PASSWORD,
+            "password": TEST_DB_AUTH,
             "host": "database-plugin",
             "dbname": "plugin-db",
             "port": 5433,

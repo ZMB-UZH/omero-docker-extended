@@ -176,6 +176,13 @@ omeroweb_<name>/
 - Before running container-local Python that imports `omeroweb_import`, `omeroweb_admin_tools`, or `omero_plugin_common`, first resolve the runtime interpreter/module location with `python -c 'import module; print(module.__file__)'` or inspect the active `venv*/site-packages`.
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
+### Security scanning policy
+- When addressing code scanning findings, always fix the root cause. Do not add inline suppression comments (`# nosemgrep`, `# DevSkim: ignore`, `# nosec`, etc.) as a first resort.
+- Investigate each finding using multiple tools and online documentation to confirm whether it is a genuine issue or a false positive.
+- Suppression is permitted only when all evidence confirms the finding is a verified false positive (e.g. `psycopg2.sql.SQL().format(sql.Identifier())` is safe parameterized SQL; internal Docker network services legitimately use HTTP) **and** the root cause cannot be fixed without breaking functionality.
+- Every suppression must include a clear explanation of why it is a false positive and link to the verifying evidence.
+- Do not modify security scan workflow files unless explicitly instructed to do so.
+
 ### Testing
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
 - Run each test directory as a separate `pytest` invocation to avoid cross-contamination from `conftest.py` mock stubs. Running all suites in a single `pytest` call causes false failures in log-sanitization and multipart-upload tests.

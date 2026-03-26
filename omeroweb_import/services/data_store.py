@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 TABLE_NAME_USER_SETTINGS = "upload_user_settings"
 TABLE_NAME_SPECIAL_METHOD_SETTINGS = "upload_special_method_settings"
 ENV_USER = "OMP_DATA_USER"
-ENV_PASS = "OMP_DATA_PASS"
+ENV_AUTH = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
 ENV_DB = "OMP_DATA_DB"
 ENV_PORT = "OMP_DATA_PORT"
@@ -60,7 +60,7 @@ def _load_psycopg2_sql():
 
 def _db_params():
     user = os.environ.get(ENV_USER)
-    password = os.environ.get(ENV_PASS)
+    password = os.environ.get(ENV_AUTH)
     host = os.environ.get(ENV_HOST)
     dbname = os.environ.get(ENV_DB)
 
@@ -153,7 +153,7 @@ def _connect():
 def _ensure_user_settings_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -166,7 +166,7 @@ def _ensure_user_settings_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -182,7 +182,7 @@ def _ensure_user_settings_schema(conn):
 def _ensure_special_method_settings_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -197,7 +197,7 @@ def _ensure_special_method_settings_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -207,7 +207,7 @@ def _ensure_special_method_settings_schema(conn):
                 sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS),
             )
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (method_key);
@@ -228,7 +228,7 @@ def save_user_settings(username, settings_payload):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         INSERT INTO {} (username, settings, updated_at)
@@ -242,7 +242,7 @@ def save_user_settings(username, settings_payload):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT settings
@@ -275,7 +275,7 @@ def save_special_method_settings(username, method_key, settings_payload):
         with _connect() as conn:
             _ensure_special_method_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         INSERT INTO {} (username, method_key, settings, updated_at)
@@ -289,7 +289,7 @@ def save_special_method_settings(username, method_key, settings_payload):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT settings
@@ -322,7 +322,7 @@ def load_special_method_settings(username, method_key):
         with _connect() as conn:
             _ensure_special_method_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT settings

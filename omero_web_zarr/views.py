@@ -237,7 +237,6 @@ def image_zarray(request, iid, level, conn=None, **kwargs):
     ptype = image.getPrimaryPixels().getPixelsType().getValue()
     np_type = PIXEL_TYPES[ptype]
 
-    rsp = {"data": "fail"}
     with tempfile.TemporaryDirectory() as tmpdirname:
         open_compat_array(
             tmpdirname,

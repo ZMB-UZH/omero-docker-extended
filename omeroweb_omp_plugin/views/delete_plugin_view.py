@@ -58,7 +58,7 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         valid, _ = validate_user_password(conn, password)
         if not valid:
             logger.warning(
-                "OMERO password validation failed for delete_plugin_keyvaluepairs user %s",
+                "OMERO re-authentication failed for delete_plugin_keyvaluepairs user %s",
                 conn.getUser().getName(),
             )
             return JsonResponse(

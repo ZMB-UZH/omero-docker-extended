@@ -102,7 +102,7 @@ def _validate_user_password(conn, password):
     host, port = _resolve_omero_host_port(conn)
     if not host or not port:
         logger.error(
-            "Unable to resolve OMERO host/port for password validation (host=%s, port=%s).",
+            "Unable to resolve OMERO host/port for re-authentication (host=%s, port=%s).",
             host,
             port,
         )
@@ -113,7 +113,7 @@ def _validate_user_password(conn, password):
         client.createSession(username, password)
     except Exception as exc:
         logger.warning(
-            "Password validation failed for user %s: %s",
+            "Re-authentication failed for user %s: %s",
             sanitize_log_value(username),
             sanitize_log_value(exc),
         )

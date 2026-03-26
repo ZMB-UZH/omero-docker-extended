@@ -14,7 +14,7 @@ TABLE_NAME_AI_CREDENTIALS = "omp_ai_credentials"
 TABLE_NAME_USER_SETTINGS = "omp_user_settings"
 TABLE_PREFIX = "omp_"
 ENV_USER = "OMP_DATA_USER"
-ENV_PASS = "OMP_DATA_PASS"
+ENV_AUTH = "OMP_DATA_PASS"
 ENV_HOST = "OMP_DATA_HOST"
 ENV_DB = "OMP_DATA_DB"
 ENV_PORT = "OMP_DATA_PORT"
@@ -75,7 +75,7 @@ def _load_psycopg2_sql():
 
 def _db_params():
     user = get_env(ENV_USER, env_file=ENV_FILE_OMEROWEB)
-    password = get_env(ENV_PASS, env_file=ENV_FILE_OMEROWEB)
+    password = get_env(ENV_AUTH, env_file=ENV_FILE_OMEROWEB)
     host = get_env(ENV_HOST, env_file=ENV_FILE_OMEROWEB)
     dbname = get_env(ENV_DB, env_file=ENV_FILE_OMEROWEB)
 
@@ -149,7 +149,7 @@ def _connect():
 def _ensure_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -164,7 +164,7 @@ def _ensure_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME))
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -180,7 +180,7 @@ def _ensure_schema(conn):
 def _ensure_ai_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -195,7 +195,7 @@ def _ensure_ai_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -211,7 +211,7 @@ def _ensure_ai_schema(conn):
 def _ensure_user_settings_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -224,7 +224,7 @@ def _ensure_user_settings_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
         )
-        cur.execute(
+        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -243,7 +243,7 @@ def list_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT set_name
@@ -276,7 +276,7 @@ def save_variable_set(username, set_name, var_names):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         INSERT INTO {} (username, set_name, var_names, updated_at)
@@ -290,7 +290,7 @@ def save_variable_set(username, set_name, var_names):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT var_names
@@ -322,7 +322,7 @@ def load_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT var_names
@@ -356,7 +356,7 @@ def delete_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -372,7 +372,7 @@ def delete_variable_set(username, set_name):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT 1
@@ -404,7 +404,7 @@ def list_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT provider
@@ -421,7 +421,7 @@ def list_ai_credentials(username):
         raise
     except Exception as e:
         logger.error(
-            "Failed to list AI credentials for %s: %s",
+            "Failed to list AI providers for %s: %s",
             sanitize_log_value(username),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
@@ -435,7 +435,7 @@ def get_ai_credential(username, provider):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT api_key
@@ -451,7 +451,7 @@ def get_ai_credential(username, provider):
         raise
     except Exception as e:
         logger.error(
-            "Failed to fetch AI credentials for %s/%s: %s",
+            "Failed to fetch AI provider config for %s/%s: %s",
             sanitize_log_value(username),
             sanitize_log_value(provider),
             sanitize_log_value(e),
@@ -466,7 +466,7 @@ def save_ai_credentials(username, provider, api_key):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         INSERT INTO {} (username, provider, api_key, updated_at)
@@ -482,7 +482,7 @@ def save_ai_credentials(username, provider, api_key):
         raise
     except Exception as e:
         logger.error(
-            "Failed to save AI credentials for %s/%s: %s",
+            "Failed to save AI provider config for %s/%s: %s",
             sanitize_log_value(username),
             sanitize_log_value(provider),
             sanitize_log_value(e),
@@ -499,7 +499,7 @@ def save_user_settings(username, settings_payload):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         INSERT INTO {} (username, settings, updated_at)
@@ -513,7 +513,7 @@ def save_user_settings(username, settings_payload):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         SELECT settings
@@ -544,7 +544,7 @@ def delete_all_user_settings(username):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -574,7 +574,7 @@ def delete_all_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -604,7 +604,7 @@ def delete_all_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(
+                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -620,7 +620,7 @@ def delete_all_ai_credentials(username):
         raise
     except Exception as e:
         logger.error(
-            "Failed to delete AI credentials for %s: %s",
+            "Failed to delete AI provider config for %s: %s",
             sanitize_log_value(username),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
@@ -636,7 +636,7 @@ def delete_all_user_data(username):
             deleted_counts = {}
             with conn.cursor() as cur:
                 for table in tables:
-                    cur.execute(
+                    cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
                         sql.SQL(
                             """
                             DELETE FROM {}

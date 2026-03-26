@@ -32,8 +32,8 @@ from .core_functions import (
     _generate_orphan_dataset_name,
     _get_env_int,
     _get_jobs_root,
-    _get_or_create_dataset,
-    _get_session_key,
+    _get_or_create_dataset,  # noqa: F401 -- re-exported for test monkeypatching
+    _get_session_key,  # noqa: F401 -- re-exported for test monkeypatching
     _get_text,
     _get_upload_root,
     _has_read_write_permissions,
@@ -43,7 +43,7 @@ from .core_functions import (
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
     _normalize_upload_relative_path,
-    _prepare_job_import_datasets,
+    _prepare_job_import_datasets,  # noqa: F401 -- re-exported for test monkeypatching
     _prepare_uploaded_job_for_request_path_import,
     _refresh_job_status,
     _resolve_omero_host_port,
@@ -59,14 +59,6 @@ from .core_functions import (
     logger,
 )
 from .utils import current_username, json_error, load_json_body, require_non_root_user
-
-# Keep these helpers on the module surface because existing tests monkeypatch
-# them directly when isolating view logic.
-_EXPORTED_HELPERS = (
-    _get_or_create_dataset,
-    _get_session_key,
-    _prepare_job_import_datasets,
-)
 
 
 @login_required()
@@ -862,7 +854,6 @@ def confirm_import(request, job_id, conn=None, url=None, **kwargs):
     prepared_job, prep_error = _prepare_ready_job_for_import_start(job_id, job, conn)
     if prep_error:
         return json_error(prep_error, status=500)
-    job = prepared_job or job
     _start_import_thread(job_id)
 
     return JsonResponse({"ok": True, "status": "ready"})
