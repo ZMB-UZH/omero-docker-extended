@@ -1,0 +1,120 @@
+name: sonarcloud
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonarcloud:
+    name: SonarCloud analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout (full history for blame data)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install test and coverage dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install \
+            pytest \
+            coverage \
+            django \
+            pyyaml \
+            portalocker \
+            psycopg2-binary \
+            numpy \
+            numcodecs \
+            matplotlib \
+            ome-zarr \
+            zarr \
+            tifffile
+
+      # Each test suite MUST be a separate invocation — the root
+      # conftest.py installs mock stubs that interfere across test
+      # modules when run in a single process.
+      - name: Run all test suites with coverage
+        run: |
+          set +e
+          EXIT_FINAL=0
+
+          echo "::group::tests/"
+          COVERAGE_FILE=.coverage.root \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omero_plugin_common/tests/"
+          COVERAGE_FILE=.coverage.common \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omero_plugin_common/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_imaris_connector/tests/"
+          COVERAGE_FILE=.coverage.imaris \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_imaris_connector/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_admin_tools/tests/"
+          COVERAGE_FILE=.coverage.admin \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_omp_plugin/tests/"
+          COVERAGE_FILE=.coverage.omp \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omeroweb_import/tests/"
+          COVERAGE_FILE=.coverage.import \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          echo "::group::omero_web_zarr/tests/"
+          COVERAGE_FILE=.coverage.zarr \
+            python3 -m coverage run --rcfile=.coveragerc \
+            -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
+          [ $? -ne 0 ] && EXIT_FINAL=1
+          echo "::endgroup::"
+
+          exit $EXIT_FINAL
+
+      - name: Combine coverage
+        if: always()
+        run: |
+          python3 -m coverage combine --rcfile=.coveragerc
+          python3 -m coverage xml --rcfile=.coveragerc
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
