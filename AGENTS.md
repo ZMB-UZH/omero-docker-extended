@@ -5,6 +5,7 @@ It is intentionally short. Deep context lives in the files it points to.
 
 ## Working contract
 
+- **Never use background agents or subagents** unless the user explicitly asks for them. All work must be done directly in the main conversation. Background agents have produced hallucinated data (e.g. fabricated commit SHAs) that broke CI workflows.
 - All configuration is environment-driven. Never hard-code paths, credentials, or endpoints.
 - Keep changes deterministic, explicit, and reproducible across environments.
 - Prefer small, focused pull requests with clear acceptance criteria.
