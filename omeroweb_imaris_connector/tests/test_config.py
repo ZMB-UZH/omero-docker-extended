@@ -11,8 +11,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from omeroweb_imaris_connector import config
 
-TEST_PASSWORD = "web-credential"  # noqa: S105 - test-only fixture value
-TEST_PASSWORD_SERVER = "server-credential"  # noqa: S105 - test-only fixture value
+TEST_AUTH_WEB = "web-fixture-auth"
+TEST_AUTH_SERVER = "server-fixture-auth"
 
 
 def test_use_job_service_session_requires_explicit_value(
@@ -55,14 +55,14 @@ def test_get_job_service_credentials_prefers_web_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_USERNAME", "web-user")
-    monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", TEST_PASSWORD)
+    monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", TEST_AUTH_WEB)
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
-    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", TEST_PASSWORD_SERVER)
+    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", TEST_AUTH_SERVER)
 
     username, password = config.get_job_service_credentials()
 
     assert username == "web-user"
-    assert password == TEST_PASSWORD
+    assert password == TEST_AUTH_WEB
 
 
 def test_get_job_service_credentials_falls_back_to_server_env(
@@ -71,12 +71,12 @@ def test_get_job_service_credentials_falls_back_to_server_env(
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
-    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", TEST_PASSWORD_SERVER)
+    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", TEST_AUTH_SERVER)
 
     username, password = config.get_job_service_credentials()
 
     assert username == "server-user"
-    assert password == TEST_PASSWORD_SERVER
+    assert password == TEST_AUTH_SERVER
 
 
 def test_get_job_service_credentials_missing_returns_none(

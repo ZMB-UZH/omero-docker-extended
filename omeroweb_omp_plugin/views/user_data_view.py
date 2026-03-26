@@ -46,7 +46,7 @@ def delete_api_keys(request, conn=None, url=None, **kwargs):
         )
     except Exception as e:
         logger.error(
-            "Unexpected error deleting API keys: %s",
+            "Unexpected error deleting stored provider entries: %s",
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )

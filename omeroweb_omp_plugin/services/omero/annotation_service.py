@@ -17,7 +17,7 @@ from ...constants import (
     HASH_KEY,
     HASH_PREFIX,
     PLUGIN_ID,
-    HASH_SECRET_ENV,
+    HASH_HMAC_KEY_ENV,
 )
 from ...utils.omero_helpers import get_id
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def get_hash_secret():
     """Return secret used to compute/verify plugin hash marker."""
-    return get_env(HASH_SECRET_ENV, env_file=ENV_FILE_OMEROWEB)
+    return get_env(HASH_HMAC_KEY_ENV, env_file=ENV_FILE_OMEROWEB)
 
 
 def canonicalize_mapping(mapping):

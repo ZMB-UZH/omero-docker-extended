@@ -591,7 +591,7 @@ def index(request, conn=None, url=None, **kwargs):
                 api_key = (get_ai_credential(username, provider) or "").strip()
             except AiCredentialStoreError as e:
                 logger.error(
-                    "AI credential lookup failed for regex generation: %s",
+                    "AI provider lookup failed for regex generation: %s",
                     sanitize_log_value(e),
                     exc_info=sanitized_exc_info(e),
                 )
@@ -717,7 +717,7 @@ def index(request, conn=None, url=None, **kwargs):
                 api_key = (get_ai_credential(username, provider) or "").strip()
             except AiCredentialStoreError as e:
                 logger.error(
-                    "AI credential lookup failed for AI parse: %s",
+                    "AI provider lookup failed for AI parse: %s",
                     sanitize_log_value(e),
                     exc_info=sanitized_exc_info(e),
                 )

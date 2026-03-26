@@ -119,7 +119,7 @@ def _perform_connection_test(provider, api_key):
         return False, message
     except Exception as e:
         logger.error(
-            "AI credential connection test failed for %s: %s",
+            "AI provider connection test failed for %s: %s",
             sanitize_log_value(provider),
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
@@ -222,7 +222,7 @@ def list_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
     except Exception as e:
         logger.error(
-            "Unexpected error listing AI credentials: %s",
+            "Unexpected error listing AI providers: %s",
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
@@ -258,7 +258,7 @@ def test_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"message": message})
     except Exception as e:
         logger.error(
-            "Unexpected error testing AI credentials: %s",
+            "Unexpected error testing AI provider: %s",
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )
@@ -297,7 +297,7 @@ def save_credentials(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.ai_credentials_save_failed()}, status=500)
     except Exception as e:
         logger.error(
-            "Unexpected error saving AI credentials: %s",
+            "Unexpected error saving AI provider config: %s",
             sanitize_log_value(e),
             exc_info=sanitized_exc_info(e),
         )

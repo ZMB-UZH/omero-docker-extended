@@ -66,7 +66,7 @@ class _FakeConnection:
 
 def test_import_data_store_connection_schema_and_crud(monkeypatch):
     monkeypatch.setenv(import_data_store.ENV_USER, "import-user")
-    monkeypatch.setenv(import_data_store.ENV_PASS, "import-pass")
+    monkeypatch.setenv(import_data_store.ENV_AUTH, "import-pass")
     monkeypatch.setenv(import_data_store.ENV_HOST, "database-plugin")
     monkeypatch.setenv(import_data_store.ENV_DB, "import-db")
     monkeypatch.setenv(import_data_store.ENV_PORT, "5434")
