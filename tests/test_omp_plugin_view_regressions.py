@@ -278,6 +278,10 @@ def _clear_omp_modules() -> None:
             sys.modules.pop(module_name, None)
 
 
+TEST_PASSWORD = "credential"  # noqa: S105 - test-only fixture value
+TEST_PASSWORD_SECRET = "credential-secret"  # noqa: S105 - test-only fixture value
+
+
 class OmpPluginViewRegressionTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -342,7 +346,9 @@ class OmpPluginViewRegressionTests(TestCase):
             return_value=(False, "Wrong password."),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
-                self._make_request(payload={"project_id": 1, "password": "credential"}),
+                self._make_request(
+                    payload={"project_id": 1, "password": TEST_PASSWORD}
+                ),
                 conn=mock.Mock(),
             )
 
@@ -407,7 +413,7 @@ class OmpPluginViewRegressionTests(TestCase):
         ):
             response = view_module.delete_plugin_keyvaluepairs(
                 self._make_request(
-                    payload={"project_id": 1, "password": "credential-secret"}
+                    payload={"project_id": 1, "password": TEST_PASSWORD_SECRET}
                 ),
                 conn=conn,
             )
@@ -429,7 +435,7 @@ class OmpPluginViewRegressionTests(TestCase):
             ],
             recorded_commands[0],
         )
-        self.assertNotIn("credential-secret", recorded_commands[0])
+        self.assertNotIn(TEST_PASSWORD_SECRET, recorded_commands[0])
 
     def test_delete_all_view_uses_session_key_cli_without_passing_password(
         self,
@@ -482,7 +488,7 @@ class OmpPluginViewRegressionTests(TestCase):
         ):
             response = view_module.delete_all_keyvaluepairs(
                 self._make_request(
-                    payload={"project_id": 1, "password": "credential-secret"}
+                    payload={"project_id": 1, "password": TEST_PASSWORD_SECRET}
                 ),
                 conn=conn,
             )
@@ -508,7 +514,7 @@ class OmpPluginViewRegressionTests(TestCase):
             ],
             recorded_commands[0],
         )
-        self.assertNotIn("credential-secret", recorded_commands[0])
+        self.assertNotIn(TEST_PASSWORD_SECRET, recorded_commands[0])
 
     def test_job_view_invalid_regex_message_is_sanitized(self) -> None:
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
@@ -630,7 +636,7 @@ class OmpPluginViewRegressionTests(TestCase):
                 ):
                     response = getattr(view_module, function_name)(
                         self._make_request(
-                            payload={"project_id": 1, "password": "credential"}
+                            payload={"project_id": 1, "password": TEST_PASSWORD}
                         ),
                         conn=conn,
                     )

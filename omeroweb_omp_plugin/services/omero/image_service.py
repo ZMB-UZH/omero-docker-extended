@@ -366,7 +366,7 @@ def collect_images_in_project(conn, project_id, limit=None):
     try:
         project = conn.getObject("Project", int(project_id))
         if project is None:
-            logger.warning("Project %s not found", project_id)
+            logger.warning("Project %s not found", sanitize_log_value(project_id))
             return images
 
         for ds in project.listChildren():

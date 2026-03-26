@@ -28,9 +28,12 @@ def _load_xt_module():
     return module
 
 
+TEST_PASSWORD = "test-pass"  # noqa: S105 - test-only fixture value
+
+
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", "pass")
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_PASSWORD)
     client.session_id = "session-123"
     client.csrf_token = "request-token-123"
 
@@ -44,7 +47,7 @@ def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
 
 def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", "pass")
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_PASSWORD)
     client.session_id = "session-123"
     client.csrf_token = "request-token-123"
 
