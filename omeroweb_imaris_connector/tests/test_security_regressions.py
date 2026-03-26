@@ -282,8 +282,10 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs)
-        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
+        lambda **kwargs: (
+            captured.update(kwargs)
+            or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
+        ),
     )
 
     result = tasks.run_ims_export_task(
@@ -320,8 +322,10 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs)
-        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
+        lambda **kwargs: (
+            captured.update(kwargs)
+            or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
+        ),
     )
 
     result = tasks.run_ims_export_task(
@@ -361,8 +365,10 @@ def test_run_ims_export_task_uses_job_service_session_key_when_user_session_miss
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs)
-        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
+        lambda **kwargs: (
+            captured.update(kwargs)
+            or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
+        ),
     )
 
     result = tasks.run_ims_export_task(

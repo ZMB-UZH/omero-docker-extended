@@ -342,9 +342,7 @@ class OmpPluginViewRegressionTests(TestCase):
             return_value=(False, "Wrong password."),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
-                self._make_request(
-                    payload={"project_id": 1, "password": "credential"}
-                ),
+                self._make_request(payload={"project_id": 1, "password": "credential"}),
                 conn=mock.Mock(),
             )
 
