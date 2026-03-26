@@ -1,8 +1,7 @@
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from django.utils.html import escape
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html_join
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
@@ -1016,13 +1015,17 @@ def index(request, conn=None, url=None, **kwargs):
 
             preview_rows_payload = []
             for ds_label, img_id, fname, vars_dict in preview_rows:
-                kv = " | ".join(f"{k[3:]}='{escape(v)}'" for k, v in vars_dict.items())
+                kv_display = format_html_join(
+                    " | ",
+                    "{}='{}'",
+                    ((k[3:], v) for k, v in vars_dict.items()),
+                )
                 preview_rows_payload.append(
                     {
                         "ds_label": ds_label,
                         "img_id": img_id,
                         "filename": fname,
-                        "vars_display": mark_safe(kv),
+                        "vars_display": kv_display,
                     }
                 )
 

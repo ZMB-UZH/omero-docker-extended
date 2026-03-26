@@ -540,6 +540,16 @@ def test_ome_zarr_support_helpers_cover_metadata_fallback_axes_sizes_and_chunk_w
     monkeypatch.setenv(support.OME_ZARR_NATIVE_GZIP_LEVEL_ENV, "4")
     assert support._native_ome_zarr_gzip_level() == 4
 
+    # Edge case: if _load_root_ome_zarr_metadata ever returns (None, None)
+    # (a bug in the helper), inspect_ome_zarr_image should return a
+    # non-crashing "not recognized" result instead of a None-dereference.
+    monkeypatch.setattr(
+        support, "_load_root_ome_zarr_metadata", lambda _path: (None, None)
+    )
+    result = support.inspect_ome_zarr_image(tmp_path / "dummy.zarr")
+    assert not result.recognized
+    assert result.support_error is not None
+
 
 def test_import_help_page_serves_markdown_and_404s_when_missing(monkeypatch, tmp_path):
     request = RequestFactory().get("/omeroweb_import/help/")

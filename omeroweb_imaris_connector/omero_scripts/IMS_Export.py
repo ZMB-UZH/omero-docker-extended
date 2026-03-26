@@ -88,7 +88,7 @@ def _ensure_bioformats_jar(install_dir):
                 jar_path,
                 cache_path,
                 expected_sha256=_sha256_file(jar_path),
-                file_mode=0o644,
+                file_mode=0o640,
                 description="cached Bio-Formats jar",
             ):
                 _write_expected_sha256(cache_sha256_path, _sha256_file(jar_path))
@@ -137,7 +137,7 @@ def _write_expected_sha256(path, sha256_value):
     try:
         with open(tmp_path, "w", encoding="ascii") as handle:
             handle.write(f"{sha256_value}  {BIOFORMATS_JAR_NAME}\n")
-        os.chmod(tmp_path, 0o644)
+        os.chmod(tmp_path, 0o640)
         os.replace(tmp_path, path)
         return True
     except OSError as exc:
