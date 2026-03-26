@@ -149,7 +149,7 @@ def _connect():
 def _ensure_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -164,7 +164,7 @@ def _ensure_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME))
         )
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -180,7 +180,7 @@ def _ensure_schema(conn):
 def _ensure_ai_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -195,7 +195,7 @@ def _ensure_ai_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
         )
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -211,7 +211,7 @@ def _ensure_ai_schema(conn):
 def _ensure_user_settings_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE TABLE IF NOT EXISTS {} (
@@ -224,7 +224,7 @@ def _ensure_user_settings_schema(conn):
                 """
             ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
         )
-        cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+        cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             sql.SQL(
                 """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
@@ -243,7 +243,7 @@ def list_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT set_name
@@ -276,7 +276,7 @@ def save_variable_set(username, set_name, var_names):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         INSERT INTO {} (username, set_name, var_names, updated_at)
@@ -290,7 +290,7 @@ def save_variable_set(username, set_name, var_names):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT var_names
@@ -322,7 +322,7 @@ def load_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT var_names
@@ -356,7 +356,7 @@ def delete_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -372,7 +372,7 @@ def delete_variable_set(username, set_name):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT 1
@@ -404,7 +404,7 @@ def list_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT provider
@@ -435,7 +435,7 @@ def get_ai_credential(username, provider):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT api_key
@@ -466,7 +466,7 @@ def save_ai_credentials(username, provider, api_key):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         INSERT INTO {} (username, provider, api_key, updated_at)
@@ -499,7 +499,7 @@ def save_user_settings(username, settings_payload):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         INSERT INTO {} (username, settings, updated_at)
@@ -513,7 +513,7 @@ def save_user_settings(username, settings_payload):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         SELECT settings
@@ -544,7 +544,7 @@ def delete_all_user_settings(username):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -574,7 +574,7 @@ def delete_all_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -604,7 +604,7 @@ def delete_all_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     sql.SQL(
                         """
                         DELETE FROM {}
@@ -636,7 +636,7 @@ def delete_all_user_data(username):
             deleted_counts = {}
             with conn.cursor() as cur:
                 for table in tables:
-                    cur.execute(  # nosemgrep: sqlalchemy-execute-raw-query -- psycopg2.sql.SQL is safe parameterized SQL
+                    cur.execute(  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                         sql.SQL(
                             """
                             DELETE FROM {}

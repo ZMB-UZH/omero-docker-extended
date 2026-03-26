@@ -1528,8 +1528,9 @@ def resource_monitoring_data(request, conn=None, url=None, **kwargs):
         return root_error
 
     grafana_base_url = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000"
-    )  # DevSkim: ignore DS137138
+        "ADMIN_TOOLS_GRAFANA_URL",
+        "http://grafana:3000",  # DevSkim: ignore DS137138
+    )
     prometheus_base_url = os.environ.get(
         "ADMIN_TOOLS_PROMETHEUS_URL",
         "http://prometheus:9090",  # DevSkim: ignore DS137138
@@ -1755,8 +1756,9 @@ def grafana_proxy(request, subpath: str, conn=None, url=None, **kwargs):
         return root_error
 
     grafana_base_url = os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000"
-    )  # DevSkim: ignore DS137138
+        "ADMIN_TOOLS_GRAFANA_URL",
+        "http://grafana:3000",  # DevSkim: ignore DS137138
+    )
     grafana_public_url = os.environ.get("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "")
     backend_urls = _build_proxy_backend_urls(grafana_base_url, grafana_public_url)
 
