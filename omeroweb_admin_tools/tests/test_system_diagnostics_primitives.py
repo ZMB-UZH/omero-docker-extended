@@ -208,14 +208,17 @@ def test_docker_api_json_and_runtime_inspection_handle_socket_and_payload_cases(
 
 
 def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
-    monkeypatch.setattr(
-        system_diagnostics,
-        "_load_psycopg2",
-        lambda: type(
+    def _psycopg2_single_value():
+        return type(
             "Psycopg2",
             (),
             {"connect": staticmethod(lambda **kwargs: _PgConnection((1,)))},
-        )(),
+        )()
+
+    monkeypatch.setattr(
+        system_diagnostics,
+        "_load_psycopg2",
+        _psycopg2_single_value,
     )
     value, error = system_diagnostics._execute_sql_sanity_query(
         DatabaseRuntimeProfile("database", 5432, "omero", "secret", "omero")
@@ -253,7 +256,7 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
         lambda request, timeout=1.0: _FakeResponse(200, b""),
     )
     http_pass = system_diagnostics._http_probe(
-        "http", "Probe HTTP", "http://omeroserver", 1.0
+        "http", "Probe HTTP", "https://omeroserver", 1.0
     )
     assert http_pass.status == "pass"
 
@@ -265,7 +268,7 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
         ),
     )
     http_fail = system_diagnostics._http_probe(
-        "http", "Probe HTTP", "http://omeroserver", 1.0
+        "http", "Probe HTTP", "https://omeroserver", 1.0
     )
     assert http_fail.status == "fail"
 
@@ -293,18 +296,21 @@ def test_sql_and_network_primitives_report_success_and_failure(monkeypatch):
         lambda request, timeout=1.0: _FakeResponse(503, b""),
     )
     http_warn = system_diagnostics._http_probe(
-        "http", "Probe HTTP", "http://omeroserver", 1.0
+        "http", "Probe HTTP", "https://omeroserver", 1.0
     )
     assert http_warn.status == "warn"
+
+    def _psycopg2_bad_value():
+        return type(
+            "Psycopg2",
+            (),
+            {"connect": staticmethod(lambda **kwargs: _PgConnection(("bad",)))},
+        )()
 
     monkeypatch.setattr(
         system_diagnostics,
         "_load_psycopg2",
-        lambda: type(
-            "Psycopg2",
-            (),
-            {"connect": staticmethod(lambda **kwargs: _PgConnection(("bad",)))},
-        )(),
+        _psycopg2_bad_value,
     )
     value, error = system_diagnostics._execute_sql_sanity_query(
         DatabaseRuntimeProfile("database", 5432, "omero", "secret", "omero")

@@ -198,7 +198,7 @@ def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries()
 
 def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
     config = LogConfig(
-        loki_url="http://loki:3100",
+        loki_url="https://loki:3100",
         lookback_seconds=900,
         max_entries=5000,
         timeout_seconds=30.0,
@@ -239,7 +239,7 @@ def test_fetch_loki_logs_uses_process_local_cache(monkeypatch) -> None:
 
 def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
     config = LogConfig(
-        loki_url="http://loki:3100",
+        loki_url="https://loki:3100",
         lookback_seconds=900,
         max_entries=5000,
         timeout_seconds=30.0,
@@ -282,7 +282,7 @@ def test_fetch_loki_logs_cache_key_varies_by_text_query(monkeypatch) -> None:
 
 def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> None:
     config = LogConfig(
-        loki_url="http://loki:3100",
+        loki_url="https://loki:3100",
         lookback_seconds=900,
         max_entries=5000,
         timeout_seconds=30.0,

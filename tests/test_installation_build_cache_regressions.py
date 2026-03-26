@@ -10,6 +10,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class InstallationBuildCacheRegressionTests(unittest.TestCase):
     """Exercise installer cache behavior in both compose and Buildx modes."""
 
@@ -77,7 +80,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", str(harness_path)],
+                [BASH_BIN, str(harness_path)],
                 cwd=temp_path,
                 text=True,
                 capture_output=True,
@@ -134,7 +137,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", str(harness_path)],
+                [BASH_BIN, str(harness_path)],
                 cwd=temp_path,
                 text=True,
                 capture_output=True,
@@ -197,7 +200,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", str(harness_path)],
+                [BASH_BIN, str(harness_path)],
                 cwd=temp_path,
                 text=True,
                 capture_output=True,
@@ -260,7 +263,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", str(harness_path)],
+                [BASH_BIN, str(harness_path)],
                 cwd=temp_path,
                 text=True,
                 capture_output=True,

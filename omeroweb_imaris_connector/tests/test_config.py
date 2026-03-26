@@ -52,14 +52,14 @@ def test_get_job_service_credentials_prefers_web_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_USERNAME", "web-user")
-    monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", "web-pass")
+    monkeypatch.setenv("OMERO_WEB_JOB_SERVICE_PASS", "web-credential")
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
-    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", "server-pass")
+    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", "server-credential")
 
     username, password = config.get_job_service_credentials()
 
     assert username == "web-user"
-    assert password == "web-pass"
+    assert password == "web-credential"
 
 
 def test_get_job_service_credentials_falls_back_to_server_env(
@@ -68,12 +68,12 @@ def test_get_job_service_credentials_falls_back_to_server_env(
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_USERNAME", raising=False)
     monkeypatch.delenv("OMERO_WEB_JOB_SERVICE_PASS", raising=False)
     monkeypatch.setenv("OMERO_JOB_SERVICE_USERNAME", "server-user")
-    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", "server-pass")
+    monkeypatch.setenv("OMERO_JOB_SERVICE_PASS", "server-credential")
 
     username, password = config.get_job_service_credentials()
 
     assert username == "server-user"
-    assert password == "server-pass"
+    assert password == "server-credential"
 
 
 def test_get_job_service_credentials_missing_returns_none(

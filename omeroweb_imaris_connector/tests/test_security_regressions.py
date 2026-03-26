@@ -4,8 +4,12 @@ import json
 import sys
 import types
 import urllib.parse
+from pathlib import Path
 
 import pytest
+
+
+TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
 
 
 class _BaseResponse:
@@ -143,11 +147,11 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OMERO_IMS_EXPORT_TIMEOUT": "10",
         "OMERO_IMS_EXPORT_POLL_INTERVAL": "0.1",
         "OMERO_IMS_SCRIPT_NAME": "IMS_Export.py",
-        "OMERO_IMS_EXPORT_DIR": "/tmp",
+        "OMERO_IMS_EXPORT_DIR": str(TEST_RUNTIME_ROOT / "export"),
         "OMERO_IMS_SCRIPT_START_TIMEOUT": "1",
         "OMERO_IMS_SCRIPT_START_RETRY_INTERVAL": "0.1",
         "OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL": "10",
-        "OMERO_TMP_PATH": "/tmp",
+        "OMERO_TMP_PATH": str(TEST_RUNTIME_ROOT / "tmp"),
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
@@ -278,7 +282,8 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs) or {"Export_Path": "/tmp/export.ims"},
+        lambda **kwargs: captured.update(kwargs)
+        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
     )
 
     result = tasks.run_ims_export_task(
@@ -315,7 +320,8 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs) or {"Export_Path": "/tmp/export.ims"},
+        lambda **kwargs: captured.update(kwargs)
+        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
     )
 
     result = tasks.run_ims_export_task(
@@ -355,7 +361,8 @@ def test_run_ims_export_task_uses_job_service_session_key_when_user_session_miss
     monkeypatch.setattr(
         tasks,
         "_run_script_via_omero_cli",
-        lambda **kwargs: captured.update(kwargs) or {"Export_Path": "/tmp/export.ims"},
+        lambda **kwargs: captured.update(kwargs)
+        or {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")},
     )
 
     result = tasks.run_ims_export_task(

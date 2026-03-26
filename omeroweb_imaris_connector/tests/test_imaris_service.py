@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
 
 class NoProcessorAvailable(Exception):
     """Stub for OMERO NoProcessorAvailable exceptions."""
+
+
+TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / "_runtime"
 
 
 def _install_omero_stub() -> None:
@@ -26,10 +30,10 @@ def _install_omero_stub() -> None:
 
 def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMERO_IMS_SCRIPT_NAME", "IMS_Export.py")
-    monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", "/tmp")
+    monkeypatch.setenv("OMERO_IMS_EXPORT_DIR", str(TEST_RUNTIME_ROOT / "export"))
     monkeypatch.setenv("OMERO_IMS_EXPORT_TIMEOUT", "10")
     monkeypatch.setenv("OMERO_IMS_EXPORT_POLL_INTERVAL", "0.1")
-    monkeypatch.setenv("OMERO_TMP_PATH", "/tmp")
+    monkeypatch.setenv("OMERO_TMP_PATH", str(TEST_RUNTIME_ROOT / "tmp"))
     monkeypatch.setenv("OMERO_IMS_SCRIPT_START_TIMEOUT", "1")
     monkeypatch.setenv("OMERO_IMS_SCRIPT_START_RETRY_INTERVAL", "0.1")
     monkeypatch.setenv("OMERO_IMS_PROCESSOR_CONFIG_CACHE_TTL", "10")
@@ -228,7 +232,7 @@ def test_wait_for_process_detaches_after_completion(
             return "FINISHED"
 
         def getResults(self, *_args):
-            return {"Export_Path": "/tmp/export.ims"}
+            return {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
 
         def close(self, *_args):
             self.closed = True
@@ -239,5 +243,5 @@ def test_wait_for_process_detaches_after_completion(
     state, outputs = imaris_service._wait_for_process(proc, timeout=1)
 
     assert state == "FINISHED"
-    assert outputs == {"Export_Path": "/tmp/export.ims"}
+    assert outputs == {"Export_Path": str(TEST_RUNTIME_ROOT / "export.ims")}
     assert proc.closed is True

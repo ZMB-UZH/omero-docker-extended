@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -268,7 +269,7 @@ def test_reconcile_marks_pending_when_group_directory_missing(
 
 
 def test_detect_filesystem_returns_metadata_for_existing_path() -> None:
-    fs = detect_filesystem(Path("/tmp"))
+    fs = detect_filesystem(Path(tempfile.gettempdir()))
 
     assert isinstance(fs.fs_type, str)
     assert isinstance(fs.mount_point, str)

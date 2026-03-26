@@ -187,7 +187,7 @@ def _plugin_mapping(secret=None, **extra):
 
 def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypatch):
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
-    monkeypatch.setattr(annotation_service, "rlong", lambda value: _Value(value))
+    monkeypatch.setattr(annotation_service, "rlong", _Value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
 
     mapping = _plugin_mapping("shared-secret", alpha="1", beta=None)
@@ -218,8 +218,8 @@ def test_annotation_hash_helpers_detect_preloaded_and_database_fallback(monkeypa
 
 def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
-    monkeypatch.setattr(annotation_service, "rlong", lambda value: _Value(value))
-    monkeypatch.setattr(annotation_service, "rstring", lambda value: _Value(value))
+    monkeypatch.setattr(annotation_service, "rlong", _Value)
+    monkeypatch.setattr(annotation_service, "rstring", _Value)
     monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
     monkeypatch.setattr(
         annotation_service, "get_id", lambda obj: getattr(obj, "id", None)

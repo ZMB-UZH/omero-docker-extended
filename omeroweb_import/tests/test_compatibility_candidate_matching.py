@@ -16,7 +16,7 @@ def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
     tmp_path: Path,
 ):
     expected_file = tmp_path / "sample.unsupported"
-    stdout = "/tmp/other-file.tiff\n"
+    stdout = f"{tmp_path / 'other-file.tiff'}\n"
 
     status, _details = _classify_compatibility_output(
         0,
@@ -44,7 +44,7 @@ def test_classify_marks_compatible_when_expected_file_is_candidate(tmp_path: Pat
 
 def test_classify_marks_incompatible_when_stdout_has_non_path_line(tmp_path: Path):
     expected_file = tmp_path / "sample.unsupported"
-    stdout = "Using OMERODIR=/tmp/compat-check-1234\n"
+    stdout = f"Using OMERODIR={tmp_path / 'compat-check-1234'}\n"
 
     status, _details = _classify_compatibility_output(
         0,

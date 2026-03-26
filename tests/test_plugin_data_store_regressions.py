@@ -89,7 +89,7 @@ def _patch_connection_queue(monkeypatch, module, connections):
 def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
     env_values = {
         omp_data_store.ENV_USER: "plugin-user",
-        omp_data_store.ENV_PASS: "plugin-pass",
+        omp_data_store.ENV_PASS: "plugin-credential",
         omp_data_store.ENV_HOST: "database-plugin",
         omp_data_store.ENV_DB: "plugin-db",
         omp_data_store.ENV_PORT: "5433",
@@ -103,7 +103,7 @@ def test_omp_data_store_connection_and_schema_helpers(monkeypatch):
     assert omp_data_store._db_params() == [
         {
             "user": "plugin-user",
-            "password": "plugin-pass",
+            "password": "plugin-credential",
             "host": "database-plugin",
             "dbname": "plugin-db",
             "port": 5433,

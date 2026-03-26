@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class RepoRootSyncRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -244,7 +247,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         )
 
         result = subprocess.run(
-            ["bash", "-lc", script],
+            [BASH_BIN, "-lc", script],
             check=False,
             text=True,
             stdout=subprocess.PIPE,
@@ -291,7 +294,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             )
 
             result = subprocess.run(
-                ["bash", "-lc", script],
+                [BASH_BIN, "-lc", script],
                 check=False,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -303,7 +306,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "-lc", script],
+            [BASH_BIN, "-lc", script],
             check=True,
             text=True,
             stdout=subprocess.PIPE,

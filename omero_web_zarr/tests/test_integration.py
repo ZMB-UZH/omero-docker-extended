@@ -835,10 +835,13 @@ def test_load_metadata_preview_with_safe_rendering_returns_empty_rdefs(monkeypat
 
     from omeroweb.webclient import views as webclient_views
 
+    def _build_metadata_preview_container(conn, **kwargs):
+        return _FakeMetadataPreviewContainer(conn, **kwargs)
+
     monkeypatch.setattr(
         webclient_views,
         "BaseContainer",
-        lambda conn, **kwargs: _FakeMetadataPreviewContainer(conn, **kwargs),
+        _build_metadata_preview_container,
     )
     monkeypatch.setattr(webclient_views, "BaseShare", lambda conn, share_id: object())
     monkeypatch.setattr(
