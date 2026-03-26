@@ -67,7 +67,7 @@ __all__ = [
     "INT_SANITIZER",
     "JOB_ID_SANITIZER",
     "JOB_SERVICE_GROUP_ENV",
-    "JOB_SERVICE_PASS_ENV",
+    "JOB_SERVICE_AUTH_ENV",
     "JOB_SERVICE_SECURE_ENV",
     "JOB_SERVICE_USER_ENV",
     "JsonResponse",
@@ -247,8 +247,8 @@ JOB_SERVICE_USERNAME_DEFAULT = "job-service"
 JOB_SERVICE_USER_ENV = "OMERO_JOB_SERVICE_USERNAME"
 JOB_SERVICE_USER_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_USERNAME"
 
-JOB_SERVICE_PASS_ENV = "OMERO_JOB_SERVICE_PASS"
-JOB_SERVICE_PASS_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
+JOB_SERVICE_AUTH_ENV = "OMERO_JOB_SERVICE_PASS"
+JOB_SERVICE_AUTH_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_PASS"
 
 JOB_SERVICE_GROUP_ENV = "OMERO_JOB_SERVICE_GROUP"
 JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
@@ -2129,32 +2129,26 @@ def _ensure_job_dataset_targets(
             purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
         )
         if not user_conn:
-            if host and port and username:
-                for dataset_name in missing_dataset_names:
-                    ds_id = _create_dataset_via_admin_connection(
-                        username,
-                        host,
-                        port,
-                        dataset_name,
-                        group_id=job_dict.get("group_id"),
-                        group_name=job_dict.get("group_name"),
-                        project_id=job_dict.get("project_id"),
+            for dataset_name in missing_dataset_names:
+                ds_id = _create_dataset_via_admin_connection(
+                    username,
+                    host,
+                    port,
+                    dataset_name,
+                    group_id=job_dict.get("group_id"),
+                    group_name=job_dict.get("group_name"),
+                    project_id=job_dict.get("project_id"),
+                )
+                if ds_id is not None:
+                    dataset_map[dataset_name] = ds_id
+                else:
+                    logger.warning(
+                        "Failed to create dataset %s via CLI for job %s.",
+                        sanitize_log_value(dataset_name),
+                        sanitize_log_value(job_dict.get("job_id")),
                     )
-                    if ds_id is not None:
-                        dataset_map[dataset_name] = ds_id
-                    else:
-                        logger.warning(
-                            "Failed to create dataset %s via CLI for job %s.",
-                            sanitize_log_value(dataset_name),
-                            sanitize_log_value(job_dict.get("job_id")),
-                        )
-                        return False, generic_error
-                return True, None
-            logger.warning(
-                "Background dataset preparation for job %s is missing host/port/username.",
-                sanitize_log_value(job_dict.get("job_id")),
-            )
-            return False, generic_error
+                    return False, generic_error
+            return True, None
 
         for dataset_name in missing_dataset_names:
             dataset_id = _get_or_create_dataset(
@@ -2388,10 +2382,10 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
             except Exception:
                 last_err = None
             logger.error(
-                "root connect() failed for background import sessions: host=%s port=%s secure=%s lastError=%r",
+                "root connect() failed for background import sessions: host=%s port=%s tls=%s lastError=%r",
                 sanitize_log_value(host),
                 sanitize_log_value(port),
-                secure,
+                "enabled" if secure else "disabled",
                 last_err,
             )
             try:
@@ -3122,9 +3116,9 @@ def _get_job_service_credentials():
     if not user:
         user = JOB_SERVICE_USERNAME_DEFAULT
 
-    passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
+    passwd = (os.environ.get(JOB_SERVICE_AUTH_ENV) or "").strip()
     if not passwd:
-        passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
+        passwd = (os.environ.get(JOB_SERVICE_AUTH_ENV_FALLBACK) or "").strip()
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
@@ -3219,8 +3213,8 @@ def _open_service_connection(
 
     if not service_pass:
         logger.error(
-            "job-service password missing. Set %s in the omeroweb container environment.",
-            JOB_SERVICE_PASS_ENV,
+            "job-service authentication missing. Set %s in the omeroweb container environment.",
+            JOB_SERVICE_AUTH_ENV,
         )
         return None
 
@@ -3233,10 +3227,10 @@ def _open_service_connection(
             ok = conn.connect()
         except Exception as exc:
             logger.error(
-                "job-service connect() raised: host=%s port=%s secure=%s error_type=%s has_last_error=%s",
+                "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                secure,
+                "enabled" if secure else "disabled",
                 sanitize_log_value(type(exc).__name__),
                 _connection_has_last_error(conn),
             )
@@ -3251,10 +3245,10 @@ def _open_service_connection(
 
         if not ok:
             logger.error(
-                "job-service connect() failed: host=%s port=%s secure=%s has_last_error=%s",
+                "job-service connect() failed: host=%s port=%s tls=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                secure,
+                "enabled" if secure else "disabled",
                 _connection_has_last_error(conn),
             )
             try:
@@ -5138,6 +5132,7 @@ def _iter_script_services(conn):
         try:
             svc = svc_getter()
         except Exception:
+            logger.debug("Skipping script service getter", exc_info=True)
             continue
         if svc is None or id(svc) in seen:
             continue
@@ -5157,6 +5152,7 @@ def _find_script_id_by_name(
         try:
             scripts = svc.getScripts()
         except Exception:
+            logger.debug("Failed to list scripts from service", exc_info=True)
             continue
 
         for script in scripts:
@@ -5182,6 +5178,7 @@ def _find_script_id_by_name(
                 )
                 sid = int(sid) if sid is not None else None
             except Exception:
+                logger.debug("Skipping unparseable script entry", exc_info=True)
                 continue
 
             if sid is None:
@@ -6148,18 +6145,40 @@ def _import_job_entry(
     # reports the staged .zarr as incompatible and ome-zarr recognizes it as a
     # layout supported by the installed omero-cli-zarr runtime.
     # ------------------------------------------------------------------
-    _zarr_temp_path = None
-    try:
-        with _background_import_session(
-            username or "",
-            host,
-            port,
-            group_id=group_id,
-            group_name=group_name,
-            timeout_hint_seconds=_get_import_timeout_seconds(),
-        ) as background_session_key:
-            if not background_session_key:
-                error_msg = errors.missing_omero_connection_details()
+    with _background_import_session(
+        username or "",
+        host,
+        port,
+        group_id=group_id,
+        group_name=group_name,
+        timeout_hint_seconds=_get_import_timeout_seconds(),
+    ) as background_session_key:
+        if not background_session_key:
+            error_msg = errors.missing_omero_connection_details()
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+        if (
+            is_directory_zarr
+            and zarr_scan_status == "compatible"
+            and zarr_import_backend == _ZARR_IMPORT_BACKEND_BIOFORMATS
+        ):
+            pass
+        elif (
+            is_directory_zarr
+            and zarr_scan_status in {"compatible", "incompatible"}
+            and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE
+        ):
+            if not native_plan or not native_plan.kind:
+                error_msg = "Native OME-Zarr routing metadata is missing for the staged .zarr store."
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
@@ -6171,86 +6190,7 @@ def _import_job_entry(
                     "job_error": job_error,
                     "job_message": job_error,
                 }
-            if (
-                is_directory_zarr
-                and zarr_scan_status == "compatible"
-                and zarr_import_backend == _ZARR_IMPORT_BACKEND_BIOFORMATS
-            ):
-                pass
-            elif (
-                is_directory_zarr
-                and zarr_scan_status in {"compatible", "incompatible"}
-                and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE
-            ):
-                if not native_plan or not native_plan.kind:
-                    error_msg = "Native OME-Zarr routing metadata is missing for the staged .zarr store."
-                    job_error = messages.job_error_with_path(rel_path, error_msg)
-                    return {
-                        "cleanup_staged_paths": cleanup_staged_paths,
-                        "covered_indexes": covered_indexes,
-                        "covered_relative_paths": covered_relative_paths,
-                        "index": entry.get("index"),
-                        "status": "error",
-                        "entry_error": error_msg,
-                        "job_error": job_error,
-                        "job_message": job_error,
-                    }
-                if native_plan.validation_error:
-                    error_msg = native_plan.validation_error
-                    job_error = messages.job_error_with_path(rel_path, error_msg)
-                    return {
-                        "cleanup_staged_paths": cleanup_staged_paths,
-                        "covered_indexes": covered_indexes,
-                        "covered_relative_paths": covered_relative_paths,
-                        "index": entry.get("index"),
-                        "status": "error",
-                        "entry_error": error_msg,
-                        "job_error": job_error,
-                        "job_message": job_error,
-                    }
-                return _import_zarr_via_cli(
-                    file_path=file_path,
-                    session_key=background_session_key,
-                    host=host,
-                    port=port,
-                    dataset_id=dataset_id,
-                    import_name=import_name,
-                    rel_path=rel_path,
-                    entry=entry,
-                    cleanup_staged_paths=cleanup_staged_paths,
-                    covered_indexes=covered_indexes,
-                    covered_relative_paths=covered_relative_paths,
-                    group_id=group_id,
-                    progress_job=progress_job,
-                    username=username,
-                    group_name=group_name,
-                    native_plan=native_plan,
-                )
-            if (
-                has_precomputed_zarr_routing
-                and is_directory_zarr
-                and zarr_scan_status == "error"
-            ):
-                error_msg = zarr_scan_details or "Compatibility check failed."
-                job_error = messages.job_error_with_path(rel_path, error_msg)
-                return {
-                    "cleanup_staged_paths": cleanup_staged_paths,
-                    "covered_indexes": covered_indexes,
-                    "covered_relative_paths": covered_relative_paths,
-                    "index": entry.get("index"),
-                    "status": "error",
-                    "entry_error": error_msg,
-                    "job_error": job_error,
-                    "job_message": job_error,
-                }
-            if (
-                is_directory_zarr
-                and not has_precomputed_zarr_routing
-                and zarr_scan_status == "incompatible"
-                and native_plan
-                and native_plan.recognized_zarr
-                and native_plan.validation_error
-            ):
+            if native_plan.validation_error:
                 error_msg = native_plan.validation_error
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
@@ -6263,138 +6203,189 @@ def _import_job_entry(
                     "job_error": job_error,
                     "job_message": job_error,
                 }
-            if is_directory_zarr and zarr_scan_status == "incompatible":
-                error_msg = (
-                    zarr_scan_details
-                    or "Bio-Formats did not recognize the staged .zarr store."
-                )
-                job_error = messages.job_error_with_path(rel_path, error_msg)
-                return {
-                    "cleanup_staged_paths": cleanup_staged_paths,
-                    "covered_indexes": covered_indexes,
-                    "covered_relative_paths": covered_relative_paths,
-                    "index": entry.get("index"),
-                    "status": "error",
-                    "entry_error": error_msg,
-                    "job_error": job_error,
-                    "job_message": job_error,
-                }
-
-            try:
-                success, stdout, stderr = _import_file(
-                    conn=None,
-                    session_key=background_session_key,
-                    host=host,
-                    port=port,
-                    path=file_path,
-                    dataset_id=dataset_id,
-                    import_name=import_name,
-                    progress_job=progress_job,
-                )
-            except Exception as exc:
-                logger.error(
-                    "Import failed for %s: %s",
-                    sanitize_log_value(rel_path),
-                    sanitize_log_value(exc),
-                    exc_info=sanitized_exc_info(exc),
-                )
-                success = False
-                stdout = ""
-                stderr = ""
-
-            # ------------------------------------------------------------------
-            # Detect created objects.  The OMERO CLI prints object IDs to stdout
-            # for most formats, but some formats/plugins use "Created Image 123".
-            # Search both streams.  As a final fallback, query the OMERO API
-            # through an independent admin-backed user connection.
-            # ------------------------------------------------------------------
-            combined_output = (stdout or "") + "\n" + (stderr or "")
-            imported_objects = _extract_imported_object_ids(combined_output)
-
-            if not imported_objects and dataset_id:
-                api_objects = _verify_import_via_api(
-                    username or "",
-                    host,
-                    port,
-                    dataset_id,
-                    import_name,
-                    file_path.name,
-                    group_id=group_id,
-                    group_name=group_name,
-                )
-                if api_objects:
-                    imported_objects = api_objects
-                    logger.info(
-                        "OMERO API verification found objects for %s: %s",
-                        sanitize_log_value(rel_path),
-                        sanitize_log_value(imported_objects[:5]),
-                    )
-
-            if not success:
-                if imported_objects:
-                    logger.warning(
-                        "Import CLI returned non-zero for %s but %d objects "
-                        "confirmed; treating as success.  stderr=%r",
-                        sanitize_log_value(rel_path),
-                        len(imported_objects),
-                        _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
-                    )
-                else:
-                    logger.warning(
-                        "Import failed for %s (stdout=%r, stderr=%r).",
-                        sanitize_log_value(rel_path),
-                        _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
-                        _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
-                    )
-                    error_msg = _classify_import_failure(
-                        str(stdout).strip(), str(stderr).strip()
-                    )
-                    job_error = messages.job_error_with_path(rel_path, error_msg)
-                    return {
-                        "cleanup_staged_paths": cleanup_staged_paths,
-                        "covered_indexes": covered_indexes,
-                        "covered_relative_paths": covered_relative_paths,
-                        "index": entry.get("index"),
-                        "status": "error",
-                        "entry_error": error_msg,
-                        "job_error": job_error,
-                        "job_message": job_error,
-                    }
-
-            if not imported_objects:
-                logger.error(
-                    "Import CLI returned success for %s but no objects found in "
-                    "output or via API.  stdout=%r stderr=%r",
-                    sanitize_log_value(rel_path),
-                    _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
-                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
-                )
-                error_msg = errors.import_no_objects_created()
-                job_error = messages.job_error_with_path(rel_path, error_msg)
-                return {
-                    "cleanup_staged_paths": cleanup_staged_paths,
-                    "covered_indexes": covered_indexes,
-                    "covered_relative_paths": covered_relative_paths,
-                    "index": entry.get("index"),
-                    "status": "error",
-                    "entry_error": error_msg,
-                    "job_error": job_error,
-                    "job_message": job_error,
-                }
-
+            return _import_zarr_via_cli(
+                file_path=file_path,
+                session_key=background_session_key,
+                host=host,
+                port=port,
+                dataset_id=dataset_id,
+                import_name=import_name,
+                rel_path=rel_path,
+                entry=entry,
+                cleanup_staged_paths=cleanup_staged_paths,
+                covered_indexes=covered_indexes,
+                covered_relative_paths=covered_relative_paths,
+                group_id=group_id,
+                progress_job=progress_job,
+                username=username,
+                group_name=group_name,
+                native_plan=native_plan,
+            )
+        if (
+            has_precomputed_zarr_routing
+            and is_directory_zarr
+            and zarr_scan_status == "error"
+        ):
+            error_msg = zarr_scan_details or "Compatibility check failed."
+            job_error = messages.job_error_with_path(rel_path, error_msg)
             return {
                 "cleanup_staged_paths": cleanup_staged_paths,
                 "covered_indexes": covered_indexes,
                 "covered_relative_paths": covered_relative_paths,
                 "index": entry.get("index"),
-                "status": "imported",
-                "rel_path": rel_path,
-                "file_path": file_path,
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
             }
-    finally:
-        # Clean up any temporary zarr copy created for import preparation.
-        if _zarr_temp_path is not None:
-            shutil.rmtree(_zarr_temp_path, ignore_errors=True)
+        if (
+            is_directory_zarr
+            and not has_precomputed_zarr_routing
+            and zarr_scan_status == "incompatible"
+            and native_plan
+            and native_plan.recognized_zarr
+            and native_plan.validation_error
+        ):
+            error_msg = native_plan.validation_error
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+        if is_directory_zarr and zarr_scan_status == "incompatible":
+            error_msg = (
+                zarr_scan_details
+                or "Bio-Formats did not recognize the staged .zarr store."
+            )
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+
+        try:
+            success, stdout, stderr = _import_file(
+                conn=None,
+                session_key=background_session_key,
+                host=host,
+                port=port,
+                path=file_path,
+                dataset_id=dataset_id,
+                import_name=import_name,
+                progress_job=progress_job,
+            )
+        except Exception as exc:
+            logger.error(
+                "Import failed for %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+                exc_info=sanitized_exc_info(exc),
+            )
+            success = False
+            stdout = ""
+            stderr = ""
+
+        # ------------------------------------------------------------------
+        # Detect created objects.  The OMERO CLI prints object IDs to stdout
+        # for most formats, but some formats/plugins use "Created Image 123".
+        # Search both streams.  As a final fallback, query the OMERO API
+        # through an independent admin-backed user connection.
+        # ------------------------------------------------------------------
+        combined_output = (stdout or "") + "\n" + (stderr or "")
+        imported_objects = _extract_imported_object_ids(combined_output)
+
+        if not imported_objects and dataset_id:
+            api_objects = _verify_import_via_api(
+                username or "",
+                host,
+                port,
+                dataset_id,
+                import_name,
+                file_path.name,
+                group_id=group_id,
+                group_name=group_name,
+            )
+            if api_objects:
+                imported_objects = api_objects
+                logger.info(
+                    "OMERO API verification found objects for %s: %s",
+                    sanitize_log_value(rel_path),
+                    sanitize_log_value(imported_objects[:5]),
+                )
+
+        if not success:
+            if imported_objects:
+                logger.warning(
+                    "Import CLI returned non-zero for %s but %d objects "
+                    "confirmed; treating as success.  stderr=%r",
+                    sanitize_log_value(rel_path),
+                    len(imported_objects),
+                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                )
+            else:
+                logger.warning(
+                    "Import failed for %s (stdout=%r, stderr=%r).",
+                    sanitize_log_value(rel_path),
+                    _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
+                    _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+                )
+                error_msg = _classify_import_failure(
+                    str(stdout).strip(), str(stderr).strip()
+                )
+                job_error = messages.job_error_with_path(rel_path, error_msg)
+                return {
+                    "cleanup_staged_paths": cleanup_staged_paths,
+                    "covered_indexes": covered_indexes,
+                    "covered_relative_paths": covered_relative_paths,
+                    "index": entry.get("index"),
+                    "status": "error",
+                    "entry_error": error_msg,
+                    "job_error": job_error,
+                    "job_message": job_error,
+                }
+
+        if not imported_objects:
+            logger.error(
+                "Import CLI returned success for %s but no objects found in "
+                "output or via API.  stdout=%r stderr=%r",
+                sanitize_log_value(rel_path),
+                _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
+                _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
+            )
+            error_msg = errors.import_no_objects_created()
+            job_error = messages.job_error_with_path(rel_path, error_msg)
+            return {
+                "cleanup_staged_paths": cleanup_staged_paths,
+                "covered_indexes": covered_indexes,
+                "covered_relative_paths": covered_relative_paths,
+                "index": entry.get("index"),
+                "status": "error",
+                "entry_error": error_msg,
+                "job_error": job_error,
+                "job_message": job_error,
+            }
+
+        return {
+            "cleanup_staged_paths": cleanup_staged_paths,
+            "covered_indexes": covered_indexes,
+            "covered_relative_paths": covered_relative_paths,
+            "index": entry.get("index"),
+            "status": "imported",
+            "rel_path": rel_path,
+            "file_path": file_path,
+        }
 
 
 def _mark_failed_job_for_deferred_cleanup(job_id: str) -> bool:

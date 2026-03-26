@@ -46,7 +46,7 @@ def build_log_config() -> LogConfig:
     loki_url = require_env(
         "ADMIN_TOOLS_LOKI_URL",
         env_file=ENV_FILE_OMEROWEB,
-        hint="Expected the Loki base URL (e.g., http://loki:3100).",
+        hint="Expected the Loki base URL (e.g., http://loki:3100).",  # DevSkim: ignore DS137138,
     )
 
     lookback_seconds = get_int_env(

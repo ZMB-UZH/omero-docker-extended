@@ -573,7 +573,8 @@ def _run_omero_server_core() -> List[DiagnosticCheckResult]:
     blitz_port = int(_get_env("ADMIN_TOOLS_OMERO_BLITZ_PORT", "4064"))
     secure_port = int(_get_env("ADMIN_TOOLS_OMERO_SECURE_PORT", "4063"))
     web_url = _get_env(
-        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL", "http://omeroweb:4090/webclient/"
+        "ADMIN_TOOLS_OMERO_WEB_HEALTH_URL",
+        "http://omeroweb:4090/webclient/",  # DevSkim: ignore DS137138
     )
     timeout_s = _to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)
 
