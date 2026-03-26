@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from omeroweb_import.views import core_functions
+
+
+def test_directory_initialization_uses_parent_checks_and_caches_paths(
+    tmp_path, monkeypatch
+):
+    upload_root = tmp_path / "upload-root"
+    jobs_root = tmp_path / "jobs-root"
+    ensure_parent_calls = []
+    ensure_dir_calls = []
+
+    monkeypatch.setattr(core_functions, "_resolve_upload_root", lambda: upload_root)
+    monkeypatch.setattr(core_functions, "_resolve_jobs_root", lambda: jobs_root)
+    monkeypatch.setattr(
+        core_functions,
+        "_ensure_parent_dir",
+        lambda path: ensure_parent_calls.append(path) or True,
+    )
+    monkeypatch.setattr(
+        core_functions,
+        "_ensure_dir_with_permissions",
+        lambda path, mode: ensure_dir_calls.append((path, mode)) or True,
+    )
+    monkeypatch.setattr(core_functions, "_DIRS_INITIALIZED", False)
+    monkeypatch.setattr(core_functions, "_UPLOAD_ROOT_CACHE", None)
+    monkeypatch.setattr(core_functions, "_JOBS_ROOT_CACHE", None)
+
+    assert core_functions._get_upload_root() == upload_root
+    assert core_functions._get_jobs_root() == jobs_root
+    assert ensure_parent_calls == [upload_root, jobs_root]
+    assert ensure_dir_calls == [(upload_root, 0o700), (jobs_root, 0o700)]
+    assert core_functions._DIRS_INITIALIZED is True
+
+    ensure_parent_calls.clear()
+    ensure_dir_calls.clear()
+    assert core_functions._get_upload_root() == upload_root
+    assert core_functions._get_jobs_root() == jobs_root
+    assert ensure_parent_calls == []
+    assert ensure_dir_calls == []
+
+
+def test_directory_helpers_cover_failure_and_permission_fix_paths(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "nested" / "child"
+    target.parent.mkdir(parents=True)
+    assert core_functions._ensure_parent_dir(target) is True
+
+    monkeypatch.setattr(core_functions, "_DIRS_INITIALIZED", False)
+    monkeypatch.setattr(core_functions, "_UPLOAD_ROOT_CACHE", None)
+    monkeypatch.setattr(core_functions, "_JOBS_ROOT_CACHE", None)
+    monkeypatch.setattr(
+        core_functions, "_resolve_upload_root", lambda: tmp_path / "uploads"
+    )
+    monkeypatch.setattr(core_functions, "_resolve_jobs_root", lambda: tmp_path / "jobs")
+    monkeypatch.setattr(core_functions, "_ensure_parent_dir", lambda path: False)
+    assert core_functions._initialize_directories() is None
+    assert core_functions._DIRS_INITIALIZED is False
+
+    created = tmp_path / "created"
+    assert core_functions._ensure_dir_with_permissions(created, 0o700) is True
+    assert created.exists()
+
+    chmod_calls = []
+    existing = tmp_path / "existing"
+    existing.mkdir(mode=0o755)
+    original_chmod = Path.chmod
+
+    def chmod(self, path_mode):
+        if self == existing:
+            chmod_calls.append(path_mode)
+            return None
+        return original_chmod(self, path_mode)
+
+    monkeypatch.setattr(Path, "chmod", chmod)
+    assert core_functions._ensure_dir_with_permissions(existing, 0o700) is True
+    assert chmod_calls == [0o700]
+
+
+def test_runtime_env_helpers_normalize_boolean_and_integer_values(monkeypatch):
+    monkeypatch.setenv("IMPORT_BATCH", " 7 ")
+    monkeypatch.setenv("FEATURE_FLAG", " yes ")
+    monkeypatch.setenv("BROKEN_BATCH", "bad-value")
+    monkeypatch.setenv("ZERO_BATCH", "0")
+
+    assert core_functions._get_env_int("IMPORT_BATCH", 5, 1, 10) == 7
+    assert core_functions._get_env_int("BROKEN_BATCH", 5, 1, 10) == 5
+    assert core_functions._get_env_int("ZERO_BATCH", 5, 1, 10) == 1
+    assert core_functions._get_env_bool("FEATURE_FLAG") is True
+    assert core_functions._get_env_bool("MISSING_FEATURE", default=True) is True
