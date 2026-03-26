@@ -7,6 +7,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class CrowdSecInstallationRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -309,7 +312,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                ["bash", str(self.crowdsec_restart_helper)],
+                [BASH_BIN, str(self.crowdsec_restart_helper)],
                 check=True,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -368,7 +371,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                ["bash", str(self.crowdsec_restart_helper)],
+                [BASH_BIN, str(self.crowdsec_restart_helper)],
                 check=True,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -518,7 +521,7 @@ EOF
 
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "-lc", script],
+            [BASH_BIN, "-lc", script],
             check=True,
             text=True,
             stdout=subprocess.PIPE,

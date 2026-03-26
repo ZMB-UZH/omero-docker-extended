@@ -144,7 +144,7 @@ def test_build_target_service_status_uses_recent_container_samples() -> None:
 
 
 def test_origin_from_url_normalizes_scheme_and_host() -> None:
-    assert _origin_from_url("http://grafana:3000/path?q=1") == "http://grafana:3000"
+    assert _origin_from_url("https://grafana:3000/path?q=1") == "https://grafana:3000"
     assert _origin_from_url("https://example.org") == "https://example.org"
     assert _origin_from_url("not-a-url") == ""
 
@@ -181,14 +181,14 @@ def test_proxy_http_request_rewrites_origin_headers_when_enabled(monkeypatch) ->
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "https://grafana:3000",
         "api/user",
         rewrite_origin_headers=True,
     )
 
     assert response.status_code == 200
-    assert captured["headers"]["Origin"] == "http://grafana:3000"
-    assert captured["headers"]["Referer"] == "http://grafana:3000/"
+    assert captured["headers"]["Origin"] == "https://grafana:3000"
+    assert captured["headers"]["Referer"] == "https://grafana:3000/"
 
 
 def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:

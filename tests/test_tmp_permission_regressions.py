@@ -8,6 +8,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class TmpPermissionRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -109,7 +112,7 @@ class TmpPermissionRegressionTests(unittest.TestCase):
 
     def _run_bash(self, script: str) -> None:
         subprocess.run(
-            ["bash", "-lc", script],
+            [BASH_BIN, "-lc", script],
             check=True,
             text=True,
             stdout=subprocess.PIPE,

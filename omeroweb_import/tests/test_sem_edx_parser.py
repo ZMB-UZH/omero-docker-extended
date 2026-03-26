@@ -443,7 +443,7 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
         sem_edx_parser.create_spectrum_table(
             SimpleNamespace(
                 getObject=lambda *_args, **_kwargs: None,
-                getUpdateService=lambda: SimpleNamespace(),
+                getUpdateService=SimpleNamespace,
                 c=SimpleNamespace(
                     sf=SimpleNamespace(
                         sharedResources=lambda: _FakeResources(table=failing_table)
@@ -460,7 +460,7 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
         sem_edx_parser.create_spectrum_table(
             SimpleNamespace(
                 getObject=lambda *_args, **_kwargs: _FakeImage([]),
-                getUpdateService=lambda: SimpleNamespace(),
+                getUpdateService=SimpleNamespace,
                 c=SimpleNamespace(
                     sf=SimpleNamespace(
                         sharedResources=lambda: _FakeResources(table=failing_table)
@@ -481,7 +481,7 @@ def test_sem_edx_plot_and_table_helpers_cover_png_generation_table_persistence_a
                     if (model, image_id) == ("Image", 7)
                     else None
                 ),
-                getUpdateService=lambda: SimpleNamespace(),
+                getUpdateService=SimpleNamespace,
                 c=SimpleNamespace(
                     sf=SimpleNamespace(
                         sharedResources=lambda: _FakeResources(table=None)
