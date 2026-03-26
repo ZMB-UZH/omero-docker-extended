@@ -51,20 +51,20 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets:
-          - http://loki:3100/ready
-          - http://prometheus:9090/-/ready
-          - http://grafana:3000/api/health
-          - http://cadvisor:8080/healthz
-          - http://node-exporter:9100/metrics
-          - http://postgres-exporter:9187/metrics
-          - http://postgres-exporter-plugin:9187/metrics
-          - http://redis-exporter:9121/metrics
-          - http://blackbox-exporter:9115/-/healthy
-          - http://portainer:9000/api/system/status
+          - http://loki:3100/ready  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://prometheus:9090/-/ready  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://grafana:3000/api/health  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://cadvisor:8080/healthz  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://node-exporter:9100/metrics  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://postgres-exporter:9187/metrics  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://postgres-exporter-plugin:9187/metrics  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://redis-exporter:9121/metrics  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://blackbox-exporter:9115/-/healthy  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://portainer:9000/api/system/status  # DevSkim: ignore DS137138 -- internal Docker network probe
           # CROWDSEC_PROBE_MARKER (do not remove — installation script injects CrowdSec target here when enabled)
-          - http://crowdsec:8080/health
-          - http://omeroweb:4090/webgateway/
-          - http://alloy:12345/metrics
+          - http://crowdsec:8080/health  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://omeroweb:4090/webgateway/  # DevSkim: ignore DS137138 -- internal Docker network probe
+          - http://alloy:12345/metrics  # DevSkim: ignore DS137138 -- internal Docker network probe
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

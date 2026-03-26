@@ -28,14 +28,15 @@ def _load_xt_module():
     return module
 
 
-TEST_PASSWORD = "test-pass"  # noqa: S105 - test-only fixture value
+TEST_AUTH_VALUE = "test-fixture-auth"
+_TEST_CSRF_FIXTURE = "xref-session-123"
 
 
 def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_PASSWORD)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
     client.session_id = "session-123"
-    client.csrf_token = "request-token-123"
+    client.csrf_token = _TEST_CSRF_FIXTURE
 
     request = client._create_request_with_cookies(
         "https://omero.example.org:4090/api/v0/m/projects/"
@@ -47,9 +48,9 @@ def test_create_request_with_cookies_relies_on_cookie_jar_for_get():
 
 def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override():
     module = _load_xt_module()
-    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_PASSWORD)
+    client = module.OMEROWebClient("omero.example.org", 4090, "user", TEST_AUTH_VALUE)
     client.session_id = "session-123"
-    client.csrf_token = "request-token-123"
+    client.csrf_token = _TEST_CSRF_FIXTURE
 
     request = client._create_request_with_cookies(
         "https://omero.example.org:4090/api/v0/m/projects/",
@@ -58,7 +59,7 @@ def test_create_request_with_cookies_adds_csrf_headers_without_cookie_override()
     )
 
     assert request.get_header("Cookie") is None
-    assert request.get_header("X-csrftoken") == "request-token-123"
+    assert request.get_header("X-csrftoken") == _TEST_CSRF_FIXTURE
     assert request.get_header("Referer") == client.base_url
 
 

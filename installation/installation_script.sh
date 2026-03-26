@@ -3589,18 +3589,18 @@ echo ""
 # so blackbox-exporter does not produce error logs for a missing service.
 # =====================================================
 PROMETHEUS_CONFIG="${OMERO_INSTALLATION_PATH%/}/monitoring/prometheus/prometheus.yml"
-CROWDSEC_PROBE_LINE="          - http://crowdsec:8080/health"
+CROWDSEC_PROBE_LINE="          - http://crowdsec:8080/health"  # DevSkim: ignore DS137138
 if [ -f "${PROMETHEUS_CONFIG}" ]; then
     if is_crowdsec_enabled; then
-        if ! grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then
+        if ! grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then  # DevSkim: ignore DS137138
             sed -i "/# CROWDSEC_PROBE_MARKER/a\\${CROWDSEC_PROBE_LINE}" "${PROMETHEUS_CONFIG}"
             echo "Injected CrowdSec health probe into prometheus.yml"
         else
             echo "CrowdSec health probe already present in prometheus.yml"
         fi
     else
-        if grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then
-            sed -i '\|http://crowdsec:8080/health|d' "${PROMETHEUS_CONFIG}"
+        if grep -qF "http://crowdsec:8080/health" "${PROMETHEUS_CONFIG}"; then  # DevSkim: ignore DS137138
+            sed -i '\|http://crowdsec:8080/health|d' "${PROMETHEUS_CONFIG}"  # DevSkim: ignore DS137138
             echo "Removed CrowdSec health probe from prometheus.yml (CrowdSec disabled)"
         fi
     fi

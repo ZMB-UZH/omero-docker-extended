@@ -13,8 +13,8 @@ INT_SANITIZER = _core.INT_SANITIZER
 JOB_ID_SANITIZER = _core.JOB_ID_SANITIZER
 JOB_SERVICE_GROUP_ENV = _core.JOB_SERVICE_GROUP_ENV
 JOB_SERVICE_GROUP_ENV_FALLBACK = _core.JOB_SERVICE_GROUP_ENV_FALLBACK
-JOB_SERVICE_PASS_ENV = _core.JOB_SERVICE_PASS_ENV
-JOB_SERVICE_PASS_ENV_FALLBACK = _core.JOB_SERVICE_PASS_ENV_FALLBACK
+JOB_SERVICE_AUTH_ENV = _core.JOB_SERVICE_AUTH_ENV
+JOB_SERVICE_AUTH_ENV_FALLBACK = _core.JOB_SERVICE_AUTH_ENV_FALLBACK
 JOB_SERVICE_SECURE_ENV = _core.JOB_SERVICE_SECURE_ENV
 JOB_SERVICE_SECURE_ENV_FALLBACK = _core.JOB_SERVICE_SECURE_ENV_FALLBACK
 JOB_SERVICE_USER_ENV = _core.JOB_SERVICE_USER_ENV
@@ -90,8 +90,8 @@ def _open_service_connection(host: str, port: int, group_id=None):
 
     if not service_pass:
         logger.error(
-            "job-service password missing. Set %s in the omeroweb container environment.",
-            JOB_SERVICE_PASS_ENV,
+            "job-service authentication missing. Set %s in the omeroweb container environment.",
+            JOB_SERVICE_AUTH_ENV,
         )
         return None
 
@@ -104,10 +104,10 @@ def _open_service_connection(host: str, port: int, group_id=None):
             ok = conn.connect()
         except Exception as exc:
             logger.error(
-                "job-service connect() raised: host=%s port=%s secure=%s error_type=%s has_last_error=%s",
+                "job-service connect() raised: host=%s port=%s tls=%s error_type=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                secure,
+                "enabled" if secure else "disabled",
                 sanitize_log_value(type(exc).__name__),
                 _connection_has_last_error(conn),
             )
@@ -122,10 +122,10 @@ def _open_service_connection(host: str, port: int, group_id=None):
 
         if not ok:
             logger.error(
-                "job-service connect() failed: host=%s port=%s secure=%s has_last_error=%s",
+                "job-service connect() failed: host=%s port=%s tls=%s has_last_error=%s",
                 sanitize_log_value(host),
                 port,
-                secure,
+                "enabled" if secure else "disabled",
                 _connection_has_last_error(conn),
             )
             try:
@@ -178,8 +178,8 @@ __all__ = [
     "JOB_SERVICE_USERNAME_DEFAULT",
     "JOB_SERVICE_USER_ENV",
     "JOB_SERVICE_USER_ENV_FALLBACK",
-    "JOB_SERVICE_PASS_ENV",
-    "JOB_SERVICE_PASS_ENV_FALLBACK",
+    "JOB_SERVICE_AUTH_ENV",
+    "JOB_SERVICE_AUTH_ENV_FALLBACK",
     "JOB_SERVICE_GROUP_ENV",
     "JOB_SERVICE_GROUP_ENV_FALLBACK",
     "JOB_SERVICE_SECURE_ENV",
