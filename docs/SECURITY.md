@@ -18,7 +18,7 @@ Security practices and controls for this deployment.
 - The `omeroserver` container drops to the `omero-server` user at runtime (non-root).
 - The `omero-celery-worker` container runs as a dedicated `celery` user (uid/gid 10001).
 - Redis runs with `maxmemory 512mb` and `allkeys-lru` eviction on tmpfs (no persistent state).
-- The `redis-sysctl-init` sidecar is the only privileged container, and it runs once and exits.
+- The `redis-sysctl-init` sidecar is the only privileged container; it is profile-gated (`sysctl-init`) and only needed for non-standard deployments. The installation script persists the sysctl on the host.
 
 ## Post-build vulnerability scanning
 

@@ -128,8 +128,8 @@ celerybeat.pid
 installation_paths.env
 .venv
 /logo/logo.png
-env/
 !env/
+env/*
 !env/*_example.env
 !installation_paths_example.env
 venv/

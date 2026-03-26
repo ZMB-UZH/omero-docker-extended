@@ -47,7 +47,7 @@ Cache backend and Celery message broker:
 
 - Version 8.4.0-alpine with in-memory only configuration (`--save ""` `--appendonly no`).
 - 512MB max memory with LRU eviction, backed by tmpfs.
-- Requires `vm.overcommit_memory=1` set by the `redis-sysctl-init` one-shot sidecar.
+- Requires `vm.overcommit_memory=1`, persisted on the host by the installation script (`/etc/sysctl.d/99-redis-overcommit.conf`). The profile-gated `redis-sysctl-init` one-shot sidecar is available as a fallback.
 - Used as: OMERO.web session cache (db 1), Celery broker and result backend (db 2).
 
 ### Monitoring stack

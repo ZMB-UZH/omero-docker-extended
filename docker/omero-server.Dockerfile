@@ -391,6 +391,26 @@ RUN set -euo pipefail; \
         chmod 0555 "${startup_script}"; \
     done
 
+# Remove "config drop default" and "certificates -v" from the base image's
+# /opt/omero/server/config/00-omero-server.omero.
+#
+# Problem: the base image's 50-config.py runs  omero load --glob  on this file
+# AFTER our 10-server-bootstrap.sh has already configured certificate SANs,
+# omero.scripts.python, and other runtime properties.  The "config drop default"
+# wipes all of those settings, and "certificates -v" regenerates certificates
+# WITHOUT the SAN entries (DNS:omeroserver) that our bootstrap added —
+# silently undoing the bootstrap's work.
+#
+# Fix: strip both lines so the file only retains "config set omero.data.dir".
+# Our bootstrap now runs "config drop default" itself, BEFORE setting any
+# properties, so the clean-slate guarantee is preserved in the correct order.
+# --------------------------------------------------------------------------
+RUN set -euo pipefail; \
+    cfg="/opt/omero/server/config/00-omero-server.omero"; \
+    if [ -f "${cfg}" ]; then \
+        sed -i '/^config drop default$/d; /^certificates/d' "${cfg}"; \
+    fi
+
 # Pre-configure library path for ImarisConvertBioformats
 # ------------------------------------------------------
 RUN set -euo pipefail; \

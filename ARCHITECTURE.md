@@ -32,12 +32,12 @@ OMERO Docker Extended packages an OMERO imaging platform with custom web plugins
 
 **Files:** `docker-compose.yml`, `docker/`, `env/`, `installation_paths.env`
 
-Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled; the one-shot `redis-sysctl-init` helper exits after Redis startup. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
+Defines the complete topology: 20 Compose services on a single `omero` bridge network. In steady state, the stack runs 18 long-running runtime containers by default or 19 when the profile-gated `crowdsec` service is enabled. The one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the installation script persists the required sysctl on the host. Every service has explicit health checks, pinned image versions, `no-new-privileges` security, and environment-driven configuration.
 
 Key design decisions:
 - Two PostgreSQL instances: `database` (OMERO core, port 5432) and `database_plugin` (OMERO plugin data, port 5433) for isolation.
 - Redis as pure cache (no persistence: `--save "" --appendonly no`, tmpfs-backed, 512MB LRU).
-- `redis-sysctl-init` one-shot sidecar sets `vm.overcommit_memory=1` before Redis starts.
+- `redis-sysctl-init` one-shot sidecar sets `vm.overcommit_memory=1` (profile-gated; the installation script persists this on the host via `/etc/sysctl.d/`).
 - All container data paths bind-mount from host paths defined in `installation_paths.env`.
 - PostgreSQL uses a `pgdata` subdirectory inside the mount to avoid ext4 `lost+found` issues.
 

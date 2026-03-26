@@ -403,6 +403,8 @@ services:
       context: .
       dockerfile: docker/redis-sysctl-init.Dockerfile
     container_name: redis-sysctl-init
+    profiles:
+      - sysctl-init
     privileged: true
     restart: "no"
     command: []
@@ -419,9 +421,6 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: Europe/Zurich
-    depends_on:
-      redis-sysctl-init:
-        condition: service_completed_successfully
     networks:
       omero:
         aliases:

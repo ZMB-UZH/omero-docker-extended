@@ -51,7 +51,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 ├── ARCHITECTURE.md                    # Architectural overview and dependency boundaries
 ├── CLAUDE.md                          # Claude Code working instructions
 ├── README.md                          # This file
-├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec, plus redis-sysctl-init startup helper)
+├── docker-compose.yml                 # Full service orchestration (20 Compose services total: 18 default long-running containers, 19 with crowdsec; redis-sysctl-init is profile-gated)
 ├── docker/                            # Dockerfiles
 │   ├── omero-server.Dockerfile        #   OMERO.server with CLI plugins, scripts, ImarisConvert
 │   ├── omero-web.Dockerfile           #   OMERO.web with all plugins, supervisord, Celery worker
@@ -109,7 +109,7 @@ For the official OMERO documentation, release notes, and guides, your first poin
 <details>
 <summary><h2>Service topology</h2></summary>
 
-`docker-compose.yml` declares **20 Compose services total** on a single Docker bridge network (`omero`): **18 long-running runtime containers by default**, **19 when the profile-gated `crowdsec` service is enabled**, plus the one-shot `redis-sysctl-init` helper during Redis startup.
+`docker-compose.yml` declares **20 Compose services total** on a single Docker bridge network (`omero`): **18 long-running runtime containers by default**, **19 when the profile-gated `crowdsec` service is enabled**. The one-shot `redis-sysctl-init` helper is also profile-gated (`sysctl-init`); the installation script persists `vm.overcommit_memory=1` on the host so it is not needed during normal `docker compose up` cycles.
 
 The table below lists the long-running services available in the full profile set:
 

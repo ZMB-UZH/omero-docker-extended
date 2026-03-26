@@ -3806,6 +3806,14 @@ if [ "${START_CONTAINERS}" -eq 1 ]; then
         print_crowdsec_install_enrollment_notice "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"
     fi
 
+    # Persist vm.overcommit_memory=1 on the host so Redis operates safely
+    # across reboots.  The redis-sysctl-init container is profile-gated and
+    # only needed for non-standard deployments; this host-level setting is
+    # the primary mechanism for production installs.
+    echo "vm.overcommit_memory = 1" > /etc/sysctl.d/99-redis-overcommit.conf
+    sysctl -w vm.overcommit_memory=1 >/dev/null 2>&1 || true
+    echo "Set vm.overcommit_memory=1 (persisted to /etc/sysctl.d/99-redis-overcommit.conf)"
+
     repo_root_sync_started_epoch="$(date +%s)"
     compose_up_with_retries "${COMPOSE_FILE}"
     schedule_crowdsec_install_auto_restart
