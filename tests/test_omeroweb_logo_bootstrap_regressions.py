@@ -5,11 +5,11 @@ from pathlib import Path
 
 
 _EXPECTED_HASHES = [
-    "a755d0d82d51c3292bb7047b7bdfbb92"
+    "a755d0d82d51c3292bb7047b7bdfbb92"  # DevSkim: ignore DS173237
     + "c6f430b6d99cd91c463510b43b462e84",  # DevSkim: ignore DS173237 -- branding file content hash
-    "fed3805fd27203cb1d2d80df346d625e"
+    "fed3805fd27203cb1d2d80df346d625e"  # DevSkim: ignore DS173237
     + "e5b9fa127e7f5408c0ede31eeb148bc7",  # DevSkim: ignore DS173237 -- branding file content hash
-    "4962acc5fbf52f8ef72721990487fdc9"
+    "4962acc5fbf52f8ef72721990487fdc9"  # DevSkim: ignore DS173237
     + "a1e76c862e8e0676acd4aa0dad867286",  # DevSkim: ignore DS173237 -- branding file content hash
 ]
 
