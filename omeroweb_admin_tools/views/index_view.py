@@ -29,7 +29,10 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
-from omero_plugin_common.logging_utils import sanitize_log_value, sanitize_url_for_logging
+from omero_plugin_common.logging_utils import (
+    sanitize_log_value,
+    sanitize_url_for_logging,
+)
 
 from ..config import optional_log_config
 from ..services.log_query import (
@@ -153,14 +156,16 @@ def _proxy_http_request(
             safe_path = f"{safe_path}/{normalized_path}"
         else:
             safe_path = f"{safe_path}/"
-        target_url = urllib.parse.urlunparse((
-            base_parsed.scheme,
-            base_parsed.netloc,
-            safe_path,
-            "",      # params
-            query,   # query string
-            "",      # fragment
-        ))
+        target_url = urllib.parse.urlunparse(
+            (
+                base_parsed.scheme,
+                base_parsed.netloc,
+                safe_path,
+                "",  # params
+                query,  # query string
+                "",  # fragment
+            )
+        )
     except Exception:
         return JsonResponse({"error": "Invalid URL format"}, status=400)
 
@@ -298,7 +303,9 @@ def _build_proxied_response(
     _copy_set_cookie_headers(headers, proxied, proxy_prefix)
     location = headers.get("Location")
     if location:
-        proxied["Location"] = _rewrite_proxied_location(location, base_url, proxy_prefix)
+        proxied["Location"] = _rewrite_proxied_location(
+            location, base_url, proxy_prefix
+        )
     return proxied
 
 
@@ -404,19 +411,17 @@ def _grafana_proxy_home_fallback_response(proxy_prefix: str) -> HttpResponse:
     normalized_prefix = _normalize_proxy_prefix(proxy_prefix)
     dashboard_uid = _safe_dashboard_uid(
         os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
-    ).strip(),
+            "ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "omero-infrastructure"
+        ).strip(),
         "omero-infrastructure",
     )
     dashboard_slug = _safe_redirect_segment(
         os.environ.get(
-        "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
-    ).strip(),
+            "ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "server-infrastructure"
+        ).strip(),
         "server-infrastructure",
     )
-    dashboard_path = (
-        f"{normalized_prefix}/d/{quote(dashboard_uid, safe='')}/{quote(dashboard_slug, safe='')}"
-    )
+    dashboard_path = f"{normalized_prefix}/d/{quote(dashboard_uid, safe='')}/{quote(dashboard_slug, safe='')}"
 
     response = HttpResponse(status=302)
     response["Location"] = dashboard_path
@@ -1921,7 +1926,7 @@ def storage_data(request, conn=None, url=None, **kwargs):
 
         for username in totals_by_user:
             full_name_by_user.setdefault(username, "")
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to compute storage distribution")
         return JsonResponse({"error": "Storage query failed."}, status=500)
 
@@ -2076,22 +2081,20 @@ def storage_quota_update(request, conn=None, url=None, **kwargs):
             if not isinstance(item, dict):
                 raise QuotaError("Each quota update must be an object")
             normalized.append((item.get("group", ""), item.get("quota_gb", "")))
-    except (json.JSONDecodeError, QuotaError, ValueError, TypeError) as exc:
+    except (json.JSONDecodeError, QuotaError, ValueError, TypeError):
         logger.warning(
             "Invalid quota update payload (content_type=%s, content_length=%s)",
             sanitize_log_value(request.META.get("CONTENT_TYPE", "")),
             sanitize_log_value(request.META.get("CONTENT_LENGTH", "")),
         )
-        return JsonResponse(
-            {"error": "Invalid quota update payload."}, status=400
-        )
+        return JsonResponse({"error": "Invalid quota update payload."}, status=400)
 
     # ---- persist and reconcile ----
     try:
         state = upsert_quotas(normalized, source="ui-edit")
         known_groups = _list_omero_group_names(conn)
         reconciled = reconcile_quotas(known_groups)
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to update quotas")
         return JsonResponse({"error": "Quota update failed."}, status=500)
 
@@ -2133,7 +2136,7 @@ def storage_quota_import(request, conn=None, url=None, **kwargs):
     except (QuotaError, CsvError):
         logger.warning("Invalid CSV import payload.")
         return JsonResponse({"error": "Invalid CSV import."}, status=400)
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to import quotas")
         return JsonResponse({"error": "Quota import failed."}, status=500)
 
@@ -2218,7 +2221,9 @@ def server_database_testing_run(request, conn=None, url=None, **kwargs):
         logger.error(
             "[%s] Failed to run diagnostics scripts %s: %s\n%s",
             request_id,
-            ", ".join(sanitize_log_value(script_id) for script_id in normalized_script_ids),
+            ", ".join(
+                sanitize_log_value(script_id) for script_id in normalized_script_ids
+            ),
             sanitize_log_value(exc),
             traceback.format_exc(),
         )

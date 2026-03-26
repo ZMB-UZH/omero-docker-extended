@@ -68,7 +68,9 @@ def sanitized_exc_info(exc: BaseException):
     try:
         sanitized_exc = exc_type(safe_message)
     except Exception:
-        sanitized_exc = RuntimeError(f"{sanitize_log_value(exc_type.__name__)}: {safe_message}")
+        sanitized_exc = RuntimeError(
+            f"{sanitize_log_value(exc_type.__name__)}: {safe_message}"
+        )
     sanitized_exc = sanitized_exc.with_traceback(exc.__traceback__)
     return type(sanitized_exc), sanitized_exc, sanitized_exc.__traceback__
 

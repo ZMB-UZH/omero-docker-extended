@@ -4,7 +4,7 @@ import time
 from math import ceil
 
 from django.core.cache import cache
-from omero_plugin_common.logging_utils import sanitize_log_value
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
 try:
     from django.core.cache.backends.dummy import DummyCache

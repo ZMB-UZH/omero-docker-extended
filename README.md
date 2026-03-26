@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml/badge.svg)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![Code coverage](https://codecov.io/gh/ZMB-UZH/omero-docker-extended/graph/badge.svg)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
+[![Ruff](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml/badge.svg)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
 

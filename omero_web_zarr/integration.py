@@ -274,7 +274,9 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
     tiles = levels > 1
     payload["tiles"] = tiles
     if tiles:
-        width, height = get_safe_image_tile_size(image, conn=getattr(image, "_conn", None))
+        width, height = get_safe_image_tile_size(
+            image, conn=getattr(image, "_conn", None)
+        )
         payload.update(
             {
                 "tile_size": {"width": width, "height": height},
@@ -326,7 +328,9 @@ def _marshal_regular_image_data_with_safe_tile_size(image, request):
             payload["nominalMagnification"] = nominal_magnification
         try:
             payload["pixel_range"] = image.getPixelRange()
-            payload["channels"] = [channelMarshal(channel) for channel in image.getChannels()]
+            payload["channels"] = [
+                channelMarshal(channel) for channel in image.getChannels()
+            ]
             payload["split_channel"] = image.splitChannelDims()
             payload["rdefs"] = {
                 "model": image.isGreyscaleRenderingModel() and "greyscale" or "color",
@@ -418,7 +422,9 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
             if max_viewer_level == 0:
                 if viewer_level > 0:
-                    message = "Invalid resolution level %s, non pyramid file" % viewer_level
+                    message = (
+                        "Invalid resolution level %s, non pyramid file" % viewer_level
+                    )
                     LOGGER.debug(message, exc_info=True)
                     return HttpResponseBadRequest(message)
                 level = None
@@ -476,7 +482,9 @@ def _safe_regular_image_marshal(original_image_marshal, image, key=None, request
 
 
 def _install_safe_image_marshal_overrides(webgateway_marshal):
-    if getattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False):
+    if getattr(
+        webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False
+    ):
         return webgateway_marshal.imageMarshal
 
     original_image_marshal = webgateway_marshal.imageMarshal
@@ -509,7 +517,9 @@ def _install_safe_image_marshal_overrides(webgateway_marshal):
     return safe_image_marshal
 
 
-def _load_metadata_preview_with_safe_rendering(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+def _load_metadata_preview_with_safe_rendering(
+    request, c_type, c_id, conn=None, share_id=None, **kwargs
+):
     from omeroweb.webclient import views as webclient_views
 
     context = {}
@@ -537,7 +547,10 @@ def _load_metadata_preview_with_safe_rendering(request, c_type, c_id, conn=None,
         for rendering_def in all_rdefs:
             owner_id = rendering_def["owner"]["id"]
             rendering_def["current"] = rendering_def["id"] == current_rdef_id
-            if owner_id not in deduped_rdefs or deduped_rdefs[owner_id]["id"] < rendering_def["id"]:
+            if (
+                owner_id not in deduped_rdefs
+                or deduped_rdefs[owner_id]["id"] < rendering_def["id"]
+            ):
                 deduped_rdefs[owner_id] = rendering_def
         rdefs = list(deduped_rdefs.values())
         for rendering_def in rdefs:
@@ -582,14 +595,18 @@ def _store_backed_image_data(image, request):
     node = load_store_backed_image_node(image)
     channels = _decorate_store_backed_channels(image, image.getChannels(noRE=True))
     level_count = get_store_backed_level_count(node) if node is not None else 1
-    level_sizes = get_store_backed_level_sizes(node) if node is not None else [
-        {"sizeX": int(image.getSizeX()), "sizeY": int(image.getSizeY())}
-    ]
-    tile_size = get_store_backed_tile_size(node) if node is not None else {"width": 256, "height": 256}
-    zoom_scaling = (
-        get_store_backed_zoom_level_scaling(node)
+    level_sizes = (
+        get_store_backed_level_sizes(node)
         if node is not None
-        else {0: 1.0}
+        else [{"sizeX": int(image.getSizeX()), "sizeY": int(image.getSizeY())}]
+    )
+    tile_size = (
+        get_store_backed_tile_size(node)
+        if node is not None
+        else {"width": 256, "height": 256}
+    )
+    zoom_scaling = (
+        get_store_backed_zoom_level_scaling(node) if node is not None else {0: 1.0}
     )
 
     tiles = level_count > 1
@@ -597,7 +614,9 @@ def _store_backed_image_data(image, request):
     if not tiles and conn is not None:
         try:
             max_plane_width, max_plane_height = conn.getMaxPlaneSize()
-            tiles = (image.getSizeX() * image.getSizeY()) > (max_plane_width * max_plane_height)
+            tiles = (image.getSizeX() * image.getSizeY()) > (
+                max_plane_width * max_plane_height
+            )
         except Exception:
             LOGGER.debug(
                 "Failed to determine store-backed tiling threshold for image %s",
@@ -633,7 +652,9 @@ def _store_backed_image_data(image, request):
             "canLink": image.canLink(),
         },
         "tiles": tiles,
-        "interpolate": request.session.get("server_settings", {}).get("viewer", {}).get(
+        "interpolate": request.session.get("server_settings", {})
+        .get("viewer", {})
+        .get(
             "interpolate_pixels",
             True,
         ),
@@ -681,8 +702,7 @@ def _store_backed_image_data(image, request):
                 "tile_size": tile_size,
                 "levels": max(level_count, 1),
                 "resolutions": {
-                    index: level_sizes[index]
-                    for index in range(len(level_sizes))
+                    index: level_sizes[index] for index in range(len(level_sizes))
                 },
                 "zoomLevelScaling": zoom_scaling,
             }
@@ -733,13 +753,17 @@ def _store_backed_region_response(image, request, z=None, t=None, conn=None):
             y = int(tile_fields[2]) * height
             level = select_store_backed_viewer_level(node, viewer_level)
         except Exception:
-            LOGGER.debug("Malformed tile request for store-backed region", exc_info=True)
+            LOGGER.debug(
+                "Malformed tile request for store-backed region", exc_info=True
+            )
             return HttpResponseBadRequest("malformed tile argument")
     elif region:
         try:
             x, y, width, height = [int(value) for value in region.split(",")]
         except Exception:
-            LOGGER.debug("Malformed region request for store-backed image", exc_info=True)
+            LOGGER.debug(
+                "Malformed region request for store-backed image", exc_info=True
+            )
             return HttpResponseBadRequest("malformed region argument")
     else:
         return HttpResponseBadRequest("tile or region argument required")
@@ -909,9 +933,10 @@ def install_webgateway_overrides():
                 try:
                     payload = thumbnails[image_id]
                     if payload:
-                        response[image_id] = "data:image/jpeg;base64,%s" % base64.b64encode(
-                            payload
-                        ).decode("utf-8")
+                        response[image_id] = (
+                            "data:image/jpeg;base64,%s"
+                            % base64.b64encode(payload).decode("utf-8")
+                        )
                 except KeyError:
                     LOGGER.error("Thumbnail not available. (img id: %d)", image_id)
                 except Exception:
@@ -1000,7 +1025,9 @@ def install_webgateway_overrides():
         return payload
 
     @wraps(original_load_metadata_preview)
-    def load_metadata_preview_override(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+    def load_metadata_preview_override(
+        request, c_type, c_id, conn=None, share_id=None, **kwargs
+    ):
         try:
             return original_load_metadata_preview_impl(
                 request,
@@ -1022,8 +1049,12 @@ def install_webgateway_overrides():
                 **kwargs,
             )
 
-    decorated_get_thumbnails_json = login_required()(webgateway_views.jsonp(get_thumbnails_json_override))
-    decorated_image_data_json = login_required()(webgateway_views.jsonp(image_data_json_override))
+    decorated_get_thumbnails_json = login_required()(
+        webgateway_views.jsonp(get_thumbnails_json_override)
+    )
+    decorated_image_data_json = login_required()(
+        webgateway_views.jsonp(image_data_json_override)
+    )
     decorated_render_image = login_required()(render_image_override)
     decorated_render_image_region = login_required()(render_image_region_override)
     decorated_load_metadata_preview = login_required()(

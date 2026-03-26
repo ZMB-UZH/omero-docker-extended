@@ -29,6 +29,7 @@ def _get_optional_positive_int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be a positive integer when set.")
     return value
 
+
 @dataclass(frozen=True)
 class LogConfig:
     """Configuration values for the Loki log backend."""

@@ -1,4 +1,5 @@
 """Tests for _should_auto_skip_import and related constants."""
+
 from __future__ import annotations
 
 import sys
@@ -19,6 +20,7 @@ from omeroweb_import.views.core_functions import (
 
 # ── helpers ──────────────────────────────────────────────────────────
 
+
 class TestConstantsAreLowercase:
     """All entries in the skip sets must be lowercase (matching is case-folded)."""
 
@@ -33,45 +35,56 @@ class TestConstantsAreLowercase:
 
 # ── Windows OS files ─────────────────────────────────────────────────
 
+
 class TestWindowsJunkFiles:
-    @pytest.mark.parametrize("filename", [
-        "Thumbs.db",
-        "thumbs.db",
-        "THUMBS.DB",
-        "desktop.ini",
-        "Desktop.ini",
-        "ehthumbs.db",
-        "ehthumbs_vista.db",
-        "IconCache.db",
-        "ntuser.dat",
-        "ntuser.dat.log",
-        "ntuser.ini",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "Thumbs.db",
+            "thumbs.db",
+            "THUMBS.DB",
+            "desktop.ini",
+            "Desktop.ini",
+            "ehthumbs.db",
+            "ehthumbs_vista.db",
+            "IconCache.db",
+            "ntuser.dat",
+            "ntuser.dat.log",
+            "ntuser.ini",
+        ],
+    )
     def test_windows_files_skipped(self, filename):
         assert _should_auto_skip_import(filename) is True
 
-    @pytest.mark.parametrize("filename", [
-        "Thumbs.db",
-        "desktop.ini",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "Thumbs.db",
+            "desktop.ini",
+        ],
+    )
     def test_windows_files_in_subdirectory_skipped(self, filename):
         assert _should_auto_skip_import(f"experiment/{filename}") is True
 
 
 # ── macOS OS files ───────────────────────────────────────────────────
 
+
 class TestMacOSJunkFiles:
-    @pytest.mark.parametrize("filename", [
-        ".DS_Store",
-        ".ds_store",
-        ".DS_STORE",
-        ".apdisk",
-        ".VolumeIcon.icns",
-        ".fseventsd",
-        ".Spotlight-V100",
-        ".TemporaryItems",
-        ".Trashes",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            ".DS_Store",
+            ".ds_store",
+            ".DS_STORE",
+            ".apdisk",
+            ".VolumeIcon.icns",
+            ".fseventsd",
+            ".Spotlight-V100",
+            ".TemporaryItems",
+            ".Trashes",
+        ],
+    )
     def test_macos_files_skipped(self, filename):
         assert _should_auto_skip_import(filename) is True
 
@@ -83,6 +96,7 @@ class TestMacOSJunkFiles:
 
 # ── Linux OS files ───────────────────────────────────────────────────
 
+
 class TestLinuxJunkFiles:
     def test_directory_file_skipped(self):
         assert _should_auto_skip_import(".directory") is True
@@ -93,24 +107,29 @@ class TestLinuxJunkFiles:
 
 # ── Application metadata files ───────────────────────────────────────
 
+
 class TestApplicationJunkFiles:
-    @pytest.mark.parametrize("filename", [
-        ".picasa.ini",
-        ".BridgeCache",
-        ".bridgecache",
-        ".BridgeCacheT",
-        ".bridgecachet",
-        ".BridgeSort",
-        ".bridgesort",
-        ".PicasaOriginals",
-        ".picasaoriginals",
-        ".adobe",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            ".picasa.ini",
+            ".BridgeCache",
+            ".bridgecache",
+            ".BridgeCacheT",
+            ".bridgecachet",
+            ".BridgeSort",
+            ".bridgesort",
+            ".PicasaOriginals",
+            ".picasaoriginals",
+            ".adobe",
+        ],
+    )
     def test_app_metadata_skipped(self, filename):
         assert _should_auto_skip_import(filename) is True
 
 
 # ── OS junk directories ──────────────────────────────────────────────
+
 
 class TestJunkDirectories:
     def test_lost_and_found_contents_skipped(self):
@@ -145,6 +164,7 @@ class TestJunkDirectories:
 
 
 # ── XML files: MUST NOT be skipped ───────────────────────────────────
+
 
 class TestXMLFilesNeverSkipped:
     """XML files must always be forwarded to OMERO regardless of location."""
@@ -186,34 +206,38 @@ class TestXMLFilesNeverSkipped:
 
 # ── Legitimate image / data files: MUST NOT be skipped ───────────────
 
+
 class TestLegitimateFilesNotSkipped:
     """Regular files must pass through to OMERO."""
 
-    @pytest.mark.parametrize("path", [
-        "image.tif",
-        "image.tiff",
-        "image.ome.tif",
-        "image.ome.tiff",
-        "image.png",
-        "image.jpg",
-        "image.jpeg",
-        "image.bmp",
-        "image.gif",
-        "image.nd2",
-        "image.czi",
-        "image.lif",
-        "image.lsm",
-        "image.dv",
-        "image.svs",
-        "image.vsi",
-        "image.ims",
-        "data.h5",
-        "data.hdf5",
-        "data.csv",
-        "data.txt",
-        "notes.pdf",
-        "readme.md",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "image.tif",
+            "image.tiff",
+            "image.ome.tif",
+            "image.ome.tiff",
+            "image.png",
+            "image.jpg",
+            "image.jpeg",
+            "image.bmp",
+            "image.gif",
+            "image.nd2",
+            "image.czi",
+            "image.lif",
+            "image.lsm",
+            "image.dv",
+            "image.svs",
+            "image.vsi",
+            "image.ims",
+            "data.h5",
+            "data.hdf5",
+            "data.csv",
+            "data.txt",
+            "notes.pdf",
+            "readme.md",
+        ],
+    )
     def test_image_and_data_files_not_skipped(self, path):
         assert _should_auto_skip_import(path) is False
 
@@ -230,6 +254,7 @@ class TestLegitimateFilesNotSkipped:
 
 
 # ── Edge cases ───────────────────────────────────────────────────────
+
 
 class TestEdgeCases:
     def test_empty_string_not_skipped(self):

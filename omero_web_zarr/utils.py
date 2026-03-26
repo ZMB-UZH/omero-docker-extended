@@ -276,11 +276,21 @@ def _read_store_attrs(store_root):
 
 
 def _store_relative_metadata_path(store_root, dataset_path):
-    dataset_root = store_root if dataset_path in ("", ".") else store_root / dataset_path
+    dataset_root = (
+        store_root if dataset_path in ("", ".") else store_root / dataset_path
+    )
     if (dataset_root / ".zarray").is_file():
-        return str(Path(dataset_path) / ".zarray") if dataset_path not in ("", ".") else ".zarray"
+        return (
+            str(Path(dataset_path) / ".zarray")
+            if dataset_path not in ("", ".")
+            else ".zarray"
+        )
     if (dataset_root / "zarr.json").is_file():
-        return str(Path(dataset_path) / "zarr.json") if dataset_path not in ("", ".") else "zarr.json"
+        return (
+            str(Path(dataset_path) / "zarr.json")
+            if dataset_path not in ("", ".")
+            else "zarr.json"
+        )
     return None
 
 
@@ -288,7 +298,11 @@ def _store_node_signature(store_root):
     attrs = _read_store_attrs(store_root)
     multiscales = attrs.get("multiscales") or []
     documents = []
-    for candidate in (store_root / ".zattrs", store_root / "zarr.json", store_root / ".zgroup"):
+    for candidate in (
+        store_root / ".zattrs",
+        store_root / "zarr.json",
+        store_root / ".zgroup",
+    ):
         if candidate.is_file():
             documents.append(candidate)
             break
@@ -297,7 +311,9 @@ def _store_node_signature(store_root):
         datasets = multiscales[0].get("datasets") or []
         for dataset in datasets:
             dataset_path = str(dataset.get("path") or "").strip("/")
-            relative_metadata_path = _store_relative_metadata_path(store_root, dataset_path)
+            relative_metadata_path = _store_relative_metadata_path(
+                store_root, dataset_path
+            )
             if not relative_metadata_path:
                 continue
             documents.append(store_root / relative_metadata_path)
@@ -305,7 +321,9 @@ def _store_node_signature(store_root):
     signature = []
     for document in documents:
         stat = document.stat()
-        signature.append((str(document.relative_to(store_root)), stat.st_mtime_ns, stat.st_size))
+        signature.append(
+            (str(document.relative_to(store_root)), stat.st_mtime_ns, stat.st_size)
+        )
     return tuple(signature)
 
 
@@ -371,7 +389,9 @@ def _load_store_backed_image_node_from_metadata(store_root):
     arrays = []
     for dataset in datasets:
         dataset_path = str(dataset.get("path") or "").strip("/")
-        array_root = store_root if dataset_path in ("", ".") else store_root / dataset_path
+        array_root = (
+            store_root if dataset_path in ("", ".") else store_root / dataset_path
+        )
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -453,7 +473,9 @@ def load_store_backed_image_node(image):
         setattr(image, "_omero_web_zarr_node", node)
         return node
     except OSError:
-        LOGGER.debug("Failed to load store-backed image node for %s", store_root, exc_info=True)
+        LOGGER.debug(
+            "Failed to load store-backed image node for %s", store_root, exc_info=True
+        )
     setattr(image, "_omero_web_zarr_node", None)
     return None
 
@@ -612,8 +634,7 @@ def get_store_backed_zoom_level_scaling(node):
     level_sizes = get_store_backed_level_sizes(node)
     base_width = max(1, int(level_sizes[0]["sizeX"]))
     return {
-        index: level["sizeX"] / base_width
-        for index, level in enumerate(level_sizes)
+        index: level["sizeX"] / base_width for index, level in enumerate(level_sizes)
     }
 
 
@@ -643,7 +664,10 @@ def _clamp_index(index, size):
 def _map_multiscale_index(full_resolution_index, full_resolution_size, level_size):
     if full_resolution_size <= 1 or level_size <= 1:
         return 0
-    return min(level_size - 1, (int(full_resolution_index) * level_size) // full_resolution_size)
+    return min(
+        level_size - 1,
+        (int(full_resolution_index) * level_size) // full_resolution_size,
+    )
 
 
 def _select_axis_index(axis_name, requested, full_size, level_size):
@@ -760,7 +784,9 @@ def render_store_backed_plane(node, *, level=0, z=None, t=None):
             return single_plane
         rgb = np.zeros(single_plane.shape + (3,), dtype=np.uint8)
         for idx, component in enumerate(single_color):
-            rgb[..., idx] = np.round(single_plane.astype(np.float32) * (component / 255.0)).astype(np.uint8)
+            rgb[..., idx] = np.round(
+                single_plane.astype(np.float32) * (component / 255.0)
+            ).astype(np.uint8)
         return rgb
 
     visible = metadata.get("visible") or []
@@ -774,11 +800,22 @@ def render_store_backed_plane(node, *, level=0, z=None, t=None):
         if not is_visible:
             continue
         any_visible = True
-        normalized = _normalize_to_uint8(
-            plane[index],
-            limits[index] if index < len(limits) else None,
-        ).astype(np.float32) / 255.0
-        color = np.asarray(_channel_color(colormap[index] if index < len(colormap) else None, index), dtype=np.float32) / 255.0
+        normalized = (
+            _normalize_to_uint8(
+                plane[index],
+                limits[index] if index < len(limits) else None,
+            ).astype(np.float32)
+            / 255.0
+        )
+        color = (
+            np.asarray(
+                _channel_color(
+                    colormap[index] if index < len(colormap) else None, index
+                ),
+                dtype=np.float32,
+            )
+            / 255.0
+        )
         composite += normalized[..., None] * color
 
     if not any_visible:
@@ -801,7 +838,9 @@ def render_store_backed_pil_image(
         raise Http404("store-backed image data not found")
 
     if level is None:
-        level = select_store_backed_level(node, max_width=max_width, max_height=max_height)
+        level = select_store_backed_level(
+            node, max_width=max_width, max_height=max_height
+        )
     rendered = render_store_backed_plane(node, level=level, z=z, t=t)
 
     from PIL import Image
@@ -904,17 +943,23 @@ def _exception_text(exc):
 
 def is_known_tile_size_failure(exc):
     text = _exception_text(exc)
-    return "ZarrReader" in text and ("getOptimalTileWidth" in text or "getTileSize" in text)
+    return "ZarrReader" in text and (
+        "getOptimalTileWidth" in text or "getTileSize" in text
+    )
 
 
 def _configured_max_tile_length(conn, default=1024):
     if conn is None:
         return int(default)
     try:
-        value = conn.getConfigService().getConfigValue("omero.pixeldata.max_tile_length")
+        value = conn.getConfigService().getConfigValue(
+            "omero.pixeldata.max_tile_length"
+        )
         return max(1, int(value))
     except Exception:
-        LOGGER.debug("Failed to resolve max tile length from OMERO config", exc_info=True)
+        LOGGER.debug(
+            "Failed to resolve max tile length from OMERO config", exc_info=True
+        )
         return int(default)
 
 

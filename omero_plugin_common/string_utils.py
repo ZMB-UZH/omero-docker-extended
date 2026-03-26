@@ -1,4 +1,5 @@
 """Shared string helpers for message payloads."""
+
 from __future__ import annotations
 
 from typing import Callable, Dict, Iterable, Mapping
@@ -17,6 +18,10 @@ def build_message_payload(
     """Build a payload for a list of message names from the provided lookup."""
     payload: Dict[str, str] = {}
     for name in names:
-        key = "confirmIrreversible" if name == "confirm_irreversible_action" else snake_to_camel(name)
+        key = (
+            "confirmIrreversible"
+            if name == "confirm_irreversible_action"
+            else snake_to_camel(name)
+        )
         payload[key] = message_lookup[name]()
     return payload

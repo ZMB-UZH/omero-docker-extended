@@ -1,6 +1,7 @@
 """
 Job storage and management for import workflows.
 """
+
 import os
 import json
 import time
@@ -106,7 +107,11 @@ def refresh_job_status(job_dict):
     # do NOT get stuck in "checking". Mark as compatible once uploads are complete.
     if job_dict.get("special_upload") == "sem_edx_spectra":
         pending_entries = get_compatibility_pending_entries(job_dict)
-        if not pending_entries and job_dict.get("compatibility_status") not in ("compatible", "incompatible", "error"):
+        if not pending_entries and job_dict.get("compatibility_status") not in (
+            "compatible",
+            "incompatible",
+            "error",
+        ):
             job_dict["compatibility_status"] = "compatible"
 
     compatibility_status = job_dict.get("compatibility_status")
@@ -148,13 +153,22 @@ def load_job(job_id: str, jobs_root: Path):
     return None
 
 
-def save_job(job_dict, jobs_root: Path, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def save_job(
+    job_dict,
+    jobs_root: Path,
+    retries: int = JOB_LOCK_RETRIES,
+    timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
+):
     """Save job data to filesystem with retry logic."""
     path = get_job_path(job_dict["job_id"], jobs_root)
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
+            time.sleep(
+                random.uniform(
+                    JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
+                )
+            )
         try:
             with portalocker.Lock(path, "w", timeout=timeout) as handle:
                 json.dump(job_dict, handle)
@@ -169,11 +183,19 @@ def save_job(job_dict, jobs_root: Path, retries: int = JOB_LOCK_RETRIES, timeout
                 retries,
                 exc,
             )
-    logger.error("Failed to lock job file %s for writing after %s attempts.", path, retries)
+    logger.error(
+        "Failed to lock job file %s for writing after %s attempts.", path, retries
+    )
     return False
 
 
-def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def robust_update_job(
+    job_id: str,
+    update_fn,
+    jobs_root: Path,
+    retries: int = JOB_LOCK_RETRIES,
+    timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
+):
     """Atomically update job with function."""
     try:
         path = get_job_path(job_id, jobs_root)
@@ -181,7 +203,11 @@ def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = JO
         return None
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
+            time.sleep(
+                random.uniform(
+                    JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
+                )
+            )
         try:
             with portalocker.Lock(path, "r+", timeout=timeout) as handle:
                 job_dict = json.load(handle)
@@ -203,7 +229,9 @@ def robust_update_job(job_id: str, update_fn, jobs_root: Path, retries: int = JO
                 retries,
                 exc,
             )
-    logger.error("Failed to lock job file %s for update after %s attempts.", path, retries)
+    logger.error(
+        "Failed to lock job file %s for update after %s attempts.", path, retries
+    )
     return None
 
 
@@ -224,6 +252,7 @@ def append_job_error(job: dict, message: str):
     errors = job.get("errors", [])
     errors.append({"timestamp": time.time(), "text": message})
     job["errors"] = errors
+
 
 def _compatibility_pending_entries(job_dict):
     return [

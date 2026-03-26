@@ -69,14 +69,23 @@ class TmpCleanupRegressionTests(TestCase):
             os.utime(payload, (old_time, old_time))
 
             subprocess.run(
-                ["bash", str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"), "--tmp-dir", str(root), "--max-age-seconds", "60"],
+                [
+                    "bash",
+                    str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                    "--tmp-dir",
+                    str(root),
+                    "--max-age-seconds",
+                    "60",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
             self.assertTrue(payload.exists())
-            self.assertTrue((target_dir / tmp_cleanup.RETENTION_DIR_MARKER_NAME).exists())
+            self.assertTrue(
+                (target_dir / tmp_cleanup.RETENTION_DIR_MARKER_NAME).exists()
+            )
 
     def test_tmp_cleaner_respects_active_file_retention_marker(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -94,13 +103,23 @@ class TmpCleanupRegressionTests(TestCase):
             os.utime(job_file, (old_time, old_time))
 
             subprocess.run(
-                ["bash", str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"), "--tmp-dir", str(root), "--max-age-seconds", "60"],
+                [
+                    "bash",
+                    str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                    "--tmp-dir",
+                    str(root),
+                    "--max-age-seconds",
+                    "60",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
             )
 
-            marker = job_file.parent / f".{job_file.name}{tmp_cleanup.RETENTION_FILE_MARKER_SUFFIX}"
+            marker = (
+                job_file.parent
+                / f".{job_file.name}{tmp_cleanup.RETENTION_FILE_MARKER_SUFFIX}"
+            )
             self.assertTrue(job_file.exists())
             self.assertTrue(marker.exists())
 
@@ -118,11 +137,21 @@ class TmpCleanupRegressionTests(TestCase):
             )
             old_time = time.time() - 7200
             os.utime(job_file, (old_time, old_time))
-            marker = job_file.parent / f".{job_file.name}{tmp_cleanup.RETENTION_FILE_MARKER_SUFFIX}"
+            marker = (
+                job_file.parent
+                / f".{job_file.name}{tmp_cleanup.RETENTION_FILE_MARKER_SUFFIX}"
+            )
             os.utime(marker, (old_time, old_time))
 
             subprocess.run(
-                ["bash", str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"), "--tmp-dir", str(root), "--max-age-seconds", "60"],
+                [
+                    "bash",
+                    str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
+                    "--tmp-dir",
+                    str(root),
+                    "--max-age-seconds",
+                    "60",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,

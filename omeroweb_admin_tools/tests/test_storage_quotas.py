@@ -393,8 +393,6 @@ def test_storage_quota_update_endpoint(monkeypatch) -> None:
     assert response.status_code == 200
 
 
-
-
 def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
@@ -423,8 +421,9 @@ def test_storage_quota_update_endpoint_accepts_empty_body(monkeypatch) -> None:
     assert response.status_code == 200
 
 
-
-def test_storage_quota_update_endpoint_accepts_form_encoded_updates(monkeypatch) -> None:
+def test_storage_quota_update_endpoint_accepts_form_encoded_updates(
+    monkeypatch,
+) -> None:
     request = RequestFactory().post(
         "/omeroweb_admin_tools/storage/quota/update/",
         data={"updates": json.dumps([{"group": "demo", "quota_gb": 0.5}])},
@@ -449,6 +448,7 @@ def test_storage_quota_update_endpoint_accepts_form_encoded_updates(monkeypatch)
     response = storage_quota_update(request, conn=None)
 
     assert response.status_code == 200
+
 
 def test_upsert_recovers_from_empty_state_file(tmp_path, monkeypatch) -> None:
     """When the state file exists but is empty, upsert should start fresh."""
@@ -537,8 +537,10 @@ def test_storage_quota_update_hides_payload_parse_details(monkeypatch) -> None:
 
 def _raises(exc):
     """Return a callable that raises the given exception."""
+
     def _fn(*_a, **_kw):
         raise exc
+
     return _fn
 
 
@@ -689,6 +691,8 @@ def test_storage_data_failure_is_sanitized(monkeypatch) -> None:
 
     assert response.status_code == 500
     assert body["error"] == "Storage query failed."
+
+
 def test_managed_repository_compatibility_requires_group_user_prefix(
     monkeypatch,
 ) -> None:

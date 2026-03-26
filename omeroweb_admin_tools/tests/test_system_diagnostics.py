@@ -164,4 +164,6 @@ def test_run_diagnostic_script_hides_internal_exception_text(monkeypatch) -> Non
 
     assert payload["status"] == "fail"
     assert payload["checks"] == []
-    assert payload["error"] == "Failed to execute check due to an internal server error."
+    assert (
+        payload["error"] == "Failed to execute check due to an internal server error."
+    )

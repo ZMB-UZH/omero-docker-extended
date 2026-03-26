@@ -233,9 +233,7 @@ def _load_state(path: Path) -> Dict[str, object]:
         return _fresh_state()
     raw = path.read_text(encoding="utf-8")
     if not raw.strip():
-        logger.warning(
-            "Quota state file %s is empty; initialising fresh state", path
-        )
+        logger.warning("Quota state file %s is empty; initialising fresh state", path)
         return _fresh_state()
     try:
         data = json.loads(raw)
@@ -269,26 +267,26 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     state[STATE_SCHEMA_VERSION_KEY] = STATE_SCHEMA_VERSION
     _ensure_parent(path)
     serialized = json.dumps(state, indent=2, sort_keys=True)
-    
+
     # We use a unique randomized suffix instead of a fixed .tmp to avoid ANY
-    # chance of colliding with a locked or root-owned file from a previous 
+    # chance of colliding with a locked or root-owned file from a previous
     # process or host-side tool.
     random_suffix = uuid.uuid4().hex[:8]
     temp_path = path.with_suffix(f"{path.suffix}.tmp_{random_suffix}")
-    
+
     try:
         temp_path.write_text(serialized, encoding="utf-8")
-        
+
         # Keep host readability without making the state file world-writable.
         os.chmod(temp_path, 0o660)
-        
+
         # os.replace is atomic on POSIX
         os.replace(temp_path, path)
     except PermissionError as exc:
         # Fallback if replacing fails (e.g., sticky bit preventing rename)
         if temp_path.exists():
             temp_path.unlink(missing_ok=True)
-            
+
         if not path.exists() or not os.access(path, os.W_OK):
             raise QuotaError(
                 f"Quota state path is not replaceable/writable: {path}. "
@@ -302,13 +300,15 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
         # Clean up any unique random tmp files we created if something went terribly wrong
         if temp_path.exists():
             temp_path.unlink(missing_ok=True)
-            
+
         # Optional: Attempt to clean up the legacy fixed .tmp file to prevent future confusion
         legacy_tmp = path.with_suffix(f"{path.suffix}.tmp")
         try:
             legacy_tmp.unlink(missing_ok=True)
         except OSError as exc:
-            logger.debug("Suppressed non-fatal exception in storage_quotas.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in storage_quotas.py", exc_info=exc
+            )
 
 
 def _append_log(state: Dict[str, object], level: str, message: str) -> None:
@@ -449,7 +449,9 @@ def upsert_quotas(
     state = _load_state(path)
     quotas = state.setdefault("quotas_gb", {})
     if not isinstance(quotas, dict):
-        raise TypeError(f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}")
+        raise TypeError(
+            f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}"
+        )
     changed = False
 
     for raw_group, raw_quota in updates:
@@ -550,7 +552,9 @@ def reconcile_quotas(known_groups: Sequence[str]) -> Dict[str, object]:
         state = _load_state(path)
         quotas = state.setdefault("quotas_gb", {})
         if not isinstance(quotas, dict):
-            raise TypeError(f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}")
+            raise TypeError(
+                f"Expected 'quotas_gb' to be a dict, got {type(quotas).__name__}"
+            )
 
         auto_set_default_quota = auto_set_default_group_quota_enabled()
         default_quota_gb = default_group_quota_gb()

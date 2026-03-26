@@ -84,7 +84,9 @@ def _db_params():
         try:
             port = int(candidate_str)
         except ValueError:
-            logger.warning("Ignoring invalid port value '%s' for database.", candidate_str)
+            logger.warning(
+                "Ignoring invalid port value '%s' for database.", candidate_str
+            )
             continue
 
         if port not in port_candidates:
@@ -143,7 +145,9 @@ def _connect():
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in data_store.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in data_store.py", exc_info=exc
+                )
 
 
 def _ensure_user_settings_schema(conn):
@@ -297,7 +301,9 @@ def save_special_method_settings(username, method_key, settings_payload):
                 )
                 row = cur.fetchone()
                 if row is None:
-                    raise UserSettingsStoreError(errors.special_method_settings_not_persisted())
+                    raise UserSettingsStoreError(
+                        errors.special_method_settings_not_persisted()
+                    )
     except UserSettingsStoreError:
         raise
     except Exception as e:

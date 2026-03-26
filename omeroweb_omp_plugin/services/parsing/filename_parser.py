@@ -1,6 +1,7 @@
 """
 Filename parsing logic.
 """
+
 import re
 import logging
 
@@ -11,11 +12,11 @@ _UNSAFE_SEPARATOR_REGEX_RE = re.compile(r"(\(\?[:!=<]|\\[1-9]|\{\d|\*\+|\+\+)")
 def parse_filename(filename, sep_pattern):
     """
     Parse filename into parts using separator pattern.
-    
+
     Args:
         filename: Image filename to parse
         sep_pattern: Regular expression pattern for separator
-        
+
     Returns:
         List of parsed parts
     """

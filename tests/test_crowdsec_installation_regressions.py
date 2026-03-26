@@ -21,7 +21,9 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             cls.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
         )
 
-    def test_console_enrollment_still_runs_when_only_capi_credentials_exist(self) -> None:
+    def test_console_enrollment_still_runs_when_only_capi_credentials_exist(
+        self,
+    ) -> None:
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -46,7 +48,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
-                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / "data"}"
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="token-value"
                 CROWDSEC_ENGINE_NAME="omero-host"
@@ -89,7 +91,9 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
             config_dir.mkdir(parents=True, exist_ok=True)
             data_dir = tmpdir_path / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
-            (data_dir / ".console-enrollment-install.done").write_text("", encoding="utf-8")
+            (data_dir / ".console-enrollment-install.done").write_text(
+                "", encoding="utf-8"
+            )
             log_path = tmpdir_path / "cscli.log"
 
             script = textwrap.dedent(
@@ -143,7 +147,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
-                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / "data"}"
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="sudo cscli console enroll first-install-token"
                 CROWDSEC_ENGINE_NAME="omero-host"
@@ -190,7 +194,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
-                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / "data"}"
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="1"
                 CROWDSEC_ENROLL_KEY="CHANGEVALUE3"
                 CROWDSEC_ENGINE_NAME="CHANGEVALUE4"
@@ -211,7 +215,9 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 "console disable",
             )
 
-    def test_console_enrollment_is_never_attempted_on_regular_restart_without_install_arm(self) -> None:
+    def test_console_enrollment_is_never_attempted_on_regular_restart_without_install_arm(
+        self,
+    ) -> None:
         helper_block = self._slice_between(
             self.crowdsec_entrypoint,
             "is_true() {",
@@ -237,7 +243,7 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 f"""\
                 set -euo pipefail
                 CROWDSEC_CONFIG_DIR="{config_dir}"
-                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / 'data'}"
+                CROWDSEC_INSTALL_BOOTSTRAP_STATE_DIR="{tmpdir_path / "data"}"
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="0"
                 CROWDSEC_ENROLL_KEY="first-install-token"
                 CROWDSEC_ENGINE_NAME="omero-host"
@@ -258,7 +264,9 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 "Regular CrowdSec restarts must not trigger console enrollment even when CAPI credentials already exist.",
             )
 
-    def test_restart_helper_restarts_running_container_once_and_removes_marker(self) -> None:
+    def test_restart_helper_restarts_running_container_once_and_removes_marker(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             bin_dir = tmpdir_path / "bin"
@@ -309,8 +317,12 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 env=env,
             )
 
-            self.assertFalse(marker_path.exists(), "Helper must remove the one-shot marker.")
-            self.assertEqual(log_path.read_text(encoding="utf-8").strip(), "restart crowdsec")
+            self.assertFalse(
+                marker_path.exists(), "Helper must remove the one-shot marker."
+            )
+            self.assertEqual(
+                log_path.read_text(encoding="utf-8").strip(), "restart crowdsec"
+            )
 
     def test_restart_helper_skips_restart_when_container_is_not_running(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -364,10 +376,17 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 env=env,
             )
 
-            self.assertFalse(marker_path.exists(), "Helper must clear stale one-shot markers.")
-            self.assertFalse(log_path.exists(), "Stopped containers must not be restarted by the helper.")
+            self.assertFalse(
+                marker_path.exists(), "Helper must clear stale one-shot markers."
+            )
+            self.assertFalse(
+                log_path.exists(),
+                "Stopped containers must not be restarted by the helper.",
+            )
 
-    def test_installation_arms_bootstrap_even_when_runtime_state_already_exists(self) -> None:
+    def test_installation_arms_bootstrap_even_when_runtime_state_already_exists(
+        self,
+    ) -> None:
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -384,13 +403,13 @@ class CrowdSecInstallationRegressionTests(unittest.TestCase):
                 set -euo pipefail
                 CROWDSEC_ENROLL_KEY="real-token"
                 CROWDSEC_CONFIG_PATH="{config_dir}"
-                CROWDSEC_DB_PATH="{tmpdir_path / 'crowdsec_db'}"
+                CROWDSEC_DB_PATH="{tmpdir_path / "crowdsec_db"}"
                 CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED=0
                 CROWDSEC_INSTALL_BOOTSTRAP_ENROLL=0
                 {install_block}
                 prepare_crowdsec_install_bootstrap_enrollment
                 printf 'before=%s,%s\\n' "${{CROWDSEC_INSTALL_AUTO_RESTART_REQUIRED}}" "${{CROWDSEC_INSTALL_BOOTSTRAP_ENROLL}}"
-                cat > "{config_dir / 'config.yaml'}" <<'EOF'
+                cat > "{config_dir / "config.yaml"}" <<'EOF'
 api:
   server:
     listen_uri: 127.0.0.1:8080
@@ -411,7 +430,9 @@ EOF
             )
             self.assertEqual(stdout_lines[-1], "after=1,1")
 
-    def test_installation_reports_existing_crowdsec_runtime_state_in_transcript(self) -> None:
+    def test_installation_reports_existing_crowdsec_runtime_state_in_transcript(
+        self,
+    ) -> None:
         install_block = self._slice_between(
             self.installation_script,
             "is_crowdsec_enabled() {",
@@ -424,7 +445,9 @@ EOF
             db_dir = tmpdir_path / "crowdsec_db"
             config_dir.mkdir(parents=True, exist_ok=True)
             db_dir.mkdir(parents=True, exist_ok=True)
-            (db_dir / "crowdsec.db").write_text("sqlite-placeholder\n", encoding="utf-8")
+            (db_dir / "crowdsec.db").write_text(
+                "sqlite-placeholder\n", encoding="utf-8"
+            )
 
             script = textwrap.dedent(
                 f"""\

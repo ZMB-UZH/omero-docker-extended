@@ -147,12 +147,19 @@ class _InMemoryTTLCache:
         return future.result()
 
     def _prune_locked(self, now: float) -> None:
-        expired = [key for key, record in self._values.items() if record.expires_at <= now]
+        expired = [
+            key for key, record in self._values.items() if record.expires_at <= now
+        ]
         for key in expired:
             record = self._values.pop(key, None)
             if record is not None:
-                self._total_size_bytes = max(0, self._total_size_bytes - record.size_bytes)
-        if len(self._values) <= self._max_items and self._total_size_bytes <= self._max_bytes:
+                self._total_size_bytes = max(
+                    0, self._total_size_bytes - record.size_bytes
+                )
+        if (
+            len(self._values) <= self._max_items
+            and self._total_size_bytes <= self._max_bytes
+        ):
             return
         overflow_items = max(0, len(self._values) - self._max_items)
         oldest = sorted(
@@ -168,7 +175,10 @@ class _InMemoryTTLCache:
                 continue
             overflow_items = max(0, overflow_items - 1)
             self._total_size_bytes = max(0, self._total_size_bytes - record.size_bytes)
-            if len(self._values) <= self._max_items and self._total_size_bytes <= self._max_bytes:
+            if (
+                len(self._values) <= self._max_items
+                and self._total_size_bytes <= self._max_bytes
+            ):
                 break
 
     def reconfigure(self, *, max_bytes: Optional[int] = None) -> None:
@@ -223,6 +233,7 @@ _INTERNAL_LABELS_CACHE = _InMemoryTTLCache(
     size_estimator=_estimate_label_cache_size,
 )
 
+
 @dataclass(frozen=True)
 class LogEntry:
     """Typed log entry returned from Loki."""
@@ -231,6 +242,7 @@ class LogEntry:
     container: str
     level: str
     message: str
+
 
 def _normalize_internal_service(service: str) -> str:
     """
@@ -241,6 +253,7 @@ def _normalize_internal_service(service: str) -> str:
     if service.endswith("_internal"):
         return service[: -len("_internal")]
     return service
+
 
 def _split_internal_container(container: str) -> Optional[Tuple[str, str]]:
     """Split a container string like 'omeroserver_internal/Blitz-0.log'."""
@@ -293,10 +306,12 @@ def build_loki_query(containers: List[str]) -> str:
     selector = "|".join(re.escape(c) for c in containers)
     return f'{{compose_service=~"^({selector})$"}}'
 
+
 def _format_timestamp(value_ns: str) -> str:
     """Convert a Loki nanosecond timestamp to an ISO string."""
     timestamp = dt.datetime.fromtimestamp(int(value_ns) / 1e9, tz=dt.timezone.utc)
     return timestamp.isoformat()
+
 
 def _parse_level_from_message(message: str) -> Optional[str]:
     """Try to extract a log level from the message text.
@@ -343,14 +358,16 @@ def _parse_level_from_message(message: str) -> Optional[str]:
 
     return None
 
+
 _TRACEBACK_FRAME_PREFIXES = (
     "during handling of the above exception",
     'file "',
 )
 
 _EXCEPTION_LINE_RE = re.compile(
-    r'^[A-Za-z][A-Za-z0-9_.]*(?:Error|Exception|Warning|Interrupt|Failure|Refused|NotFound)s?:'
+    r"^[A-Za-z][A-Za-z0-9_.]*(?:Error|Exception|Warning|Interrupt|Failure|Refused|NotFound)s?:"
 )
+
 
 def _is_traceback_continuation(message: str) -> bool:
     """Return True for traceback frame/continuation lines (not the start or exception line)."""
@@ -358,6 +375,7 @@ def _is_traceback_continuation(message: str) -> bool:
         return False
     lowered = message.strip().lower()
     return lowered.startswith(_TRACEBACK_FRAME_PREFIXES)
+
 
 def _is_django_template_lookup_noise(message: str) -> bool:
     """Return True for Django template lookup diagnostics that are not runtime failures."""
@@ -370,12 +388,14 @@ def _is_django_template_lookup_noise(message: str) -> bool:
         return False
     return True
 
+
 def _is_redis_bloom_info(message: str) -> bool:
     """Return True for RedisBloom informational lines containing bf-error-rate."""
     if not message:
         return False
     lowered = message.lower()
     return "<bf>" in lowered and "bf-error-rate" in lowered
+
 
 def _infer_level_from_message(message: str) -> str:
     """Infer a severity when stream labels do not provide a trusted level."""
@@ -410,9 +430,7 @@ def _infer_level_from_message(message: str) -> str:
         if re.search(pattern, lowered):
             return "error"
 
-    warning_patterns = (
-        r"\b(warn|warning|deprecated|retry|timed?\s*out|timeout)\b",
-    )
+    warning_patterns = (r"\b(warn|warning|deprecated|retry|timed?\s*out|timeout)\b",)
     for pattern in warning_patterns:
         if re.search(pattern, lowered):
             return "warn"
@@ -423,6 +441,7 @@ def _infer_level_from_message(message: str) -> str:
             return "debug"
 
     return "info"
+
 
 def _normalize_level(stream_level: str, message: str) -> str:
     """Normalize Loki stream level labels to canonical UI values."""
@@ -456,6 +475,7 @@ def _normalize_level(stream_level: str, message: str) -> str:
 
     return _infer_level_from_message(message)
 
+
 def _execute_loki_query(
     config: LogConfig,
     query: str,
@@ -480,13 +500,15 @@ def _execute_loki_query(
         }
     )
     url = f"{config.loki_url}/loki/api/v1/query_range?{params}"
-    
+
     # FIX: Validate URL against config to prevent SSRF (CodeQL #91)
     base_parsed = urllib.parse.urlparse(config.loki_url)
     url_parsed = urllib.parse.urlparse(url)
-    if (url_parsed.scheme != base_parsed.scheme or 
-        url_parsed.netloc != base_parsed.netloc):
-            raise RuntimeError("Invalid Loki URL (SSRF protection)")
+    if (
+        url_parsed.scheme != base_parsed.scheme
+        or url_parsed.netloc != base_parsed.netloc
+    ):
+        raise RuntimeError("Invalid Loki URL (SSRF protection)")
 
     request = urllib.request.Request(url, method="GET")
     try:
@@ -516,6 +538,7 @@ def _execute_loki_query(
         raise RuntimeError(f"Loki request failed: {exc}") from exc
     except (TimeoutError, socket.timeout) as exc:
         raise RuntimeError(f"Loki request timed out: {exc}") from exc
+
 
 def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
     """Extract LogEntry objects from a Loki query_range response payload."""
@@ -572,6 +595,7 @@ def _parse_entries_from_payload(payload: dict) -> List[LogEntry]:
                 )
             )
     return entries
+
 
 def fetch_loki_logs(
     config: LogConfig,
@@ -766,7 +790,9 @@ def _fetch_loki_logs_uncached(
                 else:
                     logger.warning(
                         "%s log query failed for %s: %s",
-                        "Internal" if job.source_type.startswith("internal") else "Docker",
+                        "Internal"
+                        if job.source_type.startswith("internal")
+                        else "Docker",
                         job.source_name,
                         exc,
                     )
@@ -815,6 +841,7 @@ def _fetch_loki_logs_uncached(
     )
     return result
 
+
 def _strip_message_prefix(message: str) -> str:
     """Remove duplicate timestamp/level prefixes from a log message."""
     if not message:
@@ -838,6 +865,7 @@ def _strip_message_prefix(message: str) -> str:
             return cleaned.lstrip()
     return message
 
+
 def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
     """Extract the filename label for internal OMERO log streams."""
     for key in ("filename", "filepath", "__path__", "path", "file"):
@@ -845,6 +873,7 @@ def _extract_filename(stream_labels: Dict[str, str]) -> Optional[str]:
         if value:
             return os.path.basename(value)
     return None
+
 
 def _build_internal_file_query(
     service: str, filename: str, label_key: str = "filepath"
@@ -865,8 +894,7 @@ def _build_internal_files_query(
         raise ValueError("At least one filename is required for an internal log query.")
     normalized = _normalize_internal_service(service)
     escaped_parts = [
-        re.escape(filename).replace("\\", "\\\\")
-        for filename in sorted(set(filenames))
+        re.escape(filename).replace("\\", "\\\\") for filename in sorted(set(filenames))
     ]
     pattern = "|".join(escaped_parts)
     return (
@@ -922,6 +950,7 @@ def _build_logs_cache_key(
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+
 def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     """Limit entries per container/file to the most recent `limit` items."""
     if limit <= 0:
@@ -936,6 +965,7 @@ def _cap_entries_per_container(entries: List[LogEntry], limit: int) -> List[LogE
         capped.extend(container_entries[:limit])
     return capped
 
+
 def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     """Apply a global cap on total entries, keeping the most recent ones."""
     if limit <= 0:
@@ -946,6 +976,7 @@ def _apply_global_cap(entries: List[LogEntry], limit: int) -> List[LogEntry]:
     sorted_entries = sorted(entries, key=_entry_sort_key, reverse=True)
     return sorted_entries[:limit]
 
+
 def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
     """Sort key for log entries based on timestamp."""
     try:
@@ -953,6 +984,7 @@ def _entry_sort_key(entry: LogEntry) -> Tuple[int, str]:
         return int(timestamp.timestamp()), entry.timestamp
     except ValueError:
         return 0, entry.timestamp
+
 
 def fetch_internal_log_labels(
     config: LogConfig,
@@ -972,7 +1004,9 @@ def fetch_internal_log_labels(
     return list(labels), label_key
 
 
-def _fetch_internal_log_labels_uncached(compose_service: str) -> Tuple[Tuple[str, ...], str]:
+def _fetch_internal_log_labels_uncached(
+    compose_service: str,
+) -> Tuple[Tuple[str, ...], str]:
     """Discover internal log filenames from the mounted filesystem."""
     discovered = _discover_internal_log_labels_from_filesystem(compose_service)
     if discovered is None:
@@ -992,6 +1026,7 @@ def _fetch_internal_log_labels_uncached(compose_service: str) -> Tuple[Tuple[str
             normalized,
         )
     return tuple(labels), label_key
+
 
 def serialize_entries(entries: List[LogEntry]) -> List[Dict[str, str]]:
     """Serialize LogEntry objects for JSON responses."""
