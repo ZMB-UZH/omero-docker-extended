@@ -16,7 +16,7 @@ def test_build_log_config_validates_environment_values(monkeypatch):
     monkeypatch.setattr(
         admin_config,
         "require_env",
-        lambda name, env_file=None, hint=None: "http://loki:3100/",
+        lambda name, env_file=None, hint=None: "https://loki:3100/",
     )
     monkeypatch.setattr(
         admin_config,
@@ -40,7 +40,7 @@ def test_build_log_config_validates_environment_values(monkeypatch):
     config = admin_config.build_log_config()
 
     assert config == admin_config.LogConfig(
-        loki_url="http://loki:3100",
+        loki_url="https://loki:3100",
         lookback_seconds=900,
         max_entries=250,
         timeout_seconds=4.5,
@@ -157,12 +157,17 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
         def close(self):
             raise RuntimeError("close failed")
 
+    def _psycopg2_connection():
+        return type(
+            "Psycopg2",
+            (),
+            {"connect": staticmethod(lambda **kwargs: _Connection())},
+        )()
+
     monkeypatch.setattr(
         system_diagnostics,
         "_load_psycopg2",
-        lambda: type(
-            "Psycopg2", (), {"connect": staticmethod(lambda **kwargs: _Connection())}
-        )(),
+        _psycopg2_connection,
     )
     value, error = system_diagnostics._execute_sql_sanity_query(
         DatabaseRuntimeProfile("database", 5432, "omero", "secret", "omero")
@@ -171,7 +176,7 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     assert error == "SQL query returned no rows."
 
     http_error = urllib.error.HTTPError(
-        "http://omeroserver",
+        "https://omeroserver",
         503,
         "Service Unavailable",
         hdrs=None,
@@ -185,7 +190,7 @@ def test_system_diagnostics_edge_branches_cover_runtime_failures(monkeypatch):
     http_result = system_diagnostics._http_probe(
         "http",
         "Probe HTTP",
-        "http://omeroserver",
+        "https://omeroserver",
         1.0,
     )
     assert http_result.status == "fail"

@@ -1,5 +1,6 @@
 import json
 import sys
+import tempfile
 from django.http import Http404
 from io import BytesIO
 from pathlib import Path
@@ -346,7 +347,7 @@ def test_collect_store_metadata_documents_includes_nested_metadata(tmp_path):
 
 
 def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkeypatch):
-    image = _FakeImage("/tmp/fake.zarr")
+    image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 2
     node = _FakeNode(
         [np.zeros((2, 4, 4), dtype=np.uint16)],
@@ -387,7 +388,7 @@ def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkey
 
 
 def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkeypatch):
-    image = _FakeImage("/tmp/fake.zarr")
+    image = _FakeImage(str(Path(tempfile.gettempdir()) / "fake.zarr"))
     image._size_c = 1
     monkeypatch.setattr(
         "omero_web_zarr.utils.load_store_backed_image_node", lambda image: None

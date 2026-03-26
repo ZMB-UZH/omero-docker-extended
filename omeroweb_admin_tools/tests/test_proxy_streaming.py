@@ -45,7 +45,7 @@ def test_proxy_http_request_suppresses_prometheus_live_notification_stream(
 
     response = _proxy_http_request(
         _DummyDjangoRequest(),
-        "http://prometheus:9090",
+        "https://prometheus:9090",
         "api/v1/notifications/live",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/prometheus-proxy",
     )
@@ -65,7 +65,7 @@ def test_proxy_http_request_returns_gateway_timeout_for_backend_timeout(
 
     response = _proxy_http_request(
         _DummyDjangoRequest(),
-        "http://prometheus:9090",
+        "https://prometheus:9090",
         "api/v1/query",
         "query=up",
     )
@@ -86,7 +86,7 @@ def test_proxy_http_request_returns_gateway_timeout_for_socket_timeout(
 
     response = _proxy_http_request(
         _DummyDjangoRequest(),
-        "http://prometheus:9090",
+        "https://prometheus:9090",
         "api/v1/query",
         "query=up",
     )

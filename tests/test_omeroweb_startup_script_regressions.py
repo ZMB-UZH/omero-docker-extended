@@ -10,6 +10,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -188,7 +191,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                ["bash", str(self.default_config_script)], check=True, env=env
+                [BASH_BIN, str(self.default_config_script)], check=True, env=env
             )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
@@ -209,7 +212,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
             }
 
             subprocess.run(
-                ["bash", str(self.cleanprevious_script)], check=True, env=env
+                [BASH_BIN, str(self.cleanprevious_script)], check=True, env=env
             )
 
             self.assertFalse(pid_file.exists())
