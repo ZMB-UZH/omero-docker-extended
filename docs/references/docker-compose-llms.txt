@@ -1,7 +1,7 @@
 Docker Compose reference notes for AI agent workflows.
 
 Service topology (docker-compose.yml):
-- 20 Compose services total on a single "omero" bridge network: 18 long-running runtime containers by default, 19 when the profile-gated crowdsec service is enabled, plus the one-shot redis-sysctl-init helper during Redis startup.
+- 20 Compose services total on a single "omero" bridge network: 18 long-running runtime containers by default, 19 when the profile-gated crowdsec service is enabled. The one-shot redis-sysctl-init helper is also profile-gated (sysctl-init); the installation script persists the sysctl on the host.
 - All services have explicit healthcheck: blocks (interval 10s, timeout 10s, retries 30).
 - Service startup ordering via depends_on with condition: service_healthy.
 - All services use security_opt: no-new-privileges:true.
@@ -15,7 +15,7 @@ Core services:
 - redis (port 6379): Redis 8.4.0-alpine, in-memory only (no persistence), 512MB LRU, tmpfs-backed.
 
 Supporting services:
-- redis-sysctl-init: one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately.
+- redis-sysctl-init: profile-gated (sysctl-init) one-shot Alpine sidecar, sets vm.overcommit_memory=1, exits immediately. Not needed during normal operation when sysctl is persisted on host.
 - pg-maintenance: cron-based PostgreSQL VACUUM ANALYZE (weekly) + REINDEX CONCURRENTLY (monthly).
 - portainer (ports 9000, 9443): container management UI.
 
