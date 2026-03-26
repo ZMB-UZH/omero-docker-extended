@@ -114,7 +114,33 @@ jobs:
           python3 -m coverage combine --rcfile=.coveragerc
           python3 -m coverage xml --rcfile=.coveragerc
 
+      # ----------------------------------------------------------------
+      # SonarCloud scan — requires one-time setup:
+      #
+      #   1. Go to https://sonarcloud.io and sign in with your GitHub account.
+      #   2. Import the ZMB-UZH organization (or your fork's org).
+      #   3. Add the omero-docker-extended project.
+      #   4. In SonarCloud > My Account > Security, generate a token.
+      #   5. In GitHub > repo Settings > Secrets > Actions, create a
+      #      secret named SONAR_TOKEN with the token value.
+      #
+      # Until the secret is configured, this step is skipped and the
+      # workflow passes (tests + coverage still run above).
+      # ----------------------------------------------------------------
+      - name: Validate SONAR_TOKEN
+        id: sonar_token_check
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "${SONAR_TOKEN}" ]; then
+            echo "::warning::SONAR_TOKEN is not configured. SonarCloud scan will be skipped. See workflow comments for setup instructions."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: SonarCloud Scan
+        if: steps.sonar_token_check.outputs.available == 'true'
         uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
