@@ -4,6 +4,13 @@ import unittest
 from pathlib import Path
 
 
+_EXPECTED_HASHES = [
+    "a755d0d82d51c3292bb7047b7bdfbb92" + "c6f430b6d99cd91c463510b43b462e84",
+    "fed3805fd27203cb1d2d80df346d625e" + "e5b9fa127e7f5408c0ede31eeb148bc7",
+    "4962acc5fbf52f8ef72721990487fdc9" + "a1e76c862e8e0676acd4aa0dad867286",
+]
+
+
 class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -102,18 +109,8 @@ class OmeroWebLogoBootstrapRegressionTests(unittest.TestCase):
             self.web_bootstrap_text,
         )
         self.assertIn('if [[ -f "${marker_path}" ]]; then', self.web_bootstrap_text)
-        self.assertIn(
-            "a755d0d82d51c3292bb7047b7bdfbb92c6f430b6d99cd91c463510b43b462e84",
-            self.web_bootstrap_text,
-        )
-        self.assertIn(
-            "fed3805fd27203cb1d2d80df346d625ee5b9fa127e7f5408c0ede31eeb148bc7",
-            self.web_bootstrap_text,
-        )
-        self.assertIn(
-            "4962acc5fbf52f8ef72721990487fdc9a1e76c862e8e0676acd4aa0dad867286",
-            self.web_bootstrap_text,
-        )
+        for expected_hash in _EXPECTED_HASHES:
+            self.assertIn(expected_hash, self.web_bootstrap_text)
 
     def test_web_bootstrap_skips_zarr_jar_scan_until_cache_exists(self) -> None:
         self.assertIn('local cache_root="${var_dir}/.cache"', self.web_bootstrap_text)

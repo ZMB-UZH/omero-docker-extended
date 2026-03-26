@@ -79,7 +79,8 @@ def test_in_memory_cache_expires_entries_and_supports_delete_clear(monkeypatch):
     assert cache.get("alpha") is None
 
     cache.set("beta", 2, timeout=10)
-    assert cache.delete("beta") is True
+    deleted = cache.delete("beta")
+    assert deleted is True
     assert cache.get("beta") is None
 
     cache.set("gamma", 3, timeout=10)

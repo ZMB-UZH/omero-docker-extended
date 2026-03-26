@@ -720,7 +720,7 @@ def _regenerate_xy_only_pyramid(
         try:
             s0_zarray_path.write_text(json.dumps(s0_meta), encoding="utf-8")
         except OSError:
-            pass
+            LOGGER.debug("Suppressed OSError writing .zarray metadata", exc_info=True)
 
     s0_transforms = datasets[0].get("coordinateTransformations", [])
     s0_scale = None
