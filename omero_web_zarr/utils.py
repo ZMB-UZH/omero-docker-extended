@@ -88,7 +88,11 @@ def generate_coordinate_transformations(shapes):
     data_shape = shapes[0]
     transformations = []
     for shape in shapes:
-        assert len(shape) == len(data_shape)
+        if len(shape) != len(data_shape):
+            raise ValueError(
+                f"Shape dimension mismatch: expected {len(data_shape)}, "
+                f"got {len(shape)}"
+            )
         scale = [full / level for full, level in zip(data_shape, shape)]
         transformations.append([{"type": "scale", "scale": scale}])
 

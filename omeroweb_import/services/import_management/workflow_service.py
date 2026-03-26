@@ -27,6 +27,7 @@ _start_import_thread = _core._start_import_thread
 
 __all__ = [
     "OMERO_CLI",
+    "subprocess",
     "_classify_compatibility_output",
     "_has_import_candidates_in_output",
     "_extract_import_candidates",
