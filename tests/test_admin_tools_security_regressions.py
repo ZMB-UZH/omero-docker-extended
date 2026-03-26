@@ -167,7 +167,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
             ):
                 storage_quotas._write_state(state_path, {"quotas_gb": {}, "logs": []})
 
-        self.assertEqual([0o660], seen_modes)
+        self.assertEqual([0o640], seen_modes)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from PIL import Image
 
 from omero_web_zarr.utils import collect_store_metadata_documents
 from omero_web_zarr.utils import encode_store_backed_pil_image
+from omero_web_zarr.utils import generate_coordinate_transformations
 from omero_web_zarr.utils import get_safe_image_tile_size
 from omero_web_zarr.utils import open_compat_array
 from omero_web_zarr.utils import is_store_metadata_path
@@ -634,3 +635,19 @@ def test_encode_store_backed_pil_image_supports_png_and_tiff():
     assert tif_suffix == "tif"
     assert png_payload[:8] == b"\x89PNG\r\n\x1a\n"
     assert tif_payload[:4] in (b"II*\x00", b"MM\x00*")
+
+
+def test_generate_coordinate_transformations_computes_scales():
+    """Verify scale factors for a two-level pyramid."""
+    shapes = [(1, 1, 100, 200), (1, 1, 50, 100)]
+    result = generate_coordinate_transformations(shapes)
+    assert len(result) == 2
+    assert result[0] == [{"type": "scale", "scale": [1.0, 1.0, 1.0, 1.0]}]
+    assert result[1] == [{"type": "scale", "scale": [1.0, 1.0, 2.0, 2.0]}]
+
+
+def test_generate_coordinate_transformations_rejects_dimension_mismatch():
+    """Shapes with differing number of dimensions must raise ValueError."""
+    shapes = [(1, 1, 100, 200), (1, 50, 100)]
+    with pytest.raises(ValueError, match="Shape dimension mismatch"):
+        generate_coordinate_transformations(shapes)

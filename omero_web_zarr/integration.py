@@ -10,6 +10,7 @@ from django.conf import settings
 from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseBadRequest
+from django.utils.html import escape as _html_escape
 import omero
 from django.urls.resolvers import URLPattern, URLResolver
 import numpy as np
@@ -416,43 +417,58 @@ def _render_regular_image_region_with_safe_tile_size(request, iid, z, t, conn=No
 
             viewer_level = int(fields[0])
             if viewer_level < 0:
-                message = "Invalid resolution level %s < 0" % viewer_level
+                message = "Invalid resolution level %d < 0" % viewer_level
                 LOGGER.debug(message, exc_info=True)
-                return HttpResponseBadRequest(message)
+                return HttpResponseBadRequest(
+                    _html_escape(message), content_type="text/plain; charset=utf-8"
+                )
 
             if max_viewer_level == 0:
                 if viewer_level > 0:
                     message = (
-                        "Invalid resolution level %s, non pyramid file" % viewer_level
+                        "Invalid resolution level %d, non pyramid file" % viewer_level
                     )
                     LOGGER.debug(message, exc_info=True)
-                    return HttpResponseBadRequest(message)
+                    return HttpResponseBadRequest(
+                        _html_escape(message),
+                        content_type="text/plain; charset=utf-8",
+                    )
                 level = None
             else:
                 level = max_viewer_level - viewer_level
                 if level < 0:
                     message = (
-                        "Invalid resolution level, %s > number of available levels %s "
+                        "Invalid resolution level, %d > number of available levels %d "
                         % (viewer_level, max_viewer_level)
                     )
                     LOGGER.debug(message, exc_info=True)
-                    return HttpResponseBadRequest(message)
+                    return HttpResponseBadRequest(
+                        _html_escape(message),
+                        content_type="text/plain; charset=utf-8",
+                    )
 
             x = int(fields[1]) * width
             y = int(fields[2]) * height
         except Exception:
-            message = "malformed tile argument, tile=%s" % tile
+            message = "malformed tile argument, tile=%s" % _html_escape(str(tile))
             LOGGER.debug(message, exc_info=True)
-            return HttpResponseBadRequest(message)
+            return HttpResponseBadRequest(
+                message, content_type="text/plain; charset=utf-8"
+            )
     elif region:
         try:
             x, y, width, height = [int(value) for value in region.split(",")]
         except Exception:
-            message = "malformed region argument, region=%s" % region
+            message = "malformed region argument, region=%s" % _html_escape(str(region))
             LOGGER.debug(message, exc_info=True)
-            return HttpResponseBadRequest(message)
+            return HttpResponseBadRequest(
+                message, content_type="text/plain; charset=utf-8"
+            )
     else:
-        return HttpResponseBadRequest("tile or region argument required")
+        return HttpResponseBadRequest(
+            "tile or region argument required",
+            content_type="text/plain; charset=utf-8",
+        )
 
     jpeg_data = image.renderJpegRegion(
         z,

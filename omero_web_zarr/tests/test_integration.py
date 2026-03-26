@@ -1123,3 +1123,48 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
     assert context["rdefs"] == []
     assert context["rdefsJson"] == "[]"
     assert context["tiledImage"] is True
+
+
+def test_render_tile_bad_request_escapes_user_input():
+    """HttpResponseBadRequest from tile parsing must HTML-escape reflected input.
+
+    User-supplied tile/region values flow into error messages.  They must be
+    escaped to prevent reflected XSS when a browser renders the response.
+    """
+    from django.utils.html import escape as html_escape
+    from omeroweb.webgateway import views as webgateway_views
+
+    xss_payload = '<script>alert("xss")</script>'
+    factory = RequestFactory()
+    request = factory.get(
+        "/render_image_region/1/0/0/",
+        {"tile": xss_payload},
+    )
+    request.session = {"connector": {"server_id": "1"}}
+
+    class _FakeImage:
+        _re = None
+
+        def _prepareRenderingEngine(self):
+            raise ValueError("forced")
+
+    import unittest.mock as mock
+
+    with mock.patch.object(
+        webgateway_views,
+        "_get_prepared_image",
+        return_value=(_FakeImage(), 90),
+    ):
+        response = integration._render_regular_image_region_with_safe_tile_size(
+            request,
+            1,
+            0,
+            0,
+            conn=None,
+        )
+
+    assert response.status_code == 400
+    body = response.content.decode("utf-8")
+    assert xss_payload not in body
+    assert html_escape(xss_payload) in body
+    assert response["Content-Type"] == "text/plain; charset=utf-8"

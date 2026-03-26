@@ -63,7 +63,11 @@ def inspect_ome_zarr_image(store_root: Path) -> OMEZarrImageInspection:
     if inspection is not None:
         return inspection
 
-    assert metadata_payload is not None  # for type checkers
+    if metadata_payload is None:
+        return OMEZarrImageInspection(
+            recognized=False,
+            support_error="Root metadata loaded but payload is unexpectedly None.",
+        )
     if metadata_payload.get("bioformats2raw.layout") == 3:
         return _inspect_bioformats2raw_layout(store_root)
 
