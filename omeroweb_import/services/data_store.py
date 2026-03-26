@@ -58,6 +58,12 @@ def _load_psycopg2_sql():
     return _psycopg2_sql
 
 
+def _safe_query(template, *identifiers):
+    """Compose a parameterized SQL query with safe psycopg2.sql identifiers."""
+    sql_mod = _load_psycopg2_sql()
+    return sql_mod.SQL(template).format(*[sql_mod.Identifier(i) for i in identifiers])
+
+
 def _db_params():
     user = os.environ.get(ENV_USER)
     password = os.environ.get(ENV_AUTH)
@@ -151,9 +157,9 @@ def _connect():
 
 
 def _ensure_user_settings_schema(conn):
-    sql = _load_psycopg2_sql()
+    _load_psycopg2_sql()
     with conn.cursor() as cur:
-        stmt = sql.SQL(
+        stmt = _safe_query(
             """
             CREATE TABLE IF NOT EXISTS {} (
                 id SERIAL PRIMARY KEY,
@@ -162,25 +168,25 @@ def _ensure_user_settings_schema(conn):
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             );
-            """
-        ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+            """,
+            TABLE_NAME_USER_SETTINGS,
+        )
         cur.execute(stmt)
-        stmt = sql.SQL(
+        stmt = _safe_query(
             """
             CREATE INDEX IF NOT EXISTS {} ON {} (username);
-            """
-        ).format(
-            sql.Identifier(f"{TABLE_NAME_USER_SETTINGS}_username_idx"),
-            sql.Identifier(TABLE_NAME_USER_SETTINGS),
+            """,
+            f"{TABLE_NAME_USER_SETTINGS}_username_idx",
+            TABLE_NAME_USER_SETTINGS,
         )
         cur.execute(stmt)
     conn.commit()
 
 
 def _ensure_special_method_settings_schema(conn):
-    sql = _load_psycopg2_sql()
+    _load_psycopg2_sql()
     with conn.cursor() as cur:
-        stmt = sql.SQL(
+        stmt = _safe_query(
             """
                 CREATE TABLE IF NOT EXISTS {} (
                     id SERIAL PRIMARY KEY,
@@ -191,25 +197,24 @@ def _ensure_special_method_settings_schema(conn):
                     updated_at TIMESTAMPTZ DEFAULT NOW(),
                     UNIQUE (username, method_key)
                 );
-                """
-        ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
-        cur.execute(stmt)
-        stmt = sql.SQL(
-            """
-                CREATE INDEX IF NOT EXISTS {} ON {} (username);
-                """
-        ).format(
-            sql.Identifier(f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_username_idx"),
-            sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS),
+                """,
+            TABLE_NAME_SPECIAL_METHOD_SETTINGS,
         )
         cur.execute(stmt)
-        stmt = sql.SQL(
+        stmt = _safe_query(
+            """
+                CREATE INDEX IF NOT EXISTS {} ON {} (username);
+                """,
+            f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_username_idx",
+            TABLE_NAME_SPECIAL_METHOD_SETTINGS,
+        )
+        cur.execute(stmt)
+        stmt = _safe_query(
             """
                 CREATE INDEX IF NOT EXISTS {} ON {} (method_key);
-                """
-        ).format(
-            sql.Identifier(f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_method_idx"),
-            sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS),
+                """,
+            f"{TABLE_NAME_SPECIAL_METHOD_SETTINGS}_method_idx",
+            TABLE_NAME_SPECIAL_METHOD_SETTINGS,
         )
         cur.execute(stmt)
     conn.commit()
@@ -218,30 +223,32 @@ def _ensure_special_method_settings_schema(conn):
 def save_user_settings(username, settings_payload):
     try:
         _, extras = _load_psycopg2()
-        sql = _load_psycopg2_sql()
+        _load_psycopg2_sql()
         json_payload = extras.Json(settings_payload)
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                stmt = sql.SQL(
+                stmt = _safe_query(
                     """
                         INSERT INTO {} (username, settings, updated_at)
                         VALUES (%s, %s, NOW())
                         ON CONFLICT (username)
                         DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
-                        """
-                ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+                        """,
+                    TABLE_NAME_USER_SETTINGS,
+                )
                 cur.execute(stmt, (username, json_payload))
             conn.commit()
 
             with conn.cursor() as cur:
-                stmt = sql.SQL(
+                stmt = _safe_query(
                     """
                         SELECT settings
                         FROM {}
                         WHERE username = %s
-                        """
-                ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+                        """,
+                    TABLE_NAME_USER_SETTINGS,
+                )
                 cur.execute(stmt, (username,))
                 row = cur.fetchone()
                 if row is None:
@@ -261,30 +268,32 @@ def save_user_settings(username, settings_payload):
 def save_special_method_settings(username, method_key, settings_payload):
     try:
         _, extras = _load_psycopg2()
-        sql = _load_psycopg2_sql()
+        _load_psycopg2_sql()
         json_payload = extras.Json(settings_payload)
         with _connect() as conn:
             _ensure_special_method_settings_schema(conn)
             with conn.cursor() as cur:
-                stmt = sql.SQL(
+                stmt = _safe_query(
                     """
                         INSERT INTO {} (username, method_key, settings, updated_at)
                         VALUES (%s, %s, %s, NOW())
                         ON CONFLICT (username, method_key)
                         DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
-                        """
-                ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
+                        """,
+                    TABLE_NAME_SPECIAL_METHOD_SETTINGS,
+                )
                 cur.execute(stmt, (username, method_key, json_payload))
             conn.commit()
 
             with conn.cursor() as cur:
-                stmt = sql.SQL(
+                stmt = _safe_query(
                     """
                         SELECT settings
                         FROM {}
                         WHERE username = %s AND method_key = %s
-                        """
-                ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
+                        """,
+                    TABLE_NAME_SPECIAL_METHOD_SETTINGS,
+                )
                 cur.execute(stmt, (username, method_key))
                 row = cur.fetchone()
                 if row is None:
@@ -305,17 +314,18 @@ def save_special_method_settings(username, method_key, settings_payload):
 
 def load_special_method_settings(username, method_key):
     try:
-        sql = _load_psycopg2_sql()
+        _load_psycopg2_sql()
         with _connect() as conn:
             _ensure_special_method_settings_schema(conn)
             with conn.cursor() as cur:
-                stmt = sql.SQL(
+                stmt = _safe_query(
                     """
                         SELECT settings
                         FROM {}
                         WHERE username = %s AND method_key = %s
-                        """
-                ).format(sql.Identifier(TABLE_NAME_SPECIAL_METHOD_SETTINGS))
+                        """,
+                    TABLE_NAME_SPECIAL_METHOD_SETTINGS,
+                )
                 cur.execute(stmt, (username, method_key))
                 row = cur.fetchone()
                 if row is None:
