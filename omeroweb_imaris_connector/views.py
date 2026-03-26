@@ -254,7 +254,11 @@ def _poll_celery_job(job_id):
     """Poll a Celery job for its current state and results."""
     task_id = job_id[len(CELERY_JOB_PREFIX) :]
     async_result = celery_app.AsyncResult(task_id)
-    logger.debug("Polling Celery job task_id=%s state=%s", task_id, async_result.state)
+    logger.debug(
+        "Polling Celery job task_id=%s state=%s",
+        sanitize_log_value(task_id),
+        async_result.state,
+    )
 
     meta = async_result.info if isinstance(async_result.info, dict) else None
 
@@ -277,7 +281,9 @@ def _poll_celery_job(job_id):
         return "FAILED", None, error, meta
     if async_result.state == celery_states.SUCCESS:
         payload = async_result.result or {}
-        logger.debug("Celery job %s success payload=%s", task_id, payload)
+        logger.debug(
+            "Celery job %s success payload=%s", sanitize_log_value(task_id), payload
+        )
         return (
             payload.get("state", "FINISHED"),
             payload.get("outputs"),
