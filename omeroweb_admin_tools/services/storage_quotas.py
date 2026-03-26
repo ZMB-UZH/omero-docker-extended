@@ -277,8 +277,9 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     try:
         temp_path.write_text(serialized, encoding="utf-8")
 
-        # Keep host readability without making the state file world-writable.
-        os.chmod(temp_path, 0o660)
+        # Owner read/write, group read-only.  The atomic rename that follows
+        # means only the writer needs write access; group-write is unnecessary.
+        os.chmod(temp_path, 0o640)
 
         # os.replace is atomic on POSIX
         os.replace(temp_path, path)
