@@ -66,7 +66,9 @@ def resolve_web_python_bin(omero_bin: str) -> str:
         if candidate.is_file():
             return str(candidate)
 
-    raise RuntimeError("Could not resolve an OMERO.web Python binary for startup validation")
+    raise RuntimeError(
+        "Could not resolve an OMERO.web Python binary for startup validation"
+    )
 
 
 def config_env_to_property(env_name: str) -> str:
@@ -123,7 +125,9 @@ def parse_additional_apps(raw_value: str) -> list[str]:
             "CONFIG_omero_web_apps must be a JSON array of app module names"
         ) from exc
 
-    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+    if not isinstance(parsed, list) or not all(
+        isinstance(item, str) for item in parsed
+    ):
         raise RuntimeError(
             "CONFIG_omero_web_apps must be a JSON array of app module names"
         )
@@ -163,7 +167,9 @@ if missing:
 def main() -> int:
     omero_bin = resolve_omero_bin()
     python_bin = resolve_web_python_bin(omero_bin)
-    config_glob = os.environ.get("OMERO_WEB_CONFIG_GLOB", "/opt/omero/web/config/*.omero")
+    config_glob = os.environ.get(
+        "OMERO_WEB_CONFIG_GLOB", "/opt/omero/web/config/*.omero"
+    )
 
     if glob.glob(config_glob):
         run_omero_command(omero_bin, "load", "--glob", config_glob)

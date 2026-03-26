@@ -69,6 +69,7 @@ Central navigation hub for all project documentation. Start here, then follow li
 
 - `reference/service-endpoints.md` -- infrastructure ports, plugin routes, proxy forwarding
 - `reference/release-notes.md` -- release history and change documentation template
+- `reference/python-style-and-linting.md` -- Ruff formatter/lint policy, CI workflow, pre-commit usage
 - `generated/db-schema.md` -- generated schema artifacts (reserved)
 - `references/design-system-reference-llms.txt` -- agent-facing design system notes
 - `references/docker-compose-llms.txt` -- agent-facing Docker Compose reference notes

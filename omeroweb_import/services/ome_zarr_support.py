@@ -1,4 +1,5 @@
 """OME-Zarr inspection helpers backed by the ``ome-zarr`` package."""
+
 from __future__ import annotations
 
 import json
@@ -120,7 +121,9 @@ def _load_root_ome_zarr_metadata(
     if metadata_payload is None:
         if metadata_error is None:
             return None, OMEZarrImageInspection()
-        return None, OMEZarrImageInspection(recognized=True, support_error=metadata_error)
+        return None, OMEZarrImageInspection(
+            recognized=True, support_error=metadata_error
+        )
 
     if not isinstance(metadata_payload, dict):
         return None, OMEZarrImageInspection(
@@ -150,7 +153,8 @@ def _inspect_single_ome_zarr_image(
     if runtime is None:
         return OMEZarrImageInspection(
             recognized=True,
-            support_error=runtime_error or "The ome-zarr Python package is not available.",
+            support_error=runtime_error
+            or "The ome-zarr Python package is not available.",
         )
 
     parse_url = runtime["parse_url"]
@@ -320,14 +324,19 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
     for series_dir in series_dirs:
         series_metadata, inspection = _load_root_ome_zarr_metadata(series_dir)
         if inspection is not None:
-            error_text = inspection.support_error or "ome-zarr did not recognize this series."
+            error_text = (
+                inspection.support_error or "ome-zarr did not recognize this series."
+            )
             return OMEZarrImageInspection(
                 recognized=True,
                 support_error=f"Series {series_dir.name} is not a supported OME-Zarr image: {error_text}",
             )
         series_inspection = _inspect_single_ome_zarr_image(series_dir, series_metadata)
         if not series_inspection.supported:
-            error_text = series_inspection.support_error or "ome-zarr did not recognize this series."
+            error_text = (
+                series_inspection.support_error
+                or "ome-zarr did not recognize this series."
+            )
             return OMEZarrImageInspection(
                 recognized=True,
                 support_error=f"Series {series_dir.name} is not a supported OME-Zarr image: {error_text}",
@@ -358,7 +367,9 @@ def _inspect_bioformats2raw_layout(store_root: Path) -> OMEZarrImageInspection:
     )
 
 
-def _read_store_metadata_payload(store_root: Path) -> tuple[Optional[dict], Optional[str]]:
+def _read_store_metadata_payload(
+    store_root: Path,
+) -> tuple[Optional[dict], Optional[str]]:
     metadata_path = None
     for candidate_name in (".zattrs", "zarr.json"):
         candidate = store_root / candidate_name
@@ -373,7 +384,10 @@ def _read_store_metadata_payload(store_root: Path) -> tuple[Optional[dict], Opti
         with open(metadata_path, encoding="utf-8") as handle:
             return json.load(handle), None
     except (OSError, json.JSONDecodeError) as exc:
-        return None, f"Failed to read OME-Zarr metadata from {metadata_path.name}: {exc}"
+        return (
+            None,
+            f"Failed to read OME-Zarr metadata from {metadata_path.name}: {exc}",
+        )
 
 
 def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str]]:
@@ -415,11 +429,17 @@ def _extract_physical_sizes(
     transforms_payload,
 ) -> tuple[dict[str, tuple[float, str]], Optional[str]]:
     if not isinstance(transforms_payload, list) or not transforms_payload:
-        return {}, "OME-Zarr metadata is missing coordinate transformations for the primary resolution level."
+        return (
+            {},
+            "OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
+        )
 
     primary_transforms = transforms_payload[0]
     if not isinstance(primary_transforms, list):
-        return {}, "OME-Zarr coordinate transformations for the primary resolution level are malformed."
+        return (
+            {},
+            "OME-Zarr coordinate transformations for the primary resolution level are malformed.",
+        )
 
     scale_values = None
     for transform in primary_transforms:
@@ -553,7 +573,11 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
         return None
     axes = ms.get("axes")
     datasets = ms.get("datasets")
-    if not isinstance(axes, list) or not isinstance(datasets, list) or len(datasets) < 2:
+    if (
+        not isinstance(axes, list)
+        or not isinstance(datasets, list)
+        or len(datasets) < 2
+    ):
         return None
 
     z_axis_index = None
@@ -601,7 +625,9 @@ def _has_3d_pyramid_downsampling(store_root: Path) -> Optional[dict]:
     }
 
 
-def _regenerate_xy_only_pyramid(store_root: Path, downscale_factor: int = 2) -> Optional[str]:
+def _regenerate_xy_only_pyramid(
+    store_root: Path, downscale_factor: int = 2
+) -> Optional[str]:
     """Regenerate pyramid levels so only YX axes are downsampled.
 
     Preserves ``s0`` (full resolution) unchanged.  Removes old
@@ -662,14 +688,14 @@ def _regenerate_xy_only_pyramid(store_root: Path, downscale_factor: int = 2) -> 
 
     try:
         import zarr as _zarr
+
         s0_array = _zarr.open_array(str(store_root / s0_path), mode="r")
         s0_data = np.asarray(s0_array)
     except Exception as exc:
         return f"Failed to read full-resolution data: {exc}"
 
     base_factors = tuple(
-        downscale_factor if i in yx_indices else 1
-        for i in range(ndim)
+        downscale_factor if i in yx_indices else 1 for i in range(ndim)
     )
 
     for ds in datasets[1:]:
@@ -694,7 +720,9 @@ def _regenerate_xy_only_pyramid(store_root: Path, downscale_factor: int = 2) -> 
         if any(s < 2 for s in next_yx):
             break
 
-        downsampled = downscale_local_mean(current_data, factors=base_factors).astype(s0_dtype)
+        downsampled = downscale_local_mean(current_data, factors=base_factors).astype(
+            s0_dtype
+        )
         new_scale = list(current_scale)
         new_translation = list(current_translation)
         for ax_i in yx_indices:
@@ -706,14 +734,18 @@ def _regenerate_xy_only_pyramid(store_root: Path, downscale_factor: int = 2) -> 
 
         level_path = datasets[level_idx]["path"]
         level_dir = store_root / level_path
-        error = _write_zarr_v2_level(level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec)
+        error = _write_zarr_v2_level(
+            level_dir, downsampled, s0_chunks, s0_compressor, s0_filters, codec
+        )
         if error:
             return error
 
         transforms = [{"type": "scale", "scale": new_scale}]
         if s0_translation is not None:
             transforms.append({"type": "translation", "translation": new_translation})
-        new_datasets.append({"path": level_path, "coordinateTransformations": transforms})
+        new_datasets.append(
+            {"path": level_path, "coordinateTransformations": transforms}
+        )
 
         current_data = downsampled
         current_scale = new_scale
@@ -777,7 +809,9 @@ def _write_zarr_v2_level(
             remainder //= chunk_grid[dim]
 
         slices = tuple(
-            slice(coords[d] * chunks[d], min(coords[d] * chunks[d] + chunks[d], shape[d]))
+            slice(
+                coords[d] * chunks[d], min(coords[d] * chunks[d] + chunks[d], shape[d])
+            )
             for d in range(ndim)
         )
         chunk_data = data[slices]

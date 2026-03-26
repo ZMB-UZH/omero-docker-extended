@@ -1,4 +1,5 @@
 """Backward compatible exports for shared OMERO helpers."""
+
 from omero_plugin_common.omero_helpers import (  # noqa: F401
     _current_user_id,
     _get_owner_username,
@@ -18,4 +19,3 @@ __all__ = [
     "_get_owner_username",
     "_has_read_write_permissions",
 ]
-

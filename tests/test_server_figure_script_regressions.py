@@ -15,7 +15,10 @@ class ServerFigureScriptRegressionTests(unittest.TestCase):
         cls.bootstrap = SERVER_BOOTSTRAP.read_text(encoding="utf-8")
 
     def test_server_image_bundles_figure_to_pdf_script(self):
-        self.assertIn('ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"', self.dockerfile)
+        self.assertIn(
+            'ARG OME_OMERO_FIGURE_REPO="https://github.com/ome/omero-figure.git"',
+            self.dockerfile,
+        )
         self.assertIn('ARG OME_OMERO_FIGURE_REF="7.3.1"', self.dockerfile)
         self.assertIn(
             "/opt/omero/server/OMERO.server/lib/scripts/omero/figure_scripts/Figure_To_Pdf.py",

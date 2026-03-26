@@ -30,7 +30,10 @@ def _install_import_stubs():
             **kwargs,
         }
         django_shortcuts = types.ModuleType("django.shortcuts")
-        django_shortcuts.render = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
+        django_shortcuts.render = lambda *args, **kwargs: {
+            "args": args,
+            "kwargs": kwargs,
+        }
         django_urls = types.ModuleType("django.urls")
         django_urls.reverse = lambda name, *args, **kwargs: f"/{name}/"
         django_csrf = types.ModuleType("django.views.decorators.csrf")
@@ -45,7 +48,9 @@ def _install_import_stubs():
         django_module = sys.modules.setdefault("django", types.ModuleType("django"))
         if not hasattr(django_module, "__path__"):
             django_module.__path__ = []
-        django_conf = sys.modules.setdefault("django.conf", types.ModuleType("django.conf"))
+        django_conf = sys.modules.setdefault(
+            "django.conf", types.ModuleType("django.conf")
+        )
         django_conf.settings = types.SimpleNamespace()
 
     if "omero" not in sys.modules:
@@ -73,7 +78,7 @@ def _install_import_stubs():
     if "omeroweb.decorators" not in sys.modules:
         omeroweb_module = types.ModuleType("omeroweb")
         omeroweb_decorators = types.ModuleType("omeroweb.decorators")
-        omeroweb_decorators.login_required = lambda *args, **kwargs: (lambda view: view)
+        omeroweb_decorators.login_required = lambda *args, **kwargs: lambda view: view
         sys.modules["omeroweb"] = omeroweb_module
         sys.modules["omeroweb.decorators"] = omeroweb_decorators
 
@@ -105,7 +110,9 @@ def _install_import_stubs():
                 return False
 
         portalocker_module.Lock = Lock
-        portalocker_module.exceptions = types.SimpleNamespace(LockException=LockException)
+        portalocker_module.exceptions = types.SimpleNamespace(
+            LockException=LockException
+        )
         sys.modules["portalocker"] = portalocker_module
 
     if "omero_plugin_common.logging_utils" not in sys.modules:
@@ -114,7 +121,9 @@ def _install_import_stubs():
         logging_utils.sanitize_log_value = lambda value: value
         logging_utils.sanitized_exc_info = lambda exc: None
         tmp_utils = types.ModuleType("omero_plugin_common.tmp_utils")
-        tmp_utils.get_plugin_tmp_dir = lambda name: Path("/tmp") / f"import-plugin-{name}"
+        tmp_utils.get_plugin_tmp_dir = lambda name: (
+            Path("/tmp") / f"import-plugin-{name}"
+        )
         tmp_cleanup = types.ModuleType("omero_plugin_common.tmp_cleanup")
         tmp_cleanup.safe_mark_path_for_deferred_cleanup = lambda *args, **kwargs: True
         tmp_cleanup.safe_remove_job_data = lambda *args, **kwargs: None
@@ -141,7 +150,9 @@ def _install_import_stubs():
 
         data_store.UserSettingsStoreError = UserSettingsStoreError
         data_store.save_user_settings = lambda username, settings: None
-        data_store.save_special_method_settings = lambda username, method_key, settings: None
+        data_store.save_special_method_settings = (
+            lambda username, method_key, settings: None
+        )
         data_store.load_special_method_settings = lambda username, method_key: {}
         sys.modules["omeroweb_import.services.data_store"] = data_store
 
@@ -174,7 +185,9 @@ class ImportPluginRegressionTests(TestCase):
             return response["status"], response["payload"]
         return response.status_code, json.loads(response.content)
 
-    def test_normalize_upload_relative_path_rejects_overlong_component_by_utf8_bytes(self):
+    def test_normalize_upload_relative_path_rejects_overlong_component_by_utf8_bytes(
+        self,
+    ):
         raw_name = f"{'ä' * 130}.tif"
 
         rel_path, error = core_functions._normalize_upload_relative_path(raw_name)
@@ -183,7 +196,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("Filename is too long", error)
 
     def test_get_text_falls_back_to_private_rstring_value(self):
-        value_obj = types.SimpleNamespace(val=None, _val="/managed/path/sample.ome.zarr")
+        value_obj = types.SimpleNamespace(
+            val=None, _val="/managed/path/sample.ome.zarr"
+        )
 
         text = core_functions._get_text(value_obj)
 
@@ -192,7 +207,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_external_info_text_uses_getter_when_attribute_is_unloaded(self):
         external_info = types.SimpleNamespace(
             lsid=types.SimpleNamespace(val=None, _val=None),
-            getLsid=lambda: types.SimpleNamespace(val=None, _val="/managed/path/from-getter.ome.zarr"),
+            getLsid=lambda: types.SimpleNamespace(
+                val=None, _val="/managed/path/from-getter.ome.zarr"
+            ),
         )
 
         text = core_functions._external_info_text(external_info, "lsid", "getLsid")
@@ -202,10 +219,16 @@ class ImportPluginRegressionTests(TestCase):
     def test_query_image_external_info_reads_projection_values(self):
         params_seen = {}
         fake_query = mock.Mock()
-        fake_query.projection.return_value = [[
-            types.SimpleNamespace(val=None, _val="/managed/path/from-query.ome.zarr"),
-            types.SimpleNamespace(val=None, _val="com.glencoesoftware.ngff:multiscales"),
-        ]]
+        fake_query.projection.return_value = [
+            [
+                types.SimpleNamespace(
+                    val=None, _val="/managed/path/from-query.ome.zarr"
+                ),
+                types.SimpleNamespace(
+                    val=None, _val="com.glencoesoftware.ngff:multiscales"
+                ),
+            ]
+        ]
         fake_conn = types.SimpleNamespace(
             getQueryService=lambda: fake_query,
             SERVICE_OPTS=object(),
@@ -214,7 +237,9 @@ class ImportPluginRegressionTests(TestCase):
             core_functions.omero,
             "sys",
             types.SimpleNamespace(
-                ParametersI=lambda: types.SimpleNamespace(addId=lambda value: params_seen.setdefault("id", value))
+                ParametersI=lambda: types.SimpleNamespace(
+                    addId=lambda value: params_seen.setdefault("id", value)
+                )
             ),
             create=True,
         ):
@@ -344,21 +369,25 @@ class ImportPluginRegressionTests(TestCase):
             "z": _FakeLength(1.25, "MICROMETER"),
         }
 
-        with mock.patch.object(
-            core_functions,
-            "_open_admin_connection",
-            return_value=fake_admin_conn,
-        ), mock.patch.object(
-            core_functions,
-            "_query_image_external_info",
-            return_value=(
-                "/OMERO/ManagedRepository/user/test/sample.ome.zarr/0",
-                "com.glencoesoftware.ngff:multiscales",
+        with (
+            mock.patch.object(
+                core_functions,
+                "_open_admin_connection",
+                return_value=fake_admin_conn,
             ),
-        ), mock.patch.object(
-            core_functions,
-            "_runtime_native_zarr_physical_sizes",
-            return_value=(expected_sizes, None),
+            mock.patch.object(
+                core_functions,
+                "_query_image_external_info",
+                return_value=(
+                    "/OMERO/ManagedRepository/user/test/sample.ome.zarr/0",
+                    "com.glencoesoftware.ngff:multiscales",
+                ),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_runtime_native_zarr_physical_sizes",
+                return_value=(expected_sizes, None),
+            ),
         ):
             ok, errors = core_functions._finalize_imported_zarr_image_metadata(
                 "test",
@@ -373,15 +402,21 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual([], errors)
         self.assertEqual(
             core_functions._native_zarr_length_signature(expected_sizes["x"]),
-            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeX()),
+            core_functions._native_zarr_length_signature(
+                pixels_wrapper.getPhysicalSizeX()
+            ),
         )
         self.assertEqual(
             core_functions._native_zarr_length_signature(expected_sizes["y"]),
-            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeY()),
+            core_functions._native_zarr_length_signature(
+                pixels_wrapper.getPhysicalSizeY()
+            ),
         )
         self.assertEqual(
             core_functions._native_zarr_length_signature(expected_sizes["z"]),
-            core_functions._native_zarr_length_signature(pixels_wrapper.getPhysicalSizeZ()),
+            core_functions._native_zarr_length_signature(
+                pixels_wrapper.getPhysicalSizeZ()
+            ),
         )
         self.assertEqual([pixels_model], fake_conn.getUpdateService().saved)
         self.assertTrue(fake_conn.closed)
@@ -412,7 +447,9 @@ class ImportPluginRegressionTests(TestCase):
         fake_units = {name: _FakeUnit(name) for name in unit_names}
 
         class _FakeUnitsLength:
-            _enumerators = {index: fake_units[name] for index, name in enumerate(unit_names)}
+            _enumerators = {
+                index: fake_units[name] for index, name in enumerate(unit_names)
+            }
 
         for name, unit in fake_units.items():
             setattr(_FakeUnitsLength, name, unit)
@@ -427,25 +464,29 @@ class ImportPluginRegressionTests(TestCase):
         self.addCleanup(core_functions._units_length_by_normalized_name.cache_clear)
         self.addCleanup(core_functions._units_length_symbol_aliases.cache_clear)
 
-        with mock.patch.dict(
-            sys.modules,
-            {"omero.model.enums": fake_enums_module},
-        ), mock.patch.object(
-            sys.modules["omero.model"],
-            "LengthI",
-            _FakeLength,
-            create=True,
-        ), mock.patch.object(
-            core_functions,
-            "inspect_ome_zarr_image",
-            return_value=types.SimpleNamespace(
-                recognized=True,
-                support_error=None,
-                physical_sizes={
-                    "x": ("10.0", "nm"),
-                    "y": ("5.0", "µm"),
-                    "z": ("2.5", "um"),
-                },
+        with (
+            mock.patch.dict(
+                sys.modules,
+                {"omero.model.enums": fake_enums_module},
+            ),
+            mock.patch.object(
+                sys.modules["omero.model"],
+                "LengthI",
+                _FakeLength,
+                create=True,
+            ),
+            mock.patch.object(
+                core_functions,
+                "inspect_ome_zarr_image",
+                return_value=types.SimpleNamespace(
+                    recognized=True,
+                    support_error=None,
+                    physical_sizes={
+                        "x": ("10.0", "nm"),
+                        "y": ("5.0", "µm"),
+                        "z": ("2.5", "um"),
+                    },
+                ),
             ),
         ):
             sizes, error = core_functions._runtime_native_zarr_physical_sizes(
@@ -454,9 +495,18 @@ class ImportPluginRegressionTests(TestCase):
             )
 
         self.assertIsNone(error)
-        self.assertEqual((10.0, "nanometer"), core_functions._native_zarr_length_signature(sizes["x"]))
-        self.assertEqual((5.0, "micrometer"), core_functions._native_zarr_length_signature(sizes["y"]))
-        self.assertEqual((2.5, "micrometer"), core_functions._native_zarr_length_signature(sizes["z"]))
+        self.assertEqual(
+            (10.0, "nanometer"),
+            core_functions._native_zarr_length_signature(sizes["x"]),
+        )
+        self.assertEqual(
+            (5.0, "micrometer"),
+            core_functions._native_zarr_length_signature(sizes["y"]),
+        )
+        self.assertEqual(
+            (2.5, "micrometer"),
+            core_functions._native_zarr_length_signature(sizes["z"]),
+        )
 
     def test_validate_staged_target_path_rejects_excessive_target_length(self):
         upload_root = Path("/tmp/upload-root")
@@ -469,7 +519,9 @@ class ImportPluginRegressionTests(TestCase):
     def test_resolve_staged_target_path_rejects_traversal(self):
         upload_root = Path("/tmp/upload-root")
 
-        target, error = core_functions._resolve_staged_target_path(upload_root, "../escape.bin")
+        target, error = core_functions._resolve_staged_target_path(
+            upload_root, "../escape.bin"
+        )
 
         self.assertIsNone(target)
         self.assertIn("Invalid", error)
@@ -500,14 +552,19 @@ class ImportPluginRegressionTests(TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             jobs_root = Path(tmpdir)
-            with mock.patch.object(core_functions, "_get_jobs_root", return_value=jobs_root):
+            with mock.patch.object(
+                core_functions, "_get_jobs_root", return_value=jobs_root
+            ):
                 self.assertTrue(core_functions._save_job(dict(job)))
 
                 def increment_job():
                     for _ in range(25):
                         updated = core_functions._robust_update_job(
                             job_id,
-                            lambda job_dict: {**job_dict, "counter": job_dict.get("counter", 0) + 1},
+                            lambda job_dict: {
+                                **job_dict,
+                                "counter": job_dict.get("counter", 0) + 1,
+                            },
                         )
                         self.assertIsNotNone(updated)
 
@@ -520,7 +577,9 @@ class ImportPluginRegressionTests(TestCase):
                 self.assertIsNotNone(loaded)
                 self.assertEqual(100, loaded["counter"])
 
-    def test_open_session_connection_detaches_joined_session_before_wrapper_teardown(self):
+    def test_open_session_connection_detaches_joined_session_before_wrapper_teardown(
+        self,
+    ):
         detach_calls = []
         group_calls = []
         client_calls = {}
@@ -547,16 +606,24 @@ class ImportPluginRegressionTests(TestCase):
                 self.client_obj = client_obj
                 self.SERVICE_OPTS = FakeServiceOpts()
 
-        with mock.patch.object(
-            core_functions.omero,
-            "client",
-            side_effect=lambda host, port: FakeClient(host=host, port=port),
-            create=True,
-        ), mock.patch.object(core_functions, "BlitzGateway", FakeGateway):
-            conn = core_functions._open_session_connection("session-key", "omeroserver", 4064)
+        with (
+            mock.patch.object(
+                core_functions.omero,
+                "client",
+                side_effect=lambda host, port: FakeClient(host=host, port=port),
+                create=True,
+            ),
+            mock.patch.object(core_functions, "BlitzGateway", FakeGateway),
+        ):
+            conn = core_functions._open_session_connection(
+                "session-key", "omeroserver", 4064
+            )
 
         self.assertIsInstance(conn, FakeGateway)
-        self.assertEqual({"host": "omeroserver", "port": 4064, "session_key": "session-key"}, client_calls)
+        self.assertEqual(
+            {"host": "omeroserver", "port": 4064, "session_key": "session-key"},
+            client_calls,
+        )
         self.assertEqual(["detached"], detach_calls)
         self.assertEqual(["-1"], group_calls)
 
@@ -594,7 +661,9 @@ class ImportPluginRegressionTests(TestCase):
             ]
         )
 
-        self.assertEqual(["51", "52"], sorted(core_functions._extract_imported_object_ids(output)))
+        self.assertEqual(
+            ["51", "52"], sorted(core_functions._extract_imported_object_ids(output))
+        )
 
     def test_sanitize_cli_output_for_logging_redacts_uuid_tokens(self):
         raw = "Bad session key. Cannot join 12345678-1234-1234-1234-123456789abc on omeroserver:4064."
@@ -650,7 +719,9 @@ class ImportPluginRegressionTests(TestCase):
         ]
         conn = types.SimpleNamespace(
             getScriptService=lambda: types.SimpleNamespace(getScripts=lambda: scripts),
-            c=types.SimpleNamespace(sf=types.SimpleNamespace(getScriptService=lambda: None)),
+            c=types.SimpleNamespace(
+                sf=types.SimpleNamespace(getScriptService=lambda: None)
+            ),
         )
 
         script_id = core_functions._find_script_id_by_name(
@@ -675,31 +746,38 @@ class ImportPluginRegressionTests(TestCase):
         )
         admin_conn = types.SimpleNamespace(close=lambda: None)
 
-        with mock.patch.object(
-            core_functions,
-            "_open_admin_connection",
-            return_value=admin_conn,
-        ), mock.patch.object(
-            core_functions,
-            "_find_script_id_by_name",
-            return_value=42,
-        ), mock.patch.object(
-            core_functions,
-            "_get_import_timeout_seconds",
-            return_value=120,
-        ), mock.patch.object(
-            core_functions,
-            "_get_root_password",
-            return_value="root-secret",
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={"TEST_ENV": "1"},
-        ), mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            return_value=completed,
-        ) as run_mock:
+        with (
+            mock.patch.object(
+                core_functions,
+                "_open_admin_connection",
+                return_value=admin_conn,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_find_script_id_by_name",
+                return_value=42,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_import_timeout_seconds",
+                return_value=120,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_root_password",
+                return_value="root-secret",
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={"TEST_ENV": "1"},
+            ),
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                return_value=completed,
+            ) as run_mock,
+        ):
             ok, outputs, message = core_functions._run_zarr_managed_repo_script(
                 "stage",
                 "omeroserver",
@@ -740,7 +818,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("test", command[13].split("=", 1)[1])
         self.assertEqual("/tmp/job/sample.zarr", command[14].split("=", 1)[1])
 
-    def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(self):
+    def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(
+        self,
+    ):
         admin_conn = types.SimpleNamespace(close=lambda: None)
         results = [
             subprocess.CompletedProcess(
@@ -757,43 +837,53 @@ class ImportPluginRegressionTests(TestCase):
             ),
         ]
 
-        with mock.patch.object(
-            core_functions,
-            "_open_admin_connection",
-            return_value=admin_conn,
-        ), mock.patch.object(
-            core_functions,
-            "_find_script_id_by_name",
-            return_value=42,
-        ), mock.patch.object(
-            core_functions,
-            "_get_root_password",
-            return_value="root-secret",
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={},
-        ), mock.patch.object(
-            core_functions,
-            "_get_import_timeout_seconds",
-            return_value=120,
-        ), mock.patch.object(
-            core_functions,
-            "_get_script_start_timeout_seconds",
-            return_value=60,
-        ), mock.patch.object(
-            core_functions,
-            "_get_script_start_retry_seconds",
-            return_value=1,
-        ), mock.patch.object(
-            core_functions.time,
-            "sleep",
-            return_value=None,
-        ) as sleep_mock, mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            side_effect=results,
-        ) as run_mock:
+        with (
+            mock.patch.object(
+                core_functions,
+                "_open_admin_connection",
+                return_value=admin_conn,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_find_script_id_by_name",
+                return_value=42,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_root_password",
+                return_value="root-secret",
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={},
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_import_timeout_seconds",
+                return_value=120,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_script_start_timeout_seconds",
+                return_value=60,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_script_start_retry_seconds",
+                return_value=1,
+            ),
+            mock.patch.object(
+                core_functions.time,
+                "sleep",
+                return_value=None,
+            ) as sleep_mock,
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                side_effect=results,
+            ) as run_mock,
+        ):
             ok, outputs, message = core_functions._run_zarr_managed_repo_script(
                 "stage",
                 "omeroserver",
@@ -804,52 +894,66 @@ class ImportPluginRegressionTests(TestCase):
             )
 
         self.assertTrue(ok)
-        self.assertEqual("/OMERO/ManagedRepository/users_private/test/retried.zarr", outputs["Managed_Path"])
+        self.assertEqual(
+            "/OMERO/ManagedRepository/users_private/test/retried.zarr",
+            outputs["Managed_Path"],
+        )
         self.assertEqual("staged", message)
         self.assertEqual(2, run_mock.call_count)
         sleep_mock.assert_called_once_with(1)
 
     def test_import_zarr_via_cli_cleans_managed_path_when_no_objects_are_created(self):
-        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        managed_path = Path(
+            "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
+        )
         shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
         shared_parent = shared_source.parent
 
-        with mock.patch.object(
-            core_functions,
-            "_prepare_server_readable_zarr_source",
-            return_value=(shared_source, shared_parent, None),
-        ), mock.patch.object(
-            core_functions,
-            "_run_zarr_managed_repo_script",
-            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_shared_zarr_transfer",
-        ) as cleanup_transfer_mock, mock.patch.object(
-            core_functions,
-            "_build_omero_cli_command",
-            return_value=["omero", "zarr", "import"],
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={"TEST_ENV": "1"},
-        ), mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(
-                args=["omero", "zarr", "import"],
-                returncode=0,
-                stdout="",
-                stderr="",
+        with (
+            mock.patch.object(
+                core_functions,
+                "_prepare_server_readable_zarr_source",
+                return_value=(shared_source, shared_parent, None),
             ),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_zarr_import_via_api",
-            return_value=[],
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_managed_zarr_path",
-        ) as cleanup_mock:
+            mock.patch.object(
+                core_functions,
+                "_run_zarr_managed_repo_script",
+                return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_shared_zarr_transfer",
+            ) as cleanup_transfer_mock,
+            mock.patch.object(
+                core_functions,
+                "_build_omero_cli_command",
+                return_value=["omero", "zarr", "import"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={"TEST_ENV": "1"},
+            ),
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=["omero", "zarr", "import"],
+                    returncode=0,
+                    stdout="",
+                    stderr="",
+                ),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_zarr_import_via_api",
+                return_value=[],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_managed_zarr_path",
+            ) as cleanup_mock,
+        ):
             result = core_functions._import_zarr_via_cli(
                 file_path=Path("/tmp/job/sample.zarr"),
                 session_key="session-key",
@@ -884,57 +988,71 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_render_verification_fails(self):
-        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        managed_path = Path(
+            "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
+        )
         shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
         shared_parent = shared_source.parent
 
-        with mock.patch.object(
-            core_functions,
-            "_prepare_server_readable_zarr_source",
-            return_value=(shared_source, shared_parent, None),
-        ), mock.patch.object(
-            core_functions,
-            "_run_zarr_managed_repo_script",
-            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_shared_zarr_transfer",
-        ), mock.patch.object(
-            core_functions,
-            "_build_omero_cli_command",
-            return_value=["omero", "zarr", "import"],
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={"TEST_ENV": "1"},
-        ), mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(
-                args=["omero", "zarr", "import"],
-                returncode=0,
-                stdout="Created Image 51\n",
-                stderr="",
+        with (
+            mock.patch.object(
+                core_functions,
+                "_prepare_server_readable_zarr_source",
+                return_value=(shared_source, shared_parent, None),
             ),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_zarr_import_via_api",
-            return_value=["51"],
-        ), mock.patch.object(
-            core_functions,
-            "_finalize_imported_zarr_image_metadata",
-            return_value=(True, []),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_imported_zarr_images_renderable",
-            return_value=(False, ["thumbnail failed"]),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_imported_images",
-        ) as cleanup_images_mock, mock.patch.object(
-            core_functions,
-            "_cleanup_managed_zarr_path",
-        ) as cleanup_managed_mock:
+            mock.patch.object(
+                core_functions,
+                "_run_zarr_managed_repo_script",
+                return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_shared_zarr_transfer",
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_omero_cli_command",
+                return_value=["omero", "zarr", "import"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={"TEST_ENV": "1"},
+            ),
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=["omero", "zarr", "import"],
+                    returncode=0,
+                    stdout="Created Image 51\n",
+                    stderr="",
+                ),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_zarr_import_via_api",
+                return_value=["51"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_finalize_imported_zarr_image_metadata",
+                return_value=(True, []),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_imported_zarr_images_renderable",
+                return_value=(False, ["thumbnail failed"]),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_imported_images",
+            ) as cleanup_images_mock,
+            mock.patch.object(
+                core_functions,
+                "_cleanup_managed_zarr_path",
+            ) as cleanup_managed_mock,
+        ):
             result = core_functions._import_zarr_via_cli(
                 file_path=Path("/tmp/job/sample.zarr"),
                 session_key="session-key",
@@ -969,56 +1087,70 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_import_zarr_via_cli_rolls_back_when_metadata_finalization_fails(self):
-        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        managed_path = Path(
+            "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
+        )
         shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
         shared_parent = shared_source.parent
 
-        with mock.patch.object(
-            core_functions,
-            "_prepare_server_readable_zarr_source",
-            return_value=(shared_source, shared_parent, None),
-        ), mock.patch.object(
-            core_functions,
-            "_run_zarr_managed_repo_script",
-            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_shared_zarr_transfer",
-        ), mock.patch.object(
-            core_functions,
-            "_build_omero_cli_command",
-            return_value=["omero", "zarr", "import"],
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={"TEST_ENV": "1"},
-        ), mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(
-                args=["omero", "zarr", "import"],
-                returncode=0,
-                stdout="Created Image 61\n",
-                stderr="",
+        with (
+            mock.patch.object(
+                core_functions,
+                "_prepare_server_readable_zarr_source",
+                return_value=(shared_source, shared_parent, None),
             ),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_zarr_import_via_api",
-            return_value=["61"],
-        ), mock.patch.object(
-            core_functions,
-            "_finalize_imported_zarr_image_metadata",
-            return_value=(False, ["physical size save failed"]),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_imported_zarr_images_renderable",
-        ) as render_verify_mock, mock.patch.object(
-            core_functions,
-            "_cleanup_imported_images",
-        ) as cleanup_images_mock, mock.patch.object(
-            core_functions,
-            "_cleanup_managed_zarr_path",
-        ) as cleanup_managed_mock:
+            mock.patch.object(
+                core_functions,
+                "_run_zarr_managed_repo_script",
+                return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_shared_zarr_transfer",
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_omero_cli_command",
+                return_value=["omero", "zarr", "import"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={"TEST_ENV": "1"},
+            ),
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=["omero", "zarr", "import"],
+                    returncode=0,
+                    stdout="Created Image 61\n",
+                    stderr="",
+                ),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_zarr_import_via_api",
+                return_value=["61"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_finalize_imported_zarr_image_metadata",
+                return_value=(False, ["physical size save failed"]),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_imported_zarr_images_renderable",
+            ) as render_verify_mock,
+            mock.patch.object(
+                core_functions,
+                "_cleanup_imported_images",
+            ) as cleanup_images_mock,
+            mock.patch.object(
+                core_functions,
+                "_cleanup_managed_zarr_path",
+            ) as cleanup_managed_mock,
+        ):
             result = core_functions._import_zarr_via_cli(
                 file_path=Path("/tmp/job/sample.zarr"),
                 session_key="session-key",
@@ -1054,57 +1186,71 @@ class ImportPluginRegressionTests(TestCase):
         render_verify_mock.assert_not_called()
 
     def test_import_zarr_via_cli_accepts_only_renderable_images(self):
-        managed_path = Path("/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr")
+        managed_path = Path(
+            "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
+        )
         shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
         shared_parent = shared_source.parent
 
-        with mock.patch.object(
-            core_functions,
-            "_prepare_server_readable_zarr_source",
-            return_value=(shared_source, shared_parent, None),
-        ), mock.patch.object(
-            core_functions,
-            "_run_zarr_managed_repo_script",
-            return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_shared_zarr_transfer",
-        ), mock.patch.object(
-            core_functions,
-            "_build_omero_cli_command",
-            return_value=["omero", "zarr", "import"],
-        ), mock.patch.object(
-            core_functions,
-            "_build_cli_env",
-            return_value={"TEST_ENV": "1"},
-        ), mock.patch.object(
-            core_functions.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(
-                args=["omero", "zarr", "import"],
-                returncode=0,
-                stdout="Created Image 52\n",
-                stderr="",
+        with (
+            mock.patch.object(
+                core_functions,
+                "_prepare_server_readable_zarr_source",
+                return_value=(shared_source, shared_parent, None),
             ),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_zarr_import_via_api",
-            return_value=["52"],
-        ), mock.patch.object(
-            core_functions,
-            "_finalize_imported_zarr_image_metadata",
-            return_value=(True, []),
-        ), mock.patch.object(
-            core_functions,
-            "_verify_imported_zarr_images_renderable",
-            return_value=(True, []),
-        ), mock.patch.object(
-            core_functions,
-            "_cleanup_imported_images",
-        ) as cleanup_images_mock, mock.patch.object(
-            core_functions,
-            "_cleanup_managed_zarr_path",
-        ) as cleanup_managed_mock:
+            mock.patch.object(
+                core_functions,
+                "_run_zarr_managed_repo_script",
+                return_value=(True, {"Managed_Path": str(managed_path)}, "staged"),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_shared_zarr_transfer",
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_omero_cli_command",
+                return_value=["omero", "zarr", "import"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_build_cli_env",
+                return_value={"TEST_ENV": "1"},
+            ),
+            mock.patch.object(
+                core_functions.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess(
+                    args=["omero", "zarr", "import"],
+                    returncode=0,
+                    stdout="Created Image 52\n",
+                    stderr="",
+                ),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_zarr_import_via_api",
+                return_value=["52"],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_finalize_imported_zarr_image_metadata",
+                return_value=(True, []),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_verify_imported_zarr_images_renderable",
+                return_value=(True, []),
+            ),
+            mock.patch.object(
+                core_functions,
+                "_cleanup_imported_images",
+            ) as cleanup_images_mock,
+            mock.patch.object(
+                core_functions,
+                "_cleanup_managed_zarr_path",
+            ) as cleanup_managed_mock,
+        ):
             result = core_functions._import_zarr_via_cli(
                 file_path=Path("/tmp/job/sample.zarr"),
                 session_key="session-key",
@@ -1157,12 +1303,17 @@ class ImportPluginRegressionTests(TestCase):
                 ),
                 encoding="utf-8",
             )
-            (source / "0" / ".zarray").write_text('{"shape":[1,1],"dtype":"<u2"}', encoding="utf-8")
+            (source / "0" / ".zarray").write_text(
+                '{"shape":[1,1],"dtype":"<u2"}', encoding="utf-8"
+            )
             (source / "0" / "0.0").write_bytes(b"abc")
             transfer_root = tmp_root / "shared-transfer"
             transfer_root.mkdir()
 
-            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root), \
+            with (
+                mock.patch.object(
+                    core_functions, "get_plugin_tmp_dir", return_value=transfer_root
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1172,20 +1323,29 @@ class ImportPluginRegressionTests(TestCase):
                         support_error=None,
                         compatibility_details="OME-Zarr image detected by ome-zarr",
                     ),
-                ), \
-                mock.patch.object(core_functions, "normalize_native_ome_zarr_copy", return_value=None):
-                shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
+                ),
+                mock.patch.object(
+                    core_functions, "normalize_native_ome_zarr_copy", return_value=None
+                ),
+            ):
+                shared_source, shared_parent, error = (
+                    core_functions._prepare_server_readable_zarr_source(source)
+                )
 
             self.assertIsNone(error)
             self.assertIsNotNone(shared_source)
             self.assertIsNotNone(shared_parent)
             self.assertTrue(shared_source.is_dir())
             self.assertEqual("sample.zarr", shared_source.name)
-            self.assertIn('"multiscales"', (shared_source / ".zattrs").read_text(encoding="utf-8"))
+            self.assertIn(
+                '"multiscales"', (shared_source / ".zattrs").read_text(encoding="utf-8")
+            )
             self.assertEqual(b"abc", (shared_source / "0" / "0.0").read_bytes())
             self.assertEqual(0o711, shared_parent.stat().st_mode & 0o777)
             self.assertEqual(0o755, shared_source.stat().st_mode & 0o777)
-            self.assertEqual(0o644, (shared_source / "0" / "0.0").stat().st_mode & 0o777)
+            self.assertEqual(
+                0o644, (shared_source / "0" / "0.0").stat().st_mode & 0o777
+            )
 
     def test_prepare_server_readable_zarr_source_preserves_multiscale_copy(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1226,10 +1386,15 @@ class ImportPluginRegressionTests(TestCase):
             for name in ("s0", "s1"):
                 subdir = source / name
                 subdir.mkdir()
-                (subdir / ".zarray").write_text('{"shape":[4,4],"dtype":"<u2"}', encoding="utf-8")
+                (subdir / ".zarray").write_text(
+                    '{"shape":[4,4],"dtype":"<u2"}', encoding="utf-8"
+                )
                 (subdir / "0.0").write_bytes(b"chunk")
 
-            with mock.patch.object(core_functions, "get_plugin_tmp_dir", return_value=transfer_root), \
+            with (
+                mock.patch.object(
+                    core_functions, "get_plugin_tmp_dir", return_value=transfer_root
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1239,19 +1404,33 @@ class ImportPluginRegressionTests(TestCase):
                         support_error=None,
                         compatibility_details="OME-Zarr image detected by ome-zarr",
                     ),
-                ), \
-                mock.patch.object(core_functions, "normalize_native_ome_zarr_copy", return_value=None):
-                shared_source, shared_parent, error = core_functions._prepare_server_readable_zarr_source(source)
+                ),
+                mock.patch.object(
+                    core_functions, "normalize_native_ome_zarr_copy", return_value=None
+                ),
+            ):
+                shared_source, shared_parent, error = (
+                    core_functions._prepare_server_readable_zarr_source(source)
+                )
 
             self.assertIsNone(error)
             self.assertIsNotNone(shared_source)
-            self.assertTrue((source / "s1").exists(), "original upload must not be modified")
-            self.assertTrue((shared_source / "s1").exists(), "shared copy must preserve native levels")
+            self.assertTrue(
+                (source / "s1").exists(), "original upload must not be modified"
+            )
+            self.assertTrue(
+                (shared_source / "s1").exists(),
+                "shared copy must preserve native levels",
+            )
             with open(shared_source / ".zattrs", encoding="utf-8") as fh:
                 attrs = json.load(fh)
-            self.assertEqual(["s0", "s1"], [d["path"] for d in attrs["multiscales"][0]["datasets"]])
+            self.assertEqual(
+                ["s0", "s1"], [d["path"] for d in attrs["multiscales"][0]["datasets"]]
+            )
 
-    def test_check_import_compatibility_accepts_incompatible_ome_zarr_via_ome_zarr_support(self):
+    def test_check_import_compatibility_accepts_incompatible_ome_zarr_via_ome_zarr_support(
+        self,
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "image.ome.zarr"
             zarr_dir.mkdir()
@@ -1289,7 +1468,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="unsupported",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1299,7 +1481,8 @@ class ImportPluginRegressionTests(TestCase):
                         support_error=None,
                         compatibility_details="OME-Zarr image detected by ome-zarr",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1354,7 +1537,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1364,7 +1550,8 @@ class ImportPluginRegressionTests(TestCase):
                         support_error="OME-Zarr metadata is missing multiscale axes information.",
                         compatibility_details="",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1382,7 +1569,9 @@ class ImportPluginRegressionTests(TestCase):
             zarr_dir = Path(tmpdir) / "broken.ome.zarr"
             zarr_dir.mkdir()
             (zarr_dir / "s0").mkdir()
-            (zarr_dir / "s0" / ".zarray").write_text('{"shape":[1,1]}', encoding="utf-8")
+            (zarr_dir / "s0" / ".zarray").write_text(
+                '{"shape":[1,1]}', encoding="utf-8"
+            )
             (zarr_dir / ".zattrs").write_text(
                 json.dumps(
                     {
@@ -1403,7 +1592,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="unsupported",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1413,7 +1605,8 @@ class ImportPluginRegressionTests(TestCase):
                         support_error="OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
                         compatibility_details="",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1426,7 +1619,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("error", result["status"])
         self.assertIn("coordinate transformations", result["details"].lower())
 
-    def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(self):
+    def test_check_import_compatibility_rejects_native_zarr_missing_scale_transform(
+        self,
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
             zarr_dir = Path(tmpdir) / "broken-scale.ome.zarr"
             zarr_dir.mkdir()
@@ -1456,7 +1651,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="unsupported",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1466,7 +1664,8 @@ class ImportPluginRegressionTests(TestCase):
                         support_error="OME-Zarr metadata is missing coordinate transformations for the primary resolution level.",
                         compatibility_details="",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1516,7 +1715,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="unsupported",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1526,7 +1728,8 @@ class ImportPluginRegressionTests(TestCase):
                         support_error="OME-Zarr metadata was found, but ome-zarr did not expose a readable multiscale image node.",
                         compatibility_details="",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1581,7 +1784,10 @@ class ImportPluginRegressionTests(TestCase):
                 stderr="unsupported",
             )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", return_value=scan_result), \
+            with (
+                mock.patch.object(
+                    core_functions, "_run_local_import_scan", return_value=scan_result
+                ),
                 mock.patch.object(
                     core_functions,
                     "inspect_ome_zarr_image",
@@ -1594,7 +1800,8 @@ class ImportPluginRegressionTests(TestCase):
                         ),
                         compatibility_details="",
                     ),
-                ):
+                ),
+            ):
                 result = core_functions._check_import_compatibility(
                     "session-key",
                     "omeroserver",
@@ -1616,15 +1823,25 @@ class ImportPluginRegressionTests(TestCase):
         fake_admin_conn = mock.Mock()
         fake_admin_conn.c.sf.getSessionService.return_value = fake_service
 
-        with mock.patch.object(core_functions, "_open_admin_connection", return_value=fake_admin_conn), \
-            mock.patch.object(core_functions, "_resolve_group_name", return_value="users_private"), \
-            mock.patch.object(core_functions, "_get_background_import_session_timeout_seconds", return_value=3600), \
+        with (
+            mock.patch.object(
+                core_functions, "_open_admin_connection", return_value=fake_admin_conn
+            ),
+            mock.patch.object(
+                core_functions, "_resolve_group_name", return_value="users_private"
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_background_import_session_timeout_seconds",
+                return_value=3600,
+            ),
             mock.patch.object(
                 core_functions.omero,
                 "sys",
                 types.SimpleNamespace(Principal=lambda *args: ("Principal", args)),
                 create=True,
-            ):
+            ),
+        ):
             with core_functions._background_import_session(
                 "test",
                 "omeroserver",
@@ -1651,7 +1868,9 @@ class ImportPluginRegressionTests(TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             jobs_root = Path(tmpdir)
-            with mock.patch.object(core_functions, "_get_jobs_root", return_value=jobs_root):
+            with mock.patch.object(
+                core_functions, "_get_jobs_root", return_value=jobs_root
+            ):
                 self.assertTrue(core_functions._save_job(dict(job)))
                 with mock.patch.object(core_functions.portalocker, "Lock", FailingLock):
                     loaded = core_functions._load_job(job_id)
@@ -1670,16 +1889,25 @@ class ImportPluginRegressionTests(TestCase):
             calls.append((path, root, ttl_seconds, now))
             return True
 
-        with mock.patch.object(core_functions, "_get_upload_root", return_value=upload_root), mock.patch.object(
-            core_functions, "_get_jobs_root", return_value=jobs_root
-        ), mock.patch.object(
-            core_functions, "safe_mark_path_for_deferred_cleanup", side_effect=capture_marker
-        ), mock.patch.dict(
-            core_functions.os.environ,
-            {core_functions.FAILED_IMPORT_RETENTION_SECONDS_ENV: "172800"},
-            clear=False,
+        with (
+            mock.patch.object(
+                core_functions, "_get_upload_root", return_value=upload_root
+            ),
+            mock.patch.object(core_functions, "_get_jobs_root", return_value=jobs_root),
+            mock.patch.object(
+                core_functions,
+                "safe_mark_path_for_deferred_cleanup",
+                side_effect=capture_marker,
+            ),
+            mock.patch.dict(
+                core_functions.os.environ,
+                {core_functions.FAILED_IMPORT_RETENTION_SECONDS_ENV: "172800"},
+                clear=False,
+            ),
         ):
-            self.assertTrue(core_functions._mark_failed_job_for_deferred_cleanup(job_id))
+            self.assertTrue(
+                core_functions._mark_failed_job_for_deferred_cleanup(job_id)
+            )
 
         self.assertEqual(
             [
@@ -1744,8 +1972,12 @@ class ImportPluginRegressionTests(TestCase):
                     stderr="",
                 )
 
-            with mock.patch.object(core_functions, "_run_local_import_scan", side_effect=fake_scan):
-                units = core_functions._build_import_units({"files": entries}, upload_root)
+            with mock.patch.object(
+                core_functions, "_run_local_import_scan", side_effect=fake_scan
+            ):
+                units = core_functions._build_import_units(
+                    {"files": entries}, upload_root
+                )
 
         self.assertEqual(1, len(units))
         self.assertEqual("plate.zarr", units[0]["relative_path"])
@@ -1756,16 +1988,29 @@ class ImportPluginRegressionTests(TestCase):
 
     def test_upload_template_keeps_compatibility_polling_without_browser_timeout(self):
         template = (
-            REPO_ROOT / "omeroweb_import" / "templates" / "omeroweb_import" / "index.html"
+            REPO_ROOT
+            / "omeroweb_import"
+            / "templates"
+            / "omeroweb_import"
+            / "index.html"
         ).read_text(encoding="utf-8")
 
-        self.assertNotIn("Compatibility check timeout - operation took too long. Please try again.", template)
-        self.assertNotIn("Compatibility check timeout - maximum attempts exceeded.", template)
+        self.assertNotIn(
+            "Compatibility check timeout - operation took too long. Please try again.",
+            template,
+        )
+        self.assertNotIn(
+            "Compatibility check timeout - maximum attempts exceeded.", template
+        )
         self.assertNotIn("const maxTimeMs = 5 * 60 * 1000", template)
 
     def test_upload_template_uses_short_loading_label_for_dropped_files(self):
         template = (
-            REPO_ROOT / "omeroweb_import" / "templates" / "omeroweb_import" / "index.html"
+            REPO_ROOT
+            / "omeroweb_import"
+            / "templates"
+            / "omeroweb_import"
+            / "index.html"
         ).read_text(encoding="utf-8")
 
         self.assertIn("withPreparingFilesState('LOADING', async () => {", template)
@@ -1800,8 +2045,9 @@ class ImportPluginRegressionTests(TestCase):
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "bob"}
 
-        with mock.patch.object(index_view, "_load_job", return_value=job_payload), mock.patch.object(
-            index_view, "current_username", return_value="alice"
+        with (
+            mock.patch.object(index_view, "_load_job", return_value=job_payload),
+            mock.patch.object(index_view, "current_username", return_value="alice"),
         ):
             job, error_response = index_view._load_owned_job(
                 request,
@@ -1820,8 +2066,9 @@ class ImportPluginRegressionTests(TestCase):
         request = types.SimpleNamespace(user=types.SimpleNamespace(username="alice"))
         job_payload = {"job_id": "a" * 32, "username": "alice"}
 
-        with mock.patch.object(index_view, "_load_job", return_value=job_payload), mock.patch.object(
-            index_view, "current_username", return_value="alice"
+        with (
+            mock.patch.object(index_view, "_load_job", return_value=job_payload),
+            mock.patch.object(index_view, "current_username", return_value="alice"),
         ):
             job, error_response = index_view._load_owned_job(
                 request,
@@ -1835,7 +2082,9 @@ class ImportPluginRegressionTests(TestCase):
 
     def test_confirm_import_defers_dataset_preparation_to_background_thread(self):
         job_id = "d" * 32
-        request = types.SimpleNamespace(method="POST", user=types.SimpleNamespace(username="alice"))
+        request = types.SimpleNamespace(
+            method="POST", user=types.SimpleNamespace(username="alice")
+        )
         job_payload = {
             "job_id": job_id,
             "username": "alice",
@@ -1844,14 +2093,23 @@ class ImportPluginRegressionTests(TestCase):
         }
         import_started = []
 
-        with mock.patch.object(index_view, "_load_owned_job", return_value=(job_payload, None)), mock.patch.object(
-            index_view, "_save_job", return_value=True
-        ), mock.patch.object(
-            index_view,
-            "_prepare_job_import_datasets",
-            side_effect=AssertionError("dataset prep must stay off confirm_import"),
-        ), mock.patch.object(
-            index_view, "_start_import_thread", side_effect=lambda current_job_id: import_started.append(current_job_id)
+        with (
+            mock.patch.object(
+                index_view, "_load_owned_job", return_value=(job_payload, None)
+            ),
+            mock.patch.object(index_view, "_save_job", return_value=True),
+            mock.patch.object(
+                index_view,
+                "_prepare_job_import_datasets",
+                side_effect=AssertionError("dataset prep must stay off confirm_import"),
+            ),
+            mock.patch.object(
+                index_view,
+                "_start_import_thread",
+                side_effect=lambda current_job_id: import_started.append(
+                    current_job_id
+                ),
+            ),
         ):
             response = index_view.confirm_import(request, conn=object(), job_id=job_id)
 
@@ -1864,11 +2122,15 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual([job_id], import_started)
 
     def test_ensure_job_dataset_targets_uses_request_connection_when_available(self):
-        request_conn = types.SimpleNamespace(SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None))
+        request_conn = types.SimpleNamespace(
+            SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda group: None)
+        )
         created = []
 
         def fail_open_service_connection(*args, **kwargs):
-            raise AssertionError("service connection should not be used when request connection is available")
+            raise AssertionError(
+                "service connection should not be used when request connection is available"
+            )
 
         def fake_get_or_create_dataset(conn, name, dataset_map, project_id=None):
             created.append((conn, name, project_id))
@@ -1893,16 +2155,30 @@ class ImportPluginRegressionTests(TestCase):
             }
         ]
 
-        with mock.patch.object(core_functions, "_open_service_connection", side_effect=fail_open_service_connection), \
-             mock.patch.object(core_functions, "_get_or_create_dataset", side_effect=fake_get_or_create_dataset):
-            ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import, conn=request_conn)
+        with (
+            mock.patch.object(
+                core_functions,
+                "_open_service_connection",
+                side_effect=fail_open_service_connection,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_get_or_create_dataset",
+                side_effect=fake_get_or_create_dataset,
+            ),
+        ):
+            ok, error = core_functions._ensure_job_dataset_targets(
+                job, entries_to_import, conn=request_conn
+            )
 
         self.assertTrue(ok)
         self.assertIsNone(error)
         self.assertEqual([(request_conn, "folder", 9)], created)
         self.assertEqual({"folder": 11}, job["dataset_map"])
 
-    def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(self):
+    def test_prepare_request_job_import_datasets_uses_zarr_package_root_without_import_scan(
+        self,
+    ):
         created = []
         group_calls = []
 
@@ -1931,14 +2207,17 @@ class ImportPluginRegressionTests(TestCase):
             ],
         }
 
-        with mock.patch.object(
-            core_functions,
-            "_get_or_create_dataset",
-            side_effect=fake_get_or_create_dataset,
-        ), mock.patch.object(
-            core_functions,
-            "_save_job",
-            return_value=True,
+        with (
+            mock.patch.object(
+                core_functions,
+                "_get_or_create_dataset",
+                side_effect=fake_get_or_create_dataset,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_save_job",
+                return_value=True,
+            ),
         ):
             prepared_job, error = core_functions._prepare_request_job_import_datasets(
                 job["job_id"],
@@ -1977,7 +2256,9 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIsNone(error)
         prepare_mock.assert_called_once_with(job["job_id"], job, request_conn)
 
-    def test_prepare_uploaded_job_for_request_path_import_waits_for_planned_units_during_compatibility(self):
+    def test_prepare_uploaded_job_for_request_path_import_waits_for_planned_units_during_compatibility(
+        self,
+    ):
         job = {
             "job_id": "e" * 32,
             "status": "checking",
@@ -1990,18 +2271,24 @@ class ImportPluginRegressionTests(TestCase):
         with mock.patch.object(
             core_functions,
             "_prepare_request_job_import_datasets",
-            side_effect=AssertionError("request-path preparation should wait for planned units"),
+            side_effect=AssertionError(
+                "request-path preparation should wait for planned units"
+            ),
         ):
-            prepared_job, error = core_functions._prepare_uploaded_job_for_request_path_import(
-                job["job_id"],
-                job,
-                conn=object(),
+            prepared_job, error = (
+                core_functions._prepare_uploaded_job_for_request_path_import(
+                    job["job_id"],
+                    job,
+                    conn=object(),
+                )
             )
 
         self.assertIs(prepared_job, job)
         self.assertIsNone(error)
 
-    def test_prepare_uploaded_job_for_request_path_import_waits_for_background_import_plan(self):
+    def test_prepare_uploaded_job_for_request_path_import_waits_for_background_import_plan(
+        self,
+    ):
         job = {
             "job_id": "f" * 32,
             "status": "checking",
@@ -2014,12 +2301,16 @@ class ImportPluginRegressionTests(TestCase):
         with mock.patch.object(
             core_functions,
             "_prepare_request_job_import_datasets",
-            side_effect=AssertionError("request-path preparation should wait for the persisted import plan"),
+            side_effect=AssertionError(
+                "request-path preparation should wait for the persisted import plan"
+            ),
         ):
-            prepared_job, error = core_functions._prepare_uploaded_job_for_request_path_import(
-                job["job_id"],
-                job,
-                conn=object(),
+            prepared_job, error = (
+                core_functions._prepare_uploaded_job_for_request_path_import(
+                    job["job_id"],
+                    job,
+                    conn=object(),
+                )
             )
 
         self.assertIs(prepared_job, job)
@@ -2053,18 +2344,25 @@ class ImportPluginRegressionTests(TestCase):
             updater(job_state)
             return job_state
 
-        with mock.patch.object(core_functions, "_load_job", side_effect=fake_load_job), mock.patch.object(
-            core_functions,
-            "_build_import_units",
-            return_value=[planned_unit],
-        ), mock.patch.object(
-            core_functions,
-            "_update_job",
-            side_effect=fake_update_job,
-        ), mock.patch.object(
-            core_functions,
-            "_check_import_compatibility",
-            side_effect=AssertionError("compatibility scan should not run when disabled"),
+        with (
+            mock.patch.object(core_functions, "_load_job", side_effect=fake_load_job),
+            mock.patch.object(
+                core_functions,
+                "_build_import_units",
+                return_value=[planned_unit],
+            ),
+            mock.patch.object(
+                core_functions,
+                "_update_job",
+                side_effect=fake_update_job,
+            ),
+            mock.patch.object(
+                core_functions,
+                "_check_import_compatibility",
+                side_effect=AssertionError(
+                    "compatibility scan should not run when disabled"
+                ),
+            ),
         ):
             core_functions._run_compatibility_check(job_id)
 
@@ -2099,20 +2397,28 @@ class ImportPluginRegressionTests(TestCase):
             "compatibility_enabled": True,
         }
 
-        with mock.patch.object(index_view, "_load_owned_job", return_value=(job, None)), mock.patch.object(
-            index_view,
-            "_prepare_uploaded_job_dataset_targets",
-            return_value=(job, None),
-        ), mock.patch.object(
-            index_view,
-            "_prepare_ready_job_for_import_start",
-            return_value=(job, None),
-        ), mock.patch.object(index_view, "_start_import_thread") as start_import, mock.patch.object(
-            index_view,
-            "_load_job",
-            return_value=job,
+        with (
+            mock.patch.object(index_view, "_load_owned_job", return_value=(job, None)),
+            mock.patch.object(
+                index_view,
+                "_prepare_uploaded_job_dataset_targets",
+                return_value=(job, None),
+            ),
+            mock.patch.object(
+                index_view,
+                "_prepare_ready_job_for_import_start",
+                return_value=(job, None),
+            ),
+            mock.patch.object(index_view, "_start_import_thread") as start_import,
+            mock.patch.object(
+                index_view,
+                "_load_job",
+                return_value=job,
+            ),
         ):
-            response = inspect.unwrap(index_view.job_status)(request, job_id, conn=object())
+            response = inspect.unwrap(index_view.job_status)(
+                request, job_id, conn=object()
+            )
 
         status, payload = self._json_status_and_payload(response)
         self.assertEqual(200, status)
@@ -2121,8 +2427,7 @@ class ImportPluginRegressionTests(TestCase):
 
     def test_vizarr_openwith_uses_browser_origin_for_source_url(self):
         script = (
-            REPO_ROOT
-            / "omero_web_zarr/static/omero_web_zarr/openwith.js"
+            REPO_ROOT / "omero_web_zarr/static/omero_web_zarr/openwith.js"
         ).read_text(encoding="utf-8")
 
         self.assertIn("window.location.origin", script)
@@ -2175,21 +2480,28 @@ class ImportPluginRegressionTests(TestCase):
             }
         ]
 
-        with mock.patch.object(core_functions, "_open_service_connection", return_value=fake_service_conn):
-            ok, error = core_functions._ensure_job_dataset_targets(job, entries_to_import)
+        with mock.patch.object(
+            core_functions, "_open_service_connection", return_value=fake_service_conn
+        ):
+            ok, error = core_functions._ensure_job_dataset_targets(
+                job, entries_to_import
+            )
 
         self.assertFalse(ok)
-        self.assertEqual("OMERO could not prepare the destination for this import.", error)
+        self.assertEqual(
+            "OMERO could not prepare the destination for this import.", error
+        )
         self.assertNotIn("impersonate", error.lower())
         self.assertTrue(fake_service_conn.closed)
 
     def test_start_import_thread_does_not_spawn_when_save_fails(self):
         job = {"job_id": "b" * 32, "status": "ready", "import_thread_started": False}
 
-        with mock.patch.object(core_functions, "_load_job", return_value=job), mock.patch.object(
-            core_functions, "_save_job", return_value=False
-        ), mock.patch.object(core_functions.threading, "Thread") as thread_cls, mock.patch.object(
-            core_functions.logger, "error"
+        with (
+            mock.patch.object(core_functions, "_load_job", return_value=job),
+            mock.patch.object(core_functions, "_save_job", return_value=False),
+            mock.patch.object(core_functions.threading, "Thread") as thread_cls,
+            mock.patch.object(core_functions.logger, "error"),
         ):
             core_functions._start_import_thread(job["job_id"])
 
@@ -2204,10 +2516,15 @@ class ImportPluginRegressionTests(TestCase):
             body=b"{}",
             user=types.SimpleNamespace(username="alice"),
         )
-        with mock.patch.object(user_settings_view, "load_request_data", return_value={"settings": {}}), mock.patch.object(
-            user_settings_view,
-            "save_user_settings",
-            side_effect=data_store.UserSettingsStoreError("db secret"),
+        with (
+            mock.patch.object(
+                user_settings_view, "load_request_data", return_value={"settings": {}}
+            ),
+            mock.patch.object(
+                user_settings_view,
+                "save_user_settings",
+                side_effect=data_store.UserSettingsStoreError("db secret"),
+            ),
         ):
             response = user_settings_view.save_settings(request, conn=object())
 
@@ -2225,16 +2542,21 @@ class ImportPluginRegressionTests(TestCase):
             body=b"{}",
             user=types.SimpleNamespace(username="alice"),
         )
-        with mock.patch.object(
-            special_method_settings_view,
-            "load_request_data",
-            return_value={"method": "sem_edx"},
-        ), mock.patch.object(
-            special_method_settings_view,
-            "load_special_method_settings",
-            side_effect=data_store.UserSettingsStoreError("db secret"),
+        with (
+            mock.patch.object(
+                special_method_settings_view,
+                "load_request_data",
+                return_value={"method": "sem_edx"},
+            ),
+            mock.patch.object(
+                special_method_settings_view,
+                "load_special_method_settings",
+                side_effect=data_store.UserSettingsStoreError("db secret"),
+            ),
         ):
-            response = special_method_settings_view.load_settings(request, conn=object())
+            response = special_method_settings_view.load_settings(
+                request, conn=object()
+            )
 
         status, payload = self._json_status_and_payload(response)
         self.assertEqual(500, status)
@@ -2242,16 +2564,23 @@ class ImportPluginRegressionTests(TestCase):
         self.assertNotIn("secret", payload["error"])
 
     def test_upload_template_keeps_completed_bytes_and_aborts_parallel_failures(self):
-        template = (REPO_ROOT / "omeroweb_import/templates/omeroweb_import/index.html").read_text()
+        template = (
+            REPO_ROOT / "omeroweb_import/templates/omeroweb_import/index.html"
+        ).read_text()
 
         self.assertIn("let uploadCompletedBytes = 0;", template)
         self.assertIn("function abortActiveUploadRequests()", template)
         self.assertIn("xhr.__uploadProgressCompleted = true;", template)
         self.assertIn("throw firstError || error;", template)
-        self.assertIn("entry.file.name || (relativePath.split('/').pop() || relativePath)", template)
+        self.assertIn(
+            "entry.file.name || (relativePath.split('/').pop() || relativePath)",
+            template,
+        )
 
     def test_upload_styles_keep_long_names_inside_tree_column(self):
-        styles = (REPO_ROOT / "omeroweb_import/static/omeroweb_import/styles.css").read_text()
+        styles = (
+            REPO_ROOT / "omeroweb_import/static/omeroweb_import/styles.css"
+        ).read_text()
 
         self.assertIn("grid-template-columns: minmax(0, 1fr) 120px 170px 32px;", styles)
         self.assertIn("overflow-x: hidden;", styles)
@@ -2341,7 +2670,12 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 )
 
             self.assertEqual(
-                managed_root / "users_private" / "test" / "2026-03-22" / "09-51-15" / "sample.zarr",
+                managed_root
+                / "users_private"
+                / "test"
+                / "2026-03-22"
+                / "09-51-15"
+                / "sample.zarr",
                 destination,
             )
             self.assertTrue((managed_root / "users_private" / "test").is_dir())
@@ -2352,11 +2686,22 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             managed_root = Path(tmpdir) / "data" / "ManagedRepository"
             (managed_root / "users_private" / "test").mkdir(parents=True, exist_ok=True)
-            outside_path = managed_root / "users_private" / "other" / "2026-03-22" / "09-51-15" / "sample.zarr"
+            outside_path = (
+                managed_root
+                / "users_private"
+                / "other"
+                / "2026-03-22"
+                / "09-51-15"
+                / "sample.zarr"
+            )
             server_config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
 
-            with self.assertRaisesRegex(RuntimeError, "outside the allowed user prefix"):
-                manage_script._cleanup_zarr(server_config, str(outside_path), "users_private", "test")
+            with self.assertRaisesRegex(
+                RuntimeError, "outside the allowed user prefix"
+            ):
+                manage_script._cleanup_zarr(
+                    server_config, str(outside_path), "users_private", "test"
+                )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 """Root conftest — mock heavy OMERO/Ice dependencies for test collection."""
+
 import os
 import sys
 from types import ModuleType
@@ -38,7 +39,9 @@ def _passthrough_login_required(*args, **kwargs):
         @wraps(func)
         def wrapper(*a, **kw):
             return func(*a, **kw)
+
         return wrapper
+
     # Called as @login_required() (with parens)
     if args and callable(args[0]):
         return decorator(args[0])
@@ -82,7 +85,15 @@ class _ColorHolder:
 
 _celery_module = ModuleType("celery")
 _celery_states = ModuleType("celery.states")
-for _name in ("PENDING", "RECEIVED", "STARTED", "FAILURE", "IGNORED", "SUCCESS", "REVOKED"):
+for _name in (
+    "PENDING",
+    "RECEIVED",
+    "STARTED",
+    "FAILURE",
+    "IGNORED",
+    "SUCCESS",
+    "REVOKED",
+):
     setattr(_celery_states, _name, _name)
 
 
@@ -106,16 +117,31 @@ _celery_module.Celery = _DummyCelery
 _celery_module.states = _celery_states
 
 for _mod in [
-    "omeroweb", "omeroweb.connector", "omeroweb.http", "omeroweb.httprsp",
+    "omeroweb",
+    "omeroweb.connector",
+    "omeroweb.http",
+    "omeroweb.httprsp",
     "omeroweb.webclient",
-    "omeroweb.webclient.urls", "omeroweb.webclient.views",
+    "omeroweb.webclient.urls",
+    "omeroweb.webclient.views",
     "omeroweb.webclient.webclient_gateway",
-    "omeroweb.webgateway", "omeroweb.webgateway.marshal",
-    "omeroweb.webgateway.urls", "omeroweb.webgateway.views",
-    "Ice", "omero", "omero.gateway", "omero.rtypes", "omero.sys",
-    "omero.clients", "omero.model", "omero.model.enums", "omero.api",
-    "omero_figure", "omero_figure.views",
-    "omero_iviewer", "omero_iviewer.views",
+    "omeroweb.webgateway",
+    "omeroweb.webgateway.marshal",
+    "omeroweb.webgateway.urls",
+    "omeroweb.webgateway.views",
+    "Ice",
+    "omero",
+    "omero.gateway",
+    "omero.rtypes",
+    "omero.sys",
+    "omero.clients",
+    "omero.model",
+    "omero.model.enums",
+    "omero.api",
+    "omero_figure",
+    "omero_figure.views",
+    "omero_iviewer",
+    "omero_iviewer.views",
 ]:
     sys.modules.setdefault(_mod, MagicMock())
 

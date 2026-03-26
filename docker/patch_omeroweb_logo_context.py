@@ -25,7 +25,9 @@ def main() -> int:
     if OLD_BLOCK not in original_text:
         raise SystemExit(f"expected OMERO.web logo block not found in {target_path}")
 
-    target_path.write_text(original_text.replace(OLD_BLOCK, NEW_BLOCK), encoding="utf-8")
+    target_path.write_text(
+        original_text.replace(OLD_BLOCK, NEW_BLOCK), encoding="utf-8"
+    )
     return 0
 
 

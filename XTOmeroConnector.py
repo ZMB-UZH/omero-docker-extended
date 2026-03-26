@@ -35,7 +35,7 @@ import http.cookiejar
 # Default timeout/poll values for client-side export polling.
 # These must NOT depend on server-side packages (omero_plugin_common)
 # because this script runs inside Imaris on the user's machine.
-EXPORT_TIMEOUT = 3600       # seconds
+EXPORT_TIMEOUT = 3600  # seconds
 EXPORT_POLL_INTERVAL = 2.0  # seconds
 IMARIS_HANDLE_RETRY_ATTEMPTS = 10
 IMARIS_HANDLE_RETRY_INTERVAL = 0.25
@@ -49,6 +49,7 @@ def _xt_debug(message):
     print(line)
     if _XT_LOG_PATH:
         _xt_write_log(_XT_LOG_PATH, line)
+
 
 def _parse_port(port_value):
     """Parse a port value into an integer or return None if invalid."""
@@ -142,8 +143,14 @@ def _iter_imaris_executable_candidates():
 
     if winreg is not None:
         reg_locations = [
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
-            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe"),
+            (
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
+            ),
+            (
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\Imaris.exe",
+            ),
         ]
         for hive, subkey in reg_locations:
             try:
@@ -224,7 +231,9 @@ def _prepare_imaris_xt_environment():
     if os.name != "nt":
         return {"paths": [], "dll_dirs": []}
 
-    path_parts = os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
+    path_parts = (
+        os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
+    )
     added = []
     dll_dirs = []
     add_dll_directory = getattr(os, "add_dll_directory", None)
@@ -285,7 +294,9 @@ def _collect_imaris_xt_diagnostics():
         xt_paths.append(os.path.join(install_root, "XT"))
         xt_paths.append(os.path.join(install_root, "XT", "python3"))
         xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib"))
-        xt_paths.append(os.path.join(install_root, "XT", "python3", "Lib", "site-packages"))
+        xt_paths.append(
+            os.path.join(install_root, "XT", "python3", "Lib", "site-packages")
+        )
     deduped_xt_paths = []
     seen = set()
     for candidate in xt_paths:
@@ -331,9 +342,7 @@ def _log_imaris_xt_diagnostics():
     for install_root in diagnostics["install_roots"]:
         _xt_debug(f"XT diagnostics install_root={install_root}")
     for entry in diagnostics["xt_candidate_paths"]:
-        _xt_debug(
-            f"XT diagnostics path={entry['path']} exists={entry['exists']}"
-        )
+        _xt_debug(f"XT diagnostics path={entry['path']} exists={entry['exists']}")
     _xt_debug(
         "XT diagnostics imports: "
         f"has_add_dll_directory={diagnostics['has_add_dll_directory']} "
@@ -386,13 +395,11 @@ def _resolve_imaris_application(
             added_dll_dirs = prepared.get("dll_dirs", [])
             if added_paths:
                 _xt_debug(
-                    "Prepared Imaris XT environment paths: "
-                    + "; ".join(added_paths)
+                    "Prepared Imaris XT environment paths: " + "; ".join(added_paths)
                 )
             if added_dll_dirs:
                 _xt_debug(
-                    "Prepared Imaris XT DLL directories: "
-                    + "; ".join(added_dll_dirs)
+                    "Prepared Imaris XT DLL directories: " + "; ".join(added_dll_dirs)
                 )
             import ImarisLib
 
@@ -424,9 +431,11 @@ def _resolve_imaris_application(
 
     return None
 
+
 # =============================================================================
 # OMERO WEB CLIENT
 # =============================================================================
+
 
 class OMEROWebClient:
     """Client for OMERO.web API."""
@@ -457,15 +466,15 @@ class OMEROWebClient:
         req = urllib.request.Request(url, data=data, method=method)
 
         # Add CSRF token header for POST requests
-        if method == 'POST' or data is not None:
+        if method == "POST" or data is not None:
             if self.csrf_token:
-                req.add_header('X-CSRFToken', self.csrf_token)
-            req.add_header('Referer', self.base_url)
+                req.add_header("X-CSRFToken", self.csrf_token)
+            req.add_header("Referer", self.base_url)
 
         # Add common headers to prevent caching issues
-        req.add_header('Cache-Control', 'no-cache')
-        req.add_header('Pragma', 'no-cache')
-        req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
+        req.add_header("Cache-Control", "no-cache")
+        req.add_header("Pragma", "no-cache")
+        req.add_header("User-Agent", "OMERO-ImarisXT/1.0")
 
         return req
 
@@ -473,24 +482,26 @@ class OMEROWebClient:
         """Extract session and CSRF cookies from the cookie jar."""
         if not self.cookie_jar:
             return
-        
+
         for cookie in self.cookie_jar:
-            if cookie.name == 'sessionid':
+            if cookie.name == "sessionid":
                 self.session_id = cookie.value
                 self.session_key = cookie.value
                 _xt_debug(f"Extracted sessionid: {cookie.value[:8]}...")
-            elif cookie.name == 'csrftoken':
+            elif cookie.name == "csrftoken":
                 self.csrf_token = cookie.value
                 _xt_debug(f"Extracted csrftoken: {cookie.value[:8]}...")
 
     def _check_login_redirect(self, response, context="request"):
         """Check if a response was redirected to login page.
-        
+
         Returns True if redirected to login (authentication failed).
         """
         final_url = getattr(response, "geturl", lambda: "")()
         if "/webclient/login/" in str(final_url):
-            _xt_debug(f"Authentication failed during {context}: redirected to {final_url}")
+            _xt_debug(
+                f"Authentication failed during {context}: redirected to {final_url}"
+            )
             return True
         return False
 
@@ -504,7 +515,7 @@ class OMEROWebClient:
             return False
         return (
             "csrfmiddlewaretoken" in text
-            and "name=\"username\"" in text
+            and 'name="username"' in text
             and "/webclient/login/" in text
         )
 
@@ -540,7 +551,9 @@ class OMEROWebClient:
         for row in rows or []:
             if not isinstance(row, dict):
                 continue
-            entity_id = row.get("@id") or row.get("id") or row.get("Id") or row.get("ID")
+            entity_id = (
+                row.get("@id") or row.get("id") or row.get("Id") or row.get("ID")
+            )
             if entity_id is None:
                 continue
             name = (
@@ -559,13 +572,13 @@ class OMEROWebClient:
         self.session_id = None
         self.csrf_token = None
         self.session_key = None
-        
+
         if self.connect():
             _xt_debug("Re-authentication succeeded.")
             return True
         _xt_debug("Re-authentication failed.")
         return False
-        
+
     def connect(self):
         """Authenticate with OMERO.web."""
         try:
@@ -576,48 +589,52 @@ class OMEROWebClient:
             )
             # Set default timeout
             urllib.request.install_opener(self.opener)
-            
+
             login_url = f"{self.base_url}/webclient/login/"
             _xt_debug(f"Connecting to OMERO.web login url={login_url}")
-            
+
             # First GET to obtain CSRF token
             req = urllib.request.Request(login_url)
-            req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
+            req.add_header("User-Agent", "OMERO-ImarisXT/1.0")
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login GET response={getattr(response, 'status', 'unknown')}")
-            
+
             # Extract CSRF token from cookies
             self._extract_cookies_from_jar()
-            
+
             if not self.csrf_token:
                 _xt_debug("Login failed: CSRF token missing after GET")
                 return False
-            
+
             # POST login credentials
             pre_auth_session = self.session_id
-            data = urllib.parse.urlencode({
-                'username': self.username,
-                'password': self.password,
-                'server': 1,
-                'csrfmiddlewaretoken': self.csrf_token
-            }).encode()
-            
-            req = urllib.request.Request(login_url, data=data, method='POST')
-            req.add_header('Referer', login_url)
-            req.add_header('X-CSRFToken', self.csrf_token)
-            req.add_header('User-Agent', 'OMERO-ImarisXT/1.0')
-            
+            data = urllib.parse.urlencode(
+                {
+                    "username": self.username,
+                    "password": self.password,
+                    "server": 1,
+                    "csrfmiddlewaretoken": self.csrf_token,
+                }
+            ).encode()
+
+            req = urllib.request.Request(login_url, data=data, method="POST")
+            req.add_header("Referer", login_url)
+            req.add_header("X-CSRFToken", self.csrf_token)
+            req.add_header("User-Agent", "OMERO-ImarisXT/1.0")
+
             response = self.opener.open(req, timeout=30)
             _xt_debug(f"Login POST response={getattr(response, 'status', 'unknown')}")
             raw_body = response.read()
             post_url = getattr(response, "geturl", lambda: "")()
             if post_url:
                 _xt_debug(f"Login POST final url={post_url}")
-            
+
             # Extract session cookie from response
             self._extract_cookies_from_jar()
-            
-            if self._check_login_redirect(response, "login POST") or self._looks_like_login_page(raw_body):
+
+            if self._check_login_redirect(
+                response, "login POST"
+            ) or self._looks_like_login_page(raw_body):
                 _xt_debug("Login failed: still on login page after POST")
                 return False
 
@@ -634,9 +651,11 @@ class OMEROWebClient:
                 _xt_debug("Login failed: authenticated API probe did not return JSON")
                 return False
 
-            _xt_debug(f"Login succeeded; session cookie received (sessionid={self.session_id[:8]}...)")
+            _xt_debug(
+                f"Login succeeded; session cookie received (sessionid={self.session_id[:8]}...)"
+            )
             return True
-            
+
         except urllib.error.HTTPError as e:
             _xt_debug(f"Login HTTP error {e.code}: {e.reason}")
             return False
@@ -646,35 +665,36 @@ class OMEROWebClient:
         except Exception as e:
             _xt_debug(f"Connection error: {e}")
             import traceback
+
             _xt_debug(traceback.format_exc())
             return False
-    
+
     def _api_request(self, endpoint):
         """Make API request with explicit cookie handling."""
         if not self.session_id:
             _xt_debug("API request skipped: no session")
             return None
-            
+
         url = f"{self.api_url}/{endpoint}"
         _xt_debug(f"API GET url={url}")
-        
+
         # Create request with explicit cookies
         req = self._create_request_with_cookies(url)
-        
+
         try:
             # Use opener for cookie jar updates, but we've also set explicit headers
             response = self.opener.open(req, timeout=30)
-            
+
             if self._check_login_redirect(response, "API request"):
                 return None
-            
+
             _xt_debug(f"API GET response={getattr(response, 'status', 'unknown')}")
             content_type = (response.headers.get("Content-Type") or "").lower()
             raw = response.read()
             if "text/html" in content_type and self._looks_like_login_page(raw):
                 _xt_debug("API request returned login HTML instead of JSON")
                 return None
-            return json.loads(raw.decode('utf-8'))
+            return json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError as e:
             _xt_debug(f"API error: invalid JSON response ({e})")
             return None
@@ -694,31 +714,36 @@ class OMEROWebClient:
         url = f"{self.api_url}/{endpoint}"
         data = None
         if payload is not None:
-            data = json.dumps(payload).encode('utf-8')
+            data = json.dumps(payload).encode("utf-8")
 
-        req = self._create_request_with_cookies(url, data=data, method='POST')
-        req.add_header('Content-Type', 'application/json')
+        req = self._create_request_with_cookies(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
 
         try:
             response = self.opener.open(req, timeout=30)
-            
+
             if self._check_login_redirect(response, "API POST"):
                 return None
-            
-            _xt_debug(f"API POST url={url} response={getattr(response, 'status', 'unknown')}")
+
+            _xt_debug(
+                f"API POST url={url} response={getattr(response, 'status', 'unknown')}"
+            )
             raw = response.read()
             if not raw:
                 return None
             try:
-                return json.loads(raw.decode('utf-8'))
+                return json.loads(raw.decode("utf-8"))
             except Exception:
                 return None
         except urllib.error.HTTPError as e:
             _xt_debug(f"API POST error ({e.code}): {e.reason}")
             try:
-                _xt_debug(e.read().decode('utf-8'))
+                _xt_debug(e.read().decode("utf-8"))
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
             return None
         except Exception as e:
             _xt_debug(f"API POST error: {e}")
@@ -729,27 +754,27 @@ class OMEROWebClient:
         data = self._api_request(self._with_all_groups(f"m/images/{image_id}/"))
         if not data:
             return {}
-        
+
         result = {
-            'id': image_id,
-            'name': data.get('Name') or data.get('name') or '',
-            'original_file': None,
+            "id": image_id,
+            "name": data.get("Name") or data.get("name") or "",
+            "original_file": None,
         }
-        
+
         fileset = data.get("Fileset") or data.get("fileset") or {}
         files = fileset.get("Files") or fileset.get("files") or []
         if files:
-            result['original_file'] = files[0].get("Name") or files[0].get("name")
-        
+            result["original_file"] = files[0].get("Name") or files[0].get("name")
+
         return result
 
     def list_scripts(self):
         """List available scripts."""
         data = self._api_request("scripts/")
         if data and isinstance(data, dict):
-            scripts = data.get('data') or data.get('scripts') or []
+            scripts = data.get("data") or data.get("scripts") or []
             if isinstance(scripts, dict):
-                scripts = scripts.get('data') or scripts.get('scripts') or []
+                scripts = scripts.get("data") or scripts.get("scripts") or []
             return scripts
         return []
 
@@ -758,9 +783,9 @@ class OMEROWebClient:
         scripts_list = self.list_scripts()
         normalized_name = os.path.splitext(script_name)[0]
         for item in scripts_list:
-            name = item.get('name') or item.get('Name') or item.get('scriptName')
-            path = item.get('path') or item.get('Path')
-            sid = item.get('id') or item.get('@id')
+            name = item.get("name") or item.get("Name") or item.get("scriptName")
+            path = item.get("path") or item.get("Path")
+            sid = item.get("id") or item.get("@id")
             if not sid:
                 continue
             if name == script_name or path == script_name:
@@ -770,9 +795,15 @@ class OMEROWebClient:
             if path and os.path.basename(path) == script_name:
                 return sid
             if normalized_name:
-                if name and os.path.splitext(os.path.basename(name))[0] == normalized_name:
+                if (
+                    name
+                    and os.path.splitext(os.path.basename(name))[0] == normalized_name
+                ):
                     return sid
-                if path and os.path.splitext(os.path.basename(path))[0] == normalized_name:
+                if (
+                    path
+                    and os.path.splitext(os.path.basename(path))[0] == normalized_name
+                ):
                     return sid
         return None
 
@@ -796,10 +827,10 @@ class OMEROWebClient:
             if not data:
                 return None
 
-            status = (data.get('status') or data.get('state') or '').upper()
-            if status in {'FINISHED', 'SUCCESS', 'COMPLETE', 'DONE'}:
+            status = (data.get("status") or data.get("state") or "").upper()
+            if status in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
                 return data
-            if status in {'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'}:
+            if status in {"FAILED", "ERROR", "CANCELLED", "CANCELED"}:
                 return data
 
             time.sleep(interval)
@@ -819,7 +850,9 @@ class OMEROWebClient:
 
     def list_datasets(self, project_id):
         """List datasets in a project."""
-        data = self._api_request(self._with_all_groups(f"m/projects/{project_id}/datasets/"))
+        data = self._api_request(
+            self._with_all_groups(f"m/projects/{project_id}/datasets/")
+        )
         datasets = self._extract_items(
             data,
             collection_keys=("data", "datasets", "results", "items", "objects"),
@@ -843,7 +876,9 @@ class OMEROWebClient:
 
     def list_images(self, dataset_id):
         """List images in a dataset."""
-        data = self._api_request(self._with_all_groups(f"m/datasets/{dataset_id}/images/"))
+        data = self._api_request(
+            self._with_all_groups(f"m/datasets/{dataset_id}/images/")
+        )
         if not data:
             return []
         images = self._extract_items(
@@ -858,17 +893,18 @@ class OMEROWebClient:
             if image_id is None:
                 continue
             pixels = img.get("Pixels") or img.get("pixels") or {}
-            out.append({
-                'id': image_id,
-                'name': img.get("Name") or img.get("name") or f"Image {image_id}",
-                'sizeX': pixels.get('SizeX', pixels.get('sizeX', 0)),
-                'sizeY': pixels.get('SizeY', pixels.get('sizeY', 0)),
-                'sizeZ': pixels.get('SizeZ', pixels.get('sizeZ', 1)),
-                'sizeC': pixels.get('SizeC', pixels.get('sizeC', 1)),
-                'sizeT': pixels.get('SizeT', pixels.get('sizeT', 1)),
-            })
+            out.append(
+                {
+                    "id": image_id,
+                    "name": img.get("Name") or img.get("name") or f"Image {image_id}",
+                    "sizeX": pixels.get("SizeX", pixels.get("sizeX", 0)),
+                    "sizeY": pixels.get("SizeY", pixels.get("sizeY", 0)),
+                    "sizeZ": pixels.get("SizeZ", pixels.get("sizeZ", 1)),
+                    "sizeC": pixels.get("SizeC", pixels.get("sizeC", 1)),
+                    "sizeT": pixels.get("SizeT", pixels.get("sizeT", 1)),
+                }
+            )
         return out
-
 
     def download_ims_export(
         self,
@@ -885,7 +921,9 @@ class OMEROWebClient:
         This intentionally avoids /api/v0/scripts/ (often not available).
         """
         if download_dir is None:
-            download_dir = os.path.join(os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports")
+            download_dir = os.path.join(
+                os.path.expanduser("~"), "Downloads", "OMERO_Imaris_Exports"
+            )
 
         # Ensure logged in
         if not self.session_id:
@@ -905,7 +943,7 @@ class OMEROWebClient:
 
         # Create request with explicit cookies
         req = self._create_request_with_cookies(export_url)
-        
+
         try:
             with self.opener.open(req, timeout=30) as response:
                 if self._check_login_redirect(response, "IMS export request"):
@@ -929,12 +967,12 @@ class OMEROWebClient:
                         "Please verify the OMERO.web Imaris connector is healthy.\n\n"
                         f"Response preview:\n{snippet}"
                     ) from exc
-                    
+
                 job_id = payload.get("job_id")
                 status_url = payload.get("status_url")
                 if not job_id or not status_url:
                     raise RuntimeError(f"Unexpected response from server: {payload}")
-                    
+
                 status_url = self._normalize_url(status_url, base)
                 _xt_debug(f"IMS export started job_id={job_id} status_url={status_url}")
 
@@ -944,14 +982,14 @@ class OMEROWebClient:
             last_state = None
             poll_count = 0
             reauth_attempted = False
-            
+
             while time.time() < deadline:
                 poll_count += 1
                 _xt_debug(f"IMS export poll #{poll_count} url={status_url}")
-                
+
                 # Create poll request with explicit cookies
                 poll_req = self._create_request_with_cookies(status_url)
-                
+
                 try:
                     with self.opener.open(poll_req, timeout=30) as poll_response:
                         if self._check_login_redirect(poll_response, "IMS export poll"):
@@ -969,8 +1007,10 @@ class OMEROWebClient:
                                 "Not authenticated to OMERO.web (redirected to login) while polling IMS export. "
                                 "Session may have expired. Please try again."
                             )
-                        
-                        poll_body = poll_response.read().decode("utf-8", errors="replace")
+
+                        poll_body = poll_response.read().decode(
+                            "utf-8", errors="replace"
+                        )
                         try:
                             poll_payload = json.loads(poll_body)
                         except json.JSONDecodeError as exc:
@@ -980,7 +1020,7 @@ class OMEROWebClient:
                                 "Please verify the OMERO.web Imaris connector is healthy.\n\n"
                                 f"Response preview:\n{snippet}"
                             ) from exc
-                            
+
                 except urllib.error.HTTPError as e:
                     if e.code == 401 or e.code == 403:
                         if not reauth_attempted:
@@ -992,20 +1032,20 @@ class OMEROWebClient:
                             "Session may have expired. Please try again."
                         )
                     raise
-                
+
                 last_state = poll_payload.get("state")
                 _xt_debug(f"IMS export poll state={last_state} payload={poll_payload}")
-                
+
                 if poll_payload.get("failed"):
-                    error_msg = poll_payload.get('error', 'unknown error')
+                    error_msg = poll_payload.get("error", "unknown error")
                     raise RuntimeError(f"IMS export failed: {error_msg}")
-                    
+
                 if poll_payload.get("finished"):
                     download_url = poll_payload.get("download_url")
                     if download_url:
                         download_url = self._normalize_url(download_url, base)
                     break
-                    
+
                 time.sleep(EXPORT_POLL_INTERVAL)
 
             if not download_url:
@@ -1014,16 +1054,18 @@ class OMEROWebClient:
             # Download the file
             _xt_debug(f"Downloading IMS from: {download_url}")
             download_req = self._create_request_with_cookies(download_url)
-            
-            with self.opener.open(download_req, timeout=EXPORT_TIMEOUT + 60) as response:
+
+            with self.opener.open(
+                download_req, timeout=EXPORT_TIMEOUT + 60
+            ) as response:
                 if self._check_login_redirect(response, "IMS export download"):
                     raise RuntimeError(
                         "Not authenticated to OMERO.web (redirected to login) while downloading IMS export."
                     )
-                    
+
                 cd = response.headers.get("Content-Disposition", "")
                 filename = None
-                m = re.search(r'filename\*=UTF-8\'\'([^;]+)', cd)
+                m = re.search(r"filename\*=UTF-8\'\'([^;]+)", cd)
                 if m:
                     filename = urllib.parse.unquote(m.group(1))
                 else:
@@ -1036,7 +1078,7 @@ class OMEROWebClient:
                     if not filename.lower().endswith(".ims"):
                         filename += ".ims"
 
-                safe_filename = re.sub(r'[^\w\s.-]', "_", filename).strip()
+                safe_filename = re.sub(r"[^\w\s.-]", "_", filename).strip()
                 if not safe_filename:
                     safe_filename = fallback_name
 
@@ -1057,7 +1099,7 @@ class OMEROWebClient:
                         if total_size:
                             percent = (downloaded / total_size) * 100.0
                             print(
-                                f"  Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)",
+                                f"  Progress: {percent:.1f}% ({downloaded / (1024 * 1024):.1f} MB)",
                                 end="\r",
                             )
 
@@ -1065,7 +1107,9 @@ class OMEROWebClient:
                     print()
 
             if not os.path.exists(local_path):
-                raise RuntimeError(f"Download completed but file not found at {local_path}")
+                raise RuntimeError(
+                    f"Download completed but file not found at {local_path}"
+                )
             if os.path.getsize(local_path) <= 0:
                 raise RuntimeError("Downloaded IMS file is empty")
 
@@ -1077,27 +1121,35 @@ class OMEROWebClient:
             try:
                 body = e.read().decode("utf-8", errors="replace")
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
-            raise RuntimeError(f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}") from e
+                logger.debug(
+                    "Suppressed non-fatal exception in XTOmeroConnector.py",
+                    exc_info=exc,
+                )
+            raise RuntimeError(
+                f"IMS export HTTPError {e.code}: {e.reason}\n{body[:2000]}"
+            ) from e
         except urllib.error.URLError as e:
             raise RuntimeError(f"IMS export failed (URLError): {e}") from e
 
     def _normalize_url(self, url, base_url):
         """Normalize a URL to use the base_url's scheme and host.
-        
+
         This ensures all URLs point to the same server the client authenticated with.
         """
         if not url:
             return url
-            
+
         parsed = urllib.parse.urlparse(url)
         base_parsed = urllib.parse.urlparse(base_url)
-        
+
         # If URL has scheme and netloc
         if parsed.scheme and parsed.netloc:
             # Always rebuild to use base_url's scheme and netloc
             # This handles cases where server returns localhost, Docker hostname, etc.
-            if parsed.netloc != base_parsed.netloc or parsed.scheme != base_parsed.scheme:
+            if (
+                parsed.netloc != base_parsed.netloc
+                or parsed.scheme != base_parsed.scheme
+            ):
                 rebuilt = urllib.parse.urlunparse(
                     (
                         base_parsed.scheme,
@@ -1111,7 +1163,7 @@ class OMEROWebClient:
                 _xt_debug(f"Normalized URL: {url} -> {rebuilt}")
                 return rebuilt
             return url
-            
+
         # Relative URL - join with base
         result = urllib.parse.urljoin(base_url.rstrip("/") + "/", url.lstrip("/"))
         return result
@@ -1128,106 +1180,139 @@ class OMEROBrowserDialog:
         self.datasets_data = []
         self.images_data = []
         self.temp_files = []
-        
+
         # Get export directory
         self.export_dir = self._get_export_dir()
-        
+
         self.root = tk.Tk()
         self.root.title("OMERO → Imaris Connector")
         self.root.geometry("1000x700")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        
+
         self._build_ui()
-    
+
     def _on_close(self):
         """Handle window close - don't delete temp files as Imaris might still be using them."""
         self.root.destroy()
-    
+
     def _build_ui(self):
         # Connection frame
         conn_frame = tk.LabelFrame(self.root, text="OMERO Connection", padx=10, pady=10)
         conn_frame.pack(fill=tk.X, padx=10, pady=10)
-        
+
         tk.Label(conn_frame, text="Host:").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.host_entry = tk.Entry(conn_frame, width=25)
         self.host_entry.insert(0, "172.23.208.90")
         self.host_entry.grid(row=0, column=1, pady=5, padx=5)
-        
+
         tk.Label(conn_frame, text="Port:").grid(row=0, column=2, sticky=tk.W, pady=5)
         self.port_entry = tk.Entry(conn_frame, width=8)
         self.port_entry.insert(0, "4090")
         self.port_entry.grid(row=0, column=3, pady=5, padx=5)
-        
+
         self.https_var = tk.BooleanVar(value=False)
         tk.Checkbutton(conn_frame, text="Use HTTPS", variable=self.https_var).grid(
             row=0, column=4, pady=5, padx=5
         )
-        
-        tk.Label(conn_frame, text="Username:").grid(row=1, column=0, sticky=tk.W, pady=5)
+
+        tk.Label(conn_frame, text="Username:").grid(
+            row=1, column=0, sticky=tk.W, pady=5
+        )
         self.user_entry = tk.Entry(conn_frame, width=25)
         self.user_entry.insert(0, "test")
         self.user_entry.grid(row=1, column=1, pady=5, padx=5)
-        
-        tk.Label(conn_frame, text="Password:").grid(row=1, column=2, sticky=tk.W, pady=5)
+
+        tk.Label(conn_frame, text="Password:").grid(
+            row=1, column=2, sticky=tk.W, pady=5
+        )
         self.pass_entry = tk.Entry(conn_frame, show="*", width=25)
         self.pass_entry.grid(row=1, column=3, columnspan=2, pady=5, padx=5, sticky=tk.W)
 
-        tk.Button(conn_frame, text="Connect", command=self._connect,
-                 bg='#3498db', fg='white', font=('Arial', 10, 'bold'),
-                 width=15).grid(row=0, column=5, rowspan=2, padx=10, pady=5)
-        
+        tk.Button(
+            conn_frame,
+            text="Connect",
+            command=self._connect,
+            bg="#3498db",
+            fg="white",
+            font=("Arial", 10, "bold"),
+            width=15,
+        ).grid(row=0, column=5, rowspan=2, padx=10, pady=5)
+
         # Browser
         browser = tk.Frame(self.root)
         browser.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
+
         # Projects
         p_frame = tk.LabelFrame(browser, text="Projects")
         p_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         p_scroll = tk.Scrollbar(p_frame)
         p_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.plist = tk.Listbox(p_frame, yscrollcommand=p_scroll.set, exportselection=False)
+        self.plist = tk.Listbox(
+            p_frame, yscrollcommand=p_scroll.set, exportselection=False
+        )
         self.plist.pack(fill=tk.BOTH, expand=True)
         p_scroll.config(command=self.plist.yview)
-        self.plist.bind('<<ListboxSelect>>', lambda e: self._sel_proj())
-        
+        self.plist.bind("<<ListboxSelect>>", lambda e: self._sel_proj())
+
         # Datasets
         d_frame = tk.LabelFrame(browser, text="Datasets")
         d_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         d_scroll = tk.Scrollbar(d_frame)
         d_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.dlist = tk.Listbox(d_frame, yscrollcommand=d_scroll.set, exportselection=False)
+        self.dlist = tk.Listbox(
+            d_frame, yscrollcommand=d_scroll.set, exportselection=False
+        )
         self.dlist.pack(fill=tk.BOTH, expand=True)
         d_scroll.config(command=self.dlist.yview)
-        self.dlist.bind('<<ListboxSelect>>', lambda e: self._sel_ds())
-        
+        self.dlist.bind("<<ListboxSelect>>", lambda e: self._sel_ds())
+
         # Images
         i_frame = tk.LabelFrame(browser, text="Images")
         i_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         i_scroll = tk.Scrollbar(i_frame)
         i_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.ilist = tk.Listbox(i_frame, yscrollcommand=i_scroll.set, exportselection=False)
+        self.ilist = tk.Listbox(
+            i_frame, yscrollcommand=i_scroll.set, exportselection=False
+        )
         self.ilist.pack(fill=tk.BOTH, expand=True)
         i_scroll.config(command=self.ilist.yview)
-        
+
         # Actions
         actions = tk.Frame(self.root)
         actions.pack(fill=tk.X, padx=10, pady=10)
-        
-        self.load_btn = tk.Button(actions, text="Load into Imaris", 
-                                  command=self._load,
-                                  bg='#27ae60', fg='white', 
-                                  font=('Arial', 12, 'bold'), 
-                                  state=tk.DISABLED, height=2)
+
+        self.load_btn = tk.Button(
+            actions,
+            text="Load into Imaris",
+            command=self._load,
+            bg="#27ae60",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            state=tk.DISABLED,
+            height=2,
+        )
         self.load_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        
-        tk.Button(actions, text="Close", command=self._on_close,
-                 bg='#95a5a6', fg='white', 
-                 font=('Arial', 12, 'bold'), height=2).pack(side=tk.LEFT, padx=2)
-        
+
+        tk.Button(
+            actions,
+            text="Close",
+            command=self._on_close,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            height=2,
+        ).pack(side=tk.LEFT, padx=2)
+
         # Status
-        self.status = tk.Label(self.root, text="Ready - Please connect to OMERO", 
-                              bg='#ecf0f1', anchor=tk.W, padx=10, pady=5,
-                              font=('Arial', 9))
+        self.status = tk.Label(
+            self.root,
+            text="Ready - Please connect to OMERO",
+            bg="#ecf0f1",
+            anchor=tk.W,
+            padx=10,
+            pady=5,
+            font=("Arial", 9),
+        )
         self.status.pack(fill=tk.X, side=tk.BOTTOM)
 
     def _get_export_dir(self):
@@ -1241,10 +1326,11 @@ class OMEROBrowserDialog:
         os.makedirs(export_dir, exist_ok=True)
         return export_dir
 
-    def _set_status(self, text, color='#ecf0f1'):
+    def _set_status(self, text, color="#ecf0f1"):
         def update():
             self.status.config(text=text, bg=color)
             self.root.update_idletasks()
+
         self.root.after(0, update)
 
     def _show_error(self, title, message):
@@ -1279,7 +1365,9 @@ class OMEROBrowserDialog:
         self._set_status("Opening IMS in Imaris...", "#fff3cd")
 
         if self.imaris is None:
-            _xt_debug("Imaris handle missing before open; attempting UI-thread re-acquisition")
+            _xt_debug(
+                "Imaris handle missing before open; attempting UI-thread re-acquisition"
+            )
             try:
                 self.imaris = _resolve_imaris_application(
                     self.imaris_id,
@@ -1290,20 +1378,26 @@ class OMEROBrowserDialog:
                 _xt_debug(f"Failed to re-acquire Imaris application handle: {exc}")
 
         if self.imaris is None:
-            _xt_debug("Imaris handle is still unavailable after re-acquisition attempts")
+            _xt_debug(
+                "Imaris handle is still unavailable after re-acquisition attempts"
+            )
         else:
-            _xt_debug(f"Using Imaris handle type={type(self.imaris).__name__} for file open")
+            _xt_debug(
+                f"Using Imaris handle type={type(self.imaris).__name__} for file open"
+            )
 
         return open_file_in_imaris(downloaded_file, self.imaris)
-    
+
     def _connect(self):
         h = self.host_entry.get().strip()
         p = self.port_entry.get().strip()
         u = self.user_entry.get().strip()
         pw = self.pass_entry.get()
-        
+
         if not all([h, p, u, pw]):
-            messagebox.showwarning("Missing Fields", "Please fill all connection fields")
+            messagebox.showwarning(
+                "Missing Fields", "Please fill all connection fields"
+            )
             return
 
         port = _parse_port(p)
@@ -1313,78 +1407,81 @@ class OMEROBrowserDialog:
                 "Please enter a valid numeric port (1-65535) for the OMERO.web server.",
             )
             return
-        
+
         self._set_status("Connecting to OMERO...", "#fff3cd")
-        
+
         scheme = "https" if self.https_var.get() else "http"
         self.client = OMEROWebClient(h, port, u, pw, scheme=scheme)
-        
+
         if self.client.connect():
             self._set_status(f"✓ Connected to {h}:{p} as {u}", "#d4edda")
             self._load_projects()
             self.load_btn.config(state=tk.NORMAL)
         else:
             self._set_status("✗ Connection failed", "#f8d7da")
-            messagebox.showerror("Connection Failed", 
-                               "Cannot connect to OMERO server.\n"
-                               "Please check your credentials.")
-    
+            messagebox.showerror(
+                "Connection Failed",
+                "Cannot connect to OMERO server.\nPlease check your credentials.",
+            )
+
     def _load_projects(self):
         self.plist.delete(0, tk.END)
         self.projects_data = self.client.list_projects()
         for p in self.projects_data:
-            self.plist.insert(tk.END, p['name'])
-    
+            self.plist.insert(tk.END, p["name"])
+
     def _sel_proj(self):
         sel = self.plist.curselection()
         if not sel:
             return
         p = self.projects_data[sel[0]]
-        if not hasattr(self, '_pid') or self._pid != p['id']:
-            self._pid = p['id']
+        if not hasattr(self, "_pid") or self._pid != p["id"]:
+            self._pid = p["id"]
             self._load_ds()
-    
+
     def _sel_ds(self):
         sel = self.dlist.curselection()
         if not sel:
             return
         d = self.datasets_data[sel[0]]
-        self._load_imgs(d['id'])
-    
+        self._load_imgs(d["id"])
+
     def _load_ds(self):
         self.dlist.delete(0, tk.END)
         self.ilist.delete(0, tk.END)
         self.datasets_data = self.client.list_datasets(self._pid)
         for d in self.datasets_data:
-            self.dlist.insert(tk.END, d['name'])
-    
+            self.dlist.insert(tk.END, d["name"])
+
     def _load_imgs(self, did):
         self.ilist.delete(0, tk.END)
         self.images_data = self.client.list_images(did)
         for img in self.images_data:
             size_info = f"{img['sizeX']}×{img['sizeY']}×{img['sizeZ']}"
-            if img['sizeC'] > 1:
+            if img["sizeC"] > 1:
                 size_info += f" C{img['sizeC']}"
-            if img['sizeT'] > 1:
+            if img["sizeT"] > 1:
                 size_info += f" T{img['sizeT']}"
             self.ilist.insert(tk.END, f"{img['name']} [{size_info}]")
-    
+
     def _load(self):
         sel = self.ilist.curselection()
         if not sel:
             messagebox.showwarning("No Selection", "Please select an image")
             return
-        
+
         img = self.images_data[sel[0]]
-        
-        if not messagebox.askyesno("Confirm Load", 
-                                   f"Download and open:\n{img['name']}\n\n"
-                                   f"Conversion will run on the server if needed."):
+
+        if not messagebox.askyesno(
+            "Confirm Load",
+            f"Download and open:\n{img['name']}\n\n"
+            f"Conversion will run on the server if needed.",
+        ):
             return
-        
+
         self.load_btn.config(state=tk.DISABLED)
         threading.Thread(target=self._load_worker, args=(img,), daemon=True).start()
-    
+
     def _load_worker(self, img):
         try:
             _xt_debug(f"Load worker starting image_id={img['id']} name={img['name']}")
@@ -1396,11 +1493,11 @@ class OMEROBrowserDialog:
 
             self._set_status("Running server-side IMS export...", "#fff3cd")
             downloaded_file = self.client.download_ims_export(
-                img['id'],
+                img["id"],
                 download_dir,
                 fallback_name=f"img_{img['id']}.ims",
             )
-            
+
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise RuntimeError("Failed to download IMS export from OMERO.")
 
@@ -1410,35 +1507,43 @@ class OMEROBrowserDialog:
                     "Refusing to open to avoid triggering Imaris File Converter. "
                     "Please verify that the server-side conversion completed successfully."
                 )
-            
-            self._set_status(f"Downloaded: {os.path.basename(downloaded_file)}", "#d4edda")
+
+            self._set_status(
+                f"Downloaded: {os.path.basename(downloaded_file)}", "#d4edda"
+            )
             _xt_debug(f"Downloaded: {downloaded_file}")
-            
+
             self.temp_files.append(downloaded_file)
-            
+
             # Open in Imaris on the UI thread so the XT handle stays in the
             # same thread/apartment as the original dialog.
             success = self._invoke_on_ui_thread(
                 lambda: self._open_downloaded_file_in_imaris(downloaded_file)
             )
-            
+
             if success:
                 self._set_status("✓ Opened in Imaris", "#d4edda")
-                self._show_info("Success", 
-                              f"File opened in Imaris!\n"
-                              f"Opened IMS file: {downloaded_file}")
+                self._show_info(
+                    "Success",
+                    f"File opened in Imaris!\nOpened IMS file: {downloaded_file}",
+                )
             else:
-                raise RuntimeError(f"Failed to open in Imaris.\n\nFile: {downloaded_file}")
-            
+                raise RuntimeError(
+                    f"Failed to open in Imaris.\n\nFile: {downloaded_file}"
+                )
+
         except Exception as e:
             self._set_status("✗ Failed", "#f8d7da")
             self._show_error("Error", str(e))
             import traceback
+
             traceback.print_exc()
             _xt_debug(f"Load worker failed: {e}")
         finally:
-            self._invoke_on_ui_thread(lambda: self.load_btn.config(state=tk.NORMAL), wait=False)
-    
+            self._invoke_on_ui_thread(
+                lambda: self.load_btn.config(state=tk.NORMAL), wait=False
+            )
+
     def show(self):
         self.root.mainloop()
 
@@ -1446,6 +1551,7 @@ class OMEROBrowserDialog:
 # =============================================================================
 # XTENSION ENTRY POINT
 # =============================================================================
+
 
 def _xt_log_path():
     try:
@@ -1462,12 +1568,15 @@ def _xt_write_log(log_path, msg):
             if not msg.endswith("\n"):
                 f.write("\n")
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+        )
 
 
 def _xt_show_fatal(title, message):
     try:
         import tkinter.messagebox as _mb
+
         _mb.showerror(title, message)
     except Exception:
         print(title + ": " + message)
@@ -1497,7 +1606,10 @@ def XTOmeroConnector(aImarisId):
             vImaris = aImarisId if _looks_like_imaris_application(aImarisId) else None
 
         if vImaris is None:
-            _xt_write_log(log_path, f"Imaris handle resolution returned None for entrypoint={aImarisId!r}")
+            _xt_write_log(
+                log_path,
+                f"Imaris handle resolution returned None for entrypoint={aImarisId!r}",
+            )
         else:
             _xt_write_log(
                 log_path,
@@ -1518,7 +1630,9 @@ def XTOmeroConnector(aImarisId):
         try:
             input("Press ENTER to close...")
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+            )
 
 
 if __name__ == "__main__":
@@ -1530,4 +1644,6 @@ if __name__ == "__main__":
         try:
             input("Press ENTER to close...")
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in XTOmeroConnector.py", exc_info=exc
+            )

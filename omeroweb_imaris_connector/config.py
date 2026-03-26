@@ -23,11 +23,11 @@ def use_job_service_session() -> bool:
 
 def get_job_service_credentials() -> tuple[str | None, str | None]:
     """Return (username, password) for the job-service account.
-    
+
     Prefers OMERO_WEB_JOB_SERVICE_* variables, falls back to OMERO_JOB_SERVICE_*.
     """
     from omero_plugin_common.env_utils import get_optional_env
-    
+
     # Try web-specific first
     username = get_optional_env(
         "OMERO_WEB_JOB_SERVICE_USERNAME",
@@ -37,7 +37,7 @@ def get_job_service_credentials() -> tuple[str | None, str | None]:
         "OMERO_WEB_JOB_SERVICE_PASS",
         env_file=ENV_FILE_OMERO_CELERY,
     )
-    
+
     # Fall back to server-side env vars
     if not username:
         username = get_optional_env(
@@ -49,7 +49,7 @@ def get_job_service_credentials() -> tuple[str | None, str | None]:
             "OMERO_JOB_SERVICE_PASS",
             env_file=ENV_FILE_OMERO_CELERY,
         )
-    
+
     return username, password
 
 
@@ -74,7 +74,9 @@ def get_celery_queue() -> str:
 
 def get_celery_result_expires() -> int:
     """Return Celery result expiry (seconds)."""
-    return get_int_env("OMERO_IMS_CELERY_RESULT_EXPIRES", env_file=ENV_FILE_OMERO_CELERY)
+    return get_int_env(
+        "OMERO_IMS_CELERY_RESULT_EXPIRES", env_file=ENV_FILE_OMERO_CELERY
+    )
 
 
 def get_celery_time_limit() -> int:
@@ -99,4 +101,6 @@ def get_export_timeout() -> int:
 
 def get_export_poll_interval() -> float:
     """Return IMS export polling interval (seconds)."""
-    return get_float_env("OMERO_IMS_EXPORT_POLL_INTERVAL", env_file=ENV_FILE_OMERO_CELERY)
+    return get_float_env(
+        "OMERO_IMS_EXPORT_POLL_INTERVAL", env_file=ENV_FILE_OMERO_CELERY
+    )

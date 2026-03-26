@@ -22,7 +22,7 @@ def extract_base_name(filename):
 def detect_label_value_pairs(filenames):
     """
     Intelligently detect if filenames contain label-value pair patterns.
-    
+
     Returns:
         tuple: (has_pairs, detected_labels)
             has_pairs: bool - True if >30% of parts are label-value pairs
@@ -31,38 +31,40 @@ def detect_label_value_pairs(filenames):
     all_pairs = []
     total_parts = 0
     label_counts = Counter()
-    
+
     for filename in filenames[:30]:  # Sample first 30 files
         base = extract_base_name(filename)
-        parts = base.split('-')
+        parts = base.split("-")
         total_parts += len(parts)
-        
+
         # Look for alpha-numeric pairs
         i = 0
         while i < len(parts) - 1:
             current = parts[i]
             next_part = parts[i + 1]
-            
+
             # Check for label-value pattern:
             # - Current is 2-3 lowercase letters
             # - Next is digits
-            if (current.isalpha() and 
-                2 <= len(current) <= 3 and 
-                current.islower() and 
-                next_part.isdigit()):
+            if (
+                current.isalpha()
+                and 2 <= len(current) <= 3
+                and current.islower()
+                and next_part.isdigit()
+            ):
                 all_pairs.append((current, next_part))
                 label_counts[current] += 1
                 i += 2
             else:
                 i += 1
-    
+
     # Determine if this is a label-value pattern dataset
     pair_ratio = len(all_pairs) / max(total_parts, 1)
     has_pairs = pair_ratio >= 0.3  # 30% threshold
-    
+
     # Get labels that appear multiple times (true labels, not random)
     detected_labels = {label for label, count in label_counts.items() if count >= 2}
-    
+
     return has_pairs, detected_labels
 
 
@@ -84,7 +86,9 @@ def build_hyphen_protection_pattern(detected_labels=None):
     if detected_labels:
         label_parts = sorted(detected_labels)
         if label_parts:
-            label_alternation = "|".join(re.escape(l) for l in label_parts)
+            label_alternation = "|".join(
+                re.escape(label_part) for label_part in label_parts
+            )
             label_pattern = rf"(?:^|-)(?:{label_alternation})-"
             return f"(?:{label_pattern}|{base_pattern})"
 
@@ -95,24 +99,24 @@ def build_hyphen_protection_pattern(detected_labels=None):
 def regex_for_separators(separators, filenames=None):
     """
     Generate regex pattern with intelligent hyphen protection.
-    
+
     Args:
         separators: Characters to use as separators (string or list)
         filenames: Optional list of filenames for intelligent pattern detection
-    
+
     Returns:
         str: Regex pattern suitable for re.split()
     """
     tokens = []
     has_whitespace = False
     detected_labels = None
-    
+
     # Detect label-value pairs if filenames provided and hyphen is a separator
-    if filenames and '-' in separators:
+    if filenames and "-" in separators:
         has_pairs, detected_labels = detect_label_value_pairs(filenames)
         if not has_pairs:
             detected_labels = None
-    
+
     # Build separator tokens
     for char in separators:
         if char.isspace():
@@ -123,13 +127,13 @@ def regex_for_separators(separators, filenames=None):
             tokens.append(hyphen_pattern)
         else:
             tokens.append(re.escape(char))
-    
+
     if has_whitespace:
         tokens.append(r"\s")
-    
+
     if not tokens:
         return r"(?<=\D)(?=\d)|(?<=\d)(?=\D)"
-    
+
     # Combine all separator patterns
     return "(?:" + "|".join(tokens) + ")+"
 

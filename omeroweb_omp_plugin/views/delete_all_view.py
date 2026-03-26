@@ -7,7 +7,10 @@ import logging
 
 from ..services.core import collect_images_in_project, find_map_annotation_ids, get_id
 from ..constants import OMERO_CLI
-from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+from ..services.rate_limit import (
+    build_rate_limit_message,
+    check_major_action_rate_limit,
+)
 from ..views.utils import (
     build_omero_cli_base_command,
     load_json_body,
@@ -20,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 OMERO = OMERO_CLI
 
+
 @csrf_exempt
 @login_required()
 @require_non_root_user
@@ -31,7 +35,9 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data, error = load_json_body(request)
         if error:
@@ -41,9 +47,13 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id()}, status=400
+            )
         if not password:
-            return JsonResponse({"error": error_messages.missing_password()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_password()}, status=400
+            )
 
         valid, _ = validate_user_password(conn, password)
         if not valid:
@@ -85,7 +95,7 @@ def delete_all_keyvaluepairs(request, conn=None, url=None, **kwargs):
 
         CHUNK = 100
         for i in range(0, len(image_ids), CHUNK):
-            chunk_ids = [str(int(x)) for x in image_ids[i:i + CHUNK]]
+            chunk_ids = [str(int(x)) for x in image_ids[i : i + CHUNK]]
             target = "Image/Annotation:" + ",".join(chunk_ids)
             cmd = [
                 *cli_base_cmd,

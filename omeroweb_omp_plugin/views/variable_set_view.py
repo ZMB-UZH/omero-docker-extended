@@ -29,7 +29,9 @@ def list_sets(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         sets = list_variable_sets(username)
@@ -58,14 +60,16 @@ def save_set(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         data = load_request_data(request)
 
         set_name = (data.get("set_name") or "").strip()
         var_names = data.get("var_names")
-        
+
         # Read user's max_sets
         user_max_sets = data.get("max_sets")
         try:
@@ -76,25 +80,33 @@ def save_set(request, conn=None, url=None, **kwargs):
             max_sets = MAX_VARIABLE_SET_ENTRIES
 
         if not isinstance(var_names, list):
-            return JsonResponse({"error": errors.invalid_variable_payload()}, status=400)
+            return JsonResponse(
+                {"error": errors.invalid_variable_payload()}, status=400
+            )
 
         has_empty = any(not str(v or "").strip() for v in var_names)
         if has_empty:
             return JsonResponse({"error": errors.variable_names_empty()}, status=400)
 
         if not set_name:
-            return JsonResponse({"error": errors.variable_set_name_required()}, status=400)
+            return JsonResponse(
+                {"error": errors.variable_set_name_required()}, status=400
+            )
 
         existing_sets = list_variable_sets(username)
         normalized_existing = {str(name).strip() for name in existing_sets}
-        
+
         # Check if name already exists - prevent overwrite
         if set_name in normalized_existing:
-            return JsonResponse({"error": errors.variable_set_already_exists()}, status=400)
-        
+            return JsonResponse(
+                {"error": errors.variable_set_already_exists()}, status=400
+            )
+
         # Check max limit for new sets only
         if len(existing_sets) >= max_sets:
-            return JsonResponse({"error": errors.variable_set_max_entries(max_sets)}, status=400)
+            return JsonResponse(
+                {"error": errors.variable_set_max_entries(max_sets)}, status=400
+            )
 
         save_variable_set(username, set_name, var_names)
 
@@ -124,11 +136,15 @@ def load_set(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     set_name = (request.GET.get("set_name") or "").strip()
     if not set_name:
-        return JsonResponse({"error": errors.variable_set_dropdown_required()}, status=400)
+        return JsonResponse(
+            {"error": errors.variable_set_dropdown_required()}, status=400
+        )
 
     try:
         existing_sets = list_variable_sets(username)
@@ -164,7 +180,9 @@ def delete_set(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         data = load_request_data(request)

@@ -11,8 +11,12 @@ from .views.index_view import (
     start_upload,
     upload_files,
 )
-from .views.special_method_settings_view import load_settings as load_special_method_settings
-from .views.special_method_settings_view import save_settings as save_special_method_settings
+from .views.special_method_settings_view import (
+    load_settings as load_special_method_settings,
+)
+from .views.special_method_settings_view import (
+    save_settings as save_special_method_settings,
+)
 from .views.user_settings_view import save_settings
 from .views.help_view import help_page
 
@@ -26,7 +30,9 @@ urlpatterns = [
     path("status/<str:job_id>/", job_status, name="omeroweb_import_status"),
     path("projects/", list_projects, name="omeroweb_import_projects"),
     path("root-status/", root_status, name="omeroweb_import_root_status"),
-    path("user-settings/save/", save_settings, name="omeroweb_import_save_user_settings"),
+    path(
+        "user-settings/save/", save_settings, name="omeroweb_import_save_user_settings"
+    ),
     path(
         "special-method-settings/save/",
         save_special_method_settings,

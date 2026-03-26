@@ -2,6 +2,7 @@
 Core helper functions for upload views.
 All non-view functions extracted here to reduce index_view.py size.
 """
+
 import os
 import json
 import logging
@@ -18,7 +19,6 @@ import tempfile
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 import omero
 
@@ -60,151 +60,151 @@ from omero_plugin_common.tmp_cleanup import (
 from .utils import current_username, json_error, load_json_body
 
 __all__ = [
-    'BlitzGateway',
-    'DatasetI',
-    'DEFAULT_UPLOAD_BATCH_FILES',
-    'DEFAULT_UPLOAD_CONCURRENCY',
-    'INT_SANITIZER',
-    'JOB_ID_SANITIZER',
-    'JOB_SERVICE_GROUP_ENV',
-    'JOB_SERVICE_PASS_ENV',
-    'JOB_SERVICE_SECURE_ENV',
-    'JOB_SERVICE_USER_ENV',
-    'JsonResponse',
-    'MAX_IMPORT_LOG_LINES',
-    'MAX_UPLOAD_BATCH_BYTES',
-    'MAX_UPLOAD_BATCH_GB',
-    'OMERO_CLI',
-    'OMERO_IMPORT_SCAN_DEPTH',
-    'ORPHAN_DATASET_PREFIX',
-    'ORPHAN_SUFFIX_ALPHANUM',
-    'ORPHAN_SUFFIX_LENGTH',
-    'Optional',
-    'Path',
-    'ProjectDatasetLinkI',
-    'ProjectI',
-    'PurePosixPath',
-    'SPECIAL_METHODS_DISABLED_ENV',
-    'SEM_EDX_FILEANNOTATION_NS',
-    'ThreadPoolExecutor',
-    'UPLOAD_BATCH_FILES_ENV',
-    'UPLOAD_CONCURRENCY_ENV',
-    '_CLI_ID_PATTERN',
-    '_IMPORT_OBJECT_PATTERN',
-    '_DIRS_INITIALIZED',
-    '_IMPORT_LOCKS',
-    '_IMPORT_LOCKS_GUARD',
-    '_JOBS_ROOT_CACHE',
-    '_UPLOAD_ROOT_CACHE',
-    '_append_job_error',
-    '_append_job_message',
-    '_append_txt_attachment_message',
-    '_apply_upload_updates',
-    '_attach_txt_to_image_service',
-    '_batch_find_images_by_name',
-    '_build_staged_relative_path',
-    '_build_omero_cli_command',
-    '_build_sem_edx_associations_from_entries',
-    '_check_import_compatibility',
-    '_classify_compatibility_output',
-    '_collect_project_payload',
-    '_compatibility_pending_entries',
-    '_current_user_id',
-    '_dataset_name_for_path',
-    '_ensure_dir',
-    '_ensure_dir_with_permissions',
-    '_ensure_parent_dir',
-    '_extract_import_candidates',
-    '_find_image_by_name',
-    '_find_project_dataset',
-    '_generate_orphan_dataset_name',
-    '_get_env_bool',
-    '_get_env_int',
-    '_get_failed_import_retention_seconds',
-    '_get_id',
-    '_get_import_lock',
-    '_get_job_service_credentials',
-    '_get_jobs_root',
-    '_get_or_create_dataset',
-    '_get_owner_id',
-    '_get_owner_username',
-    '_get_session_key',
-    '_get_text',
-    '_get_upload_root',
-    '_has_import_candidates_in_output',
-    '_has_pending_uploads',
-    '_has_read_write_permissions',
-    '_import_file',
-    '_import_job_entry',
-    '_initialize_directories',
-    '_is_owned_by_user',
-    '_iter_accessible_projects',
-    '_job_path',
-    '_link_dataset_to_project',
-    '_load_job',
-    '_mark_failed_job_for_deferred_cleanup',
-    '_normalize_job_batch_size',
-    '_normalize_upload_relative_path',
-    '_normalize_sem_edx_associations',
-    '_normalize_sem_edx_settings',
-    '_open_service_connection',
-    '_open_session_connection',
-    '_parse_cli_id',
-    '_planned_import_units_for_request',
-    '_prepare_job_import_datasets',
-    '_prepare_uploaded_job_for_request_path_import',
-    '_process_import_job',
-    '_reconnect_session',
-    '_refresh_job_status',
-    '_resolve_root_relative_path',
-    '_resolve_job_batch_size',
-    '_resolve_jobs_root',
-    '_resolve_omero_host_port',
-    '_resolve_staged_target_path',
-    '_resolve_upload_root',
-    '_robust_update_job',
-    '_run_compatibility_check',
-    '_run_omero_cli',
-    '_safe_job_id',
-    '_safe_relative_path',
-    '_save_job',
-    '_native_zarr_import_enabled',
-    '_special_methods_enabled',
-    '_should_auto_skip_import',
-    '_should_start_compatibility_check',
-    '_should_start_import_plan_build',
-    '_start_compatibility_check_thread',
-    '_start_import_thread',
-    '_update_job',
-    '_validate_session',
-    '_validate_staged_target_path',
-    '_verify_import',
-    'as_completed',
-    'current_username',
-    'errors',
-    'json',
-    'json_error',
-    'load_json_body',
-    'logger',
-    'logging',
-    'login_required',
-    'messages',
-    'omero',
-    'os',
-    'portalocker',
-    'random',
-    're',
-    'render',
-    'reverse',
-    'rstring',
-    'secrets',
-    'settings',
-    'stat',
-    'string',
-    'subprocess',
-    'threading',
-    'time',
-    'uuid',
+    "BlitzGateway",
+    "DatasetI",
+    "DEFAULT_UPLOAD_BATCH_FILES",
+    "DEFAULT_UPLOAD_CONCURRENCY",
+    "INT_SANITIZER",
+    "JOB_ID_SANITIZER",
+    "JOB_SERVICE_GROUP_ENV",
+    "JOB_SERVICE_PASS_ENV",
+    "JOB_SERVICE_SECURE_ENV",
+    "JOB_SERVICE_USER_ENV",
+    "JsonResponse",
+    "MAX_IMPORT_LOG_LINES",
+    "MAX_UPLOAD_BATCH_BYTES",
+    "MAX_UPLOAD_BATCH_GB",
+    "OMERO_CLI",
+    "OMERO_IMPORT_SCAN_DEPTH",
+    "ORPHAN_DATASET_PREFIX",
+    "ORPHAN_SUFFIX_ALPHANUM",
+    "ORPHAN_SUFFIX_LENGTH",
+    "Optional",
+    "Path",
+    "ProjectDatasetLinkI",
+    "ProjectI",
+    "PurePosixPath",
+    "SPECIAL_METHODS_DISABLED_ENV",
+    "SEM_EDX_FILEANNOTATION_NS",
+    "ThreadPoolExecutor",
+    "UPLOAD_BATCH_FILES_ENV",
+    "UPLOAD_CONCURRENCY_ENV",
+    "_CLI_ID_PATTERN",
+    "_IMPORT_OBJECT_PATTERN",
+    "_DIRS_INITIALIZED",
+    "_IMPORT_LOCKS",
+    "_IMPORT_LOCKS_GUARD",
+    "_JOBS_ROOT_CACHE",
+    "_UPLOAD_ROOT_CACHE",
+    "_append_job_error",
+    "_append_job_message",
+    "_append_txt_attachment_message",
+    "_apply_upload_updates",
+    "_attach_txt_to_image_service",
+    "_batch_find_images_by_name",
+    "_build_staged_relative_path",
+    "_build_omero_cli_command",
+    "_build_sem_edx_associations_from_entries",
+    "_check_import_compatibility",
+    "_classify_compatibility_output",
+    "_collect_project_payload",
+    "_compatibility_pending_entries",
+    "_current_user_id",
+    "_dataset_name_for_path",
+    "_ensure_dir",
+    "_ensure_dir_with_permissions",
+    "_ensure_parent_dir",
+    "_extract_import_candidates",
+    "_find_image_by_name",
+    "_find_project_dataset",
+    "_generate_orphan_dataset_name",
+    "_get_env_bool",
+    "_get_env_int",
+    "_get_failed_import_retention_seconds",
+    "_get_id",
+    "_get_import_lock",
+    "_get_job_service_credentials",
+    "_get_jobs_root",
+    "_get_or_create_dataset",
+    "_get_owner_id",
+    "_get_owner_username",
+    "_get_session_key",
+    "_get_text",
+    "_get_upload_root",
+    "_has_import_candidates_in_output",
+    "_has_pending_uploads",
+    "_has_read_write_permissions",
+    "_import_file",
+    "_import_job_entry",
+    "_initialize_directories",
+    "_is_owned_by_user",
+    "_iter_accessible_projects",
+    "_job_path",
+    "_link_dataset_to_project",
+    "_load_job",
+    "_mark_failed_job_for_deferred_cleanup",
+    "_normalize_job_batch_size",
+    "_normalize_upload_relative_path",
+    "_normalize_sem_edx_associations",
+    "_normalize_sem_edx_settings",
+    "_open_service_connection",
+    "_open_session_connection",
+    "_parse_cli_id",
+    "_planned_import_units_for_request",
+    "_prepare_job_import_datasets",
+    "_prepare_uploaded_job_for_request_path_import",
+    "_process_import_job",
+    "_reconnect_session",
+    "_refresh_job_status",
+    "_resolve_root_relative_path",
+    "_resolve_job_batch_size",
+    "_resolve_jobs_root",
+    "_resolve_omero_host_port",
+    "_resolve_staged_target_path",
+    "_resolve_upload_root",
+    "_robust_update_job",
+    "_run_compatibility_check",
+    "_run_omero_cli",
+    "_safe_job_id",
+    "_safe_relative_path",
+    "_save_job",
+    "_native_zarr_import_enabled",
+    "_special_methods_enabled",
+    "_should_auto_skip_import",
+    "_should_start_compatibility_check",
+    "_should_start_import_plan_build",
+    "_start_compatibility_check_thread",
+    "_start_import_thread",
+    "_update_job",
+    "_validate_session",
+    "_validate_staged_target_path",
+    "_verify_import",
+    "as_completed",
+    "current_username",
+    "errors",
+    "json",
+    "json_error",
+    "load_json_body",
+    "logger",
+    "logging",
+    "login_required",
+    "messages",
+    "omero",
+    "os",
+    "portalocker",
+    "random",
+    "re",
+    "render",
+    "reverse",
+    "rstring",
+    "secrets",
+    "settings",
+    "stat",
+    "string",
+    "subprocess",
+    "threading",
+    "time",
+    "uuid",
 ]
 
 logger = logging.getLogger(__name__)
@@ -268,48 +268,52 @@ SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
 # debris are skipped.  Everything else -- including all XML variants -- is
 # forwarded to OMERO and Bio-Formats so the server decides what it can import.
 # --------------------------------------------------------------------------
-_ALWAYS_SKIP_FILENAMES = frozenset({
-    # Windows
-    "thumbs.db",            # thumbnail cache
-    "desktop.ini",          # folder display settings
-    "ehthumbs.db",          # Explorer thumbnail cache (legacy)
-    "ehthumbs_vista.db",    # Explorer thumbnail cache (Vista)
-    "$recycle.bin",         # recycle-bin sentinel
-    "ntuser.dat",           # user profile registry hive
-    "ntuser.dat.log",       # user profile registry log
-    "ntuser.ini",           # user profile settings
-    "iconcache.db",         # icon cache
-    # macOS
-    ".ds_store",            # Finder folder metadata
-    ".apdisk",              # Apple disk image metadata
-    ".volumeicon.icns",     # custom volume icon
-    ".fseventsd",           # filesystem-events daemon
-    ".spotlight-v100",      # Spotlight index
-    ".temporaryitems",      # temporary items folder
-    ".trashes",             # per-volume trash
-    # Linux
-    ".directory",           # KDE/Dolphin folder settings
-    ".trash-1000",          # common user-trash sentinel
-    # Cross-platform applications
-    ".picasa.ini",          # Google Picasa metadata
-    ".picasaoriginals",     # Google Picasa originals folder
-    ".bridgecache",         # Adobe Bridge cache
-    ".bridgecachet",        # Adobe Bridge cache thumbnail
-    ".bridgesort",          # Adobe Bridge sort order
-    ".adobe",               # Adobe application data
-})
+_ALWAYS_SKIP_FILENAMES = frozenset(
+    {
+        # Windows
+        "thumbs.db",  # thumbnail cache
+        "desktop.ini",  # folder display settings
+        "ehthumbs.db",  # Explorer thumbnail cache (legacy)
+        "ehthumbs_vista.db",  # Explorer thumbnail cache (Vista)
+        "$recycle.bin",  # recycle-bin sentinel
+        "ntuser.dat",  # user profile registry hive
+        "ntuser.dat.log",  # user profile registry log
+        "ntuser.ini",  # user profile settings
+        "iconcache.db",  # icon cache
+        # macOS
+        ".ds_store",  # Finder folder metadata
+        ".apdisk",  # Apple disk image metadata
+        ".volumeicon.icns",  # custom volume icon
+        ".fseventsd",  # filesystem-events daemon
+        ".spotlight-v100",  # Spotlight index
+        ".temporaryitems",  # temporary items folder
+        ".trashes",  # per-volume trash
+        # Linux
+        ".directory",  # KDE/Dolphin folder settings
+        ".trash-1000",  # common user-trash sentinel
+        # Cross-platform applications
+        ".picasa.ini",  # Google Picasa metadata
+        ".picasaoriginals",  # Google Picasa originals folder
+        ".bridgecache",  # Adobe Bridge cache
+        ".bridgecachet",  # Adobe Bridge cache thumbnail
+        ".bridgesort",  # Adobe Bridge sort order
+        ".adobe",  # Adobe application data
+    }
+)
 
 # Directories whose *contents* should never be imported.
 # If any path component matches (case-insensitive) the file is skipped.
-_ALWAYS_SKIP_DIRS = frozenset({
-    "lost+found",           # Linux filesystem recovery directory
-    "$recycle.bin",         # Windows recycle bin
-    "system volume information",  # Windows system folder
-    ".trashes",             # macOS per-volume trash
-    ".spotlight-v100",      # macOS Spotlight index
-    ".fseventsd",           # macOS filesystem events
-    ".temporaryitems",      # macOS temporary items
-})
+_ALWAYS_SKIP_DIRS = frozenset(
+    {
+        "lost+found",  # Linux filesystem recovery directory
+        "$recycle.bin",  # Windows recycle bin
+        "system volume information",  # Windows system folder
+        ".trashes",  # macOS per-volume trash
+        ".spotlight-v100",  # macOS Spotlight index
+        ".fseventsd",  # macOS filesystem events
+        ".temporaryitems",  # macOS temporary items
+    }
+)
 SEM_EDX_SETTINGS_DEFAULTS = {
     "create_tables": True,
     "create_figures_attachments": True,
@@ -325,6 +329,7 @@ _DIRS_INITIALIZED = False
 # --------------------------------------------------------------------------
 # PATHS + JOB STORAGE
 # --------------------------------------------------------------------------
+
 
 def _resolve_upload_root() -> Path:
     return resolve_upload_root()
@@ -350,31 +355,31 @@ def _ensure_parent_dir(path: Path) -> bool:
 def _initialize_directories():
     """
     Initialize upload directories once per application lifecycle.
-    
+
     This function:
     - Ensures parent directories exist with 0o755 (accessible for traversal)
     - Creates target directories with 0o700 (secure)
     - Only runs once, subsequent calls return immediately
-    
+
     Called automatically by _get_upload_root() and _get_jobs_root()
     """
     global _DIRS_INITIALIZED
-    
+
     if _DIRS_INITIALIZED:
         return  # Already initialized, skip
-    
+
     upload_root = _resolve_upload_root()
     jobs_root = _resolve_jobs_root()
 
     if not _ensure_parent_dir(upload_root) or not _ensure_parent_dir(jobs_root):
         return
-    
+
     # Create upload directory with 0o700
     _ensure_dir_with_permissions(upload_root, 0o700)
-    
+
     # Create jobs directory with 0o700
     _ensure_dir_with_permissions(jobs_root, 0o700)
-    
+
     # Mark as initialized so we don't check again
     _DIRS_INITIALIZED = True
     logger.info("Upload directories initialized successfully")
@@ -383,32 +388,32 @@ def _initialize_directories():
 def _get_upload_root() -> Path:
     """
     Get the upload root directory.
-    
+
     Uses cached path after first initialization to avoid repeated filesystem checks.
     """
     global _UPLOAD_ROOT_CACHE
-    
+
     # Use cached path if available
     if _UPLOAD_ROOT_CACHE is None:
         _initialize_directories()
         _UPLOAD_ROOT_CACHE = _resolve_upload_root()
-    
+
     return _UPLOAD_ROOT_CACHE
 
 
 def _get_jobs_root() -> Path:
     """
     Get the jobs directory.
-    
+
     Uses cached path after first initialization to avoid repeated filesystem checks.
     """
     global _JOBS_ROOT_CACHE
-    
+
     # Use cached path if available
     if _JOBS_ROOT_CACHE is None:
         _initialize_directories()
         _JOBS_ROOT_CACHE = _resolve_jobs_root()
-    
+
     return _JOBS_ROOT_CACHE
 
 
@@ -433,16 +438,16 @@ def _ensure_dir(path: Path) -> bool:
 def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
     """
     Ensure directory exists with strict permissions.
-    
+
     - Creates target directory with specified mode if it doesn't exist
     - If directory exists, verifies and fixes permissions if necessary
     - NEVER deletes any files or directories
     - Does NOT create parent directories (caller's responsibility)
-    
+
     Args:
         path: Directory path to ensure
         mode: Octal permissions for the target directory (e.g., 0o700 for rwx------)
-    
+
     Returns:
         True if directory exists/created successfully, False otherwise
     """
@@ -452,11 +457,19 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
             # Parent directory must already exist
             try:
                 path.mkdir(mode=mode, exist_ok=True)
-                logger.info("Created directory: %s with permissions %s", sanitize_log_value(path), oct(mode))
+                logger.info(
+                    "Created directory: %s with permissions %s",
+                    sanitize_log_value(path),
+                    oct(mode),
+                )
             except OSError as target_exc:
-                logger.error("Unable to create target directory %s: %s", sanitize_log_value(path), sanitize_log_value(target_exc))
+                logger.error(
+                    "Unable to create target directory %s: %s",
+                    sanitize_log_value(path),
+                    sanitize_log_value(target_exc),
+                )
                 return False
-            
+
             return True
         else:
             # Directory exists - check and fix permissions if necessary
@@ -465,17 +478,32 @@ def _ensure_dir_with_permissions(path: Path, mode: int) -> bool:
                 current_perms = stat.S_IMODE(path.stat().st_mode)
                 if current_perms != mode:
                     path.chmod(mode)
-                    logger.warning("Fixed permissions for existing directory: %s (was %s, now %s)", sanitize_log_value(path), oct(current_perms), oct(mode))
+                    logger.warning(
+                        "Fixed permissions for existing directory: %s (was %s, now %s)",
+                        sanitize_log_value(path),
+                        oct(current_perms),
+                        oct(mode),
+                    )
             except OSError as perm_exc:
-                logger.warning("Could not verify/fix permissions for %s: %s", sanitize_log_value(path), sanitize_log_value(perm_exc))
+                logger.warning(
+                    "Could not verify/fix permissions for %s: %s",
+                    sanitize_log_value(path),
+                    sanitize_log_value(perm_exc),
+                )
             return True
     except OSError as exc:
-        logger.error("Unable to create/verify directory %s: %s", sanitize_log_value(path), sanitize_log_value(exc))
+        logger.error(
+            "Unable to create/verify directory %s: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
         return False
 
 
 def _job_path(job_id: str) -> Path:
-    return _resolve_managed_child_path(_get_jobs_root(), f"{_validated_job_id(job_id)}.json")
+    return _resolve_managed_child_path(
+        _get_jobs_root(), f"{_validated_job_id(job_id)}.json"
+    )
 
 
 def _get_env_int(env_key: str, default: int, min_value: int, max_value: int) -> int:
@@ -533,7 +561,9 @@ def _normalize_sem_edx_settings(raw_settings):
 
 
 def _resolve_job_batch_size(job_dict) -> int:
-    default_batch_size = _get_env_int(UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10)
+    default_batch_size = _get_env_int(
+        UPLOAD_BATCH_FILES_ENV, DEFAULT_UPLOAD_BATCH_FILES, 1, 10
+    )
     return _normalize_job_batch_size(job_dict.get("job_batch_size"), default_batch_size)
 
 
@@ -599,7 +629,11 @@ def _refresh_job_status(job_dict):
     # If nothing requires compatibility (all files skipped or already decided),
     # do NOT get stuck in "checking" once uploads are complete.
     pending_entries = _compatibility_pending_entries(job_dict)
-    if not pending_entries and job_dict.get("compatibility_status") not in ("compatible", "incompatible", "error"):
+    if not pending_entries and job_dict.get("compatibility_status") not in (
+        "compatible",
+        "incompatible",
+        "error",
+    ):
         job_dict["compatibility_status"] = "compatible"
 
     compatibility_status = job_dict.get("compatibility_status")
@@ -636,7 +670,11 @@ def _load_job(job_id: str):
     last_lock_error = None
     for attempt in range(JOB_LOCK_RETRIES):
         if attempt:
-            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
+            time.sleep(
+                random.uniform(
+                    JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
+                )
+            )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=JOB_LOCK_TIMEOUT_SECONDS):
                 if not path.exists():
@@ -670,7 +708,9 @@ def _load_job(job_id: str):
     return None
 
 
-def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def _save_job(
+    job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS
+):
     job_id = job_dict.get("job_id")
     if not _safe_job_id(job_id):
         logger.warning("Refusing to save upload job with invalid id: %s", job_id)
@@ -680,7 +720,11 @@ def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LO
     job_dict["updated"] = time.time()
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
+            time.sleep(
+                random.uniform(
+                    JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
+                )
+            )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 _write_job_file(job_id, job_dict)
@@ -693,11 +737,18 @@ def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LO
                 retries,
                 exc,
             )
-    logger.error("Failed to lock job file %s for writing after %s attempts.", path, retries)
+    logger.error(
+        "Failed to lock job file %s for writing after %s attempts.", path, retries
+    )
     return False
 
 
-def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def _robust_update_job(
+    job_id: str,
+    update_fn,
+    retries: int = JOB_LOCK_RETRIES,
+    timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
+):
     if not _safe_job_id(job_id):
         logger.warning(
             "Refusing to update upload job with invalid id: %s",
@@ -708,7 +759,11 @@ def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, 
     lock_path = _job_lock_path(job_id)
     for attempt in range(retries):
         if attempt:
-            time.sleep(random.uniform(JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS))
+            time.sleep(
+                random.uniform(
+                    JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
+                )
+            )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 if not path.exists():
@@ -729,7 +784,9 @@ def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, 
                 retries,
                 exc,
             )
-    logger.error("Failed to lock job file %s for update after %s attempts.", path, retries)
+    logger.error(
+        "Failed to lock job file %s for update after %s attempts.", path, retries
+    )
     return None
 
 
@@ -769,13 +826,18 @@ def _normalize_upload_relative_path(raw_name: str):
     return rel_path, None
 
 
-def _resolve_root_relative_path(root: Path, relative_path: str, *, max_bytes: int = None):
+def _resolve_root_relative_path(
+    root: Path, relative_path: str, *, max_bytes: int = None
+):
     try:
-        return _resolve_managed_child_path(root, relative_path, max_bytes=max_bytes), None
+        return _resolve_managed_child_path(
+            root, relative_path, max_bytes=max_bytes
+        ), None
     except OSError:
         return None, errors.invalid_filename(relative_path)
     except ValueError as exc:
         return None, str(exc) or errors.invalid_filename(relative_path)
+
 
 def _resolve_staged_target_path(upload_root: Path, staged_path: str):
     return _resolve_root_relative_path(
@@ -1008,7 +1070,9 @@ def _units_length_for_name(unit_name: str):
 def _normalize_units_length_name(unit_name: str) -> str:
     normalized_name = str(unit_name or "").strip().replace("μ", "µ").lower()
     normalized_name = normalized_name.replace("-", "").replace("_", "").replace(" ", "")
-    normalized_name = normalized_name.replace("metres", "meters").replace("metre", "meter")
+    normalized_name = normalized_name.replace("metres", "meters").replace(
+        "metre", "meter"
+    )
     if normalized_name.endswith("s"):
         normalized_name = normalized_name[:-1]
     return normalized_name
@@ -1127,7 +1191,9 @@ def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
     return round(value, 9), unit_name
 
 
-def _native_zarr_image_relative_path_from_lsid(managed_zarr: Path, lsid: str) -> Optional[str]:
+def _native_zarr_image_relative_path_from_lsid(
+    managed_zarr: Path, lsid: str
+) -> Optional[str]:
     root_path = Path(managed_zarr).resolve(strict=False)
     lsid_text = str(lsid or "").strip()
     if not lsid_text:
@@ -1152,7 +1218,10 @@ def _runtime_native_zarr_physical_sizes(
 
     inspection = inspect_ome_zarr_image(target_path)
     if not inspection.recognized:
-        return {}, "ome-zarr did not recognize the imported store as a readable OME-Zarr image."
+        return (
+            {},
+            "ome-zarr did not recognize the imported store as a readable OME-Zarr image.",
+        )
     if inspection.support_error:
         return {}, inspection.support_error
 
@@ -1161,7 +1230,10 @@ def _runtime_native_zarr_physical_sizes(
         try:
             length_value = _native_zarr_length_from_value_unit(raw_value)
         except Exception as exc:
-            return {}, f"Failed to normalize native Zarr pixel size for axis {axis_name}: {exc}"
+            return (
+                {},
+                f"Failed to normalize native Zarr pixel size for axis {axis_name}: {exc}",
+            )
         if length_value is not None:
             normalized_sizes[axis_name] = length_value
     return normalized_sizes, None
@@ -1187,7 +1259,9 @@ def _finalize_imported_zarr_image_metadata(
     ``Pixels`` object before declaring the import successful.
     """
     if not username:
-        return False, ["Missing importing username for native Zarr metadata finalization."]
+        return False, [
+            "Missing importing username for native Zarr metadata finalization."
+        ]
 
     unique_ids = []
     seen_ids = set()
@@ -1198,7 +1272,9 @@ def _finalize_imported_zarr_image_metadata(
         seen_ids.add(text_id)
         unique_ids.append(text_id)
     if not unique_ids:
-        return False, ["No imported Image IDs were available for native Zarr metadata finalization."]
+        return False, [
+            "No imported Image IDs were available for native Zarr metadata finalization."
+        ]
 
     admin_conn = None
     conn = None
@@ -1206,10 +1282,14 @@ def _finalize_imported_zarr_image_metadata(
     try:
         admin_conn = _open_admin_connection(host, port)
         if admin_conn is None:
-            return False, ["Failed to open an admin connection for native Zarr metadata finalization."]
+            return False, [
+                "Failed to open an admin connection for native Zarr metadata finalization."
+            ]
         conn = admin_conn.suConn(username)
         if conn is None:
-            return False, ["Failed to open the importing user's session for native Zarr metadata finalization."]
+            return False, [
+                "Failed to open the importing user's session for native Zarr metadata finalization."
+            ]
         if group_id is not None:
             conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
         elif group_name:
@@ -1220,7 +1300,9 @@ def _finalize_imported_zarr_image_metadata(
             try:
                 image = conn.getObject("Image", int(image_id))
             except Exception as exc:
-                errors_found.append(f"Image:{image_id} lookup failed during metadata finalization: {exc}")
+                errors_found.append(
+                    f"Image:{image_id} lookup failed during metadata finalization: {exc}"
+                )
                 continue
             if image is None:
                 errors_found.append(
@@ -1236,7 +1318,9 @@ def _finalize_imported_zarr_image_metadata(
                 continue
 
             try:
-                image_relative_path = _native_zarr_image_relative_path_from_lsid(managed_zarr, lsid)
+                image_relative_path = _native_zarr_image_relative_path_from_lsid(
+                    managed_zarr, lsid
+                )
             except Exception:
                 errors_found.append(
                     f"Image:{image_id} resolved to unexpected externalInfo.lsid {lsid!r}."
@@ -1248,7 +1332,9 @@ def _finalize_imported_zarr_image_metadata(
                 image_relative_path,
             )
             if metadata_error:
-                errors_found.append(f"Image:{image_id} metadata finalization failed: {metadata_error}")
+                errors_found.append(
+                    f"Image:{image_id} metadata finalization failed: {metadata_error}"
+                )
                 continue
             if not expected_sizes:
                 continue
@@ -1272,11 +1358,13 @@ def _finalize_imported_zarr_image_metadata(
             for axis_name, expected_length in expected_sizes.items():
                 getter = getattr(pixels, f"getPhysicalSize{axis_name.upper()}", None)
                 current_length = getter() if callable(getter) else None
-                if _native_zarr_length_signature(current_length) == _native_zarr_length_signature(
-                    expected_length
-                ):
+                if _native_zarr_length_signature(
+                    current_length
+                ) == _native_zarr_length_signature(expected_length):
                     continue
-                setter = getattr(pixels_obj, f"setPhysicalSize{axis_name.upper()}", None)
+                setter = getattr(
+                    pixels_obj, f"setPhysicalSize{axis_name.upper()}", None
+                )
                 if not callable(setter):
                     setter_error = axis_name.upper()
                     break
@@ -1304,11 +1392,13 @@ def _finalize_imported_zarr_image_metadata(
                 continue
             refreshed_pixels = refreshed_image.getPrimaryPixels()
             for axis_name, expected_length in expected_sizes.items():
-                getter = getattr(refreshed_pixels, f"getPhysicalSize{axis_name.upper()}", None)
+                getter = getattr(
+                    refreshed_pixels, f"getPhysicalSize{axis_name.upper()}", None
+                )
                 actual_length = getter() if callable(getter) else None
-                if _native_zarr_length_signature(actual_length) != _native_zarr_length_signature(
-                    expected_length
-                ):
+                if _native_zarr_length_signature(
+                    actual_length
+                ) != _native_zarr_length_signature(expected_length):
                     errors_found.append(
                         f"Image:{image_id} physicalSize{axis_name.upper()} did not persist from native Zarr metadata."
                     )
@@ -1357,7 +1447,9 @@ def _get_owner_id(obj):
             oid = owner.getId()
             return oid.getValue() if hasattr(oid, "getValue") else oid
     except Exception as exc:
-        logger.debug("Could not resolve owner via getOwner() for object %r: %s", obj, exc)
+        logger.debug(
+            "Could not resolve owner via getOwner() for object %r: %s", obj, exc
+        )
     return None
 
 
@@ -1437,26 +1529,28 @@ def _has_read_write_permissions(obj):
 def _iter_accessible_projects(conn):
     if conn is None:
         return
-    
+
     # Save current group context
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
     except Exception as exc:
         logger.debug("Failed to read current OMERO group context: %s", exc)
-    
+
     try:
         # Set group context to -1 to query across all groups
-        conn.SERVICE_OPTS.setOmeroGroup('-1')
-        
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+
         # Try to get projects with cross-group querying enabled
         try:
             for proj in conn.getObjects("Project"):
                 yield proj
             return
         except Exception as e:
-            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", e)
-        
+            logger.warning(
+                "Failed to query projects across all groups with SERVICE_OPTS: %s", e
+            )
+
         # Fallback: try with opts parameter
         try:
             for proj in conn.getObjects("Project", opts={"group": "-1"}):
@@ -1464,15 +1558,19 @@ def _iter_accessible_projects(conn):
             return
         except Exception as e:
             logger.warning("Failed to query projects with opts group=-1: %s", e)
-            
+
     finally:
         # Restore original group context
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
             except Exception as exc:
-                logger.warning("Failed to restore OMERO group context to %s: %s", current_group, exc)
-    
+                logger.warning(
+                    "Failed to restore OMERO group context to %s: %s",
+                    current_group,
+                    exc,
+                )
+
     # Final fallback: try without cross-group querying
     try:
         for proj in conn.getObjects("Project"):
@@ -1480,7 +1578,7 @@ def _iter_accessible_projects(conn):
         return
     except Exception as e:
         logger.warning("Failed to query projects in current group: %s", e)
-    
+
     # Last resort: use listProjects
     try:
         for proj in conn.listProjects():
@@ -1527,12 +1625,16 @@ def _directory_package_root_for_relative_path(relative_path: str) -> Optional[st
 
     for index, part in enumerate(parts):
         lower_part = part.lower()
-        if any(lower_part.endswith(extension) for extension in DIRECTORY_PACKAGE_EXTENSIONS):
-            return PurePosixPath(*parts[:index + 1]).as_posix()
+        if any(
+            lower_part.endswith(extension) for extension in DIRECTORY_PACKAGE_EXTENSIONS
+        ):
+            return PurePosixPath(*parts[: index + 1]).as_posix()
     return None
 
 
-def _dataset_name_for_upload_relative_path(relative_path: str, orphan_dataset_name: str = None):
+def _dataset_name_for_upload_relative_path(
+    relative_path: str, orphan_dataset_name: str = None
+):
     package_root = _directory_package_root_for_relative_path(relative_path)
     if package_root:
         return "\\".join(PurePosixPath(package_root).parts)
@@ -1540,7 +1642,9 @@ def _dataset_name_for_upload_relative_path(relative_path: str, orphan_dataset_na
 
 
 def _logical_unit_is_directory_package_root(entry: dict) -> bool:
-    dataset_relative_path = entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    dataset_relative_path = (
+        entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    )
     if not dataset_relative_path or entry.get("relative_path") != dataset_relative_path:
         return False
 
@@ -1554,13 +1658,17 @@ def _logical_unit_is_directory_package_root(entry: dict) -> bool:
 
     for covered_relative_path in covered_relative_paths:
         covered_parts = PurePosixPath(covered_relative_path).parts
-        if covered_parts[:len(root_parts)] == root_parts and len(covered_parts) > len(root_parts):
+        if covered_parts[: len(root_parts)] == root_parts and len(covered_parts) > len(
+            root_parts
+        ):
             return True
     return False
 
 
 def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str = None):
-    dataset_relative_path = entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    dataset_relative_path = (
+        entry.get("dataset_relative_path") or entry.get("relative_path") or ""
+    )
     if not dataset_relative_path:
         return orphan_dataset_name
     if _logical_unit_is_directory_package_root(entry):
@@ -1569,7 +1677,9 @@ def _dataset_name_for_import_entry(entry: dict, orphan_dataset_name: str = None)
 
 
 def _generate_orphan_dataset_name():
-    suffix = "".join(secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH))
+    suffix = "".join(
+        secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH)
+    )
     return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
 
 
@@ -1601,13 +1711,16 @@ def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
         conn.getUpdateService().saveAndReturnObject(link)
         return True
     except Exception as exc:
-        logger.warning("Failed to link dataset %s to project %s: %s", dataset_id, project_id, exc)
+        logger.warning(
+            "Failed to link dataset %s to project %s: %s", dataset_id, project_id, exc
+        )
         return False
 
 
 # --------------------------------------------------------------------------
 # OMERO IMPORT HELPERS
 # --------------------------------------------------------------------------
+
 
 def _resolve_omero_host_port(conn):
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
@@ -1684,7 +1797,9 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
 
 def _plan_job_dataset_targets(job_dict: dict, entries_to_import: list[dict]):
     orphan_dataset_name = job_dict.get("orphan_dataset_name")
-    if any(_dataset_name_for_import_entry(entry) is None for entry in entries_to_import):
+    if any(
+        _dataset_name_for_import_entry(entry) is None for entry in entries_to_import
+    ):
         orphan_dataset_name = orphan_dataset_name or _generate_orphan_dataset_name()
 
     dataset_names = []
@@ -1742,7 +1857,10 @@ def _planned_import_units_for_request(job_dict: dict):
         if serialized is None:
             continue
         covered_relative_paths = serialized["covered_relative_paths"]
-        if any(relative_path not in active_relative_paths for relative_path in covered_relative_paths):
+        if any(
+            relative_path not in active_relative_paths
+            for relative_path in covered_relative_paths
+        ):
             continue
         unit_key = (
             serialized["relative_path"],
@@ -1783,7 +1901,10 @@ def _plan_request_job_dataset_targets(job_dict: dict):
         relative_path = (entry.get("relative_path") or "").strip()
         if not relative_path:
             continue
-        if _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name) is None:
+        if (
+            _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name)
+            is None
+        ):
             requires_orphan_dataset = True
             break
 
@@ -1797,14 +1918,18 @@ def _plan_request_job_dataset_targets(job_dict: dict):
         relative_path = (entry.get("relative_path") or "").strip()
         if not relative_path:
             continue
-        dataset_name = _dataset_name_for_upload_relative_path(relative_path, orphan_dataset_name)
+        dataset_name = _dataset_name_for_upload_relative_path(
+            relative_path, orphan_dataset_name
+        )
         if dataset_name:
             dataset_names.append(dataset_name)
 
     return orphan_dataset_name, sorted(set(dataset_names))
 
 
-def _prepare_request_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None):
+def _prepare_request_job_import_datasets(
+    job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
+):
     generic_error = errors.unable_prepare_import_destination()
     if conn is None:
         return None, generic_error
@@ -1881,7 +2006,9 @@ def _prepare_uploaded_job_for_request_path_import(
     if job_dict.get("status") not in ("checking", "awaiting_confirmation", "ready"):
         return job_dict, None
 
-    if job_dict.get("compatibility_thread_active") and not _planned_import_units_for_request(job_dict):
+    if job_dict.get(
+        "compatibility_thread_active"
+    ) and not _planned_import_units_for_request(job_dict):
         return job_dict, None
 
     if (
@@ -1891,15 +2018,21 @@ def _prepare_uploaded_job_for_request_path_import(
     ):
         return job_dict, None
 
-    prepared_job, prep_error = _prepare_request_job_import_datasets(job_id, job_dict, conn)
+    prepared_job, prep_error = _prepare_request_job_import_datasets(
+        job_id, job_dict, conn
+    )
     if prep_error:
         return prepared_job or job_dict, prep_error
 
     return _load_job(job_id) or prepared_job or job_dict, None
 
 
-def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None):
-    orphan_dataset_name, dataset_names = _plan_job_dataset_targets(job_dict, entries_to_import)
+def _ensure_job_dataset_targets(
+    job_dict: dict, entries_to_import: list[dict], conn: Optional[BlitzGateway] = None
+):
+    orphan_dataset_name, dataset_names = _plan_job_dataset_targets(
+        job_dict, entries_to_import
+    )
     dataset_map = dict(job_dict.get("dataset_map") or {})
     missing_dataset_names = [name for name in dataset_names if name not in dataset_map]
     generic_error = errors.unable_prepare_import_destination()
@@ -1956,7 +2089,9 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
         )
         return False, generic_error
 
-    service_conn = _open_service_connection(host, port, group_id=job_dict.get("group_id"))
+    service_conn = _open_service_connection(
+        host, port, group_id=job_dict.get("group_id")
+    )
     if not service_conn:
         logger.warning(
             "Unable to open OMERO service connection for dataset preparation on job %s.",
@@ -2020,14 +2155,21 @@ def _ensure_job_dataset_targets(job_dict: dict, entries_to_import: list[dict], c
             try:
                 user_conn.close()
             except Exception as exc:
-                logger.warning("Failed to close impersonated OMERO connection after dataset creation: %s", exc)
+                logger.warning(
+                    "Failed to close impersonated OMERO connection after dataset creation: %s",
+                    exc,
+                )
         try:
             service_conn.close()
         except Exception as exc:
-            logger.warning("Failed to close job-service connection after dataset creation: %s", exc)
+            logger.warning(
+                "Failed to close job-service connection after dataset creation: %s", exc
+            )
 
 
-def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None):
+def _prepare_job_import_datasets(
+    job_id: str, job_dict: dict, conn: Optional[BlitzGateway] = None
+):
     upload_root = _get_upload_root() / job_id
     if not upload_root.exists():
         error_message = errors.upload_folder_missing_on_server()
@@ -2042,7 +2184,9 @@ def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[Bli
         return updated_job, error_message
 
     entries_to_import = _build_import_units(job_dict, upload_root)
-    datasets_ready, dataset_error = _ensure_job_dataset_targets(job_dict, entries_to_import, conn=conn)
+    datasets_ready, dataset_error = _ensure_job_dataset_targets(
+        job_dict, entries_to_import, conn=conn
+    )
     if not datasets_ready:
         error_message = dataset_error or errors.unable_prepare_import_destination()
 
@@ -2061,14 +2205,18 @@ def _prepare_job_import_datasets(job_id: str, job_dict: dict, conn: Optional[Bli
     return job_dict, None
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)")
+_CLI_ID_PATTERN = re.compile(
+    r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\d+)"
+)
 
 # Patterns to detect successfully imported OMERO objects in CLI output.
 # Different OMERO CLI commands report created objects using different formats
 # such as ``Image:123`` or ``Created Image 123``.
 _IMPORT_OBJECT_PATTERNS = (
     re.compile(r"\b(?:Image|Fileset|Plate|Screen|Dataset|OriginalFile):(\d+)\b"),
-    re.compile(r"\bCreated (?:Image|Fileset|Plate|Screen|Dataset|OriginalFile)\s+(\d+)\b"),
+    re.compile(
+        r"\bCreated (?:Image|Fileset|Plate|Screen|Dataset|OriginalFile)\s+(\d+)\b"
+    ),
 )
 _IMPORT_OBJECT_PATTERN = _IMPORT_OBJECT_PATTERNS[0]
 
@@ -2085,7 +2233,9 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
     return cmd
 
 
-IMPORT_TIMEOUT_SECONDS_DEFAULT = 24 * 60 * 60  # 24 hours per file import for large structured datasets
+IMPORT_TIMEOUT_SECONDS_DEFAULT = (
+    24 * 60 * 60
+)  # 24 hours per file import for large structured datasets
 IMPORT_TIMEOUT_SECONDS_ENV = "OMERO_WEB_UPLOAD_IMPORT_TIMEOUT_SECONDS"
 CLI_KEEPALIVE_SECONDS_DEFAULT = 30
 CLI_KEEPALIVE_SECONDS_ENV = "OMERO_WEB_UPLOAD_CLI_KEEPALIVE_SECONDS"
@@ -2180,8 +2330,14 @@ BACKGROUND_IMPORT_SESSION_MIN_SECONDS = 60 * 60
 BACKGROUND_IMPORT_SESSION_MAX_SECONDS = 7 * 24 * 60 * 60
 
 
-def _get_background_import_session_timeout_seconds(timeout_hint_seconds: Optional[int] = None) -> int:
-    base_seconds = timeout_hint_seconds if timeout_hint_seconds is not None else _get_import_timeout_seconds()
+def _get_background_import_session_timeout_seconds(
+    timeout_hint_seconds: Optional[int] = None,
+) -> int:
+    base_seconds = (
+        timeout_hint_seconds
+        if timeout_hint_seconds is not None
+        else _get_import_timeout_seconds()
+    )
     requested = int(base_seconds) + BACKGROUND_IMPORT_SESSION_TTL_SLACK_SECONDS
     return max(
         BACKGROUND_IMPORT_SESSION_MIN_SECONDS,
@@ -2196,7 +2352,9 @@ def _get_root_password() -> str:
 def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
     root_pass = _get_root_password()
     if not root_pass:
-        logger.error("ROOTPASS is missing; cannot create independent background OMERO sessions.")
+        logger.error(
+            "ROOTPASS is missing; cannot create independent background OMERO sessions."
+        )
         return None
 
     _, _, _, secure = _get_job_service_credentials()
@@ -2281,13 +2439,17 @@ def _background_import_session(
     session = None
     session_key = None
     try:
-        resolved_group_name = _resolve_group_name(admin_conn, group_id, group_name=group_name)
+        resolved_group_name = _resolve_group_name(
+            admin_conn, group_id, group_name=group_name
+        )
         principal = omero.sys.Principal(
             (username or "").strip(),
             resolved_group_name or "",
             "User",
         )
-        timeout_ms = _get_background_import_session_timeout_seconds(timeout_hint_seconds) * 1000
+        timeout_ms = (
+            _get_background_import_session_timeout_seconds(timeout_hint_seconds) * 1000
+        )
         session = admin_conn.c.sf.getSessionService().createSessionWithTimeouts(
             principal,
             timeout_ms,
@@ -2315,7 +2477,9 @@ def _background_import_session(
             pass
 
 
-def _write_cli_ice_config(cli_home: Path, keepalive_seconds: int, base_config_path: str = "") -> Optional[Path]:
+def _write_cli_ice_config(
+    cli_home: Path, keepalive_seconds: int, base_config_path: str = ""
+) -> Optional[Path]:
     if keepalive_seconds <= 0:
         return None
 
@@ -2324,7 +2488,9 @@ def _write_cli_ice_config(cli_home: Path, keepalive_seconds: int, base_config_pa
         try:
             base_text = Path(base_config_path).read_text(encoding="utf-8")
         except OSError as exc:
-            logger.warning("Failed to read base ICE_CONFIG %s: %s", base_config_path, exc)
+            logger.warning(
+                "Failed to read base ICE_CONFIG %s: %s", base_config_path, exc
+            )
         else:
             stripped = base_text.rstrip()
             if stripped:
@@ -2394,10 +2560,19 @@ def _run_omero_cli(cmd, timeout=None):
 def _run_local_import_scan(path: Path, timeout: Optional[int] = None):
     if timeout is None:
         timeout = _get_local_import_scan_timeout_seconds()
-    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(path)]
+    cmd = [
+        OMERO_CLI,
+        "import",
+        "-f",
+        "--depth",
+        str(OMERO_IMPORT_SCAN_DEPTH),
+        str(path),
+    ]
 
     env = os.environ.copy()
-    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    omerodir_path = (
+        get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    )
     env["OMERODIR"] = str(omerodir_path)
 
     cli_home = _get_upload_root() / ".omero-cli-home"
@@ -2519,7 +2694,9 @@ def _import_file(
         cmd.extend(["-n", str(import_name)])
     cmd.append(str(path))
 
-    logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
+    logger.info(
+        "Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id
+    )
     import_start = time.time()
 
     # ------------------------------------------------------------------
@@ -2530,14 +2707,25 @@ def _import_file(
         try:
             result = _run_omero_cli(cmd, timeout=_get_import_timeout_seconds())
         except subprocess.TimeoutExpired:
-            logger.error("Import CLI timed out after %ds for %s", _get_import_timeout_seconds(), path)
-            return False, "", f"Import timed out after {_get_import_timeout_seconds()} seconds"
+            logger.error(
+                "Import CLI timed out after %ds for %s",
+                _get_import_timeout_seconds(),
+                path,
+            )
+            return (
+                False,
+                "",
+                f"Import timed out after {_get_import_timeout_seconds()} seconds",
+            )
         elapsed = time.time() - import_start
         success = result.returncode == 0
         logger.info(
             "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
             "stdout_lines=%d, stderr_lines=%d)",
-            path.name, elapsed, success, result.returncode,
+            path.name,
+            elapsed,
+            success,
+            result.returncode,
             len((result.stdout or "").splitlines()),
             len((result.stderr or "").splitlines()),
         )
@@ -2578,8 +2766,12 @@ def _import_file(
         except Exception:
             pass
 
-    t_out = threading.Thread(target=_drain, args=(proc.stdout, stdout_lines), daemon=True)
-    t_err = threading.Thread(target=_drain, args=(proc.stderr, stderr_lines), daemon=True)
+    t_out = threading.Thread(
+        target=_drain, args=(proc.stdout, stdout_lines), daemon=True
+    )
+    t_err = threading.Thread(
+        target=_drain, args=(proc.stderr, stderr_lines), daemon=True
+    )
     t_out.start()
     t_err.start()
 
@@ -2591,7 +2783,9 @@ def _import_file(
             elapsed = time.time() - import_start
             if elapsed > timeout_seconds:
                 proc.kill()
-                logger.error("Import CLI timed out after %ds for %s", timeout_seconds, path)
+                logger.error(
+                    "Import CLI timed out after %ds for %s", timeout_seconds, path
+                )
                 t_out.join(timeout=5)
                 t_err.join(timeout=5)
                 for pipe in (proc.stdout, proc.stderr):
@@ -2600,7 +2794,11 @@ def _import_file(
                             pipe.close()
                         except Exception:
                             pass
-                return False, "".join(stdout_lines), f"Import timed out after {timeout_seconds} seconds"
+                return (
+                    False,
+                    "".join(stdout_lines),
+                    f"Import timed out after {timeout_seconds} seconds",
+                )
 
             # Update progress from /proc I/O – lightweight read, max every
             # _IMPORT_PROGRESS_INTERVAL seconds.
@@ -2640,7 +2838,10 @@ def _import_file(
     logger.info(
         "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
         "stdout_lines=%d, stderr_lines=%d)",
-        path.name, elapsed, success, proc.returncode,
+        path.name,
+        elapsed,
+        success,
+        proc.returncode,
         len(stdout.splitlines()),
         len(stderr.splitlines()),
     )
@@ -2656,7 +2857,7 @@ def _import_file(
 def _validate_session(conn):
     """
     Validate that a BlitzGateway connection is still active.
-    
+
     Returns:
         bool: True if session is valid, False otherwise
     """
@@ -2672,13 +2873,13 @@ def _validate_session(conn):
 def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     """
     Create a new connection or reconnect using the session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
         old_conn: Previous connection to close (if any)
-    
+
     Returns:
         BlitzGateway connection or None if failed
     """
@@ -2686,8 +2887,10 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
         try:
             old_conn.close()
         except Exception as exc:
-            logger.debug("Failed to close stale OMERO connection before reconnect: %s", exc)
-    
+            logger.debug(
+                "Failed to close stale OMERO connection before reconnect: %s", exc
+            )
+
     try:
         client = omero.client(host=host, port=port)
         _join_detached_session(client, session_key)
@@ -2700,7 +2903,9 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             try:
                 conn.close()
             except Exception as exc:
-                logger.warning("Failed to close invalid OMERO session during reconnect: %s", exc)
+                logger.warning(
+                    "Failed to close invalid OMERO session during reconnect: %s", exc
+                )
             return None
 
         return conn
@@ -2740,19 +2945,20 @@ def _join_detached_session(client, session_key: str):
 def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=30):
     """
     Find image by name using OMERO QueryService with limits and timeout.
-    
+
     FIXED: This version uses database queries instead of iterating all images.
     Prevents hangs on large datasets (100-1000x faster).
     """
     if not file_name:
         return None
-    
+
     import time
+
     start_time = time.time()
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Try dataset-scoped search first (fastest)
         if dataset_id:
             try:
@@ -2762,34 +2968,43 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                     WHERE dil.parent.id = :did
                     AND i.name = :name
                 """
-                
+
                 params = omero.sys.ParametersI()
                 params.addLong("did", dataset_id)
                 params.addString("name", file_name)
                 params.page(0, 100)  # Limit results
-                
+
                 images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-                
+
                 if images:
                     elapsed = time.time() - start_time
-                    logger.debug("Found image '%s' in Dataset:%d in %.2fs", file_name, dataset_id, elapsed)
+                    logger.debug(
+                        "Found image '%s' in Dataset:%d in %.2fs",
+                        file_name,
+                        dataset_id,
+                        elapsed,
+                    )
                     return conn.getObject("Image", images[0].getId().getValue())
             except Exception as exc:
                 logger.warning("Dataset search failed for '%s': %s", file_name, exc)
-        
+
         # Global search as fallback
         try:
             query = "SELECT i FROM Image i WHERE i.name = :name"
             params = omero.sys.ParametersI()
             params.addString("name", file_name)
             params.page(0, 100)
-            
+
             images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-            
+
             if images:
                 elapsed = time.time() - start_time
                 if len(images) > 1:
-                    logger.warning("Found %d images named '%s' - using first", len(images), file_name)
+                    logger.warning(
+                        "Found %d images named '%s' - using first",
+                        len(images),
+                        file_name,
+                    )
                 logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
                 return conn.getObject("Image", images[0].getId().getValue())
             else:
@@ -2798,7 +3013,7 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
         except Exception as exc:
             logger.error("Global search failed for '%s': %s", file_name, exc)
             return None
-    except Exception as exc:
+    except Exception:
         logger.exception("Unexpected error searching for '%s'", file_name)
         return None
 
@@ -2806,26 +3021,27 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
     """
     Find multiple images in a single query - MUCH faster than individual lookups.
-    
+
     Returns: dict mapping file_name -> Image wrapper object
-    
+
     CRITICAL: This is the key to fixing SEM EDX performance.
     Instead of N queries (one per TXT file), we do 1 query for all images.
     """
     if not file_names:
         return {}
-    
+
     import time
+
     start_time = time.time()
     results = {}
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Build IN clause safely
         escaped_names = [name.replace("'", "''") for name in file_names]
         name_list = ", ".join([f"'{name}'" for name in escaped_names])
-        
+
         if dataset_id:
             query = f"""
                 SELECT i FROM Image i
@@ -2841,24 +3057,31 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
                 WHERE i.name IN ({name_list})
             """
             params = omero.sys.ParametersI()
-        
-        logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
+
+        logger.info(
+            "Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id
+        )
         images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-        
+
         for image_obj in images:
             img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
             if img_wrapper:
                 results[img_wrapper.getName()] = img_wrapper
-        
+
         elapsed = time.time() - start_time
-        logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
-        
+        logger.info(
+            "Batch search found %d/%d images in %.2fs",
+            len(results),
+            len(file_names),
+            elapsed,
+        )
+
         missing = set(file_names) - set(results.keys())
         if missing:
             logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
     except Exception as exc:
         logger.error("Batch image search failed: %s", exc)
-    
+
     return results
 
 
@@ -2947,7 +3170,9 @@ def _create_dataset_via_admin_connection(
         )
         return ds_id
     except Exception as exc:
-        logger.warning("Dataset creation via admin connection failed: %s", sanitize_log_value(exc))
+        logger.warning(
+            "Dataset creation via admin connection failed: %s", sanitize_log_value(exc)
+        )
         return None
     finally:
         try:
@@ -2961,8 +3186,9 @@ def _create_dataset_via_admin_connection(
             pass
 
 
-
-def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
+def _open_service_connection(
+    host: str, port: int, group_id: Optional[int] = None
+) -> Optional[BlitzGateway]:
     """Login as service user for async background work (safe for user sessions)."""
     service_user, service_pass, group_override, secure = _get_job_service_credentials()
 
@@ -2973,7 +3199,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         )
         return None
 
-    conn = BlitzGateway(service_user, service_pass, host=host, port=int(port), secure=secure)
+    conn = BlitzGateway(
+        service_user, service_pass, host=host, port=int(port), secure=secure
+    )
 
     try:
         try:
@@ -2987,12 +3215,19 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
 
             logger.error(
                 "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
-                host, port, secure, exc, last_err
+                host,
+                port,
+                secure,
+                exc,
+                last_err,
             )
             try:
                 conn.close()
             except Exception as close_exc:
-                logger.debug("Failed to close job-service connection after connect() exception: %s", close_exc)
+                logger.debug(
+                    "Failed to close job-service connection after connect() exception: %s",
+                    close_exc,
+                )
             return None
 
         if not ok:
@@ -3004,12 +3239,18 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
 
             logger.error(
                 "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
-                host, port, secure, last_err
+                host,
+                port,
+                secure,
+                last_err,
             )
             try:
                 conn.close()
             except Exception as close_exc:
-                logger.debug("Failed to close job-service connection after failed connect(): %s", close_exc)
+                logger.debug(
+                    "Failed to close job-service connection after failed connect(): %s",
+                    close_exc,
+                )
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -3026,7 +3267,11 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(str(effective_group))
             except Exception as exc:
-                logger.warning("Failed to set job-service group context to %s: %s", effective_group, exc)
+                logger.warning(
+                    "Failed to set job-service group context to %s: %s",
+                    effective_group,
+                    exc,
+                )
 
         return conn
 
@@ -3034,7 +3279,10 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         try:
             conn.close()
         except Exception as close_exc:
-            logger.debug("Failed to close job-service connection during exception cleanup: %s", close_exc)
+            logger.debug(
+                "Failed to close job-service connection during exception cleanup: %s",
+                close_exc,
+            )
         raise
 
 
@@ -3155,7 +3403,9 @@ def _entry_requires_name_normalization(entry: dict, dataset_id: Optional[int]) -
 
     desired_name = _logical_import_entry_display_name(entry)
     group_header_name = _logical_import_entry_group_header_name(entry)
-    return bool(desired_name and group_header_name and desired_name != group_header_name)
+    return bool(
+        desired_name and group_header_name and desired_name != group_header_name
+    )
 
 
 def _build_import_name_normalization_context(entry: dict, dataset_id: Optional[int]):
@@ -3188,7 +3438,9 @@ def _extract_imported_image_ids(import_stdout: str) -> list[int]:
     return imported_ids
 
 
-def _image_name_requires_normalization(current_name: str, group_header_name: str) -> bool:
+def _image_name_requires_normalization(
+    current_name: str, group_header_name: str
+) -> bool:
     normalized_current = (current_name or "").strip()
     if not normalized_current:
         return True
@@ -3237,7 +3489,10 @@ def _apply_import_name_normalization_context(
         if len(images) == 1:
             image = images[0]
             current_name = (image.getName() or "").strip()
-            if _image_name_requires_normalization(current_name, group_header_name) and current_name != desired_name:
+            if (
+                _image_name_requires_normalization(current_name, group_header_name)
+                and current_name != desired_name
+            ):
                 image.setName(desired_name)
                 image.save()
                 image_id = _get_id(image)
@@ -3335,7 +3590,11 @@ def _attach_txt_to_image_service(
             try:
                 store.close()
             except Exception as exc:
-                logger.warning("Failed to close raw file store after attaching %s: %s", file_path, exc)
+                logger.warning(
+                    "Failed to close raw file store after attaching %s: %s",
+                    file_path,
+                    exc,
+                )
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -3355,7 +3614,7 @@ def _attach_txt_to_image_service(
     )
     if not user_conn:
         raise RuntimeError(f"Failed to create connection as user {username}")
-    
+
     try:
         # Get the image in user's context
         image_obj = user_conn.getObject("Image", image_id)
@@ -3363,12 +3622,16 @@ def _attach_txt_to_image_service(
             raise RuntimeError(f"Image:{image_id} not found for user {username}")
 
         _attach_file(user_conn, image_obj, txt_path, "text/plain")
-        
+
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
-            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path, persist_table=create_tables)
+            table_id = attach_sem_edx_tables(
+                user_conn, image_id, txt_path, persist_table=create_tables
+            )
             if table_id:
-                logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
+                logger.info(
+                    "Created OMERO Table for image %d from %s", image_id, txt_path.name
+                )
         except Exception as exc:
             # Don't fail the entire attachment if table creation fails
             logger.error(
@@ -3380,7 +3643,11 @@ def _attach_txt_to_image_service(
         if plot_path and plot_path.exists():
             try:
                 _attach_file(user_conn, image_obj, plot_path, "image/png")
-                logger.info("Attached SEM EDX spectrum plot %s to image %d", plot_path.name, image_id)
+                logger.info(
+                    "Attached SEM EDX spectrum plot %s to image %d",
+                    plot_path.name,
+                    image_id,
+                )
             except Exception as exc:
                 logger.error(
                     "Failed to attach SEM EDX plot %s to image %d: %s",
@@ -3414,7 +3681,9 @@ def _append_job_error(job: dict, message: str):
         job["errors"] = job["errors"][-MAX_IMPORT_LOG_LINES:]
 
 
-def _append_txt_attachment_message(job: dict, txt_name: str, image_name: str, success: bool):
+def _append_txt_attachment_message(
+    job: dict, txt_name: str, image_name: str, success: bool
+):
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
@@ -3462,10 +3731,14 @@ def _validated_job_id(value: str) -> str:
 
 
 def _job_lock_path(job_id: str) -> Path:
-    return _resolve_managed_child_path(_get_jobs_root(), f".{_validated_job_id(job_id)}.lock")
+    return _resolve_managed_child_path(
+        _get_jobs_root(), f".{_validated_job_id(job_id)}.lock"
+    )
 
 
-def _resolve_managed_child_path(root: Path, relative_path: str, *, max_bytes: int = None) -> Path:
+def _resolve_managed_child_path(
+    root: Path, relative_path: str, *, max_bytes: int = None
+) -> Path:
     normalized_path, normalize_error = _normalize_upload_relative_path(relative_path)
     if normalize_error:
         raise ValueError(normalize_error)
@@ -3546,7 +3819,9 @@ def _write_job_file(job_id: str, job_dict):
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
     def apply_updates(job_dict):
-        entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
+        entries_by_id = {
+            entry.get("upload_id"): entry for entry in job_dict.get("files", [])
+        }
         for update in updates:
             entry = entries_by_id.get(update.get("upload_id"))
             if not entry:
@@ -3557,11 +3832,16 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
         if errors:
             job_dict.setdefault("errors", []).extend(errors)
         uploaded_bytes = sum(
-            entry.get("size", 0) for entry in job_dict.get("files", []) if entry.get("status") == "uploaded"
+            entry.get("size", 0)
+            for entry in job_dict.get("files", [])
+            if entry.get("status") == "uploaded"
         )
         job_dict["uploaded_bytes"] = uploaded_bytes
         compatibility_pending = _compatibility_pending_entries(job_dict)
-        if compatibility_pending and job_dict.get("compatibility_status") != "incompatible":
+        if (
+            compatibility_pending
+            and job_dict.get("compatibility_status") != "incompatible"
+        ):
             job_dict["compatibility_status"] = "checking"
         _refresh_job_status(job_dict)
         job_dict["updated"] = time.time()
@@ -3640,23 +3920,21 @@ def _classify_compatibility_output(
     return "incompatible", details or "No importable files detected by Bio-Formats"
 
 
-
-
 def _has_import_candidates_in_output(
     output: str,
     expected_file_path: Optional[Path] = None,
 ) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
-    
+
     The -f flag displays files grouped by import groups, separated by "#" comments.
     Real import candidates are non-empty, non-comment lines.
-    
+
     Returns True if at least one import candidate is found.
     """
     if not output or not output.strip():
         return False
-    
+
     candidates = _extract_import_candidates(output)
     if not candidates:
         return False
@@ -3705,16 +3983,16 @@ def _has_import_candidates_in_output(
 def _extract_import_candidates(output: str):
     """
     Extract import candidates from OMERO import -f output.
-    
+
     Returns a list of file paths that would be imported.
     This is used for additional validation after compatibility check.
     """
     if not output or not output.strip():
         return []
-    
+
     candidates = []
-    lines = output.strip().split('\n')
-    
+    lines = output.strip().split("\n")
+
     skip_patterns = [
         "# group:",
         "to import",
@@ -3727,19 +4005,19 @@ def _extract_import_candidates(output: str):
         "dry run",
         "would import",
     ]
-    
+
     for line in lines:
         stripped = line.strip()
-        
+
         # Skip empty lines and comments
         if not stripped or stripped.startswith("#"):
             continue
-        
+
         # Skip metadata lines
         stripped_lower = stripped.lower()
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
-        
+
         parsed_candidate = _parse_candidate_path_line(stripped)
         if parsed_candidate is not None:
             candidates.append(str(parsed_candidate))
@@ -3781,7 +4059,7 @@ def _parse_import_groups(output: str):
             continue
 
         if stripped.startswith("# Group:"):
-            group_header = stripped[len("# Group:"):].strip()
+            group_header = stripped[len("# Group:") :].strip()
             group_path_text = group_header.split(" SPW:", 1)[0].strip()
             current_group = {
                 "group_path": _parse_candidate_path_line(group_path_text),
@@ -3803,7 +4081,9 @@ def _parse_import_groups(output: str):
 def _relative_path_within_root(relative_path: str, root_relative_path: str) -> bool:
     if not root_relative_path:
         return False
-    return relative_path == root_relative_path or relative_path.startswith(f"{root_relative_path}/")
+    return relative_path == root_relative_path or relative_path.startswith(
+        f"{root_relative_path}/"
+    )
 
 
 def _common_relative_prefix(relative_paths: list[str]) -> str:
@@ -3853,7 +4133,9 @@ def _looks_like_directory_package_root(
 ) -> bool:
     if not root_relative_path or not covered_relative_paths:
         return False
-    if group_path_relative and not _relative_path_within_root(group_path_relative, root_relative_path):
+    if group_path_relative and not _relative_path_within_root(
+        group_path_relative, root_relative_path
+    ):
         return False
     if not _group_covers_all_active_paths_under_root(
         active_relative_paths,
@@ -3870,9 +4152,9 @@ def _looks_like_directory_package_root(
 
     for covered_relative_path in covered_relative_paths:
         covered_parts = PurePosixPath(covered_relative_path).parts
-        if covered_parts[:len(root_parts)] != root_parts:
+        if covered_parts[: len(root_parts)] != root_parts:
             continue
-        suffix_parts = covered_parts[len(root_parts):]
+        suffix_parts = covered_parts[len(root_parts) :]
         if not suffix_parts:
             continue
         distinct_first_children.add(suffix_parts[0])
@@ -3916,7 +4198,8 @@ def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
             {
                 "index": index,
                 "relative_path": rel_path,
-                "staged_path": entry.get("staged_path") or _build_staged_relative_path(rel_path),
+                "staged_path": entry.get("staged_path")
+                or _build_staged_relative_path(rel_path),
                 "entry": entry,
             }
         )
@@ -3952,11 +4235,6 @@ def _probe_import_path(
     except OSError:
         staged_root_resolved = staged_root
     try:
-        path_resolved = path.resolve()
-    except OSError:
-        path_resolved = path
-
-    try:
         result = _run_local_import_scan(path)
     except Exception as exc:
         logger.warning(
@@ -3988,7 +4266,9 @@ def _probe_import_path(
             except OSError:
                 group_path_resolved = group_path
             try:
-                group_path_relative = group_path_resolved.relative_to(staged_root_resolved).as_posix()
+                group_path_relative = group_path_resolved.relative_to(
+                    staged_root_resolved
+                ).as_posix()
             except ValueError:
                 group_path_relative = None
 
@@ -3999,7 +4279,9 @@ def _probe_import_path(
             except OSError:
                 member_resolved = member_path
             try:
-                member_relative_path = member_resolved.relative_to(staged_root_resolved).as_posix()
+                member_relative_path = member_resolved.relative_to(
+                    staged_root_resolved
+                ).as_posix()
             except ValueError:
                 continue
             if member_relative_path in active_relative_path_set:
@@ -4035,8 +4317,12 @@ def _probe_import_path(
     return cached
 
 
-def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool = False):
-    active_entries = _collect_import_entries(job_dict, for_compatibility=for_compatibility)
+def _build_import_units(
+    job_dict, upload_root: Path, *, for_compatibility: bool = False
+):
+    active_entries = _collect_import_entries(
+        job_dict, for_compatibility=for_compatibility
+    )
     if not active_entries:
         return []
 
@@ -4048,10 +4334,7 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
         )
         return [_single_entry_import_unit(entry) for entry in active_entries]
 
-    entry_by_relative_path = {
-        entry["relative_path"]: entry
-        for entry in active_entries
-    }
+    entry_by_relative_path = {entry["relative_path"]: entry for entry in active_entries}
     staged_root = upload_root / "_staged"
     probe_cache = {}
 
@@ -4068,7 +4351,9 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
             dir_rel = current.as_posix()
             dir_path = staged_root / dir_rel
             if dir_path.exists() and dir_path.is_dir():
-                probe = _probe_import_path(dir_path, staged_root, active_relative_paths, probe_cache)
+                probe = _probe_import_path(
+                    dir_path, staged_root, active_relative_paths, probe_cache
+                )
                 matching_groups = [
                     group
                     for group in probe.get("groups", [])
@@ -4095,8 +4380,14 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
             ]
             if group_coverage:
                 common_root_relative_path = _common_relative_prefix(group_coverage)
-                group_path_relative = chosen_group.get("group_path_relative") or group_coverage[0]
-                group_header_name = PurePosixPath(group_path_relative).name if group_path_relative else ""
+                group_path_relative = (
+                    chosen_group.get("group_path_relative") or group_coverage[0]
+                )
+                group_header_name = (
+                    PurePosixPath(group_path_relative).name
+                    if group_path_relative
+                    else ""
+                )
                 if _looks_like_directory_package_root(
                     active_relative_paths,
                     common_root_relative_path,
@@ -4132,7 +4423,10 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
                     "relative_path": logical_relative_path,
                     "staged_path": staged_path,
                 }
-                if group_header_name and group_header_name != PurePosixPath(logical_relative_path).name:
+                if (
+                    group_header_name
+                    and group_header_name != PurePosixPath(logical_relative_path).name
+                ):
                     unit["group_header_name"] = group_header_name
                 units.append(unit)
                 continue
@@ -4177,7 +4471,9 @@ def _build_import_units(job_dict, upload_root: Path, *, for_compatibility: bool 
                             ],
                             "covered_relative_paths": package_entries,
                             "dataset_relative_path": package_root,
-                            "index": entry_by_relative_path[package_entries[0]]["index"],
+                            "index": entry_by_relative_path[package_entries[0]][
+                                "index"
+                            ],
                             "relative_path": package_root,
                             "staged_path": staged_path,
                         }
@@ -4211,12 +4507,12 @@ def _check_import_compatibility(
 ):
     """
     Check if a file can be imported into OMERO by analyzing it with Bio-Formats.
-    
+
     CRITICAL FIXES:
     1. The -f flag ALWAYS returns exit code 0, regardless of compatibility
     2. Compatibility is determined by parsing stdout for import candidates
     3. Proper distinction between errors and incompatibility
-    
+
     Uses 'omero import -f' which performs local file format analysis
     without requiring server connection or authentication.
     """
@@ -4231,9 +4527,8 @@ def _check_import_compatibility(
 
     native_plan = None
     native_plan_payload = None
-    is_directory_zarr = (
-        file_path.is_dir()
-        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+    is_directory_zarr = file_path.is_dir() and any(
+        file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS
     )
     if is_directory_zarr and _native_zarr_import_enabled():
         native_plan = _native_zarr_import_plan(file_path)
@@ -4281,7 +4576,7 @@ def _check_import_compatibility(
             if native_plan_payload is not None:
                 response["native_zarr_plan"] = native_plan_payload
         return response
-    
+
     # CRITICAL FIX: Classify based on stdout content, NOT return code
     status, details = _classify_compatibility_output(
         result.returncode,
@@ -4289,7 +4584,7 @@ def _check_import_compatibility(
         result.stderr,
         expected_file_path=file_path,
     )
-    
+
     # Additional logging for debugging
     logger.debug(
         "Compatibility check for %s: status=%s, returncode=%d, stdout_lines=%d, stderr_lines=%d",
@@ -4349,6 +4644,7 @@ def _check_import_compatibility(
             response["native_zarr_plan"] = native_plan_payload
     return response
 
+
 def _run_compatibility_check(job_id: str):
     try:
         _run_compatibility_check_inner(job_id)
@@ -4381,13 +4677,17 @@ def _run_compatibility_check_inner(job_id: str):
     upload_root = _get_upload_root() / job_id
     planned_units = _build_import_units(job, upload_root, for_compatibility=True)
     if not planned_units:
+
         def mark_idle(job_dict):
             job_dict["planned_import_units"] = []
             job_dict["compatibility_thread_active"] = False
-            has_uploaded = any(entry.get("status") == "uploaded" for entry in job_dict.get("files", []))
+            has_uploaded = any(
+                entry.get("status") == "uploaded" for entry in job_dict.get("files", [])
+            )
             if has_uploaded:
                 has_errors = any(
-                    entry.get("compatibility") == "error" for entry in job_dict.get("files", [])
+                    entry.get("compatibility") == "error"
+                    for entry in job_dict.get("files", [])
                 )
                 if job_dict.get("incompatible_files"):
                     job_dict["compatibility_status"] = "incompatible"
@@ -4396,7 +4696,11 @@ def _run_compatibility_check_inner(job_id: str):
                 else:
                     job_dict["compatibility_status"] = "compatible"
             else:
-                if job_dict.get("compatibility_status") not in ("incompatible", "error", "compatible"):
+                if job_dict.get("compatibility_status") not in (
+                    "incompatible",
+                    "error",
+                    "compatible",
+                ):
                     job_dict["compatibility_status"] = "pending"
             _refresh_job_status(job_dict)
             job_dict["updated"] = time.time()
@@ -4419,6 +4723,7 @@ def _run_compatibility_check_inner(job_id: str):
     job = _update_job(job_id, persist_plans) or job
 
     if not job.get("compatibility_enabled", True):
+
         def mark_planning_ready(job_dict):
             job_dict["compatibility_thread_active"] = False
             if job_dict.get("compatibility_status") not in ("incompatible", "error"):
@@ -4441,7 +4746,9 @@ def _run_compatibility_check_inner(job_id: str):
             staged_path = unit.get("staged_path") or unit.get("relative_path")
             if not staged_path:
                 continue
-            file_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+            file_path, staged_error = _resolve_staged_target_path(
+                upload_root, staged_path
+            )
             if staged_error:
                 logger.warning(
                     "Compatibility check rejected staged path for job %s: relative_path=%s staged_path=%s error=%s",
@@ -4453,14 +4760,18 @@ def _run_compatibility_check_inner(job_id: str):
                 results.append(
                     {
                         "covered_indexes": unit.get("covered_indexes", []),
-                        "covered_relative_paths": unit.get("covered_relative_paths", []),
+                        "covered_relative_paths": unit.get(
+                            "covered_relative_paths", []
+                        ),
                         "relative_path": unit.get("relative_path"),
                         "status": "error",
                         "details": staged_error,
                     }
                 )
                 continue
-            dataset_name = _dataset_name_for_import_entry(unit, job.get("orphan_dataset_name"))
+            dataset_name = _dataset_name_for_import_entry(
+                unit, job.get("orphan_dataset_name")
+            )
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -4477,7 +4788,11 @@ def _run_compatibility_check_inner(job_id: str):
             try:
                 result = future.result()
             except Exception as exc:
-                logger.warning("Compatibility check failed for %s: %s", unit.get("relative_path"), exc)
+                logger.warning(
+                    "Compatibility check failed for %s: %s",
+                    unit.get("relative_path"),
+                    exc,
+                )
                 result = {
                     "status": "error",
                     "stdout": "",
@@ -4582,7 +4897,9 @@ def _start_compatibility_check_thread(job_id: str):
     job = _update_job(job_id, mark_started)
     if not job or not started["value"]:
         return
-    worker = threading.Thread(target=_run_compatibility_check, args=(job_id,), daemon=True)
+    worker = threading.Thread(
+        target=_run_compatibility_check, args=(job_id,), daemon=True
+    )
     worker.start()
 
 
@@ -4625,7 +4942,9 @@ def _native_zarr_import_plan(zarr_path: Path) -> _NativeZarrImportPlan:
     )
 
 
-def _serialize_native_zarr_plan(plan: Optional[_NativeZarrImportPlan]) -> Optional[dict]:
+def _serialize_native_zarr_plan(
+    plan: Optional[_NativeZarrImportPlan],
+) -> Optional[dict]:
     if not isinstance(plan, _NativeZarrImportPlan):
         return None
     if not (
@@ -4665,9 +4984,7 @@ def _attach_import_routing_fields(unit: dict, covered_entries: list[dict]) -> No
 
     for field_name in _IMPORT_ROUTING_ENTRY_FIELDS:
         values = [
-            entry.get(field_name)
-            for entry in covered_entries
-            if field_name in entry
+            entry.get(field_name) for entry in covered_entries if field_name in entry
         ]
         if not values:
             continue
@@ -4727,7 +5044,9 @@ def _normalize_shared_zarr_permissions(path: Path) -> None:
             current_path.chmod(ZARR_SHARED_TRANSFER_FILE_MODE)
 
 
-def _prepare_server_readable_zarr_source(file_path: Path) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
+def _prepare_server_readable_zarr_source(
+    file_path: Path,
+) -> tuple[Optional[Path], Optional[Path], Optional[str]]:
     try:
         source = Path(file_path).resolve(strict=True)
     except OSError as exc:
@@ -4806,7 +5125,9 @@ def _iter_script_services(conn):
         yield svc
 
 
-def _find_script_id_by_name(conn, script_name: str, *, preferred_path_fragment: Optional[str] = None) -> Optional[int]:
+def _find_script_id_by_name(
+    conn, script_name: str, *, preferred_path_fragment: Optional[str] = None
+) -> Optional[int]:
     if conn is None or not script_name:
         return None
 
@@ -4820,9 +5141,25 @@ def _find_script_id_by_name(conn, script_name: str, *, preferred_path_fragment: 
 
         for script in scripts:
             try:
-                name = str(getattr(getattr(script, "name", None), "val", getattr(script, "name", "")) or "")
-                path = str(getattr(getattr(script, "path", None), "val", getattr(script, "path", "")) or "")
-                sid = getattr(getattr(script, "id", None), "val", getattr(script, "id", None))
+                name = str(
+                    getattr(
+                        getattr(script, "name", None),
+                        "val",
+                        getattr(script, "name", ""),
+                    )
+                    or ""
+                )
+                path = str(
+                    getattr(
+                        getattr(script, "path", None),
+                        "val",
+                        getattr(script, "path", ""),
+                    )
+                    or ""
+                )
+                sid = getattr(
+                    getattr(script, "id", None), "val", getattr(script, "id", None)
+                )
                 sid = int(sid) if sid is not None else None
             except Exception:
                 continue
@@ -4834,7 +5171,9 @@ def _find_script_id_by_name(conn, script_name: str, *, preferred_path_fragment: 
             if script_name not in {name, basename, path}:
                 continue
 
-            path_match = bool(preferred_path_fragment and preferred_path_fragment in path)
+            path_match = bool(
+                preferred_path_fragment and preferred_path_fragment in path
+            )
             if path_match and not best_preferred:
                 best_sid = sid
                 best_preferred = True
@@ -4857,7 +5196,11 @@ def _run_zarr_managed_repo_script(
 ) -> tuple[bool, dict[str, str], str]:
     admin_conn = _open_admin_connection(host, port)
     if admin_conn is None:
-        return False, {}, "Unable to open an admin OMERO session for managed-repository Zarr staging."
+        return (
+            False,
+            {},
+            "Unable to open an admin OMERO session for managed-repository Zarr staging.",
+        )
 
     script_id = None
     try:
@@ -4877,7 +5220,11 @@ def _run_zarr_managed_repo_script(
 
     root_pass = _get_root_password()
     if not root_pass:
-        return False, {}, "ROOTPASS is missing; cannot launch the managed-repository Zarr helper."
+        return (
+            False,
+            {},
+            "ROOTPASS is missing; cannot launch the managed-repository Zarr helper.",
+        )
 
     cmd = [OMERO_CLI, "-q"]
     if host:
@@ -4926,14 +5273,18 @@ def _run_zarr_managed_repo_script(
         if result.returncode == 0:
             return True, outputs, outputs.get("Message") or combined
 
-        if _reports_no_processor_available(stdout, stderr) and time.time() < retry_deadline:
+        if (
+            _reports_no_processor_available(stdout, stderr)
+            and time.time() < retry_deadline
+        ):
             time.sleep(retry_sleep)
             continue
 
         return (
             False,
             outputs,
-            combined or f"Managed-repository Zarr helper failed with exit code {result.returncode}.",
+            combined
+            or f"Managed-repository Zarr helper failed with exit code {result.returncode}.",
         )
 
 
@@ -4987,7 +5338,9 @@ def _import_zarr_via_cli(
     script, then runs ``omero zarr import`` against that final managed path.
     """
     if not username or not group_name:
-        error_msg = "Missing username or group name for managed-repository Zarr staging."
+        error_msg = (
+            "Missing username or group name for managed-repository Zarr staging."
+        )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -5002,7 +5355,9 @@ def _import_zarr_via_cli(
 
     native_plan = native_plan or _native_zarr_import_plan(file_path)
     if not native_plan.kind:
-        error_msg = "Zarr source is not supported by the installed omero-cli-zarr runtime."
+        error_msg = (
+            "Zarr source is not supported by the installed omero-cli-zarr runtime."
+        )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -5031,9 +5386,13 @@ def _import_zarr_via_cli(
     shared_source = None
     shared_transfer_parent = None
     prepare_error = None
-    shared_source, shared_transfer_parent, prepare_error = _prepare_server_readable_zarr_source(file_path)
+    shared_source, shared_transfer_parent, prepare_error = (
+        _prepare_server_readable_zarr_source(file_path)
+    )
     if shared_source is None:
-        error_msg = prepare_error or "Failed to prepare a server-readable Zarr staging copy."
+        error_msg = (
+            prepare_error or "Failed to prepare a server-readable Zarr staging copy."
+        )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
             "cleanup_staged_paths": cleanup_staged_paths,
@@ -5219,9 +5578,8 @@ def _import_zarr_via_cli(
             group_name=group_name,
             managed_path=managed_zarr,
         )
-        error_msg = (
-            "Native Zarr import failed metadata finalization: "
-            + "; ".join(str(error) for error in metadata_errors[:3])
+        error_msg = "Native Zarr import failed metadata finalization: " + "; ".join(
+            str(error) for error in metadata_errors[:3]
         )
         job_error = messages.job_error_with_path(rel_path, error_msg)
         return {
@@ -5412,7 +5770,9 @@ def _verify_imported_zarr_images_renderable(
 ) -> tuple[bool, list[str]]:
     """Exercise OMERO's thumbnail/render path for newly imported Zarr images."""
     if not username:
-        return False, ["Missing importing username for post-import render verification."]
+        return False, [
+            "Missing importing username for post-import render verification."
+        ]
 
     unique_ids = []
     seen_ids = set()
@@ -5431,10 +5791,14 @@ def _verify_imported_zarr_images_renderable(
     try:
         admin_conn = _open_admin_connection(host, port)
         if admin_conn is None:
-            return False, ["Failed to open an admin connection for render verification."]
+            return False, [
+                "Failed to open an admin connection for render verification."
+            ]
         conn = admin_conn.suConn(username)
         if conn is None:
-            return False, ["Failed to open the importing user's session for render verification."]
+            return False, [
+                "Failed to open the importing user's session for render verification."
+            ]
         if group_id is not None:
             conn.SERVICE_OPTS.setOmeroGroup(str(int(group_id)))
         elif group_name:
@@ -5447,7 +5811,9 @@ def _verify_imported_zarr_images_renderable(
                 errors_found.append(f"Image:{image_id} lookup failed: {exc}")
                 continue
             if image is None:
-                errors_found.append(f"Image:{image_id} could not be loaded after import.")
+                errors_found.append(
+                    f"Image:{image_id} could not be loaded after import."
+                )
                 continue
 
             sizes = (
@@ -5467,7 +5833,9 @@ def _verify_imported_zarr_images_renderable(
             details = getattr(getattr(image, "_obj", None), "details", None)
             external_info = getattr(details, "externalInfo", None)
             if external_info is None:
-                errors_found.append(f"Image:{image_id} is missing externalInfo after native Zarr import.")
+                errors_found.append(
+                    f"Image:{image_id} is missing externalInfo after native Zarr import."
+                )
                 continue
             lsid, _entity_type = _query_image_external_info(conn, int(image_id))
             if not lsid:
@@ -5583,7 +5951,9 @@ def _verify_import_via_api(
         candidates = [n for n in (import_name, file_name) if n]
         if not candidates:
             return []
-        placeholders = " OR ".join(["i.name = :n%d" % idx for idx in range(len(candidates))])
+        placeholders = " OR ".join(
+            ["i.name = :n%d" % idx for idx in range(len(candidates))]
+        )
         for idx, name in enumerate(candidates):
             params.add("n%d" % idx, omero.rtypes.rstring(name))
         query = (
@@ -5597,7 +5967,8 @@ def _verify_import_via_api(
     except Exception as exc:
         logger.debug(
             "OMERO API verification failed for dataset %s: %s",
-            dataset_id, sanitize_log_value(exc),
+            dataset_id,
+            sanitize_log_value(exc),
         )
         return []
     finally:
@@ -5676,13 +6047,14 @@ def _import_job_entry(
     if (
         import_name is None
         and file_path.is_dir()
-        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+        and any(
+            file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS
+        )
     ):
         import_name = file_path.name
 
-    is_directory_zarr = (
-        file_path.is_dir()
-        and any(file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS)
+    is_directory_zarr = file_path.is_dir() and any(
+        file_path.name.lower().endswith(ext) for ext in DIRECTORY_PACKAGE_EXTENSIONS
     )
     _native_import_on = is_directory_zarr and _native_zarr_import_enabled()
     native_plan = (
@@ -5696,7 +6068,8 @@ def _import_job_entry(
     has_precomputed_zarr_routing = (
         is_directory_zarr
         and entry.get("compatibility") in {"compatible", "incompatible", "error"}
-        and entry.get("import_backend") in {
+        and entry.get("import_backend")
+        in {
             _ZARR_IMPORT_BACKEND_BIOFORMATS,
             _ZARR_IMPORT_BACKEND_NATIVE,
         }
@@ -5708,7 +6081,9 @@ def _import_job_entry(
         if not _native_import_on and zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE:
             zarr_import_backend = None
             zarr_scan_status = "incompatible"
-        elif zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE and not native_plan.kind:
+        elif (
+            zarr_import_backend == _ZARR_IMPORT_BACKEND_NATIVE and not native_plan.kind
+        ):
             native_plan = _native_zarr_import_plan(file_path)
     elif is_directory_zarr:
         if _native_import_on:
@@ -5718,7 +6093,9 @@ def _import_job_entry(
         except subprocess.TimeoutExpired:
             timeout_seconds = _get_local_import_scan_timeout_seconds()
             zarr_scan_status = "error"
-            zarr_scan_details = f"Compatibility check timeout after {timeout_seconds} seconds"
+            zarr_scan_details = (
+                f"Compatibility check timeout after {timeout_seconds} seconds"
+            )
         except FileNotFoundError as exc:
             zarr_scan_status = "error"
             zarr_scan_details = f"OMERO CLI not found: {exc}"
@@ -5734,7 +6111,12 @@ def _import_job_entry(
             )
             if zarr_scan_status == "compatible":
                 zarr_import_backend = _ZARR_IMPORT_BACKEND_BIOFORMATS
-            elif zarr_scan_status == "incompatible" and _native_import_on and native_plan and native_plan.kind:
+            elif (
+                zarr_scan_status == "incompatible"
+                and _native_import_on
+                and native_plan
+                and native_plan.kind
+            ):
                 zarr_import_backend = _ZARR_IMPORT_BACKEND_NATIVE
 
     # ------------------------------------------------------------------
@@ -5824,7 +6206,11 @@ def _import_job_entry(
                     group_name=group_name,
                     native_plan=native_plan,
                 )
-            if has_precomputed_zarr_routing and is_directory_zarr and zarr_scan_status == "error":
+            if (
+                has_precomputed_zarr_routing
+                and is_directory_zarr
+                and zarr_scan_status == "error"
+            ):
                 error_msg = zarr_scan_details or "Compatibility check failed."
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
@@ -5858,7 +6244,10 @@ def _import_job_entry(
                     "job_message": job_error,
                 }
             if is_directory_zarr and zarr_scan_status == "incompatible":
-                error_msg = zarr_scan_details or "Bio-Formats did not recognize the staged .zarr store."
+                error_msg = (
+                    zarr_scan_details
+                    or "Bio-Formats did not recognize the staged .zarr store."
+                )
                 job_error = messages.job_error_with_path(rel_path, error_msg)
                 return {
                     "cleanup_staged_paths": cleanup_staged_paths,
@@ -5937,7 +6326,9 @@ def _import_job_entry(
                         _sanitize_cli_output_for_logging(str(stdout).strip()[:500]),
                         _sanitize_cli_output_for_logging(str(stderr).strip()[:500]),
                     )
-                    error_msg = _classify_import_failure(str(stdout).strip(), str(stderr).strip())
+                    error_msg = _classify_import_failure(
+                        str(stdout).strip(), str(stderr).strip()
+                    )
                     job_error = messages.job_error_with_path(rel_path, error_msg)
                     return {
                         "cleanup_staged_paths": cleanup_staged_paths,
@@ -6030,21 +6421,33 @@ def _process_import_job(job_id: str):
         safe_username = sanitize_log_value(username)
 
         LOCK_TIMEOUT = 900  # 15 minutes max wait for another import to finish
-        logger.info("Import thread: acquiring lock for user %s (job %s)", safe_username, safe_job_id)
+        logger.info(
+            "Import thread: acquiring lock for user %s (job %s)",
+            safe_username,
+            safe_job_id,
+        )
         acquired = lock.acquire(timeout=LOCK_TIMEOUT)
         if not acquired:
             logger.error(
                 "Import lock timeout for user %s after %ds - a previous import may be stuck. "
                 "Restart the OMERO-web container to clear stale locks.",
-                safe_username, LOCK_TIMEOUT,
+                safe_username,
+                LOCK_TIMEOUT,
             )
             job = _load_job(job_id) or {"job_id": job_id}
-            _append_job_error(job, "Import could not start: another import is stuck. Please restart OMERO-web.")
+            _append_job_error(
+                job,
+                "Import could not start: another import is stuck. Please restart OMERO-web.",
+            )
             job["status"] = "error"
             _save_job(job)
             return
 
-        logger.info("Import thread: lock acquired for user %s (job %s)", safe_username, safe_job_id)
+        logger.info(
+            "Import thread: lock acquired for user %s (job %s)",
+            safe_username,
+            safe_job_id,
+        )
         try:
             job = _load_job(job_id)
             if not job:
@@ -6112,8 +6515,12 @@ def _process_import_job(job_id: str):
                 if entry.get("import_skip"):
                     if entry.get("status") != "skipped":
                         entry["status"] = "skipped"
-                        job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
-                        _append_job_message(job, messages.skipped_non_importable(rel_path))
+                        job["imported_bytes"] = job.get(
+                            "imported_bytes", 0
+                        ) + entry.get("size", 0)
+                        _append_job_message(
+                            job, messages.skipped_non_importable(rel_path)
+                        )
                         skipped_count += 1
                     continue
 
@@ -6122,7 +6529,9 @@ def _process_import_job(job_id: str):
                 if entry.get("compatibility") == "incompatible":
                     entry["status"] = "skipped"
                     entry["import_skip"] = True
-                    job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get("size", 0)
+                    job["imported_bytes"] = job.get("imported_bytes", 0) + entry.get(
+                        "size", 0
+                    )
                     _append_job_message(job, messages.skipped_incompatible(rel_path))
                     incompatible_skipped += 1
                     continue
@@ -6130,17 +6539,24 @@ def _process_import_job(job_id: str):
             if skipped_count or incompatible_skipped:
                 logger.info(
                     "Import thread: pre-skipped %d non-importable + %d incompatible files for job %s",
-                    skipped_count, incompatible_skipped, safe_job_id,
+                    skipped_count,
+                    incompatible_skipped,
+                    safe_job_id,
                 )
                 _save_job(job)
 
             # Keep OMERO CLI dry-run planning off the request path. Large grouped
             # formats such as .zarr can legitimately spend tens of seconds here.
             entries_to_import = _build_import_units(job, upload_root)
-            datasets_ready, dataset_error = _ensure_job_dataset_targets(job, entries_to_import)
+            datasets_ready, dataset_error = _ensure_job_dataset_targets(
+                job, entries_to_import
+            )
             if not datasets_ready:
                 job["status"] = "error"
-                _append_job_error(job, dataset_error or "Failed to create target dataset(s) for import.")
+                _append_job_error(
+                    job,
+                    dataset_error or "Failed to create target dataset(s) for import.",
+                )
                 _save_job(job)
                 return
 
@@ -6150,16 +6566,21 @@ def _process_import_job(job_id: str):
 
             logger.info(
                 "Import thread: %d logical import units to import for job %s (batch_size=%d)",
-                len(entries_to_import), safe_job_id, batch_size,
+                len(entries_to_import),
+                safe_job_id,
+                batch_size,
             )
 
             for start in range(0, len(entries_to_import), batch_size):
-                batch = entries_to_import[start:start + batch_size]
+                batch = entries_to_import[start : start + batch_size]
                 if not batch:
                     continue
                 logger.info(
                     "Import thread: processing batch %d-%d of %d for job %s",
-                    start, start + len(batch), len(entries_to_import), safe_job_id,
+                    start,
+                    start + len(batch),
+                    len(entries_to_import),
+                    safe_job_id,
                 )
                 # Serialize live imports through a single CLI process.
                 # The live stack shows intermittent OMERO.java/import-init failures when
@@ -6194,7 +6615,8 @@ def _process_import_job(job_id: str):
                     covered_entries = [
                         job.get("files", [])[entry_index]
                         for entry_index in covered_indexes
-                        if entry_index is not None and entry_index < len(job.get("files", []))
+                        if entry_index is not None
+                        and entry_index < len(job.get("files", []))
                     ]
                     if not covered_entries:
                         continue
@@ -6219,7 +6641,9 @@ def _process_import_job(job_id: str):
                         continue
 
                     if result.get("status") == "imported":
-                        rel_path = result.get("rel_path") or covered_entries[0].get("relative_path")
+                        rel_path = result.get("rel_path") or covered_entries[0].get(
+                            "relative_path"
+                        )
                         for entry in covered_entries:
                             entry["status"] = "imported"
                         job["imported_bytes"] = job.get("imported_bytes", 0) + sum(
@@ -6229,7 +6653,9 @@ def _process_import_job(job_id: str):
                         if rel_path:
                             _append_job_message(job, messages.imported_file(rel_path))
                         cleanup_targets = []
-                        for cleanup_staged_path in result.get("cleanup_staged_paths") or []:
+                        for cleanup_staged_path in (
+                            result.get("cleanup_staged_paths") or []
+                        ):
                             cleanup_target, cleanup_error = _resolve_staged_target_path(
                                 upload_root,
                                 cleanup_staged_path,
@@ -6264,10 +6690,15 @@ def _process_import_job(job_id: str):
             sem_edx_associations = job.get("sem_edx_associations") or {}
             sem_edx_settings = job.get("sem_edx_settings") or {}
             create_tables = sem_edx_settings.get("create_tables", True)
-            create_figures_attachments = sem_edx_settings.get("create_figures_attachments", True)
+            create_figures_attachments = sem_edx_settings.get(
+                "create_figures_attachments", True
+            )
             create_figures_images = sem_edx_settings.get("create_figures_images", True)
 
-            if job.get("special_upload") == "sem_edx_spectra" and not sem_edx_associations:
+            if (
+                job.get("special_upload") == "sem_edx_spectra"
+                and not sem_edx_associations
+            ):
                 # Fallback: derive associations server-side from uploaded file list.
                 derived = _build_sem_edx_associations_from_entries(job.get("files", []))
                 if derived:
@@ -6275,7 +6706,7 @@ def _process_import_job(job_id: str):
                     job["sem_edx_associations"] = derived
                     _append_job_message(
                         job,
-                        f"SEM EDX: derived {sum(len(v) for v in derived.values())} TXT attachment(s) from uploaded files (no UI associations received)"
+                        f"SEM EDX: derived {sum(len(v) for v in derived.values())} TXT attachment(s) from uploaded files (no UI associations received)",
                     )
                     _save_job(job)
                 else:
@@ -6283,80 +6714,127 @@ def _process_import_job(job_id: str):
                         "SEM EDX mode enabled for job %s but no TXT/image associations could be derived; skipping TXT attachments",
                         safe_job_id,
                     )
-                    _append_job_message(job, "SEM EDX: no TXT/image associations found; skipping TXT attachments")
+                    _append_job_message(
+                        job,
+                        "SEM EDX: no TXT/image associations found; skipping TXT attachments",
+                    )
                     _save_job(job)
 
             if job.get("special_upload") == "sem_edx_spectra" and sem_edx_associations:
                 try:
-                    conn = _open_service_connection(host, port, group_id=job.get("group_id"))
+                    conn = _open_service_connection(
+                        host, port, group_id=job.get("group_id")
+                    )
                     if not conn:
-                        logger.error("Failed to open SEM-EDX service connection for TXT attachments")
-                        _append_job_message(job, "SEM EDX: failed to open service connection for TXT attachments")
+                        logger.error(
+                            "Failed to open SEM-EDX service connection for TXT attachments"
+                        )
+                        _append_job_message(
+                            job,
+                            "SEM EDX: failed to open service connection for TXT attachments",
+                        )
                         _save_job(job)
                     else:
                         try:
                             entries_by_path = {
-                                entry.get("relative_path"): entry for entry in job.get("files", [])
+                                entry.get("relative_path"): entry
+                                for entry in job.get("files", [])
                             }
                             attachment_count = 0
                             total_attachments = sum(
-                                len(txt_paths) for txt_paths in sem_edx_associations.values() 
+                                len(txt_paths)
+                                for txt_paths in sem_edx_associations.values()
                                 if isinstance(txt_paths, list)
                             )
-                            
+
                             logger.info(
                                 "Processing %d SEM EDX text attachments for job %s",
                                 total_attachments,
                                 safe_job_id,
                             )
-                            
+
                             # CRITICAL FIX: Batch lookup ALL images at once instead of one-by-one
-                            logger.info("Pre-loading image cache for %d images", len(sem_edx_associations))
+                            logger.info(
+                                "Pre-loading image cache for %d images",
+                                len(sem_edx_associations),
+                            )
                             all_image_names = []
                             image_to_dataset = {}  # Track which dataset each image should be in
-                            
+
                             for image_rel in sem_edx_associations.keys():
-                                image_name = PurePosixPath(image_rel).name if image_rel else ""
+                                image_name = (
+                                    PurePosixPath(image_rel).name if image_rel else ""
+                                )
                                 if image_name:
                                     all_image_names.append(image_name)
-                                    dataset_name = _dataset_name_for_path(image_rel, orphan_dataset_name)
+                                    dataset_name = _dataset_name_for_path(
+                                        image_rel, orphan_dataset_name
+                                    )
                                     dataset_id = dataset_map.get(dataset_name)
                                     image_to_dataset[image_name] = dataset_id
-                            
+
                             # Do batch lookup - this is 100-1000x faster than individual lookups
                             image_cache = {}
                             datasets_to_search = set(image_to_dataset.values())
-                            
+
                             for dataset_id in datasets_to_search:
                                 if dataset_id:
                                     # Find all images for this dataset
-                                    dataset_images = [name for name, did in image_to_dataset.items() if did == dataset_id]
+                                    dataset_images = [
+                                        name
+                                        for name, did in image_to_dataset.items()
+                                        if did == dataset_id
+                                    ]
                                     if dataset_images:
-                                        batch_results = _batch_find_images_by_name(conn, dataset_images, dataset_id)
-                                        image_cache.update({name: img for name, img in batch_results.items()})
-                            
+                                        batch_results = _batch_find_images_by_name(
+                                            conn, dataset_images, dataset_id
+                                        )
+                                        image_cache.update(
+                                            {
+                                                name: img
+                                                for name, img in batch_results.items()
+                                            }
+                                        )
+
                             # Fallback: global search for images not found in datasets
-                            missing_images = set(all_image_names) - set(image_cache.keys())
+                            missing_images = set(all_image_names) - set(
+                                image_cache.keys()
+                            )
                             if missing_images:
-                                logger.info("Searching globally for %d missing images", len(missing_images))
-                                global_results = _batch_find_images_by_name(conn, list(missing_images), None)
+                                logger.info(
+                                    "Searching globally for %d missing images",
+                                    len(missing_images),
+                                )
+                                global_results = _batch_find_images_by_name(
+                                    conn, list(missing_images), None
+                                )
                                 image_cache.update(global_results)
-                            
-                            logger.info("Image cache loaded: %d/%d found", len(image_cache), len(all_image_names))
+
+                            logger.info(
+                                "Image cache loaded: %d/%d found",
+                                len(image_cache),
+                                len(all_image_names),
+                            )
 
                             plot_cache = {}
                             plot_rel_cache = {}
                             imported_plots = set()
                             if create_figures_attachments or create_figures_images:
-                                from ..services.omero.sem_edx_parser import create_edx_spectrum_plot
-                            
+                                from ..services.omero.sem_edx_parser import (
+                                    create_edx_spectrum_plot,
+                                )
+
                             # Now process attachments using cached images
-                            for attachment_idx, (image_rel, txt_paths) in enumerate(sem_edx_associations.items()):
+                            for attachment_idx, (image_rel, txt_paths) in enumerate(
+                                sem_edx_associations.items()
+                            ):
                                 if not isinstance(txt_paths, list):
                                     continue
-                                
+
                                 # Progress logging
-                                progress_pct = (attachment_idx / len(sem_edx_associations)) * 100
+                                progress_pct = (
+                                    attachment_idx / len(sem_edx_associations)
+                                ) * 100
                                 logger.info(
                                     "Processing image %d/%d (%.1f%%) - %s",
                                     attachment_idx + 1,
@@ -6365,13 +6843,17 @@ def _process_import_job(job_id: str):
                                     sanitize_log_value(image_rel),
                                 )
 
-                                image_name = PurePosixPath(image_rel).name if image_rel else ""
+                                image_name = (
+                                    PurePosixPath(image_rel).name if image_rel else ""
+                                )
 
                                 # Validate job-service session periodically (every 10 attachments).
                                 # IMPORTANT: NEVER reconnect using the end-user session_key here.
                                 if attachment_count > 0 and attachment_count % 10 == 0:
                                     if not _validate_session(conn):
-                                        logger.warning("job-service session expired, reopening service connection...")
+                                        logger.warning(
+                                            "job-service session expired, reopening service connection..."
+                                        )
                                         try:
                                             try:
                                                 conn.close()
@@ -6380,26 +6862,46 @@ def _process_import_job(job_id: str):
                                                     "Failed to close expired job-service connection: %s",
                                                     sanitize_log_value(close_exc),
                                                 )
-                                            conn = _open_service_connection(host, port, group_id=job.get("group_id"))
+                                            conn = _open_service_connection(
+                                                host, port, group_id=job.get("group_id")
+                                            )
                                         except Exception:
                                             conn = None
 
                                         if not conn:
-                                            logger.error("Failed to reopen job-service connection, aborting SEM EDX attachments")
+                                            logger.error(
+                                                "Failed to reopen job-service connection, aborting SEM EDX attachments"
+                                            )
                                             break
 
                                         # Re-populate cache after reconnect
-                                        logger.info("Re-loading image cache after reconnect")
+                                        logger.info(
+                                            "Re-loading image cache after reconnect"
+                                        )
                                         image_cache.clear()
                                         for dataset_id in datasets_to_search:
                                             if dataset_id:
-                                                dataset_images = [name for name, did in image_to_dataset.items() if did == dataset_id]
+                                                dataset_images = [
+                                                    name
+                                                    for name, did in image_to_dataset.items()
+                                                    if did == dataset_id
+                                                ]
                                                 if dataset_images:
-                                                    batch_results = _batch_find_images_by_name(conn, dataset_images, dataset_id)
+                                                    batch_results = (
+                                                        _batch_find_images_by_name(
+                                                            conn,
+                                                            dataset_images,
+                                                            dataset_id,
+                                                        )
+                                                    )
                                                     image_cache.update(batch_results)
-                                        missing_images = set(all_image_names) - set(image_cache.keys())
+                                        missing_images = set(all_image_names) - set(
+                                            image_cache.keys()
+                                        )
                                         if missing_images:
-                                            global_results = _batch_find_images_by_name(conn, list(missing_images), None)
+                                            global_results = _batch_find_images_by_name(
+                                                conn, list(missing_images), None
+                                            )
                                             image_cache.update(global_results)
 
                                 # Get cached image (no query needed!)
@@ -6411,8 +6913,16 @@ def _process_import_job(job_id: str):
                                     attachment_count += 1
 
                                     if not image_obj:
-                                        logger.warning("Image not found for %s, skipping attachment", txt_name)
-                                        _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                        logger.warning(
+                                            "Image not found for %s, skipping attachment",
+                                            txt_name,
+                                        )
+                                        _append_txt_attachment_message(
+                                            job,
+                                            txt_name,
+                                            image_name or image_rel,
+                                            False,
+                                        )
                                         continue
 
                                     image_id = _get_id(image_obj)
@@ -6422,7 +6932,12 @@ def _process_import_job(job_id: str):
                                             sanitize_log_value(image_name),
                                             sanitize_log_value(txt_name),
                                         )
-                                        _append_txt_attachment_message(job, txt_name, image_name or image_rel, False)
+                                        _append_txt_attachment_message(
+                                            job,
+                                            txt_name,
+                                            image_name or image_rel,
+                                            False,
+                                        )
                                         continue
 
                                     sem_dataset_id = None
@@ -6446,11 +6961,19 @@ def _process_import_job(job_id: str):
                                             "Text entry not found for %s, skipping",
                                             sanitize_log_value(txt_rel),
                                         )
-                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        _append_txt_attachment_message(
+                                            job, txt_name, image_name, False
+                                        )
                                         continue
 
-                                    staged_path = txt_entry.get("staged_path") or txt_rel
-                                    txt_path, staged_error = _resolve_staged_target_path(upload_root, staged_path)
+                                    staged_path = (
+                                        txt_entry.get("staged_path") or txt_rel
+                                    )
+                                    txt_path, staged_error = (
+                                        _resolve_staged_target_path(
+                                            upload_root, staged_path
+                                        )
+                                    )
                                     if staged_error:
                                         logger.warning(
                                             "Rejected SEM-EDX text staged path for job %s: txt=%s staged=%s error=%s",
@@ -6460,7 +6983,9 @@ def _process_import_job(job_id: str):
                                             sanitize_log_value(staged_error),
                                         )
                                         _append_job_error(job, staged_error)
-                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        _append_txt_attachment_message(
+                                            job, txt_name, image_name, False
+                                        )
                                         continue
 
                                     if not txt_path.exists():
@@ -6468,33 +6993,53 @@ def _process_import_job(job_id: str):
                                             "Text file not found at %s, skipping",
                                             sanitize_log_value(txt_path),
                                         )
-                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        _append_txt_attachment_message(
+                                            job, txt_name, image_name, False
+                                        )
                                         continue
 
                                     plot_path = None
                                     plot_rel = None
-                                    if create_figures_attachments or create_figures_images:
+                                    if (
+                                        create_figures_attachments
+                                        or create_figures_images
+                                    ):
                                         if txt_rel in plot_cache:
                                             plot_path = plot_cache.get(txt_rel)
                                             plot_rel = plot_rel_cache.get(txt_rel)
                                         else:
-                                            plot_path = create_edx_spectrum_plot(txt_path)
+                                            plot_path = create_edx_spectrum_plot(
+                                                txt_path
+                                            )
                                             plot_cache[txt_rel] = plot_path
                                             if plot_path:
-                                                plot_rel = str(PurePosixPath(txt_rel).with_name(plot_path.name))
+                                                plot_rel = str(
+                                                    PurePosixPath(txt_rel).with_name(
+                                                        plot_path.name
+                                                    )
+                                                )
                                                 plot_rel_cache[txt_rel] = plot_rel
 
-                                    if create_figures_images and plot_path and plot_rel and txt_rel not in imported_plots:
+                                    if (
+                                        create_figures_images
+                                        and plot_path
+                                        and plot_rel
+                                        and txt_rel not in imported_plots
+                                    ):
                                         plot_import_rel = str(
                                             PurePosixPath(image_rel).with_name(
                                                 PurePosixPath(plot_rel).name
                                             )
                                         )
-                                        plot_staged_rel = _build_staged_relative_path(plot_import_rel)
+                                        plot_staged_rel = _build_staged_relative_path(
+                                            plot_import_rel
+                                        )
 
-                                        staged_plot_path, staged_plot_error = _resolve_staged_target_path(
-                                            upload_root,
-                                            plot_staged_rel,
+                                        staged_plot_path, staged_plot_error = (
+                                            _resolve_staged_target_path(
+                                                upload_root,
+                                                plot_staged_rel,
+                                            )
                                         )
                                         if staged_plot_error:
                                             logger.warning(
@@ -6508,7 +7053,9 @@ def _process_import_job(job_id: str):
                                             imported_plots.add(txt_rel)
                                             continue
                                         try:
-                                            staged_plot_path.parent.mkdir(parents=True, exist_ok=True)
+                                            staged_plot_path.parent.mkdir(
+                                                parents=True, exist_ok=True
+                                            )
                                             shutil.copy2(plot_path, staged_plot_path)
                                         except Exception as exc:
                                             logger.error(
@@ -6551,17 +7098,26 @@ def _process_import_job(job_id: str):
                                         )
                                         if import_result.get("status") == "error":
                                             if import_result.get("job_error"):
-                                                _append_job_error(job, import_result["job_error"])
+                                                _append_job_error(
+                                                    job, import_result["job_error"]
+                                                )
                                             if import_result.get("job_message"):
-                                                _append_job_message(job, import_result["job_message"])
+                                                _append_job_message(
+                                                    job, import_result["job_message"]
+                                                )
                                             logger.error(
                                                 "Failed to import SEM EDX plot %s (dataset_id=%s staged=%s)",
                                                 sanitize_log_value(plot_import_rel),
                                                 sem_dataset_id,
-                                                sanitize_log_value(str(staged_plot_path)),
+                                                sanitize_log_value(
+                                                    str(staged_plot_path)
+                                                ),
                                             )
                                         elif import_result.get("status") == "imported":
-                                            _append_job_message(job, messages.imported_file(plot_import_rel))
+                                            _append_job_message(
+                                                job,
+                                                messages.imported_file(plot_import_rel),
+                                            )
                                             logger.info(
                                                 "Imported SEM EDX plot %s into dataset_id=%s",
                                                 sanitize_log_value(plot_import_rel),
@@ -6585,7 +7141,9 @@ def _process_import_job(job_id: str):
                                             txt_path,
                                             username,
                                             create_tables,
-                                            plot_path=plot_path if create_figures_attachments else None,
+                                            plot_path=plot_path
+                                            if create_figures_attachments
+                                            else None,
                                             session_key=session_key,
                                             host=host,
                                             port=port,
@@ -6595,9 +7153,13 @@ def _process_import_job(job_id: str):
                                         # Mark as imported if not already
                                         if txt_entry.get("status") != "imported":
                                             txt_entry["status"] = "imported"
-                                            job["imported_bytes"] = job.get("imported_bytes", 0) + txt_entry.get("size", 0)
+                                            job["imported_bytes"] = job.get(
+                                                "imported_bytes", 0
+                                            ) + txt_entry.get("size", 0)
 
-                                        _append_txt_attachment_message(job, txt_name, image_name, True)
+                                        _append_txt_attachment_message(
+                                            job, txt_name, image_name, True
+                                        )
                                         logger.info(
                                             "Successfully attached %s to %s",
                                             sanitize_log_value(txt_name),
@@ -6612,13 +7174,14 @@ def _process_import_job(job_id: str):
                                             sanitize_log_value(exc),
                                             exc_info=sanitized_exc_info(exc),
                                         )
-                                        _append_txt_attachment_message(job, txt_name, image_name, False)
+                                        _append_txt_attachment_message(
+                                            job, txt_name, image_name, False
+                                        )
 
                                     # Save job state periodically
                                     if attachment_count % 5 == 0:
                                         _save_job(job)
 
-                            
                             # Final save
                             _save_job(job)
                             logger.info(
@@ -6627,7 +7190,7 @@ def _process_import_job(job_id: str):
                                 attachment_count,
                                 total_attachments,
                             )
-                            
+
                         finally:
                             try:
                                 conn.close()
@@ -6649,7 +7212,9 @@ def _process_import_job(job_id: str):
                 job["status"] = "error"
                 logger.warning(
                     "Import thread: job %s finished with errors (%d errors, %d messages)",
-                    safe_job_id, len(job.get("errors", [])), len(job.get("messages", [])),
+                    safe_job_id,
+                    len(job.get("errors", [])),
+                    len(job.get("messages", [])),
                 )
             else:
                 job["status"] = "done"
