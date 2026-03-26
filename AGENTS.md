@@ -36,6 +36,8 @@ It is intentionally short. Deep context lives in the files it points to.
 4. **`docs/QUALITY_SCORE.md`** -- current quality grades and debt priorities.
 5. **`docs/exec-plans/`** -- active and completed implementation plans.
 6. **`docs/operations/installation-permissions.md`** -- authoritative install/update/bootstrap permission and ownership model.
+7. **`docs/reference/code-scanning-resolved-findings.md`** -- **MANDATORY READING** before writing new code. Catalogs 1 845 resolved scanner alerts with prevention rules. Every pattern there has been fixed at least once — reintroducing the same pattern is a regression.
+8. **`docs/operations/code-scanning.md`** -- live alert inventory, triage SLAs, and coding guidelines that prevent new scanner findings.
 
 ## Domain map
 
@@ -178,11 +180,13 @@ omeroweb_<name>/
 - If a container Python command fails with `ModuleNotFoundError` for repository modules, do not retry the same command. Switch to the runtime virtualenv interpreter or fix the import path first.
 
 ### Security scanning policy
+- **Before writing any new code**, consult `docs/reference/code-scanning-resolved-findings.md`. This ledger catalogs 1 845 previously resolved scanner alerts with specific prevention rules. Reintroducing a pattern that has already been fixed is a regression and must be treated as a defect.
 - When addressing code scanning findings, always fix the root cause. Do not add inline suppression comments (`# nosemgrep`, `# DevSkim: ignore`, `# nosec`, etc.) as a first resort.
 - Investigate each finding using multiple tools and online documentation to confirm whether it is a genuine issue or a false positive.
 - Suppression is permitted only when all evidence confirms the finding is a verified false positive (e.g. `psycopg2.sql.SQL().format(sql.Identifier())` is safe parameterized SQL; internal Docker network services legitimately use HTTP) **and** the root cause cannot be fixed without breaking functionality.
 - Every suppression must include a clear explanation of why it is a false positive and link to the verifying evidence.
 - Do not modify security scan workflow files unless explicitly instructed to do so.
+- For the complete coding guidelines that prevent new findings, see `docs/operations/code-scanning.md` § "AI agent coding guidelines".
 
 ### Testing
 - When tests fail, fix the actual production code using best practices. Do not weaken, loosen, or remove tests to make them pass unless the tests themselves are fundamentally incorrect (e.g. relying on mock-specific behavior that does not match real runtime semantics). If a test must be changed, the change must make the test *more* correct, not less.
