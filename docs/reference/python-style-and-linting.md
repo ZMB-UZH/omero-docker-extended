@@ -37,8 +37,8 @@ ruff format .
 
 - Ruff formatting applies repo-wide to tracked Python files.
 - The lint gate is intentionally narrow: `F`, `E7`, and `E9`.
-- A small `per-file-ignores` list in `.ruff.toml` documents legacy modules that still need manual refactoring before they can join the strict baseline safely.
-- Do not expand that exception list casually. Prefer shrinking it only when the underlying code is fixed and covered by targeted tests.
+- The current baseline carries no `per-file-ignores`.
+- If a temporary exception ever becomes unavoidable, keep it narrow, document why, and remove it as soon as the underlying code is fixed and covered by targeted tests.
 
 ## Agent guidance
 

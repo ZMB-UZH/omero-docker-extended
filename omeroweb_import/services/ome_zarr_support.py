@@ -149,35 +149,87 @@ def _inspect_single_ome_zarr_image(
     store_root: Path,
     metadata_payload: dict,
 ) -> OMEZarrImageInspection:
-    multiscales = metadata_payload.get("multiscales")
-    if not isinstance(multiscales, list) or not multiscales:
+    runtime, runtime_error = _ome_zarr_runtime()
+    if runtime is None:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=runtime_error
+            or "The ome-zarr Python package is not available.",
+        )
+
+    parse_url = runtime["parse_url"]
+    Reader = runtime["Reader"]
+    detect_format = runtime["detect_format"]
+    CurrentFormat = runtime["CurrentFormat"]
+
+    detected_format = detect_format(metadata_payload, CurrentFormat())
+    format_version = getattr(detected_format, "version", None)
+    zarr_format = getattr(detected_format, "zarr_format", None)
+
+    try:
+        zarr_location = parse_url(str(store_root), mode="r", fmt=detected_format)
+    except Exception as exc:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=f"Failed to open OME-Zarr metadata with ome-zarr: {exc}",
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+
+    if zarr_location is None:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=f"ome-zarr could not open {store_root.name}.",
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+
+    try:
+        nodes = list(Reader(zarr_location)())
+    except Exception as exc:
+        return OMEZarrImageInspection(
+            recognized=True,
+            support_error=f"ome-zarr failed to read {store_root.name}: {exc}",
+            format_version=format_version,
+            zarr_format=zarr_format,
+        )
+
+    image_nodes = []
+    for node in nodes:
+        spec_names = {type(spec).__name__ for spec in getattr(node, "specs", [])}
+        if "Plate" in spec_names or "Well" in spec_names:
+            return OMEZarrImageInspection(
+                recognized=True,
+                support_error="OME-Zarr plate and well layouts are not supported by the native image-import path.",
+                format_version=format_version,
+                zarr_format=zarr_format,
+            )
+        if "Multiscales" not in spec_names:
+            continue
+        if not getattr(node, "data", None):
+            continue
+        image_nodes.append(node)
+
+    if not image_nodes:
         return OMEZarrImageInspection(
             recognized=True,
             support_error=(
-                "OME-Zarr metadata was found, but no multiscale image definition "
-                "was present in the root metadata."
+                "OME-Zarr metadata was found, but ome-zarr did not expose a readable multiscale image node."
             ),
+            format_version=format_version,
+            zarr_format=zarr_format,
         )
 
-    if len(multiscales) != 1:
+    if len(image_nodes) != 1:
         return OMEZarrImageInspection(
             recognized=True,
-            support_error=(
-                "OME-Zarr store contains multiple image nodes; the native "
-                "image-import path expects a single image store."
-            ),
+            support_error="OME-Zarr store contains multiple image nodes; the native image-import path expects a single image store.",
+            format_version=format_version,
+            zarr_format=zarr_format,
         )
 
-    multiscale = multiscales[0]
-    if not isinstance(multiscale, dict):
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error="OME-Zarr multiscale metadata is malformed.",
-        )
-
-    format_version = str(multiscale.get("version") or "").strip() or None
-    zarr_format = _read_zarr_format_metadata(store_root, metadata_payload)
-    axis_names, axis_units, axis_error = _extract_axes(multiscale.get("axes"))
+    node = image_nodes[0]
+    axis_names, axis_units, axis_error = _extract_axes(node.metadata.get("axes"))
     if axis_error:
         return OMEZarrImageInspection(
             recognized=True,
@@ -185,7 +237,6 @@ def _inspect_single_ome_zarr_image(
             format_version=format_version,
             zarr_format=zarr_format,
         )
-
     if "x" not in axis_names or "y" not in axis_names:
         return OMEZarrImageInspection(
             recognized=True,
@@ -194,47 +245,10 @@ def _inspect_single_ome_zarr_image(
             zarr_format=zarr_format,
         )
 
-    dataset_entries = multiscale.get("datasets")
-    if not isinstance(dataset_entries, list) or not dataset_entries:
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error=(
-                "OME-Zarr metadata is missing multiscale dataset entries for the "
-                "native image-import path."
-            ),
-            format_version=format_version,
-            zarr_format=zarr_format,
-        )
-
-    primary_dataset = dataset_entries[0]
-    if not isinstance(primary_dataset, dict):
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error="OME-Zarr primary dataset metadata is malformed.",
-            format_version=format_version,
-            zarr_format=zarr_format,
-        )
-
-    primary_dataset_path = str(primary_dataset.get("path") or "").strip().strip("/")
-    if not primary_dataset_path:
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error=(
-                "OME-Zarr primary dataset metadata is missing a readable dataset path."
-            ),
-            format_version=format_version,
-            zarr_format=zarr_format,
-        )
-
     physical_sizes, scale_error = _extract_physical_sizes(
         axis_names,
         axis_units,
-        [
-            dataset_entry.get("coordinateTransformations")
-            if isinstance(dataset_entry, dict)
-            else None
-            for dataset_entry in dataset_entries
-        ],
+        node.metadata.get("coordinateTransformations"),
     )
     if scale_error:
         return OMEZarrImageInspection(
@@ -244,27 +258,21 @@ def _inspect_single_ome_zarr_image(
             zarr_format=zarr_format,
         )
 
-    array_metadata, array_error = _read_array_metadata_payload(
-        store_root, primary_dataset_path
-    )
-    if array_metadata is None:
-        return OMEZarrImageInspection(
-            recognized=True,
-            support_error=array_error
-            or (
-                "OME-Zarr metadata was found, but the primary dataset metadata "
-                "could not be read."
-            ),
-            format_version=format_version,
-            zarr_format=zarr_format,
-        )
-
     try:
-        shape = tuple(int(value) for value in array_metadata.get("shape", ()) or ())
+        shape = tuple(int(value) for value in getattr(node.data[0], "shape", ()) or ())
     except Exception:
         shape = ()
-    dtype_name = _normalize_dtype_name(array_metadata.get("dtype", ""))
+    dtype_name = _normalize_dtype_name(getattr(node.data[0], "dtype", ""))
     dataset_relative_paths = _extract_dataset_relative_paths(metadata_payload)
+
+    relative_path = None
+    try:
+        node_path = Path(getattr(node.zarr, "path", "") or "").resolve(strict=False)
+        root_path = store_root.resolve(strict=False)
+        if node_path != root_path:
+            relative_path = node_path.relative_to(root_path).as_posix() or None
+    except Exception:
+        relative_path = None
 
     version_text = ome_zarr_package_version()
     details = "OME-Zarr image detected by ome-zarr"
@@ -276,7 +284,7 @@ def _inspect_single_ome_zarr_image(
         kind=OME_ZARR_IMPORT_KIND_IMAGE,
         format_version=format_version,
         zarr_format=zarr_format,
-        relative_path=primary_dataset_path or None,
+        relative_path=relative_path,
         compatibility_details=details,
         image_relative_paths=dataset_relative_paths,
         physical_sizes=physical_sizes,
@@ -380,61 +388,6 @@ def _read_store_metadata_payload(
             None,
             f"Failed to read OME-Zarr metadata from {metadata_path.name}: {exc}",
         )
-
-
-def _read_zarr_format_metadata(
-    store_root: Path, metadata_payload: dict
-) -> Optional[int]:
-    raw_value = metadata_payload.get("zarr_format")
-    if isinstance(raw_value, int):
-        return raw_value
-
-    for candidate_name in (".zgroup", "zarr.json"):
-        candidate = store_root / candidate_name
-        if not candidate.is_file():
-            continue
-        try:
-            with open(candidate, encoding="utf-8") as handle:
-                payload = json.load(handle)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(payload, dict) and isinstance(payload.get("zarr_format"), int):
-            return int(payload["zarr_format"])
-    return None
-
-
-def _read_array_metadata_payload(
-    store_root: Path, relative_path: str
-) -> tuple[Optional[dict], Optional[str]]:
-    array_root = store_root / relative_path
-    metadata_path = None
-    for candidate_name in (".zarray", "zarr.json"):
-        candidate = array_root / candidate_name
-        if candidate.is_file():
-            metadata_path = candidate
-            break
-
-    if metadata_path is None:
-        return (
-            None,
-            f"OME-Zarr dataset path is missing its array metadata: {relative_path}",
-        )
-
-    try:
-        with open(metadata_path, encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
-        return (
-            None,
-            f"Failed to read OME-Zarr array metadata for {relative_path}: {exc}",
-        )
-
-    if not isinstance(payload, dict):
-        return (
-            None,
-            f"OME-Zarr array metadata for {relative_path} must be a JSON object.",
-        )
-    return payload, None
 
 
 def _extract_axes(axes_payload) -> tuple[list[str], dict[str, str], Optional[str]]:
