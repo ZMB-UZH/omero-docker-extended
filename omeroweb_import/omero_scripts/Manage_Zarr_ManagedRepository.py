@@ -72,7 +72,9 @@ def _load_server_config(conn: BlitzGateway) -> dict[str, str]:
 def _runtime_state_path() -> Path:
     omerodir = str(os.environ.get("OMERODIR") or "").strip()
     if not omerodir:
-        raise RuntimeError("OMERODIR is not set in the OMERO script processor environment.")
+        raise RuntimeError(
+            "OMERODIR is not set in the OMERO script processor environment."
+        )
     return Path(omerodir).resolve(strict=False) / "var" / _RUNTIME_STATE_FILENAME
 
 
@@ -96,8 +98,7 @@ def _load_runtime_state_value(key: str) -> str:
     value = values.get(key, "").strip()
     if not value:
         raise RuntimeError(
-            f"Missing required import runtime value: {key}. "
-            f"Check {state_path}."
+            f"Missing required import runtime value: {key}. Check {state_path}."
         )
     return value
 
@@ -115,7 +116,9 @@ def _validate_path_component(value: str, label: str) -> str:
     return component
 
 
-def _render_repo_template(config: dict[str, str], group_name: str, username: str, when: datetime):
+def _render_repo_template(
+    config: dict[str, str], group_name: str, username: str, when: datetime
+):
     template = _require_config_value(config, _CONFIG_REPO_PATH)
     raw_parts = [part for part in template.split("/") if part]
     if not raw_parts:
@@ -156,14 +159,18 @@ def _render_repo_template(config: dict[str, str], group_name: str, username: str
             seen_user = True
 
     if not seen_user:
-        raise RuntimeError(f"{_CONFIG_REPO_PATH} must include a %user% token for Zarr staging.")
+        raise RuntimeError(
+            f"{_CONFIG_REPO_PATH} must include a %user% token for Zarr staging."
+        )
 
-    suffix_parts = rendered_parts[len(prefix_parts):]
+    suffix_parts = rendered_parts[len(prefix_parts) :]
     return prefix_parts, suffix_parts
 
 
 def _managed_repository_root(config: dict[str, str]) -> Path:
-    data_dir = Path(_require_config_value(config, _CONFIG_DATA_DIR)).resolve(strict=False)
+    data_dir = Path(_require_config_value(config, _CONFIG_DATA_DIR)).resolve(
+        strict=False
+    )
     managed_dir_raw = _require_config_value(config, _CONFIG_MANAGED_DIR)
     managed_dir = Path(managed_dir_raw)
     if not managed_dir.is_absolute():
@@ -184,7 +191,9 @@ def _managed_repository_root(config: dict[str, str]) -> Path:
 
 
 def _shared_tmp_root(config: dict[str, str]) -> Path:
-    root = Path(_require_config_value(config, _CONFIG_SHARED_TMP_PATH)).resolve(strict=False)
+    root = Path(_require_config_value(config, _CONFIG_SHARED_TMP_PATH)).resolve(
+        strict=False
+    )
     if not root.exists() or not root.is_dir():
         raise RuntimeError(f"Shared temp root does not exist: {root}")
     return root
@@ -214,7 +223,9 @@ def _reject_symlinks(path: Path) -> None:
         for name in list(dirnames) + list(filenames):
             current_path = current_dir / name
             if current_path.is_symlink():
-                raise RuntimeError(f"Symlinks are not allowed in staged Zarrs: {current_path}")
+                raise RuntimeError(
+                    f"Symlinks are not allowed in staged Zarrs: {current_path}"
+                )
 
 
 def _user_prefix_dir(
@@ -226,7 +237,9 @@ def _user_prefix_dir(
     create_missing: bool,
 ) -> tuple[Path, list[str]]:
     managed_root = _managed_repository_root(config)
-    prefix_parts, suffix_parts = _render_repo_template(config, group_name, username, when)
+    prefix_parts, suffix_parts = _render_repo_template(
+        config, group_name, username, when
+    )
     prefix_dir = managed_root
     for part in prefix_parts:
         prefix_dir = (prefix_dir / part).resolve(strict=False)
@@ -244,12 +257,16 @@ def _user_prefix_dir(
                 f"by OMERO.server first: {prefix_dir}"
             )
         if not prefix_dir.is_dir():
-            raise RuntimeError(f"Managed-repository prefix path is not a directory: {prefix_dir}")
+            raise RuntimeError(
+                f"Managed-repository prefix path is not a directory: {prefix_dir}"
+            )
         os.chmod(prefix_dir, 0o755)
     return prefix_dir, suffix_parts
 
 
-def _ensure_suffix_dir(managed_root: Path, prefix_dir: Path, suffix_parts: list[str]) -> Path:
+def _ensure_suffix_dir(
+    managed_root: Path, prefix_dir: Path, suffix_parts: list[str]
+) -> Path:
     target_dir = prefix_dir
     for part in suffix_parts:
         target_dir = target_dir / part
@@ -296,7 +313,9 @@ def _normalize_tree_permissions(root: Path) -> None:
             os.chmod(os.path.join(dirpath, filename), 0o644)
 
 
-def _stage_zarr(config: dict[str, str], source_path: str, group_name: str, username: str) -> Path:
+def _stage_zarr(
+    config: dict[str, str], source_path: str, group_name: str, username: str
+) -> Path:
     when = datetime.now()
     source = _validate_source_path(config, source_path)
     _reject_symlinks(source)
@@ -315,7 +334,9 @@ def _stage_zarr(config: dict[str, str], source_path: str, group_name: str, usern
     return destination
 
 
-def _cleanup_zarr(config: dict[str, str], managed_path: str, group_name: str, username: str) -> Path:
+def _cleanup_zarr(
+    config: dict[str, str], managed_path: str, group_name: str, username: str
+) -> Path:
     when = datetime.now()
     managed_root = _managed_repository_root(config)
     prefix_dir, _ = _user_prefix_dir(

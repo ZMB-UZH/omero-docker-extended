@@ -1,4 +1,5 @@
 """Regression tests for compatibility candidate parsing."""
+
 from __future__ import annotations
 
 import sys
@@ -11,7 +12,9 @@ if str(REPO_ROOT) not in sys.path:
 from omeroweb_import.views.core_functions import _classify_compatibility_output
 
 
-def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(tmp_path: Path):
+def test_classify_marks_incompatible_when_output_contains_unrelated_candidate(
+    tmp_path: Path,
+):
     expected_file = tmp_path / "sample.unsupported"
     stdout = "/tmp/other-file.tiff\n"
 

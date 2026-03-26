@@ -15,7 +15,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.helper_path = cls.repo_root / "installation" / "install_transcript_utils.sh"
 
-    def test_transcript_helper_saves_preinstall_and_install_output_under_omero_data_path(self) -> None:
+    def test_transcript_helper_saves_preinstall_and_install_output_under_omero_data_path(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
             data_dir = temp_root / "omero_data"
@@ -70,7 +72,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
             )
             self.assertIn("Saved installation transcript:", result.stdout)
 
-    def test_interactive_transcript_path_does_not_trip_on_pipestatus_under_set_u(self) -> None:
+    def test_interactive_transcript_path_does_not_trip_on_pipestatus_under_set_u(
+        self,
+    ) -> None:
         if shutil.which("script") is None:
             self.skipTest("script command not available")
 

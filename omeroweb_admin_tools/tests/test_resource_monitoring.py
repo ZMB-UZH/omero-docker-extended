@@ -244,10 +244,12 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
 
     class DummyResponse:
         status = 200
-        headers = _make_headers({
-            "Content-Type": "application/json",
-            "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",
-        })
+        headers = _make_headers(
+            {
+                "Content-Type": "application/json",
+                "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly",
+            }
+        )
 
         def __enter__(self):
             return self
@@ -314,7 +316,9 @@ def test_normalize_proxy_request_target_strips_absolute_url_to_safe_path() -> No
 def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> None:
     class DummyResponse:
         status = 302
-        headers = _make_headers({"Content-Type": "text/plain", "Location": "/d/omero-infrastructure"})
+        headers = _make_headers(
+            {"Content-Type": "text/plain", "Location": "/d/omero-infrastructure"}
+        )
 
         def __enter__(self):
             return self
@@ -400,7 +404,9 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("urlopen should not run")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("urlopen should not run")
+        ),
     )
 
     class DummyDjangoRequest:
@@ -904,7 +910,9 @@ def test_prometheus_proxy_root_path_forwards_empty_subpath(monkeypatch) -> None:
     response = prometheus_proxy(request, "", conn=None)
 
     assert response.status_code == 302
-    assert "/admin_tools/resource-monitoring/prometheus-proxy/d/" in response["Location"]
+    assert (
+        "/admin_tools/resource-monitoring/prometheus-proxy/d/" in response["Location"]
+    )
 
 
 def test_safe_request_host_falls_back_when_get_host_fails() -> None:
@@ -1213,7 +1221,9 @@ def test_grafana_proxy_root_redirects_to_default_dashboard(monkeypatch) -> None:
 
 
 def test_grafana_proxy_root_redirect_sanitizes_env_segments(monkeypatch) -> None:
-    from omeroweb_admin_tools.views.index_view import _grafana_proxy_home_fallback_response
+    from omeroweb_admin_tools.views.index_view import (
+        _grafana_proxy_home_fallback_response,
+    )
 
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_UID", "https://evil.example")
     monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_DASHBOARD_SLUG", "../escape")
@@ -1249,7 +1259,9 @@ def test_logs_data_runtime_error_is_sanitized(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.index_view.fetch_loki_logs",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("secret loki details")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("secret loki details")
+        ),
     )
 
     response = logs_data(request, conn=None)
@@ -1338,10 +1350,12 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
         status = 200
 
         def __init__(self) -> None:
-            self.headers = _make_headers({
-                "Content-Type": "text/html; charset=utf-8",
-                "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",
-            })
+            self.headers = _make_headers(
+                {
+                    "Content-Type": "text/html; charset=utf-8",
+                    "Set-Cookie": "grafana_session=abc123; Path=/; HttpOnly; SameSite=Lax",
+                }
+            )
 
         def __enter__(self):
             return self

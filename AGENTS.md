@@ -10,6 +10,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - Prefer small, focused pull requests with clear acceptance criteria.
 - Update documentation in `docs/` whenever behavior or operating assumptions change.
 - Run `python3 tools/lint_docs_structure.py` before proposing changes.
+- Use Ruff as the canonical Python formatter and lint gate. For Python changes, run `ruff check` and `ruff format` on the touched files before finishing; when changing the Ruff workflow or formatting baseline, rerun the repo-wide commands.
 - Prefer focused unit tests or other fast local verification before live runtime tests whenever that is feasible. Use live tests after that, not instead of that, so debugging cycles stay short and failures surface earlier.
 - Pin image tags and dependency versions. Never use `:latest`.
 - Treat plugin input as untrusted; validate at system boundaries.
@@ -191,7 +192,10 @@ omeroweb_<name>/
   python3 -m pytest omeroweb_admin_tools/tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omeroweb_omp_plugin/tests/ -v -p no:cacheprovider -W error
   python3 -m pytest omeroweb_import/tests/ -v -p no:cacheprovider -W error
+  python3 -m pytest omero_web_zarr/tests/ -v -p no:cacheprovider -W error
   ```
+- Always also run: `python3 -m ruff check .`
+- Always also run: `python3 -m ruff format --check .`
 - Always also run: `python3 tools/lint_docs_structure.py`
 
 ### Log checking

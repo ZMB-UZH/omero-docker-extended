@@ -37,10 +37,14 @@ def example(context, settings):
             patched_text = target_path.read_text(encoding="utf-8")
             self.assertIn('context["ome"].setdefault("logo_src", "")', patched_text)
             self.assertIn('context["ome"].setdefault("logo_href", "")', patched_text)
-            self.assertEqual(patched_text.count('context["ome"].setdefault("logo_src", "")'), 1)
-            self.assertEqual(patched_text.count('context["ome"].setdefault("logo_href", "")'), 1)
-            self.assertIn('if settings.TOP_LOGO:', patched_text)
-            self.assertIn('if settings.TOP_LOGO_LINK:', patched_text)
+            self.assertEqual(
+                patched_text.count('context["ome"].setdefault("logo_src", "")'), 1
+            )
+            self.assertEqual(
+                patched_text.count('context["ome"].setdefault("logo_href", "")'), 1
+            )
+            self.assertIn("if settings.TOP_LOGO:", patched_text)
+            self.assertIn("if settings.TOP_LOGO_LINK:", patched_text)
 
 
 if __name__ == "__main__":

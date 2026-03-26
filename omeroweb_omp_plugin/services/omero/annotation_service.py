@@ -1,6 +1,7 @@
 """
 OMERO annotation services for managing MapAnnotations.
 """
+
 import json
 import logging
 import hashlib
@@ -88,7 +89,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
             try:
                 return val.getValue()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in annotation_service.py",
+                    exc_info=exc,
+                )
         # Some OMERO rtypes expose `.val` instead of `.getValue()`
         val = getattr(val, "val", val)
         return val
@@ -150,7 +154,10 @@ def is_plugin_annotation(map_ann_obj, qs=None, service_opts=None):
             try:
                 mv = mv.getValue()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in annotation_service.py",
+                    exc_info=exc,
+                )
 
         if not mv:
             aid = None
@@ -245,7 +252,9 @@ def find_plugin_annotation_ids(conn, image_id, allow_legacy=True):
                 continue
 
     except Exception as e:
-        logger.exception("Error locating plugin annotations for image %s: %s", image_id, e)
+        logger.exception(
+            "Error locating plugin annotations for image %s: %s", image_id, e
+        )
 
     return ann_ids
 
@@ -422,7 +431,10 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
                 ns_obj = ann.getNs() if hasattr(ann, "getNs") else obj.getNs()
                 ns = ns_obj.getValue() if ns_obj else None
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in annotation_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in annotation_service.py",
+                    exc_info=exc,
+                )
 
             if mode == "all":
                 target_ids.add(ann_id)
@@ -451,9 +463,13 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
 
     if mode == "plugin":
         try:
-            target_ids.update(find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True))
+            target_ids.update(
+                find_plugin_annotation_ids(conn, get_id(img), allow_legacy=True)
+            )
         except Exception:
-            logger.warning("Failed to delete plugin annotations for image %s", get_id(img))
+            logger.warning(
+                "Failed to delete plugin annotations for image %s", get_id(img)
+            )
 
     deleted_sets = 0
     deleted_pairs = 0
@@ -465,7 +481,9 @@ def delete_existing_annotations(conn, update, img, var_names, mode):
         pair_count = 0
         if ann_obj is not None:
             try:
-                map_values = ann_obj.getMapValue() if hasattr(ann_obj, "getMapValue") else None
+                map_values = (
+                    ann_obj.getMapValue() if hasattr(ann_obj, "getMapValue") else None
+                )
                 if map_values:
                     pair_count = len(map_values)
             except Exception:

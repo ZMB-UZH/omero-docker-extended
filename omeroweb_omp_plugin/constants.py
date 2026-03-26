@@ -39,10 +39,10 @@ MAX_VARIABLE_SET_ENTRIES = 10
 
 # Whitelist of common, safe separators for filename parsing
 # Prevents weird Unicode characters from being chosen as separators
-COMMON_SEPARATORS = ['_', '-', '.', ' ', '__']
+COMMON_SEPARATORS = ["_", "-", ".", " ", "__"]
 
 # Namespaces used for MapAnnotations
-MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation" # default client namespace that allows editing in OMERO.web
+MAP_NS = "openmicroscopy.org/omero/client/mapAnnotation"  # default client namespace that allows editing in OMERO.web
 
 # Plugin prefix marker (hash) for safe delete only what this plugin created
 
@@ -70,15 +70,15 @@ JOB_CLEANUP_INTERVAL = 300  # Run cleanup every 5 minutes
 
 # Hyphen protection patterns for scientific nomenclature, used in "Local Regex" creation
 PROTECTED_HYPHEN_PATTERNS = [
-    r'[A-Za-z]+\d+',                                    # Chemical: DMSO-d6, 5-HT2A
-    r'(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)',              # After digit: 5-HT, 20-HETE
-    r'(?<=[ZTC])(?:stack|series|plane|projection)',     # Z-stack, T-series
-    r'(?<=x)(?:objective|oil|water)',                   # 20x-objective
-    r'(?<=X)(?:objective|lens)',                        # 20X-objective
-    r'(?<=m)(?:laser|channel|filter)',                  # 488nm-laser
-    r'(?<=[TB])cell',                                    # T-cell, B-cell
-    r'(?<=[NOHSC])(?:terminus|terminal|bond|linked)',   # N-terminus, H-bond
-    r'(?<=P)(?:GFP|RFP|YFP)',                           # anti-GFP
-    r'(?<=t)test',                                       # t-test
-    r'(?<=p)value',                                      # p-value
+    r"[A-Za-z]+\d+",  # Chemical: DMSO-d6, 5-HT2A
+    r"(?<=\d)[A-Z]{1,3}(?:\d+)?(?=\W|$)",  # After digit: 5-HT, 20-HETE
+    r"(?<=[ZTC])(?:stack|series|plane|projection)",  # Z-stack, T-series
+    r"(?<=x)(?:objective|oil|water)",  # 20x-objective
+    r"(?<=X)(?:objective|lens)",  # 20X-objective
+    r"(?<=m)(?:laser|channel|filter)",  # 488nm-laser
+    r"(?<=[TB])cell",  # T-cell, B-cell
+    r"(?<=[NOHSC])(?:terminus|terminal|bond|linked)",  # N-terminus, H-bond
+    r"(?<=P)(?:GFP|RFP|YFP)",  # anti-GFP
+    r"(?<=t)test",  # t-test
+    r"(?<=p)value",  # p-value
 ]

@@ -187,6 +187,7 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
     from omeroweb.webgateway import views as webgateway_views
 
     calls = []
+
     def _fake_get_channels(self, *args, **kwargs):
         calls.append((args, kwargs))
         return [_FakeChannel()]
@@ -202,14 +203,24 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
         "_decorate_store_backed_channels",
         lambda image, channels: ["wrapped", image.store_backed, len(channels)],
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", _fake_get_channels)
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", _fake_get_channels
+    )
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
     monkeypatch.setattr(
         webgateway_marshal,
         "_omero_web_zarr_safe_image_marshal_installed",
@@ -222,18 +233,26 @@ def test_install_webgateway_overrides_routes_store_backed_channels_off_re(monkey
         None,
         raising=False,
     )
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
 
     integration.install_webgateway_overrides()
 
     store_backed_image = type("StoreBackedImage", (), {"store_backed": True})()
     regular_image = type("RegularImage", (), {"store_backed": False})()
 
-    assert webclient_gateway.ImageWrapper.getChannels(store_backed_image) == ["wrapped", True, 1]
+    assert webclient_gateway.ImageWrapper.getChannels(store_backed_image) == [
+        "wrapped",
+        True,
+        1,
+    ]
     assert calls[0] == ((), {"noRE": True})
 
     assert isinstance(webclient_gateway.ImageWrapper.getChannels(regular_image), list)
@@ -274,16 +293,28 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
         "is_store_backed_image",
         lambda image: getattr(image, "store_backed", False),
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
     monkeypatch.setattr(webgateway_views, "imageData_json", original_image_data_json)
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
     monkeypatch.setattr(
         webgateway_marshal,
         "_omero_web_zarr_safe_image_marshal_installed",
@@ -296,15 +327,21 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
         None,
         raising=False,
     )
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
     monkeypatch.setattr(
         integration,
         "_store_backed_image_data",
-        lambda image, request: (_ for _ in ()).throw(AssertionError("unexpected store-backed path")),
+        lambda image, request: (_ for _ in ()).throw(
+            AssertionError("unexpected store-backed path")
+        ),
     )
 
     integration.install_webgateway_overrides()
@@ -315,7 +352,9 @@ def test_install_webgateway_overrides_preserves_regular_image_data_json(monkeypa
     assert len(original_calls) == 1
 
 
-def test_install_webgateway_overrides_preserves_regular_render_image_region(monkeypatch):
+def test_install_webgateway_overrides_preserves_regular_render_image_region(
+    monkeypatch,
+):
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
@@ -328,7 +367,9 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(monk
     from omeroweb.webgateway import urls as webgateway_urls
     from omeroweb.webgateway import views as webgateway_views
 
-    request = RequestFactory().get("/webclient/render_image_region/7/0/0/", {"tile": "0,0,0"})
+    request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/", {"tile": "0,0,0"}
+    )
     request.session = {}
     regular_image = type("RegularImage", (), {"store_backed": False})()
     sentinel = HttpResponse(b"original-region", content_type="image/jpeg")
@@ -350,16 +391,28 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(monk
         "is_store_backed_image",
         lambda image: getattr(image, "store_backed", False),
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
     monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "render_image_region", original_render_image_region)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", original_render_image_region
+    )
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
     monkeypatch.setattr(
         webgateway_marshal,
         "_omero_web_zarr_safe_image_marshal_installed",
@@ -372,15 +425,21 @@ def test_install_webgateway_overrides_preserves_regular_render_image_region(monk
         None,
         raising=False,
     )
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
     monkeypatch.setattr(
         integration,
         "_store_backed_region_response",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected store-backed path")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("unexpected store-backed path")
+        ),
     )
 
     integration.install_webgateway_overrides()
@@ -413,7 +472,12 @@ def test_store_backed_image_data_uses_store_metadata_without_re(monkeypatch):
                     {
                         "shape": (1, 1, 512, 1024),
                         "dtype": np.dtype(np.uint16),
-                        "chunks": ((1,), (1,), (128, 128, 128, 128), (256, 256, 256, 256)),
+                        "chunks": (
+                            (1,),
+                            (1,),
+                            (128, 128, 128, 128),
+                            (256, 256, 256, 256),
+                        ),
                     },
                 )(),
                 type(
@@ -467,7 +531,12 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
                     (),
                     {
                         "shape": (1, 1, 512, 1024),
-                        "chunks": ((1,), (1,), (128, 128, 128, 128), (256, 256, 256, 256)),
+                        "chunks": (
+                            (1,),
+                            (1,),
+                            (128, 128, 128, 128),
+                            (256, 256, 256, 256),
+                        ),
                     },
                 )(),
                 type(
@@ -492,9 +561,13 @@ def test_store_backed_region_response_maps_viewer_tile_level(monkeypatch):
 
         return Image.fromarray(np.full((32, 64), 127, dtype=np.uint8), mode="L")
 
-    monkeypatch.setattr(integration, "render_store_backed_region_pil_image", fake_region)
+    monkeypatch.setattr(
+        integration, "render_store_backed_region_pil_image", fake_region
+    )
 
-    response = integration._store_backed_region_response(image, request, z=3, t=0, conn=None)
+    response = integration._store_backed_region_response(
+        image, request, z=3, t=0, conn=None
+    )
 
     assert response.status_code == 200
     assert captured == {
@@ -634,7 +707,9 @@ def test_marshal_regular_image_data_with_safe_tile_size_uses_generic_fallback():
     }
     image = _FakeRegularTileFailureImage()
 
-    payload = integration._marshal_regular_image_data_with_safe_tile_size(image, request)
+    payload = integration._marshal_regular_image_data_with_safe_tile_size(
+        image, request
+    )
 
     assert payload["tiles"] is True
     assert payload["tile_size"] == {"width": 1024, "height": 512}
@@ -703,7 +778,9 @@ def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkey
         raising=False,
     )
 
-    safe_image_marshal = integration._install_safe_image_marshal_overrides(webgateway_marshal)
+    safe_image_marshal = integration._install_safe_image_marshal_overrides(
+        webgateway_marshal
+    )
 
     assert webgateway_marshal.imageMarshal is safe_image_marshal
     assert webgateway_views.imageMarshal is safe_image_marshal
@@ -711,7 +788,9 @@ def test_install_safe_image_marshal_overrides_rebinds_loaded_view_modules(monkey
     assert figure_views.imageMarshal is safe_image_marshal
 
 
-def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(monkeypatch):
+def test_render_regular_image_region_with_safe_tile_size_uses_generic_fallback(
+    monkeypatch,
+):
     request = RequestFactory().get(
         "/webclient/render_image_region/7/0/0/",
         {"tile": "0,1,2"},
@@ -798,7 +877,8 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
     from omeroweb.webgateway import urls as webgateway_urls
     from omeroweb.webgateway import views as webgateway_views
 
-    original_image_marshal = lambda image, key=None, request=None: {"id": 999}
+    def original_image_marshal(image, key=None, request=None):
+        return {"id": 999}
 
     monkeypatch.setattr(integration, "login_required", _identity_decorator)
     monkeypatch.setattr(
@@ -806,15 +886,25 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
         "is_store_backed_image",
         lambda image: getattr(image, "store_backed", False),
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
     monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(webgateway_marshal, "imageMarshal", original_image_marshal)
     monkeypatch.setattr(
         webgateway_marshal,
@@ -828,20 +918,28 @@ def test_install_webgateway_overrides_skips_safe_marshal_when_disabled(monkeypat
         None,
         raising=False,
     )
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
 
     integration.install_webgateway_overrides()
 
     # imageMarshal must remain the original — NOT wrapped by safe marshal
     assert webgateway_marshal.imageMarshal is original_image_marshal
-    assert not getattr(webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False)
+    assert not getattr(
+        webgateway_marshal, "_omero_web_zarr_safe_image_marshal_installed", False
+    )
 
 
-def test_install_webgateway_overrides_propagates_tile_failure_when_safe_rendering_disabled(monkeypatch):
+def test_install_webgateway_overrides_propagates_tile_failure_when_safe_rendering_disabled(
+    monkeypatch,
+):
     """When safe rendering is disabled, tile-size failures in regular images
     must propagate as-is — OMERO's built-in error handling applies."""
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "false")
@@ -871,16 +969,28 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
         "is_store_backed_image",
         lambda image: getattr(image, "store_backed", False),
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
     monkeypatch.setattr(webgateway_views, "imageData_json", failing_image_data_json)
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
     monkeypatch.setattr(
         webgateway_marshal,
         "_omero_web_zarr_safe_image_marshal_installed",
@@ -893,15 +1003,20 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
         None,
         raising=False,
     )
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
 
     integration.install_webgateway_overrides()
 
     import pytest
+
     request = RequestFactory().get("/webclient/imgData/7/")
     request.session = {}
 
@@ -909,7 +1024,9 @@ def test_install_webgateway_overrides_propagates_tile_failure_when_safe_renderin
         webgateway_views.imageData_json(request, conn=_FakeConn(), iid=7)
 
 
-def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_failure(monkeypatch):
+def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_failure(
+    monkeypatch,
+):
     monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
 
     def _identity_decorator():
@@ -931,16 +1048,28 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
         "is_store_backed_image",
         lambda image: getattr(image, "store_backed", False),
     )
-    monkeypatch.setattr(webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
     monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
-    monkeypatch.setattr(webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
     monkeypatch.setattr(webgateway_views, "render_image", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_views, "render_image_region", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        webgateway_views, "render_image_region", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
     monkeypatch.setattr(webgateway_views, "get_longs", lambda *args, **kwargs: [])
-    monkeypatch.setattr(webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None)
-    monkeypatch.setattr(webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {})
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
     monkeypatch.setattr(
         webgateway_marshal,
         "_omero_web_zarr_safe_image_marshal_installed",
@@ -962,16 +1091,22 @@ def test_install_webgateway_overrides_falls_back_for_metadata_preview_rendering_
     )
     monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
 
-    def failing_load_metadata_preview(request, c_type, c_id, conn=None, share_id=None, **kwargs):
+    def failing_load_metadata_preview(
+        request, c_type, c_id, conn=None, share_id=None, **kwargs
+    ):
         raise RuntimeError(
             "Error instantiating pixel buffer: managed/path\n"
             "at com.glencoesoftware.omero.zarr.ZarrPixelsService.getPixelBuffer"
         )
 
-    monkeypatch.setattr(webclient_views, "load_metadata_preview", failing_load_metadata_preview)
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", failing_load_metadata_preview
+    )
     monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
     monkeypatch.setattr(webclient_urls, "urlpatterns", [])
-    monkeypatch.setattr(webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False)
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
 
     integration.install_webgateway_overrides()
 

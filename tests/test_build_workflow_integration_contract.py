@@ -14,25 +14,33 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_installation_script_references_compressed_helper(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn("USE_BUILDX_COMPRESSED_BUILD", script_text)
         self.assertIn("run_image_build()", script_text)
         self.assertIn("docker_buildx_compressed_push.sh", script_text)
-        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"', script_text)
+        self.assertIn(
+            'DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"',
+            script_text,
+        )
         self.assertIn("resolve_flatten_final_image_choice()", script_text)
         self.assertIn('local prompt_hint="Y/n"', script_text)
-        self.assertIn('Flatten final images into single-layer outputs? (slower; rebuilds each image)', script_text)
+        self.assertIn(
+            "Flatten final images into single-layer outputs? (slower; rebuilds each image)",
+            script_text,
+        )
         self.assertIn('DOCKER_BUILD_FLATTEN_ONLY="1"', script_text)
-        self.assertIn('resolve_build_provenance_setting()', script_text)
+        self.assertIn("resolve_build_provenance_setting()", script_text)
         self.assertIn('--provenance "${provenance_setting}"', script_text)
         self.assertNotIn("DOCKER_BUILD_SQUASH", script_text)
 
-    def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+    def test_installation_script_checks_build_and_flatten_helper_failures_explicitly(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn(
             'if ! compose_with_installation_env "${COMPOSE_FILE}" "${compose_build_args[@]}"; then',
             script_text,
@@ -41,85 +49,127 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("ERROR: Compose image flatten workflow failed.", script_text)
         self.assertIn("ERROR: Buildx compressed build workflow failed.", script_text)
 
-    def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+    def test_installation_script_propagates_omero_data_dir_into_generated_compose_env(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn(
             "        OMERO_TMP_PATH\n        OMERO_DATA_DIR\n        OMERO_USER_DATA_PATH\n",
             script_text,
         )
-        self.assertGreaterEqual(script_text.count("OMERO_DATA_DIR=${OMERO_DATA_DIR}"), 2)
+        self.assertGreaterEqual(
+            script_text.count("OMERO_DATA_DIR=${OMERO_DATA_DIR}"), 2
+        )
         self.assertIn("OMERO_DATA_DIR=${old_omero_data_dir}", script_text)
         self.assertIn('DEFAULT_OMERO_DATA_DIR="${OMERO_DATA_DIR}"', script_text)
-        self.assertIn('require_path_config_var "OMERO_DATA_DIR" "${SCRIPT_ENV_FILE}"', script_text)
+        self.assertIn(
+            'require_path_config_var "OMERO_DATA_DIR" "${SCRIPT_ENV_FILE}"', script_text
+        )
 
     def test_installation_script_does_not_inject_top_logo_defaults(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertNotIn("ensure_omeroweb_logo_defaults()", script_text)
-        self.assertNotIn('CONFIG_omero_web_top__logo=', script_text)
-        self.assertNotIn('CONFIG_omero_web_top__logo__link=/webclient/', script_text)
+        self.assertNotIn("CONFIG_omero_web_top__logo=", script_text)
+        self.assertNotIn("CONFIG_omero_web_top__logo__link=/webclient/", script_text)
 
     def test_omeroweb_example_env_defines_only_login_logo_default(self) -> None:
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
-        self.assertIn("CONFIG_omero_web_login__logo=/static/branding/logo.png", env_text)
+        self.assertIn(
+            "CONFIG_omero_web_login__logo=/static/branding/logo.png", env_text
+        )
         self.assertNotIn("CONFIG_omero_web_top__logo=", env_text)
         self.assertNotIn("CONFIG_omero_web_top__logo__link=", env_text)
 
     def test_omeroweb_dockerfile_applies_logo_context_patch(self) -> None:
-        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-web.Dockerfile"
+        ).read_text(encoding="utf-8")
         self.assertIn("patch_omeroweb_logo_context.py", dockerfile_text)
 
-
-    def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
+    def test_installation_group_bootstrap_uses_dynamic_omero_cli_discovery(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }',
+            script_text,
         )
-        self.assertIn('resolve_omero_bin() { local candidate=""; for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do [ -x "${candidate}" ] || continue; printf "%s" "${candidate}"; return 0; done; return 1; }', script_text)
 
-
-    def test_server_bootstrap_job_service_uses_cli_autodetection_and_hosted_login(self) -> None:
+    def test_server_bootstrap_job_service_uses_cli_autodetection_and_hosted_login(
+        self,
+    ) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn('SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"', script_text)
-        self.assertIn('resolve_omero_bin() {', script_text)
+        self.assertIn(
+            'SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"', script_text
+        )
+        self.assertIn("resolve_omero_bin() {", script_text)
         self.assertIn('server_root="${SERVER_HOME%/*}"', script_text)
-        self.assertIn('for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do', script_text)
-        self.assertIn('for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do', script_text)
-        self.assertIn('run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"', script_text)
+        self.assertIn(
+            'for candidate in "${server_root}"/venv*/bin/omero "${SERVER_HOME}"/bin/omero; do',
+            script_text,
+        )
+        self.assertIn(
+            "for candidate in /opt/omero/server/venv*/bin/omero /opt/omero/server/OMERO.server/bin/omero; do",
+            script_text,
+        )
+        self.assertIn(
+            'run_omero -C -s "${host}" -p "${port}" login -u root -w "${root_pass}"',
+            script_text,
+        )
 
-    def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(self) -> None:
+    def test_server_bootstrap_normalizes_managed_repo_shared_prefixes_for_runtime_groups(
+        self,
+    ) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn("list_repo_root_bootstrap_groups()", script_text)
-        self.assertIn('mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")', script_text)
-        self.assertIn('path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"', script_text)
+        self.assertIn(
+            'mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")',
+            script_text,
+        )
+        self.assertIn(
+            'path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"',
+            script_text,
+        )
         self.assertIn('path_list="$(collect_repo_root_bootstrap_paths)"', script_text)
         self.assertIn('run_omero fs mkdir --parents "${repo_dir_path}"', script_text)
-        self.assertIn('run_omero chown root "OriginalFile:${root_dir_id}" --force', script_text)
-        self.assertIn('REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"', script_text)
+        self.assertIn(
+            'run_omero chown root "OriginalFile:${root_dir_id}" --force', script_text
+        )
+        self.assertIn(
+            'REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"',
+            script_text,
+        )
         self.assertIn("write_repo_root_sync_status()", script_text)
         self.assertIn("run_repo_root_bootstrap_once()", script_text)
         self.assertIn("schedule_repo_root_sync()", script_text)
         self.assertIn("validate_repo_root_sync_configuration()", script_text)
 
-    def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(self) -> None:
+    def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(
+        self,
+    ) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn('venv_py="$(resolve_server_venv_python)"', script_text)
-        self.assertIn('resolve_cli_home()', script_text)
+        self.assertIn("resolve_cli_home()", script_text)
         self.assertIn('chown "${OMERO_CLI_USER}" "${lookup_py}"', script_text)
         self.assertIn('chmod 0600 "${lookup_py}"', script_text)
-        self.assertIn('runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"', script_text)
+        self.assertIn(
+            'runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"',
+            script_text,
+        )
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
@@ -128,10 +178,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn('"${expected_tmp_dir}/runtime"', script_text)
         self.assertIn('export TMPDIR="${runtime_tmp_dir}"', script_text)
         self.assertIn('ln -sf "${runtime_tmp_dir}" "${legacy_tmp_dir}"', script_text)
-        self.assertIn('local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"', script_text)
-        self.assertIn('rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}"', script_text)
+        self.assertIn(
+            'local legacy_omero_py_user_dir="${expected_tmp_dir}/omero_${requested_owner}"',
+            script_text,
+        )
+        self.assertIn(
+            'rm -rf "${omero_py_dir}" "${omero_py_user_dir}" "${legacy_omero_py_user_dir}"',
+            script_text,
+        )
 
-    def test_server_bootstrap_schedules_binary_repository_cleanse_with_keepalive(self) -> None:
+    def test_server_bootstrap_schedules_binary_repository_cleanse_with_keepalive(
+        self,
+    ) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
@@ -140,28 +198,49 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("OMERO_BINARY_REPO_CLEANSE_ON_START", script_text)
         self.assertIn("OMERO_REPOSITORY_LOCK_CLEANUP_ON_START", script_text)
         self.assertIn("run_omero_with_keepalive", script_text)
-        self.assertIn('admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}"', script_text)
-        self.assertIn('proc_start_ticks', script_text)
-        self.assertIn('Removed stale repository lock file', script_text)
-    def test_installation_script_preserves_server_temp_namespace_ownership(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
+        self.assertIn(
+            'admin cleanse -q -C -s localhost -p 4064 -u root -w "${root_pass}" "${data_dir}"',
+            script_text,
         )
+        self.assertIn("proc_start_ticks", script_text)
+        self.assertIn("Removed stale repository lock file", script_text)
+
+    def test_installation_script_preserves_server_temp_namespace_ownership(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn("ensure_omero_tmp_layout()", script_text)
         self.assertIn('if ! ensure_omero_tmp_layout "${OMERO_TMP_PATH}"', script_text)
-        self.assertIn('if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text)
-        self.assertIn('chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"', script_text)
+        self.assertIn(
+            'if [ "${top_level_entry}" = "${server_namespace_dir}" ]; then', script_text
+        )
+        self.assertIn(
+            'chown -R "${server_uid}:${server_gid}" "${server_namespace_dir}"',
+            script_text,
+        )
         self.assertNotIn('chown_tree_or_die "${OMERO_TMP_PATH}"', script_text)
 
-    def test_installation_script_reports_binary_repository_cleanse_runtime_hook(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+    def test_installation_script_reports_binary_repository_cleanse_runtime_hook(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn("print_binary_repository_cleanse_notice()", script_text)
-        self.assertIn("OMERO binary repository cleanse is configured to run automatically on each omeroserver start", script_text)
-        self.assertIn("OMERO binary repository cleanse will run automatically on the next omeroserver start", script_text)
+        self.assertIn(
+            "OMERO binary repository cleanse is configured to run automatically on each omeroserver start",
+            script_text,
+        )
+        self.assertIn(
+            "OMERO binary repository cleanse will run automatically on the next omeroserver start",
+            script_text,
+        )
 
-    def test_omeroserver_example_env_defines_binary_repository_cleanse_defaults(self) -> None:
+    def test_omeroserver_example_env_defines_binary_repository_cleanse_defaults(
+        self,
+    ) -> None:
         env_text = (self.repo_root / "env" / "omeroserver_example.env").read_text(
             encoding="utf-8"
         )
@@ -172,9 +251,9 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("CONFIG_omero_managed_dir=/OMERO/ManagedRepository", env_text)
 
     def test_omeroserver_runtime_does_not_force_server_tree_cwd(self) -> None:
-        dockerfile_text = (self.repo_root / "docker" / "omero-server.Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-server.Dockerfile"
+        ).read_text(encoding="utf-8")
         compose_text = (self.repo_root / "docker-compose.yml").read_text(
             encoding="utf-8"
         )
@@ -188,49 +267,83 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         env_text = (self.repo_root / "env" / "omeroweb_example.env").read_text(
             encoding="utf-8"
         )
-        web_bootstrap_text = (self.repo_root / "startup" / "10-web-bootstrap.sh").read_text(
-            encoding="utf-8"
+        web_bootstrap_text = (
+            self.repo_root / "startup" / "10-web-bootstrap.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("OMERO_WEB_WSGI_ARGS", supervisord_text)
+        self.assertIn("--chdir /opt/omero/web/OMERO.web/var/run", supervisord_text)
+        self.assertIn(
+            "OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run", env_text
         )
-        self.assertIn('OMERO_WEB_WSGI_ARGS', supervisord_text)
-        self.assertIn('--chdir /opt/omero/web/OMERO.web/var/run', supervisord_text)
-        self.assertIn('OMERO_WEB_WSGI_ARGS=--chdir /opt/omero/web/OMERO.web/var/run', env_text)
         self.assertIn('local run_dir="${var_dir}/run"', web_bootstrap_text)
         self.assertIn('local static_dir="${var_dir}/static"', web_bootstrap_text)
-        self.assertIn('ensure_runtime_directory "${var_dir}" "OMERO.web var directory" 0755', web_bootstrap_text)
-        self.assertIn('ensure_runtime_directory "${var_dir}/omero/tmp" "OMERO.web tmp directory" 1777', web_bootstrap_text)
-        self.assertIn('ensure_runtime_directory "${run_dir}" "OMERO.web runtime directory" 0755', web_bootstrap_text)
-        self.assertIn('ensure_runtime_directory "${static_dir}" "OMERO.web static directory" 0755', web_bootstrap_text)
+        self.assertIn(
+            'ensure_runtime_directory "${var_dir}" "OMERO.web var directory" 0755',
+            web_bootstrap_text,
+        )
+        self.assertIn(
+            'ensure_runtime_directory "${var_dir}/omero/tmp" "OMERO.web tmp directory" 1777',
+            web_bootstrap_text,
+        )
+        self.assertIn(
+            'ensure_runtime_directory "${run_dir}" "OMERO.web runtime directory" 0755',
+            web_bootstrap_text,
+        )
+        self.assertIn(
+            'ensure_runtime_directory "${static_dir}" "OMERO.web static directory" 0755',
+            web_bootstrap_text,
+        )
 
     def test_github_pull_script_exports_compressed_build_env(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
             encoding="utf-8"
         )
         self.assertIn("exec env", script_text)
-        self.assertIn('USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"', script_text)
-        self.assertIn('DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"', script_text)
-        self.assertIn('INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"', script_text)
+        self.assertIn(
+            'USE_BUILDX_COMPRESSED_BUILD="${USE_BUILDX_COMPRESSED_BUILD:-1}"',
+            script_text,
+        )
+        self.assertIn(
+            'DOCKER_BUILD_FLATTEN_FINAL_IMAGE="${DOCKER_BUILD_FLATTEN_FINAL_IMAGE:-0}"',
+            script_text,
+        )
+        self.assertIn(
+            'INSTALLATION_AUTOMATION_MODE="${INSTALLATION_AUTOMATION_MODE}"',
+            script_text,
+        )
 
     def test_pull_scripts_enable_transcript_capture(self) -> None:
         scripts = [self.repo_root / "github_pull_project_bash_example"]
-        private_script = self.repo_root / "github_pull_private_project_bash_example"
-        if private_script.exists():
-            scripts.append(private_script)
 
         for script in scripts:
             text = script.read_text(encoding="utf-8")
-            self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"', text)
-            self.assertIn('install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"', text)
+            self.assertIn(
+                'TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/installation/install_transcript_utils.sh"',
+                text,
+            )
+            self.assertIn(
+                'install_transcript_enable "${SCRIPT_DIR}/${INSTALLATION_PATHS_ENV_RELATIVE_PATH}" "$0" "$@"',
+                text,
+            )
 
-    def test_installation_script_publishes_transcript_destination_after_path_resolution(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
+    def test_installation_script_publishes_transcript_destination_after_path_resolution(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            'TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"',
+            script_text,
         )
-
-        self.assertIn('TRANSCRIPT_HELPER_PATH="${SCRIPT_DIR}/install_transcript_utils.sh"', script_text)
-        self.assertIn('install_transcript_enable "${REPO_ROOT_DIR}/installation_paths.env" "$0" "$@"', script_text)
-        self.assertIn('install_transcript_publish_final_path_if_needed \\', script_text)
-        self.assertIn('tty_echo()', script_text)
-        self.assertIn('tty_read_line()', script_text)
+        self.assertIn(
+            'install_transcript_enable "${REPO_ROOT_DIR}/installation_paths.env" "$0" "$@"',
+            script_text,
+        )
+        self.assertIn("install_transcript_publish_final_path_if_needed \\", script_text)
+        self.assertIn("tty_echo()", script_text)
+        self.assertIn("tty_read_line()", script_text)
 
     def test_public_pull_script_defaults_to_public_repo(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
@@ -241,16 +354,6 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             script_text,
         )
         self.assertIn('REPO_BRANCH="${REPO_BRANCH:-main}"', script_text)
-
-    @unittest.skipUnless(
-        (Path(__file__).resolve().parents[1] / "github_pull_private_project_bash_example").exists(),
-        "private pull script not present in this checkout",
-    )
-    def test_private_pull_script_branch_default_is_independent(self) -> None:
-        script_text = (self.repo_root / "github_pull_private_project_bash_example").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('REPO_BRANCH="${REPO_BRANCH:-alpha}"', script_text)
 
     def test_public_pull_script_is_https_only(self) -> None:
         script_text = (self.repo_root / "github_pull_project_bash_example").read_text(
@@ -275,47 +378,59 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         may not be present — the installation script injects it when CrowdSec
         is enabled and removes it when disabled.  Both states are valid for the
         checked-in file."""
-        prom_text = (self.repo_root / "monitoring" / "prometheus" / "prometheus.yml").read_text(
-            encoding="utf-8"
-        )
+        prom_text = (
+            self.repo_root / "monitoring" / "prometheus" / "prometheus.yml"
+        ).read_text(encoding="utf-8")
         self.assertIn("# CROWDSEC_PROBE_MARKER", prom_text)
 
     def test_installation_script_injects_crowdsec_probe_conditionally(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn("CROWDSEC_PROBE_MARKER", script_text)
         self.assertIn("http://crowdsec:8080/health", script_text)
         self.assertIn("Injected CrowdSec health probe into prometheus.yml", script_text)
         self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
 
     def test_is_crowdsec_enabled_rejects_both_placeholder_values(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         self.assertIn('"CHANGEVALUE2"', script_text)
         self.assertIn('"CHANGEVALUE3"', script_text)
 
-    def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
+    def test_installation_script_schedules_one_shot_crowdsec_restart_only_when_needed(
+        self,
+    ) -> None:
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"',
+            script_text,
         )
-        self.assertIn('CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS="${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS:-600}"', script_text)
         self.assertIn("prepare_crowdsec_install_bootstrap_enrollment()", script_text)
-        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env', script_text)
+        self.assertIn(
+            'CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${crowdsec_bootstrap_enroll}" compose_with_installation_env',
+            script_text,
+        )
         self.assertIn("schedule_crowdsec_install_auto_restart()", script_text)
         self.assertIn("CrowdSec Console Approval Required", script_text)
-        self.assertIn("This enrollment request is created during installation", script_text)
+        self.assertIn(
+            "This enrollment request is created during installation", script_text
+        )
         self.assertIn("Scheduled one-time CrowdSec install auto-restart", script_text)
 
     def test_installation_script_prints_crowdsec_banner_before_compose_up(self) -> None:
-        script_text = (self.repo_root / "installation" / "installation_script.sh").read_text(
-            encoding="utf-8"
-        )
+        script_text = (
+            self.repo_root / "installation" / "installation_script.sh"
+        ).read_text(encoding="utf-8")
         banner_call_index = script_text.rindex(
             'print_crowdsec_install_enrollment_notice "${CROWDSEC_INSTALL_AUTO_RESTART_DELAY_SECONDS}"'
         )
-        compose_up_index = script_text.rindex('compose_up_with_retries "${COMPOSE_FILE}"')
+        compose_up_index = script_text.rindex(
+            'compose_up_with_retries "${COMPOSE_FILE}"'
+        )
         self.assertLess(
             banner_call_index,
             compose_up_index,
@@ -326,35 +441,57 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         helper_text = (
             self.repo_root / "installation" / "crowdsec_install_auto_restart.sh"
         ).read_text(encoding="utf-8")
-        self.assertIn('trap cleanup_marker EXIT HUP INT TERM', helper_text)
+        self.assertIn("trap cleanup_marker EXIT HUP INT TERM", helper_text)
         self.assertIn('docker restart "${container_name}"', helper_text)
         self.assertNotIn("while ", helper_text)
 
-    def test_crowdsec_entrypoint_enrolls_only_when_install_bootstrap_is_armed(self) -> None:
-        entrypoint_text = (self.repo_root / "docker" / "crowdsec-entrypoint.sh").read_text(
-            encoding="utf-8"
+    def test_crowdsec_entrypoint_enrolls_only_when_install_bootstrap_is_armed(
+        self,
+    ) -> None:
+        entrypoint_text = (
+            self.repo_root / "docker" / "crowdsec-entrypoint.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"',
+            entrypoint_text,
         )
-        self.assertIn('CROWDSEC_CONFIG_DIR="${CROWDSEC_CONFIG_DIR:-/etc/crowdsec}"', entrypoint_text)
-        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"', entrypoint_text)
+        self.assertIn(
+            'CROWDSEC_INSTALL_BOOTSTRAP_ENROLL="${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"',
+            entrypoint_text,
+        )
         self.assertIn("crowdsec_install_enrollment_done_marker_path()", entrypoint_text)
-        self.assertIn("CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment.", entrypoint_text)
+        self.assertIn(
+            "CrowdSec install-only enrollment is not armed for this startup. Skipping console enrollment.",
+            entrypoint_text,
+        )
         self.assertIn("--overwrite", entrypoint_text)
 
-    def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(self) -> None:
-        compose_text = (self.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
-        self.assertIn('CROWDSEC_INSTALL_BOOTSTRAP_ENROLL: "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"', compose_text)
+    def test_docker_compose_defaults_crowdsec_install_bootstrap_enroll_to_disabled(
+        self,
+    ) -> None:
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'CROWDSEC_INSTALL_BOOTSTRAP_ENROLL: "${CROWDSEC_INSTALL_BOOTSTRAP_ENROLL:-0}"',
+            compose_text,
+        )
 
     # ------------------------------------------------------------------
     # Managed repository data-volume binding
     # ------------------------------------------------------------------
 
-    def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(self) -> None:
+    def test_docker_compose_omeroserver_passes_omero_data_dir_and_omero_dir(
+        self,
+    ) -> None:
         """The omeroserver service MUST pass OMERO_DATA_DIR and OMERO_DIR into
         the container environment so the OMERO server resolves managed
         repository paths against the bind-mounted data volume, not the
         ephemeral server install directory.  Removing these causes imports
         to land inside the container and be lost on restart."""
-        compose_text = (self.repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+        compose_text = (self.repo_root / "docker-compose.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(
             'OMERO_DATA_DIR: "${OMERO_DATA_DIR:?Set OMERO_DATA_DIR',
             compose_text,
@@ -372,7 +509,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("expected_managed_repository_root()", script_text)
         self.assertIn("find_unexpected_server_managed_repository_dirs()", script_text)
         self.assertIn(
-            'CONFIG_omero_managed_dir must be an absolute path',
+            "CONFIG_omero_managed_dir must be an absolute path",
             script_text,
         )
 

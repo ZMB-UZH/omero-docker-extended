@@ -40,9 +40,7 @@ _MODEL_PREFERENCES = {
         "sonar",
         "sonar-pro",
     ),
-    "xai": (
-        "grok-2-latest",
-    ),
+    "xai": ("grok-2-latest",),
     "cohere": (
         "command-r",
         "command-r-plus",
@@ -72,7 +70,9 @@ _MODEL_ENDPOINTS = {
         "headers": lambda key: {"x-api-key": key, "anthropic-version": "2023-06-01"},
     },
     "gemini": {
-        "url": lambda key: f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
+        "url": lambda key: (
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        ),
         "headers": lambda key: {},
     },
     "cohere": {
@@ -115,9 +115,7 @@ def _perform_connection_test(provider, api_key):
         if detail:
             message = f"{message} {detail}"
         if provider == "xai" and e.code == 403:
-            message = (
-                f"{message} xAI accounts need paid credits to access the API."
-            )
+            message = f"{message} xAI accounts need paid credits to access the API."
         return False, message
     except Exception as e:
         logger.error(
@@ -209,13 +207,18 @@ def list_credentials(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         providers = list_ai_credentials(username)
         return JsonResponse({"providers": providers})
     except AiCredentialStoreError as exc:
-        logger.error("AI credential store failure while listing credentials.", exc_info=sanitized_exc_info(exc))
+        logger.error(
+            "AI credential store failure while listing credentials.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
     except Exception as e:
         logger.error(
@@ -239,7 +242,9 @@ def test_credentials(request, conn=None, url=None, **kwargs):
         provider = (data.get("provider") or "").strip()
         api_key = (data.get("api_key") or "").strip()
         if not provider:
-            return JsonResponse({"error": errors.provider_and_key_required()}, status=400)
+            return JsonResponse(
+                {"error": errors.provider_and_key_required()}, status=400
+            )
         if not api_key:
             username = current_username(request, conn)
             if username:
@@ -269,7 +274,9 @@ def save_credentials(request, conn=None, url=None, **kwargs):
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         data = load_request_data(request)
@@ -283,7 +290,10 @@ def save_credentials(request, conn=None, url=None, **kwargs):
         save_ai_credentials(username, provider, api_key)
         return JsonResponse({"message": messages.api_key_saved_status()})
     except AiCredentialStoreError as exc:
-        logger.error("AI credential store failure while saving credentials.", exc_info=sanitized_exc_info(exc))
+        logger.error(
+            "AI credential store failure while saving credentials.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.ai_credentials_save_failed()}, status=500)
     except Exception as e:
         logger.error(
@@ -303,27 +313,38 @@ def list_models(request, conn=None, url=None, **kwargs):
 
     provider = (request.GET.get("provider") or "").strip().lower()
     if not provider:
-        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+        return JsonResponse(
+            {"models": [], "default_model": None, "supports_models": False}
+        )
 
     username = current_username(request, conn)
     if not username:
-        return JsonResponse({"error": errors.unable_to_determine_username()}, status=400)
+        return JsonResponse(
+            {"error": errors.unable_to_determine_username()}, status=400
+        )
 
     try:
         api_key = (get_ai_credential(username, provider) or "").strip()
     except AiCredentialStoreError as exc:
-        logger.error("AI credential store failure while listing models.", exc_info=sanitized_exc_info(exc))
+        logger.error(
+            "AI credential store failure while listing models.",
+            exc_info=sanitized_exc_info(exc),
+        )
         return JsonResponse({"error": errors.ai_credentials_fetch_failed()}, status=500)
 
     if not api_key:
         return JsonResponse({"error": errors.ai_api_key_required()}, status=400)
 
     if provider == "perplexity":
-        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+        return JsonResponse(
+            {"models": [], "default_model": None, "supports_models": False}
+        )
 
     config = _MODEL_ENDPOINTS.get(provider)
     if not config:
-        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+        return JsonResponse(
+            {"models": [], "default_model": None, "supports_models": False}
+        )
 
     url = config["url"](api_key) if callable(config["url"]) else config["url"]
     headers = config["headers"](api_key)
@@ -362,7 +383,9 @@ def list_models(request, conn=None, url=None, **kwargs):
     default_model = _select_default_model(provider, model_ids)
 
     if not models:
-        return JsonResponse({"models": [], "default_model": None, "supports_models": False})
+        return JsonResponse(
+            {"models": [], "default_model": None, "supports_models": False}
+        )
 
     return JsonResponse(
         {"models": models, "default_model": default_model, "supports_models": True}

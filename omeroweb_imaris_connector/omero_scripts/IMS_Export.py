@@ -15,7 +15,11 @@ import re
 import hashlib
 from datetime import datetime
 
-from omero_plugin_common.env_utils import ENV_FILE_OMERO_CELERY, ENV_FILE_OMEROSERVER, get_env
+from omero_plugin_common.env_utils import (
+    ENV_FILE_OMERO_CELERY,
+    ENV_FILE_OMEROSERVER,
+    get_env,
+)
 
 IMARISCONVERT_INSTALL_DIR = "/opt/omero/imarisconvert"
 BIOFORMATS_SUBDIR = "bioformats"
@@ -142,7 +146,9 @@ def _write_expected_sha256(path, sha256_value):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
         except OSError as cleanup_exc:
-            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc)
+            logger.debug(
+                "Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc
+            )
         return False
 
 
@@ -169,13 +175,17 @@ def _is_valid_bioformats_jar(path, expected_sha256=None):
     return True
 
 
-def _copy_bioformats_jar(source_path, destination_path, expected_sha256, file_mode, description):
+def _copy_bioformats_jar(
+    source_path, destination_path, expected_sha256, file_mode, description
+):
     tmp_path = destination_path + ".tmp"
     try:
         os.makedirs(os.path.dirname(destination_path), exist_ok=True)
         shutil.copyfile(source_path, tmp_path)
         if _sha256_file(tmp_path) != expected_sha256:
-            print(f"ERROR: Integrity check failed while preparing {description}: {destination_path}")
+            print(
+                f"ERROR: Integrity check failed while preparing {description}: {destination_path}"
+            )
             os.remove(tmp_path)
             return False
         os.chmod(tmp_path, file_mode)
@@ -187,7 +197,9 @@ def _copy_bioformats_jar(source_path, destination_path, expected_sha256, file_mo
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
         except OSError as cleanup_exc:
-            logger.debug("Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc)
+            logger.debug(
+                "Suppressed non-fatal exception in IMS_Export.py", exc_info=cleanup_exc
+            )
         return False
 
 
@@ -268,7 +280,9 @@ def convert_to_ims(image, input_file, output_file):
             # Resolve to the real binary so ImarisConvertBioformats can find its runtime files.
             converter_path = os.path.realpath(converter)
         else:
-            converter_path = os.path.join(IMARISCONVERT_INSTALL_DIR, "ImarisConvertBioformats")
+            converter_path = os.path.join(
+                IMARISCONVERT_INSTALL_DIR, "ImarisConvertBioformats"
+            )
 
         if not os.path.exists(converter_path):
             print(f"ERROR: ImarisConvertBioformats not found at: {converter_path}")
@@ -285,11 +299,16 @@ def convert_to_ims(image, input_file, output_file):
 
         cmd = [
             converter_path,
-            "-i", input_file,
-            "-o", output_file,
-            "-vsx", str(vsx),
-            "-vsy", str(vsy),
-            "-vsz", str(vsz),
+            "-i",
+            input_file,
+            "-o",
+            output_file,
+            "-vsx",
+            str(vsx),
+            "-vsy",
+            str(vsy),
+            "-vsz",
+            str(vsz),
         ]
 
         print(f"Running: {' '.join(cmd)}")
@@ -319,7 +338,7 @@ def convert_to_ims(image, input_file, output_file):
             text=True,
             timeout=DEFAULT_TIMEOUT_SECONDS,
             env=env,
-            cwd=converter_dir
+            cwd=converter_dir,
         )
 
         if result.returncode != 0:
@@ -383,7 +402,7 @@ def run_script():
             "Image_ID",
             optional=False,
             grouping="1",
-            description="ID of the image to export to IMS format"
+            description="ID of the image to export to IMS format",
         ),
         namespaces=["omero.export"],
         version="1.0.0",
@@ -403,9 +422,6 @@ def run_script():
             # Attach the IMS file as a FileAnnotation to the image
             # This makes it downloadable from the Activities panel
             try:
-                from omero.model import FileAnnotationI, OriginalFileI
-                from omero.gateway import FileAnnotationWrapper
-
                 image = conn.getObject("Image", image_id)
                 if image:
                     # Switch to the image's group for write operations
@@ -417,7 +433,7 @@ def run_script():
                         export_path,
                         mimetype="application/octet-stream",
                         ns="omero.export.ims",
-                        desc=f"IMS export of {image.getName()}"
+                        desc=f"IMS export of {image.getName()}",
                     )
 
                     # Link to image
@@ -425,22 +441,37 @@ def run_script():
 
                     # Return the file annotation object so OMERO.web shows a download button
                     try:
-                        client.setOutput("File_Annotation", omero.rtypes.robject(file_ann._obj))
+                        client.setOutput(
+                            "File_Annotation", omero.rtypes.robject(file_ann._obj)
+                        )
                     except Exception as output_error:
-                        print(f"WARNING: Failed to set File_Annotation output: {output_error}")
+                        print(
+                            f"WARNING: Failed to set File_Annotation output: {output_error}"
+                        )
                     # Also return the ID for clients that only parse numeric outputs
-                    client.setOutput("File_Annotation_Id", omero.rtypes.rlong(file_ann.getId()))
+                    client.setOutput(
+                        "File_Annotation_Id", omero.rtypes.rlong(file_ann.getId())
+                    )
                     client.setOutput("Export_Path", rstring(export_path))
-                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+                    client.setOutput(
+                        "Export_Name", rstring(os.path.basename(export_path))
+                    )
 
-                    print(f"Attached file annotation {file_ann.getId()} to image {image_id}")
+                    print(
+                        f"Attached file annotation {file_ann.getId()} to image {image_id}"
+                    )
                 else:
-                    print(f"WARNING: Could not retrieve image {image_id} to attach file")
+                    print(
+                        f"WARNING: Could not retrieve image {image_id} to attach file"
+                    )
                     client.setOutput("Export_Path", rstring(export_path))
-                    client.setOutput("Export_Name", rstring(os.path.basename(export_path)))
+                    client.setOutput(
+                        "Export_Name", rstring(os.path.basename(export_path))
+                    )
             except Exception as e:
                 print(f"WARNING: Failed to attach file annotation: {e}")
                 import traceback
+
                 traceback.print_exc()
                 # Still return the path even if attachment fails
                 client.setOutput("Export_Path", rstring(export_path))
@@ -449,6 +480,7 @@ def run_script():
     except Exception as e:
         client.setOutput("Message", rstring(f"Script error: {e}"))
         import traceback
+
         traceback.print_exc()
     finally:
         client.closeSession()

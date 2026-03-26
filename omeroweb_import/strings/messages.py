@@ -1,4 +1,3 @@
-
 def imported_file(path):
     return f"Import success: {path}"
 
