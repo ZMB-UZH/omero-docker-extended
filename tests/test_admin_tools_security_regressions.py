@@ -59,7 +59,10 @@ def _install_import_stubs():
         django_http.HttpResponse = _HttpResponse
         django_http.HttpResponseRedirect = _HttpResponseRedirect
         django_shortcuts = types.ModuleType("django.shortcuts")
-        django_shortcuts.render = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
+        django_shortcuts.render = lambda *args, **kwargs: {
+            "args": args,
+            "kwargs": kwargs,
+        }
         django_urls = types.ModuleType("django.urls")
         django_urls.reverse = lambda name, *args, **kwargs: f"/{name}/"
         django_views = types.ModuleType("django.views")
@@ -81,7 +84,7 @@ def _install_import_stubs():
     if "omeroweb.decorators" not in sys.modules:
         omeroweb_module = types.ModuleType("omeroweb")
         omeroweb_decorators = types.ModuleType("omeroweb.decorators")
-        omeroweb_decorators.login_required = lambda *args, **kwargs: (lambda view: view)
+        omeroweb_decorators.login_required = lambda *args, **kwargs: lambda view: view
         sys.modules["omeroweb"] = omeroweb_module
         sys.modules["omeroweb.decorators"] = omeroweb_decorators
 
@@ -137,8 +140,9 @@ class AdminToolsSecurityRegressionTests(TestCase):
             META={"CONTENT_TYPE": "application/json", "CONTENT_LENGTH": "17"},
         )
 
-        with mock.patch.object(index_view, "_require_root_user", return_value=None), mock.patch.object(
-            admin_utils, "current_username", return_value="root"
+        with (
+            mock.patch.object(index_view, "_require_root_user", return_value=None),
+            mock.patch.object(admin_utils, "current_username", return_value="root"),
         ):
             response = index_view.storage_quota_update(request, conn=None)
 
@@ -158,7 +162,9 @@ class AdminToolsSecurityRegressionTests(TestCase):
                 seen_modes.append(stat.S_IMODE(Path(src).stat().st_mode))
                 real_replace(src, dst)
 
-            with mock.patch.object(storage_quotas.os, "replace", side_effect=_capturing_replace):
+            with mock.patch.object(
+                storage_quotas.os, "replace", side_effect=_capturing_replace
+            ):
                 storage_quotas._write_state(state_path, {"quotas_gb": {}, "logs": []})
 
         self.assertEqual([0o660], seen_modes)

@@ -76,7 +76,9 @@ def _write_process_job_file(job_id, payload):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+            )
 
 
 def _read_process_job_file(job_id):
@@ -194,7 +196,12 @@ def _poll_process_job(job_id):
         outputs = proc.getResults(0)
     except Exception:
         outputs = None
-    logger.debug("Process job %s finished state=%s outputs=%s", job_id, state, _serialize_outputs(outputs))
+    logger.debug(
+        "Process job %s finished state=%s outputs=%s",
+        job_id,
+        state,
+        _serialize_outputs(outputs),
+    )
     _detach_script_process(proc, reason="process job completed")
     _write_process_job_file(
         job_id,
@@ -278,13 +285,13 @@ def _find_script_id(conn):
                 ):
                     is_match = True
                     break
-            
+
             if is_match:
                 sid_int = int(sid)
                 is_official = False
                 if path and ("omero/export" in str(path) or "official" in str(path)):
                     is_official = True
-                    
+
                 if is_official and not best_is_official:
                     best_sid = sid_int
                     best_is_official = True
@@ -317,7 +324,7 @@ def _resolve_async_result(svc, meth_name, async_result):
 
     candidates = []
     if meth_name.startswith("begin_"):
-        candidates.append("end_" + meth_name[len("begin_"):])
+        candidates.append("end_" + meth_name[len("begin_") :])
     if meth_name.endswith("_async"):
         base_name = meth_name[:-6]
         candidates.append(base_name)
@@ -420,12 +427,16 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
             try:
                 args_to_try.append((script_id, inputs, rint(0)))
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+                )
         else:
             try:
                 args_to_try.append((script_id, inputs, rint(int(wait_secs))))
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+                )
             args_to_try.extend(
                 [
                     (script_id, inputs, int(wait_secs)),
@@ -443,7 +454,9 @@ def _call_script_method(meth, meth_name, script_id, inputs, wait_secs):
     try:
         args_to_try.append((script_id, inputs, rint(int(wait_secs or 0)), None))
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+        )
     last_type_error = None
     for args in args_to_try:
         try:
@@ -469,6 +482,7 @@ def _run_script(
     # Build inputs
     try:
         from omero.rtypes import rlong
+
         inputs = {"Image_ID": rlong(int(image_id))}
     except Exception:
         inputs = {"Image_ID": int(image_id)}
@@ -577,9 +591,7 @@ def _get_script_processor_config(conn):
     if conn is None:
         return None
     if not _can_read_script_config(conn):
-        logger.debug(
-            "Skipping omero.scripts.processors lookup for non-admin session."
-        )
+        logger.debug("Skipping omero.scripts.processors lookup for non-admin session.")
         return None
     now = time.time()
     if (
@@ -712,7 +724,9 @@ def _extract_job_id(job):
         try:
             return int(job_id)
         except (TypeError, ValueError) as exc:
-            logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+            )
     if isinstance(job_id, dict):
         for key in ("job_id", "jobId", "id", "JobId", "JobID"):
             if key in job_id:
@@ -785,18 +799,29 @@ def _get_job_state_and_outputs(conn, job_id):
                     )
                     return str(_unwrap_rtype(state)), outputs
                 except Exception as exc:
-                    logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+                    logger.debug(
+                        "Suppressed non-fatal exception in imaris_service.py",
+                        exc_info=exc,
+                    )
 
         # 1b) Outputs-only fallback (some versions expose getJobOutputs without status)
-        out_fn = getattr(svc, "getJobOutputs", None) or getattr(svc, "get_job_outputs", None)
+        out_fn = getattr(svc, "getJobOutputs", None) or getattr(
+            svc, "get_job_outputs", None
+        )
         if out_fn:
             try:
                 outputs = out_fn(job_id)
                 if outputs:
-                    logger.debug("Job %s outputs via outputs-only path: %s", job_id, _serialize_outputs(outputs))
+                    logger.debug(
+                        "Job %s outputs via outputs-only path: %s",
+                        job_id,
+                        _serialize_outputs(outputs),
+                    )
                     return "FINISHED", outputs
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+                )
 
         # 2) Older pattern: getJobs() returns job objects with .id/.status and maybe outputs elsewhere
         get_jobs = getattr(svc, "getJobs", None)
@@ -805,11 +830,15 @@ def _get_job_state_and_outputs(conn, job_id):
                 jobs = get_jobs()
                 for j in jobs:
                     try:
-                        jid = _unwrap_rtype(getattr(getattr(j, "id", None), "val", None))
+                        jid = _unwrap_rtype(
+                            getattr(getattr(j, "id", None), "val", None)
+                        )
                         if jid is None and hasattr(getattr(j, "id", None), "val"):
                             jid = j.id.val
                         if str(jid) == str(job_id):
-                            status = _unwrap_rtype(getattr(getattr(j, "status", None), "val", None)) or _unwrap_rtype(getattr(j, "status", None))
+                            status = _unwrap_rtype(
+                                getattr(getattr(j, "status", None), "val", None)
+                            ) or _unwrap_rtype(getattr(j, "status", None))
                             # Outputs usually via getJobOutputs, but if missing we return None
                             outputs = None
                             out_fn = getattr(svc, "getJobOutputs", None)
@@ -818,13 +847,20 @@ def _get_job_state_and_outputs(conn, job_id):
                                     outputs = out_fn(job_id)
                                 except Exception:
                                     outputs = None
-                            logger.debug("Job %s state via getJobs(): %s outputs=%s", job_id, status, _serialize_outputs(outputs))
+                            logger.debug(
+                                "Job %s state via getJobs(): %s outputs=%s",
+                                job_id,
+                                status,
+                                _serialize_outputs(outputs),
+                            )
                             return str(status), outputs
                     except Exception:
                         logger.debug("Failed to query job state via getJobs()")
                         continue
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+                )
 
     return None, None
 
@@ -864,17 +900,23 @@ def _normalize_job_state(state):
         if hasattr(state, "val"):
             state = state.val
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+        )
     try:
         if hasattr(state, "getValue"):
             state = state.getValue()
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+        )
     try:
         if hasattr(state, "name"):
             state = state.name
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+        )
     try:
         state = str(state).strip()
     except Exception:
@@ -896,7 +938,9 @@ def _detach_script_process(proc, reason=""):
             logger.debug("Detached ScriptProcess (%s).", reason)
         return
     except TypeError as exc:
-        logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+        logger.debug(
+            "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+        )
     except Exception:
         logger.exception("Failed to detach ScriptProcess (%s).", reason)
         return
@@ -945,7 +989,9 @@ def _raw_file_generator(store, size, chunk_size=8 * 1024 * 1024):
         try:
             store.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in imaris_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in imaris_service.py", exc_info=exc
+            )
 
 
 def _sanitize_filename(filename, fallback="export.ims"):

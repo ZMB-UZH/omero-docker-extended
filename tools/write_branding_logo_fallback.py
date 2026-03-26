@@ -125,7 +125,12 @@ def build_png_bytes() -> bytes:
 
     def chunk(tag: bytes, payload: bytes) -> bytes:
         checksum = zlib.crc32(tag + payload) & 0xFFFFFFFF
-        return struct.pack(">I", len(payload)) + tag + payload + struct.pack(">I", checksum)
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", checksum)
+        )
 
     return b"".join(
         (

@@ -1,6 +1,7 @@
 """
 OMERO metadata extraction services.
 """
+
 import logging
 from omero.model import FileAnnotationI, OriginalFileI, ImageAnnotationLinkI
 from omero.rtypes import rstring, rlong
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 def extract_acquisition_metadata(img):
     """
     Extract acquisition metadata from an OMERO image.
-    
+
     Returns dict of metadata key-value pairs suitable for MapAnnotation.
     Long values are stored separately as FileAnnotation.
     """
@@ -32,7 +33,9 @@ def extract_acquisition_metadata(img):
                 meta["acquisition_date"] = str(ad)
     except Exception as e:
         try:
-            logger.error("ACQ: error reading acquisition date for image %s: %s", img.getId(), e)
+            logger.error(
+                "ACQ: error reading acquisition date for image %s: %s", img.getId(), e
+            )
         except Exception:
             logger.error("ACQ: error reading acquisition date: %s", e)
 
@@ -48,7 +51,10 @@ def extract_acquisition_metadata(img):
                     except AttributeError:
                         meta["objective_id"] = str(oid)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
 
             try:
                 collar = os.getCorrectionCollar()
@@ -58,10 +64,15 @@ def extract_acquisition_metadata(img):
                     except AttributeError:
                         meta["objective_collar"] = str(collar)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
     except Exception as e:
         try:
-            logger.error("ACQ: error reading objective settings for image %s: %s", img.getId(), e)
+            logger.error(
+                "ACQ: error reading objective settings for image %s: %s", img.getId(), e
+            )
         except Exception:
             logger.error("ACQ: error reading objective settings: %s", e)
 
@@ -78,7 +89,10 @@ def extract_acquisition_metadata(img):
                 if lbl:
                     meta[f"channel_{idx}_label"] = str(lbl)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
 
             try:
                 ew = ch.getEmissionWave()
@@ -88,7 +102,10 @@ def extract_acquisition_metadata(img):
                     except AttributeError:
                         meta[f"channel_{idx}_emission"] = str(ew)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
 
             try:
                 exw = ch.getExcitationWave()
@@ -98,10 +115,15 @@ def extract_acquisition_metadata(img):
                     except AttributeError:
                         meta[f"channel_{idx}_excitation"] = str(exw)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
     except Exception as e:
         try:
-            logger.error("ACQ: error reading channel metadata for image %s: %s", img.getId(), e)
+            logger.error(
+                "ACQ: error reading channel metadata for image %s: %s", img.getId(), e
+            )
         except Exception:
             logger.error("ACQ: error reading channel metadata: %s", e)
 
@@ -129,7 +151,10 @@ def extract_acquisition_metadata(img):
                         except AttributeError:
                             meta[f"detector_{did}_binning"] = str(binning)
                 except Exception as exc:
-                    logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                    logger.debug(
+                        "Suppressed non-fatal exception in metadata_service.py",
+                        exc_info=exc,
+                    )
 
                 try:
                     gain = ds.getGain()
@@ -139,10 +164,15 @@ def extract_acquisition_metadata(img):
                         except AttributeError:
                             meta[f"detector_{did}_gain"] = str(gain)
                 except Exception as exc:
-                    logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                    logger.debug(
+                        "Suppressed non-fatal exception in metadata_service.py",
+                        exc_info=exc,
+                    )
     except Exception as e:
         try:
-            logger.error("ACQ: error reading detector settings for image %s: %s", img.getId(), e)
+            logger.error(
+                "ACQ: error reading detector settings for image %s: %s", img.getId(), e
+            )
         except Exception:
             logger.error("ACQ: error reading detector settings: %s", e)
 
@@ -164,7 +194,7 @@ def extract_acquisition_metadata(img):
             except Exception:
                 series_md = []
 
-            for kv in (global_md + series_md):
+            for kv in global_md + series_md:
                 try:
                     # kv is usually (key, value, ...)
                     if len(kv) > 1:
@@ -225,7 +255,10 @@ def extract_acquisition_metadata(img):
             try:
                 store.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in metadata_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in metadata_service.py",
+                    exc_info=exc,
+                )
 
         fa = FileAnnotationI()
         fa.setNs(rstring("acquisition.fullmetadata"))

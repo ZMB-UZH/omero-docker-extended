@@ -3,6 +3,7 @@ OMERO helper utilities.
 
 Common functions for extracting data from OMERO objects.
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,8 +12,10 @@ logger = logging.getLogger(__name__)
 def get_text(value_obj):
     """Extract text value from OMERO rtype objects."""
     try:
-        return value_obj.getValue() if hasattr(value_obj, "getValue") else getattr(
-            value_obj, "val", str(value_obj)
+        return (
+            value_obj.getValue()
+            if hasattr(value_obj, "getValue")
+            else getattr(value_obj, "val", str(value_obj))
         )
     except Exception:
         return str(value_obj)

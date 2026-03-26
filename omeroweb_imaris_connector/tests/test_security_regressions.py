@@ -74,9 +74,7 @@ def _install_omero_stubs() -> None:
     omero_module = types.ModuleType("omero")
     omero_module.ClientError = type("ClientError", (Exception,), {})
     omero_module.SecurityViolation = type("SecurityViolation", (Exception,), {})
-    omero_module.NoProcessorAvailable = type(
-        "NoProcessorAvailable", (Exception,), {}
-    )
+    omero_module.NoProcessorAvailable = type("NoProcessorAvailable", (Exception,), {})
     omero_module.client = lambda host, port: types.SimpleNamespace(
         joinSession=lambda session_key: types.SimpleNamespace(
             detachOnDestroy=lambda: None
@@ -126,7 +124,7 @@ def _install_celery_stubs() -> None:
 def _install_omeroweb_stub() -> None:
     omeroweb_module = types.ModuleType("omeroweb")
     decorators_module = types.ModuleType("omeroweb.decorators")
-    decorators_module.login_required = lambda *args, **kwargs: (lambda view: view)
+    decorators_module.login_required = lambda *args, **kwargs: lambda view: view
     sys.modules["omeroweb"] = omeroweb_module
     sys.modules["omeroweb.decorators"] = decorators_module
 
@@ -197,15 +195,17 @@ def test_imaris_export_ignores_request_backend_override_params(
     monkeypatch.setattr(
         views,
         "_start_celery_job",
-        lambda actual_conn, image_id: captured.update(
-            {"conn": actual_conn, "image_id": image_id}
-        )
-        or "celery-job-1",
+        lambda actual_conn, image_id: (
+            captured.update({"conn": actual_conn, "image_id": image_id})
+            or "celery-job-1"
+        ),
     )
     monkeypatch.setattr(
         views,
         "_build_absolute_url",
-        lambda request, path, base_url_override=None: f"https://omero.example.org{path}",
+        lambda request, path, base_url_override=None: (
+            f"https://omero.example.org{path}"
+        ),
     )
 
     response = views.imaris_export(request, conn=conn)
@@ -271,7 +271,9 @@ def test_run_ims_export_task_prefers_user_session_key_for_cli_even_in_job_servic
     )
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
-    monkeypatch.setattr(tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn)
+    monkeypatch.setattr(
+        tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn
+    )
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 99)
     monkeypatch.setattr(
         tasks,
@@ -306,7 +308,9 @@ def test_run_ims_export_task_uses_cli_with_user_session_key(
     )
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: False)
-    monkeypatch.setattr(tasks, "_open_session_connection", lambda *args, **kwargs: dummy_conn)
+    monkeypatch.setattr(
+        tasks, "_open_session_connection", lambda *args, **kwargs: dummy_conn
+    )
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 101)
     monkeypatch.setattr(
         tasks,
@@ -344,7 +348,9 @@ def test_run_ims_export_task_uses_job_service_session_key_when_user_session_miss
     )
 
     monkeypatch.setattr(tasks, "use_job_service_session", lambda: True)
-    monkeypatch.setattr(tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn)
+    monkeypatch.setattr(
+        tasks, "_open_job_service_connection", lambda *args, **kwargs: dummy_conn
+    )
     monkeypatch.setattr(tasks, "_find_script_id", lambda conn: 202)
     monkeypatch.setattr(
         tasks,

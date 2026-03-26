@@ -68,7 +68,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     ENABLE_VULNERABILITY_SCAN=0
                     DOCKER_BUILD_PROVENANCE=0
                     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
-                    COMPOSE_FILE="{temp_path / 'docker-compose.yml'}"
+                    COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
                     run_image_build
@@ -125,7 +125,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
                     DOCKER_BUILD_LOCAL_CACHE_ENABLED=1
                     DOCKER_BUILD_LOCAL_CACHE_MODE=min
-                    COMPOSE_FILE="{temp_path / 'docker-compose.yml'}"
+                    COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                     OMERO_INSTALLATION_PATH="{temp_path}"
                     BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
                     run_image_build
@@ -148,7 +148,9 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
             self.assertIn("DOCKER_BUILD_LOCAL_CACHE_ENABLED=0", env_log)
             self.assertIn("DOCKER_BUILD_LOCAL_CACHE_MODE=min", env_log)
 
-    def test_cleanup_prunes_docker_builder_and_buildx_cache_in_buildx_mode(self) -> None:
+    def test_cleanup_prunes_docker_builder_and_buildx_cache_in_buildx_mode(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"
@@ -188,7 +190,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     {self.cleanup_functions}
                     USE_CACHE_BUILD=0
                     USE_BUILDX_COMPRESSED_BUILD=1
-                    OMERO_DATA_PATH="{temp_path / 'data'}"
+                    OMERO_DATA_PATH="{temp_path / "data"}"
                     cleanup_local_build_cache_if_disabled
                     """,
                 ),
@@ -251,7 +253,7 @@ class InstallationBuildCacheRegressionTests(unittest.TestCase):
                     {self.cleanup_functions}
                     USE_CACHE_BUILD=0
                     USE_BUILDX_COMPRESSED_BUILD=0
-                    OMERO_DATA_PATH="{temp_path / 'data'}"
+                    OMERO_DATA_PATH="{temp_path / "data"}"
                     cleanup_local_build_cache_if_disabled
                     """,
                 ),

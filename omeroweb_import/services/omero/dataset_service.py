@@ -1,11 +1,13 @@
 """
 Dataset management for OMERO upload workflow.
 """
+
 import logging
 from omero.model import DatasetI, ProjectDatasetLinkI, ProjectI
 from omero.rtypes import rstring
 
 logger = logging.getLogger(__name__)
+
 
 def _collect_project_payload(conn, user_id):
     owned_projects = []
@@ -35,7 +37,9 @@ def _dataset_name_for_path(relative_path: str, orphan_dataset_name: str = None):
 
 
 def _generate_orphan_dataset_name():
-    suffix = "".join(secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH))
+    suffix = "".join(
+        secrets.choice(ORPHAN_SUFFIX_ALPHANUM) for _ in range(ORPHAN_SUFFIX_LENGTH)
+    )
     return f"{ORPHAN_DATASET_PREFIX}_{suffix}"
 
 
@@ -67,13 +71,16 @@ def _link_dataset_to_project(conn, dataset_id: int, project_id: int):
         conn.getUpdateService().saveAndReturnObject(link)
         return True
     except Exception as exc:
-        logger.warning("Failed to link dataset %s to project %s: %s", dataset_id, project_id, exc)
+        logger.warning(
+            "Failed to link dataset %s to project %s: %s", dataset_id, project_id, exc
+        )
         return False
 
 
 # --------------------------------------------------------------------------
 # OMERO IMPORT HELPERS
 # --------------------------------------------------------------------------
+
 
 def _resolve_omero_host_port(conn):
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
@@ -147,6 +154,7 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     dataset_map[name] = dataset_id
     return dataset_id
 
+
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     cmd = [OMERO_CLI]
     if session_key:
@@ -162,26 +170,30 @@ def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int)
 def _iter_accessible_projects(conn):
     if conn is None:
         return
-    
+
     # Save current group context
     current_group = None
     try:
         current_group = conn.SERVICE_OPTS.getOmeroGroup()
     except Exception as exc:
-        logger.debug("Suppressed non-fatal exception in dataset_service.py", exc_info=exc)
-    
+        logger.debug(
+            "Suppressed non-fatal exception in dataset_service.py", exc_info=exc
+        )
+
     try:
         # Set group context to -1 to query across all groups
-        conn.SERVICE_OPTS.setOmeroGroup('-1')
-        
+        conn.SERVICE_OPTS.setOmeroGroup("-1")
+
         # Try to get projects with cross-group querying enabled
         try:
             for proj in conn.getObjects("Project"):
                 yield proj
             return
         except Exception as e:
-            logger.warning("Failed to query projects across all groups with SERVICE_OPTS: %s", e)
-        
+            logger.warning(
+                "Failed to query projects across all groups with SERVICE_OPTS: %s", e
+            )
+
         # Fallback: try with opts parameter
         try:
             for proj in conn.getObjects("Project", opts={"group": "-1"}):
@@ -189,15 +201,17 @@ def _iter_accessible_projects(conn):
             return
         except Exception as e:
             logger.warning("Failed to query projects with opts group=-1: %s", e)
-            
+
     finally:
         # Restore original group context
         if current_group is not None:
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(current_group)
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in dataset_service.py", exc_info=exc)
-    
+                logger.debug(
+                    "Suppressed non-fatal exception in dataset_service.py", exc_info=exc
+                )
+
     # Final fallback: try without cross-group querying
     try:
         for proj in conn.getObjects("Project"):
@@ -205,7 +219,7 @@ def _iter_accessible_projects(conn):
         return
     except Exception as e:
         logger.warning("Failed to query projects in current group: %s", e)
-    
+
     # Last resort: use listProjects
     try:
         for proj in conn.listProjects():

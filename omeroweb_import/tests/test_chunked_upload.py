@@ -1,4 +1,5 @@
 """Regression tests for chunked upload handling."""
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,9 @@ def _mark_job_owned(monkeypatch, job):
     monkeypatch.setattr(index_view, "current_username", lambda request, conn: "alice")
 
 
-def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: Path, monkeypatch):
+def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(
+    tmp_path: Path, monkeypatch
+):
     upload_root = tmp_path / "upload-root"
     job_id = "b0aa2d2266f8466c8eea6b26477693b2"
     job = {
@@ -59,7 +62,9 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
 
     import_started = []
     prepare_calls = []
@@ -75,7 +80,11 @@ def test_upload_files_accepts_chunked_upload_and_marks_file_uploaded(tmp_path: P
         return job
 
     monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
-    monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
+    monkeypatch.setattr(
+        index_view,
+        "_start_import_thread",
+        lambda current_job_id: import_started.append(current_job_id),
+    )
     monkeypatch.setattr(
         index_view,
         "_prepare_uploaded_job_for_request_path_import",
@@ -162,7 +171,9 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
 
     import_started = []
     helper_calls = []
@@ -178,7 +189,11 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
         return job
 
     monkeypatch.setattr(index_view, "_apply_upload_updates", fake_apply_upload_updates)
-    monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: import_started.append(current_job_id))
+    monkeypatch.setattr(
+        index_view,
+        "_start_import_thread",
+        lambda current_job_id: import_started.append(current_job_id),
+    )
     monkeypatch.setattr(
         index_view,
         "_prepare_uploaded_job_for_request_path_import",
@@ -206,7 +221,9 @@ def test_upload_files_defers_noncompat_import_until_background_plan_exists(
     assert helper_calls == [(job_id, fake_conn)]
 
 
-def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: Path, monkeypatch):
+def test_upload_files_resets_existing_staged_file_when_chunk_restarts(
+    tmp_path: Path, monkeypatch
+):
     upload_root = tmp_path / "upload-root"
     job_id = "c3c9bf8e3f0846d3b719f7874707dbba"
     job = {
@@ -229,13 +246,19 @@ def test_upload_files_resets_existing_staged_file_when_chunk_restarts(tmp_path: 
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
     prepare_calls = []
     fake_conn = object()
     monkeypatch.setattr(
         index_view,
         "_apply_upload_updates",
-        lambda current_job_id, updates, upload_errors: {**job, "status": "ready", "uploaded_bytes": 5},
+        lambda current_job_id, updates, upload_errors: {
+            **job,
+            "status": "ready",
+            "uploaded_bytes": 5,
+        },
     )
     monkeypatch.setattr(index_view, "_start_import_thread", lambda current_job_id: None)
     monkeypatch.setattr(
@@ -294,7 +317,9 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
 
     staged_target = upload_root / job_id / "_staged/folder/big.bin"
     staged_target.parent.mkdir(parents=True, exist_ok=True)
@@ -319,7 +344,9 @@ def test_upload_files_rejects_chunk_offset_mismatch(tmp_path: Path, monkeypatch)
 
     assert response.status_code == 409
     assert payload["ok"] is False
-    assert payload["error"] == errors.upload_chunk_offset_mismatch("folder/big.bin", 3, 5)
+    assert payload["error"] == errors.upload_chunk_offset_mismatch(
+        "folder/big.bin", 3, 5
+    )
     assert staged_target.read_bytes() == b"abc"
 
 
@@ -344,7 +371,9 @@ def test_upload_files_rejects_unsafe_staged_path(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
 
     apply_upload_updates_called = []
     monkeypatch.setattr(
@@ -399,7 +428,9 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
 
     class _DummyParent:
         def mkdir(self, parents=True, exist_ok=True):
@@ -449,7 +480,9 @@ def test_upload_files_chunked_save_error_is_sanitized(tmp_path: Path, monkeypatc
     assert apply_calls[0][2] == [errors.unexpected_server_error_uploading_files()]
 
 
-def test_upload_files_wrapper_returns_json_when_internal_upload_raises(monkeypatch, caplog):
+def test_upload_files_wrapper_returns_json_when_internal_upload_raises(
+    monkeypatch, caplog
+):
     request = RequestFactory().post("/omeroweb_import/upload/test-job/")
 
     monkeypatch.setattr(view_utils, "current_username", lambda request, conn: "alice")
@@ -491,8 +524,14 @@ def test_upload_files_hides_oserror_details(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
     monkeypatch.setattr(index_view, "_ensure_dir", _ensure_dir)
-    monkeypatch.setattr(index_view, "_load_job", lambda value: job if value == job_id else None)
-    monkeypatch.setattr(index_view, "_apply_upload_updates", lambda current_job_id, updates, upload_errors: {"status": "uploading"})
+    monkeypatch.setattr(
+        index_view, "_load_job", lambda value: job if value == job_id else None
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_apply_upload_updates",
+        lambda current_job_id, updates, upload_errors: {"status": "uploading"},
+    )
 
     class BrokenTarget:
         def __init__(self, path: Path):

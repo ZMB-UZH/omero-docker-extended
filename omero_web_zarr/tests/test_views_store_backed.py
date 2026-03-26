@@ -145,9 +145,12 @@ def test_store_backed_response_supports_non_numeric_dataset_paths(tmp_path):
     assert json.loads(response.content)["zarr_format"] == 2
 
 
-def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_path, monkeypatch):
+def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(
+    tmp_path, monkeypatch
+):
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=502, name="10150")
+
     def fake_reverse(name, args=None, kwargs=None):
         if name == "omero_web_zarr_index":
             return "/zarr/"
@@ -171,7 +174,9 @@ def test_build_store_backed_preview_context_points_to_omero_zarr_endpoints(tmp_p
     assert "source=/zarr/v0.4/image/502.zarr" in context["validator_url"]
 
 
-def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(tmp_path, monkeypatch):
+def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(
+    tmp_path, monkeypatch
+):
     _write_store(tmp_path)
     image = _FakeImage(str(tmp_path.resolve()), image_id=12, name="pyramid.zarr")
     request = RequestFactory().get("/zarr/v0.4/preview/image/12.zarr/.zattrs")
@@ -180,8 +185,18 @@ def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(tmp_path, m
             {
                 "version": "0.4",
                 "datasets": [
-                    {"path": "s0", "coordinateTransformations": [{"type": "scale", "scale": [1, 1, 1]}]},
-                    {"path": "s1", "coordinateTransformations": [{"type": "scale", "scale": [2, 2, 2]}]},
+                    {
+                        "path": "s0",
+                        "coordinateTransformations": [
+                            {"type": "scale", "scale": [1, 1, 1]}
+                        ],
+                    },
+                    {
+                        "path": "s1",
+                        "coordinateTransformations": [
+                            {"type": "scale", "scale": [2, 2, 2]}
+                        ],
+                    },
                 ],
             }
         ],
@@ -196,7 +211,9 @@ def test_preview_image_zattrs_preserves_store_backed_raw_multiscales(tmp_path, m
         ),
     )
 
-    response = views.preview_image_zattrs.__wrapped__(request, 12, conn=_FakeConn(image))
+    response = views.preview_image_zattrs.__wrapped__(
+        request, 12, conn=_FakeConn(image)
+    )
 
     assert response.status_code == 200
     assert json.loads(response.content) == root_payload
@@ -249,7 +266,9 @@ def test_preview_image_chunk_delegates_to_raw_endpoint(monkeypatch):
 
     monkeypatch.setattr(views, "image_chunk", fake_image_chunk)
 
-    response = views.preview_image_chunk.__wrapped__(request, 44, 0, "0/0/0/0", conn=conn)
+    response = views.preview_image_chunk.__wrapped__(
+        request, 44, 0, "0/0/0/0", conn=conn
+    )
 
     assert response is sentinel
     assert captured["call"][1:5] == (44, 0, "0/0/0/0", conn)
@@ -287,9 +306,14 @@ def test_download_store_metadata_returns_json_manifest(tmp_path):
     response = views.download_store_metadata(request, 7, conn=_FakeConn(image))
 
     payload = json.loads(response.content)
-    assert response["Content-Disposition"] == "attachment; filename=demo.zarr-metadata.json"
+    assert (
+        response["Content-Disposition"]
+        == "attachment; filename=demo.zarr-metadata.json"
+    )
     assert payload["store"] == tmp_path.name
-    assert payload["documents"][".zattrs"]["multiscales"][0]["datasets"] == [{"path": "0"}]
+    assert payload["documents"][".zattrs"]["multiscales"][0]["datasets"] == [
+        {"path": "0"}
+    ]
 
 
 def test_download_store_original_returns_zip_file(tmp_path):
@@ -339,7 +363,10 @@ def test_download_store_ome_tiff_returns_ome_tiff_file(tmp_path, monkeypatch):
     try:
         payload = b"".join(response.streaming_content)
 
-        assert response["Content-Disposition"] == 'attachment; filename="demo.zarr.ome.tif"'
+        assert (
+            response["Content-Disposition"]
+            == 'attachment; filename="demo.zarr.ome.tif"'
+        )
         with tifffile.TiffFile(BytesIO(payload)) as tif:
             assert tif.is_ome
             assert tif.series[0].shape == (2, 2)
@@ -359,7 +386,9 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     views._fetch_remote_app_shell.cache_clear()
     monkeypatch.setattr(views.requests, "get", lambda url, timeout=20: _FakeResponse())
 
-    shell_request = RequestFactory().get("/zarr/vizarr/", {"source": "/zarr/v0.4/image/9.zarr"})
+    shell_request = RequestFactory().get(
+        "/zarr/vizarr/", {"source": "/zarr/v0.4/image/9.zarr"}
+    )
     shell_response = views.apps(shell_request, "vizarr", "")
     shell_html = shell_response.content.decode("utf-8")
 
@@ -373,15 +402,20 @@ def test_apps_serves_base_injected_shell_and_redirects_assets(monkeypatch):
     asset_response = views.apps(asset_request, "vizarr", "static/index.js")
 
     assert asset_response.status_code == 302
-    assert asset_response["Location"] == "https://hms-dbmi.github.io/vizarr/static/index.js"
+    assert (
+        asset_response["Location"]
+        == "https://hms-dbmi.github.io/vizarr/static/index.js"
+    )
 
 
 def test_inject_launcher_head_replaces_existing_base_tag():
     html = '<html><head><base href="https://stale.example/"></head><body>validator</body></html>'
 
-    updated = views._inject_launcher_head(html, "https://ome.github.io/ome-ngff-validator/")
+    updated = views._inject_launcher_head(
+        html, "https://ome.github.io/ome-ngff-validator/"
+    )
 
-    assert 'https://stale.example/' not in updated
+    assert "https://stale.example/" not in updated
     assert '<base href="https://ome.github.io/ome-ngff-validator/">' in updated
     assert updated.count("<base ") == 1
     assert "window.location.origin" in updated

@@ -138,7 +138,11 @@ def _run_script_via_omero_cli(
         env=env,
     )
 
-    combined = (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or "")
+    combined = (
+        (result.stdout or "")
+        + ("\n" if result.stdout and result.stderr else "")
+        + (result.stderr or "")
+    )
     outputs = _extract_cli_outputs(combined)
 
     if result.returncode != 0:
@@ -255,7 +259,9 @@ def _open_job_service_connection(host, port, secure=None):
             secure=secure,
         )
         if not conn.connect():
-            raise RuntimeError("Failed to connect to OMERO with job-service credentials.")
+            raise RuntimeError(
+                "Failed to connect to OMERO with job-service credentials."
+            )
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         logger.debug("Successfully connected to OMERO using the job-service account.")
         return conn
@@ -275,7 +281,9 @@ def run_ims_export_task(self, image_id, session_key, host, port, secure=None):
     script_id = None
     start_time = time.time()
 
-    def _update_task_state(status: str, extra_meta: dict[str, Any] | None = None) -> None:
+    def _update_task_state(
+        status: str, extra_meta: dict[str, Any] | None = None
+    ) -> None:
         meta = {
             "image_id": image_id,
             "status": status,

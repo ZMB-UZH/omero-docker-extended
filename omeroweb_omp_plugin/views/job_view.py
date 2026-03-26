@@ -28,7 +28,10 @@ from ..services.core import (
     delete_existing_annotations,
     extract_acquisition_metadata,
 )
-from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+from ..services.rate_limit import (
+    build_rate_limit_message,
+    check_major_action_rate_limit,
+)
 from ..views.utils import current_username, load_request_data, require_non_root_user
 from ..strings import errors as error_messages
 
@@ -153,6 +156,7 @@ def _save_annotation_link(update, link):
         return False
     return bool(get_id(saved_link))
 
+
 # ==============================================================================
 # START JOB
 # ==============================================================================
@@ -162,7 +166,9 @@ def _save_annotation_link(update, link):
 def start_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data = load_request_data(request)
 
@@ -172,7 +178,7 @@ def start_job(request, conn=None, url=None, **kwargs):
         var_names = data.get("var_names") or []
         delete_mode = data.get("delete_mode")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
-        
+
         # Read user's chunk size
         user_chunk_size = data.get("chunk_size")
         try:
@@ -198,13 +204,17 @@ def start_job(request, conn=None, url=None, **kwargs):
                     "Rejected invalid regex pattern for job start: %s",
                     sanitize_log_value(e),
                 )
-                return JsonResponse({"error": error_messages.invalid_regex_pattern()}, status=400)
+                return JsonResponse(
+                    {"error": error_messages.invalid_regex_pattern()}, status=400
+                )
 
         if delete_mode not in ("keep", "all", "plugin"):
             delete_mode = "keep"
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id_lower()}, status=400
+            )
 
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
@@ -245,19 +255,22 @@ def start_job(request, conn=None, url=None, **kwargs):
         )
         return JsonResponse({"error": error_messages.unexpected_error()}, status=500)
 
+
 @csrf_exempt
 @login_required()
 @require_non_root_user
 def start_acq_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data = load_request_data(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
-        
+
         # Read user's chunk size
         user_chunk_size = data.get("chunk_size")
         try:
@@ -268,7 +281,9 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id_lower()}, status=400
+            )
         image_ids = _resolve_image_ids(conn, project_id, selected_image_ids)
 
         allowed, remaining = check_major_action_rate_limit(request, conn)
@@ -283,7 +298,7 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
         job = {
             "job_id": job_id,
             "username": current_username(request, conn),
-            "type": "acq",       # <-- DO NOT CHANGE THIS
+            "type": "acq",  # <-- DO NOT CHANGE THIS
             "project_id": int(project_id),
             "image_ids": image_ids,
             "total": len(image_ids),
@@ -315,14 +330,16 @@ def start_acq_job(request, conn=None, url=None, **kwargs):
 def start_delete_all_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data = load_request_data(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
         password = data.get("password")
-        
+
         # Read user's chunk size
         user_chunk_size = data.get("chunk_size")
         try:
@@ -333,7 +350,9 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id_lower()}, status=400
+            )
 
         valid, error = _validate_user_password(conn, password)
         if not valid:
@@ -385,14 +404,16 @@ def start_delete_all_job(request, conn=None, url=None, **kwargs):
 def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data = load_request_data(request)
 
         project_id = data.get("project_id")
         selected_image_ids = parse_image_ids(data.get("image_ids"))
         password = data.get("password")
-        
+
         # Read user's chunk size
         user_chunk_size = data.get("chunk_size")
         try:
@@ -403,7 +424,9 @@ def start_delete_plugin_job(request, conn=None, url=None, **kwargs):
             chunk_size = CHUNK_SIZE
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id_lower()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id_lower()}, status=400
+            )
 
         valid, error = _validate_user_password(conn, password)
         if not valid:
@@ -460,9 +483,13 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
     try:
         job = load_job(job_id)
         if job is None:
-            return JsonResponse({"error": error_messages.unknown_job(), "finished": True}, status=404)
+            return JsonResponse(
+                {"error": error_messages.unknown_job(), "finished": True}, status=404
+            )
         if not _job_owned_by_request(job, request, conn):
-            return JsonResponse({"error": error_messages.unknown_job(), "finished": True}, status=404)
+            return JsonResponse(
+                {"error": error_messages.unknown_job(), "finished": True}, status=404
+            )
 
         lockfile = _job_lock_path(job_id)
         try:
@@ -472,14 +499,16 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
             done = job["index"]
             total = job["total"]
             percent = (done / total * 100) if total else 0
-            return JsonResponse({
-                "done": done,
-                "total": total,
-                "percent": percent,
-                "finished": False,
-                "eta_seconds": None,
-                "last_log": ""
-            })
+            return JsonResponse(
+                {
+                    "done": done,
+                    "total": total,
+                    "percent": percent,
+                    "finished": False,
+                    "eta_seconds": None,
+                    "last_log": "",
+                }
+            )
 
         total = job["total"]
         idx = job["index"]
@@ -491,19 +520,24 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
         started = job["started"]
 
         if idx >= total:
-            return JsonResponse({
-                "done": total,
-                "total": total,
-                "percent": 100.0,
-                "finished": True,
-                "eta_seconds": 0,
-                "last_log": ""
-            })
+            return JsonResponse(
+                {
+                    "done": total,
+                    "total": total,
+                    "percent": 100.0,
+                    "finished": True,
+                    "eta_seconds": 0,
+                    "last_log": "",
+                }
+            )
 
         if separator_mode in ("regex", "ai_regex"):
             if not _is_safe_separator_regex(raw_seps):
                 return JsonResponse(
-                    {"error": error_messages.invalid_regex_pattern_title(), "finished": True},
+                    {
+                        "error": error_messages.invalid_regex_pattern_title(),
+                        "finished": True,
+                    },
                     status=400,
                 )
             sep_pattern = raw_seps
@@ -533,12 +567,14 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 # ---------------------------------------------------------
                 if job.get("type") == "del_all":
                     try:
-                        deleted_sets, deleted_pairs, attempted_sets = delete_existing_annotations(
-                            conn,
-                            update,
-                            img,
-                            var_names,
-                            "all",
+                        deleted_sets, deleted_pairs, attempted_sets = (
+                            delete_existing_annotations(
+                                conn,
+                                update,
+                                img,
+                                var_names,
+                                "all",
+                            )
                         )
                         if attempted_sets == 0:
                             batch_logs.append(
@@ -574,12 +610,14 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
 
                 if job.get("type") == "del_plugin":
                     try:
-                        deleted_sets, deleted_pairs, attempted_sets = delete_existing_annotations(
-                            conn,
-                            update,
-                            img,
-                            var_names,
-                            "plugin",
+                        deleted_sets, deleted_pairs, attempted_sets = (
+                            delete_existing_annotations(
+                                conn,
+                                update,
+                                img,
+                                var_names,
+                                "plugin",
+                            )
                         )
                         if attempted_sets == 0:
                             batch_logs.append(
@@ -641,9 +679,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                                 f"Image {iid} ({filename}): ERROR confirming acquisition save."
                             )
                     else:
-                        batch_logs.append(
-                            f"Image {iid}: no acquisition metadata."
-                        )
+                        batch_logs.append(f"Image {iid}: no acquisition metadata.")
 
                     # IMPORTANT: skip filename-processing logic
                     continue
@@ -673,7 +709,6 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                 # FIX: WRITE ONLY ONE ANNOTATION
                 # -------------------------------
                 if mapping:
-
                     ann = MapAnnotationI()
                     ann.setNs(rstring(MAP_NS))
                     nv_list = [NamedValue(k, v) for k, v in mapping.items()]
@@ -688,7 +723,7 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
                     if saved:
                         saved_total = len(parts) + 1
                         batch_logs.append(
-                            f"Image {iid} ({filename}): saved {saved_total-1}+1 variables."
+                            f"Image {iid} ({filename}): saved {saved_total - 1}+1 variables."
                         )
                     else:
                         batch_logs.append(
@@ -716,14 +751,16 @@ def job_progress(request, job_id, conn=None, url=None, **kwargs):
         percent = (done / total * 100) if total else 0
         finished = done >= total
 
-        return JsonResponse({
-            "done": done,
-            "total": total,
-            "percent": percent,
-            "eta_seconds": eta,
-            "finished": finished,
-            "last_log": "\n".join(batch_logs)
-        })
+        return JsonResponse(
+            {
+                "done": done,
+                "total": total,
+                "percent": percent,
+                "eta_seconds": eta,
+                "finished": finished,
+                "last_log": "\n".join(batch_logs),
+            }
+        )
 
     finally:
         try:

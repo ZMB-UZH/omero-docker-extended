@@ -1,6 +1,7 @@
 """
 OMERO connection and session management.
 """
+
 import os
 import logging
 import re
@@ -24,6 +25,7 @@ JOB_SERVICE_GROUP_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_GROUP"
 JOB_SERVICE_SECURE_ENV = "OMERO_JOB_SERVICE_SECURE"
 JOB_SERVICE_SECURE_ENV_FALLBACK = "OMERO_WEB_JOB_SERVICE_SECURE"
 SEM_EDX_FILEANNOTATION_NS = "sem_edx.spectra"
+
 
 def _resolve_omero_host_port(conn):
     host = getattr(conn, "host", None) or getattr(conn, "_host", None)
@@ -98,7 +100,9 @@ def _get_or_create_dataset(conn, name: str, dataset_map: dict, project_id: int =
     return dataset_id
 
 
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+_CLI_ID_PATTERN = re.compile(
+    r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)"
+)
 
 
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
@@ -130,7 +134,9 @@ def _parse_cli_id(output: str, expected_type: str):
     return None
 
 
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
+def _import_file(
+    conn, session_key: str, host: str, port: int, path: Path, dataset_id=None
+):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
@@ -144,7 +150,7 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
 def _validate_session(conn):
     """
     Validate that a BlitzGateway connection is still active.
-    
+
     Returns:
         bool: True if session is valid, False otherwise
     """
@@ -160,13 +166,13 @@ def _validate_session(conn):
 def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     """
     Create a new connection or reconnect using the session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
         old_conn: Previous connection to close (if any)
-    
+
     Returns:
         BlitzGateway connection or None if failed
     """
@@ -174,23 +180,28 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
         try:
             old_conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
-    
+            logger.debug(
+                "Suppressed non-fatal exception in connection_service.py", exc_info=exc
+            )
+
     try:
         client = omero.client(host=host, port=port)
         client.joinSession(session_key)
         conn = BlitzGateway(client_obj=client)
         conn.SERVICE_OPTS.setOmeroGroup("-1")
-        
+
         # Validate the new connection
         if not _validate_session(conn):
             logger.error("Newly created session is invalid")
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in connection_service.py",
+                    exc_info=exc,
+                )
             return None
-            
+
         return conn
     except Exception as exc:
         logger.error("Failed to reconnect session: %s", exc)
@@ -200,12 +211,12 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
 def _open_session_connection(session_key: str, host: str, port: int):
     """
     Open a BlitzGateway connection using a session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
-    
+
     Returns:
         BlitzGateway connection
     """
@@ -219,19 +230,20 @@ def _open_session_connection(session_key: str, host: str, port: int):
 def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=30):
     """
     Find image by name using OMERO QueryService with limits and timeout.
-    
+
     FIXED: This version uses database queries instead of iterating all images.
     Prevents hangs on large datasets (100-1000x faster).
     """
     if not file_name:
         return None
-    
+
     import time
+
     start_time = time.time()
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Try dataset-scoped search first (fastest)
         if dataset_id:
             try:
@@ -241,34 +253,43 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                     WHERE dil.parent.id = :did
                     AND i.name = :name
                 """
-                
+
                 params = omero.sys.ParametersI()
                 params.addLong("did", dataset_id)
                 params.addString("name", file_name)
                 params.page(0, 100)  # Limit results
-                
+
                 images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-                
+
                 if images:
                     elapsed = time.time() - start_time
-                    logger.debug("Found image '%s' in Dataset:%d in %.2fs", file_name, dataset_id, elapsed)
+                    logger.debug(
+                        "Found image '%s' in Dataset:%d in %.2fs",
+                        file_name,
+                        dataset_id,
+                        elapsed,
+                    )
                     return conn.getObject("Image", images[0].getId().getValue())
             except Exception as exc:
                 logger.warning("Dataset search failed for '%s': %s", file_name, exc)
-        
+
         # Global search as fallback
         try:
             query = "SELECT i FROM Image i WHERE i.name = :name"
             params = omero.sys.ParametersI()
             params.addString("name", file_name)
             params.page(0, 100)
-            
+
             images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-            
+
             if images:
                 elapsed = time.time() - start_time
                 if len(images) > 1:
-                    logger.warning("Found %d images named '%s' - using first", len(images), file_name)
+                    logger.warning(
+                        "Found %d images named '%s' - using first",
+                        len(images),
+                        file_name,
+                    )
                 logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
                 return conn.getObject("Image", images[0].getId().getValue())
             else:
@@ -277,7 +298,7 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
         except Exception as exc:
             logger.error("Global search failed for '%s': %s", file_name, exc)
             return None
-    except Exception as exc:
+    except Exception:
         logger.exception("Unexpected error searching for '%s'", file_name)
         return None
 
@@ -285,26 +306,27 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
     """
     Find multiple images in a single query - MUCH faster than individual lookups.
-    
+
     Returns: dict mapping file_name -> Image wrapper object
-    
+
     CRITICAL: This is the key to fixing SEM EDX performance.
     Instead of N queries (one per TXT file), we do 1 query for all images.
     """
     if not file_names:
         return {}
-    
+
     import time
+
     start_time = time.time()
     results = {}
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Build IN clause safely
         escaped_names = [name.replace("'", "''") for name in file_names]
         name_list = ", ".join([f"'{name}'" for name in escaped_names])
-        
+
         if dataset_id:
             query = f"""
                 SELECT i FROM Image i
@@ -320,24 +342,31 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
                 WHERE i.name IN ({name_list})
             """
             params = omero.sys.ParametersI()
-        
-        logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
+
+        logger.info(
+            "Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id
+        )
         images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-        
+
         for image_obj in images:
             img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
             if img_wrapper:
                 results[img_wrapper.getName()] = img_wrapper
-        
+
         elapsed = time.time() - start_time
-        logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
-        
+        logger.info(
+            "Batch search found %d/%d images in %.2fs",
+            len(results),
+            len(file_names),
+            elapsed,
+        )
+
         missing = set(file_names) - set(results.keys())
         if missing:
             logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
     except Exception as exc:
         logger.error("Batch image search failed: %s", exc)
-    
+
     return results
 
 
@@ -376,7 +405,9 @@ def _get_job_service_credentials():
     return user, passwd, group_override, secure
 
 
-def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
+def _open_service_connection(
+    host: str, port: int, group_id: Optional[int] = None
+) -> Optional[BlitzGateway]:
     """Login as service user for async background work (safe for user sessions)."""
     service_user, service_pass, group_override, secure = _get_job_service_credentials()
 
@@ -388,7 +419,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         )
         return None
 
-    conn = BlitzGateway(service_user, service_pass, host=host, port=int(port), secure=secure)
+    conn = BlitzGateway(
+        service_user, service_pass, host=host, port=int(port), secure=secure
+    )
 
     try:
         try:
@@ -402,12 +435,19 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
 
             logger.error(
                 "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
-                host, port, secure, exc, last_err
+                host,
+                port,
+                secure,
+                exc,
+                last_err,
             )
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in connection_service.py",
+                    exc_info=exc,
+                )
             return None
 
         if not ok:
@@ -419,12 +459,18 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
 
             logger.error(
                 "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
-                host, port, secure, last_err
+                host,
+                port,
+                secure,
+                last_err,
             )
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in connection_service.py",
+                    exc_info=exc,
+                )
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -441,7 +487,11 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(str(effective_group))
             except Exception as exc:
-                logger.warning("Failed to set job-service group context to %s: %s", effective_group, exc)
+                logger.warning(
+                    "Failed to set job-service group context to %s: %s",
+                    effective_group,
+                    exc,
+                )
 
         return conn
 
@@ -449,7 +499,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         try:
             conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in connection_service.py", exc_info=exc
+            )
         raise
 
 
@@ -505,7 +557,10 @@ def _attach_txt_to_image_service(
             try:
                 store.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in connection_service.py",
+                    exc_info=exc,
+                )
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -520,7 +575,7 @@ def _attach_txt_to_image_service(
     user_conn = conn.suConn(username)
     if not user_conn:
         raise RuntimeError(f"Failed to create connection as user {username}")
-    
+
     try:
         # Get the image in user's context
         image_obj = user_conn.getObject("Image", image_id)
@@ -531,9 +586,13 @@ def _attach_txt_to_image_service(
 
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
-            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path, persist_table=create_tables)
+            table_id = attach_sem_edx_tables(
+                user_conn, image_id, txt_path, persist_table=create_tables
+            )
             if table_id:
-                logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
+                logger.info(
+                    "Created OMERO Table for image %d from %s", image_id, txt_path.name
+                )
         except Exception as exc:
             # Don't fail the entire attachment if table creation fails
             logger.error(
@@ -545,7 +604,11 @@ def _attach_txt_to_image_service(
         if plot_path and plot_path.exists():
             try:
                 _attach_file(user_conn, image_obj, plot_path, "image/png")
-                logger.info("Attached SEM EDX spectrum plot %s to image %d", plot_path.name, image_id)
+                logger.info(
+                    "Attached SEM EDX spectrum plot %s to image %d",
+                    plot_path.name,
+                    image_id,
+                )
             except Exception as exc:
                 logger.error(
                     "Failed to attach SEM EDX plot %s to image %d: %s",
@@ -558,4 +621,6 @@ def _attach_txt_to_image_service(
         try:
             user_conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in connection_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in connection_service.py", exc_info=exc
+            )

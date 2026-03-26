@@ -204,7 +204,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertEqual(rc, 0, msg=output)
             self.assertIn("RESULT=/srv/omero", output)
 
-    def test_interactive_no_cache_choice_prunes_and_uses_no_cache_compose_build(self) -> None:
+    def test_interactive_no_cache_choice_prunes_and_uses_no_cache_compose_build(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"
@@ -251,7 +253,7 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         DOCKER_BUILD_PROVENANCE=0
                         DOCKER_BUILD_FLATTEN_FINAL_IMAGE=0
                         OMERO_INSTALLATION_PATH="{temp_path}"
-                        COMPOSE_FILE="{temp_path / 'docker-compose.yml'}"
+                        COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                         BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="installation/docker_buildx_compressed_push.sh"
                         resolve_cache_build_choice
                         cleanup_local_build_cache_if_disabled
@@ -264,7 +266,10 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             rc, output = self._run_harness_with_pty(harness_path, user_input="n\n")
 
             self.assertEqual(rc, 0, msg=output)
-            self.assertIn("Build cache is disabled; cleaning local build cache before rebuild...", output)
+            self.assertIn(
+                "Build cache is disabled; cleaning local build cache before rebuild...",
+                output,
+            )
             self.assertIn("Removed docker builder cache.", output)
             compose_log = compose_log_path.read_text(encoding="utf-8").strip()
             docker_log = docker_log_path.read_text(encoding="utf-8")
@@ -272,7 +277,9 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
             self.assertIn("builder prune --help", docker_log)
             self.assertIn("builder prune -a -f", docker_log)
 
-    def test_interactive_no_cache_choice_prunes_buildx_cache_and_disables_buildx_cache_knobs(self) -> None:
+    def test_interactive_no_cache_choice_prunes_buildx_cache_and_disables_buildx_cache_knobs(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             bin_dir = temp_path / "bin"
@@ -338,8 +345,8 @@ class InstallationInteractivePromptRegressionTests(unittest.TestCase):
                         DOCKER_BUILD_LOCAL_CACHE_ENABLED=1
                         DOCKER_BUILD_LOCAL_CACHE_MODE=min
                         OMERO_INSTALLATION_PATH="{temp_path}"
-                        OMERO_DATA_PATH="{temp_path / 'data'}"
-                        COMPOSE_FILE="{temp_path / 'docker-compose.yml'}"
+                        OMERO_DATA_PATH="{temp_path / "data"}"
+                        COMPOSE_FILE="{temp_path / "docker-compose.yml"}"
                         BUILDX_COMPRESSED_BUILD_SCRIPT_RELATIVE_PATH="{helper_path.name}"
                         resolve_cache_build_choice
                         cleanup_local_build_cache_if_disabled

@@ -5,6 +5,7 @@ but the ephemeral managed-repository copy may normalize image-array codecs when
 the installed OMERO render stack cannot reliably thumbnail the original chunk
 encoding.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,9 @@ def _write_chunk(path: Path, payload: bytes = b"\x00") -> None:
     path.write_bytes(payload)
 
 
-def _write_blosc_chunk(path: Path, shape: tuple[int, ...], dtype: str = "uint16") -> None:
+def _write_blosc_chunk(
+    path: Path, shape: tuple[int, ...], dtype: str = "uint16"
+) -> None:
     raw = np.zeros(shape, dtype=np.dtype(dtype)).tobytes(order="C")
     codec = Blosc(cname="lz4", clevel=5, shuffle=1)
     _write_chunk(path, codec.encode(raw))
@@ -123,7 +126,12 @@ def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
                             "coordinateTransformations": [
                                 {
                                     "type": "scale",
-                                    "scale": [1.0, 1.0, 0.11656635164576248, 0.11656635164576248],
+                                    "scale": [
+                                        1.0,
+                                        1.0,
+                                        0.11656635164576248,
+                                        0.11656635164576248,
+                                    ],
                                 }
                             ],
                         }
@@ -173,20 +181,29 @@ def _make_large_blosc_image_store(zarr_dir: Path) -> Path:
 
 
 class TestNativeZarrNormalization:
-
-    def test_prepare_native_zarr_copy_accepts_multiscale_ome_zarr_without_rewriting(self, tmp_path):
-        zarr_dir = _make_multiscale_ome_zarr(tmp_path / "image.ome.zarr", ["s0", "s1", "s2"])
+    def test_prepare_native_zarr_copy_accepts_multiscale_ome_zarr_without_rewriting(
+        self, tmp_path
+    ):
+        zarr_dir = _make_multiscale_ome_zarr(
+            tmp_path / "image.ome.zarr", ["s0", "s1", "s2"]
+        )
 
         error = _prepare_native_zarr_copy(zarr_dir)
 
         assert error is None
         with open(zarr_dir / ".zattrs", encoding="utf-8") as handle:
             attrs = json.load(handle)
-        assert [entry["path"] for entry in attrs["multiscales"][0]["datasets"]] == ["s0", "s1", "s2"]
+        assert [entry["path"] for entry in attrs["multiscales"][0]["datasets"]] == [
+            "s0",
+            "s1",
+            "s2",
+        ]
         assert (zarr_dir / "s1").is_dir()
         assert (zarr_dir / "s2").is_dir()
 
-    def test_prepare_native_zarr_copy_rewrites_large_blosc_image_arrays_to_gzip(self, tmp_path):
+    def test_prepare_native_zarr_copy_rewrites_large_blosc_image_arrays_to_gzip(
+        self, tmp_path
+    ):
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
 
         error = _prepare_native_zarr_copy(zarr_dir)
@@ -197,7 +214,9 @@ class TestNativeZarrNormalization:
         assert attrs["compressor"] == {"id": "gzip", "level": 1}
         assert (zarr_dir / "0" / "0" / "0" / "0" / "0").is_file()
 
-    def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(self, tmp_path):
+    def test_prepare_native_zarr_copy_rewrites_only_referenced_image_arrays(
+        self, tmp_path
+    ):
         zarr_dir = _make_large_blosc_image_store(tmp_path / "image.ome.zarr")
         _write_text(
             zarr_dir / "tables" / "measurements" / ".zarray",
@@ -218,19 +237,25 @@ class TestNativeZarrNormalization:
                 "order": "C",
             },
         )
-        _write_blosc_chunk(zarr_dir / "tables" / "measurements" / "0", (4,), dtype="uint8")
+        _write_blosc_chunk(
+            zarr_dir / "tables" / "measurements" / "0", (4,), dtype="uint8"
+        )
 
         error = _prepare_native_zarr_copy(zarr_dir)
 
         assert error is None
         with open(zarr_dir / "0" / ".zarray", encoding="utf-8") as handle:
             image_attrs = json.load(handle)
-        with open(zarr_dir / "tables" / "measurements" / ".zarray", encoding="utf-8") as handle:
+        with open(
+            zarr_dir / "tables" / "measurements" / ".zarray", encoding="utf-8"
+        ) as handle:
             table_attrs = json.load(handle)
         assert image_attrs["compressor"] == {"id": "gzip", "level": 1}
         assert table_attrs["compressor"]["id"] == "blosc"
 
-    def test_prepare_native_zarr_copy_rewrites_supported_bioformats2raw_series_arrays(self, tmp_path):
+    def test_prepare_native_zarr_copy_rewrites_supported_bioformats2raw_series_arrays(
+        self, tmp_path
+    ):
         zarr_dir = _make_bioformats2raw_layout(tmp_path / "bf2raw.ome.zarr", ["0", "1"])
         for series_name in ("0", "1"):
             _write_text(
@@ -258,12 +283,18 @@ class TestNativeZarrNormalization:
 
         assert error is None
         for series_name in ("0", "1"):
-            with open(zarr_dir / series_name / "0" / ".zarray", encoding="utf-8") as handle:
+            with open(
+                zarr_dir / series_name / "0" / ".zarray", encoding="utf-8"
+            ) as handle:
                 attrs = json.load(handle)
             assert attrs["compressor"] == {"id": "gzip", "level": 1}
 
-    def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(self, tmp_path):
-        zarr_dir = _make_bioformats2raw_layout(tmp_path / "bf2raw-gap.ome.zarr", ["0", "2"])
+    def test_prepare_native_zarr_copy_rejects_sparse_bioformats2raw_layout(
+        self, tmp_path
+    ):
+        zarr_dir = _make_bioformats2raw_layout(
+            tmp_path / "bf2raw-gap.ome.zarr", ["0", "2"]
+        )
 
         error = _prepare_native_zarr_copy(zarr_dir)
 

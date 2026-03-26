@@ -1,0 +1,16 @@
+required-version = "==0.15.7"
+target-version = "py39"
+
+[lint]
+select = ["F", "E7", "E9"]
+
+[lint.per-file-ignores]
+# These legacy modules still rely on star-import re-exports or incomplete
+# extraction boundaries. Keep the exceptions narrow until the underlying code
+# is refactored and covered with focused tests.
+"omeroweb_import/services/import_management/workflow_service.py" = ["F821"]
+"omeroweb_import/services/omero/connection_service.py" = ["F821"]
+"omeroweb_import/services/omero/dataset_service.py" = ["F821"]
+"omeroweb_import/services/omero/import_service.py" = ["F821"]
+"omeroweb_import/views/index_view.py" = ["F403", "F405"]
+"omeroweb_omp_plugin/services/ai_assist.py" = ["F821"]

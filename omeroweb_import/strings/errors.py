@@ -1,4 +1,3 @@
-
 def unexpected_server_error_start_upload():
     return "Unexpected server error while starting upload."
 
@@ -80,10 +79,6 @@ def upload_chunk_incomplete(path, expected_size, actual_size):
     )
 
 
-def upload_file_save_failed(path):
-    return f"Failed to save upload: {path}."
-
-
 def invalid_filename(name):
     return f"Invalid filename: {name}"
 
@@ -157,7 +152,9 @@ def import_zarr_not_recognized():
 
 
 def import_session_expired():
-    return "Import failed because the OMERO session expired during a long-running import."
+    return (
+        "Import failed because the OMERO session expired during a long-running import."
+    )
 
 
 def import_parent_directory_not_writable(group_name=None, parent_id=None):

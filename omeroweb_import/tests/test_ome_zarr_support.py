@@ -21,7 +21,9 @@ def _write_chunk(path: Path) -> None:
     path.write_bytes(b"\x00")
 
 
-def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(tmp_path: Path) -> None:
+def test_inspect_ome_zarr_image_reads_metadata_and_physical_sizes(
+    tmp_path: Path,
+) -> None:
     store = tmp_path / "image.ome.zarr"
     _write_text(
         store / ".zattrs",
@@ -175,7 +177,9 @@ def test_inspect_ome_zarr_image_accepts_bioformats2raw_layout(tmp_path: Path) ->
     assert inspection.image_relative_paths == ("0/0", "1/0")
 
 
-def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(tmp_path: Path) -> None:
+def test_inspect_ome_zarr_image_rejects_sparse_bioformats2raw_layout(
+    tmp_path: Path,
+) -> None:
     store = tmp_path / "bf2raw-gap.ome.zarr"
     _write_text(store / ".zattrs", {"bioformats2raw.layout": 3})
     _write_text(store / ".zgroup", {"zarr_format": 2})

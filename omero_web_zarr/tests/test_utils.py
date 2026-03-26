@@ -120,7 +120,9 @@ class _FakeConnForTileSize:
 
 
 class _FakeChannel:
-    def __init__(self, *, window_start=None, window_end=None, window_min=0.0, window_max=1.0):
+    def __init__(
+        self, *, window_start=None, window_end=None, window_min=0.0, window_max=1.0
+    ):
         self._window_start = window_start
         self._window_end = window_end
         self._window_min = window_min
@@ -193,13 +195,17 @@ def test_open_compat_array_writes_v2_array_metadata_under_zarr3(tmp_path):
     assert not (tmp_path / "zarr.json").exists()
 
 
-def test_open_compat_array_retries_without_zarr_format_when_unsupported(tmp_path, monkeypatch):
+def test_open_compat_array_retries_without_zarr_format_when_unsupported(
+    tmp_path, monkeypatch
+):
     calls = []
 
     def fake_open_array(path, **kwargs):
         calls.append(kwargs.copy())
         if "zarr_format" in kwargs:
-            raise TypeError("open_array() got an unexpected keyword argument 'zarr_format'")
+            raise TypeError(
+                "open_array() got an unexpected keyword argument 'zarr_format'"
+            )
         Path(path).mkdir(parents=True, exist_ok=True)
         (Path(path) / ".zarray").write_text("{}", encoding="utf-8")
         return object()
@@ -218,7 +224,9 @@ def test_open_compat_array_retries_without_zarr_format_when_unsupported(tmp_path
     assert "zarr_format" not in calls[1]
 
 
-def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(tmp_path, monkeypatch):
+def test_open_compat_array_retries_without_zarr_format_when_runtime_warns(
+    tmp_path, monkeypatch
+):
     calls = []
 
     def fake_open_array(path, **kwargs):
@@ -277,7 +285,9 @@ def test_resolve_local_zarr_store_rejects_non_group_path(tmp_path):
     assert resolve_local_zarr_store(str(tmp_path)) is None
 
 
-def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(tmp_path, monkeypatch):
+def test_resolve_image_backing_zarr_store_queries_lsid_when_wrapper_details_are_incomplete(
+    tmp_path, monkeypatch
+):
     class _FakeParametersI:
         def addId(self, image_id):
             self.image_id = image_id
@@ -308,7 +318,9 @@ def test_resolve_local_zarr_file_accepts_nested_dataset_paths(tmp_path):
     nested.parent.mkdir(parents=True, exist_ok=True)
     nested.write_text("{}", encoding="utf-8")
 
-    assert resolve_local_zarr_file(tmp_path.resolve(), "s0", ".zarray") == nested.resolve()
+    assert (
+        resolve_local_zarr_file(tmp_path.resolve(), "s0", ".zarray") == nested.resolve()
+    )
 
 
 def test_is_store_metadata_path_identifies_supported_metadata_files(tmp_path):
@@ -348,9 +360,13 @@ def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkey
             ],
         },
     )
-    monkeypatch.setattr("omero_web_zarr.utils.load_store_backed_image_node", lambda image: node)
+    monkeypatch.setattr(
+        "omero_web_zarr.utils.load_store_backed_image_node", lambda image: node
+    )
 
-    overrides = get_store_backed_channel_overrides(image, channels=[_FakeChannel(), _FakeChannel()])
+    overrides = get_store_backed_channel_overrides(
+        image, channels=[_FakeChannel(), _FakeChannel()]
+    )
 
     assert overrides == [
         {
@@ -373,11 +389,17 @@ def test_get_store_backed_channel_overrides_prefers_zarr_display_metadata(monkey
 def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkeypatch):
     image = _FakeImage("/tmp/fake.zarr")
     image._size_c = 1
-    monkeypatch.setattr("omero_web_zarr.utils.load_store_backed_image_node", lambda image: None)
+    monkeypatch.setattr(
+        "omero_web_zarr.utils.load_store_backed_image_node", lambda image: None
+    )
 
     overrides = get_store_backed_channel_overrides(
         image,
-        channels=[_FakeChannel(window_start=None, window_end=None, window_min=2.0, window_max=7.0)],
+        channels=[
+            _FakeChannel(
+                window_start=None, window_end=None, window_min=2.0, window_max=7.0
+            )
+        ],
     )
 
     assert overrides == [
@@ -390,7 +412,9 @@ def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkey
     ]
 
 
-def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(tmp_path):
+def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(
+    tmp_path,
+):
     _write_multiscale_store(
         tmp_path,
         attrs={
@@ -425,7 +449,10 @@ def test_get_safe_image_tile_size_falls_back_to_configured_maximum():
 
 def test_sanitize_download_basename_normalizes_empty_and_path_like_names():
     assert sanitize_download_basename("", default="fallback") == "fallback"
-    assert sanitize_download_basename("dir/name, with spaces.zarr") == "name._with_spaces.zarr"
+    assert (
+        sanitize_download_basename("dir/name, with spaces.zarr")
+        == "name._with_spaces.zarr"
+    )
 
 
 def test_select_store_backed_level_prefers_smallest_sufficient_level():

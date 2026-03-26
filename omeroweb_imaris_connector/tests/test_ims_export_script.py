@@ -63,19 +63,25 @@ def test_ensure_bioformats_jar_seeds_cache_from_runtime(monkeypatch, tmp_path) -
 
     resolved = module._ensure_bioformats_jar(str(install_dir))
 
-    cache_jar = install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    cache_jar = (
+        install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    )
     cache_sha = pathlib.Path(str(cache_jar) + ".sha256")
     assert resolved == str(runtime_jar)
     assert cache_jar.read_bytes() == payload
     assert cache_sha.exists()
 
 
-def test_ensure_bioformats_jar_restores_runtime_from_cache(monkeypatch, tmp_path) -> None:
+def test_ensure_bioformats_jar_restores_runtime_from_cache(
+    monkeypatch, tmp_path
+) -> None:
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
     install_dir = tmp_path / "imarisconvert"
-    cache_jar = install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    cache_jar = (
+        install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    )
     cache_sha = pathlib.Path(str(cache_jar) + ".sha256")
     payload = b"cached-runtime-jar"
     _write_file(cache_jar, payload)
@@ -88,13 +94,17 @@ def test_ensure_bioformats_jar_restores_runtime_from_cache(monkeypatch, tmp_path
     assert runtime_jar.read_bytes() == payload
 
 
-def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(monkeypatch, tmp_path) -> None:
+def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(
+    monkeypatch, tmp_path
+) -> None:
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
 
     install_dir = tmp_path / "imarisconvert"
     runtime_jar = install_dir / "bioformats" / module.BIOFORMATS_JAR_NAME
-    cache_jar = install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    cache_jar = (
+        install_dir / module.BIOFORMATS_ARTIFACTS_SUBDIR / module.BIOFORMATS_JAR_NAME
+    )
     cache_sha = pathlib.Path(str(cache_jar) + ".sha256")
     _write_file(runtime_jar, b"bad")
     payload = b"valid-cached-runtime-jar"
@@ -107,7 +117,9 @@ def test_ensure_bioformats_jar_replaces_invalid_runtime_from_cache(monkeypatch, 
     assert runtime_jar.read_bytes() == payload
 
 
-def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(monkeypatch, tmp_path) -> None:
+def test_ensure_bioformats_jar_returns_none_without_runtime_or_cache(
+    monkeypatch, tmp_path
+) -> None:
     module = _load_script_module()
     monkeypatch.setattr(module, "BIOFORMATS_MIN_SIZE_BYTES", 4)
     monkeypatch.setenv("BIOFORMATS_VERSION", "8.5.0")

@@ -76,7 +76,7 @@ def _install_import_stubs() -> None:
         "omeroweb.decorators",
         types.ModuleType("omeroweb.decorators"),
     )
-    decorators_module.login_required = lambda *args, **kwargs: (lambda view: view)
+    decorators_module.login_required = lambda *args, **kwargs: lambda view: view
 
     portalocker_module = types.ModuleType("portalocker")
 
@@ -115,7 +115,9 @@ def _install_import_stubs() -> None:
     omero_model.NamedValue = type("NamedValue", (), {})
     omero_model.ImageAnnotationLinkI = type("ImageAnnotationLinkI", (), {})
 
-    omero_rtypes = sys.modules.setdefault("omero.rtypes", types.ModuleType("omero.rtypes"))
+    omero_rtypes = sys.modules.setdefault(
+        "omero.rtypes", types.ModuleType("omero.rtypes")
+    )
     omero_rtypes.rstring = lambda value: value
 
     if "omero_plugin_common" not in sys.modules:
@@ -126,7 +128,9 @@ def _install_import_stubs() -> None:
         types.ModuleType("omero_plugin_common.env_utils"),
     )
     env_utils.ENV_FILE_OMEROWEB = ""
-    env_utils.get_env = lambda key, env_file=None: "/tmp" if key == "OMERO_WEB_ROOT" else ""
+    env_utils.get_env = lambda key, env_file=None: (
+        "/tmp" if key == "OMERO_WEB_ROOT" else ""
+    )
 
     tmp_utils = sys.modules.setdefault(
         "omero_plugin_common.tmp_utils",
@@ -139,7 +143,9 @@ def _install_import_stubs() -> None:
         types.ModuleType("omero_plugin_common.request_utils"),
     )
     request_utils.current_username = lambda request, conn: "stub-user"
-    request_utils.load_request_data = lambda request: json.loads(request.body.decode("utf-8"))
+    request_utils.load_request_data = lambda request: json.loads(
+        request.body.decode("utf-8")
+    )
     request_utils.parse_json_body = lambda request: (
         json.loads(request.body.decode("utf-8")),
         None,
@@ -205,8 +211,14 @@ def _install_omp_dependency_stubs() -> None:
         pass
 
     ai_assist_module.AiAssistError = AiAssistError
-    ai_assist_module.generate_ai_regex = lambda *args, **kwargs: {"regex": "_", "source": "ai"}
-    ai_assist_module.generate_ai_parsed_values = lambda *args, **kwargs: {"rows": [], "source": "ai"}
+    ai_assist_module.generate_ai_regex = lambda *args, **kwargs: {
+        "regex": "_",
+        "source": "ai",
+    }
+    ai_assist_module.generate_ai_parsed_values = lambda *args, **kwargs: {
+        "rows": [],
+        "source": "ai",
+    }
     sys.modules["omeroweb_omp_plugin.services.ai_assist"] = ai_assist_module
 
     data_store_module = types.ModuleType("omeroweb_omp_plugin.services.data_store")
@@ -244,12 +256,16 @@ def _install_omp_dependency_stubs() -> None:
     ai_providers_module.list_ai_provider_options = lambda: []
     sys.modules["omeroweb_omp_plugin.services.ai_providers"] = ai_providers_module
 
-    filename_utils_module = types.ModuleType("omeroweb_omp_plugin.services.filename_utils")
+    filename_utils_module = types.ModuleType(
+        "omeroweb_omp_plugin.services.filename_utils"
+    )
     filename_utils_module.suggest_separator_regex = lambda filenames: "_"
     sys.modules["omeroweb_omp_plugin.services.filename_utils"] = filename_utils_module
 
     rate_limit_module = types.ModuleType("omeroweb_omp_plugin.services.rate_limit")
-    rate_limit_module.build_rate_limit_message = lambda remaining: f"Rate limited: {remaining}"
+    rate_limit_module.build_rate_limit_message = lambda remaining: (
+        f"Rate limited: {remaining}"
+    )
     rate_limit_module.check_major_action_rate_limit = lambda request, conn: (True, 0)
     sys.modules["omeroweb_omp_plugin.services.rate_limit"] = rate_limit_module
 
@@ -276,8 +292,12 @@ class OmpPluginViewRegressionTests(TestCase):
     def _make_form_request(self, method: str = "POST", post: dict | None = None):
         return types.SimpleNamespace(method=method, POST=post or {}, body=b"")
 
-    def test_delete_plugin_view_returns_missing_password_error_without_unbound_local(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_plugin_view")
+    def test_delete_plugin_view_returns_missing_password_error_without_unbound_local(
+        self,
+    ) -> None:
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_plugin_view"
+        )
 
         response = view_module.delete_plugin_keyvaluepairs(
             self._make_request(payload={"project_id": 123}),
@@ -287,8 +307,12 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual(400, response["status"])
         self.assertEqual("Missing password", response["payload"]["error"])
 
-    def test_delete_all_view_returns_missing_password_error_without_unbound_local(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_all_view")
+    def test_delete_all_view_returns_missing_password_error_without_unbound_local(
+        self,
+    ) -> None:
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_all_view"
+        )
 
         response = view_module.delete_all_keyvaluepairs(
             self._make_request(payload={"project_id": 123}),
@@ -307,8 +331,14 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Missing password", error)
 
     def test_delete_plugin_login_failure_hides_cli_output(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_plugin_view")
-        with mock.patch.object(view_module, "validate_user_password", return_value=(False, "Wrong password.")):
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_plugin_view"
+        )
+        with mock.patch.object(
+            view_module,
+            "validate_user_password",
+            return_value=(False, "Wrong password."),
+        ):
             response = view_module.delete_plugin_keyvaluepairs(
                 self._make_request(payload={"project_id": 1, "password": "pw"}),
                 conn=mock.Mock(),
@@ -318,8 +348,12 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertNotIn("stdout", response["payload"])
         self.assertNotIn("stderr", response["payload"])
 
-    def test_delete_plugin_view_uses_session_key_cli_without_passing_password(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_plugin_view")
+    def test_delete_plugin_view_uses_session_key_cli_without_passing_password(
+        self,
+    ) -> None:
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_plugin_view"
+        )
         conn = mock.Mock()
         conn.getUser.return_value.getName.return_value = "alice"
         conn.getObject.return_value = None
@@ -331,26 +365,43 @@ class OmpPluginViewRegressionTests(TestCase):
             recorded_commands.append(cmd)
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        with mock.patch.object(view_module, "validate_user_password", return_value=(True, None)), mock.patch.object(
-            view_module,
-            "build_omero_cli_base_command",
-            return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
-        ), mock.patch.object(
-            view_module,
-            "collect_images_in_project",
-            return_value=[image],
-        ), mock.patch.object(
-            view_module,
-            "find_plugin_annotation_ids",
-            return_value=[77],
-        ), mock.patch.object(
-            view_module,
-            "find_annotation_link_ids",
-            return_value=[],
-        ), mock.patch.object(
-            view_module.subprocess,
-            "run",
-            side_effect=_record_run,
+        with (
+            mock.patch.object(
+                view_module, "validate_user_password", return_value=(True, None)
+            ),
+            mock.patch.object(
+                view_module,
+                "build_omero_cli_base_command",
+                return_value=[
+                    "/usr/bin/omero",
+                    "-k",
+                    "session-123",
+                    "-s",
+                    "omeroserver",
+                    "-p",
+                    "4064",
+                ],
+            ),
+            mock.patch.object(
+                view_module,
+                "collect_images_in_project",
+                return_value=[image],
+            ),
+            mock.patch.object(
+                view_module,
+                "find_plugin_annotation_ids",
+                return_value=[77],
+            ),
+            mock.patch.object(
+                view_module,
+                "find_annotation_link_ids",
+                return_value=[],
+            ),
+            mock.patch.object(
+                view_module.subprocess,
+                "run",
+                side_effect=_record_run,
+            ),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
                 self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
@@ -376,8 +427,12 @@ class OmpPluginViewRegressionTests(TestCase):
         )
         self.assertNotIn("pw-secret", recorded_commands[0])
 
-    def test_delete_all_view_uses_session_key_cli_without_passing_password(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.delete_all_view")
+    def test_delete_all_view_uses_session_key_cli_without_passing_password(
+        self,
+    ) -> None:
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.delete_all_view"
+        )
         conn = mock.Mock()
         conn.getUser.return_value.getName.return_value = "alice"
 
@@ -388,22 +443,38 @@ class OmpPluginViewRegressionTests(TestCase):
             recorded_commands.append(cmd)
             return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        with mock.patch.object(view_module, "validate_user_password", return_value=(True, None)), mock.patch.object(
-            view_module,
-            "build_omero_cli_base_command",
-            return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
-        ), mock.patch.object(
-            view_module,
-            "collect_images_in_project",
-            return_value=[image],
-        ), mock.patch.object(
-            view_module,
-            "find_map_annotation_ids",
-            return_value=[],
-        ), mock.patch.object(
-            view_module.subprocess,
-            "run",
-            side_effect=_record_run,
+        with (
+            mock.patch.object(
+                view_module, "validate_user_password", return_value=(True, None)
+            ),
+            mock.patch.object(
+                view_module,
+                "build_omero_cli_base_command",
+                return_value=[
+                    "/usr/bin/omero",
+                    "-k",
+                    "session-123",
+                    "-s",
+                    "omeroserver",
+                    "-p",
+                    "4064",
+                ],
+            ),
+            mock.patch.object(
+                view_module,
+                "collect_images_in_project",
+                return_value=[image],
+            ),
+            mock.patch.object(
+                view_module,
+                "find_map_annotation_ids",
+                return_value=[],
+            ),
+            mock.patch.object(
+                view_module.subprocess,
+                "run",
+                side_effect=_record_run,
+            ),
         ):
             response = view_module.delete_all_keyvaluepairs(
                 self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
@@ -449,10 +520,13 @@ class OmpPluginViewRegressionTests(TestCase):
     def test_job_view_start_job_hides_internal_exception_text(self) -> None:
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
 
-        with mock.patch.object(job_view, "_resolve_image_ids", return_value=[1]), mock.patch.object(
-            job_view,
-            "save_job",
-            side_effect=RuntimeError("secret boom"),
+        with (
+            mock.patch.object(job_view, "_resolve_image_ids", return_value=[1]),
+            mock.patch.object(
+                job_view,
+                "save_job",
+                side_effect=RuntimeError("secret boom"),
+            ),
         ):
             response = job_view.start_job(
                 self._make_request(payload={"project_id": 123}),
@@ -479,14 +553,16 @@ class OmpPluginViewRegressionTests(TestCase):
         conn = mock.Mock()
         conn.getUpdateService.return_value = object()
 
-        with mock.patch.object(job_view, "load_job", return_value=job), mock.patch.object(
-            job_view, "fetch_images_by_ids", return_value={1: image}
-        ), mock.patch.object(
-            job_view,
-            "delete_existing_annotations",
-            side_effect=RuntimeError("sensitive details"),
-        ), mock.patch.object(job_view, "save_job", return_value=True), mock.patch.object(
-            job_view.time, "time", return_value=2.0
+        with (
+            mock.patch.object(job_view, "load_job", return_value=job),
+            mock.patch.object(job_view, "fetch_images_by_ids", return_value={1: image}),
+            mock.patch.object(
+                job_view,
+                "delete_existing_annotations",
+                side_effect=RuntimeError("sensitive details"),
+            ),
+            mock.patch.object(job_view, "save_job", return_value=True),
+            mock.patch.object(job_view.time, "time", return_value=2.0),
         ):
             response = job_view.job_progress(
                 self._make_request(method="GET"),
@@ -495,12 +571,17 @@ class OmpPluginViewRegressionTests(TestCase):
             )
 
         self.assertEqual(200, response["status"])
-        self.assertIn("ERROR deleting ALL key-value pairs.", response["payload"]["last_log"])
+        self.assertIn(
+            "ERROR deleting ALL key-value pairs.", response["payload"]["last_log"]
+        )
         self.assertNotIn("sensitive details", response["payload"]["last_log"])
 
     def test_delete_views_hide_internal_exception_text(self) -> None:
         cases = [
-            ("omeroweb_omp_plugin.views.delete_plugin_view", "delete_plugin_keyvaluepairs"),
+            (
+                "omeroweb_omp_plugin.views.delete_plugin_view",
+                "delete_plugin_keyvaluepairs",
+            ),
             ("omeroweb_omp_plugin.views.delete_all_view", "delete_all_keyvaluepairs"),
         ]
         for module_name, function_name in cases:
@@ -509,22 +590,37 @@ class OmpPluginViewRegressionTests(TestCase):
                 conn = mock.Mock()
                 conn.getUser.return_value.getName.return_value = "alice"
 
-                with mock.patch.object(
-                    view_module,
-                    "collect_images_in_project",
-                    side_effect=RuntimeError("secret delete failure"),
-                ), mock.patch.object(
-                    view_module,
-                    "validate_user_password",
-                    return_value=(True, None),
-                ), mock.patch.object(
-                    view_module,
-                    "build_omero_cli_base_command",
-                    return_value=["/usr/bin/omero", "-k", "session-123", "-s", "omeroserver", "-p", "4064"],
-                ), mock.patch.object(
-                    view_module.subprocess,
-                    "run",
-                    return_value=types.SimpleNamespace(returncode=0, stdout="", stderr=""),
+                with (
+                    mock.patch.object(
+                        view_module,
+                        "collect_images_in_project",
+                        side_effect=RuntimeError("secret delete failure"),
+                    ),
+                    mock.patch.object(
+                        view_module,
+                        "validate_user_password",
+                        return_value=(True, None),
+                    ),
+                    mock.patch.object(
+                        view_module,
+                        "build_omero_cli_base_command",
+                        return_value=[
+                            "/usr/bin/omero",
+                            "-k",
+                            "session-123",
+                            "-s",
+                            "omeroserver",
+                            "-p",
+                            "4064",
+                        ],
+                    ),
+                    mock.patch.object(
+                        view_module.subprocess,
+                        "run",
+                        return_value=types.SimpleNamespace(
+                            returncode=0, stdout="", stderr=""
+                        ),
+                    ),
                 ):
                     response = getattr(view_module, function_name)(
                         self._make_request(payload={"project_id": 1, "password": "pw"}),
@@ -535,18 +631,28 @@ class OmpPluginViewRegressionTests(TestCase):
                 self.assertEqual("Unexpected error.", response["payload"]["error"])
 
     def test_variable_set_views_hide_store_exception_details(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.variable_set_view")
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.variable_set_view"
+        )
         cases = [
             (
                 "list_sets",
                 self._make_request(method="GET"),
-                {"list_variable_sets": mock.Mock(side_effect=view_module.VariableStoreError("db secret"))},
+                {
+                    "list_variable_sets": mock.Mock(
+                        side_effect=view_module.VariableStoreError("db secret")
+                    )
+                },
                 "Unable to fetch saved variable sets.",
             ),
             (
                 "save_set",
                 self._make_request(payload={"set_name": "demo", "var_names": ["A"]}),
-                {"save_variable_set": mock.Mock(side_effect=view_module.VariableStoreError("db secret"))},
+                {
+                    "save_variable_set": mock.Mock(
+                        side_effect=view_module.VariableStoreError("db secret")
+                    )
+                },
                 "Could not save variable set.",
             ),
             (
@@ -554,41 +660,72 @@ class OmpPluginViewRegressionTests(TestCase):
                 types.SimpleNamespace(method="GET", GET={"set_name": "demo"}, body=b""),
                 {
                     "list_variable_sets": mock.Mock(return_value=["demo"]),
-                    "load_variable_set": mock.Mock(side_effect=view_module.VariableStoreError("db secret")),
+                    "load_variable_set": mock.Mock(
+                        side_effect=view_module.VariableStoreError("db secret")
+                    ),
                 },
                 "Unable to load variable set.",
             ),
             (
                 "delete_set",
                 self._make_request(payload={"set_name": "demo"}),
-                {"delete_variable_set": mock.Mock(side_effect=view_module.VariableStoreError("db secret"))},
+                {
+                    "delete_variable_set": mock.Mock(
+                        side_effect=view_module.VariableStoreError("db secret")
+                    )
+                },
                 "Unable to delete variable set.",
             ),
         ]
         for function_name, request, patches, expected_error in cases:
             with self.subTest(view=function_name):
                 with mock.patch.multiple(view_module, **patches):
-                    response = getattr(view_module, function_name)(request, conn=mock.Mock())
+                    response = getattr(view_module, function_name)(
+                        request, conn=mock.Mock()
+                    )
                 self.assertEqual(500, response["status"])
                 self.assertEqual(expected_error, response["payload"]["error"])
                 self.assertNotIn("secret", response["payload"]["error"])
 
     def test_user_data_views_hide_store_exception_details(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.user_data_view")
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.user_data_view"
+        )
         cases = [
-            ("delete_api_keys", "delete_all_ai_credentials", view_module.AiCredentialStoreError("db secret"), "Unable to delete AI credentials."),
-            ("delete_variable_sets", "delete_all_variable_sets", view_module.VariableStoreError("db secret"), "Unable to delete variable sets."),
-            ("delete_all_data", "delete_all_user_data", view_module.UserDataStoreError("db secret"), "Unable to delete user data."),
+            (
+                "delete_api_keys",
+                "delete_all_ai_credentials",
+                view_module.AiCredentialStoreError("db secret"),
+                "Unable to delete AI credentials.",
+            ),
+            (
+                "delete_variable_sets",
+                "delete_all_variable_sets",
+                view_module.VariableStoreError("db secret"),
+                "Unable to delete variable sets.",
+            ),
+            (
+                "delete_all_data",
+                "delete_all_user_data",
+                view_module.UserDataStoreError("db secret"),
+                "Unable to delete user data.",
+            ),
         ]
         for function_name, dependency_name, side_effect, expected_error in cases:
             with self.subTest(view=function_name):
-                with mock.patch.object(view_module, dependency_name, side_effect=side_effect):
-                    response = getattr(view_module, function_name)(self._make_request(), conn=mock.Mock())
+                with mock.patch.object(
+                    view_module, dependency_name, side_effect=side_effect
+                ):
+                    response = getattr(view_module, function_name)(
+                        self._make_request(), conn=mock.Mock()
+                    )
                 self.assertEqual(500, response["status"])
                 self.assertEqual(expected_error, response["payload"]["error"])
 
     def test_user_settings_view_hides_store_exception_details(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.user_settings_view")
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.user_settings_view"
+        )
 
         with mock.patch.object(
             view_module,
@@ -604,24 +741,55 @@ class OmpPluginViewRegressionTests(TestCase):
         self.assertEqual("Could not save user settings.", response["payload"]["error"])
 
     def test_ai_credentials_views_hide_store_exception_details(self) -> None:
-        view_module = importlib.import_module("omeroweb_omp_plugin.views.ai_credentials_view")
+        view_module = importlib.import_module(
+            "omeroweb_omp_plugin.views.ai_credentials_view"
+        )
         cases = [
-            ("list_credentials", self._make_request(method="GET"), "list_ai_credentials", view_module.AiCredentialStoreError("db secret"), "Unable to fetch saved AI credentials."),
-            ("save_credentials", self._make_request(payload={"provider": "groq", "api_key": "key"}), "save_ai_credentials", view_module.AiCredentialStoreError("db secret"), "Could not save AI credentials."),
-            ("list_models", types.SimpleNamespace(method="GET", GET={"provider": "groq"}, body=b""), "get_ai_credential", view_module.AiCredentialStoreError("db secret"), "Unable to fetch saved AI credentials."),
+            (
+                "list_credentials",
+                self._make_request(method="GET"),
+                "list_ai_credentials",
+                view_module.AiCredentialStoreError("db secret"),
+                "Unable to fetch saved AI credentials.",
+            ),
+            (
+                "save_credentials",
+                self._make_request(payload={"provider": "groq", "api_key": "key"}),
+                "save_ai_credentials",
+                view_module.AiCredentialStoreError("db secret"),
+                "Could not save AI credentials.",
+            ),
+            (
+                "list_models",
+                types.SimpleNamespace(method="GET", GET={"provider": "groq"}, body=b""),
+                "get_ai_credential",
+                view_module.AiCredentialStoreError("db secret"),
+                "Unable to fetch saved AI credentials.",
+            ),
         ]
-        for function_name, request, dependency_name, side_effect, expected_error in cases:
+        for (
+            function_name,
+            request,
+            dependency_name,
+            side_effect,
+            expected_error,
+        ) in cases:
             with self.subTest(view=function_name):
-                with mock.patch.object(
-                    view_module,
-                    "_perform_connection_test",
-                    return_value=(True, "ok"),
-                ), mock.patch.object(
-                    view_module,
-                    dependency_name,
-                    side_effect=side_effect,
+                with (
+                    mock.patch.object(
+                        view_module,
+                        "_perform_connection_test",
+                        return_value=(True, "ok"),
+                    ),
+                    mock.patch.object(
+                        view_module,
+                        dependency_name,
+                        side_effect=side_effect,
+                    ),
                 ):
-                    response = getattr(view_module, function_name)(request, conn=mock.Mock())
+                    response = getattr(view_module, function_name)(
+                        request, conn=mock.Mock()
+                    )
                 self.assertEqual(500, response["status"])
                 self.assertEqual(expected_error, response["payload"]["error"])
 
@@ -639,21 +807,30 @@ class OmpPluginViewRegressionTests(TestCase):
         dataset = types.SimpleNamespace()
         image = types.SimpleNamespace(getName=lambda: "sample_a_01.tif")
 
-        with mock.patch.object(view_module, "_collect_project_payload", return_value={"owned": []}), mock.patch.object(
-            view_module, "_get_accessible_project", return_value=(object(), "owned")
-        ), mock.patch.object(
-            view_module,
-            "collect_images_by_selected_datasets",
-            return_value=[(dataset, [image])],
-        ), mock.patch.object(
-            view_module,
-            "get_ai_credential",
-            side_effect=view_module.AiCredentialStoreError("db secret"),
+        with (
+            mock.patch.object(
+                view_module, "_collect_project_payload", return_value={"owned": []}
+            ),
+            mock.patch.object(
+                view_module, "_get_accessible_project", return_value=(object(), "owned")
+            ),
+            mock.patch.object(
+                view_module,
+                "collect_images_by_selected_datasets",
+                return_value=[(dataset, [image])],
+            ),
+            mock.patch.object(
+                view_module,
+                "get_ai_credential",
+                side_effect=view_module.AiCredentialStoreError("db secret"),
+            ),
         ):
             response = view_module.index(request, conn=conn)
 
         self.assertEqual(500, response["status"])
-        self.assertEqual("Unable to fetch saved AI credentials.", response["payload"]["error"])
+        self.assertEqual(
+            "Unable to fetch saved AI credentials.", response["payload"]["error"]
+        )
 
     def test_index_view_preview_hides_ai_parse_json_error(self) -> None:
         view_module = importlib.import_module("omeroweb_omp_plugin.views.index_view")
@@ -667,8 +844,13 @@ class OmpPluginViewRegressionTests(TestCase):
         )
         project = types.SimpleNamespace(getName=lambda: "Demo")
 
-        with mock.patch.object(view_module, "_collect_project_payload", return_value={"owned": []}), mock.patch.object(
-            view_module, "_get_accessible_project", return_value=(project, "owned")
+        with (
+            mock.patch.object(
+                view_module, "_collect_project_payload", return_value={"owned": []}
+            ),
+            mock.patch.object(
+                view_module, "_get_accessible_project", return_value=(project, "owned")
+            ),
         ):
             response = view_module.index(request, conn=mock.Mock())
 
@@ -688,8 +870,13 @@ class OmpPluginViewRegressionTests(TestCase):
         )
         project = types.SimpleNamespace(getName=lambda: "Demo")
 
-        with mock.patch.object(view_module, "_collect_project_payload", return_value={"owned": []}), mock.patch.object(
-            view_module, "_get_accessible_project", return_value=(project, "owned")
+        with (
+            mock.patch.object(
+                view_module, "_collect_project_payload", return_value={"owned": []}
+            ),
+            mock.patch.object(
+                view_module, "_get_accessible_project", return_value=(project, "owned")
+            ),
         ):
             response = view_module.index(request, conn=mock.Mock())
 
@@ -705,7 +892,9 @@ class OmpPluginViewRegressionTests(TestCase):
             "_collect_project_payload",
             side_effect=RuntimeError("secret top-level failure"),
         ):
-            response = view_module.index(self._make_form_request(method="GET"), conn=mock.Mock())
+            response = view_module.index(
+                self._make_form_request(method="GET"), conn=mock.Mock()
+            )
 
         self.assertEqual(500, response["status"])
         self.assertIn("Unexpected error.", response["content"])

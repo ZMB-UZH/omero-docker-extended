@@ -280,11 +280,17 @@ def _inspect_docker_service_runtime(
 
     containers = [item for item in payload if isinstance(item, dict)]
     if not containers:
-        return None, f"Docker API returned no container records for service {service!r}."
+        return (
+            None,
+            f"Docker API returned no container records for service {service!r}.",
+        )
     container = max(containers, key=_created_key)
     container_id = str(container.get("Id") or "").strip()
     if not container_id:
-        return None, f"Docker API did not return a container ID for service {service!r}."
+        return (
+            None,
+            f"Docker API did not return a container ID for service {service!r}.",
+        )
 
     ok, inspect_payload, error = _docker_api_json(f"/containers/{container_id}/json")
     if not ok:
@@ -305,14 +311,18 @@ def _inspect_docker_service_runtime(
         {
             "container_id": container_id[:12],
             "container_name": container_name or service,
-            "state": str(state_payload.get("Status") or container.get("State") or "unknown"),
+            "state": str(
+                state_payload.get("Status") or container.get("State") or "unknown"
+            ),
             "health": str(health_payload.get("Status") or "").strip() or "none",
         },
         "",
     )
 
 
-def _execute_sql_sanity_query(profile: DatabaseRuntimeProfile) -> Tuple[Optional[int], str]:
+def _execute_sql_sanity_query(
+    profile: DatabaseRuntimeProfile,
+) -> Tuple[Optional[int], str]:
     psycopg2 = _load_psycopg2()
     conn = None
     try:
@@ -323,7 +333,10 @@ def _execute_sql_sanity_query(profile: DatabaseRuntimeProfile) -> Tuple[Optional
             password=profile.password,
             dbname=profile.dbname,
             connect_timeout=max(
-                1, int(round(_to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5)))
+                1,
+                int(
+                    round(_to_float_env("ADMIN_TOOLS_DIAGNOSTIC_TIMEOUT_SECONDS", 3.5))
+                ),
             ),
         )
         with conn.cursor() as cursor:
@@ -682,7 +695,7 @@ def run_diagnostic_script(script_id: str) -> Dict[str, object]:
             },
             "checks": [asdict(item) for item in checks],
         }
-    except Exception as exc:
+    except Exception:
         logger.exception(
             "Exception running diagnostic script %s", sanitize_log_value(script_id)
         )

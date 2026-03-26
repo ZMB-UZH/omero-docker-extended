@@ -1,4 +1,5 @@
 """Shared request utilities for OMERO web plugins."""
+
 from __future__ import annotations
 
 import json

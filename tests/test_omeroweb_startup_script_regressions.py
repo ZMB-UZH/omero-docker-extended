@@ -15,7 +15,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.repo_root = Path(__file__).resolve().parents[1]
         cls.config_script = cls.repo_root / "startup" / "50-config.py"
-        cls.default_config_script = cls.repo_root / "startup" / "60-default-web-config.sh"
+        cls.default_config_script = (
+            cls.repo_root / "startup" / "60-default-web-config.sh"
+        )
         cls.cleanprevious_script = cls.repo_root / "startup" / "98-cleanprevious.sh"
 
     def _make_fake_omero(self, workspace: Path) -> tuple[Path, Path]:
@@ -24,7 +26,7 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
         fake_omero.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "printf '%s\\n' \"$*\" >> \"$OMERO_CALLS_FILE\"\n",
+            'printf \'%s\\n\' "$*" >> "$OMERO_CALLS_FILE"\n',
             encoding="utf-8",
         )
         fake_omero.chmod(fake_omero.stat().st_mode | stat.S_IXUSR)
@@ -76,7 +78,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "CONFIG_omero_web_public_enabled": "false",
             }
 
-            subprocess.run([sys.executable, str(self.config_script)], check=True, env=env)
+            subprocess.run(
+                [sys.executable, str(self.config_script)], check=True, env=env
+            )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertIn(f"load --glob {config_dir}/*.omero", calls)
@@ -110,7 +114,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 ),
             }
 
-            subprocess.run([sys.executable, str(self.config_script)], check=True, env=env)
+            subprocess.run(
+                [sys.executable, str(self.config_script)], check=True, env=env
+            )
 
             self.assertEqual(
                 python_calls_file.read_text(encoding="utf-8").splitlines(),
@@ -119,7 +125,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             apps_call = next(
-                call for call in calls if call.startswith("config set -- omero.web.apps ")
+                call
+                for call in calls
+                if call.startswith("config set -- omero.web.apps ")
             )
             top_links_call = next(
                 call
@@ -161,7 +169,10 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "Missing OMERO.web app modules referenced by CONFIG_omero_web_apps: broken_plugin",
                 result.stderr,
             )
-            self.assertEqual(python_calls_file.read_text(encoding="utf-8").splitlines(), ["broken_plugin"])
+            self.assertEqual(
+                python_calls_file.read_text(encoding="utf-8").splitlines(),
+                ["broken_plugin"],
+            )
             self.assertFalse(calls_file.exists())
 
     def test_60_default_web_config_uses_dynamic_omero_binary(self) -> None:
@@ -176,7 +187,9 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "OMEROHOST": "omeroserver",
             }
 
-            subprocess.run(["bash", str(self.default_config_script)], check=True, env=env)
+            subprocess.run(
+                ["bash", str(self.default_config_script)], check=True, env=env
+            )
 
             calls = calls_file.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
@@ -195,19 +208,25 @@ class OmeroWebStartupScriptRegressionTests(unittest.TestCase):
                 "OMERO_WEB_DJANGO_PIDFILE": str(pid_file),
             }
 
-            subprocess.run(["bash", str(self.cleanprevious_script)], check=True, env=env)
+            subprocess.run(
+                ["bash", str(self.cleanprevious_script)], check=True, env=env
+            )
 
             self.assertFalse(pid_file.exists())
 
-    def test_dockerfile_replaces_inherited_startup_scripts_with_repo_managed_versions(self) -> None:
-        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
-            encoding="utf-8"
-        )
+    def test_dockerfile_replaces_inherited_startup_scripts_with_repo_managed_versions(
+        self,
+    ) -> None:
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-web.Dockerfile"
+        ).read_text(encoding="utf-8")
         self.assertIn(
             "rm -f /startup/50-config.py /startup/60-default-web-config.sh /startup/98-cleanprevious.sh /startup/99-run.sh",
             dockerfile_text,
         )
-        self.assertIn("COPY startup/50-config.py /startup/50-config.py", dockerfile_text)
+        self.assertIn(
+            "COPY startup/50-config.py /startup/50-config.py", dockerfile_text
+        )
         self.assertIn(
             "COPY startup/60-default-web-config.sh /startup/60-default-web-config.sh",
             dockerfile_text,

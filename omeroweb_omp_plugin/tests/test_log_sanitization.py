@@ -23,7 +23,9 @@ class _ImageStub:
         return "image.ome.tif"
 
 
-def test_job_progress_logs_escape_job_id_and_exception(monkeypatch, tmp_path: Path, caplog):
+def test_job_progress_logs_escape_job_id_and_exception(
+    monkeypatch, tmp_path: Path, caplog
+):
     job = {
         "job_id": "bad\njob",
         "project_id": 1,
@@ -41,9 +43,15 @@ def test_job_progress_logs_escape_job_id_and_exception(monkeypatch, tmp_path: Pa
 
     monkeypatch.setattr(job_view, "load_job", lambda job_id: job)
     monkeypatch.setattr(job_view, "save_job", lambda job_dict: True)
-    monkeypatch.setattr(job_view, "_job_lock_path", lambda job_id: tmp_path / "job.lock")
-    monkeypatch.setattr(job_view.portalocker, "Lock", lambda *args, **kwargs: _LockStub())
-    monkeypatch.setattr(job_view, "fetch_images_by_ids", lambda conn, batch_ids: {7: _ImageStub()})
+    monkeypatch.setattr(
+        job_view, "_job_lock_path", lambda job_id: tmp_path / "job.lock"
+    )
+    monkeypatch.setattr(
+        job_view.portalocker, "Lock", lambda *args, **kwargs: _LockStub()
+    )
+    monkeypatch.setattr(
+        job_view, "fetch_images_by_ids", lambda conn, batch_ids: {7: _ImageStub()}
+    )
     monkeypatch.setattr(job_view, "get_text", lambda value: value)
     monkeypatch.setattr(
         job_view,
@@ -63,7 +71,9 @@ def test_job_progress_logs_escape_job_id_and_exception(monkeypatch, tmp_path: Pa
 def test_variable_set_view_logs_escape_exception_text(monkeypatch, caplog):
     request = RequestFactory().get("/omp/sets/")
 
-    monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
     monkeypatch.setattr(
         variable_set_view,
         "list_variable_sets",

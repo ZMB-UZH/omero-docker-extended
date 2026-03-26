@@ -1,6 +1,7 @@
 """
 OMERO CLI import operations and verification.
 """
+
 import os
 import re
 import time
@@ -21,7 +22,9 @@ logger = logging.getLogger(__name__)
 MAX_IMPORT_LOG_LINES = 1000
 INT_SANITIZER = re.compile(r"[^0-9]")
 JOB_ID_SANITIZER = re.compile(r"^[0-9a-fA-F]{32}$")
-_CLI_ID_PATTERN = re.compile(r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)")
+_CLI_ID_PATTERN = re.compile(
+    r"(?P<type>OriginalFile|FileAnnotation|ImageAnnotationLink):(?P<id>\\d+)"
+)
 
 JOB_SERVICE_USERNAME_DEFAULT = "job-service"
 JOB_SERVICE_USER_ENV = "OMERO_JOB_SERVICE_USERNAME"
@@ -63,6 +66,7 @@ def _get_jobs_root() -> Path:
         _JOBS_ROOT_CACHE = None
     return _JOBS_ROOT_CACHE
 
+
 def _build_omero_cli_command(subcommand, session_key: str, host: str, port: int):
     cmd = [OMERO_CLI]
     if session_key:
@@ -97,33 +101,43 @@ def _parse_cli_id(output: str, expected_type: str):
     return None
 
 
-def _import_file(conn, session_key: str, host: str, port: int, path: Path, dataset_id=None):
+def _import_file(
+    conn, session_key: str, host: str, port: int, path: Path, dataset_id=None
+):
     cmd = _build_omero_cli_command(["import"], session_key, host, port)
     cmd.extend(["--depth", str(OMERO_IMPORT_SCAN_DEPTH)])
     if dataset_id:
         cmd.extend(["-d", str(dataset_id)])
     cmd.append(str(path))
 
-    logger.info("Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id)
+    logger.info(
+        "Import CLI: starting import for %s (dataset_id=%s)", path.name, dataset_id
+    )
     import_start = time.time()
     try:
         result = _run_omero_cli(cmd, timeout=IMPORT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        logger.error("Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path)
+        logger.error(
+            "Import CLI timed out after %ds for %s", IMPORT_TIMEOUT_SECONDS, path
+        )
         return False, "", f"Import timed out after {IMPORT_TIMEOUT_SECONDS} seconds"
     elapsed = time.time() - import_start
     success = result.returncode == 0
     logger.info(
         "Import CLI: finished for %s in %.1fs (success=%s, returncode=%d, "
         "stdout_lines=%d, stderr_lines=%d)",
-        path.name, elapsed, success, result.returncode,
+        path.name,
+        elapsed,
+        success,
+        result.returncode,
         len((result.stdout or "").splitlines()),
         len((result.stderr or "").splitlines()),
     )
     if not success:
         logger.warning(
             "Import CLI stderr for %s: %s",
-            path.name, (result.stderr or "").strip()[:500],
+            path.name,
+            (result.stderr or "").strip()[:500],
         )
     return success, result.stdout, result.stderr
 
@@ -131,7 +145,7 @@ def _import_file(conn, session_key: str, host: str, port: int, path: Path, datas
 def _validate_session(conn):
     """
     Validate that a BlitzGateway connection is still active.
-    
+
     Returns:
         bool: True if session is valid, False otherwise
     """
@@ -147,13 +161,13 @@ def _validate_session(conn):
 def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
     """
     Create a new connection or reconnect using the session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
         old_conn: Previous connection to close (if any)
-    
+
     Returns:
         BlitzGateway connection or None if failed
     """
@@ -161,8 +175,10 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
         try:
             old_conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
-    
+            logger.debug(
+                "Suppressed non-fatal exception in import_service.py", exc_info=exc
+            )
+
     try:
         client = omero.client(host=host, port=port)
         sf = client.joinSession(session_key)
@@ -176,7 +192,9 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in import_service.py", exc_info=exc
+                )
             return None
 
         return conn
@@ -188,12 +206,12 @@ def _reconnect_session(session_key: str, host: str, port: int, old_conn=None):
 def _open_session_connection(session_key: str, host: str, port: int):
     """
     Open a BlitzGateway connection using a session key.
-    
+
     Args:
         session_key: OMERO session key
         host: OMERO server host
         port: OMERO server port
-    
+
     Returns:
         BlitzGateway connection
     """
@@ -208,19 +226,20 @@ def _open_session_connection(session_key: str, host: str, port: int):
 def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=30):
     """
     Find image by name using OMERO QueryService with limits and timeout.
-    
+
     FIXED: This version uses database queries instead of iterating all images.
     Prevents hangs on large datasets (100-1000x faster).
     """
     if not file_name:
         return None
-    
+
     import time
+
     start_time = time.time()
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Try dataset-scoped search first (fastest)
         if dataset_id:
             try:
@@ -230,34 +249,43 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
                     WHERE dil.parent.id = :did
                     AND i.name = :name
                 """
-                
+
                 params = omero.sys.ParametersI()
                 params.addLong("did", dataset_id)
                 params.addString("name", file_name)
                 params.page(0, 100)  # Limit results
-                
+
                 images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-                
+
                 if images:
                     elapsed = time.time() - start_time
-                    logger.debug("Found image '%s' in Dataset:%d in %.2fs", file_name, dataset_id, elapsed)
+                    logger.debug(
+                        "Found image '%s' in Dataset:%d in %.2fs",
+                        file_name,
+                        dataset_id,
+                        elapsed,
+                    )
                     return conn.getObject("Image", images[0].getId().getValue())
             except Exception as exc:
                 logger.warning("Dataset search failed for '%s': %s", file_name, exc)
-        
+
         # Global search as fallback
         try:
             query = "SELECT i FROM Image i WHERE i.name = :name"
             params = omero.sys.ParametersI()
             params.addString("name", file_name)
             params.page(0, 100)
-            
+
             images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-            
+
             if images:
                 elapsed = time.time() - start_time
                 if len(images) > 1:
-                    logger.warning("Found %d images named '%s' - using first", len(images), file_name)
+                    logger.warning(
+                        "Found %d images named '%s' - using first",
+                        len(images),
+                        file_name,
+                    )
                 logger.debug("Found image '%s' globally in %.2fs", file_name, elapsed)
                 return conn.getObject("Image", images[0].getId().getValue())
             else:
@@ -266,7 +294,7 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
         except Exception as exc:
             logger.error("Global search failed for '%s': %s", file_name, exc)
             return None
-    except Exception as exc:
+    except Exception:
         logger.exception("Unexpected error searching for '%s'", file_name)
         return None
 
@@ -274,26 +302,27 @@ def _find_image_by_name(conn, file_name: str, dataset_id=None, timeout_seconds=3
 def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_seconds=60):
     """
     Find multiple images in a single query - MUCH faster than individual lookups.
-    
+
     Returns: dict mapping file_name -> Image wrapper object
-    
+
     CRITICAL: This is the key to fixing SEM EDX performance.
     Instead of N queries (one per TXT file), we do 1 query for all images.
     """
     if not file_names:
         return {}
-    
+
     import time
+
     start_time = time.time()
     results = {}
-    
+
     try:
         qs = conn.getQueryService()
-        
+
         # Build IN clause safely
         escaped_names = [name.replace("'", "''") for name in file_names]
         name_list = ", ".join([f"'{name}'" for name in escaped_names])
-        
+
         if dataset_id:
             query = f"""
                 SELECT i FROM Image i
@@ -309,24 +338,31 @@ def _batch_find_images_by_name(conn, file_names, dataset_id=None, timeout_second
                 WHERE i.name IN ({name_list})
             """
             params = omero.sys.ParametersI()
-        
-        logger.info("Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id)
+
+        logger.info(
+            "Batch searching for %d images (dataset_id=%s)", len(file_names), dataset_id
+        )
         images = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-        
+
         for image_obj in images:
             img_wrapper = conn.getObject("Image", image_obj.getId().getValue())
             if img_wrapper:
                 results[img_wrapper.getName()] = img_wrapper
-        
+
         elapsed = time.time() - start_time
-        logger.info("Batch search found %d/%d images in %.2fs", len(results), len(file_names), elapsed)
-        
+        logger.info(
+            "Batch search found %d/%d images in %.2fs",
+            len(results),
+            len(file_names),
+            elapsed,
+        )
+
         missing = set(file_names) - set(results.keys())
         if missing:
             logger.warning("Missing %d images: %s", len(missing), list(missing)[:5])
     except Exception as exc:
         logger.error("Batch image search failed: %s", exc)
-    
+
     return results
 
 
@@ -342,11 +378,9 @@ def _get_job_service_credentials():
     if not user:
         user = JOB_SERVICE_USERNAME_DEFAULT
 
-
     passwd = (os.environ.get(JOB_SERVICE_PASS_ENV) or "").strip()
     if not passwd:
         passwd = (os.environ.get(JOB_SERVICE_PASS_ENV_FALLBACK) or "").strip()
-
 
     # Optional override: force a specific group id for job-service.
     # If empty, we'll use the job's group_id (recommended).
@@ -354,12 +388,10 @@ def _get_job_service_credentials():
     if not group_override:
         group_override = (os.environ.get(JOB_SERVICE_GROUP_ENV_FALLBACK) or "").strip()
 
-
     # Optional: allow forcing secure/insecure connection
     secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV) or "").strip()
     if not secure_raw:
         secure_raw = (os.environ.get(JOB_SERVICE_SECURE_ENV_FALLBACK) or "").strip()
-
 
     secure = True
     if secure_raw:
@@ -369,7 +401,9 @@ def _get_job_service_credentials():
     return user, passwd, group_override, secure
 
 
-def _open_service_connection(host: str, port: int, group_id: Optional[int] = None) -> Optional[BlitzGateway]:
+def _open_service_connection(
+    host: str, port: int, group_id: Optional[int] = None
+) -> Optional[BlitzGateway]:
     """Login as service user for async background work (safe for user sessions)."""
     service_user, service_pass, group_override, secure = _get_job_service_credentials()
 
@@ -380,7 +414,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         )
         return None
 
-    conn = BlitzGateway(service_user, service_pass, host=host, port=int(port), secure=secure)
+    conn = BlitzGateway(
+        service_user, service_pass, host=host, port=int(port), secure=secure
+    )
 
     try:
         try:
@@ -397,7 +433,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in import_service.py", exc_info=exc
+                )
             return None
 
         if not ok:
@@ -411,7 +449,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in import_service.py", exc_info=exc
+                )
             return None
 
         # Prefer explicit override, else use job's group_id when provided.
@@ -428,7 +468,11 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
             try:
                 conn.SERVICE_OPTS.setOmeroGroup(str(effective_group))
             except Exception as exc:
-                logger.warning("Failed to set job-service group context to %s: %s", effective_group, exc)
+                logger.warning(
+                    "Failed to set job-service group context to %s: %s",
+                    effective_group,
+                    exc,
+                )
 
         return conn
 
@@ -436,7 +480,9 @@ def _open_service_connection(host: str, port: int, group_id: Optional[int] = Non
         try:
             conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in import_service.py", exc_info=exc
+            )
         raise
 
 
@@ -499,7 +545,9 @@ def _attach_txt_to_image_service(
             try:
                 store.close()
             except Exception as exc:
-                logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+                logger.debug(
+                    "Suppressed non-fatal exception in import_service.py", exc_info=exc
+                )
 
         fa = FileAnnotationI()
         fa.setNs(rstring(SEM_EDX_FILEANNOTATION_NS))
@@ -514,7 +562,7 @@ def _attach_txt_to_image_service(
     user_conn = conn.suConn(username)
     if not user_conn:
         raise RuntimeError(f"Failed to create connection as user {username}")
-    
+
     try:
         # Get the image in user's context
         image_obj = user_conn.getObject("Image", image_id)
@@ -525,9 +573,13 @@ def _attach_txt_to_image_service(
 
         # Parse the SEM EDX file and create OMERO Table with spectrum data
         try:
-            table_id = attach_sem_edx_tables(user_conn, image_id, txt_path, persist_table=create_tables)
+            table_id = attach_sem_edx_tables(
+                user_conn, image_id, txt_path, persist_table=create_tables
+            )
             if table_id:
-                logger.info("Created OMERO Table for image %d from %s", image_id, txt_path.name)
+                logger.info(
+                    "Created OMERO Table for image %d from %s", image_id, txt_path.name
+                )
         except Exception as exc:
             # Don't fail the entire attachment if table creation fails
             logger.error(
@@ -539,7 +591,11 @@ def _attach_txt_to_image_service(
         if plot_path and plot_path.exists():
             try:
                 _attach_file(user_conn, image_obj, plot_path, "image/png")
-                logger.info("Attached SEM EDX spectrum plot %s to image %d", plot_path.name, image_id)
+                logger.info(
+                    "Attached SEM EDX spectrum plot %s to image %d",
+                    plot_path.name,
+                    image_id,
+                )
             except Exception as exc:
                 logger.error(
                     "Failed to attach SEM EDX plot %s to image %d: %s",
@@ -552,7 +608,9 @@ def _attach_txt_to_image_service(
         try:
             user_conn.close()
         except Exception as exc:
-            logger.debug("Suppressed non-fatal exception in import_service.py", exc_info=exc)
+            logger.debug(
+                "Suppressed non-fatal exception in import_service.py", exc_info=exc
+            )
 
 
 def _append_job_message(job: dict, message: str):
@@ -573,7 +631,9 @@ def _append_job_error(job: dict, message: str):
         job["errors"] = job["errors"][-MAX_IMPORT_LOG_LINES:]
 
 
-def _append_txt_attachment_message(job: dict, txt_name: str, image_name: str, success: bool):
+def _append_txt_attachment_message(
+    job: dict, txt_name: str, image_name: str, success: bool
+):
     label = "Txt attachment success" if success else "Txt attachment failure"
     _append_job_message(job, f"{label}: {txt_name} into {image_name}")
 
@@ -616,7 +676,9 @@ def _safe_job_id(value: str) -> bool:
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
     def apply_updates(job_dict):
-        entries_by_id = {entry.get("upload_id"): entry for entry in job_dict.get("files", [])}
+        entries_by_id = {
+            entry.get("upload_id"): entry for entry in job_dict.get("files", [])
+        }
         for update in updates:
             entry = entries_by_id.get(update.get("upload_id"))
             if not entry:
@@ -627,11 +689,16 @@ def _apply_upload_updates(job_id: str, updates: list, errors: list):
         if errors:
             job_dict.setdefault("errors", []).extend(errors)
         uploaded_bytes = sum(
-            entry.get("size", 0) for entry in job_dict.get("files", []) if entry.get("status") == "uploaded"
+            entry.get("size", 0)
+            for entry in job_dict.get("files", [])
+            if entry.get("status") == "uploaded"
         )
         job_dict["uploaded_bytes"] = uploaded_bytes
         compatibility_pending = _compatibility_pending_entries(job_dict)
-        if compatibility_pending and job_dict.get("compatibility_status") != "incompatible":
+        if (
+            compatibility_pending
+            and job_dict.get("compatibility_status") != "incompatible"
+        ):
             job_dict["compatibility_status"] = "checking"
         _refresh_job_status(job_dict)
         job_dict["updated"] = time.time()
@@ -652,19 +719,19 @@ def _classify_compatibility_output(
 ):
     """
     Classify OMERO import compatibility check output.
-    
+
     Returns a tuple of (status, details) where status is one of:
     - "compatible": File can be imported
     - "incompatible": File format not supported
     - "error": Check failed due to an error
-    
+
     CRITICAL FIX: The -f flag returns:
     - Exit code 0: ALWAYS (even for incompatible files)
     - Actual compatibility is determined by checking if import candidates exist in stdout
     """
     details = (stderr or stdout or "").strip()
     lowered = details.lower()
-    
+
     # CRITICAL: Check stderr first for fatal errors (missing file, CLI errors, etc.)
     if stderr and stderr.strip():
         stderr_lower = stderr.lower()
@@ -680,7 +747,7 @@ def _classify_compatibility_output(
         ]
         if any(indicator in stderr_lower for indicator in error_indicators):
             return "error", stderr.strip()
-    
+
     # Check stdout for explicit incompatibility messages
     incompatible_markers = [
         "unsupported",
@@ -692,24 +759,22 @@ def _classify_compatibility_output(
         "no reader found",
         "failed to determine reader",
     ]
-    
+
     if any(marker in lowered for marker in incompatible_markers):
         return "incompatible", details
-    
+
     # CRITICAL FIX: Check if stdout contains actual import candidates
     # The -f flag ALWAYS returns 0, so we MUST parse stdout
     has_candidates = _has_import_candidates_in_output(
         stdout or "",
         expected_file_path=expected_file_path,
     )
-    
+
     if has_candidates:
         return "compatible", "File format supported by OMERO"
     else:
         # No candidates found = file is incompatible
         return "incompatible", "No importable files detected by Bio-Formats"
-
-
 
 
 def _has_import_candidates_in_output(
@@ -718,15 +783,15 @@ def _has_import_candidates_in_output(
 ) -> bool:
     """
     Check if omero import -f output contains actual import candidates.
-    
+
     The -f flag displays files grouped by import groups, separated by "#" comments.
     Real import candidates are non-empty, non-comment lines.
-    
+
     Returns True if at least one import candidate is found.
     """
     if not output or not output.strip():
         return False
-    
+
     candidates = _extract_import_candidates(output)
     if not candidates:
         return False
@@ -756,16 +821,16 @@ def _has_import_candidates_in_output(
 def _extract_import_candidates(output: str):
     """
     Extract import candidates from OMERO import -f output.
-    
+
     Returns a list of file paths that would be imported.
     This is used for additional validation after compatibility check.
     """
     if not output or not output.strip():
         return []
-    
+
     candidates = []
-    lines = output.strip().split('\n')
-    
+    lines = output.strip().split("\n")
+
     skip_patterns = [
         "# group:",
         "to import",
@@ -778,19 +843,19 @@ def _extract_import_candidates(output: str):
         "dry run",
         "would import",
     ]
-    
+
     for line in lines:
         stripped = line.strip()
-        
+
         # Skip empty lines and comments
         if not stripped or stripped.startswith("#"):
             continue
-        
+
         # Skip metadata lines
         stripped_lower = stripped.lower()
         if any(pattern in stripped_lower for pattern in skip_patterns):
             continue
-        
+
         parsed_candidate = _parse_candidate_path_line(stripped)
         if parsed_candidate is not None:
             candidates.append(str(parsed_candidate))
@@ -807,7 +872,7 @@ def _parse_candidate_path_line(line: str) -> Optional[Path]:
     if not raw:
         return None
 
-    unquoted = raw.strip('\"').strip("'")
+    unquoted = raw.strip('"').strip("'")
     if not unquoted:
         return None
 
@@ -832,12 +897,12 @@ def _check_import_compatibility(
 ):
     """
     Check if a file can be imported into OMERO by analyzing it with Bio-Formats.
-    
+
     CRITICAL FIXES:
     1. The -f flag ALWAYS returns exit code 0, regardless of compatibility
     2. Compatibility is determined by parsing stdout for import candidates
     3. Proper distinction between errors and incompatibility
-    
+
     Uses 'omero import -f' which performs local file format analysis
     without requiring server connection or authentication.
     """
@@ -849,13 +914,22 @@ def _check_import_compatibility(
             "stderr": f"Missing staged file: {file_path.name}",
             "details": f"Missing staged file: {file_path.name}",
         }
-    
+
     # Use -f flag for local Bio-Formats analysis (no server connection needed)
-    cmd = [OMERO_CLI, "import", "-f", "--depth", str(OMERO_IMPORT_SCAN_DEPTH), str(file_path)]
-    
+    cmd = [
+        OMERO_CLI,
+        "import",
+        "-f",
+        "--depth",
+        str(OMERO_IMPORT_SCAN_DEPTH),
+        str(file_path),
+    ]
+
     # Use a temporary OMERODIR for isolation
     env = os.environ.copy()
-    omerodir_path = get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    omerodir_path = (
+        get_plugin_tmp_dir("compat-check") / f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    )
     env["OMERODIR"] = str(omerodir_path)
 
     # CRITICAL: Ensure OMERO CLI cache paths are writable.
@@ -913,7 +987,7 @@ def _check_import_compatibility(
             "stderr": str(exc),
             "details": f"Unexpected error during compatibility check: {exc}",
         }
-    
+
     # CRITICAL FIX: Classify based on stdout content, NOT return code
     status, details = _classify_compatibility_output(
         result.returncode,
@@ -921,7 +995,7 @@ def _check_import_compatibility(
         result.stderr,
         expected_file_path=file_path,
     )
-    
+
     # Additional logging for debugging
     logger.debug(
         "Compatibility check for %s: status=%s, returncode=%d, stdout_lines=%d, stderr_lines=%d",
@@ -931,7 +1005,7 @@ def _check_import_compatibility(
         len((result.stdout or "").splitlines()),
         len((result.stderr or "").splitlines()),
     )
-    
+
     return {
         "status": status,
         "relative_path": relative_path,
@@ -939,6 +1013,7 @@ def _check_import_compatibility(
         "stderr": result.stderr,
         "details": details or "Compatibility check completed.",
     }
+
 
 def _run_compatibility_check(job_id: str):
     job = _load_job(job_id)
@@ -959,12 +1034,16 @@ def _run_compatibility_check(job_id: str):
         )
     ]
     if not pending_entries:
+
         def mark_idle(job_dict):
             job_dict["compatibility_thread_active"] = False
-            has_uploaded = any(entry.get("status") == "uploaded" for entry in job_dict.get("files", []))
+            has_uploaded = any(
+                entry.get("status") == "uploaded" for entry in job_dict.get("files", [])
+            )
             if has_uploaded:
                 has_errors = any(
-                    entry.get("compatibility") == "error" for entry in job_dict.get("files", [])
+                    entry.get("compatibility") == "error"
+                    for entry in job_dict.get("files", [])
                 )
                 if job_dict.get("incompatible_files"):
                     job_dict["compatibility_status"] = "incompatible"
@@ -973,7 +1052,11 @@ def _run_compatibility_check(job_id: str):
                 else:
                     job_dict["compatibility_status"] = "compatible"
             else:
-                if job_dict.get("compatibility_status") not in ("incompatible", "error", "compatible"):
+                if job_dict.get("compatibility_status") not in (
+                    "incompatible",
+                    "error",
+                    "compatible",
+                ):
                     job_dict["compatibility_status"] = "pending"
             _refresh_job_status(job_dict)
             job_dict["updated"] = time.time()
@@ -995,7 +1078,9 @@ def _run_compatibility_check(job_id: str):
             if not staged_path:
                 continue
             file_path = upload_root / staged_path
-            dataset_name = _dataset_name_for_path(entry.get("relative_path"), job.get("orphan_dataset_name"))
+            dataset_name = _dataset_name_for_path(
+                entry.get("relative_path"), job.get("orphan_dataset_name")
+            )
             dataset_id = (job.get("dataset_map") or {}).get(dataset_name)
             future = executor.submit(
                 _check_import_compatibility,
@@ -1012,7 +1097,11 @@ def _run_compatibility_check(job_id: str):
             try:
                 result = future.result()
             except Exception as exc:
-                logger.warning("Compatibility check failed for %s: %s", entry.get("relative_path"), exc)
+                logger.warning(
+                    "Compatibility check failed for %s: %s",
+                    entry.get("relative_path"),
+                    exc,
+                )
                 result = {
                     "status": "error",
                     "stdout": "",
@@ -1033,7 +1122,7 @@ def _run_compatibility_check(job_id: str):
         result["relative_path"]
         for result in results
         if result.get("status") == "incompatible"
-           and isinstance(result.get("relative_path"), str)
+        and isinstance(result.get("relative_path"), str)
     ]
 
     def apply_results(job_dict):
@@ -1104,5 +1193,7 @@ def _start_compatibility_check_thread(job_id: str):
     job = _update_job(job_id, mark_started)
     if not job or not started["value"]:
         return
-    worker = threading.Thread(target=_run_compatibility_check, args=(job_id,), daemon=True)
+    worker = threading.Thread(
+        target=_run_compatibility_check, args=(job_id,), daemon=True
+    )
     worker.start()

@@ -168,17 +168,21 @@ def _post_json(url, headers, payload, timeout=15):
         raise AiAssistError(errors.provider_unreachable())
     # Reconstruct the URL from validated components to prevent any
     # user-influenced path/query segments from altering scheme or host.
-    validated_url = urllib.parse.urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        parsed.query,
-        "",  # discard fragment
-    ))
+    validated_url = urllib.parse.urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            "",  # discard fragment
+        )
+    )
     data = json.dumps(payload).encode("utf-8")
     safe_url = sanitize_url_for_logging(validated_url)
-    request = urllib.request.Request(validated_url, data=data, headers=headers, method="POST")
+    request = urllib.request.Request(
+        validated_url, data=data, headers=headers, method="POST"
+    )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -316,12 +320,18 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
     if not regex:
         raise AiAssistError(errors.provider_response_no_regex())
 
-    if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(regex, filenames):
+    if not _is_regex_reasonable(regex, filenames) or _is_regex_too_generic(
+        regex, filenames
+    ):
         retry_prompt = _build_prompt(filenames, strict=True)
-        retry_content = _call_ai_provider_raw(provider, api_key, retry_prompt, 120, model=model)
+        retry_content = _call_ai_provider_raw(
+            provider, api_key, retry_prompt, 120, model=model
+        )
         retry_regex = _clean_regex(retry_content)
-        if retry_regex and _is_regex_reasonable(retry_regex, filenames) and not _is_regex_too_generic(
-            retry_regex, filenames
+        if (
+            retry_regex
+            and _is_regex_reasonable(retry_regex, filenames)
+            and not _is_regex_too_generic(retry_regex, filenames)
         ):
             regex = retry_regex
         else:
@@ -331,7 +341,9 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
         fallback = _suggest_separator_regex(filenames)
         if fallback:
             if fallback != regex:
-                logger.warning("AI regex looked unreliable; using heuristic suggestion.")
+                logger.warning(
+                    "AI regex looked unreliable; using heuristic suggestion."
+                )
             return {
                 "regex": fallback,
                 "source": "fallback",
@@ -405,7 +417,6 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
     rows = []
 
     for line in lines:
-
         if base_names and line in base_names:
             raise AiAssistError(errors.provider_response_invalid_format())
 
@@ -417,7 +428,9 @@ def _parse_ai_value_rows(text, expected_count, filenames=None):
     return rows
 
 
-def generate_ai_parsed_values(provider, api_key, filenames, model=None, custom_instructions=""):
+def generate_ai_parsed_values(
+    provider, api_key, filenames, model=None, custom_instructions=""
+):
     provider = (provider or "").strip().lower()
 
     if not provider:
@@ -431,7 +444,6 @@ def generate_ai_parsed_values(provider, api_key, filenames, model=None, custom_i
     content = _call_ai_provider_raw(provider, api_key, prompt, 800, model=model)
 
     parsed_rows = _parse_ai_value_rows(content, len(filenames), filenames=filenames)
-
 
     rows = []
 

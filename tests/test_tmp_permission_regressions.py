@@ -19,7 +19,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             cls.repo_root / "startup" / "10-server-bootstrap.sh"
         ).read_text(encoding="utf-8")
 
-    def test_installation_layout_keeps_server_namespace_owned_by_server_uid(self) -> None:
+    def test_installation_layout_keeps_server_namespace_owned_by_server_uid(
+        self,
+    ) -> None:
         function_text = self._slice_function(
             self.installation_script,
             "ensure_omero_tmp_layout() {",
@@ -29,7 +31,9 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             tmp_root = Path(tmpdir) / "omero_temp"
             current_uid = os.getuid()
             current_gid = os.getgid()
-            server_lock_dir = tmp_root / "omero-server" / "tmp" / "omero_omero-server" / "1477"
+            server_lock_dir = (
+                tmp_root / "omero-server" / "tmp" / "omero_omero-server" / "1477"
+            )
             web_plugin_dir = tmp_root / "omeroweb-import" / "jobs"
             server_lock_dir.mkdir(parents=True, exist_ok=True)
             web_plugin_dir.mkdir(parents=True, exist_ok=True)
@@ -51,14 +55,25 @@ class TmpPermissionRegressionTests(unittest.TestCase):
             self._run_bash(script)
 
             self.assertEqual((current_uid, current_gid), self._ownership(tmp_root))
-            self.assertEqual((current_uid, current_gid), self._ownership(tmp_root / "omero-server"))
-            self.assertEqual((current_uid, current_gid), self._ownership(tmp_root / "omero-server" / "tmp"))
-            self.assertEqual((current_uid, current_gid), self._ownership(server_lock_dir))
+            self.assertEqual(
+                (current_uid, current_gid), self._ownership(tmp_root / "omero-server")
+            )
+            self.assertEqual(
+                (current_uid, current_gid),
+                self._ownership(tmp_root / "omero-server" / "tmp"),
+            )
+            self.assertEqual(
+                (current_uid, current_gid), self._ownership(server_lock_dir)
+            )
             self.assertEqual((current_uid, current_gid), self._ownership(lock_file))
-            self.assertEqual((current_uid, current_gid), self._ownership(web_plugin_dir))
+            self.assertEqual(
+                (current_uid, current_gid), self._ownership(web_plugin_dir)
+            )
             self.assertEqual(0o755, tmp_root.stat().st_mode & 0o777)
             self.assertEqual(0o700, (tmp_root / "omero-server").stat().st_mode & 0o777)
-            self.assertEqual(0o700, (tmp_root / "omero-server" / "tmp").stat().st_mode & 0o777)
+            self.assertEqual(
+                0o700, (tmp_root / "omero-server" / "tmp").stat().st_mode & 0o777
+            )
 
     def test_server_bootstrap_removes_exact_legacy_lock_namespace(self) -> None:
         function_text = self._slice_function(

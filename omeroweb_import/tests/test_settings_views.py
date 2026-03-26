@@ -27,7 +27,9 @@ def test_user_settings_view_hides_store_exception(monkeypatch) -> None:
         content_type="application/json",
     )
 
-    monkeypatch.setattr(user_settings_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        user_settings_view, "current_username", lambda request, conn: "alice"
+    )
     monkeypatch.setattr(
         user_settings_view,
         "load_request_data",
@@ -56,7 +58,9 @@ def test_special_method_save_hides_store_exception(monkeypatch) -> None:
         content_type="application/json",
     )
 
-    monkeypatch.setattr(special_method_settings_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        special_method_settings_view, "current_username", lambda request, conn: "alice"
+    )
     monkeypatch.setattr(
         special_method_settings_view,
         "load_request_data",
@@ -85,7 +89,9 @@ def test_special_method_load_hides_store_exception(monkeypatch) -> None:
         content_type="application/json",
     )
 
-    monkeypatch.setattr(special_method_settings_view, "current_username", lambda request, conn: "alice")
+    monkeypatch.setattr(
+        special_method_settings_view, "current_username", lambda request, conn: "alice"
+    )
     monkeypatch.setattr(
         special_method_settings_view,
         "load_request_data",

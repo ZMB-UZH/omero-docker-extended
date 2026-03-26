@@ -13,7 +13,13 @@ from urllib.parse import quote, urljoin, urlsplit
 import numpy as np
 import requests
 import tifffile
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponse,
+    HttpResponseRedirect,
+    JsonResponse,
+)
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -95,7 +101,9 @@ def _store_backed_chunk_response(image, version, level, chunk):
     response = _store_backed_response(image, version, str(level), *chunk.split("/"))
     if response is None:
         return None
-    response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace("/", ".")
+    response["Content-Disposition"] = "attachment; filename=%s" % chunk.replace(
+        "/", "."
+    )
     return response
 
 
@@ -201,7 +209,7 @@ def get_image_shapes(image):
 
 def get_chunk_shape(image):
     chunks = []
-    for dim in ("TCZ"):
+    for dim in "TCZ":
         if getattr(image, "getSize" + dim)() > 1:
             chunks.append(1)
     if image.requiresPixelsPyramid():
@@ -361,7 +369,9 @@ def preview_image_chunk(request, iid, level, chunk, conn=None, **kwargs):
 
 
 @login_required()
-def preview_image_store_path(request, iid, version="0.4", store_path=None, conn=None, **kwargs):
+def preview_image_store_path(
+    request, iid, version="0.4", store_path=None, conn=None, **kwargs
+):
     return image_store_path(
         request,
         iid,
@@ -379,7 +389,9 @@ def image_preview(request, iid, conn=None, **kwargs):
         raise Http404("image not found")
 
     if resolve_image_backing_zarr_store(image) is None:
-        return redirect(reverse("load_metadata_preview", kwargs={"c_type": "image", "c_id": iid}))
+        return redirect(
+            reverse("load_metadata_preview", kwargs={"c_type": "image", "c_id": iid})
+        )
 
     context = _build_store_backed_preview_context(request, image)
     return render(request, "omero_web_zarr/image_preview.html", context)
@@ -456,7 +468,9 @@ def download_store_original(request, iid, conn=None, **kwargs):
         for path in sorted(store_root.rglob("*")):
             if not path.is_file():
                 continue
-            zf.write(path, arcname=str(Path(store_root.name) / path.relative_to(store_root)))
+            zf.write(
+                path, arcname=str(Path(store_root.name) / path.relative_to(store_root))
+            )
 
     archive.seek(0)
     return FileResponse(
@@ -481,9 +495,12 @@ def download_store_metadata(request, iid, conn=None, **kwargs):
         json.dumps(payload, indent=2, sort_keys=True),
         content_type="application/json",
     )
-    response["Content-Disposition"] = "attachment; filename=%s" % _store_backed_download_name(
-        image,
-        "-metadata.json",
+    response["Content-Disposition"] = (
+        "attachment; filename=%s"
+        % _store_backed_download_name(
+            image,
+            "-metadata.json",
+        )
     )
     return response
 
@@ -530,7 +547,11 @@ def download_store_ome_tiff(request, iid, conn=None, **kwargs):
             target_path.unlink(missing_ok=True)
 
     stream.close = _close_and_unlink
-    response = FileResponse(stream, as_attachment=True, filename=_store_backed_download_name(image, ".ome.tif"))
+    response = FileResponse(
+        stream,
+        as_attachment=True,
+        filename=_store_backed_download_name(image, ".ome.tif"),
+    )
     response["Content-Length"] = size
     return response
 
@@ -577,11 +598,13 @@ def _inject_launcher_head(html, base_url):
         "</script>"
     )
     if re.search(r"<base\b", html, flags=re.IGNORECASE):
-        return re.sub(r"<base\b[^>]*>", head_fragment, html, count=1, flags=re.IGNORECASE)
+        return re.sub(
+            r"<base\b[^>]*>", head_fragment, html, count=1, flags=re.IGNORECASE
+        )
 
     head_match = re.search(r"<head[^>]*>", html, flags=re.IGNORECASE)
     if head_match:
-        return f"{html[:head_match.end()]}{head_fragment}{html[head_match.end():]}"
+        return f"{html[: head_match.end()]}{head_fragment}{html[head_match.end() :]}"
     return f"{head_fragment}{html}"
 
 
@@ -608,6 +631,8 @@ def apps(request, app, url):
         LOGGER.warning("Failed to fetch remote app shell for %s", app, exc_info=True)
         return HttpResponse(status=502)
 
-    response = HttpResponse(_inject_launcher_head(html, base_url), content_type="text/html; charset=utf-8")
+    response = HttpResponse(
+        _inject_launcher_head(html, base_url), content_type="text/html; charset=utf-8"
+    )
     response["Cache-Control"] = f"private, max-age={_APP_SHELL_CACHE_SECONDS}"
     return response

@@ -66,11 +66,18 @@ def test_imaris_export_hides_job_failure_details(monkeypatch) -> None:
     views = _import_views()
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 1)
-    monkeypatch.setattr(views, "_start_celery_job", lambda *args, **kwargs: "celery-job-1")
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda *args, **kwargs: "celery-job-1"
+    )
     monkeypatch.setattr(
         views,
         "_poll_celery_job",
-        lambda job_id: ("FAILED", None, "traceback secret", {"error": "traceback secret"}),
+        lambda job_id: (
+            "FAILED",
+            None,
+            "traceback secret",
+            {"error": "traceback secret"},
+        ),
     )
     monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
 
@@ -103,7 +110,9 @@ def test_imaris_export_hides_internal_exception_text(monkeypatch) -> None:
     assert response.content.decode("utf-8") == views.IMS_EXPORT_FAILED_MESSAGE
 
 
-def test_imaris_export_status_logs_escape_user_controlled_values(monkeypatch, caplog) -> None:
+def test_imaris_export_status_logs_escape_user_controlled_values(
+    monkeypatch, caplog
+) -> None:
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"job": "celery-job\nforged"},
@@ -122,11 +131,16 @@ def test_imaris_export_status_logs_escape_user_controlled_values(monkeypatch, ca
         response = views.imaris_export(request, conn=None)
 
     assert response.status_code == 200
-    assert "IMS export status request job_id=celery-job\\\\nforged from 203.0.113.5\\\\nspoofed" in caplog.text
+    assert (
+        "IMS export status request job_id=celery-job\\\\nforged from 203.0.113.5\\\\nspoofed"
+        in caplog.text
+    )
     assert "job_id=celery-job\nforged" not in caplog.text
 
 
-def test_imaris_export_start_logs_escape_wait_and_ip_values(monkeypatch, caplog) -> None:
+def test_imaris_export_start_logs_escape_wait_and_ip_values(
+    monkeypatch, caplog
+) -> None:
     request = RequestFactory().get(
         "/omeroweb_imaris_connector/export/",
         data={"image": "1", "async": "1", "wait": "0\nline"},
@@ -137,11 +151,16 @@ def test_imaris_export_start_logs_escape_wait_and_ip_values(monkeypatch, caplog)
     views = _import_views()
     monkeypatch.setattr(views, "use_celery", lambda: True)
     monkeypatch.setattr(views, "_find_script_id", lambda conn: 7)
-    monkeypatch.setattr(views, "_start_celery_job", lambda *_args, **_kwargs: "celery-job-1")
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda *_args, **_kwargs: "celery-job-1"
+    )
 
     with caplog.at_level(logging.INFO, logger=views.logger.name):
         response = views.imaris_export(request, conn=SimpleNamespace())
 
     assert response.status_code == 200
-    assert "IMS export request image_id=1 async=True wait_param=0\\\\nline from 198.51.100.8\\\\nspoofed" in caplog.text
+    assert (
+        "IMS export request image_id=1 async=True wait_param=0\\\\nline from 198.51.100.8\\\\nspoofed"
+        in caplog.text
+    )
     assert "wait_param=0\nline" not in caplog.text

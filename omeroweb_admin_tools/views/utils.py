@@ -12,11 +12,7 @@ def require_root_user(view_func):
         username = current_username(request, conn)
         if username != "root":
             return JsonResponse(
-                {
-                    "error": (
-                        "PLEASE LOGIN AS ROOT USER\nTO USE THIS PLUGIN"
-                    )
-                },
+                {"error": ("PLEASE LOGIN AS ROOT USER\nTO USE THIS PLUGIN")},
                 status=403,
             )
         return view_func(request, *args, **kwargs)

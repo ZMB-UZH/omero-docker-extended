@@ -106,9 +106,7 @@ def render_metrics(env_values: Dict[str, str]) -> str:
             continue
 
         mountpoint, total, used, ratio = usage
-        labels = (
-            f'kind="{kind}",env_key="{env_key}",path="{host_path_value}",mountpoint="{mountpoint}"'
-        )
+        labels = f'kind="{kind}",env_key="{env_key}",path="{host_path_value}",mountpoint="{mountpoint}"'
         lines.append(f"omero_path_used_ratio{{{labels}}} {ratio}")
         lines.append(f"omero_path_bytes_total{{{labels}}} {float(total)}")
         lines.append(f"omero_path_bytes_used{{{labels}}} {float(used)}")

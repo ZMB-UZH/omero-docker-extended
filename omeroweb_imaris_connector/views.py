@@ -59,10 +59,10 @@ def _build_absolute_url(request, path, base_url_override=None):
 
 def _get_client_ip(request):
     """Extract client IP for logging purposes."""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
     if x_forwarded_for:
-        return x_forwarded_for.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR', 'unknown')
+        return x_forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "unknown")
 
 
 @login_required()
@@ -71,7 +71,9 @@ def imaris_export(request, conn=None, **kwargs):
     client_ip = _get_client_ip(request)
     safe_client_ip = sanitize_log_value(client_ip)
     safe_query = sanitize_log_value(request.GET.urlencode())
-    safe_user = sanitize_log_value(getattr(conn, 'getUser', lambda: None)() if conn else 'unknown')
+    safe_user = sanitize_log_value(
+        getattr(conn, "getUser", lambda: None)() if conn else "unknown"
+    )
 
     # Log request for debugging
     logger.debug(
@@ -175,7 +177,9 @@ def imaris_export(request, conn=None, **kwargs):
         )
         script_id = _find_script_id(conn)
         if not script_id:
-            return HttpResponse("IMS export script not found on OMERO.server.", status=500)
+            return HttpResponse(
+                "IMS export script not found on OMERO.server.", status=500
+            )
 
         celery_job_id = _start_celery_job(conn, image_id)
         status_params = {"job": celery_job_id}
@@ -187,7 +191,11 @@ def imaris_export(request, conn=None, **kwargs):
             base_url_override=base_url_override,
         )
         if async_mode:
-            logger.debug("IMS export async response image_id=%s job_id=%s", image_id, celery_job_id)
+            logger.debug(
+                "IMS export async response image_id=%s job_id=%s",
+                image_id,
+                celery_job_id,
+            )
             return JsonResponse({"job_id": celery_job_id, "status_url": status_url})
 
         deadline = time.time() + EXPORT_TIMEOUT
@@ -223,7 +231,9 @@ def imaris_export(request, conn=None, **kwargs):
             time.sleep(EXPORT_POLL_INTERVAL)
 
         if not last_state:
-            return HttpResponse("Could not determine IMS export job status.", status=500)
+            return HttpResponse(
+                "Could not determine IMS export job status.", status=500
+            )
 
         if last_state not in {"FINISHED", "SUCCESS", "COMPLETE", "DONE"}:
             return HttpResponse("Timed out waiting for IMS export job.", status=504)
@@ -242,7 +252,7 @@ def imaris_export(request, conn=None, **kwargs):
 
 def _poll_celery_job(job_id):
     """Poll a Celery job for its current state and results."""
-    task_id = job_id[len(CELERY_JOB_PREFIX):]
+    task_id = job_id[len(CELERY_JOB_PREFIX) :]
     async_result = celery_app.AsyncResult(task_id)
     logger.debug("Polling Celery job task_id=%s state=%s", task_id, async_result.state)
 
@@ -370,8 +380,8 @@ def _get_session_key(conn):
 
     # Try to get from underlying client
     try:
-        if hasattr(conn, 'c') and conn.c:
-            if hasattr(conn.c, 'getSessionId'):
+        if hasattr(conn, "c") and conn.c:
+            if hasattr(conn.c, "getSessionId"):
                 session_id = conn.c.getSessionId()
                 if session_id:
                     return session_id

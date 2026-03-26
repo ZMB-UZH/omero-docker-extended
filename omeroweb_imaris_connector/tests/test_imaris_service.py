@@ -96,7 +96,9 @@ def test_run_script_fails_after_timeout(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(imaris_service, "SCRIPT_START_RETRY_INTERVAL", 0)
     monkeypatch.setattr(imaris_service.time, "sleep", lambda *_: None)
 
-    with pytest.raises(RuntimeError, match="No script processor slot available") as exc_info:
+    with pytest.raises(
+        RuntimeError, match="No script processor slot available"
+    ) as exc_info:
         imaris_service._run_script(None, script_id=1, image_id=2, wait_secs=0)
 
     assert "Processor service is not running" in str(exc_info.value)

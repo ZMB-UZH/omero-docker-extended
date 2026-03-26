@@ -129,13 +129,17 @@ def test_normalize_level_uses_error_traceback_detection() -> None:
 
 def test_normalize_level_traceback_continuation_line_is_debug() -> None:
     assert (
-        _normalize_level("", "During handling of the above exception, another exception occurred:")
+        _normalize_level(
+            "", "During handling of the above exception, another exception occurred:"
+        )
         == "debug"
     )
 
 
 def test_normalize_level_redis_bloom_error_rate_is_info() -> None:
-    message = "1:M 04 Mar 2026 12:16:02.311 * <bf> \t{ bf-error-rate       :      0.01 }"
+    message = (
+        "1:M 04 Mar 2026 12:16:02.311 * <bf> \t{ bf-error-rate       :      0.01 }"
+    )
     assert _normalize_level("unknown", message) == "info"
 
 
@@ -149,7 +153,12 @@ def test_normalize_level_traceback_file_line_is_debug() -> None:
 
 def test_normalize_level_exception_line_is_error() -> None:
     assert _normalize_level("", "KeyError: 'public_enabled'") == "error"
-    assert _normalize_level("", "AttributeError: type object 'RequestContext' has no attribute 'html'") == "error"
+    assert (
+        _normalize_level(
+            "", "AttributeError: type object 'RequestContext' has no attribute 'html'"
+        )
+        == "error"
+    )
     assert _normalize_level("", "ValueError: invalid literal for int()") == "error"
 
 
@@ -174,7 +183,9 @@ def test_prepare_query_jobs_batches_internal_files() -> None:
     assert sum(len(job.selected_files) for job in jobs) == 13
 
 
-def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries() -> None:
+def test_prepare_query_jobs_applies_text_filter_to_docker_and_internal_queries() -> (
+    None
+):
     jobs = _prepare_query_jobs(
         ["omeroserver", "omeroweb_internal"],
         text_query='imaris "warning"',
@@ -302,10 +313,14 @@ def test_fetch_internal_log_labels_reads_filesystem_and_caches(monkeypatch) -> N
     monkeypatch.setattr(log_query_module.os.path, "isfile", lambda path: True)
 
     first_labels, first_key = fetch_internal_log_labels(config, "omeroserver_internal")
-    second_labels, second_key = fetch_internal_log_labels(config, "omeroserver_internal")
+    second_labels, second_key = fetch_internal_log_labels(
+        config, "omeroserver_internal"
+    )
 
     assert first_labels == ["Blitz-0.log", "DropBox.log"]
     assert second_labels == ["Blitz-0.log", "DropBox.log"]
     assert first_key == "filepath"
     assert second_key == "filepath"
-    assert len(seen_patterns) == len(log_query_module._INTERNAL_LOG_GLOB_PATTERNS["omeroserver"])
+    assert len(seen_patterns) == len(
+        log_query_module._INTERNAL_LOG_GLOB_PATTERNS["omeroserver"]
+    )

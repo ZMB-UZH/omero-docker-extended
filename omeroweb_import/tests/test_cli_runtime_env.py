@@ -1,4 +1,5 @@
 """Tests for OMERO CLI runtime environment handling."""
+
 from __future__ import annotations
 
 import subprocess
@@ -22,7 +23,9 @@ def test_run_omero_cli_sets_writable_home_and_cache(tmp_path: Path, monkeypatch)
     def fake_run(*args, **kwargs):
         captured["args"] = args
         captured["kwargs"] = kwargs
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout="ok", stderr=""
+        )
 
     monkeypatch.setattr(core_functions.subprocess, "run", fake_run)
 
@@ -57,7 +60,9 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
 
     def fake_run(*args, **kwargs):
         captured["kwargs"] = kwargs
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout="ok", stderr=""
+        )
 
     monkeypatch.setattr(core_functions.subprocess, "run", fake_run)
 
@@ -65,8 +70,7 @@ def test_run_omero_cli_merges_existing_ice_config(tmp_path: Path, monkeypatch):
 
     merged_config = Path(captured["kwargs"]["env"]["ICE_CONFIG"])
     assert merged_config.read_text(encoding="utf-8") == (
-        "Ice.Default.Router=test-router\n"
-        "omero.keep_alive=30\n"
+        "Ice.Default.Router=test-router\nomero.keep_alive=30\n"
     )
 
 
@@ -77,7 +81,9 @@ def test_get_import_timeout_seconds_defaults_to_24_hours(monkeypatch):
 
 
 def test_get_local_import_scan_timeout_seconds_defaults_to_2_hours(monkeypatch):
-    monkeypatch.delenv(core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, raising=False)
+    monkeypatch.delenv(
+        core_functions.LOCAL_IMPORT_SCAN_TIMEOUT_SECONDS_ENV, raising=False
+    )
 
     assert core_functions._get_local_import_scan_timeout_seconds() == 2 * 60 * 60
 
@@ -88,7 +94,9 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     def fake_run(cmd, timeout=None):
         captured["cmd"] = cmd
         captured["timeout"] = timeout
-        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=0, stdout="ok", stderr=""
+        )
 
     monkeypatch.setattr(core_functions, "_run_omero_cli", fake_run)
 
@@ -104,11 +112,15 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 
     assert ok is True
     depth_index = captured["cmd"].index("--depth")
-    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][depth_index + 1] == str(
+        core_functions.OMERO_IMPORT_SCAN_DEPTH
+    )
     assert captured["cmd"][-3:] == ["-d", "17", str(path)]
 
 
-def test_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monkeypatch):
+def test_compatibility_check_adds_scan_depth_to_cli_command(
+    tmp_path: Path, monkeypatch
+):
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
     file_path = tmp_path / "nested" / "sample.czi"
@@ -141,12 +153,16 @@ def test_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monk
 
     assert result["status"] == "compatible"
     depth_index = captured["cmd"].index("--depth")
-    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][depth_index + 1] == str(
+        core_functions.OMERO_IMPORT_SCAN_DEPTH
+    )
     assert captured["cmd"][:4] == [core_functions.OMERO_CLI, "import", "-f", "--depth"]
     assert captured["cmd"][-1] == str(file_path)
 
 
-def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(tmp_path: Path, monkeypatch):
+def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(
+    tmp_path: Path, monkeypatch
+):
     upload_root = tmp_path / "upload-root"
     upload_root.mkdir()
     file_path = tmp_path / "nested" / "sample.zarr"
@@ -169,7 +185,9 @@ def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(tmp_path:
     assert result.returncode == 0
     assert captured["cmd"][:4] == [core_functions.OMERO_CLI, "import", "-f", "--depth"]
     depth_index = captured["cmd"].index("--depth")
-    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+    assert captured["cmd"][depth_index + 1] == str(
+        core_functions.OMERO_IMPORT_SCAN_DEPTH
+    )
     assert captured["cmd"][-1] == str(file_path)
     assert captured["kwargs"]["timeout"] == 2 * 60 * 60
 
@@ -190,7 +208,9 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 
         def fake_run(cmd, *args, **kwargs):
             captured["cmd"] = cmd
-            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="ok", stderr="")
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="ok", stderr=""
+            )
 
         monkeypatch.setattr(module, "_run_omero_cli", fake_run)
 
@@ -205,11 +225,15 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 
         assert ok is True
         depth_index = captured["cmd"].index("--depth")
-        assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
+        assert captured["cmd"][depth_index + 1] == str(
+            core_functions.OMERO_IMPORT_SCAN_DEPTH
+        )
         assert captured["cmd"][-3:] == ["-d", "17", "/tmp/sample.czi"]
 
 
-def test_service_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Path, monkeypatch):
+def test_service_compatibility_check_adds_scan_depth_to_cli_command(
+    tmp_path: Path, monkeypatch
+):
     file_path = tmp_path / "nested" / "sample.czi"
     file_path.parent.mkdir()
     file_path.write_text("dummy", encoding="utf-8")
@@ -238,8 +262,15 @@ def test_service_compatibility_check_adds_scan_depth_to_cli_command(tmp_path: Pa
 
     assert result["status"] == "compatible"
     depth_index = captured["cmd"].index("--depth")
-    assert captured["cmd"][depth_index + 1] == str(core_functions.OMERO_IMPORT_SCAN_DEPTH)
-    assert captured["cmd"][:4] == [workflow_service.OMERO_CLI, "import", "-f", "--depth"]
+    assert captured["cmd"][depth_index + 1] == str(
+        core_functions.OMERO_IMPORT_SCAN_DEPTH
+    )
+    assert captured["cmd"][:4] == [
+        workflow_service.OMERO_CLI,
+        "import",
+        "-f",
+        "--depth",
+    ]
     assert captured["cmd"][-1] == str(file_path)
 
 
@@ -250,11 +281,17 @@ def test_classify_import_failure_detects_session_expiry():
     operation = "keepAllAlive"
     """
 
-    assert core_functions._classify_import_failure("", stderr) == errors.import_session_expired()
+    assert (
+        core_functions._classify_import_failure("", stderr)
+        == errors.import_session_expired()
+    )
 
 
 def test_classify_import_failure_defaults_to_generic_error():
-    assert core_functions._classify_import_failure("", "plain failure") == errors.import_failed()
+    assert (
+        core_functions._classify_import_failure("", "plain failure")
+        == errors.import_failed()
+    )
 
 
 def test_classify_import_failure_detects_parent_directory_write_denial():

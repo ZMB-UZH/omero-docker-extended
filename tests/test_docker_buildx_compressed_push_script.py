@@ -142,7 +142,9 @@ exit 0
             )
 
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr)
+            self.assertIn(
+                "Missing required variable: DOCKER_REGISTRY_PREFIX", result.stderr
+            )
 
     def test_script_allows_local_build_without_registry_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -177,7 +179,10 @@ exit 0
             )
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
-            self.assertIn("Registry prefix      : (not set; building local images only)", result.stdout)
+            self.assertIn(
+                "Registry prefix      : (not set; building local images only)",
+                result.stdout,
+            )
             self.assertIn("Flatten final image  : 0", result.stdout)
 
     def test_script_builds_expected_bake_arguments(self) -> None:
@@ -322,15 +327,15 @@ exit 0
                 joined_log,
             )
             self.assertIn(
-                "--change ENV FOO=\"bar baz\"",
+                '--change ENV FOO="bar baz"',
                 joined_log,
             )
             self.assertIn(
-                "--change ENTRYPOINT [\"/hello.txt\"]",
+                '--change ENTRYPOINT ["/hello.txt"]',
                 joined_log,
             )
             self.assertIn(
-                "--change HEALTHCHECK --interval=5000000000ns --timeout=3000000000ns --retries=2 CMD [\"/hello.txt\"]",
+                '--change HEALTHCHECK --interval=5000000000ns --timeout=3000000000ns --retries=2 CMD ["/hello.txt"]',
                 joined_log,
             )
             self.assertIn(
@@ -369,7 +374,7 @@ exit 0
                 '"StopSignal":"SIGTERM",'
                 '"Entrypoint":["/hello.txt"],'
                 '"Cmd":["--serve"],'
-                '"OnBuild":[],' 
+                '"OnBuild":[],'
                 '"Shell":["/bin/sh","-c"],'
                 '"Healthcheck":{"Test":["CMD","/hello.txt"],'
                 '"Interval":5000000000,'
@@ -413,14 +418,19 @@ exit 0
             )
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
-            self.assertIn("Running image flatten-only workflow with settings:", result.stdout)
+            self.assertIn(
+                "Running image flatten-only workflow with settings:", result.stdout
+            )
 
             joined_log = fake_log_path.read_text(encoding="utf-8")
             self.assertNotIn("buildx bake", joined_log)
             self.assertIn("compose -f", joined_log)
             self.assertIn("config", joined_log)
             self.assertIn("image inspect omeroserver:custom", joined_log)
-            self.assertIn("image tag omeroserver:custom omeroserver:custom__flatten_source_", joined_log)
+            self.assertIn(
+                "image tag omeroserver:custom omeroserver:custom__flatten_source_",
+                joined_log,
+            )
             self.assertIn("build --provenance false --file", joined_log)
             self.assertIn("image import", joined_log)
 
@@ -582,8 +592,12 @@ exit 0
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             joined_log = fake_log_path.read_text(encoding="utf-8")
             self.assertIn("buildx rm -f omero-builder", joined_log)
-            self.assertIn("volume ls -q --filter name=buildx_buildkit_omero-builder", joined_log)
-            self.assertIn("volume rm -f buildx_buildkit_omero-builder0_state", joined_log)
+            self.assertIn(
+                "volume ls -q --filter name=buildx_buildkit_omero-builder", joined_log
+            )
+            self.assertIn(
+                "volume rm -f buildx_buildkit_omero-builder0_state", joined_log
+            )
 
     def test_script_buildx_uses_compose_declared_local_image_name(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

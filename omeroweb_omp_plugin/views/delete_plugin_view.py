@@ -11,7 +11,10 @@ from ..services.core import (
     get_id,
 )
 from ..constants import OMERO_CLI
-from ..services.rate_limit import build_rate_limit_message, check_major_action_rate_limit
+from ..services.rate_limit import (
+    build_rate_limit_message,
+    check_major_action_rate_limit,
+)
 from ..views.utils import (
     build_omero_cli_base_command,
     load_json_body,
@@ -19,6 +22,7 @@ from ..views.utils import (
     validate_user_password,
 )
 from ..strings import errors as error_messages
+
 logger = logging.getLogger(__name__)
 
 OMERO = OMERO_CLI
@@ -31,7 +35,9 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
     """Delete ONLY plugin-generated MapAnnotations for a project."""
     try:
         if request.method != "POST":
-            return JsonResponse({"error": error_messages.method_post_required()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.method_post_required()}, status=400
+            )
 
         data, error = load_json_body(request)
         if error:
@@ -41,9 +47,13 @@ def delete_plugin_keyvaluepairs(request, conn=None, url=None, **kwargs):
         password = data.get("password")
 
         if not project_id:
-            return JsonResponse({"error": error_messages.missing_project_id()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_project_id()}, status=400
+            )
         if not password:
-            return JsonResponse({"error": error_messages.missing_password()}, status=400)
+            return JsonResponse(
+                {"error": error_messages.missing_password()}, status=400
+            )
 
         valid, _ = validate_user_password(conn, password)
         if not valid:

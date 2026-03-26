@@ -10,9 +10,9 @@ class OmeroWebLogoFallbackContractTests(unittest.TestCase):
         cls.repo_root = Path(__file__).resolve().parents[1]
 
     def test_omeroweb_dockerfile_copies_logo_fallback_writer(self) -> None:
-        dockerfile_text = (self.repo_root / "docker" / "omero-web.Dockerfile").read_text(
-            encoding="utf-8"
-        )
+        dockerfile_text = (
+            self.repo_root / "docker" / "omero-web.Dockerfile"
+        ).read_text(encoding="utf-8")
         self.assertIn(
             "COPY tools/write_branding_logo_fallback.py /opt/omero/tools/write_branding_logo_fallback.py",
             dockerfile_text,

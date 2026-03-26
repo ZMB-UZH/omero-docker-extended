@@ -1,4 +1,5 @@
 """Regression tests for path handling and sensitive logging hardening."""
+
 from __future__ import annotations
 
 import json
@@ -43,8 +44,14 @@ def test_job_paths_are_canonical_and_anchored_under_jobs_root(tmp_path, monkeypa
     monkeypatch.setattr(core_functions, "_get_jobs_root", lambda: jobs_root)
 
     job_id = "B0AA2D2266F8466C8EEA6B26477693B2"
-    assert core_functions._job_path(job_id) == jobs_root.resolve() / "b0aa2d2266f8466c8eea6b26477693b2.json"
-    assert core_functions._job_lock_path(job_id) == jobs_root.resolve() / ".b0aa2d2266f8466c8eea6b26477693b2.lock"
+    assert (
+        core_functions._job_path(job_id)
+        == jobs_root.resolve() / "b0aa2d2266f8466c8eea6b26477693b2.json"
+    )
+    assert (
+        core_functions._job_lock_path(job_id)
+        == jobs_root.resolve() / ".b0aa2d2266f8466c8eea6b26477693b2.lock"
+    )
 
 
 def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
@@ -55,20 +62,26 @@ def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
 
     job_id = "b0aa2d2266f8466c8eea6b26477693b2"
     job_path = jobs_root / f"{job_id}.json"
-    job_path.write_text(json.dumps({"job_id": job_id, "status": "uploading"}), encoding="utf-8")
+    job_path.write_text(
+        json.dumps({"job_id": job_id, "status": "uploading"}), encoding="utf-8"
+    )
 
     loaded = core_functions._load_job(job_id.upper())
 
     assert loaded == {"job_id": job_id, "status": "uploading"}
 
 
-def test_open_service_connection_redacts_password_when_connect_raises(monkeypatch, caplog):
+def test_open_service_connection_redacts_password_when_connect_raises(
+    monkeypatch, caplog
+):
     created = []
 
     class FakeConn:
         def __init__(self, *_args, **_kwargs):
             self.closed = False
-            self.SERVICE_OPTS = type("ServiceOpts", (), {"setOmeroGroup": lambda self, value: None})()
+            self.SERVICE_OPTS = type(
+                "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
+            )()
 
         def connect(self):
             raise RuntimeError("authentication failed for password super-secret")
@@ -84,7 +97,11 @@ def test_open_service_connection_redacts_password_when_connect_raises(monkeypatc
         created.append(conn)
         return conn
 
-    monkeypatch.setattr(import_service, "_get_job_service_credentials", lambda: ("svc-user", "svc-pass", "", True))
+    monkeypatch.setattr(
+        import_service,
+        "_get_job_service_credentials",
+        lambda: ("svc-user", "svc-pass", "", True),
+    )
     monkeypatch.setattr(import_service, "BlitzGateway", fake_gateway)
 
     with caplog.at_level(logging.ERROR, logger=import_service.logger.name):
@@ -98,13 +115,17 @@ def test_open_service_connection_redacts_password_when_connect_raises(monkeypatc
     assert "has_last_error=True" in caplog.text
 
 
-def test_open_service_connection_redacts_password_when_connect_returns_false(monkeypatch, caplog):
+def test_open_service_connection_redacts_password_when_connect_returns_false(
+    monkeypatch, caplog
+):
     created = []
 
     class FakeConn:
         def __init__(self, *_args, **_kwargs):
             self.closed = False
-            self.SERVICE_OPTS = type("ServiceOpts", (), {"setOmeroGroup": lambda self, value: None})()
+            self.SERVICE_OPTS = type(
+                "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
+            )()
 
         def connect(self):
             return False
@@ -120,7 +141,11 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(mon
         created.append(conn)
         return conn
 
-    monkeypatch.setattr(import_service, "_get_job_service_credentials", lambda: ("svc-user", "svc-pass", "", True))
+    monkeypatch.setattr(
+        import_service,
+        "_get_job_service_credentials",
+        lambda: ("svc-user", "svc-pass", "", True),
+    )
     monkeypatch.setattr(import_service, "BlitzGateway", fake_gateway)
 
     with caplog.at_level(logging.ERROR, logger=import_service.logger.name):

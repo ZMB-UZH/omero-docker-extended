@@ -2,6 +2,7 @@
 Compatibility layer - wraps refactored services to maintain original function signatures.
 This allows views to call functions without passing jobs_root parameter.
 """
+
 from .jobs.job_storage import (
     JOB_LOCK_RETRIES,
     JOB_LOCK_TIMEOUT_SECONDS,
@@ -19,18 +20,18 @@ from .jobs.job_storage import (
     safe_job_id,
     append_job_message,
     append_job_error,
-    _compatibility_pending_entries
+    _compatibility_pending_entries,
 )
 from ..utils.file_helpers import get_jobs_root
 from ..utils.omero_helpers import (
     _current_user_id,
     _get_owner_username,
-    _has_read_write_permissions
+    _has_read_write_permissions,
 )
 from .omero.dataset_service import _iter_accessible_projects
 from .import_management.workflow_service import (
     _normalize_sem_edx_associations,
-    _build_sem_edx_associations_from_entries
+    _build_sem_edx_associations_from_entries,
 )
 
 
@@ -45,37 +46,46 @@ def _load_job(job_id: str):
     return _load_job_internal(job_id, get_jobs_root())
 
 
-def _save_job(job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def _save_job(
+    job_dict, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS
+):
     """Save job without needing to pass jobs_root."""
     return _save_job_internal(job_dict, get_jobs_root(), retries, timeout)
 
 
-def _robust_update_job(job_id: str, update_fn, retries: int = JOB_LOCK_RETRIES, timeout: float = JOB_LOCK_TIMEOUT_SECONDS):
+def _robust_update_job(
+    job_id: str,
+    update_fn,
+    retries: int = JOB_LOCK_RETRIES,
+    timeout: float = JOB_LOCK_TIMEOUT_SECONDS,
+):
     """Update job without needing to pass jobs_root."""
-    return _robust_update_job_internal(job_id, update_fn, get_jobs_root(), retries, timeout)
+    return _robust_update_job_internal(
+        job_id, update_fn, get_jobs_root(), retries, timeout
+    )
 
 
 # Re-export with underscore aliases
 __all__ = [
-    '_job_path',
-    '_load_job',
-    '_save_job',
-    '_robust_update_job',
-    'get_env_int',
-    'normalize_job_batch_size',
-    'resolve_job_batch_size',
-    'has_pending_uploads',
-    'get_compatibility_pending_entries',
-    'should_start_compatibility_check',
-    'refresh_job_status',
-    'safe_job_id',
-    'append_job_message',
-    'append_job_error',
-    '_compatibility_pending_entries',
-    '_current_user_id',
-    '_get_owner_username',
-    '_has_read_write_permissions',
-    '_iter_accessible_projects',
-    '_normalize_sem_edx_associations',
-    '_build_sem_edx_associations_from_entries',
+    "_job_path",
+    "_load_job",
+    "_save_job",
+    "_robust_update_job",
+    "get_env_int",
+    "normalize_job_batch_size",
+    "resolve_job_batch_size",
+    "has_pending_uploads",
+    "get_compatibility_pending_entries",
+    "should_start_compatibility_check",
+    "refresh_job_status",
+    "safe_job_id",
+    "append_job_message",
+    "append_job_error",
+    "_compatibility_pending_entries",
+    "_current_user_id",
+    "_get_owner_username",
+    "_has_read_write_permissions",
+    "_iter_accessible_projects",
+    "_normalize_sem_edx_associations",
+    "_build_sem_edx_associations_from_entries",
 ]

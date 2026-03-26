@@ -18,7 +18,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             cls.repo_root / "startup" / "10-server-bootstrap.sh"
         ).read_text(encoding="utf-8")
 
-    def test_collect_repo_root_bootstrap_paths_unions_runtime_and_configured_groups(self) -> None:
+    def test_collect_repo_root_bootstrap_paths_unions_runtime_and_configured_groups(
+        self,
+    ) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "trim_whitespace() {",
@@ -208,11 +210,18 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
         self.assertIn('target_repo_uuid = ""', function_text)
         self.assertIn("sharedResources().repositories()", function_text)
-        self.assertIn("repo_description_path(description) != expected_managed_dir", function_text)
-        self.assertIn('obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid', function_text)
+        self.assertIn(
+            "repo_description_path(description) != expected_managed_dir", function_text
+        )
+        self.assertIn(
+            "obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid",
+            function_text,
+        )
         self.assertIn('"${managed_repo_root}"', function_text)
 
-    def test_validate_managed_repository_configuration_rejects_relative_path(self) -> None:
+    def test_validate_managed_repository_configuration_rejects_relative_path(
+        self,
+    ) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "normalize_dir_path() {",
@@ -227,7 +236,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
             trim_whitespace() {
                 printf "%s" "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
             }
-            """ + function_text + """
+            """
+            + function_text
+            + """
             validate_managed_repository_configuration
             """
         )
@@ -243,7 +254,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("absolute path", result.stderr)
 
-    def test_validate_managed_repository_configuration_rejects_image_local_repo(self) -> None:
+    def test_validate_managed_repository_configuration_rejects_image_local_repo(
+        self,
+    ) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,
             "normalize_dir_path() {",
@@ -252,7 +265,12 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             server_home = Path(tmpdir) / "server" / "OMERO.server"
-            unexpected_root = Path(tmpdir) / "server" / "OMERO.server-5.6.17-ice36" / "ManagedRepository"
+            unexpected_root = (
+                Path(tmpdir)
+                / "server"
+                / "OMERO.server-5.6.17-ice36"
+                / "ManagedRepository"
+            )
             omero_dir = Path(tmpdir) / "OMERO"
             server_home.mkdir(parents=True, exist_ok=True)
             unexpected_root.mkdir(parents=True, exist_ok=True)

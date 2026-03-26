@@ -67,7 +67,9 @@ def safe_remove_tree(path: Path, root: Path, *, follow_symlinks: bool = False) -
         return False
 
     try:
-        for root_dir, dirnames, filenames in os.walk(path, topdown=False, followlinks=follow_symlinks):
+        for root_dir, dirnames, filenames in os.walk(
+            path, topdown=False, followlinks=follow_symlinks
+        ):
             for name in filenames:
                 try:
                     (Path(root_dir) / name).unlink()

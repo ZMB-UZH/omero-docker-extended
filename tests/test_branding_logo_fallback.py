@@ -53,11 +53,20 @@ class BrandingLogoFallbackTests(unittest.TestCase):
             ihdr_length = struct.unpack(">I", png_bytes[8:12])[0]
             self.assertEqual(ihdr_length, 13)
             self.assertEqual(png_bytes[12:16], b"IHDR")
-            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
-                ">IIBBBBB", png_bytes[16:29]
-            )
+            (
+                width,
+                height,
+                bit_depth,
+                color_type,
+                compression,
+                filter_method,
+                interlace,
+            ) = struct.unpack(">IIBBBBB", png_bytes[16:29])
             self.assertEqual((width, height), (96, 96))
-            self.assertEqual((bit_depth, color_type, compression, filter_method, interlace), (8, 6, 0, 0, 0))
+            self.assertEqual(
+                (bit_depth, color_type, compression, filter_method, interlace),
+                (8, 6, 0, 0, 0),
+            )
 
             compressed_payload_length = struct.unpack(">I", png_bytes[33:37])[0]
             self.assertEqual(png_bytes[37:41], b"IDAT")
