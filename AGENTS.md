@@ -21,6 +21,7 @@ It is intentionally short. Deep context lives in the files it points to.
 - The example-file pattern exists so repository updates (including `github_pull_project_bash_example` workflows) can refresh templates without overwriting site-specific runtime files.
 - Treat this distribution as a full-stack, multi-container deployment that may contend with pre-existing Docker workloads (for example via host ports, network names, volumes, or maintenance automation). Operators are expected to validate coexistence in their own environment before production rollout.
 - Keep agent commentary terse and action-first. Prefer short progress updates over long explanations.
+- Prefer interactive terminals and avoid long `sleep` commands unless absolutely necessary for the command set or workflow. Poll for results or use background execution with notification instead of blind waits.
 - When a general command fails for a reusable environment-specific reason, update `AGENTS.md` or the relevant doc in the same change so later agents do not repeat it.
 - Never create, edit, overwrite, or delete `env/omero_secrets.env` as an AI agent. Treat it as operator-managed secret material.
 - For OMERO configuration property names, defaults, and semantics, use the official OMERO config glossary as the single source of truth: `https://omero.readthedocs.io/en/stable/sysadmins/config.html`.
