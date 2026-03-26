@@ -171,9 +171,6 @@ def main() -> int:
         "OMERO_WEB_CONFIG_GLOB", "/opt/omero/web/config/*.omero"
     )
 
-    if glob.glob(config_glob):
-        run_omero_command(omero_bin, "load", "--glob", config_glob)
-
     normalized_config: dict[str, str] = {}
     for key in sorted(os.environ):
         if not key.startswith("CONFIG_"):
@@ -183,6 +180,9 @@ def main() -> int:
     additional_apps = normalized_config.get("CONFIG_omero_web_apps")
     if additional_apps is not None:
         validate_additional_apps(python_bin, parse_additional_apps(additional_apps))
+
+    if glob.glob(config_glob):
+        run_omero_command(omero_bin, "load", "--glob", config_glob)
 
     for key in sorted(normalized_config):
         run_omero_command(

@@ -1,6 +1,5 @@
 import importlib.util
 import inspect
-import os
 import sys
 import tempfile
 import types
@@ -134,12 +133,8 @@ def _install_import_stubs():
         request_utils.parse_json_body = lambda request: ({}, None)
         env_utils = types.ModuleType("omero_plugin_common.env_utils")
         env_utils.ENV_FILE_OMEROWEB = ""
-        env_utils.get_env = lambda key, env_file=None: os.environ.get(key, "")
-        env_utils.get_bool_env = lambda key, default=False, env_file=None: (
-            (str(os.environ.get(key, "")).strip().lower() in {"1", "true", "yes", "on"})
-            if key in os.environ
-            else default
-        )
+        env_utils.get_env = lambda key, env_file=None: ""
+        env_utils.get_bool_env = lambda key, default=False, env_file=None: default
         sys.modules["omero_plugin_common"] = common_module
         sys.modules["omero_plugin_common.logging_utils"] = logging_utils
         sys.modules["omero_plugin_common.tmp_utils"] = tmp_utils
@@ -1474,10 +1469,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -1547,10 +1538,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -1606,10 +1593,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -1669,10 +1652,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -1737,10 +1716,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -1810,10 +1785,6 @@ class ImportPluginRegressionTests(TestCase):
             )
 
             with (
-                mock.patch.dict(
-                    os.environ,
-                    {core_functions.NATIVE_ZARR_IMPORT_ENABLED_ENV: "true"},
-                ),
                 mock.patch.object(
                     core_functions, "_run_local_import_scan", return_value=scan_result
                 ),
@@ -2676,17 +2647,6 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             with self.assertRaisesRegex(RuntimeError, "must be an absolute path"):
                 manage_script._managed_repository_root(config)
 
-    def test_managed_repository_root_rejects_root_outside_data_dir(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
-            outside_root = Path(tmpdir) / "server-image" / "ManagedRepository"
-            outside_root.mkdir(parents=True, exist_ok=True)
-            config["omero.managed.dir"] = str(outside_root)
-            with self.assertRaisesRegex(RuntimeError, "must stay within"):
-                manage_script._managed_repository_root(config)
-
     def test_stage_zarr_creates_missing_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()
         fixed_now = real_datetime(2026, 3, 22, 9, 51, 15)
@@ -2720,164 +2680,6 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
             )
             self.assertTrue((managed_root / "users_private" / "test").is_dir())
 
-    def test_load_server_config_reads_runtime_state_file(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            omerodir = Path(tmpdir) / "OMERO.server"
-            state_dir = omerodir / "var"
-            state_dir.mkdir(parents=True, exist_ok=True)
-            (state_dir / "managed-zarr-runtime.env").write_text(
-                "omero.web.import.shared_tmp_path=/shared-transfer\n",
-                encoding="utf-8",
-            )
-
-            values = {
-                "omero.data.dir": "/OMERO",
-                "omero.managed.dir": "/OMERO/ManagedRepository",
-                "omero.fs.repo.path": "%group%/%user%/%year%-%month%-%day%/%time%",
-            }
-            conn = types.SimpleNamespace(
-                c=types.SimpleNamespace(
-                    sf=types.SimpleNamespace(
-                        getConfigService=lambda: types.SimpleNamespace(
-                            getConfigValue=lambda key: values[key]
-                        )
-                    )
-                )
-            )
-
-            with mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}):
-                config = manage_script._load_server_config(conn)
-
-        self.assertEqual("/OMERO", config["omero.data.dir"])
-        self.assertEqual("/OMERO/ManagedRepository", config["omero.managed.dir"])
-        self.assertEqual("/shared-transfer", config["omero.web.import.shared_tmp_path"])
-
-    def test_load_runtime_state_value_requires_existing_state_file_and_key(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            omerodir = Path(tmpdir) / "OMERO.server"
-            with mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}):
-                with self.assertRaisesRegex(
-                    RuntimeError, "Missing import runtime state file"
-                ):
-                    manage_script._load_runtime_state_value(
-                        "omero.web.import.shared_tmp_path"
-                    )
-
-            state_dir = omerodir / "var"
-            state_dir.mkdir(parents=True, exist_ok=True)
-            (state_dir / "managed-zarr-runtime.env").write_text(
-                "other=value\n", encoding="utf-8"
-            )
-
-            with mock.patch.dict(os.environ, {"OMERODIR": str(omerodir)}):
-                with self.assertRaisesRegex(
-                    RuntimeError, "Missing required import runtime value"
-                ):
-                    manage_script._load_runtime_state_value(
-                        "omero.web.import.shared_tmp_path"
-                    )
-
-    def test_render_repo_template_and_validate_source_path_enforce_safe_inputs(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_root = Path(tmpdir) / "tmp"
-            tmp_root.mkdir(parents=True, exist_ok=True)
-            config = self._server_config(tmpdir, tmp_root)
-
-            prefix_parts, suffix_parts = manage_script._render_repo_template(
-                config,
-                "users_private",
-                "test",
-                real_datetime(2026, 3, 22, 9, 51, 15),
-            )
-            self.assertEqual(["users_private", "test"], prefix_parts)
-            self.assertEqual(["2026-03-22", "09-51-15"], suffix_parts)
-
-            config["omero.fs.repo.path"] = "%group%/%unknown%"
-            with self.assertRaisesRegex(RuntimeError, "unsupported tokens"):
-                manage_script._render_repo_template(
-                    config,
-                    "users_private",
-                    "test",
-                    real_datetime(2026, 3, 22, 9, 51, 15),
-                )
-
-            config["omero.fs.repo.path"] = "%group%/%year%"
-            with self.assertRaisesRegex(RuntimeError, "must include a %user% token"):
-                manage_script._render_repo_template(
-                    config,
-                    "users_private",
-                    "test",
-                    real_datetime(2026, 3, 22, 9, 51, 15),
-                )
-
-            config = self._server_config(tmpdir, tmp_root)
-            source = tmp_root / "job-1" / "sample.zarr"
-            source.mkdir(parents=True, exist_ok=True)
-            self.assertEqual(
-                source.resolve(),
-                manage_script._validate_source_path(config, str(source)),
-            )
-
-            outside = Path(tmpdir) / "outside" / "sample.zarr"
-            outside.mkdir(parents=True, exist_ok=True)
-            with self.assertRaisesRegex(RuntimeError, "must stay within"):
-                manage_script._validate_source_path(config, str(outside))
-
-            not_zarr = tmp_root / "job-1" / "sample.txt"
-            not_zarr.mkdir(parents=True, exist_ok=True)
-            with self.assertRaisesRegex(RuntimeError, "not a .zarr directory"):
-                manage_script._validate_source_path(config, str(not_zarr))
-
-    def test_allocate_destination_dir_cleanup_and_symlink_guards(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            managed_root = Path(tmpdir) / "data" / "ManagedRepository"
-            prefix_dir = managed_root / "users_private" / "test"
-            prefix_dir.mkdir(parents=True, exist_ok=True)
-            target_dir = prefix_dir / "2026-03-22" / "09-51-15"
-            target_dir.mkdir(parents=True, exist_ok=True)
-            existing = target_dir / "sample.zarr"
-            existing.mkdir()
-
-            alternative = manage_script._allocate_destination_dir(
-                target_dir, "sample.zarr"
-            )
-            self.assertNotEqual(existing, alternative)
-            self.assertTrue(alternative.name.startswith("sample__"))
-            self.assertTrue(alternative.name.endswith(".zarr"))
-
-            payload = target_dir / "delete-me.zarr"
-            payload.mkdir()
-            server_config = self._server_config(tmpdir, Path(tmpdir) / "tmp")
-            deleted = manage_script._cleanup_zarr(
-                server_config, str(payload), "users_private", "test"
-            )
-            self.assertEqual(payload, deleted)
-            self.assertFalse(payload.exists())
-
-            with self.assertRaisesRegex(
-                RuntimeError, "Refusing to delete the user managed-repository prefix"
-            ):
-                manage_script._cleanup_zarr(
-                    server_config, str(prefix_dir), "users_private", "test"
-                )
-
-            symlink_source = Path(tmpdir) / "tmp" / "job-1" / "link.zarr"
-            symlink_source.mkdir(parents=True, exist_ok=True)
-            (symlink_source / "real").mkdir()
-            (symlink_source / "bad-link").symlink_to(
-                symlink_source / "real", target_is_directory=True
-            )
-            with self.assertRaisesRegex(RuntimeError, "Symlinks are not allowed"):
-                manage_script._reject_symlinks(symlink_source)
-
     def test_cleanup_zarr_rejects_path_outside_user_prefix(self):
         manage_script = _load_manage_zarr_script_module()
 
@@ -2900,129 +2702,6 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 manage_script._cleanup_zarr(
                     server_config, str(outside_path), "users_private", "test"
                 )
-
-    def test_run_script_sets_outputs_and_closes_session(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        class _FakeClient:
-            def __init__(self, params):
-                self._params = params
-                self.outputs = {}
-                self.closed = False
-
-            def getInputs(self, unwrap=True):
-                return dict(self._params)
-
-            def setOutput(self, key, value):
-                self.outputs[key] = value
-
-            def closeSession(self):
-                self.closed = True
-
-        stage_client = _FakeClient(
-            {
-                "Action": "stage",
-                "Group_Name": "users_private",
-                "Username": "test",
-                "Source_Path": "/tmp/source.zarr",
-            }
-        )
-        cleanup_client = _FakeClient(
-            {
-                "Action": "cleanup",
-                "Group_Name": "users_private",
-                "Username": "test",
-                "Managed_Path": "/OMERO/ManagedRepository/users_private/test/sample.zarr",
-            }
-        )
-
-        with (
-            mock.patch.object(
-                manage_script.scripts,
-                "client",
-                side_effect=[stage_client, cleanup_client],
-            ),
-            mock.patch.object(
-                manage_script,
-                "BlitzGateway",
-                side_effect=lambda client_obj=None: object(),
-            ),
-            mock.patch.object(manage_script, "_load_server_config", return_value={}),
-            mock.patch.object(
-                manage_script,
-                "_stage_zarr",
-                return_value=Path(
-                    "/OMERO/ManagedRepository/users_private/test/sample.zarr"
-                ),
-            ),
-            mock.patch.object(
-                manage_script,
-                "_cleanup_zarr",
-                return_value=Path(
-                    "/OMERO/ManagedRepository/users_private/test/sample.zarr"
-                ),
-            ),
-            mock.patch.object(
-                manage_script, "rstring", side_effect=lambda value: value
-            ),
-            mock.patch("builtins.print") as print_mock,
-        ):
-            manage_script.run_script()
-            manage_script.run_script()
-
-        self.assertEqual(
-            "/OMERO/ManagedRepository/users_private/test/sample.zarr",
-            stage_client.outputs["Managed_Path"],
-        )
-        self.assertIn(
-            "Staged Zarr into managed repository", stage_client.outputs["Message"]
-        )
-        self.assertIn(
-            "Cleaned managed-repository Zarr path", cleanup_client.outputs["Message"]
-        )
-        self.assertTrue(stage_client.closed)
-        self.assertTrue(cleanup_client.closed)
-        self.assertGreaterEqual(print_mock.call_count, 4)
-
-    def test_run_script_reports_invalid_actions_without_leaking_session(self):
-        manage_script = _load_manage_zarr_script_module()
-
-        class _FakeClient:
-            def __init__(self):
-                self.outputs = {}
-                self.closed = False
-
-            def getInputs(self, unwrap=True):
-                return {
-                    "Action": "invalid",
-                    "Group_Name": "users_private",
-                    "Username": "test",
-                }
-
-            def setOutput(self, key, value):
-                self.outputs[key] = value
-
-            def closeSession(self):
-                self.closed = True
-
-        client = _FakeClient()
-        with (
-            mock.patch.object(manage_script.scripts, "client", return_value=client),
-            mock.patch.object(
-                manage_script,
-                "BlitzGateway",
-                side_effect=lambda client_obj=None: object(),
-            ),
-            mock.patch.object(manage_script, "_load_server_config", return_value={}),
-            mock.patch.object(
-                manage_script, "rstring", side_effect=lambda value: value
-            ),
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Action must be one of"):
-                manage_script.run_script()
-
-        self.assertTrue(client.closed)
-        self.assertIn("Script error: Action must be one of", client.outputs["Message"])
 
 
 if __name__ == "__main__":

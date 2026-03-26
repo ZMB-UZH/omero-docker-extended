@@ -162,6 +162,77 @@ def _clean_regex(text):
     return first.strip().strip("'\"")
 
 
+def _split_filename_with_regex(regex, filename):
+    base = extract_base_name(filename)
+    parts = [part.strip() for part in re.split(regex, base) if part and part.strip()]
+    return base, parts
+
+
+def _is_regex_reasonable(regex, filenames):
+    if not regex or not filenames:
+        return False
+    try:
+        compiled = re.compile(regex)
+    except re.error:
+        return False
+    if compiled.groups:
+        return False
+    if compiled.search(""):
+        return False
+
+    sample = filenames[:20]
+    successful_splits = 0
+    token_count = 0
+    single_char_tokens = 0
+
+    for filename in sample:
+        _, parts = _split_filename_with_regex(regex, filename)
+        if not parts:
+            continue
+        if len(parts) <= 1:
+            continue
+        successful_splits += 1
+        token_count += len(parts)
+        single_char_tokens += sum(1 for part in parts if len(part) == 1)
+
+    if not successful_splits:
+        return False
+
+    average_tokens = token_count / successful_splits
+    single_char_ratio = single_char_tokens / max(token_count, 1)
+
+    return average_tokens <= 8 and single_char_ratio <= 0.7
+
+
+def _is_regex_too_generic(regex, filenames):
+    if not regex:
+        return True
+    try:
+        compiled = re.compile(regex)
+    except re.error:
+        return True
+    if compiled.search(""):
+        return True
+
+    stripped = regex.strip()
+    if stripped in {".", ".+", ".*", "\\w", "\\W", "\\d", "\\D"}:
+        return True
+
+    sample = filenames[:20]
+    overly_split = 0
+    total = 0
+
+    for filename in sample:
+        _, parts = _split_filename_with_regex(regex, filename)
+        if len(parts) <= 1:
+            continue
+        total += 1
+        if len(parts) > 8 or sum(len(part) == 1 for part in parts) >= len(parts) * 0.8:
+            overly_split += 1
+
+    return total > 0 and overly_split >= max(1, total // 2)
+
+
 def _post_json(url, headers, payload, timeout=15):
     parsed = urllib.parse.urlparse(str(url or ""))
     if parsed.scheme != "https" or not parsed.netloc:
