@@ -13,8 +13,8 @@ from django.urls import reverse
 from omeroweb.decorators import login_required
 
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
-from ..strings import errors, messages
 
+from ..strings import errors, messages
 from .core_functions import (
     DEFAULT_UPLOAD_BATCH_FILES,
     DEFAULT_UPLOAD_CONCURRENCY,
@@ -43,8 +43,8 @@ from .core_functions import (
     _normalize_sem_edx_associations,
     _normalize_sem_edx_settings,
     _normalize_upload_relative_path,
-    _prepare_uploaded_job_for_request_path_import,
     _prepare_job_import_datasets,
+    _prepare_uploaded_job_for_request_path_import,
     _refresh_job_status,
     _resolve_omero_host_port,
     _resolve_staged_target_path,
@@ -106,7 +106,7 @@ def index(request, conn=None, url=None, **kwargs):
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
-    return JsonResponse(payload)
+    return JsonResponse(payload, safe=False)
 
 
 @login_required()

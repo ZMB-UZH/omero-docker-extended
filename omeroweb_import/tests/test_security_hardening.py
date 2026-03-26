@@ -74,85 +74,89 @@ def test_load_job_reads_from_canonical_jobs_path(tmp_path, monkeypatch):
 def test_open_service_connection_redacts_password_when_connect_raises(
     monkeypatch, caplog
 ):
-    created = []
+    for module in (import_service, core_functions):
+        created = []
 
-    class FakeConn:
-        def __init__(self, *_args, **_kwargs):
-            self.closed = False
-            self.SERVICE_OPTS = type(
-                "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
-            )()
+        class FakeConn:
+            def __init__(self, *_args, **_kwargs):
+                self.closed = False
+                self.SERVICE_OPTS = type(
+                    "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
+                )()
 
-        def connect(self):
-            raise RuntimeError("authentication failed for password super-secret")
+            def connect(self):
+                raise RuntimeError("authentication failed for password super-secret")
 
-        def getLastError(self):
-            return "password=super-secret"
+            def getLastError(self):
+                return "password=super-secret"
 
-        def close(self):
-            self.closed = True
+            def close(self):
+                self.closed = True
 
-    def fake_gateway(*args, **kwargs):
-        conn = FakeConn(*args, **kwargs)
-        created.append(conn)
-        return conn
+        def fake_gateway(*args, **kwargs):
+            conn = FakeConn(*args, **kwargs)
+            created.append(conn)
+            return conn
 
-    monkeypatch.setattr(
-        import_service,
-        "_get_job_service_credentials",
-        lambda: ("svc-user", "svc-pass", "", True),
-    )
-    monkeypatch.setattr(import_service, "BlitzGateway", fake_gateway)
+        monkeypatch.setattr(
+            module,
+            "_get_job_service_credentials",
+            lambda: ("svc-user", "svc-pass", "", True),
+        )
+        monkeypatch.setattr(module, "BlitzGateway", fake_gateway)
 
-    with caplog.at_level(logging.ERROR, logger=import_service.logger.name):
-        conn = import_service._open_service_connection("omero.example.org", 4064)
+        with caplog.at_level(logging.ERROR, logger=module.logger.name):
+            conn = module._open_service_connection("omero.example.org", 4064)
 
-    assert conn is None
-    assert created[0].closed is True
-    assert "super-secret" not in caplog.text
-    assert "svc-pass" not in caplog.text
-    assert "error_type=RuntimeError" in caplog.text
-    assert "has_last_error=True" in caplog.text
+        assert conn is None
+        assert created[0].closed is True
+        assert "super-secret" not in caplog.text
+        assert "svc-pass" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_last_error=True" in caplog.text
+        caplog.clear()
 
 
 def test_open_service_connection_redacts_password_when_connect_returns_false(
     monkeypatch, caplog
 ):
-    created = []
+    for module in (import_service, core_functions):
+        created = []
 
-    class FakeConn:
-        def __init__(self, *_args, **_kwargs):
-            self.closed = False
-            self.SERVICE_OPTS = type(
-                "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
-            )()
+        class FakeConn:
+            def __init__(self, *_args, **_kwargs):
+                self.closed = False
+                self.SERVICE_OPTS = type(
+                    "ServiceOpts", (), {"setOmeroGroup": lambda self, value: None}
+                )()
 
-        def connect(self):
-            return False
+            def connect(self):
+                return False
 
-        def getLastError(self):
-            return "password=super-secret"
+            def getLastError(self):
+                return "password=super-secret"
 
-        def close(self):
-            self.closed = True
+            def close(self):
+                self.closed = True
 
-    def fake_gateway(*args, **kwargs):
-        conn = FakeConn(*args, **kwargs)
-        created.append(conn)
-        return conn
+        def fake_gateway(*args, **kwargs):
+            conn = FakeConn(*args, **kwargs)
+            created.append(conn)
+            return conn
 
-    monkeypatch.setattr(
-        import_service,
-        "_get_job_service_credentials",
-        lambda: ("svc-user", "svc-pass", "", True),
-    )
-    monkeypatch.setattr(import_service, "BlitzGateway", fake_gateway)
+        monkeypatch.setattr(
+            module,
+            "_get_job_service_credentials",
+            lambda: ("svc-user", "svc-pass", "", True),
+        )
+        monkeypatch.setattr(module, "BlitzGateway", fake_gateway)
 
-    with caplog.at_level(logging.ERROR, logger=import_service.logger.name):
-        conn = import_service._open_service_connection("omero.example.org", 4064)
+        with caplog.at_level(logging.ERROR, logger=module.logger.name):
+            conn = module._open_service_connection("omero.example.org", 4064)
 
-    assert conn is None
-    assert created[0].closed is True
-    assert "super-secret" not in caplog.text
-    assert "svc-pass" not in caplog.text
-    assert "has_last_error=True" in caplog.text
+        assert conn is None
+        assert created[0].closed is True
+        assert "super-secret" not in caplog.text
+        assert "svc-pass" not in caplog.text
+        assert "has_last_error=True" in caplog.text
+        caplog.clear()
