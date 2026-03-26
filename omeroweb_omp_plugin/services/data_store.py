@@ -149,9 +149,8 @@ def _connect():
 def _ensure_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        stmt = sql.SQL(
+            """
                 CREATE TABLE IF NOT EXISTS {} (
                     id SERIAL PRIMARY KEY,
                     username TEXT NOT NULL,
@@ -162,27 +161,25 @@ def _ensure_schema(conn):
                     UNIQUE(username, set_name)
                 );
                 """
-            ).format(sql.Identifier(TABLE_NAME))
-        )
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        ).format(sql.Identifier(TABLE_NAME))
+        cur.execute(stmt)
+        stmt = sql.SQL(
+            """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
                 """
-            ).format(
-                sql.Identifier(f"{TABLE_NAME}_username_idx"),
-                sql.Identifier(TABLE_NAME),
-            )
+        ).format(
+            sql.Identifier(f"{TABLE_NAME}_username_idx"),
+            sql.Identifier(TABLE_NAME),
         )
+        cur.execute(stmt)
     conn.commit()
 
 
 def _ensure_ai_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        stmt = sql.SQL(
+            """
                 CREATE TABLE IF NOT EXISTS {} (
                     id SERIAL PRIMARY KEY,
                     username TEXT NOT NULL,
@@ -193,27 +190,25 @@ def _ensure_ai_schema(conn):
                     UNIQUE(username, provider)
                 );
                 """
-            ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
-        )
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
+        cur.execute(stmt)
+        stmt = sql.SQL(
+            """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
                 """
-            ).format(
-                sql.Identifier(f"{TABLE_NAME_AI_CREDENTIALS}_username_idx"),
-                sql.Identifier(TABLE_NAME_AI_CREDENTIALS),
-            )
+        ).format(
+            sql.Identifier(f"{TABLE_NAME_AI_CREDENTIALS}_username_idx"),
+            sql.Identifier(TABLE_NAME_AI_CREDENTIALS),
         )
+        cur.execute(stmt)
     conn.commit()
 
 
 def _ensure_user_settings_schema(conn):
     sql = _load_psycopg2_sql()
     with conn.cursor() as cur:
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        stmt = sql.SQL(
+            """
                 CREATE TABLE IF NOT EXISTS {} (
                     id SERIAL PRIMARY KEY,
                     username TEXT NOT NULL UNIQUE,
@@ -222,18 +217,17 @@ def _ensure_user_settings_schema(conn):
                     updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
                 """
-            ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
-        )
-        cur.execute(  # nosemgrep
-            sql.SQL(
-                """
+        ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+        cur.execute(stmt)
+        stmt = sql.SQL(
+            """
                 CREATE INDEX IF NOT EXISTS {} ON {} (username);
                 """
-            ).format(
-                sql.Identifier(f"{TABLE_NAME_USER_SETTINGS}_username_idx"),
-                sql.Identifier(TABLE_NAME_USER_SETTINGS),
-            )
+        ).format(
+            sql.Identifier(f"{TABLE_NAME_USER_SETTINGS}_username_idx"),
+            sql.Identifier(TABLE_NAME_USER_SETTINGS),
         )
+        cur.execute(stmt)
     conn.commit()
 
 
@@ -243,17 +237,15 @@ def list_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT set_name
                         FROM {}
                         WHERE username = %s
                         ORDER BY updated_at DESC, set_name ASC
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username,))
                 rows = cur.fetchall()
                 return [r[0] for r in rows if r and r[0] is not None]
     except VariableStoreError:
@@ -276,30 +268,26 @@ def save_variable_set(username, set_name, var_names):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         INSERT INTO {} (username, set_name, var_names, updated_at)
                         VALUES (%s, %s, %s, NOW())
                         ON CONFLICT (username, set_name)
                         DO UPDATE SET var_names = EXCLUDED.var_names, updated_at = NOW()
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username, set_name, json_payload),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username, set_name, json_payload))
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT var_names
                         FROM {}
                         WHERE username = %s AND set_name = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username, set_name),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username, set_name))
                 row = cur.fetchone()
                 if row is None:
                     raise VariableStoreError(errors.variable_set_not_persisted())
@@ -322,16 +310,14 @@ def load_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT var_names
                         FROM {}
                         WHERE username = %s AND set_name = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username, set_name),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username, set_name))
                 row = cur.fetchone()
                 return row[0] if row else None
     except VariableStoreError:
@@ -356,15 +342,13 @@ def delete_variable_set(username, set_name):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         DELETE FROM {}
                         WHERE username = %s AND set_name = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username, set_name),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username, set_name))
 
                 if cur.rowcount == 0:
                     raise VariableStoreError(errors.variable_set_missing(set_name))
@@ -372,16 +356,14 @@ def delete_variable_set(username, set_name):
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT 1
                         FROM {}
                         WHERE username = %s AND set_name = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username, set_name),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username, set_name))
                 if cur.fetchone():
                     raise VariableStoreError(errors.variable_set_delete_unconfirmed())
 
@@ -404,17 +386,15 @@ def list_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT provider
                         FROM {}
                         WHERE username = %s
                         ORDER BY provider ASC
                         """
-                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
+                cur.execute(stmt, (username,))
                 rows = cur.fetchall()
                 return [r[0] for r in rows if r and r[0] is not None]
     except AiCredentialStoreError:
@@ -435,16 +415,14 @@ def get_ai_credential(username, provider):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT api_key
                         FROM {}
                         WHERE username = %s AND provider = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
-                    (username, provider),
-                )
+                ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
+                cur.execute(stmt, (username, provider))
                 row = cur.fetchone()
                 return row[0] if row and row[0] is not None else None
     except AiCredentialStoreError:
@@ -466,17 +444,15 @@ def save_ai_credentials(username, provider, api_key):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         INSERT INTO {} (username, provider, api_key, updated_at)
                         VALUES (%s, %s, %s, NOW())
                         ON CONFLICT (username, provider)
                         DO UPDATE SET api_key = EXCLUDED.api_key, updated_at = NOW()
                         """
-                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
-                    (username, provider, api_key),
-                )
+                ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
+                cur.execute(stmt, (username, provider, api_key))
             conn.commit()
     except AiCredentialStoreError:
         raise
@@ -499,30 +475,26 @@ def save_user_settings(username, settings_payload):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         INSERT INTO {} (username, settings, updated_at)
                         VALUES (%s, %s, NOW())
                         ON CONFLICT (username)
                         DO UPDATE SET settings = EXCLUDED.settings, updated_at = NOW()
                         """
-                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
-                    (username, json_payload),
-                )
+                ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+                cur.execute(stmt, (username, json_payload))
             conn.commit()
 
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         SELECT settings
                         FROM {}
                         WHERE username = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+                cur.execute(stmt, (username,))
                 row = cur.fetchone()
                 if row is None:
                     raise UserSettingsStoreError(errors.user_settings_not_persisted())
@@ -544,15 +516,13 @@ def delete_all_user_settings(username):
         with _connect() as conn:
             _ensure_user_settings_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         DELETE FROM {}
                         WHERE username = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME_USER_SETTINGS))
+                cur.execute(stmt, (username,))
                 deleted = cur.rowcount
             conn.commit()
             return deleted
@@ -574,15 +544,13 @@ def delete_all_variable_sets(username):
         with _connect() as conn:
             _ensure_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         DELETE FROM {}
                         WHERE username = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME))
+                cur.execute(stmt, (username,))
                 deleted = cur.rowcount
             conn.commit()
             return deleted
@@ -604,15 +572,13 @@ def delete_all_ai_credentials(username):
         with _connect() as conn:
             _ensure_ai_schema(conn)
             with conn.cursor() as cur:
-                cur.execute(  # nosemgrep
-                    sql.SQL(
-                        """
+                stmt = sql.SQL(
+                    """
                         DELETE FROM {}
                         WHERE username = %s
                         """
-                    ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS)),
-                    (username,),
-                )
+                ).format(sql.Identifier(TABLE_NAME_AI_CREDENTIALS))
+                cur.execute(stmt, (username,))
                 deleted = cur.rowcount
             conn.commit()
             return deleted
@@ -636,15 +602,13 @@ def delete_all_user_data(username):
             deleted_counts = {}
             with conn.cursor() as cur:
                 for table in tables:
-                    cur.execute(  # nosemgrep
-                        sql.SQL(
-                            """
+                    stmt = sql.SQL(
+                        """
                             DELETE FROM {}
                             WHERE username = %s
                             """
-                        ).format(sql.Identifier(table)),
-                        (username,),
-                    )
+                    ).format(sql.Identifier(table))
+                    cur.execute(stmt, (username,))
                     deleted_counts[table] = cur.rowcount
             conn.commit()
             return deleted_counts
