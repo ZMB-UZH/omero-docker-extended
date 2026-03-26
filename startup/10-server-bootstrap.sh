@@ -1755,7 +1755,7 @@ install_figure_script() {
 
     if [[ -f "${script_path}" ]]; then
         local current_version="unknown"
-        current_version="$(grep -Eo "__version__\s*=\s*'[^']+'" "${script_path}" 2>/dev/null | head -n 1 | sed -E "s/.*'([^']+)'.*/\1/" || true)"
+        current_version="$(grep -E '^\s*(VERSION|__version__)\s*=' "${script_path}" 2>/dev/null | head -n 1 | sed -E "s/.*[\"']([^\"']+)[\"'].*/\1/" || true)"
         if [[ "${current_version}" == "${figure_version}" ]]; then
             log "OMERO.Figure script already present (version ${current_version})"
             return
@@ -2095,6 +2095,14 @@ main() {
     check_writable_dir "${SERVER_VAR_DIR}" "OMERO var"
     check_writable_dir "${SERVER_LOG_DIR}" "OMERO logs"
     ensure_tmpdir_permissions "${OMERO_CLI_USER}"
+
+    # Reset OMERO config to a clean slate before applying any settings.
+    # The upstream base image originally did this inside its .omero config
+    # file, but that runs AFTER our bootstrap — wiping certificate SANs,
+    # omero.scripts.python, and other properties we just set.  Moving the
+    # reset here ensures a clean slate while preserving the correct order.
+    run_omero config drop default
+    log "Reset OMERO config to defaults (clean slate)"
 
     validate_managed_repository_configuration
     check_writable_dir "$(expected_managed_repository_root)" "OMERO managed repository"
