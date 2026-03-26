@@ -178,4 +178,7 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# SonarQube scanner working directory
+.scannerwork/
+
 # End of https://www.toptal.com/developers/gitignore/api/python
