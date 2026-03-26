@@ -3207,19 +3207,13 @@ def _open_service_connection(
         try:
             ok = conn.connect()
         except Exception as exc:
-            last_err = None
-            try:
-                last_err = conn.getLastError()
-            except Exception:
-                last_err = None
-
             logger.error(
-                "job-service connect() raised: host=%s port=%s secure=%s error=%s lastError=%r",
-                host,
+                "job-service connect() raised: host=%s port=%s secure=%s error_type=%s has_last_error=%s",
+                sanitize_log_value(host),
                 port,
                 secure,
-                exc,
-                last_err,
+                sanitize_log_value(type(exc).__name__),
+                _connection_has_last_error(conn),
             )
             try:
                 conn.close()
@@ -3231,18 +3225,12 @@ def _open_service_connection(
             return None
 
         if not ok:
-            last_err = None
-            try:
-                last_err = conn.getLastError()
-            except Exception:
-                last_err = None
-
             logger.error(
-                "job-service connect() failed: host=%s port=%s secure=%s lastError=%r",
-                host,
+                "job-service connect() failed: host=%s port=%s secure=%s has_last_error=%s",
+                sanitize_log_value(host),
                 port,
                 secure,
-                last_err,
+                _connection_has_last_error(conn),
             )
             try:
                 conn.close()
@@ -3284,6 +3272,13 @@ def _open_service_connection(
                 close_exc,
             )
         raise
+
+
+def _connection_has_last_error(conn) -> bool:
+    try:
+        return bool(conn.getLastError())
+    except Exception:
+        return False
 
 
 def _open_group_scoped_session_connection(

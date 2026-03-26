@@ -21,23 +21,28 @@ That means:
 2. Never normalize a widespread ahead/behind explosion by rewriting many old branches one-by-one unless the human explicitly requests that scope.
 3. Always back up any branch you may rewrite under `backup/<date>-<reason>/...` before a force update.
 4. Always use `--force-with-lease`, never plain `--force`, when moving a live branch tip.
-5. If the sync must exclude specific files, preserve those exclusions explicitly in the temporary destination clone before committing.
+5. Resolve the destination remote's default branch explicitly before any push, and use that branch unless the human explicitly names a different target.
+6. Never choose the remote target branch by copying the current local branch name.
+7. If the sync must exclude specific files, preserve those exclusions explicitly in the temporary destination clone before committing.
 
 ## Safe Sync Procedure
 
 1. Fetch the latest source and destination refs.
-2. Inspect ancestry before changing anything:
+2. Resolve the destination remote's default branch explicitly.
+   - Example: `git remote show <remote>` and read `HEAD branch: ...`
+   - If the human did not explicitly name a target branch, use that default branch.
+3. Inspect ancestry before changing anything:
    - `git merge-base <destination-branch> <source-ref>`
    - `git rev-list --max-parents=0 <destination-branch>`
    - `git rev-list --max-parents=0 <source-ref>`
-3. Create a disposable clone or temporary worktree from the **destination** repository and check out the destination branch there.
-4. Replace the destination tree contents from the source tree in that disposable clone.
+4. Create a disposable clone or temporary worktree from the **destination** repository and check out the destination branch there.
+5. Replace the destination tree contents from the source tree in that disposable clone.
    - Use tree-copy approaches such as `git checkout <source-ref> -- .`, `git archive`, or equivalent file-level sync in the temporary destination clone.
    - Do **not** merge the source branch history into the destination branch.
-5. Restore explicitly excluded paths to their destination-repository state, or remove them if they must stay absent.
-6. Review the staged diff to confirm it is a content diff, not a history rewrite.
-7. Commit in the destination repository.
-8. Push the destination commit normally.
+6. Restore explicitly excluded paths to their destination-repository state, or remove them if they must stay absent.
+7. Review the staged diff to confirm it is a content diff, not a history rewrite.
+8. Commit in the destination repository.
+9. Push the destination commit normally to the verified destination branch.
 
 ## Hard Stop Signals
 
