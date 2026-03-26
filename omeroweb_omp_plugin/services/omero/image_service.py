@@ -76,7 +76,8 @@ def collect_images_by_dataset_sorted(conn, project_id, limit=None, owner_id=None
                 # truncate to satisfy limit
                 remaining = limit - (total - len(imgs_sorted))
                 imgs_sorted = imgs_sorted[:remaining]
-                out.append((ds, imgs_sorted))
+                if imgs_sorted:
+                    out.append((ds, imgs_sorted))
                 return out
 
             out.append((ds, imgs_sorted))
@@ -136,7 +137,8 @@ def collect_images_by_selected_datasets(
             if limit and total > limit:
                 remaining = limit - (total - len(imgs_sorted))
                 imgs_sorted = imgs_sorted[:remaining]
-                out.append((ds, imgs_sorted))
+                if imgs_sorted:
+                    out.append((ds, imgs_sorted))
                 return out
 
             out.append((ds, imgs_sorted))

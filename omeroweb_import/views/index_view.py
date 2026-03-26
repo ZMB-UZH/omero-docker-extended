@@ -47,7 +47,7 @@ def index(request, conn=None, url=None, **kwargs):
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
-    return JsonResponse(payload)
+    return JsonResponse(payload, safe=False)
 
 
 @login_required()
