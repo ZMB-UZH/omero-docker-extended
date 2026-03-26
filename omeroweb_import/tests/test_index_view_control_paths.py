@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,12 +57,16 @@ class _Conn:
 
 
 def test_index_list_projects_and_root_status_surface_runtime_context(monkeypatch):
-    upload_root = Path("/tmp/import-upload-root")
+    upload_root = Path(tempfile.gettempdir()) / "import-upload-root"
     request = RequestFactory().get("/omeroweb_import/")
 
     monkeypatch.setattr(index_view, "_current_user_id", lambda conn: 17)
     monkeypatch.setattr(index_view, "_get_upload_root", lambda: upload_root)
-    monkeypatch.setattr(index_view, "_get_jobs_root", lambda: Path("/tmp/import-jobs"))
+    monkeypatch.setattr(
+        index_view,
+        "_get_jobs_root",
+        lambda: Path(tempfile.gettempdir()) / "import-jobs",
+    )
     monkeypatch.setattr(index_view, "_ensure_dir", lambda path: True)
     monkeypatch.setattr(
         index_view,

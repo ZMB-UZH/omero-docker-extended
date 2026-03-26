@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from pathlib import Path
 
 from omeroweb_import.services.omero import connection_service, import_service
@@ -90,6 +91,7 @@ def test_get_local_import_scan_timeout_seconds_defaults_to_2_hours(monkeypatch):
 
 def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     captured = {}
+    sample_path = Path(tempfile.gettempdir()) / "sample.czi"
 
     def fake_run(cmd, timeout=None):
         captured["cmd"] = cmd
@@ -100,13 +102,12 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
 
     monkeypatch.setattr(core_functions, "_run_omero_cli", fake_run)
 
-    path = Path("/tmp/sample.czi")
     ok, _stdout, _stderr = core_functions._import_file(
         None,
         "session-key",
         "omeroserver",
         4064,
-        path,
+        sample_path,
         dataset_id=17,
     )
 
@@ -115,7 +116,7 @@ def test_import_file_adds_scan_depth_to_cli_command(monkeypatch):
     assert captured["cmd"][depth_index + 1] == str(
         core_functions.OMERO_IMPORT_SCAN_DEPTH
     )
-    assert captured["cmd"][-3:] == ["-d", "17", str(path)]
+    assert captured["cmd"][-3:] == ["-d", "17", str(sample_path)]
 
 
 def test_compatibility_check_adds_scan_depth_to_cli_command(
@@ -203,6 +204,7 @@ def test_run_local_import_scan_uses_depth_10_and_writable_runtime_dirs(
 
 
 def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
+    sample_path = Path(tempfile.gettempdir()) / "sample.czi"
     for module in (connection_service, import_service):
         captured = {}
 
@@ -219,7 +221,7 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
             "session-key",
             "omeroserver",
             4064,
-            Path("/tmp/sample.czi"),
+            sample_path,
             dataset_id=17,
         )
 
@@ -228,7 +230,7 @@ def test_service_import_file_adds_scan_depth_to_cli_command(monkeypatch):
         assert captured["cmd"][depth_index + 1] == str(
             core_functions.OMERO_IMPORT_SCAN_DEPTH
         )
-        assert captured["cmd"][-3:] == ["-d", "17", "/tmp/sample.czi"]
+        assert captured["cmd"][-3:] == ["-d", "17", str(sample_path)]
 
 
 def test_service_compatibility_check_adds_scan_depth_to_cli_command(

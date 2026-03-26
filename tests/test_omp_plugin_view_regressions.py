@@ -3,12 +3,14 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+import tempfile
 import types
 from pathlib import Path
 from unittest import TestCase, mock, main as unittest_main
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+TEST_TMP_ROOT = Path(tempfile.gettempdir()) / "omp-plugin-tests"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -129,14 +131,14 @@ def _install_import_stubs() -> None:
     )
     env_utils.ENV_FILE_OMEROWEB = ""
     env_utils.get_env = lambda key, env_file=None: (
-        "/tmp" if key == "OMERO_WEB_ROOT" else ""
+        str(TEST_TMP_ROOT) if key == "OMERO_WEB_ROOT" else ""
     )
 
     tmp_utils = sys.modules.setdefault(
         "omero_plugin_common.tmp_utils",
         types.ModuleType("omero_plugin_common.tmp_utils"),
     )
-    tmp_utils.get_plugin_tmp_dir = lambda name: Path("/tmp") / f"omp-plugin-{name}"
+    tmp_utils.get_plugin_tmp_dir = lambda name: TEST_TMP_ROOT / f"omp-plugin-{name}"
 
     request_utils = sys.modules.setdefault(
         "omero_plugin_common.request_utils",
@@ -195,7 +197,7 @@ def _install_omp_dependency_stubs() -> None:
     core_module.get_text = lambda value: value
     core_module.load_job = lambda job_id: None
     core_module.save_job = lambda job: True
-    core_module._job_lock_path = lambda job_id: f"/tmp/{job_id}.lock"
+    core_module._job_lock_path = lambda job_id: str(TEST_TMP_ROOT / f"{job_id}.lock")
     core_module.collect_images_by_selected_datasets = lambda *args, **kwargs: []
     core_module.collect_dataset_summaries = lambda *args, **kwargs: []
     core_module.parse_filename = lambda *args, **kwargs: []
@@ -340,7 +342,9 @@ class OmpPluginViewRegressionTests(TestCase):
             return_value=(False, "Wrong password."),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
-                self._make_request(payload={"project_id": 1, "password": "pw"}),
+                self._make_request(
+                    payload={"project_id": 1, "password": "credential"}
+                ),
                 conn=mock.Mock(),
             )
 
@@ -404,7 +408,9 @@ class OmpPluginViewRegressionTests(TestCase):
             ),
         ):
             response = view_module.delete_plugin_keyvaluepairs(
-                self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
+                self._make_request(
+                    payload={"project_id": 1, "password": "credential-secret"}
+                ),
                 conn=conn,
             )
 
@@ -425,7 +431,7 @@ class OmpPluginViewRegressionTests(TestCase):
             ],
             recorded_commands[0],
         )
-        self.assertNotIn("pw-secret", recorded_commands[0])
+        self.assertNotIn("credential-secret", recorded_commands[0])
 
     def test_delete_all_view_uses_session_key_cli_without_passing_password(
         self,
@@ -477,7 +483,9 @@ class OmpPluginViewRegressionTests(TestCase):
             ),
         ):
             response = view_module.delete_all_keyvaluepairs(
-                self._make_request(payload={"project_id": 1, "password": "pw-secret"}),
+                self._make_request(
+                    payload={"project_id": 1, "password": "credential-secret"}
+                ),
                 conn=conn,
             )
 
@@ -502,7 +510,7 @@ class OmpPluginViewRegressionTests(TestCase):
             ],
             recorded_commands[0],
         )
-        self.assertNotIn("pw-secret", recorded_commands[0])
+        self.assertNotIn("credential-secret", recorded_commands[0])
 
     def test_job_view_invalid_regex_message_is_sanitized(self) -> None:
         job_view = importlib.import_module("omeroweb_omp_plugin.views.job_view")
@@ -623,7 +631,9 @@ class OmpPluginViewRegressionTests(TestCase):
                     ),
                 ):
                     response = getattr(view_module, function_name)(
-                        self._make_request(payload={"project_id": 1, "password": "pw"}),
+                        self._make_request(
+                            payload={"project_id": 1, "password": "credential"}
+                        ),
                         conn=conn,
                     )
 

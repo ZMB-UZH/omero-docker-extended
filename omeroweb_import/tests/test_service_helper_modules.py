@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import sys
+import tempfile
 import types
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -20,6 +21,7 @@ from omero_plugin_common import omero_helpers as common_omero_helpers
 
 
 REPO_ROOT = PurePosixPath(__file__).parents[2]
+TEST_JOBS_ROOT = str(Path(tempfile.gettempdir()) / "import-jobs")
 
 
 class _FakeValue:
@@ -212,7 +214,7 @@ def test_import_module_contracts_and_reexports(monkeypatch):
     assert route_map["omeroweb_import_projects"] == "projects/"
 
     captured = {}
-    monkeypatch.setattr(compat, "get_jobs_root", lambda: "/tmp/import-jobs")
+    monkeypatch.setattr(compat, "get_jobs_root", lambda: TEST_JOBS_ROOT)
     monkeypatch.setattr(
         compat,
         "_get_job_path_internal",
@@ -238,11 +240,11 @@ def test_import_module_contracts_and_reexports(monkeypatch):
             (job_id, update_fn("value"), jobs_root, retries, timeout),
         ),
     )
-    assert compat._job_path("job-1") == ("job-1", "/tmp/import-jobs")
-    assert compat._load_job("job-2") == ("job-2", "/tmp/import-jobs")
+    assert compat._job_path("job-1") == ("job-1", TEST_JOBS_ROOT)
+    assert compat._load_job("job-2") == ("job-2", TEST_JOBS_ROOT)
     assert compat._save_job({"job_id": "job-3"}, retries=5, timeout=2.5) == (
         {"job_id": "job-3"},
-        "/tmp/import-jobs",
+        TEST_JOBS_ROOT,
         5,
         2.5,
     )
@@ -251,7 +253,7 @@ def test_import_module_contracts_and_reexports(monkeypatch):
         lambda value: f"updated-{value}",
         retries=6,
         timeout=3.5,
-    ) == ("job-4", "updated-value", "/tmp/import-jobs", 6, 3.5)
+    ) == ("job-4", "updated-value", TEST_JOBS_ROOT, 6, 3.5)
     assert compat._iter_accessible_projects is core_functions._iter_accessible_projects
     assert (
         compat._build_sem_edx_associations_from_entries
