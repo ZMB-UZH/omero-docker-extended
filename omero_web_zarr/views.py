@@ -13,6 +13,7 @@ from urllib.parse import quote, urljoin, urlsplit
 import numpy as np
 import requests
 import tifffile
+from omero_plugin_common.logging_utils import sanitize_log_value
 from django.http import (
     FileResponse,
     Http404,
@@ -628,7 +629,11 @@ def apps(request, app, url):
     try:
         html = _fetch_remote_app_shell(base_url, cache_bucket)
     except requests.RequestException:
-        LOGGER.warning("Failed to fetch remote app shell for %s", app, exc_info=True)
+        LOGGER.warning(
+            "Failed to fetch remote app shell for %s",
+            sanitize_log_value(app),
+            exc_info=True,
+        )
         return HttpResponse(status=502)
 
     response = HttpResponse(

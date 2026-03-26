@@ -311,8 +311,8 @@ class GeneticLabelPlacer:
                 x = spec["x_peak"]
                 y = spec["y_peak"] + 30 + h / 2
             else:
-                x = random.uniform(min_x, max_x)
-                y = random.uniform(min_y, max_y)
+                x = random.uniform(min_x, max_x)  # nosec B311
+                y = random.uniform(min_y, max_y)  # nosec B311
 
             genes.append(LabelGene(spec["id"], x, y))
 
@@ -362,7 +362,7 @@ class GeneticLabelPlacer:
 
             dx = gene.x - ideal_x
             dy = gene.y - ideal_y
-            distance = math.sqrt(dx * dx + dy * dy)
+            distance = math.hypot(dx, dy)
 
             # Exponential penalty
             distance_penalty += (distance**1.5) * 0.5
@@ -393,7 +393,7 @@ class GeneticLabelPlacer:
             # Maximum distance constraint
             dx = gene.x - spec["x_peak"]
             dy = gene.y - (spec["y_peak"] + 30 + (spec["height"] / 2))
-            dist = math.sqrt(dx * dx + dy * dy)
+            dist = math.hypot(dx, dy)
             if dist > 300:
                 bounds_penalty += (dist - 300) * 50
 
@@ -403,7 +403,7 @@ class GeneticLabelPlacer:
         self, population: List[Chromosome], tournament_size: int = 3
     ) -> Chromosome:
         """Select parent using tournament selection"""
-        tournament = random.sample(population, tournament_size)
+        tournament = random.sample(population, tournament_size)  # nosec B311
         return min(tournament, key=lambda c: c.fitness)
 
     def crossover(
@@ -411,7 +411,7 @@ class GeneticLabelPlacer:
     ) -> Tuple[Chromosome, Chromosome]:
         """Ordered crossover"""
         n = len(parent1.genes)
-        split = random.randint(1, n - 1)
+        split = random.randint(1, n - 1)  # nosec B311
 
         child1_genes = []
         child2_genes = []
@@ -455,13 +455,13 @@ class GeneticLabelPlacer:
         mutated = chromosome.copy()
 
         for gene in mutated.genes:
-            if random.random() < self.mutation_rate:
+            if random.random() < self.mutation_rate:  # nosec B311
                 spec = self.label_specs[gene.label_id]
                 w = spec["width"]
                 h = spec["height"]
 
-                dx = random.uniform(-30, 30)
-                dy = random.uniform(-20, 40)
+                dx = random.uniform(-30, 30)  # nosec B311
+                dy = random.uniform(-20, 40)  # nosec B311
 
                 new_x = gene.x + dx
                 new_y = gene.y + dy

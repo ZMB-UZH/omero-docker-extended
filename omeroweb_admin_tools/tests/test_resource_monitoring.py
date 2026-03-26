@@ -224,7 +224,7 @@ def test_proxy_http_request_forwards_post_body(monkeypatch) -> None:
 
     response = _proxy_http_request(
         django_request,
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "api/ds/query",
         "orgId=1",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
@@ -279,7 +279,7 @@ def test_proxy_http_request_forwards_auth_and_cookie_headers(monkeypatch) -> Non
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "api/user",
     )
 
@@ -340,7 +340,7 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "d/omero-infrastructure",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
@@ -355,7 +355,7 @@ def test_proxy_http_request_rewrites_relative_location_header(monkeypatch) -> No
 def test_rewrite_proxied_location_blocks_external_redirects() -> None:
     location = _rewrite_proxied_location(
         "https://evil.example.org/steal",
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
 
@@ -389,7 +389,7 @@ def test_proxy_http_request_rewrites_non_root_relative_location_header(
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
@@ -416,7 +416,7 @@ def test_proxy_http_request_rejects_traversal_before_backend_call(monkeypatch) -
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "../api/admin",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
@@ -451,13 +451,13 @@ def test_is_internal_hostname_handles_compose_and_local_hosts() -> None:
 
 def test_build_public_service_url_uses_request_host_and_public_port() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
-        "http",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
+        "http",  # nosec DS137138 -- mirrors internal service scheme
         "192.168.1.189",
         3000,
     )
 
-    assert built == "http://192.168.1.189:3000"
+    assert built == "http://192.168.1.189:3000"  # nosec DS137138 -- derived from internal scheme
 
 
 def test_build_public_service_url_preserves_base_path() -> None:
@@ -535,16 +535,16 @@ def test_resource_monitoring_data_prefers_public_urls_from_request_host(
 
     payload = json.loads(response.content.decode("utf-8"))
     assert payload["grafana"]["dashboard_url"].startswith("/d/")
-    assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"
+    assert payload["prometheus"]["targets_url"] == "http://testserver:9090/targets"  # nosec DS137138 -- Django testserver uses http scheme
     assert payload["grafana"]["dashboard_proxy_url"].startswith("/")
     assert payload["grafana"]["database_dashboard_external_url"].startswith(
-        "http://testserver:3000/d/database-metrics/database"
+        "http://testserver:3000/d/database-metrics/database"  # nosec DS137138 -- Django testserver uses http scheme
     )
     assert payload["grafana"]["plugin_database_dashboard_external_url"].startswith(
-        "http://testserver:3000/d/plugin-database-metrics/plugin-database"
+        "http://testserver:3000/d/plugin-database-metrics/plugin-database"  # nosec DS137138 -- Django testserver uses http scheme
     )
     assert payload["grafana"]["redis_dashboard_external_url"].startswith(
-        "http://testserver:3000/d/redis-metrics/redis"
+        "http://testserver:3000/d/redis-metrics/redis"  # nosec DS137138 -- Django testserver uses http scheme
     )
     assert payload["grafana"]["database_dashboard_proxy_url"].startswith("/")
     assert payload["grafana"]["plugin_database_dashboard_proxy_url"].startswith("/")
@@ -799,7 +799,7 @@ def test_grafana_proxy_forwards_subpath_and_query(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert captured["base_url"] == "http://grafana:3000"
+    assert captured["base_url"] == "http://grafana:3000"  # nosec DS137138 -- internal Docker service
     assert captured["path"] == "d/omero-infrastructure/server-infrastructure"
     assert captured["query"] == "refresh=10s"
     assert captured["proxy_prefix"] == "/admin_tools/resource-monitoring/grafana-proxy"
@@ -929,17 +929,18 @@ def test_safe_request_host_falls_back_when_get_host_fails() -> None:
 
 
 def test_build_proxy_backend_urls_prefers_internal_and_deduplicates() -> None:
-    assert _build_proxy_backend_urls("http://grafana:3000", "") == [
-        "http://grafana:3000"
+    assert _build_proxy_backend_urls("http://grafana:3000", "") == [  # nosec DS137138 -- internal Docker service
+        "http://grafana:3000"  # nosec DS137138 -- internal Docker service
     ]
-    assert _build_proxy_backend_urls("http://grafana:3000/", "http://grafana:3000") == [
-        "http://grafana:3000"
+    assert _build_proxy_backend_urls("http://grafana:3000/", "http://grafana:3000") == [  # nosec DS137138 -- internal Docker service
+        "http://grafana:3000"  # nosec DS137138 -- internal Docker service
     ]
     assert _build_proxy_backend_urls(
-        "http://grafana:3000", "http://130.60.107.205:3000"
-    ) == [
         "http://grafana:3000",
-        "http://130.60.107.205:3000",
+        "http://130.60.107.205:3000",  # nosec DS137138 -- internal Docker service / LAN host
+    ) == [
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
+        "http://130.60.107.205:3000",  # nosec DS137138 -- LAN monitoring host
     ]
 
 
@@ -948,7 +949,7 @@ def test_grafana_unavailable_response_has_actionable_metadata() -> None:
 
     response = _grafana_unavailable_response(
         proxy_prefix="/admin_tools/resource-monitoring/grafana-proxy",
-        attempted_backends=["http://grafana:3000", "http://130.60.107.205:3000"],
+        attempted_backends=["http://grafana:3000", "http://130.60.107.205:3000"],  # nosec DS137138 -- internal Docker service / LAN host
         status_code=502,
     )
 
@@ -968,8 +969,8 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         {"refresh": "10s"},
     )
 
-    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
-    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")  # nosec DS137138 -- internal Docker service
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")  # nosec DS137138 -- LAN monitoring host
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
         lambda request, conn: "root",
@@ -996,7 +997,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
         rewrite_origin_headers=False,
     ):
         attempts.append(base_url)
-        if base_url == "http://grafana:3000":
+        if base_url == "http://grafana:3000":  # nosec DS137138 -- internal Docker service
             return DummyResponse(status_code=502)
         return DummyResponse(status_code=200)
 
@@ -1014,7 +1015,7 @@ def test_grafana_proxy_falls_back_to_public_url_on_backend_unreachable(
     )
 
     assert response.status_code == 200
-    assert attempts == ["http://grafana:3000", "http://130.60.107.205:3000"]
+    assert attempts == ["http://grafana:3000", "http://130.60.107.205:3000"]  # nosec DS137138 -- internal Docker service / LAN host
 
 
 def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
@@ -1024,8 +1025,8 @@ def test_grafana_proxy_renders_custom_unavailable_page_for_gateway_errors(
         "/admin_tools/resource-monitoring/grafana-proxy/d/omero-infrastructure/server-infrastructure",
     )
 
-    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")
-    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_URL", "http://grafana:3000")  # nosec DS137138 -- internal Docker service
+    monkeypatch.setenv("ADMIN_TOOLS_GRAFANA_PUBLIC_URL", "http://130.60.107.205:3000")  # nosec DS137138 -- LAN monitoring host
     monkeypatch.setattr(
         "omeroweb_admin_tools.views.utils.current_username",
         lambda request, conn: "root",
@@ -1071,7 +1072,7 @@ def test_is_behind_reverse_proxy_returns_false_for_direct_access() -> None:
 
 def test_build_public_service_url_omits_port_when_proxied() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "https",
         "omero.core.uzh.ch",
         3000,
@@ -1082,8 +1083,8 @@ def test_build_public_service_url_omits_port_when_proxied() -> None:
 
 def test_build_public_service_url_uses_forwarded_proto() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
-        "http",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
+        "http",  # nosec DS137138 -- mirrors internal service scheme
         "omero.core.uzh.ch",
         3000,
         forwarded_proto="https",
@@ -1093,12 +1094,12 @@ def test_build_public_service_url_uses_forwarded_proto() -> None:
 
 def test_build_public_service_url_direct_access_unchanged() -> None:
     built = _build_public_service_url(
-        "http://grafana:3000",
-        "http",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
+        "http",  # nosec DS137138 -- mirrors internal service scheme
         "192.168.1.189",
         3000,
     )
-    assert built == "http://192.168.1.189:3000"
+    assert built == "http://192.168.1.189:3000"  # nosec DS137138 -- derived from internal scheme
 
 
 def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
@@ -1132,7 +1133,7 @@ def test_proxy_rewrites_app_sub_url_for_grafana(monkeypatch) -> None:
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "d/omero-infrastructure/server-infrastructure",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
@@ -1159,7 +1160,7 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
         def read(self):
             return (
                 b"<html><head><script>"
-                b'window.grafanaBootData={"settings":{"appUrl":"http://grafana:3000/"}};'
+                b'window.grafanaBootData={"settings":{"appUrl":"http://grafana:3000/"}};'  # nosec DS137138 -- mock Grafana response with internal Docker URL
                 b"</script></head><body></body></html>"
             )
 
@@ -1174,7 +1175,7 @@ def test_proxy_rewrites_app_url_for_grafana(monkeypatch) -> None:
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "d/omero-infrastructure/server-infrastructure",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )
@@ -1377,7 +1378,7 @@ def test_proxy_rewrites_set_cookie_path_for_grafana(monkeypatch) -> None:
 
     response = _proxy_http_request(
         DummyDjangoRequest(),
-        "http://grafana:3000",
+        "http://grafana:3000",  # nosec DS137138 -- internal Docker service
         "d/omero-infrastructure/server-infrastructure",
         proxy_prefix="/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
     )

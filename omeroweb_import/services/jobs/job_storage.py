@@ -165,7 +165,7 @@ def save_job(
     for attempt in range(retries):
         if attempt:
             time.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311
                     JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
                 )
             )
@@ -204,7 +204,7 @@ def robust_update_job(
     for attempt in range(retries):
         if attempt:
             time.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311
                     JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
                 )
             )

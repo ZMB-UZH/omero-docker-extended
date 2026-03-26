@@ -671,7 +671,7 @@ def _load_job(job_id: str):
     for attempt in range(JOB_LOCK_RETRIES):
         if attempt:
             time.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311
                     JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
                 )
             )
@@ -681,29 +681,37 @@ def _load_job(job_id: str):
                     return None
                 return _read_job_file(job_id)
         except json.JSONDecodeError as exc:
-            logger.error("Job file %s is corrupt: %s", path, exc)
+            logger.error(
+                "Job file %s is corrupt: %s",
+                sanitize_log_value(path),
+                sanitize_log_value(exc),
+            )
             return None
         except (portalocker.exceptions.LockException, OSError) as exc:
             last_lock_error = exc
             logger.debug(
                 "Unable to lock job file %s for read (attempt %s/%s): %s",
-                path,
+                sanitize_log_value(path),
                 attempt + 1,
                 JOB_LOCK_RETRIES,
-                exc,
+                sanitize_log_value(exc),
             )
     if last_lock_error is None:
         return None
     try:
         return _read_job_file(job_id)
     except json.JSONDecodeError as exc:
-        logger.error("Job file %s is corrupt after lock contention: %s", path, exc)
+        logger.error(
+            "Job file %s is corrupt after lock contention: %s",
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+        )
     except OSError as exc:
         logger.warning(
             "Unable to read job file %s after lock contention: %s (last lock error: %s)",
-            path,
-            exc,
-            last_lock_error,
+            sanitize_log_value(path),
+            sanitize_log_value(exc),
+            sanitize_log_value(last_lock_error),
         )
     return None
 
@@ -713,7 +721,10 @@ def _save_job(
 ):
     job_id = job_dict.get("job_id")
     if not _safe_job_id(job_id):
-        logger.warning("Refusing to save upload job with invalid id: %s", job_id)
+        logger.warning(
+            "Refusing to save upload job with invalid id: %s",
+            sanitize_log_value(job_id),
+        )
         return False
     path = _job_path(job_id)
     lock_path = _job_lock_path(job_id)
@@ -721,7 +732,7 @@ def _save_job(
     for attempt in range(retries):
         if attempt:
             time.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311
                     JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
                 )
             )
@@ -732,13 +743,15 @@ def _save_job(
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
                 "Unable to lock job file %s for writing (attempt %s/%s): %s",
-                path,
+                sanitize_log_value(path),
                 attempt + 1,
                 retries,
-                exc,
+                sanitize_log_value(exc),
             )
     logger.error(
-        "Failed to lock job file %s for writing after %s attempts.", path, retries
+        "Failed to lock job file %s for writing after %s attempts.",
+        sanitize_log_value(path),
+        retries,
     )
     return False
 
@@ -760,32 +773,40 @@ def _robust_update_job(
     for attempt in range(retries):
         if attempt:
             time.sleep(
-                random.uniform(
+                random.uniform(  # nosec B311
                     JOB_LOCK_RETRY_SLEEP_MIN_SECONDS, JOB_LOCK_RETRY_SLEEP_MAX_SECONDS
                 )
             )
         try:
             with portalocker.Lock(lock_path, "a+", timeout=timeout):
                 if not path.exists():
-                    logger.warning("Job file %s not found for update.", path)
+                    logger.warning(
+                        "Job file %s not found for update.", sanitize_log_value(path)
+                    )
                     return None
                 job_dict = _read_job_file(job_id)
                 job_dict = update_fn(job_dict)
                 _write_job_file(job_id, job_dict)
             return job_dict
         except json.JSONDecodeError as exc:
-            logger.error("Job file %s is corrupt: %s", path, exc)
+            logger.error(
+                "Job file %s is corrupt: %s",
+                sanitize_log_value(path),
+                sanitize_log_value(exc),
+            )
             return None
         except (portalocker.exceptions.LockException, OSError) as exc:
             logger.warning(
                 "Unable to lock job file %s for update (attempt %s/%s): %s",
-                path,
+                sanitize_log_value(path),
                 attempt + 1,
                 retries,
-                exc,
+                sanitize_log_value(exc),
             )
     logger.error(
-        "Failed to lock job file %s for update after %s attempts.", path, retries
+        "Failed to lock job file %s for update after %s attempts.",
+        sanitize_log_value(path),
+        retries,
     )
     return None
 
@@ -1021,7 +1042,7 @@ def _external_info_text(external_info, attribute_name: str, getter_name: str) ->
         try:
             return _get_text(getter()).strip()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
     return value
 
 
@@ -1187,7 +1208,7 @@ def _native_zarr_length_signature(length) -> Optional[tuple[float, str]]:
         if unit is not None:
             unit_name = str(getattr(unit, "name", None) or unit).strip().lower()
     except Exception:
-        pass
+        logger.debug("Suppressed exception in cleanup", exc_info=True)
     return round(value, 9), unit_name
 
 
@@ -1410,12 +1431,12 @@ def _finalize_imported_zarr_image_metadata(
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
         if admin_conn:
             try:
                 admin_conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _get_id(obj):
@@ -2376,7 +2397,7 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
             return None
         conn.SERVICE_OPTS.setOmeroGroup("-1")
         return conn
@@ -2390,7 +2411,7 @@ def _open_admin_connection(host: str, port: int) -> Optional[BlitzGateway]:
         try:
             conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
         return None
 
 
@@ -2470,11 +2491,11 @@ def _background_import_session(
             try:
                 admin_conn.c.sf.getSessionService().closeSession(session)
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
         try:
             admin_conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _write_cli_ice_config(
@@ -2617,7 +2638,7 @@ def _read_proc_rchar(pid):
                 if line.startswith("rchar:"):
                     return int(line.split(":", 1)[1].strip())
     except (OSError, ValueError, PermissionError):
-        pass
+        logger.debug("Suppressed exception reading process I/O stats", exc_info=True)
     return None
 
 
@@ -2634,7 +2655,7 @@ def _get_path_total_size(path: Path) -> int:
             if p.is_file():
                 total += p.stat().st_size
     except OSError:
-        pass
+        logger.debug("Suppressed exception in cleanup", exc_info=True)
     return total
 
 
@@ -2764,7 +2785,7 @@ def _import_file(
             for line in pipe:
                 dest.append(line)
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
 
     t_out = threading.Thread(
         target=_drain, args=(proc.stdout, stdout_lines), daemon=True
@@ -2793,7 +2814,9 @@ def _import_file(
                         try:
                             pipe.close()
                         except Exception:
-                            pass
+                            logger.debug(
+                                "Suppressed exception in cleanup", exc_info=True
+                            )
                 return (
                     False,
                     "".join(stdout_lines),
@@ -2812,7 +2835,9 @@ def _import_file(
                     try:
                         _save_job(progress_job)
                     except Exception:
-                        pass  # best-effort; don't derail the import
+                        logger.debug(
+                            "Suppressed exception in cleanup", exc_info=True
+                        )  # best-effort; don't derail the import
                     last_save = now
 
             time.sleep(2)
@@ -2828,7 +2853,7 @@ def _import_file(
                 try:
                     pipe.close()
                 except Exception:
-                    pass
+                    logger.debug("Suppressed exception in cleanup", exc_info=True)
 
     stdout = "".join(stdout_lines)
     stderr = "".join(stderr_lines)
@@ -3179,11 +3204,11 @@ def _create_dataset_via_admin_connection(
             if conn is not None:
                 conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
         try:
             admin_conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _open_service_connection(
@@ -3809,7 +3834,7 @@ def _write_job_file(job_id: str, job_dict):
             try:
                 tmp_path.unlink()
             except OSError:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _apply_upload_updates(job_id: str, updates: list, errors: list):
@@ -3957,7 +3982,7 @@ def _has_import_candidates_in_output(
             try:
                 resolved_candidate.relative_to(expected_resolved)
             except ValueError:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
             else:
                 return True
 
@@ -5067,7 +5092,7 @@ def _prepare_server_readable_zarr_source(
             if transfer_parent.exists():
                 shutil.rmtree(transfer_parent)
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
         return None, None, f"Failed to prepare server-readable Zarr staging copy: {exc}"
 
 
@@ -5208,7 +5233,7 @@ def _run_zarr_managed_repo_script(
         try:
             admin_conn.close()
         except Exception:
-            pass
+            logger.debug("Suppressed exception in cleanup", exc_info=True)
 
     if script_id is None:
         return False, {}, f"OMERO script not found: {ZARR_MANAGED_REPO_SCRIPT_NAME}"
@@ -5744,12 +5769,12 @@ def _verify_zarr_import_via_api(
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
         if admin_conn:
             try:
                 admin_conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _verify_imported_zarr_images_renderable(
@@ -5868,12 +5893,12 @@ def _verify_imported_zarr_images_renderable(
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
         if admin_conn:
             try:
                 admin_conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _cleanup_imported_images(host: str, port: int, image_ids: list[str]) -> None:
@@ -5905,7 +5930,7 @@ def _cleanup_imported_images(host: str, port: int, image_ids: list[str]) -> None
             try:
                 admin_conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _verify_import_via_api(
@@ -5971,12 +5996,12 @@ def _verify_import_via_api(
             try:
                 conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
         if admin_conn:
             try:
                 admin_conn.close()
             except Exception:
-                pass
+                logger.debug("Suppressed exception in cleanup", exc_info=True)
 
 
 def _import_job_entry(
@@ -6479,7 +6504,9 @@ def _process_import_job(job_id: str):
                         try:
                             admin_conn.close()
                         except Exception:
-                            pass
+                            logger.debug(
+                                "Suppressed exception in cleanup", exc_info=True
+                            )
             session_key = job.get("session_key")
 
             # IMPORTANT: never join/close the user's active OMERO.web session here.
@@ -7262,7 +7289,10 @@ def _start_import_thread(job_id: str):
 
     job["import_thread_started"] = True
     if not _save_job(job):
-        logger.error("Unable to persist import_thread_started for job %s.", job_id)
+        logger.error(
+            "Unable to persist import_thread_started for job %s.",
+            sanitize_log_value(job_id),
+        )
         return
     worker = threading.Thread(target=_process_import_job, args=(job_id,), daemon=True)
     worker.start()

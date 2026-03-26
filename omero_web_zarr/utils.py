@@ -499,7 +499,7 @@ def get_store_backed_channel_overrides(image, channels=None):
     try:
         channel_count = max(channel_count, int(image.getSizeC()))
     except Exception:
-        pass
+        LOGGER.debug("Suppressed exception reading channel count", exc_info=True)
     for sequence in (channel_names, visible, contrast_limits, colormap):
         if isinstance(sequence, (list, tuple)):
             channel_count = max(channel_count, len(sequence))

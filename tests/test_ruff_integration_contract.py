@@ -74,11 +74,11 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual(["python", "pyi"], hooks["ruff-format"]["types_or"])
 
     def test_ruff_workflow_is_pinned_and_runs_on_main_only(self) -> None:
-        workflow = yaml.load(
-            self.read_text(".github/workflows/ruff.yml"), Loader=yaml.BaseLoader
-        )
-        self.assertEqual(["main"], workflow["on"]["pull_request"]["branches"])
-        self.assertEqual(["main"], workflow["on"]["push"]["branches"])
+        workflow = yaml.safe_load(self.read_text(".github/workflows/ruff.yml"))
+        # yaml.safe_load parses the YAML key `on:` as boolean True
+        triggers = workflow[True]
+        self.assertEqual(["main"], triggers["pull_request"]["branches"])
+        self.assertEqual(["main"], triggers["push"]["branches"])
         self.assertEqual("read", workflow["permissions"]["contents"])
         self.assertEqual("ubuntu-24.04", workflow["jobs"]["ruff"]["runs-on"])
 
