@@ -104,7 +104,7 @@ class AdminToolsSecurityRegressionTests(TestCase):
     def test_rewrite_proxied_location_blocks_external_redirects(self):
         location = index_view._rewrite_proxied_location(
             "https://evil.example.org/steal",
-            "http://grafana:3000",
+            "https://grafana:3000",
             "/omeroweb_admin_tools/resource-monitoring/grafana-proxy",
         )
 

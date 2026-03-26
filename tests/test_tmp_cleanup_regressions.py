@@ -8,6 +8,7 @@ from unittest import TestCase, main as unittest_main
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+BASH_BIN = "/bin/bash"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -70,7 +71,7 @@ class TmpCleanupRegressionTests(TestCase):
 
             subprocess.run(
                 [
-                    "bash",
+                    BASH_BIN,
                     str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
                     "--tmp-dir",
                     str(root),
@@ -104,7 +105,7 @@ class TmpCleanupRegressionTests(TestCase):
 
             subprocess.run(
                 [
-                    "bash",
+                    BASH_BIN,
                     str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
                     "--tmp-dir",
                     str(root),
@@ -145,7 +146,7 @@ class TmpCleanupRegressionTests(TestCase):
 
             subprocess.run(
                 [
-                    "bash",
+                    BASH_BIN,
                     str(REPO_ROOT / "scripts/omero-tmp-cleaner.sh"),
                     "--tmp-dir",
                     str(root),

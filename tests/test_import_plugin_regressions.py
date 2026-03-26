@@ -14,8 +14,13 @@ import threading
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+TEST_TMP_ROOT = Path(tempfile.gettempdir()) / "import-plugin-tests"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+
+def _test_tmp_path(*parts: str) -> Path:
+    return TEST_TMP_ROOT.joinpath(*parts)
 
 
 def _install_import_stubs():
@@ -122,8 +127,8 @@ def _install_import_stubs():
         logging_utils.sanitize_log_value = lambda value: value
         logging_utils.sanitized_exc_info = lambda exc: None
         tmp_utils = types.ModuleType("omero_plugin_common.tmp_utils")
-        tmp_utils.get_plugin_tmp_dir = lambda name: (
-            Path("/tmp") / f"import-plugin-{name}"
+        tmp_utils.get_plugin_tmp_dir = lambda name: _test_tmp_path(
+            f"import-plugin-{name}"
         )
         tmp_cleanup = types.ModuleType("omero_plugin_common.tmp_cleanup")
         tmp_cleanup.safe_mark_path_for_deferred_cleanup = lambda *args, **kwargs: True
@@ -514,7 +519,7 @@ class ImportPluginRegressionTests(TestCase):
         )
 
     def test_validate_staged_target_path_rejects_excessive_target_length(self):
-        upload_root = Path("/tmp/upload-root")
+        upload_root = _test_tmp_path("upload-root")
         staged_path = "_staged/job/" + ("a" * 5000) + ".tif"
 
         error = core_functions._validate_staged_target_path(upload_root, staged_path)
@@ -522,7 +527,7 @@ class ImportPluginRegressionTests(TestCase):
         self.assertIn("File path is too long", error)
 
     def test_resolve_staged_target_path_rejects_traversal(self):
-        upload_root = Path("/tmp/upload-root")
+        upload_root = _test_tmp_path("upload-root")
 
         target, error = core_functions._resolve_staged_target_path(
             upload_root, "../escape.bin"
@@ -789,7 +794,7 @@ class ImportPluginRegressionTests(TestCase):
                 4064,
                 username="test",
                 group_name="users_private",
-                source_path=Path("/tmp/job/sample.zarr"),
+                source_path=_test_tmp_path("job", "sample.zarr"),
             )
 
         self.assertTrue(ok)
@@ -821,7 +826,10 @@ class ImportPluginRegressionTests(TestCase):
         self.assertEqual("stage", command[11].split("=", 1)[1])
         self.assertEqual("users_private", command[12].split("=", 1)[1])
         self.assertEqual("test", command[13].split("=", 1)[1])
-        self.assertEqual("/tmp/job/sample.zarr", command[14].split("=", 1)[1])
+        self.assertEqual(
+            str(_test_tmp_path("job", "sample.zarr")),
+            command[14].split("=", 1)[1],
+        )
 
     def test_run_zarr_managed_repo_script_retries_when_no_processor_is_temporarily_unavailable(
         self,
@@ -895,7 +903,7 @@ class ImportPluginRegressionTests(TestCase):
                 4064,
                 username="test",
                 group_name="users_private",
-                source_path=Path("/tmp/job/sample.zarr"),
+                source_path=_test_tmp_path("job", "sample.zarr"),
             )
 
         self.assertTrue(ok)
@@ -911,7 +919,7 @@ class ImportPluginRegressionTests(TestCase):
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
-        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_source = _test_tmp_path("managed-zarr-transfer", "token", "sample.zarr")
         shared_parent = shared_source.parent
 
         with (
@@ -960,7 +968,7 @@ class ImportPluginRegressionTests(TestCase):
             ) as cleanup_mock,
         ):
             result = core_functions._import_zarr_via_cli(
-                file_path=Path("/tmp/job/sample.zarr"),
+                file_path=_test_tmp_path("job", "sample.zarr"),
                 session_key="session-key",
                 host="omeroserver",
                 port=4064,
@@ -996,7 +1004,7 @@ class ImportPluginRegressionTests(TestCase):
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
-        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_source = _test_tmp_path("managed-zarr-transfer", "token", "sample.zarr")
         shared_parent = shared_source.parent
 
         with (
@@ -1059,7 +1067,7 @@ class ImportPluginRegressionTests(TestCase):
             ) as cleanup_managed_mock,
         ):
             result = core_functions._import_zarr_via_cli(
-                file_path=Path("/tmp/job/sample.zarr"),
+                file_path=_test_tmp_path("job", "sample.zarr"),
                 session_key="session-key",
                 host="omeroserver",
                 port=4064,
@@ -1095,7 +1103,7 @@ class ImportPluginRegressionTests(TestCase):
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
-        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_source = _test_tmp_path("managed-zarr-transfer", "token", "sample.zarr")
         shared_parent = shared_source.parent
 
         with (
@@ -1157,7 +1165,7 @@ class ImportPluginRegressionTests(TestCase):
             ) as cleanup_managed_mock,
         ):
             result = core_functions._import_zarr_via_cli(
-                file_path=Path("/tmp/job/sample.zarr"),
+                file_path=_test_tmp_path("job", "sample.zarr"),
                 session_key="session-key",
                 host="omeroserver",
                 port=4064,
@@ -1194,7 +1202,7 @@ class ImportPluginRegressionTests(TestCase):
         managed_path = Path(
             "/OMERO/ManagedRepository/users_private/test/2026-03-22/09-51-15/sample.zarr"
         )
-        shared_source = Path("/tmp/managed-zarr-transfer/token/sample.zarr")
+        shared_source = _test_tmp_path("managed-zarr-transfer", "token", "sample.zarr")
         shared_parent = shared_source.parent
 
         with (
@@ -1257,7 +1265,7 @@ class ImportPluginRegressionTests(TestCase):
             ) as cleanup_managed_mock,
         ):
             result = core_functions._import_zarr_via_cli(
-                file_path=Path("/tmp/job/sample.zarr"),
+                file_path=_test_tmp_path("job", "sample.zarr"),
                 session_key="session-key",
                 host="omeroserver",
                 port=4064,
@@ -1910,8 +1918,8 @@ class ImportPluginRegressionTests(TestCase):
 
     def test_mark_failed_job_for_deferred_cleanup_marks_upload_data_and_job_file(self):
         job_id = "c" * 32
-        upload_root = Path("/tmp/upload-root")
-        jobs_root = Path("/tmp/jobs-root")
+        upload_root = _test_tmp_path("upload-root")
+        jobs_root = _test_tmp_path("jobs-root")
         calls = []
 
         def capture_marker(path, root, *, ttl_seconds, now=None):
@@ -2924,7 +2932,7 @@ class ManageZarrManagedRepositoryScriptTests(TestCase):
                 "Action": "stage",
                 "Group_Name": "users_private",
                 "Username": "test",
-                "Source_Path": "/tmp/source.zarr",
+                "Source_Path": str(_test_tmp_path("source.zarr")),
             }
         )
         cleanup_client = _FakeClient(

@@ -9,6 +9,9 @@ import unittest
 from pathlib import Path
 
 
+BASH_BIN = "/bin/bash"
+
+
 class InstallTranscriptRegressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -52,7 +55,7 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
             fake_script.chmod(0o755)
 
             result = subprocess.run(
-                ["bash", str(fake_script)],
+                [BASH_BIN, str(fake_script)],
                 check=True,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -77,6 +80,8 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
     ) -> None:
         if shutil.which("script") is None:
             self.skipTest("script command not available")
+        script_bin = shutil.which("script")
+        assert script_bin is not None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = Path(tmpdir)
@@ -113,9 +118,9 @@ class InstallTranscriptRegressionTests(unittest.TestCase):
 
             result = subprocess.run(
                 [
-                    "script",
+                    script_bin,
                     "-qefc",
-                    f"bash {shlex.quote(str(fake_script))}",
+                    f"{shlex.quote(BASH_BIN)} {shlex.quote(str(fake_script))}",
                     "/dev/null",
                 ],
                 check=True,

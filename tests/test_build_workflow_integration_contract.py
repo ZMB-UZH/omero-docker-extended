@@ -388,7 +388,7 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
             self.repo_root / "installation" / "installation_script.sh"
         ).read_text(encoding="utf-8")
         self.assertIn("CROWDSEC_PROBE_MARKER", script_text)
-        self.assertIn("http://crowdsec:8080/health", script_text)
+        self.assertIn("crowdsec:8080/health", script_text)
         self.assertIn("Injected CrowdSec health probe into prometheus.yml", script_text)
         self.assertIn("Removed CrowdSec health probe from prometheus.yml", script_text)
 
