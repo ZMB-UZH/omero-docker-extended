@@ -48,17 +48,7 @@ class RuffIntegrationContractTests(unittest.TestCase):
         self.assertEqual("==0.15.7", config["required-version"])
         self.assertEqual("py39", config["target-version"])
         self.assertEqual(["F", "E7", "E9"], config["lint"]["select"])
-        self.assertEqual(
-            {
-                "omeroweb_import/services/import_management/workflow_service.py",
-                "omeroweb_import/services/omero/connection_service.py",
-                "omeroweb_import/services/omero/dataset_service.py",
-                "omeroweb_import/services/omero/import_service.py",
-                "omeroweb_import/views/index_view.py",
-                "omeroweb_omp_plugin/services/ai_assist.py",
-            },
-            set(config["lint"]["per-file-ignores"]),
-        )
+        self.assertEqual({}, config["lint"].get("per-file-ignores", {}))
 
     def test_pre_commit_uses_pinned_ruff_hooks(self) -> None:
         config = yaml.safe_load(self.read_text(".pre-commit-config.yaml"))

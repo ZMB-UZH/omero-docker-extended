@@ -2,12 +2,71 @@
 Import plugin views.
 """
 
-from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+import json
+import time
+import uuid
+from pathlib import PurePosixPath
 
-# Import all helper functions from core_functions
-from .core_functions import *
-from .core_functions import _prepare_uploaded_job_for_request_path_import
-from .utils import require_non_root_user
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.urls import reverse
+from omeroweb.decorators import login_required
+
+from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
+from ..strings import errors, messages
+
+from .core_functions import (
+    DEFAULT_UPLOAD_BATCH_FILES,
+    DEFAULT_UPLOAD_CONCURRENCY,
+    MAX_UPLOAD_BATCH_BYTES,
+    MAX_UPLOAD_BATCH_GB,
+    UPLOAD_BATCH_FILES_ENV,
+    UPLOAD_CONCURRENCY_ENV,
+    _apply_upload_updates,
+    _build_staged_relative_path,
+    _collect_project_payload,
+    _compatibility_pending_entries,
+    _current_user_id,
+    _dataset_name_for_path,
+    _ensure_dir,
+    _generate_orphan_dataset_name,
+    _get_env_int,
+    _get_jobs_root,
+    _get_or_create_dataset,
+    _get_session_key,
+    _get_text,
+    _get_upload_root,
+    _has_read_write_permissions,
+    _is_owned_by_user,
+    _load_job,
+    _normalize_job_batch_size,
+    _normalize_sem_edx_associations,
+    _normalize_sem_edx_settings,
+    _normalize_upload_relative_path,
+    _prepare_uploaded_job_for_request_path_import,
+    _prepare_job_import_datasets,
+    _refresh_job_status,
+    _resolve_omero_host_port,
+    _resolve_staged_target_path,
+    _safe_job_id,
+    _safe_relative_path,
+    _save_job,
+    _should_auto_skip_import,
+    _special_methods_enabled,
+    _start_import_thread,
+    _update_job,
+    _validate_staged_target_path,
+    logger,
+)
+from .utils import current_username, json_error, load_json_body, require_non_root_user
+
+# Keep these helpers on the module surface because existing tests monkeypatch
+# them directly when isolating view logic.
+_EXPORTED_HELPERS = (
+    _get_or_create_dataset,
+    _get_session_key,
+    _prepare_job_import_datasets,
+)
 
 
 @login_required()
@@ -47,7 +106,7 @@ def index(request, conn=None, url=None, **kwargs):
 def list_projects(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     payload = _collect_project_payload(conn, user_id)
-    return JsonResponse(payload, safe=False)
+    return JsonResponse(payload)
 
 
 @login_required()
