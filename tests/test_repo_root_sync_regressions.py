@@ -198,7 +198,9 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
         result = self._run_bash(script)
 
-        self.assertIn("Skipping managed-repository shared-prefix readiness wait", result.stdout)
+        self.assertIn(
+            "Skipping managed-repository shared-prefix readiness wait", result.stdout
+        )
 
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
         function_text = self._slice_function(

@@ -284,11 +284,11 @@ def _group_is_read_write(group):
     if permissions is None:
         return False
     try:
-        # OMERO groups use isGroupRead() and isGroupWrite()
-        # Or check the permission level string
         perm_str = str(permissions)
-        # Read-write groups have patterns like "rwrw--" or "rwra--"
-        return "rw" in perm_str.lower()[:4]  # Check first 4 chars for group perms
+        # Group permissions occupy positions 2-3 in strings like "rwrw--"
+        # or "rwra--". Match the exact group fragment so read-annotate
+        # groups are not misclassified as read-write.
+        return perm_str.lower()[2:4] == "rw"
     except Exception as exc:
         logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     # Fallback: try the isGroupRead/isGroupWrite methods if they exist
@@ -307,8 +307,7 @@ def _group_is_read_annotate(group):
         return False
     try:
         perm_str = str(permissions)
-        # Read-annotate groups have pattern like "rwra--"
-        return "ra" in perm_str.lower()[2:4]  # Check positions 2-3 for group perms
+        return perm_str.lower()[2:4] == "ra"
     except Exception as exc:
         logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     # Fallback

@@ -334,13 +334,12 @@ def lookup_prefix(root_pass: str, repo_dir_path: str, expected_managed_dir: str)
             )
             return 1
 
-        candidates = list(conn.getObjects("OriginalFile", attributes={"name": dir_name}))
+        candidates = list(
+            conn.getObjects("OriginalFile", attributes={"name": dir_name})
+        )
         for obj in candidates:
             if obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid:
-                print(
-                    "FOUND|"
-                    f"{obj.getId()}|{obj.getOwnerOmeName()}|{obj.getRepo()}"
-                )
+                print(f"FOUND|{obj.getId()}|{obj.getOwnerOmeName()}|{obj.getRepo()}")
                 return 0
 
         print("MISSING")
