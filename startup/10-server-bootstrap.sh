@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log() {
     echo "[server-bootstrap] $*"
 }
@@ -35,6 +37,7 @@ SERVER_HOME="${SERVER_HOME:-/opt/omero/server/OMERO.server}"
 SERVER_VAR_DIR="${SERVER_VAR_DIR:-${SERVER_HOME}/var}"
 SERVER_LOG_DIR="${SERVER_LOG_DIR:-${SERVER_VAR_DIR}/log}"
 REPO_ROOT_SYNC_STATUS_FILE="${SERVER_VAR_DIR}/repo-root-sync.status"
+REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"
 resolve_omero_bin() {
     local configured_bin="${OMERO_BIN:-}"
     if [[ -n "${configured_bin}" ]]; then
@@ -782,6 +785,7 @@ toggle_zarr_pixel_buffer_plugin() {
 validate_repo_root_sync_configuration() {
     local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
     local jitter="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
+    local stable_prefix_depth=""
 
     if ! [[ "${interval}" =~ ^[0-9]+$ ]] || [ "${interval}" -lt 1 ]; then
         echo "ERROR: OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS must be a positive integer, got: '${interval}'" >&2
@@ -799,6 +803,15 @@ validate_repo_root_sync_configuration() {
 
     if [[ -n "${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS-}" ]]; then
         require_positive_integer_env_var "OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS"
+    fi
+
+    stable_prefix_depth="$(repo_root_sync_stable_prefix_depth "$(resolve_server_venv_python)")" || {
+        echo "ERROR: Failed to analyze CONFIG_omero_fs_repo_path for shared-prefix sync." >&2
+        exit 1
+    }
+    if ! [[ "${stable_prefix_depth}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Invalid shared-prefix depth reported for CONFIG_omero_fs_repo_path: '${stable_prefix_depth}'" >&2
+        exit 1
     fi
 }
 
@@ -1238,122 +1251,59 @@ schedule_ldap_group_bootstrap() {
     log "Scheduled background LDAP group bootstrap for static group '${ldap_group_setting}'"
 }
 
-list_repo_root_bootstrap_groups() {
-    local root_pass="$1"
-    local out=""
+repo_root_sync_stable_prefix_depth() {
+    local python_bin="${1:?BUG: repo_root_sync_stable_prefix_depth requires a python path}"
 
-    out="$(run_omero group list -s localhost -p 4064 -u root -w "${root_pass}" 2>/dev/null || true)"
-    if [[ -z "${out}" ]]; then
-        return 0
+    if [[ ! -r "${REPO_ROOT_SYNC_HELPER}" ]]; then
+        echo "ERROR: Missing repo-root sync helper: ${REPO_ROOT_SYNC_HELPER}" >&2
+        return 1
     fi
 
-    if printf "%s" "${out}" | grep -q '|'; then
-        printf "%s\n" "${out}" \
-            | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $1); gsub(/^[ \t]+|[ \t]+$/, "", $2); if ($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/) print $2}' \
-            | sort -u
-        return 0
-    fi
-
-    printf "%s\n" "${out}" \
-        | awk '($1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/){print $2}' \
-        | sort -u
+    "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" stable-depth \
+        --repo-template "${CONFIG_omero_fs_repo_path:-}"
 }
 
-collect_repo_root_bootstrap_paths() {
-    local repo_path="${CONFIG_omero_fs_repo_path:-}"
-    if [[ -z "${repo_path}" ]]; then
-        return 0
+run_repo_root_sync_helper() {
+    local python_bin="${1:?BUG: run_repo_root_sync_helper requires a python path}"
+    local cli_home="${2:?BUG: run_repo_root_sync_helper requires a CLI home}"
+    shift 2
+
+    if [[ ! -r "${REPO_ROOT_SYNC_HELPER}" ]]; then
+        echo "ERROR: Missing repo-root sync helper: ${REPO_ROOT_SYNC_HELPER}" >&2
+        return 1
     fi
 
-    local -A seen=()
-    local -A seen_groups=()
-    local install_groups="${OMERO_INSTALL_GROUP_LIST:-}"
-    local ldap_group_setting="${CONFIG_omero_ldap_new__user__group:-}"
-    local -a candidate_groups=()
-    local entry=""
-    local group_name=""
-    local current_year=""
-    local current_month=""
-    local current_day=""
-    local current_time=""
-    local template_parts=()
-    local template_part=""
-    local rendered_part=""
+    runuser -u "${OMERO_CLI_USER}" -- env \
+        HOME="${cli_home}" \
+        TMPDIR="${TMPDIR:-/tmp}" \
+        OMERO_TMPDIR="${TMPDIR:-/tmp}" \
+        OMERO_TEMPDIR="${TMPDIR:-/tmp}" \
+        "${python_bin}" "${REPO_ROOT_SYNC_HELPER}" "$@"
+}
 
-    current_year="$(date +%Y)"
-    current_month="$(date +%m)"
-    current_day="$(date +%d)"
-    current_time="$(date +%H-%M-%S)"
+build_repo_root_sync_plan() {
+    local python_bin="${1:?BUG: build_repo_root_sync_plan requires a python path}"
+    local cli_home="${2:?BUG: build_repo_root_sync_plan requires a CLI home}"
 
-    _add_candidate_group() {
-        local candidate="$1"
-        candidate="$(trim_whitespace "${candidate}")"
-        [[ -n "${candidate}" ]] || return 0
-        [[ -n "${seen_groups[${candidate}]+x}" ]] && return 0
-        seen_groups["${candidate}"]=1
-        candidate_groups+=("${candidate}")
-    }
+    run_repo_root_sync_helper "${python_bin}" "${cli_home}" plan \
+        --managed-root "$(expected_managed_repository_root)" \
+        --repo-template "${CONFIG_omero_fs_repo_path:-}" \
+        --install-groups "${OMERO_INSTALL_GROUP_LIST:-}" \
+        --ldap-config "${CONFIG_omero_ldap_config:-false}" \
+        --ldap-group "${CONFIG_omero_ldap_new__user__group:-}"
+}
 
-    _emit_repo_paths() {
-        local current_group="$1"
-        local cumulative=()
-        local joined=""
+lookup_repo_root_prefix() {
+    local python_bin="${1:?BUG: lookup_repo_root_prefix requires a python path}"
+    local cli_home="${2:?BUG: lookup_repo_root_prefix requires a CLI home}"
+    local root_pass="${3:?BUG: lookup_repo_root_prefix requires ROOTPASS}"
+    local repo_dir_path="${4:?BUG: lookup_repo_root_prefix requires a repo path}"
+    local managed_repo_root="${5:?BUG: lookup_repo_root_prefix requires a managed root}"
 
-        # Normalize only the shared prefix segments that exist before %user%.
-        # This is bounded by the template shape, not by repository size.
-        IFS='/' read -r -a template_parts <<< "${repo_path}"
-        for template_part in "${template_parts[@]}"; do
-            [[ -n "${template_part}" ]] || continue
-            if [[ "${template_part}" == *%user%* ]]; then
-                break
-            fi
-
-            rendered_part="${template_part}"
-            rendered_part="${rendered_part//%group%/${current_group}}"
-            rendered_part="${rendered_part//%year%/${current_year}}"
-            rendered_part="${rendered_part//%month%/${current_month}}"
-            rendered_part="${rendered_part//%day%/${current_day}}"
-            rendered_part="${rendered_part//%time%/${current_time}}"
-
-            if [[ "${rendered_part}" == *%* ]]; then
-                return 0
-            fi
-
-            [[ -n "${rendered_part}" ]] || continue
-            cumulative+=("${rendered_part}")
-            joined="$(IFS=/; printf '%s' "${cumulative[*]}")"
-            if [[ -n "${joined}" ]] && [[ -z "${seen[${joined}]+x}" ]]; then
-                seen["${joined}"]=1
-                printf '%s\n' "${joined}"
-            fi
-        done
-    }
-
-    if [[ "$#" -gt 0 ]]; then
-        for group_name in "$@"; do
-            _add_candidate_group "${group_name}"
-        done
-    fi
-
-    IFS=',' read -r -a _repo_root_group_entries <<< "${install_groups}"
-    for entry in "${_repo_root_group_entries[@]}"; do
-        entry="$(trim_whitespace "${entry}")"
-        [[ -n "${entry}" ]] || continue
-        [[ "${entry}" == \#* ]] && continue
-        group_name="${entry%%:*}"
-        _add_candidate_group "${group_name}"
-    done
-
-    if [[ "${CONFIG_omero_ldap_config:-false}" == "true" ]] \
-        && [[ -n "${ldap_group_setting}" ]] \
-        && [[ "${ldap_group_setting}" != "default" ]] \
-        && [[ "${ldap_group_setting}" != :* ]]; then
-        _add_candidate_group "${ldap_group_setting}"
-    fi
-
-    for group_name in "${candidate_groups[@]}"; do
-        _emit_repo_paths "${group_name}"
-    done
+    run_repo_root_sync_helper "${python_bin}" "${cli_home}" lookup \
+        --root-pass "${root_pass}" \
+        --repo-dir-path "${repo_dir_path}" \
+        --expected-managed-dir "${managed_repo_root}"
 }
 
 resolve_cli_home() {
@@ -1395,13 +1345,13 @@ run_repo_root_bootstrap_once() {
     local login_ok=0
     local path_list=""
     local repo_dir_path=""
-    local -a repo_root_groups=()
     local lookup_output=""
     local lookup_attempt=1
+    local lookup_exit_code=1
+    local plan_exit_code=1
     local root_dir_id=""
     local root_dir_owner=""
     local venv_py=""
-    local lookup_py=""
     local cli_home=""
     local managed_repo_root=""
     local chown_output=""
@@ -1431,135 +1381,44 @@ run_repo_root_bootstrap_once() {
         return 1
     fi
 
-    mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")
-    if [[ "${#repo_root_groups[@]}" -gt 0 ]]; then
-        path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"
-    else
-        echo "[$(date -u)] WARN: OMERO group discovery returned no rows; falling back to environment-derived groups"
+    venv_py="$(resolve_server_venv_python)"
+    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
+    managed_repo_root="$(expected_managed_repository_root)"
+    set +e
+    path_list="$(build_repo_root_sync_plan "${venv_py}" "${cli_home}" 2>&1)"
+    plan_exit_code=$?
+    set -e
+
+    if [[ "${plan_exit_code}" -ne 0 ]]; then
+        echo "[$(date -u)] ERROR: failed to build managed-repository shared-prefix plan: ${path_list}"
+        write_repo_root_sync_status "error" "0" "0" "0" "1"
+        return 1
     fi
 
     if [[ -z "${path_list}" ]]; then
-        path_list="$(collect_repo_root_bootstrap_paths)"
-    fi
-
-    if [[ -z "${path_list}" ]]; then
-        echo "[$(date -u)] INFO: no managed-repository shared prefixes require normalization"
+        echo "[$(date -u)] INFO: no deterministic managed-repository shared prefixes require normalization"
         last_success_epoch="$(date +%s)"
         write_repo_root_sync_status "ok" "${last_success_epoch}" "0" "0" "0"
         return 0
     fi
-
-    venv_py="$(resolve_server_venv_python)"
-    cli_home="$(resolve_cli_home "${OMERO_CLI_USER}")"
-    managed_repo_root="$(expected_managed_repository_root)"
-    lookup_py="$(mktemp "${TMPDIR:-/tmp}/repo-root-lookup.XXXXXX.py")"
-    cat >"${lookup_py}" <<'PY'
-import sys
-from omero.gateway import BlitzGateway
-
-if len(sys.argv) != 4:
-    print(
-        "usage: repo_root_lookup.py <root_pass> <repo_dir_path> <expected_managed_dir>",
-        file=sys.stderr,
-    )
-    sys.exit(2)
-
-root_pass = sys.argv[1]
-repo_dir_path = sys.argv[2].strip("/")
-expected_managed_dir = sys.argv[3].rstrip("/")
-if not repo_dir_path:
-    print("ERROR: empty repository path", file=sys.stderr)
-    sys.exit(2)
-if not expected_managed_dir.startswith("/"):
-    print("ERROR: expected managed dir must be absolute", file=sys.stderr)
-    sys.exit(2)
-
-path_parts = repo_dir_path.split("/")
-dir_name = path_parts[-1]
-parent_path = "/"
-if len(path_parts) > 1:
-    parent_path = "/" + "/".join(path_parts[:-1]) + "/"
-
-
-def unwrap_text(value):
-    if value is None:
-        return ""
-    inner = getattr(value, "val", value)
-    return "" if inner is None else str(inner)
-
-
-def model_attr(model_obj, attr_name):
-    value = getattr(model_obj, attr_name, None)
-    if value is None:
-        value = getattr(model_obj, f"_{attr_name}", None)
-    return value
-
-
-def repo_description_path(model_obj):
-    desc_path = unwrap_text(model_attr(model_obj, "path"))
-    desc_name = unwrap_text(model_attr(model_obj, "name"))
-    if not desc_name:
-        return ""
-    return (desc_path.rstrip("/") + "/" + desc_name).rstrip("/")
-
-
-def repo_description_uuid(model_obj):
-    return unwrap_text(model_attr(model_obj, "hash"))
-
-conn = BlitzGateway("root", root_pass, host="localhost", port=4064)
-try:
-    if not conn.connect():
-        print("ERROR: failed to connect as root", file=sys.stderr)
-        sys.exit(1)
-    conn.SERVICE_OPTS.setOmeroGroup("-1")
-
-    target_repo_uuid = ""
-    repo_map = conn.c.sf.sharedResources().repositories()
-    for description in getattr(repo_map, "descriptions", []):
-        if repo_description_path(description) != expected_managed_dir:
-            continue
-        target_repo_uuid = repo_description_uuid(description)
-        if target_repo_uuid:
-            break
-
-    if not target_repo_uuid:
-        print(
-            f"ERROR: failed to resolve active repository uuid for {expected_managed_dir}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    candidates = list(conn.getObjects("OriginalFile", attributes={"name": dir_name}))
-    exact = None
-    for obj in candidates:
-        if obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid:
-            exact = obj
-            break
-    if exact is None:
-        print("MISSING")
-        sys.exit(0)
-    print(f"FOUND|{exact.getId()}|{exact.getOwnerOmeName()}|{exact.getRepo()}")
-finally:
-    try:
-        conn.close()
-    except Exception:
-        pass
-PY
-    chown "${OMERO_CLI_USER}" "${lookup_py}"
-    chmod 0600 "${lookup_py}"
 
     while IFS= read -r repo_dir_path; do
         [[ -n "${repo_dir_path}" ]] || continue
         inspected_prefix_count=$((inspected_prefix_count + 1))
         echo "[$(date -u)] INFO: ensuring managed-repository shared prefix ${repo_dir_path}"
         lookup_output=""
+        lookup_exit_code=1
 
         # Retry the exact same OMERO mkdir+lookup flow a few times because the
         # new shared-prefix row is not always queryable immediately.
         for lookup_attempt in $(seq 1 "${lookup_retry_limit}"); do
             run_omero fs mkdir --parents "${repo_dir_path}" >/dev/null 2>&1 || true
-            lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
-            if [[ "${lookup_output}" == FOUND\|* ]]; then
+            set +e
+            lookup_output="$(lookup_repo_root_prefix "${venv_py}" "${cli_home}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
+            lookup_exit_code=$?
+            set -e
+
+            if [[ "${lookup_exit_code}" -eq 0 ]] && [[ "${lookup_output}" == FOUND\|* ]]; then
                 break
             fi
 
@@ -1567,6 +1426,12 @@ PY
                 sleep "${retry_delay_seconds}"
             fi
         done
+
+        if [[ "${lookup_exit_code}" -ne 0 ]]; then
+            echo "[$(date -u)] ERROR: repository root lookup failed for ${repo_dir_path}: ${lookup_output}"
+            failed_prefix_count=$((failed_prefix_count + 1))
+            continue
+        fi
 
         if [[ "${lookup_output}" == MISSING* ]]; then
             echo "[$(date -u)] ERROR: repository root lookup did not find shared prefix for ${repo_dir_path} after fs mkdir retries"
@@ -1608,11 +1473,17 @@ PY
         fi
 
         normalized_prefix_count=$((normalized_prefix_count + 1))
-        lookup_output="$(runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}" OMERO_TMPDIR="${TMPDIR:-/tmp}" OMERO_TEMPDIR="${TMPDIR:-/tmp}" "${venv_py}" "${lookup_py}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
+        set +e
+        lookup_output="$(lookup_repo_root_prefix "${venv_py}" "${cli_home}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"
+        lookup_exit_code=$?
+        set -e
+        if [[ "${lookup_exit_code}" -ne 0 ]]; then
+            echo "[$(date -u)] ERROR: post-normalization repository lookup failed for ${repo_dir_path}: ${lookup_output}"
+            failed_prefix_count=$((failed_prefix_count + 1))
+            continue
+        fi
         echo "[$(date -u)] INFO: normalized repository prefix ${repo_dir_path}: ${lookup_output}"
     done <<< "${path_list}"
-
-    rm -f "${lookup_py}"
 
     if [[ "${failed_prefix_count}" -ne 0 ]]; then
         write_repo_root_sync_status "error" "0" "${inspected_prefix_count}" "${normalized_prefix_count}" "${failed_prefix_count}"
@@ -1627,6 +1498,8 @@ PY
 schedule_repo_root_sync() {
     local root_pass="${ROOTPASS:-}"
     local repo_path="${CONFIG_omero_fs_repo_path:-}"
+    local venv_py=""
+    local stable_prefix_depth=""
     local interval="${OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS:-3600}"
     local jitter_max="${OMERO_REPO_ROOT_SYNC_JITTER_SECONDS:-20}"
 
@@ -1635,8 +1508,19 @@ schedule_repo_root_sync() {
         return
     fi
 
-    if [[ "${repo_path}" != *%group%* ]]; then
-        log "Managed-repository root sync skipped because CONFIG_omero_fs_repo_path has no %group% token."
+    if [[ -z "${repo_path}" ]]; then
+        log "Managed-repository root sync skipped because CONFIG_omero_fs_repo_path is empty."
+        return
+    fi
+
+    venv_py="$(resolve_server_venv_python)"
+    stable_prefix_depth="$(repo_root_sync_stable_prefix_depth "${venv_py}")" || {
+        echo "ERROR: Failed to analyze CONFIG_omero_fs_repo_path for shared-prefix sync." >&2
+        exit 1
+    }
+
+    if [[ "${stable_prefix_depth}" -lt 1 ]]; then
+        log "Managed-repository root sync skipped because CONFIG_omero_fs_repo_path has no stable shared prefix before %user% or volatile tokens."
         return
     fi
 

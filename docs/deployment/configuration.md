@@ -120,25 +120,29 @@ repository.
 OMERO expands supported terms automatically when written with surrounding `%`
 characters (for example: `%group%/%user%/%year%-%month%-%day%/%time%`).
 
-At runtime, `startup/10-server-bootstrap.sh` now also normalizes the shared
-managed-repository path prefixes that appear before `%user%` (for example the
-group-level `users_ldap` directory in `%group%/%user%/...`). The bootstrap
-seeds its target group list from both live OMERO group discovery and the
-environment-defined group list so partial early-startup discovery cannot skip
-configured groups such as `users_private`. It then creates any missing shared
-prefix directories with `omero fs mkdir --parents`, and non-destructively
-reassigns their OMERO ownership metadata to `root` when an earlier uploader
-created them under a personal account. The same repair now continues in the
-background on a configurable interval (`OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS`,
-default 3600 seconds, with jitter from `OMERO_REPO_ROOT_SYNC_JITTER_SECONDS`)
-so groups created after server startup are normalized as well. Each cycle
+At runtime, `startup/10-server-bootstrap.sh` now also normalizes the stable
+shared managed-repository path prefixes that appear before `%user%` and before
+any volatile date/time token (for example the group-level `users_ldap`
+directory in `%group%/%user%/...`, or the literal `shared` prefix in
+`shared/%user%/...`). The bootstrap builds that plan from two authoritative
+sources only: deterministic configured seeds (`OMERO_INSTALL_GROUP_LIST` plus a
+static LDAP new-user group when configured) and shared-prefix directories that
+already exist in the active managed repository on disk. It does not block
+installation on arbitrary historical rows from `omero group list`, so stale
+database-only groups from older repositories do not deadlock a clean install.
+It then creates any missing planned shared prefix directories with
+`omero fs mkdir --parents`, and non-destructively reassigns their OMERO
+ownership metadata to `root` when an earlier uploader created them under a
+personal account. The same repair now continues in the background on a
+configurable interval (`OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS`, default 3600
+seconds, with jitter from `OMERO_REPO_ROOT_SYNC_JITTER_SECONDS`) so prefixes
+that later appear in the active repository are normalized as well. Each cycle
 writes its latest status to `${SERVER_VAR_DIR}/repo-root-sync.status`, and the
 host installer waits for a successful current-cycle status before reporting
-startup success. This keeps older installations, drifted deployments, and
-future groups compatible without changing the path template itself. With the
-default `%group%/%user%/...` template this work is bounded to the shared
-group-level prefixes only; it does not scan per-user trees or walk repository
-payload files.
+startup success whenever the repository template has at least one stable shared
+prefix to normalize. With the default `%group%/%user%/...` template this work
+is bounded to the shared group-level prefixes only; it does not scan per-user
+trees or walk repository payload files.
 
 The pull/update helpers store full visible terminal transcripts under
 `${OMERO_DATA_PATH}/installation_logs/`. The final transcript path is written

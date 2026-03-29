@@ -80,11 +80,15 @@ Quota helper:
 
 Managed-repository shared-prefix bridge:
 - `startup/10-server-bootstrap.sh`
-  - derives the managed-repository path prefixes that appear before `%user%`,
+  - derives the stable shared managed-repository path prefixes that appear
+    before `%user%` and before any volatile date/time token,
   - requires `CONFIG_omero_managed_dir` to be an absolute path under `${OMERO_DIR}`,
   - refuses startup if an unexpected image-local `ManagedRepository` already exists
     under `/opt/omero/server`,
-  - seeds its group list from both live OMERO group discovery and `OMERO_INSTALL_GROUP_LIST`,
+  - builds its normalization plan from deterministic configured seeds
+    (`OMERO_INSTALL_GROUP_LIST` plus a static LDAP new-user group when present)
+    and shared-prefix directories that already exist in the active managed
+    repository,
   - creates missing shared prefixes with `omero fs mkdir --parents`,
   - reassigns those shared prefix directory objects to `root`,
   - repeats the same repair in the background on
@@ -113,7 +117,8 @@ Installer readiness gate:
 - `installation/installation_script.sh`
   - waits for a successful current-cycle
     `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`
-    before reporting startup success when the repository template contains `%group%`.
+    before reporting startup success when the repository template contains at
+    least one stable shared prefix to normalize.
 
 ### `OMERO_SERVER_VAR_PATH`
 

@@ -133,16 +133,18 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("list_repo_root_bootstrap_groups()", script_text)
+        self.assertIn('REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"', script_text)
+        self.assertIn("repo_root_sync_stable_prefix_depth()", script_text)
+        self.assertIn("build_repo_root_sync_plan()", script_text)
+        self.assertIn("lookup_repo_root_prefix()", script_text)
         self.assertIn(
-            'mapfile -t repo_root_groups < <(list_repo_root_bootstrap_groups "${root_pass}")',
+            'path_list="$(build_repo_root_sync_plan "${venv_py}" "${cli_home}" 2>&1)"',
             script_text,
         )
         self.assertIn(
-            'path_list="$(collect_repo_root_bootstrap_paths "${repo_root_groups[@]}")"',
+            'lookup_output="$(lookup_repo_root_prefix "${venv_py}" "${cli_home}" "${root_pass}" "${repo_dir_path}" "${managed_repo_root}" 2>&1)"',
             script_text,
         )
-        self.assertIn('path_list="$(collect_repo_root_bootstrap_paths)"', script_text)
         self.assertIn('run_omero fs mkdir --parents "${repo_dir_path}"', script_text)
         self.assertIn(
             'run_omero chown root "OriginalFile:${root_dir_id}" --force', script_text
@@ -155,6 +157,8 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         self.assertIn("run_repo_root_bootstrap_once()", script_text)
         self.assertIn("schedule_repo_root_sync()", script_text)
         self.assertIn("validate_repo_root_sync_configuration()", script_text)
+        self.assertNotIn("list_repo_root_bootstrap_groups()", script_text)
+        self.assertNotIn("collect_repo_root_bootstrap_paths()", script_text)
 
     def test_server_bootstrap_python_helpers_use_dynamic_server_paths_and_cli_home(
         self,
@@ -164,12 +168,13 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         )
         self.assertIn('venv_py="$(resolve_server_venv_python)"', script_text)
         self.assertIn("resolve_cli_home()", script_text)
-        self.assertIn('chown "${OMERO_CLI_USER}" "${lookup_py}"', script_text)
-        self.assertIn('chmod 0600 "${lookup_py}"', script_text)
+        self.assertIn("run_repo_root_sync_helper()", script_text)
         self.assertIn(
             'runuser -u "${OMERO_CLI_USER}" -- env HOME="${cli_home}" TMPDIR="${TMPDIR:-/tmp}"',
             script_text,
         )
+        self.assertIn('"${python_bin}" "${REPO_ROOT_SYNC_HELPER}"', script_text)
+        self.assertNotIn("repo-root-lookup.XXXXXX.py", script_text)
 
     def test_server_bootstrap_uses_dedicated_runtime_tmp_slot(self) -> None:
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(

@@ -2129,26 +2129,11 @@ def _ensure_job_dataset_targets(
             purpose=f"dataset preparation on job {job_dict.get('job_id') or '?'}",
         )
         if not user_conn:
-            for dataset_name in missing_dataset_names:
-                ds_id = _create_dataset_via_admin_connection(
-                    username,
-                    host,
-                    port,
-                    dataset_name,
-                    group_id=job_dict.get("group_id"),
-                    group_name=job_dict.get("group_name"),
-                    project_id=job_dict.get("project_id"),
-                )
-                if ds_id is not None:
-                    dataset_map[dataset_name] = ds_id
-                else:
-                    logger.warning(
-                        "Failed to create dataset %s via CLI for job %s.",
-                        sanitize_log_value(dataset_name),
-                        sanitize_log_value(job_dict.get("job_id")),
-                    )
-                    return False, generic_error
-            return True, None
+            logger.warning(
+                "Background dataset preparation for job %s cannot reuse the live OMERO.web session.",
+                sanitize_log_value(job_dict.get("job_id")),
+            )
+            return False, generic_error
 
         for dataset_name in missing_dataset_names:
             dataset_id = _get_or_create_dataset(

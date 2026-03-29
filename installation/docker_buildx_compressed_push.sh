@@ -612,16 +612,18 @@ generate_flatten_filesystem_dockerfile() {
     local source_image_name="${1:?BUG: generate_flatten_filesystem_dockerfile requires a source image name}"
     local dockerfile_path="${2:?BUG: generate_flatten_filesystem_dockerfile requires a dockerfile path}"
 
-    if ! jq -rn \
-        --arg source_image "${source_image_name}" '
-        [
-            "FROM " + $source_image + " AS source",
-            "FROM scratch",
-            "COPY --from=source / /"
-        ]
-        | map(select(. != ""))
-        | .[]
-    ' >"${dockerfile_path}"; then
+    if ! python3 - "${source_image_name}" >"${dockerfile_path}" <<'PY'
+import sys
+
+source_image_name = sys.argv[1]
+for line in (
+    f"FROM {source_image_name} AS source",
+    "FROM scratch",
+    "COPY --from=source / /",
+):
+    print(line)
+PY
+    then
         echo "ERROR (${SCRIPT_NAME}): Failed to generate flatten Dockerfile for source image '${source_image_name}'." >&2
         return 1
     fi
@@ -643,63 +645,116 @@ build_flatten_import_changes() {
         return 1
     fi
 
-    if ! jq -rn \
-        --argjson image "${image_metadata_json}" '
-        def ns_duration($value): ($value | tostring) + "ns";
-        def health_options:
-            [
-                if (($image.Config.Healthcheck.Interval // 0) > 0) then "--interval=" + ns_duration($image.Config.Healthcheck.Interval) else empty end,
-                if (($image.Config.Healthcheck.Timeout // 0) > 0) then "--timeout=" + ns_duration($image.Config.Healthcheck.Timeout) else empty end,
-                if (($image.Config.Healthcheck.StartPeriod // 0) > 0) then "--start-period=" + ns_duration($image.Config.Healthcheck.StartPeriod) else empty end,
-                if (($image.Config.Healthcheck.StartInterval // 0) > 0) then "--start-interval=" + ns_duration($image.Config.Healthcheck.StartInterval) else empty end,
-                if (($image.Config.Healthcheck.Retries // 0) > 0) then "--retries=" + (($image.Config.Healthcheck.Retries | tostring)) else empty end
-            ] | join(" ");
-        def health_command:
-            if ($image.Config.Healthcheck // null) == null then empty
-            elif (($image.Config.Healthcheck.Test // []) | length) == 0 then empty
-            elif $image.Config.Healthcheck.Test[0] == "NONE" then "NONE"
-            elif $image.Config.Healthcheck.Test[0] == "CMD" then "CMD " + (($image.Config.Healthcheck.Test[1:] // []) | tojson)
-            elif $image.Config.Healthcheck.Test[0] == "CMD-SHELL" then "CMD " + ((($image.Config.Shell // ["/bin/sh", "-c"]) + [(($image.Config.Healthcheck.Test[1:] // []) | join(" "))]) | tojson)
-            else empty
-            end;
-        [
-            (($image.Config.Env // [])
-                | map(
-                    capture("^(?<key>[^=]+)=(?<value>.*)$")
-                    | "ENV " + .key + "=" + (.value | tojson)
-                )[]?),
-            (($image.Config.Labels // {})
-                | to_entries
-                | sort_by(.key)
-                | map("LABEL " + .key + "=" + (.value | tojson))[]?),
-            (($image.Config.ExposedPorts // {})
-                | keys
-                | sort
-                | map("EXPOSE " + .)[]?),
-            ((($image.Config.Volumes // {}) | keys | sort) as $volumes
-                | if ($volumes | length) > 0 then "VOLUME " + ($volumes | tojson) else empty end),
-            (if (($image.Config.WorkingDir // "") | length) > 0 then "WORKDIR " + $image.Config.WorkingDir else empty end),
-            (if (($image.Config.User // "") | length) > 0 then "USER " + $image.Config.User else empty end),
-            (if (($image.Config.StopSignal // "") | length) > 0 then "STOPSIGNAL " + $image.Config.StopSignal else empty end),
-            (
-                (health_command) as $health_command
-                | if $health_command == "" then empty
-                  elif $health_command == "NONE" then "HEALTHCHECK NONE"
-                  else
-                    (health_options) as $health_options
-                    | "HEALTHCHECK "
-                        + (if ($health_options | length) > 0 then $health_options + " " else "" end)
-                        + $health_command
-                  end
-            ),
-            (if ($image.Config.Entrypoint // null) != null then "ENTRYPOINT " + (($image.Config.Entrypoint // []) | tojson) else empty end),
-            (if ($image.Config.Cmd // null) != null then "CMD " + (($image.Config.Cmd // []) | tojson) else empty end),
-            (($image.Config.OnBuild // [])
-                | map("ONBUILD " + .)[]?)
-        ]
-        | map(select(. != ""))
-        | .[]
-    '; then
+    if ! IMAGE_METADATA_JSON="${image_metadata_json}" python3 - <<'PY'
+import json
+import os
+import sys
+
+
+def _compact_json(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _positive_int(value):
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return normalized if normalized > 0 else 0
+
+
+def _emit_healthcheck(config):
+    healthcheck = config.get("Healthcheck") or {}
+    test = healthcheck.get("Test") or []
+    if not test:
+        return []
+    if test[0] == "NONE":
+        return ["HEALTHCHECK NONE"]
+    if test[0] == "CMD":
+        command = "CMD " + _compact_json(test[1:] or [])
+    elif test[0] == "CMD-SHELL":
+        shell = config.get("Shell") or ["/bin/sh", "-c"]
+        joined = " ".join(str(part) for part in (test[1:] or []))
+        command = "CMD " + _compact_json(list(shell) + [joined])
+    else:
+        return []
+
+    options = []
+    for field_name, flag_name in (
+        ("Interval", "--interval="),
+        ("Timeout", "--timeout="),
+        ("StartPeriod", "--start-period="),
+        ("StartInterval", "--start-interval="),
+    ):
+        value = _positive_int(healthcheck.get(field_name))
+        if value > 0:
+            options.append(f"{flag_name}{value}ns")
+    retries = _positive_int(healthcheck.get("Retries"))
+    if retries > 0:
+        options.append(f"--retries={retries}")
+    if options:
+        return [f"HEALTHCHECK {' '.join(options)} {command}"]
+    return [f"HEALTHCHECK {command}"]
+
+
+def _emit_import_changes(image_metadata):
+    config = image_metadata.get("Config") or {}
+    lines = []
+
+    for env_entry in config.get("Env") or []:
+        key, separator, value = str(env_entry).partition("=")
+        if not separator or not key:
+            continue
+        lines.append(f"ENV {key}={_compact_json(value)}")
+
+    labels = config.get("Labels") or {}
+    for key in sorted(labels):
+        lines.append(f"LABEL {key}={_compact_json(labels[key])}")
+
+    exposed_ports = config.get("ExposedPorts") or {}
+    for port_name in sorted(exposed_ports):
+        lines.append(f"EXPOSE {port_name}")
+
+    volumes = sorted((config.get("Volumes") or {}).keys())
+    if volumes:
+        lines.append(f"VOLUME {_compact_json(volumes)}")
+
+    for dockerfile_key, config_key in (
+        ("WORKDIR", "WorkingDir"),
+        ("USER", "User"),
+        ("STOPSIGNAL", "StopSignal"),
+    ):
+        raw_value = str(config.get(config_key) or "")
+        if raw_value:
+            lines.append(f"{dockerfile_key} {raw_value}")
+
+    lines.extend(_emit_healthcheck(config))
+
+    if config.get("Entrypoint") is not None:
+        lines.append(f"ENTRYPOINT {_compact_json(config.get('Entrypoint') or [])}")
+    if config.get("Cmd") is not None:
+        lines.append(f"CMD {_compact_json(config.get('Cmd') or [])}")
+
+    for onbuild_entry in config.get("OnBuild") or []:
+        lines.append(f"ONBUILD {onbuild_entry}")
+
+    return lines
+
+
+raw_metadata = os.environ.get("IMAGE_METADATA_JSON", "")
+if not raw_metadata:
+    raise SystemExit(1)
+
+try:
+    metadata = json.loads(raw_metadata)
+except json.JSONDecodeError:
+    raise SystemExit(1)
+
+for change_line in _emit_import_changes(metadata):
+    if change_line:
+        print(change_line)
+PY
+    then
         echo "ERROR (${SCRIPT_NAME}): Failed to derive flatten import metadata for source image '${source_image_name}'." >&2
         return 1
     fi
@@ -1177,7 +1232,7 @@ main() {
     require_binary docker
 
     if [ "${DOCKER_BUILD_FLATTEN_FINAL_IMAGE}" = "1" ]; then
-        require_binary jq
+        require_binary python3
         trap cleanup_flatten_artifacts EXIT
         if [ "${DOCKER_BUILD_FLATTEN_ONLY}" = "1" ]; then
             prepare_flatten_source_images_from_existing_tags
