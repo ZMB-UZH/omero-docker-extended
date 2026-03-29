@@ -1132,12 +1132,24 @@ EOS_JOB_SERVICE
     return 0
 }
 
+repo_root_sync_stable_prefix_depth() {
+    local helper_path="${REPO_ROOT_DIR}/startup/repo_root_sync_helper.py"
+
+    if [ ! -r "${helper_path}" ]; then
+        echo "ERROR: Missing repo-root sync helper: ${helper_path}" >&2
+        return 1
+    fi
+
+    python3 "${helper_path}" stable-depth \
+        --repo-template "${CONFIG_omero_fs_repo_path:-}"
+}
+
 wait_for_repo_root_sync_ready() {
     local started_epoch="${1:?BUG: wait_for_repo_root_sync_ready requires a start epoch}"
     local status_file="${OMERO_SERVER_VAR_PATH%/}/repo-root-sync.status"
-    local repo_path_template="${CONFIG_omero_fs_repo_path:-}"
     local retry_limit="${OMERO_REPO_ROOT_BOOTSTRAP_RETRIES:-180}"
     local retry_delay_seconds="${OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS:-2}"
+    local stable_prefix_depth=""
     local poll_interval_seconds=5
     local max_wait_seconds=0
     local deadline_epoch=0
@@ -1155,8 +1167,18 @@ wait_for_repo_root_sync_ready() {
         return 0
     fi
 
-    if [[ "${repo_path_template}" != *%group%* ]]; then
-        echo "Skipping managed-repository shared-prefix readiness wait (CONFIG_omero_fs_repo_path has no %group% token)."
+    stable_prefix_depth="$(repo_root_sync_stable_prefix_depth)" || {
+        echo "ERROR: Failed to analyze CONFIG_omero_fs_repo_path for shared-prefix readiness." >&2
+        return 1
+    }
+
+    if ! [[ "${stable_prefix_depth}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Invalid shared-prefix depth reported for CONFIG_omero_fs_repo_path: ${stable_prefix_depth}" >&2
+        return 1
+    fi
+
+    if [ "${stable_prefix_depth}" -lt 1 ]; then
+        echo "Skipping managed-repository shared-prefix readiness wait (CONFIG_omero_fs_repo_path has no stable shared prefix before %user% or volatile tokens)."
         return 0
     fi
 

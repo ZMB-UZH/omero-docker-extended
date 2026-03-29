@@ -1172,6 +1172,7 @@ def test_import_job_entry_fails_when_cli_succeeds_but_no_objects_created(
     """Malformed Zarr metadata must fail before any fallback import path is
     attempted.  Bio-Formats also rejects the store as incompatible, and the
     native OME-Zarr branch surfaces the validation error from ome-zarr."""
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     staged_file = upload_root / "_staged" / "broken.zarr" / ".zattrs"
     staged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1481,6 +1482,7 @@ def test_ome_ngff_zarr_uses_cli_zarr_import_only_after_bioformats_incompatible(
 ):
     """A standard OME-Zarr image uses the native path only when Bio-Formats
     explicitly reports that it found no importable candidates."""
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
     (zarr_dir / "0").mkdir(parents=True, exist_ok=True)
@@ -1718,6 +1720,7 @@ def test_incompatible_bioformats2raw_zarr_uses_native_import_path(
 ):
     """A bioformats2raw.layout=3 store falls back to native import only when
     Bio-Formats reports it as incompatible."""
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "bf2raw-native.ome.zarr"
     array_dir = zarr_dir / "0" / "0"
@@ -1832,6 +1835,7 @@ def test_build_import_units_preserves_precomputed_zarr_routing(
 def test_import_job_entry_uses_precomputed_native_zarr_route_without_rescanning(
     tmp_path: Path, monkeypatch
 ):
+    monkeypatch.setenv("OMERO_WEB_UPLOAD_ALTERNATIVE_ZARR_IMPORT", "true")
     upload_root = tmp_path / "job-root"
     zarr_dir = upload_root / "_staged" / "image.ome.zarr"
     zarr_dir.mkdir(parents=True, exist_ok=True)
