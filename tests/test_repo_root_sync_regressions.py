@@ -20,32 +20,94 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         cls.server_bootstrap_script = (
             cls.repo_root / "startup" / "10-server-bootstrap.sh"
         ).read_text(encoding="utf-8")
+        cls.helper_path = cls.repo_root / "startup" / "repo_root_sync_helper.py"
+        cls.helper_script = cls.helper_path.read_text(encoding="utf-8")
 
-    def test_collect_repo_root_bootstrap_paths_unions_runtime_and_configured_groups(
+    def test_helper_plan_unions_configured_and_active_prefixes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "ManagedRepository"
+            (managed_root / "users_legacy" / "alice").mkdir(parents=True)
+
+            result = self._run_helper(
+                "plan",
+                "--managed-root",
+                str(managed_root),
+                "--repo-template",
+                "%group%/%user%/%year%-%month%-%day%/%time%",
+                "--install-groups",
+                "users_private:private,users_read:read-only",
+                "--ldap-config",
+                "true",
+                "--ldap-group",
+                "users_ldap",
+            )
+
+        self.assertEqual(
+            ["users_private", "users_read", "users_ldap", "users_legacy"],
+            result.stdout.strip().splitlines(),
+        )
+
+    def test_helper_plan_stops_before_volatile_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "ManagedRepository"
+            (managed_root / "users_private" / "2025" / "alice").mkdir(parents=True)
+
+            result = self._run_helper(
+                "plan",
+                "--managed-root",
+                str(managed_root),
+                "--repo-template",
+                "%group%/%year%/%user%/%time%",
+                "--install-groups",
+                "users_private:private",
+            )
+
+        self.assertEqual(["users_private"], result.stdout.strip().splitlines())
+
+    def test_helper_plan_handles_literal_shared_prefix_without_group_token(
         self,
     ) -> None:
-        function_text = self._slice_function(
-            self.server_bootstrap_script,
-            "trim_whitespace() {",
-            "resolve_cli_home() {",
-        )
-        script = textwrap.dedent(
-            f"""\
-            set -euo pipefail
-            {function_text}
-            CONFIG_omero_fs_repo_path="%group%/%user%/%year%-%month%-%day%/%time%"
-            OMERO_INSTALL_GROUP_LIST="users_private:private,users_read:read-only"
-            collect_repo_root_bootstrap_paths users_ldap users_collaboration
-            """
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "ManagedRepository"
+            managed_root.mkdir(parents=True)
 
-        result = self._run_bash(script)
-        emitted_paths = result.stdout.strip().splitlines()
+            result = self._run_helper(
+                "plan",
+                "--managed-root",
+                str(managed_root),
+                "--repo-template",
+                "shared/%user%/%time%",
+            )
 
-        self.assertIn("users_ldap", emitted_paths)
-        self.assertIn("users_collaboration", emitted_paths)
-        self.assertIn("users_private", emitted_paths)
-        self.assertIn("users_read", emitted_paths)
+        self.assertEqual(["shared"], result.stdout.strip().splitlines())
+
+    def test_helper_plan_is_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            managed_root = Path(tmpdir) / "ManagedRepository"
+            (managed_root / "users_private" / "alice").mkdir(parents=True)
+            before_paths = sorted(
+                str(path.relative_to(managed_root))
+                for path in managed_root.rglob("*")
+                if path.is_dir()
+            )
+
+            self._run_helper(
+                "plan",
+                "--managed-root",
+                str(managed_root),
+                "--repo-template",
+                "%group%/%user%/%year%-%month%-%day%/%time%",
+                "--install-groups",
+                "users_private:private",
+            )
+
+            after_paths = sorted(
+                str(path.relative_to(managed_root))
+                for path in managed_root.rglob("*")
+                if path.is_dir()
+            )
+
+        self.assertEqual(before_paths, after_paths)
 
     def test_write_repo_root_sync_status_records_expected_fields(self) -> None:
         function_text = self._slice_function(
@@ -78,7 +140,7 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def test_installation_wait_accepts_current_repo_root_sync_status(self) -> None:
         function_text = self._slice_function(
             self.installation_script,
-            "wait_for_repo_root_sync_ready() {",
+            "repo_root_sync_stable_prefix_depth() {",
             "stop_old_installation_containers() {",
         )
 
@@ -103,7 +165,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                 set -euo pipefail
                 START_CONTAINERS=1
                 ROOTPASS=secret
-                CONFIG_omero_fs_repo_path="%group%/%user%/%year%-%month%-%day%/%time%"
+                REPO_ROOT_DIR="{self.repo_root}"
+                CONFIG_omero_fs_repo_path="shared/%user%/%time%"
                 OMERO_SERVER_VAR_PATH="{server_var_dir}"
                 OMERO_REPO_ROOT_BOOTSTRAP_RETRIES=1
                 OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS=1
@@ -114,10 +177,33 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
 
             self._run_bash(script)
 
+    def test_installation_wait_skips_when_no_stable_shared_prefix(self) -> None:
+        function_text = self._slice_function(
+            self.installation_script,
+            "repo_root_sync_stable_prefix_depth() {",
+            "stop_old_installation_containers() {",
+        )
+        script = textwrap.dedent(
+            f"""\
+            set -euo pipefail
+            START_CONTAINERS=1
+            ROOTPASS=secret
+            REPO_ROOT_DIR="{self.repo_root}"
+            CONFIG_omero_fs_repo_path="%user%/%year%/%time%"
+            OMERO_SERVER_VAR_PATH="/tmp/unused"
+            {function_text}
+            wait_for_repo_root_sync_ready 100
+            """
+        )
+
+        result = self._run_bash(script)
+
+        self.assertIn("Skipping managed-repository shared-prefix readiness wait", result.stdout)
+
     def test_repo_root_bootstrap_retries_lookup_before_marking_failure(self) -> None:
         function_text = self._slice_function(
             self.server_bootstrap_script,
-            "run_repo_root_bootstrap_once() {",
+            "repo_root_sync_stable_prefix_depth() {",
             "schedule_repo_root_sync() {",
         )
 
@@ -129,8 +215,11 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                 set -euo pipefail
                 TMPDIR="{tmpdir}"
                 OMERO_CLI_USER=omero-server
+                REPO_ROOT_SYNC_HELPER=/bin/true
+                SERVER_VAR_DIR="{tmpdir}"
+                REPO_ROOT_SYNC_STATUS_FILE="{status_file}"
                 OMERO_REPO_ROOT_BOOTSTRAP_RETRIES=1
-                OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS=0
+                OMERO_REPO_ROOT_BOOTSTRAP_RETRY_DELAY_SECONDS=1
                 printf '0\\n' > "{lookup_state_file}"
 
                 run_omero() {{
@@ -147,20 +236,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                     return 1
                 }}
 
-                list_repo_root_bootstrap_groups() {{
-                    printf '%s\\n' users_ldap
-                }}
-
-                collect_repo_root_bootstrap_paths() {{
-                    printf '%s\\n' users_ldap
-                }}
-
                 resolve_server_venv_python() {{
                     printf '%s\\n' /bin/true
-                }}
-
-                resolve_cli_home() {{
-                    printf '%s\\n' /tmp
                 }}
 
                 expected_managed_repository_root() {{
@@ -171,12 +248,11 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                     return 0
                 }}
 
-                write_repo_root_sync_status() {{
-                    printf 'status=%s\\nlast_success_epoch=%s\\ninspected_prefix_count=%s\\nnormalized_prefix_count=%s\\nfailed_prefix_count=%s\\n' \
-                        "$1" "$2" "$3" "$4" "$5" > "{status_file}"
-                }}
-
                 runuser() {{
+                    if printf '%s\\n' "$*" | grep -q ' plan '; then
+                        printf '%s\\n' users_ldap
+                        return 0
+                    fi
                     local lookup_calls
                     lookup_calls="$(cat "{lookup_state_file}")"
                     lookup_calls=$((lookup_calls + 1))
@@ -185,11 +261,8 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
                         printf '%s\\n' MISSING
                         return 0
                     fi
-                    printf '%s\\n' FOUND\\|42\\|root
+                    printf '%s\\n' FOUND\\|42\\|root\\|repo-1
                 }}
-
-                chown() {{ :; }}
-                chmod() {{ :; }}
 
                 {function_text}
                 run_repo_root_bootstrap_once secret
@@ -205,22 +278,16 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
         self.assertIn("failed_prefix_count=0", result.stdout)
 
     def test_repo_root_bootstrap_lookup_is_repo_aware(self) -> None:
-        function_text = self._slice_function(
-            self.server_bootstrap_script,
-            "run_repo_root_bootstrap_once() {",
-            "schedule_repo_root_sync() {",
-        )
-
-        self.assertIn('target_repo_uuid = ""', function_text)
-        self.assertIn("sharedResources().repositories()", function_text)
+        self.assertIn('target_repo_uuid = ""', self.helper_script)
+        self.assertIn("sharedResources().repositories()", self.helper_script)
         self.assertIn(
-            "repo_description_path(description) != expected_managed_dir", function_text
+            "repo_description_path(description) != expected_managed_dir",
+            self.helper_script,
         )
         self.assertIn(
             "obj.getPath() == parent_path and obj.getRepo() == target_repo_uuid",
-            function_text,
+            self.helper_script,
         )
-        self.assertIn('"${managed_repo_root}"', function_text)
 
     def test_validate_managed_repository_configuration_rejects_relative_path(
         self,
@@ -307,6 +374,15 @@ class RepoRootSyncRegressionTests(unittest.TestCase):
     def _run_bash(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [BASH_BIN, "-lc", script],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def _run_helper(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["python3", str(self.helper_path), *args],
             check=True,
             text=True,
             stdout=subprocess.PIPE,

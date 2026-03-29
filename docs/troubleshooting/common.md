@@ -336,11 +336,11 @@ Next step:
 
 - Deploy the current repository patch and restart `omeroserver`.
 - Ensure `CONFIG_omero_managed_dir` is the absolute bind-mounted path `/OMERO/ManagedRepository`, not the relative string `ManagedRepository`.
-- `startup/10-server-bootstrap.sh` now auto-normalizes the shared managed-repository prefixes before `%user%` by discovering OMERO groups, creating any missing shared prefix directories, and reassigning their OMERO ownership metadata to `root`.
+- `startup/10-server-bootstrap.sh` now auto-normalizes the stable shared managed-repository prefixes before `%user%` by building a deterministic plan from configured install/LDAP groups plus prefixes that already exist in the active managed repository, creating any missing planned shared prefix directories, and reassigning their OMERO ownership metadata to `root`.
 - The same bootstrap now fails closed if OMERO is configured with a relative managed-repository path or if a second image-local `ManagedRepository` exists under `/opt/omero/server`.
 - The repair is non-destructive: it does not change the configured repository template and does not delete repository payload files.
 - The repair is no longer one-shot. A background sync loop continues running on `OMERO_REPO_ROOT_SYNC_INTERVAL_SECONDS` and writes its latest result to `${OMERO_SERVER_VAR_PATH}/repo-root-sync.status`.
-- `installation/installation_script.sh` now waits for a successful current-cycle `repo-root-sync.status` before it reports startup success, so new installs and updates do not finish before the shared group prefixes are normalized.
+- `installation/installation_script.sh` now waits for a successful current-cycle `repo-root-sync.status` before it reports startup success whenever the path template has a stable shared prefix to normalize, so new installs and updates do not finish before the active shared prefixes are normalized.
 
 Validation:
 
@@ -355,7 +355,7 @@ docker compose --env-file installation_paths.env --env-file env/omero_secrets.en
 Expected result:
 
 - `repo-root-sync.status` reports `status=ok` with a recent `last_success_epoch`.
-- The server logs show the shared-prefix normalization cycle completing without failures for the affected group.
+- The server logs show the shared-prefix normalization cycle completing without failures for the active/configured prefixes that matter to the deployment.
 
 ## 14a. Large grouped uploads fail with `OMERO could not prepare the destination for this import.`
 
