@@ -276,6 +276,8 @@ def test_detect_filesystem_returns_metadata_for_existing_path() -> None:
 
 
 def test_managed_group_root_uses_environment_configuration(monkeypatch) -> None:
+    monkeypatch.delenv("ADMIN_TOOLS_MANAGED_GROUP_ROOT", raising=False)
+    monkeypatch.delenv("CONFIG_omero_managed_dir", raising=False)
     monkeypatch.setenv("OMERO_DATA_DIR", "/custom-omero")
 
     assert managed_group_root() == Path("/custom-omero/ManagedRepository")
