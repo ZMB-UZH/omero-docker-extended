@@ -163,7 +163,7 @@ class _TileFailureImage:
         return self._size_y
 
 
-def _write_multiscale_store(root, *, attrs=None, data=None):
+def _write_multiscale_store(root, *, attrs=None):
     root.mkdir(parents=True, exist_ok=True)
     (root / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     payload = {
@@ -172,29 +172,44 @@ def _write_multiscale_store(root, *, attrs=None, data=None):
     if attrs:
         payload.update(attrs)
     (root / ".zattrs").write_text(json.dumps(payload), encoding="utf-8")
-    array = open_compat_array(
-        root / "0",
-        mode="w",
-        shape=(1, 2, 2),
-        chunks=(1, 2, 2),
-        dtype=np.uint16,
-    )
-    if data is None:
-        data = np.arange(4, dtype=np.uint16).reshape(1, 2, 2)
-    array[:] = data
+    (root / "0").mkdir(parents=True, exist_ok=True)
 
 
-def test_open_compat_array_writes_v2_array_metadata_under_zarr3(tmp_path):
-    open_compat_array(
-        tmp_path,
+def test_open_compat_array_requests_v2_layout_by_default(tmp_path, monkeypatch):
+    calls = []
+    sentinel = object()
+
+    def fake_open_array(path, **kwargs):
+        calls.append((Path(path), kwargs.copy()))
+        Path(path).mkdir(parents=True, exist_ok=True)
+        (Path(path) / ".zarray").write_text("{}", encoding="utf-8")
+        return sentinel
+
+    monkeypatch.setattr("omero_web_zarr.utils.zarr.open_array", fake_open_array)
+
+    result = open_compat_array(
+        tmp_path / "0",
         mode="w",
         shape=(2, 3, 4),
         chunks=(1, 3, 4),
         dtype=np.uint16,
     )
 
-    assert (tmp_path / ".zarray").exists()
-    assert not (tmp_path / "zarr.json").exists()
+    assert result is sentinel
+    assert calls == [
+        (
+            tmp_path / "0",
+            {
+                "mode": "w",
+                "shape": (2, 3, 4),
+                "chunks": (1, 3, 4),
+                "dtype": np.uint16,
+                "zarr_format": 2,
+            },
+        )
+    ]
+    assert (tmp_path / "0" / ".zarray").exists()
+    assert not (tmp_path / "0" / "zarr.json").exists()
 
 
 def test_open_compat_array_retries_without_zarr_format_when_unsupported(
@@ -415,7 +430,7 @@ def test_get_store_backed_channel_overrides_falls_back_to_channel_windows(monkey
 
 
 def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignment(
-    tmp_path,
+    tmp_path, monkeypatch
 ):
     _write_multiscale_store(
         tmp_path,
@@ -434,6 +449,12 @@ def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignme
         },
     )
     image = _FakeImage(str(tmp_path.resolve()))
+    fake_array = np.arange(4, dtype=np.uint16).reshape(1, 2, 2)
+
+    monkeypatch.setattr(
+        "omero_web_zarr.utils.zarr.open_array",
+        lambda path, mode="r": fake_array,
+    )
 
     node = load_store_backed_image_node(image)
 
@@ -441,6 +462,7 @@ def test_load_store_backed_image_node_preserves_partial_channel_metadata_alignme
     assert node.metadata["visible"] == [True, False]
     assert node.metadata["contrast_limits"] == [None, (5.0, 15.0)]
     assert node.metadata["colormap"] == [None, "00FF00"]
+    assert np.array_equal(node.data[0], fake_array)
 
 
 def test_get_safe_image_tile_size_falls_back_to_configured_maximum():

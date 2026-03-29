@@ -4186,6 +4186,8 @@ def _collect_import_entries(job_dict, *, for_compatibility: bool = False):
         if for_compatibility:
             if entry.get("status") != "uploaded":
                 continue
+            if entry.get("import_skip"):
+                continue
             if entry.get("compatibility") or entry.get("compatibility_skip"):
                 continue
         else:

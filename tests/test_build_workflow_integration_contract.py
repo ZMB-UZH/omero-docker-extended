@@ -133,7 +133,10 @@ class BuildWorkflowIntegrationContractTests(unittest.TestCase):
         script_text = (self.repo_root / "startup" / "10-server-bootstrap.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn('REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"', script_text)
+        self.assertIn(
+            'REPO_ROOT_SYNC_HELPER="${SCRIPT_DIR}/repo_root_sync_helper.py"',
+            script_text,
+        )
         self.assertIn("repo_root_sync_stable_prefix_depth()", script_text)
         self.assertIn("build_repo_root_sync_plan()", script_text)
         self.assertIn("lookup_repo_root_prefix()", script_text)
