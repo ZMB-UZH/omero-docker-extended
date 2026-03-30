@@ -201,6 +201,123 @@ def test_imaris_view_helpers_cover_url_ip_port_and_session_resolution() -> None:
     )
 
 
+def test_imaris_view_helpers_cover_invalid_base_urls_and_status_edge_cases(
+    monkeypatch,
+):
+    views = _import_views()
+
+    class _BrokenStr:
+        def __str__(self):
+            raise RuntimeError("bad string")
+
+    with pytest.raises(ValueError, match="Invalid base_url value"):
+        views._parse_base_url(_BrokenStr())
+
+    with pytest.raises(ValueError, match="must not include a path"):
+        views._parse_base_url("https://omero.example.org/app")
+
+    request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "job-7"},
+    )
+    request.session = SimpleNamespace(session_key=None)
+    assert views.imaris_export(request, conn=None).status_code == 400
+
+    running_download_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "celery-job-7", "download": "1"},
+    )
+    running_download_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: ("RUNNING", None, None, {"job_state": "queued"}),
+    )
+    running_download = views.imaris_export(running_download_request, conn=None)
+    assert running_download.status_code == 409
+
+    timeout_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"job": "celery-job-8"},
+    )
+    timeout_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: ("TIMEOUT", None, None, {"job_state": "timed out"}),
+    )
+    timeout_response = views.imaris_export(timeout_request, conn=None)
+    timeout_payload = json.loads(timeout_response.content)
+    assert timeout_payload == {
+        "job_id": "celery-job-8",
+        "state": "TIMEOUT",
+        "finished": False,
+        "failed": True,
+        "status": "timed out",
+        "error": views.IMS_EXPORT_JOB_FAILED_MESSAGE,
+    }
+
+
+def test_imaris_export_sync_paths_cover_missing_script_wait_override_and_unknown_state(
+    monkeypatch,
+) -> None:
+    views = _import_views()
+
+    missing_script_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7"},
+    )
+    missing_script_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "use_celery", lambda: True)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: None)
+    missing_script = views.imaris_export(missing_script_request, conn=SimpleNamespace())
+    assert missing_script.status_code == 500
+    assert b"script not found" in missing_script.content
+
+    wait_override_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7", "async": "1", "wait": "1"},
+    )
+    wait_override_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(views, "_find_script_id", lambda conn: 9)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-10"
+    )
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: ("FINISHED", {}, None, None),
+    )
+    monkeypatch.setattr(
+        views,
+        "_build_download_response",
+        lambda conn, outputs, export_name=None: views.HttpResponse(
+            export_name or "missing"
+        ),
+    )
+    wait_override = views.imaris_export(wait_override_request, conn=SimpleNamespace())
+    assert wait_override.content.decode("utf-8") == "missing"
+
+    unknown_state_request = RequestFactory().get(
+        "/omeroweb_imaris_connector/export/",
+        data={"image": "7"},
+    )
+    unknown_state_request.session = SimpleNamespace(session_key=None)
+    monkeypatch.setattr(
+        views, "_start_celery_job", lambda conn, image_id: "celery-job-11"
+    )
+    monkeypatch.setattr(
+        views,
+        "_poll_celery_job",
+        lambda job_id: ("RUNNING", None, None, None),
+    )
+    time_values = iter([0.0, 0.0, views.EXPORT_TIMEOUT + 1.0])
+    monkeypatch.setattr(views.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(views.time, "sleep", lambda *_args: None)
+    unknown_state = views.imaris_export(unknown_state_request, conn=SimpleNamespace())
+    assert unknown_state.status_code == 504
+
+
 def test_poll_celery_job_covers_pending_failure_success_revoked_and_unknown(
     monkeypatch,
 ):

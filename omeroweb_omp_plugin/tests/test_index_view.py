@@ -886,3 +886,291 @@ def test_index_landing_page_and_top_level_error_paths(monkeypatch):
 
     assert error_response.status_code == 500
     assert b"Unexpected error" in error_response.content
+
+
+def test_helper_fallback_paths_cover_group_membership_and_permission_text(monkeypatch):
+    class _OwnerByName:
+        def __init__(self, owner_id):
+            self._owner_id = owner_id
+
+        def getId(self):
+            return SimpleNamespace(val=self._owner_id)
+
+        def getOmeName(self):
+            raise RuntimeError("missing ome name")
+
+        def getName(self):
+            return "fallback-name"
+
+    class _PermissionText:
+        def __str__(self):
+            raise RuntimeError("string conversion failed")
+
+        def isGroupRead(self):
+            return True
+
+        def isGroupWrite(self):
+            return False
+
+        def isGroupAnnotate(self):
+            return True
+
+    owner = _OwnerByName(41)
+    project = SimpleNamespace(
+        getDetails=lambda: None,
+        getOwner=lambda: owner,
+        permissions=_PermissionText(),
+    )
+    conn = _Conn()
+    fallback_group = SimpleNamespace(
+        getId=lambda: _Value(4),
+        getMemberCount=lambda: (_ for _ in ()).throw(RuntimeError("no count")),
+        getMembers=lambda: [1, 2],
+        getDetails=lambda: None,
+        getPermissions=lambda: _PermissionText(),
+    )
+    conn._user = SimpleNamespace(
+        getId=lambda: (_ for _ in ()).throw(RuntimeError("bad user id")),
+        getGroups=lambda: [fallback_group],
+    )
+    conn.getGroupsMemberOf = lambda: (_ for _ in ()).throw(RuntimeError("bad groups"))
+
+    assert index_view._get_owner_username(project) == "fallback-name"
+    assert index_view._current_user_id(conn) is None
+    assert index_view._iter_member_groups(conn) == [fallback_group]
+    assert index_view._group_member_count(conn, fallback_group) == 2
+    assert index_view._group_is_read_annotate(fallback_group) is True
+    assert index_view._group_is_read_write(fallback_group) is False
+
+
+def test_index_request_validation_paths_cover_json_errors_and_rate_limits(monkeypatch):
+    conn = _Conn()
+    monkeypatch.setattr(
+        index_view, "_collect_project_payload", lambda *_args: {"owned": []}
+    )
+    monkeypatch.setattr(index_view, "reverse", lambda _name: "/omp/projects/")
+    rendered = {}
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context=None, status=200: (
+            rendered.update(
+                {"template": template, "context": context or {}, "status": status}
+            )
+            or rendered.copy()
+        ),
+    )
+
+    missing_project = inspect.unwrap(index_view.index)(
+        RequestFactory().post("/", data={"action": "list_datasets"}),
+        conn=conn,
+    )
+    assert missing_project.status_code == 400
+    assert (
+        _json_payload(missing_project)["error"]
+        == index_view.errors.select_project_first()
+    )
+
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: None)
+    missing_user = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={"action": "ai_regex", "project": "5", "selected_datasets": "10"},
+        ),
+        conn=conn,
+    )
+    assert missing_user.status_code == 400
+    assert (
+        _json_payload(missing_user)["error"]
+        == index_view.errors.unable_to_determine_username()
+    )
+
+    monkeypatch.setattr(index_view, "_current_user_id", lambda *_args: 10)
+    monkeypatch.setattr(
+        index_view, "_get_accessible_project", lambda *_args: (None, None)
+    )
+    inaccessible = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "action": "ai_parse",
+                "project": "5",
+                "selected_datasets": "10",
+                "provider": "openai",
+            },
+        ),
+        conn=conn,
+    )
+    assert inaccessible.status_code == 400
+    assert (
+        _json_payload(inaccessible)["error"] == index_view.errors.select_project_first()
+    )
+
+    monkeypatch.setattr(
+        index_view,
+        "_get_accessible_project",
+        lambda *_args: (_Project(5, "Project"), "owned"),
+    )
+    invalid_dataset_ids = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={"action": "ai_regex", "project": "5", "selected_datasets": "x, y"},
+        ),
+        conn=conn,
+    )
+    assert invalid_dataset_ids.status_code == 400
+    assert (
+        _json_payload(invalid_dataset_ids)["error"]
+        == index_view.errors.datasets_required()
+    )
+
+    monkeypatch.setattr(
+        index_view, "check_major_action_rate_limit", lambda *_args: (False, 42)
+    )
+    preview_rate_limited = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "project": "5",
+                "selected_datasets": "10",
+                "separator_mode": "chars",
+                "separator": "_",
+            },
+        ),
+        conn=conn,
+    )
+    assert preview_rate_limited["template"] == "omeroweb_omp_plugin/index.html"
+    assert rendered["context"]["error_message"] == index_view.build_rate_limit_message(
+        42
+    )
+
+
+def test_index_ai_provider_and_preview_fallbacks_cover_error_paths(monkeypatch):
+    conn = _Conn()
+    monkeypatch.setattr(
+        index_view, "_collect_project_payload", lambda *_args: {"owned": []}
+    )
+    monkeypatch.setattr(
+        index_view,
+        "_get_accessible_project",
+        lambda *_args: (_Project(5, "Project"), "owned"),
+    )
+    monkeypatch.setattr(
+        index_view, "check_major_action_rate_limit", lambda *_args: (True, 0)
+    )
+
+    ai_parse_no_filenames = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "action": "ai_parse",
+                "project": "5",
+                "selected_datasets": "10",
+                "provider": "openai",
+            },
+        ),
+        conn=conn,
+    )
+    assert ai_parse_no_filenames.status_code == 400
+    assert (
+        _json_payload(ai_parse_no_filenames)["error"]
+        == index_view.errors.no_filenames_available()
+    )
+
+    image = _ImageObject(17, "sample_A-01.tif")
+    monkeypatch.setattr(
+        index_view,
+        "collect_images_by_selected_datasets",
+        lambda *_args, **_kwargs: [(_Dataset(10, "Dataset"), [image])],
+    )
+    monkeypatch.setattr(index_view, "current_username", lambda *_args: "alice")
+    monkeypatch.setattr(index_view, "get_ai_credential", lambda *_args: "api-key")
+    monkeypatch.setattr(
+        index_view,
+        "generate_ai_parsed_values",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            index_view.AiAssistError("rejected")
+        ),
+    )
+    ai_parse_rejected = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "action": "ai_parse",
+                "project": "5",
+                "selected_datasets": "10",
+                "provider": "openai",
+            },
+        ),
+        conn=conn,
+    )
+    assert ai_parse_rejected.status_code == 400
+    assert (
+        _json_payload(ai_parse_rejected)["error"]
+        == index_view.errors.unable_to_process_filenames()
+    )
+
+    monkeypatch.setattr(
+        index_view,
+        "generate_ai_parsed_values",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    ai_parse_failed = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "action": "ai_parse",
+                "project": "5",
+                "selected_datasets": "10",
+                "provider": "openai",
+            },
+        ),
+        conn=conn,
+    )
+    assert ai_parse_failed.status_code == 500
+    assert (
+        _json_payload(ai_parse_failed)["error"]
+        == index_view.errors.unable_to_process_filenames()
+    )
+
+    rendered = {}
+    monkeypatch.setattr(
+        index_view,
+        "render",
+        lambda request, template, context=None, status=200: (
+            rendered.update(
+                {"template": template, "context": context or {}, "status": status}
+            )
+            or rendered.copy()
+        ),
+    )
+    monkeypatch.setattr(index_view, "reverse", lambda _name: "/omp/projects/")
+    preview = inspect.unwrap(index_view.index)(
+        RequestFactory().post(
+            "/",
+            data={
+                "project": "5",
+                "selected_datasets": "10",
+                "separator_mode": "ai_parse",
+                "ai_parsed_json": json.dumps(
+                    [
+                        {"img_id": 17, "values": ["sample", "A"]},
+                        {"img_id": "bad", "values": ["ignored"]},
+                    ]
+                ),
+                "user_chunk_size": "bad",
+                "user_max_parsed": "bad",
+                "user_max_sets": "bad",
+            },
+        ),
+        conn=conn,
+    )
+    assert preview["template"] == "omeroweb_omp_plugin/preview.html"
+    assert rendered["context"]["chunk_size"] == index_view.CHUNK_SIZE
+    assert (
+        rendered["context"]["max_parsed_variables"] == index_view.MAX_PARSED_VARIABLES
+    )
+    assert (
+        rendered["context"]["max_variable_sets"] == index_view.MAX_VARIABLE_SET_ENTRIES
+    )
+    assert rendered["context"]["preview_rows"][0]["img_id"] == 17

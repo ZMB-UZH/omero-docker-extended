@@ -144,6 +144,58 @@ def test_rate_limit_uses_shared_counter_and_reports_block_status(monkeypatch):
     assert state == {"timeout": rate_limit._cache_timeout_seconds()}
 
 
+def test_rate_limit_handles_django_ip_fallbacks_and_cache_failures(monkeypatch):
+    request = SimpleNamespace(
+        META={
+            "HTTP_X_FORWARDED_FOR": "10.0.0.5, 10.0.0.6",
+            "HTTP_X_REAL_IP": "10.0.0.7",
+        },
+        user=SimpleNamespace(is_authenticated=True, username="django-user", id=12),
+    )
+    failing_conn = SimpleNamespace(
+        getUser=lambda: (_ for _ in ()).throw(RuntimeError("omero unavailable"))
+    )
+
+    assert (
+        rate_limit._get_user_key(request, conn=failing_conn)
+        == "omp_rate_limit:django:django-user"
+    )
+
+    request.user = SimpleNamespace(is_authenticated=False)
+    assert rate_limit._get_user_key(request, conn=None) == "omp_rate_limit:ip:10.0.0.5"
+
+    monkeypatch.setattr(rate_limit.time, "time", lambda: 100.0)
+    monkeypatch.setattr(
+        rate_limit,
+        "_cache_get",
+        lambda key: {"actions": "bad", "blocked_until": "bad"},
+    )
+
+    status = rate_limit.get_rate_limit_status(request)
+
+    assert status["actions_count"] == 0
+    assert status["remaining_actions"] == rate_limit.MAJOR_ACTION_LIMIT
+    assert status["is_blocked"] is False
+
+    def failing_cache(*_args, **_kwargs):
+        raise RuntimeError("cache boom")
+
+    monkeypatch.setattr(rate_limit, "_cache_get", failing_cache)
+
+    allowed, remaining = rate_limit.check_major_action_rate_limit(request)
+
+    assert allowed is False
+    assert remaining == rate_limit.MAJOR_ACTION_BLOCK_SECONDS
+    assert "cache boom" in rate_limit.get_rate_limit_status(request)["error"]
+
+    monkeypatch.setattr(
+        rate_limit,
+        "_cache_delete",
+        lambda key: (_ for _ in ()).throw(RuntimeError("delete boom")),
+    )
+    assert rate_limit.reset_rate_limit(request) is False
+
+
 class _FakeParameters:
     def __init__(self):
         self.values = {}
@@ -307,6 +359,207 @@ def test_annotation_queries_and_plugin_delete_mode(monkeypatch):
     assert 1001 in deleted_link_ids
 
 
+def test_annotation_helpers_cover_tuple_pairs_and_link_stub_cleanup(monkeypatch):
+    monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
+    monkeypatch.setattr(annotation_service, "rlong", _Value)
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
+
+    tuple_mapping = _plugin_mapping("shared-secret", alpha="1")
+    tuple_ann = SimpleNamespace(
+        getMapValue=lambda: [
+            ("alpha", "1"),
+            (HASH_KEY, tuple_mapping[HASH_KEY]),
+        ],
+        getId=lambda: _Value(5),
+    )
+
+    assert annotation_service.is_plugin_annotation(tuple_ann) is True
+    assert annotation_service.delete_existing_annotations(
+        SimpleNamespace(getQueryService=lambda: None),
+        SimpleNamespace(deleteObject=lambda obj: None),
+        SimpleNamespace(
+            listAnnotations=lambda: (_ for _ in ()).throw(RuntimeError("missing"))
+        ),
+        var_names=[],
+        mode="all",
+    ) == (0, 0, 0)
+
+    deleted_link_ids = set()
+    deleted_annotation_ids = set()
+
+    class _LinkStub:
+        def setId(self, value):
+            self.link_id = value.getValue() if hasattr(value, "getValue") else value
+
+    class _QueryService:
+        def projection(self, hql, params, service_opts=None):
+            if "where l.child.id = :aid" in hql:
+                aid = params.values["aid"].getValue()
+                return [] if aid in deleted_annotation_ids else [[_Value(401)]]
+            if "select a.id from MapAnnotation a where a.id = :aid" in hql:
+                aid = params.values["aid"].getValue()
+                return [] if aid in deleted_annotation_ids else [[_Value(aid)]]
+            if "where l.parent.id = :iid" in hql:
+                return [[_Value(7)]]
+            raise AssertionError(f"Unexpected HQL: {hql}")
+
+    class _UpdateService:
+        def __init__(self):
+            self.deleted = []
+
+        def deleteObject(self, obj):
+            self.deleted.append(obj)
+            if isinstance(obj, _LinkStub):
+                deleted_link_ids.add(obj.link_id)
+                deleted_annotation_ids.add(7)
+            elif getattr(obj, "id", None) == 7:
+                deleted_annotation_ids.add(7)
+
+    ann = _MapAnnotation(7, {"alpha": "1"})
+    update = _UpdateService()
+    conn = SimpleNamespace(
+        SERVICE_OPTS=object(),
+        getQueryService=lambda: _QueryService(),
+        getObject=lambda kind, obj_id: (
+            None
+            if kind == "ImageAnnotationLink"
+            else (None if obj_id in deleted_annotation_ids else ann)
+        ),
+    )
+    monkeypatch.setattr(annotation_service, "ImageAnnotationLinkI", _LinkStub)
+    monkeypatch.setattr(
+        annotation_service,
+        "find_map_annotation_ids",
+        lambda current_conn, image_id: [7],
+    )
+    monkeypatch.setattr(
+        annotation_service, "get_id", lambda obj: getattr(obj, "id", None)
+    )
+
+    deleted_sets, deleted_pairs, attempted = (
+        annotation_service.delete_existing_annotations(
+            conn,
+            update,
+            SimpleNamespace(id=33, listAnnotations=lambda: [ann]),
+            var_names=[],
+            mode="all",
+        )
+    )
+
+    assert (deleted_sets, deleted_pairs, attempted) == (1, 1, 1)
+    assert deleted_link_ids == {401}
+
+
+def test_annotation_query_helpers_cover_invalid_inputs_and_legacy_controls(monkeypatch):
+    monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
+    monkeypatch.setattr(annotation_service, "rlong", _Value)
+    monkeypatch.setattr(annotation_service, "rstring", _Value)
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "")
+
+    plugin_mapping = _plugin_mapping("", alpha="1")
+    broken_ann = SimpleNamespace(
+        getMapValue=lambda: [
+            SimpleNamespace(
+                getName=lambda: (_ for _ in ()).throw(RuntimeError("name failed")),
+                getValue=lambda: "ignored",
+            ),
+            ("alpha", "1"),
+            (HASH_KEY, plugin_mapping[HASH_KEY]),
+        ],
+        getId=lambda: _Value(9),
+    )
+    invalid_marker_ann = _MapAnnotation(10, {"alpha": "1", HASH_KEY: "not-plugin"})
+
+    class _QueryService:
+        def projection(self, hql, params, service_opts=None):
+            if "where l.parent.id = :iid and a.ns = :ns" in hql:
+                return [[_Value(4)], [_Value(5)]]
+            if "join a.mapValue mv" in hql and "where a.id = :aid" in hql:
+                aid = params.values["aid"].getValue()
+                if aid == 4:
+                    return [(_Value("legacy"), _Value("1"))]
+                if aid == 5:
+                    raise RuntimeError("lookup failed")
+            raise AssertionError(f"Unexpected HQL: {hql}")
+
+    conn = SimpleNamespace(
+        SERVICE_OPTS=object(),
+        getQueryService=lambda: _QueryService(),
+    )
+
+    assert annotation_service.is_plugin_annotation(broken_ann) is True
+    assert annotation_service.is_plugin_annotation(invalid_marker_ann) is False
+    assert annotation_service.find_plugin_annotation_ids(conn, "not-an-id") == []
+    assert annotation_service.find_annotation_link_ids(conn, "bad-id") == []
+    assert annotation_service.find_map_annotation_ids(conn, "bad-id") == []
+    assert (
+        annotation_service.find_plugin_annotation_ids(conn, 12, allow_legacy=False)
+        == []
+    )
+
+
+def test_annotation_delete_paths_cover_keep_mode_link_residue_and_missing_annotations(
+    monkeypatch,
+):
+    monkeypatch.setattr(annotation_service, "ParametersI", _FakeParameters)
+    monkeypatch.setattr(annotation_service, "rlong", _Value)
+    monkeypatch.setattr(annotation_service, "get_hash_secret", lambda: "shared-secret")
+    monkeypatch.setattr(
+        annotation_service, "get_id", lambda obj: getattr(obj, "id", None)
+    )
+    monkeypatch.setattr(
+        annotation_service,
+        "find_plugin_annotation_ids",
+        lambda current_conn, image_id, allow_legacy=True: [7],
+    )
+
+    assert annotation_service.delete_existing_annotations(
+        SimpleNamespace(), SimpleNamespace(), SimpleNamespace(), [], "keep"
+    ) == (0, 0, 0)
+
+    plugin_mapping = _plugin_mapping("shared-secret", alpha="1")
+    ann = _MapAnnotation(7, plugin_mapping)
+    lingering_links = {7: [1007]}
+    deleted = []
+
+    class _QueryService:
+        def projection(self, hql, params, service_opts=None):
+            if "where l.child.id = :aid" in hql:
+                aid = params.values["aid"].getValue()
+                return [[_Value(link_id)] for link_id in lingering_links.get(aid, [])]
+            if "select a.id from MapAnnotation a where a.id = :aid" in hql:
+                return [[_Value(params.values["aid"].getValue())]]
+            raise AssertionError(f"Unexpected HQL: {hql}")
+
+    class _UpdateService:
+        def deleteObject(self, obj):
+            deleted.append(obj)
+
+    conn = SimpleNamespace(
+        SERVICE_OPTS=object(),
+        getQueryService=lambda: _QueryService(),
+        getObject=lambda kind, obj_id: (
+            None
+            if kind == "ImageAnnotationLink"
+            else (ann if kind == "MapAnnotation" and obj_id == 7 else None)
+        ),
+    )
+    image = SimpleNamespace(id=55, listAnnotations=lambda: [ann])
+
+    deleted_sets, deleted_pairs, attempted = (
+        annotation_service.delete_existing_annotations(
+            conn,
+            _UpdateService(),
+            image,
+            var_names=["alpha"],
+            mode="plugin",
+        )
+    )
+
+    assert (deleted_sets, deleted_pairs, attempted) == (0, 0, 1)
+    assert len(deleted) == 1
+
+
 class _FakeOriginalFile:
     def __init__(self):
         self._id = _Value(501)
@@ -460,6 +713,165 @@ def test_extract_acquisition_metadata_collects_searchable_fields_and_attaches_lo
     assert b"LongNote = " in raw_store.buffer
     assert raw_store.saved is True
     assert raw_store.closed is True
+
+
+def test_image_collection_helpers_cover_fetch_fallbacks_and_format_detection(
+    monkeypatch,
+):
+    class _Image:
+        def __init__(self, image_id, name, fileset=None):
+            self.id = image_id
+            self._name = name
+            self._fileset = fileset
+
+        def getId(self):
+            return _Value(self.id)
+
+        def getName(self):
+            return _Value(self._name)
+
+        def getFileset(self):
+            return self._fileset
+
+    class _Dataset:
+        def __init__(self, dataset_id, name, images, owner_id=7):
+            self.id = dataset_id
+            self.owner_id = owner_id
+            self._name = name
+            self._images = list(images)
+
+        def getId(self):
+            return _Value(self.id)
+
+        def getName(self):
+            return _Value(self._name)
+
+        def listChildren(self):
+            return list(self._images)
+
+    class _Project:
+        def __init__(self, datasets):
+            self._datasets = list(datasets)
+
+        def listChildren(self):
+            return list(self._datasets)
+
+    class _OriginalFile:
+        def __init__(self, *, fmt=None, name=None):
+            self._fmt = fmt
+            self._name = name
+
+        def getFormat(self):
+            return _Value(self._fmt) if self._fmt is not None else None
+
+        def getName(self):
+            return _Value(self._name)
+
+    class _UsedFile:
+        def __init__(self, original_file):
+            self._original_file = original_file
+
+        def getOriginalFile(self):
+            return self._original_file
+
+    class _Fileset:
+        def __init__(self, used_files):
+            self._used_files = list(used_files)
+
+        def copyUsedFiles(self):
+            return list(self._used_files)
+
+    monkeypatch.setattr(
+        image_service,
+        "get_id",
+        lambda obj: (
+            obj.getId().getValue()
+            if hasattr(obj, "getId")
+            else getattr(obj, "id", None)
+        ),
+    )
+    monkeypatch.setattr(
+        image_service,
+        "get_text",
+        lambda value: value.getValue() if hasattr(value, "getValue") else str(value),
+    )
+    monkeypatch.setattr(
+        image_service,
+        "is_owned_by_user",
+        lambda obj, owner_id: (
+            owner_id is None or getattr(obj, "owner_id", None) == owner_id
+        ),
+    )
+
+    image_one = _Image(1, "a.png")
+    image_two = _Image(2, "b.png")
+    fetched = {1: image_one, 2: image_two}
+
+    class _FetchConn:
+        def getObjects(self, object_type, ids=None, obj_ids=None):
+            assert object_type == "Image"
+            if ids is not None:
+                raise TypeError("legacy backend")
+            raise RuntimeError("bulk lookup failed")
+
+        def getObject(self, object_type, image_id):
+            assert object_type == "Image"
+            return fetched.get(image_id)
+
+    image_map = image_service.fetch_images_by_ids(_FetchConn(), [1, 2, 3])
+    assert image_map == {1: image_one, 2: image_two}
+
+    ds_all = _Dataset(
+        1,
+        "Dataset All",
+        [_Image(3, "c.tif"), _Image(1, "a.tif"), _Image(2, "b.tif")],
+    )
+    ds_selected = _Dataset(2, "Dataset Selected", [_Image(4, "d.tif")])
+    ds_skipped = _Dataset("bad", "Dataset Skipped", [_Image(5, "e.tif")])
+    project = _Project([ds_all, ds_selected, ds_skipped])
+    conn = SimpleNamespace(getObject=lambda object_type, object_id: project)
+
+    dataset_rows = image_service.collect_images_by_dataset_sorted(
+        conn, 1, limit=2, owner_id=7
+    )
+    assert [img.id for img in dataset_rows[0][1]] == [1, 2]
+
+    selected_rows = image_service.collect_images_by_selected_datasets(
+        conn, 1, ["bad", 2], owner_id=7
+    )
+    assert selected_rows == [(ds_selected, ds_selected.listChildren())]
+
+    format_images = [
+        _Image(
+            6,
+            "metadata-source.bin",
+            _Fileset([_UsedFile(_OriginalFile(fmt="czi", name="source.bin"))]),
+        ),
+        _Image(
+            7,
+            "sample.ome.tiff",
+            _Fileset(
+                [_UsedFile(_OriginalFile(fmt="Directory", name="sample.ome.tiff"))]
+            ),
+        ),
+        _Image(8, "preview.png"),
+    ]
+    format_dataset = _Dataset(9, "Formats", format_images)
+    format_project = _Project([format_dataset])
+    format_conn = SimpleNamespace(
+        getObject=lambda object_type, object_id: format_project
+    )
+
+    summaries = image_service.collect_dataset_summaries(format_conn, 1, owner_id=7)
+
+    assert summaries == [
+        {
+            "id": "9",
+            "name": "Formats",
+            "image_count": 3,
+            "formats": "OME-TIFF, PNG, Zeiss CZI",
+        }
+    ]
 
 
 def test_extract_acquisition_metadata_handles_direct_values_and_partial_failures():
