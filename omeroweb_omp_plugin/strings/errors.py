@@ -58,6 +58,10 @@ def no_filenames_available():
     return "No filenames available in the selected datasets."
 
 
+def no_filenames_provided():
+    return "No filenames were provided."
+
+
 def no_data_to_process():
     return "No data to process is available in the selected dataset(s)."
 
