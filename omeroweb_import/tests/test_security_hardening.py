@@ -165,3 +165,36 @@ def test_open_service_connection_redacts_password_when_connect_returns_false(
         assert "svc-pass" not in caplog.text
         assert "has_last_error=True" in caplog.text
         caplog.clear()
+
+
+def test_open_service_connection_falls_back_to_job_group_when_override_is_invalid(
+    monkeypatch,
+):
+    for module in (import_service, core_functions):
+        group_calls = []
+
+        class FakeConn:
+            def __init__(self, *_args, **_kwargs):
+                self.SERVICE_OPTS = type(
+                    "ServiceOpts",
+                    (),
+                    {"setOmeroGroup": lambda self, value: group_calls.append(value)},
+                )()
+
+            def connect(self):
+                return True
+
+            def close(self):
+                return None
+
+        monkeypatch.setattr(
+            module,
+            "_get_job_service_credentials",
+            lambda: ("svc-user", "svc-pass", "not-a-number", True),
+        )
+        monkeypatch.setattr(module, "BlitzGateway", lambda *args, **kwargs: FakeConn())
+
+        conn = module._open_service_connection("omero.example.org", 4064, group_id=7)
+
+        assert conn is not None
+        assert group_calls == ["7"]
