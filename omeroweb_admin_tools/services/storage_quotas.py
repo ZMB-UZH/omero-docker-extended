@@ -277,9 +277,9 @@ def _write_state(path: Path, state: Dict[str, object]) -> None:
     try:
         temp_path.write_text(serialized, encoding="utf-8")
 
-        # Owner read/write, group read-only.  The atomic rename that follows
-        # means only the writer needs write access; group-write is unnecessary.
-        os.chmod(temp_path, 0o640)
+        # The temporary file can contain quota and operator metadata, so keep it
+        # private until the atomic replace completes.
+        os.chmod(temp_path, 0o600)
 
         # os.replace is atomic on POSIX
         os.replace(temp_path, path)

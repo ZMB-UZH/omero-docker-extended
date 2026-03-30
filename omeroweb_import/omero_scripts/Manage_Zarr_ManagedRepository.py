@@ -28,6 +28,8 @@ _CONFIG_MANAGED_DIR = "omero.managed.dir"
 _CONFIG_REPO_PATH = "omero.fs.repo.path"
 _CONFIG_SHARED_TMP_PATH = "omero.web.import.shared_tmp_path"
 _RUNTIME_STATE_FILENAME = "managed-zarr-runtime.env"
+_MANAGED_DIRECTORY_MODE = 0o750
+_MANAGED_FILE_MODE = 0o640
 
 
 def _require_config_value(config: dict[str, str], key: str) -> str:
@@ -260,7 +262,7 @@ def _user_prefix_dir(
             raise RuntimeError(
                 f"Managed-repository prefix path is not a directory: {prefix_dir}"
             )
-        os.chmod(prefix_dir, 0o755)
+        os.chmod(prefix_dir, _MANAGED_DIRECTORY_MODE)
     return prefix_dir, suffix_parts
 
 
@@ -278,7 +280,7 @@ def _ensure_suffix_dir(
             f"Managed-repository target escaped its root: {target_dir}"
         ) from exc
     target_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(target_dir, 0o755)
+    os.chmod(target_dir, _MANAGED_DIRECTORY_MODE)
     return target_dir
 
 
@@ -306,11 +308,11 @@ def _allocate_destination_dir(target_dir: Path, source_name: str) -> Path:
 
 def _normalize_tree_permissions(root: Path) -> None:
     for dirpath, dirnames, filenames in os.walk(root):
-        os.chmod(dirpath, 0o755)
+        os.chmod(dirpath, _MANAGED_DIRECTORY_MODE)
         for dirname in dirnames:
-            os.chmod(os.path.join(dirpath, dirname), 0o755)
+            os.chmod(os.path.join(dirpath, dirname), _MANAGED_DIRECTORY_MODE)
         for filename in filenames:
-            os.chmod(os.path.join(dirpath, filename), 0o644)
+            os.chmod(os.path.join(dirpath, filename), _MANAGED_FILE_MODE)
 
 
 def _stage_zarr(

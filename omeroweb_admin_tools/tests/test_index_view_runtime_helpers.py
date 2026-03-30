@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import subprocess
 import urllib.error
-from pathlib import Path
 from types import SimpleNamespace
 
 from django.http import HttpResponse
@@ -11,6 +10,9 @@ from django.test import RequestFactory
 
 from omeroweb_admin_tools.config import LogConfig
 from omeroweb_admin_tools.views import index_view
+
+PROMETHEUS_URL = "https://prometheus.example.test:9090"
+LOKI_URL = "https://loki.example.test:3100"
 
 
 class _HttpResponseStub:
@@ -107,7 +109,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
             200, json.dumps(query_payload).encode("utf-8")
         ),
     )
-    assert index_view._prometheus_instant_query("http://prometheus:9090", "up") == 42.5
+    assert index_view._prometheus_instant_query(PROMETHEUS_URL, "up") == 42.5
 
     seen = []
 
@@ -118,7 +120,7 @@ def test_env_probe_and_prometheus_helpers_cover_runtime_failures(monkeypatch) ->
         return 7.0
 
     monkeypatch.setattr(index_view, "_prometheus_instant_query", _query_metric)
-    metrics = index_view._collect_system_metrics("http://prometheus:9090")
+    metrics = index_view._collect_system_metrics(PROMETHEUS_URL)
     assert metrics["cpu_usage_percent"] == 7.0
     assert metrics["network_receive_bps"] is None
     assert metrics["network_transmit_bps"] == 7.0
@@ -151,7 +153,7 @@ def test_collect_recently_seen_services_and_parse_since_ns() -> None:
     original = index_view.urllib.request.urlopen
     index_view.urllib.request.urlopen = lambda url, timeout=5.0: response
     try:
-        assert index_view._collect_recently_seen_services("http://prometheus:9090") == [
+        assert index_view._collect_recently_seen_services(PROMETHEUS_URL) == [
             "database",
             "redis",
         ]
@@ -175,7 +177,7 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
         index_view,
         "optional_log_config",
         lambda: LogConfig(
-            loki_url="http://loki:3100",
+            loki_url=LOKI_URL,
             lookback_seconds=60,
             max_entries=100,
             timeout_seconds=5.0,
@@ -194,7 +196,7 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
     response = index_view.logs_view(request, conn=None)
     assert response.status_code == 200
     payload = _payload(response)
-    assert json.loads(payload["log_config"])["loki_url"] == "http://loki:3100"
+    assert json.loads(payload["log_config"])["loki_url"] == LOKI_URL
     assert payload["table_row_cap"] == index_view.LOG_TABLE_ROW_CAP
     assert payload["log_sources"][0]["container"] == "omeroserver"
 
@@ -213,7 +215,7 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
         index_view,
         "optional_log_config",
         lambda: LogConfig(
-            loki_url="http://loki:3100",
+            loki_url=LOKI_URL,
             lookback_seconds=60,
             max_entries=100,
             timeout_seconds=5.0,
@@ -238,6 +240,7 @@ def test_logs_view_and_internal_log_labels_cover_configuration_paths(
 
 def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
     monkeypatch,
+    tmp_path,
 ) -> None:
     monkeypatch.setattr(
         index_view.subprocess,
@@ -255,7 +258,7 @@ def test_docker_compose_and_api_helpers_cover_json_and_socket_errors(
     )
     assert index_view._docker_compose_json(["docker", "compose", "ps"]) is None
 
-    socket_path = Path("/tmp/docker.sock")
+    socket_path = tmp_path / "docker.sock"
     monkeypatch.setenv("ADMIN_TOOLS_DOCKER_SOCKET", str(socket_path))
     monkeypatch.setattr(index_view.os.path, "exists", lambda path: True)
 

@@ -71,6 +71,7 @@ def _install_import_stubs() -> None:
         types.ModuleType("django.views.decorators.csrf"),
     )
     csrf_module.csrf_exempt = lambda view: view
+    csrf_module.ensure_csrf_cookie = lambda view: view
 
     if "omeroweb" not in sys.modules:
         sys.modules["omeroweb"] = types.ModuleType("omeroweb")
@@ -294,10 +295,24 @@ class OmpPluginViewRegressionTests(TestCase):
 
     def _make_request(self, method: str = "POST", payload: dict | None = None):
         body = json.dumps(payload or {}).encode("utf-8")
-        return types.SimpleNamespace(method=method, body=body)
+        return types.SimpleNamespace(
+            method=method,
+            body=body,
+            COOKIES={},
+            META={},
+            _dont_enforce_csrf_checks=True,
+        )
 
     def _make_form_request(self, method: str = "POST", post: dict | None = None):
-        return types.SimpleNamespace(method=method, POST=post or {}, body=b"")
+        return types.SimpleNamespace(
+            method=method,
+            POST=post or {},
+            GET={},
+            body=b"",
+            COOKIES={},
+            META={},
+            _dont_enforce_csrf_checks=True,
+        )
 
     def test_delete_plugin_view_returns_missing_password_error_without_unbound_local(
         self,

@@ -1,0 +1,71 @@
+<script>
+(function installSameOriginCsrfFetch() {
+    if (window.__omeroSameOriginCsrfFetchInstalled) {
+        return;
+    }
+
+    function getCookie(name) {
+        const prefix = `${name}=`;
+        const cookies = document.cookie ? document.cookie.split(';') : [];
+        for (const cookie of cookies) {
+            const trimmed = cookie.trim();
+            if (trimmed.startsWith(prefix)) {
+                return decodeURIComponent(trimmed.slice(prefix.length));
+            }
+        }
+        return '';
+    }
+
+    function resolveRequestUrl(input) {
+        if (typeof input === 'string') {
+            return new URL(input, window.location.href);
+        }
+        if (input instanceof URL) {
+            return input;
+        }
+        if (input && typeof input.url === 'string') {
+            return new URL(input.url, window.location.href);
+        }
+        return null;
+    }
+
+    function isMutatingMethod(method) {
+        return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
+            String(method || 'GET').toUpperCase()
+        );
+    }
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = function csrfWrappedFetch(input, init) {
+        const requestInit = init ? { ...init } : {};
+        const method = requestInit.method || (input && input.method) || 'GET';
+        const resolvedUrl = resolveRequestUrl(input);
+
+        if (
+            !isMutatingMethod(method) ||
+            !resolvedUrl ||
+            resolvedUrl.origin !== window.location.origin
+        ) {
+            return originalFetch(input, requestInit);
+        }
+
+        const headers = new Headers(
+            requestInit.headers || (input instanceof Request ? input.headers : undefined)
+        );
+        const csrfToken = getCookie('csrftoken');
+        if (csrfToken && !headers.has('X-CSRFToken')) {
+            headers.set('X-CSRFToken', csrfToken);
+        }
+        if (!headers.has('X-Requested-With')) {
+            headers.set('X-Requested-With', 'XMLHttpRequest');
+        }
+        if (!requestInit.credentials) {
+            requestInit.credentials = 'same-origin';
+        }
+        requestInit.headers = headers;
+        return originalFetch(input, requestInit);
+    };
+
+    window.__omeroSameOriginCsrfFetchInstalled = true;
+})();
+</script>

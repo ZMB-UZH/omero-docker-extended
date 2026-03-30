@@ -1,7 +1,6 @@
 import logging
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from omeroweb.decorators import login_required
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
 
@@ -23,7 +22,6 @@ def _normalize_special_method_settings(settings_payload):
     return {key: bool(value) for key, value in settings_payload.items()}
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def save_settings(request, conn=None, url=None, **kwargs):
@@ -77,7 +75,6 @@ def save_settings(request, conn=None, url=None, **kwargs):
         return JsonResponse({"error": errors.unexpected_error()}, status=500)
 
 
-@csrf_exempt
 @login_required()
 @require_non_root_user
 def load_settings(request, conn=None, url=None, **kwargs):

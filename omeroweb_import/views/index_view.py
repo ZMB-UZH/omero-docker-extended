@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from omeroweb.decorators import login_required
 
 from omero_plugin_common.logging_utils import sanitize_log_value, sanitized_exc_info
@@ -62,6 +63,7 @@ from .utils import current_username, json_error, load_json_body, require_non_roo
 
 
 @login_required()
+@ensure_csrf_cookie
 def index(request, conn=None, url=None, **kwargs):
     user_id = _current_user_id(conn)
     upload_root = _get_upload_root()

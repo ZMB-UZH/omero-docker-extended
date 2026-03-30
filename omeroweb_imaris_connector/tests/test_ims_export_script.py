@@ -162,7 +162,7 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
             str(source),
             str(destination),
             expected_sha256=expected_sha,
-            file_mode=0o640,
+            file_mode=0o600,
             description="runtime jar",
         )
         is True
@@ -182,7 +182,7 @@ def test_copy_and_validate_bioformats_jar_cover_integrity_paths(
             str(bad_source),
             str(tmp_path / "broken" / "bioformats.jar"),
             expected_sha256=expected_sha,
-            file_mode=0o640,
+            file_mode=0o600,
             description="broken jar",
         )
         is False
