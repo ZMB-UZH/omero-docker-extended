@@ -104,6 +104,7 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
 ):
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
+    export_path = tmp_path / f"{tmp_path.name}.ims"
     cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(
         tasks.os.path, "exists", lambda path: str(path) == str(cli_path)
@@ -112,15 +113,17 @@ def test_cli_resolution_output_parsing_and_connection_session_key(
 
     assert tasks._resolve_omero_cli() == str(cli_path)
     assert tasks._extract_cli_outputs(
-        """
-        * Message = done
-        * Export_Path = /tmp/export.ims
-        * Ignored = nope
-        * File_Annotation_Id = 44
-        """
+        "\n".join(
+            [
+                "* Message = done",
+                f"* Export_Path = {export_path}",
+                "* Ignored = nope",
+                "* File_Annotation_Id = 44",
+            ]
+        )
     ) == {
         "Message": "done",
-        "Export_Path": "/tmp/export.ims",
+        "Export_Path": str(export_path),
         "File_Annotation_Id": "44",
     }
     assert (
@@ -145,6 +148,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
 ):
     tasks = _import_tasks(monkeypatch)
     cli_path = tmp_path / "omero"
+    export_path = tmp_path / f"{tmp_path.name}.ims"
     cli_path.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(tasks, "_resolve_omero_cli", lambda: str(cli_path))
 
@@ -161,7 +165,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
         }
         return types.SimpleNamespace(
             returncode=0,
-            stdout="* Export_Path = /tmp/export.ims\n* Export_Name = demo.ims",
+            stdout=f"* Export_Path = {export_path}\n* Export_Name = demo.ims",
             stderr="",
         )
 
@@ -173,7 +177,7 @@ def test_run_script_via_omero_cli_covers_success_and_failure_paths(
         port=4064,
         session_key="session-key",
     )
-    assert outputs["Export_Path"] == "/tmp/export.ims"
+    assert outputs["Export_Path"] == str(export_path)
     assert captured["cmd"][:5] == [str(cli_path), "-q", "script", "launch", "7"]
     assert captured["timeout"] == tasks.EXPORT_TIMEOUT + 120
     assert captured["env"]["HOME"] == "/tmp"

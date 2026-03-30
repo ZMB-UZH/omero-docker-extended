@@ -383,6 +383,8 @@ def generate_ai_regex(provider, api_key, filenames, model=None):
     provider = (provider or "").strip().lower()
     if not provider:
         raise AiAssistError(errors.provider_required())
+    if not filenames:
+        raise AiAssistError(errors.no_filenames_provided())
     prompt = _build_prompt(filenames)
 
     content = _call_ai_provider_raw(provider, api_key, prompt, 120, model=model)

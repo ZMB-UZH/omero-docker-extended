@@ -23,6 +23,24 @@ omit =
 [report]
 skip_empty = true
 show_missing = true
+# Suppress empty package-marker modules from report noise while still
+# measuring executable package wiring modules that contain code.
+omit =
+    omero_plugin_common/__init__.py
+    omero_web_zarr/templatetags/__init__.py
+    omeroweb_admin_tools/__init__.py
+    omeroweb_admin_tools/services/__init__.py
+    omeroweb_import/__init__.py
+    omeroweb_import/services/__init__.py
+    omeroweb_import/services/import_management/__init__.py
+    omeroweb_import/services/jobs/__init__.py
+    omeroweb_import/services/omero/__init__.py
+    omeroweb_import/utils/__init__.py
+    omeroweb_import/views/__init__.py
+    omeroweb_omp_plugin/services/jobs/__init__.py
+    omeroweb_omp_plugin/services/omero/__init__.py
+    omeroweb_omp_plugin/services/parsing/__init__.py
+    omeroweb_omp_plugin/utils/__init__.py
 
 [xml]
 output = coverage.xml

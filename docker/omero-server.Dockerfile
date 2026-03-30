@@ -380,11 +380,13 @@ RUN set -euo pipefail; \
 # Consolidated OMERO.server startup flow
 # --------------------------------------
 COPY startup/10-server-bootstrap.sh /startup/10-server-bootstrap.sh
+COPY startup/repo_root_sync_helper.py /startup/repo_root_sync_helper.py
 COPY startup/50-install-omero-downloader.sh /startup/50-install-omero-downloader.sh
 COPY startup/51-install-imarisconvert.sh /startup/51-install-imarisconvert.sh
 RUN set -euo pipefail; \
     for startup_script in \
         /startup/10-server-bootstrap.sh \
+        /startup/repo_root_sync_helper.py \
         /startup/50-install-omero-downloader.sh \
         /startup/51-install-imarisconvert.sh; do \
         chown root:root "${startup_script}"; \
