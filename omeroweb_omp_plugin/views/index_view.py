@@ -101,14 +101,20 @@ def _get_owner_username(obj):
         return ""
     for attr in ("getOmeName", "getName", "getFirstName"):
         try:
-            value = getattr(owner, attr)()
+            value = getattr(owner, attr)
+            value = value() if callable(value) else value
         except Exception:
             logger.debug("Failed to get owner name via %s", attr)
             continue
         if value:
             return str(value)
     try:
-        return str(owner.getId())
+        owner_id = owner.getId()
+        if hasattr(owner_id, "getValue"):
+            owner_id = owner_id.getValue()
+        elif hasattr(owner_id, "val"):
+            owner_id = owner_id.val
+        return str(owner_id)
     except Exception:
         return ""
 
@@ -123,7 +129,8 @@ def _get_permissions(obj):
         logger.debug("Suppressed non-fatal exception in index_view.py", exc_info=exc)
     for attr in ("getPermissions", "permissions"):
         try:
-            permissions = getattr(obj, attr)()
+            permissions = getattr(obj, attr)
+            permissions = permissions() if callable(permissions) else permissions
         except Exception:
             logger.debug("Failed to get permissions via %s", attr)
             continue
@@ -254,6 +261,10 @@ def _group_member_count(conn, group):
             continue
         if attr == "getMemberCount":
             try:
+                if hasattr(value, "getValue"):
+                    value = value.getValue()
+                elif hasattr(value, "val"):
+                    value = value.val
                 return int(value)
             except Exception:
                 logger.debug("Failed to convert member count to int for %s", attr)

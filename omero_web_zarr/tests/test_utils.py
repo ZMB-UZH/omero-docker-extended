@@ -4,11 +4,13 @@ import tempfile
 from django.http import Http404
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from PIL import Image
 
+import omero_web_zarr.utils as zarr_utils
 from omero_web_zarr.utils import collect_store_metadata_documents
 from omero_web_zarr.utils import encode_store_backed_pil_image
 from omero_web_zarr.utils import generate_coordinate_transformations
@@ -25,6 +27,8 @@ from omero_web_zarr.utils import render_store_backed_pil_image
 from omero_web_zarr.utils import render_store_backed_plane
 from omero_web_zarr.utils import render_store_backed_region_pil_image
 from omero_web_zarr.utils import render_store_backed_thumbnail_bytes
+from omero_web_zarr.utils import marshal_axes
+from omero_web_zarr.utils import marshal_pixel_sizes
 from omero_web_zarr.utils import resolve_image_backing_zarr_store
 from omero_web_zarr.utils import resolve_local_zarr_file
 from omero_web_zarr.utils import resolve_local_zarr_store
@@ -673,3 +677,229 @@ def test_generate_coordinate_transformations_rejects_dimension_mismatch():
     shapes = [(1, 1, 100, 200), (1, 50, 100)]
     with pytest.raises(ValueError, match="Shape dimension mismatch"):
         generate_coordinate_transformations(shapes)
+
+
+def test_marshal_axes_and_pixel_sizes_cover_supported_and_invalid_versions():
+    class _PixelSize:
+        def __init__(self, value, unit):
+            self._value = value
+            self._unit = unit
+
+        def getUnit(self):
+            return self._unit
+
+        def getValue(self):
+            return self._value
+
+    image = type(
+        "Image",
+        (),
+        {
+            "getSizeT": lambda self: 2,
+            "getSizeC": lambda self: 3,
+            "getSizeZ": lambda self: 4,
+            "getSizeY": lambda self: 512,
+            "getSizeX": lambda self: 1024,
+            "getPixelSizeX": lambda self, units=True: _PixelSize(0.5, "MICROMETER"),
+            "getPixelSizeY": lambda self, units=True: _PixelSize(0.75, "MICROMETER"),
+            "getPixelSizeZ": lambda self, units=True: _PixelSize(1.5, "MICROMETER"),
+        },
+    )()
+
+    assert marshal_pixel_sizes(image) == {
+        "x": {"unit": "micrometer", "value": 0.5},
+        "y": {"unit": "micrometer", "value": 0.75},
+        "z": {"unit": "micrometer", "value": 1.5},
+    }
+    assert marshal_axes(image, "0.3") == ["t", "c", "z", "y", "x"]
+    assert marshal_axes(image, "0.4") == [
+        {"name": "t", "type": "time"},
+        {"name": "c", "type": "channel"},
+        {"name": "z", "type": "space", "unit": "micrometer"},
+        {"name": "y", "type": "space", "unit": "micrometer"},
+        {"name": "x", "type": "space", "unit": "micrometer"},
+    ]
+
+    with pytest.raises(Http404, match="version not supported"):
+        marshal_axes(image, "0.5")
+
+
+def test_resolve_image_external_lsid_covers_missing_ids_and_query_failures(monkeypatch):
+    image_without_conn = _FakeImage(None)
+    assert zarr_utils._resolve_image_external_lsid(image_without_conn) is None
+
+    query_fail_image = _FakeImage(None, query_lsid="ignored")
+    monkeypatch.setattr(
+        query_fail_image._conn,
+        "getQueryService",
+        lambda: type(
+            "BrokenQueryService",
+            (),
+            {
+                "projection": lambda self, *args, **kwargs: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                )
+            },
+        )(),
+    )
+    assert zarr_utils._resolve_image_external_lsid(query_fail_image) is None
+
+    no_row_image = _FakeImage(None, query_lsid="ignored")
+    monkeypatch.setattr(
+        no_row_image._conn,
+        "getQueryService",
+        lambda: type(
+            "EmptyQueryService",
+            (),
+            {"projection": lambda self, *args, **kwargs: []},
+        )(),
+    )
+    assert zarr_utils._resolve_image_external_lsid(no_row_image) is None
+
+
+def test_read_store_attrs_and_format_resolution_support_zarr_json_and_v04(
+    tmp_path, monkeypatch
+):
+    payload = {
+        "attributes": {
+            "multiscales": [{"version": "0.4", "datasets": [{"path": "0"}]}],
+        }
+    }
+    (tmp_path / "zarr.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert zarr_utils._read_store_attrs(tmp_path) == payload["attributes"]
+
+    fake_format_module = SimpleNamespace(
+        CurrentFormat=lambda: "current-format",
+        FormatV04=lambda: "format-v04",
+    )
+    monkeypatch.setitem(sys.modules, "ome_zarr.format", fake_format_module)
+    assert zarr_utils._resolve_ome_zarr_format(tmp_path) == "format-v04"
+
+    monkeypatch.setattr(
+        zarr_utils,
+        "_read_store_attrs",
+        lambda store_root: (_ for _ in ()).throw(OSError("missing")),
+    )
+    assert zarr_utils._resolve_ome_zarr_format(tmp_path) == "current-format"
+
+
+def test_load_store_backed_image_node_reader_and_cache_fallbacks(tmp_path, monkeypatch):
+    _write_minimal_zarr_group(tmp_path)
+    image = _FakeImage(str(tmp_path.resolve()))
+    sentinel_node = _FakeNode(
+        [np.zeros((1, 2, 2), dtype=np.uint8)], {"axes": ["z", "y", "x"]}
+    )
+
+    fake_io = SimpleNamespace(parse_url=lambda store_root, fmt=None: ("location", fmt))
+    fake_reader = SimpleNamespace(Reader=lambda location: lambda: [sentinel_node])
+    monkeypatch.setitem(sys.modules, "ome_zarr.io", fake_io)
+    monkeypatch.setitem(sys.modules, "ome_zarr.reader", fake_reader)
+    monkeypatch.setattr(
+        zarr_utils,
+        "_resolve_ome_zarr_format",
+        lambda store_root: "fmt",
+    )
+    monkeypatch.setattr(
+        zarr_utils,
+        "_load_store_backed_image_node_from_metadata",
+        lambda store_root: (_ for _ in ()).throw(RuntimeError("metadata failed")),
+    )
+    zarr_utils._load_store_backed_image_node_cached.cache_clear()
+
+    node = load_store_backed_image_node(image)
+    cached = load_store_backed_image_node(image)
+
+    assert node is sentinel_node
+    assert cached is sentinel_node
+
+    class _MissingStoreImage:
+        pass
+
+    missing_store_image = _MissingStoreImage()
+    monkeypatch.setattr(
+        zarr_utils,
+        "resolve_image_backing_zarr_store",
+        lambda image: (_ for _ in ()).throw(OSError("gone")),
+    )
+    assert load_store_backed_image_node(missing_store_image) is None
+
+
+def test_store_backed_dataset_and_render_helpers_cover_fallback_paths():
+    node = _FakeNode(
+        [
+            np.full((1, 2, 2), 5, dtype=np.uint16),
+            np.full((1, 1, 1), 7, dtype=np.uint16),
+        ],
+        {"axes": ["z", "y", "x"]},
+    )
+
+    assert zarr_utils.get_store_backed_datasets(node) == [{"path": "0"}, {"path": "1"}]
+
+    colorful_node = _FakeNode(
+        [np.array([[[0, 10], [10, 0]]], dtype=np.uint16)],
+        {
+            "axes": ["c", "y", "x"],
+            "contrast_limits": [[0, 10]],
+            "colormap": ["FF0000"],
+        },
+    )
+    invisible_node = _FakeNode(
+        [
+            np.array(
+                [
+                    [[0, 10], [10, 0]],
+                    [[10, 0], [0, 10]],
+                ],
+                dtype=np.uint16,
+            )
+        ],
+        {
+            "axes": ["c", "y", "x"],
+            "visible": [False, False],
+            "contrast_limits": [[0, 10], [0, 10]],
+        },
+    )
+
+    colorful = render_store_backed_plane(colorful_node)
+    invisible = render_store_backed_plane(invisible_node)
+
+    assert tuple(colorful[0, 1]) == (255, 0, 0)
+    assert invisible.shape == (2, 2)
+
+
+def test_get_safe_image_tile_size_prepares_rendering_engine_and_falls_back():
+    class _PreparedEngine:
+        def getTileSize(self):
+            return (64, 32)
+
+    class _PreparedImage:
+        def __init__(self):
+            self._re = None
+
+        def _prepareRenderingEngine(self):
+            self._re = _PreparedEngine()
+
+        def getSizeX(self):
+            return 512
+
+        def getSizeY(self):
+            return 256
+
+    assert get_safe_image_tile_size(_PreparedImage()) == (64, 32)
+
+    class _BrokenEngine:
+        def getTileSize(self):
+            raise RuntimeError("not a tile-size failure")
+
+    class _BrokenImage:
+        _re = _BrokenEngine()
+
+        def getSizeX(self):
+            return 512
+
+        def getSizeY(self):
+            return 256
+
+    with pytest.raises(RuntimeError, match="not a tile-size failure"):
+        get_safe_image_tile_size(_BrokenImage())

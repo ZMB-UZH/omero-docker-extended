@@ -4,8 +4,10 @@ from datetime import datetime
 
 import django
 import numpy as np
+import pytest
 from django.http import HttpResponse
 from django.test import RequestFactory
+from django.urls import include, path
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "omeroweb.settings")
 warnings.filterwarnings(
@@ -1411,3 +1413,221 @@ def test_store_backed_region_response_rejects_invalid_requests(monkeypatch):
     assert malformed_region.content.decode("utf-8") == "malformed region argument"
     assert missing_args.status_code == 400
     assert missing_args.content.decode("utf-8") == "tile or region argument required"
+
+
+def test_render_regular_image_region_with_safe_tile_size_rejects_invalid_levels_and_missing_image(
+    monkeypatch,
+):
+    from omeroweb.webgateway import views as webgateway_views
+
+    request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/",
+        {"tile": "3,0,0,2048,0"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    image = _PreparedRegionImage()
+
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda request, iid, server_id=None, conn=None: (image, 0.9),
+    )
+
+    invalid_level = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        0,
+        0,
+        conn=_FakeConnForTileSize(),
+    )
+    assert invalid_level.status_code == 400
+    assert invalid_level.content.decode("utf-8").startswith("Invalid resolution level")
+
+    request = RequestFactory().get(
+        "/webclient/render_image_region/7/0/0/",
+        {"region": "bad"},
+    )
+    request.session = {"connector": {"server_id": 1}}
+    malformed_region = integration._render_regular_image_region_with_safe_tile_size(
+        request,
+        7,
+        0,
+        0,
+        conn=_FakeConnForTileSize(),
+    )
+    assert malformed_region.status_code == 400
+    assert "malformed region argument" in malformed_region.content.decode("utf-8")
+
+    monkeypatch.setattr(
+        webgateway_views,
+        "_get_prepared_image",
+        lambda request, iid, server_id=None, conn=None: None,
+    )
+    with pytest.raises(integration.Http404):
+        integration._render_regular_image_region_with_safe_tile_size(
+            request,
+            7,
+            0,
+            0,
+            conn=_FakeConnForTileSize(),
+        )
+
+
+def test_patch_urlpatterns_updates_nested_routes():
+    def original_view(request):
+        return HttpResponse("original")
+
+    def replacement_view(request):
+        return HttpResponse("replacement")
+
+    urlpatterns = [
+        path("root/", original_view, name="root"),
+        path(
+            "nested/",
+            include(
+                (
+                    [
+                        path("child/", original_view, name="child"),
+                    ],
+                    "nested",
+                )
+            ),
+        ),
+    ]
+
+    integration._patch_urlpatterns(
+        urlpatterns,
+        {
+            "root": replacement_view,
+            "child": replacement_view,
+        },
+    )
+
+    root_response = urlpatterns[0].callback(RequestFactory().get("/root/"))
+    child_response = (
+        urlpatterns[1].url_patterns[0].callback(RequestFactory().get("/nested/child/"))
+    )
+
+    assert root_response.content == b"replacement"
+    assert child_response.content == b"replacement"
+
+
+def test_install_webgateway_overrides_renders_store_backed_thumbnails_and_images(
+    monkeypatch,
+):
+    monkeypatch.setenv("OMERO_WEB_ZARR_ALTERNATIVE_RENDERING", "true")
+    monkeypatch.setattr(integration.settings, "THUMBNAILS_BATCH", 10, raising=False)
+
+    def _identity_decorator():
+        return lambda func: func
+
+    from omeroweb.webclient import urls as webclient_urls
+    from omeroweb.webclient import views as webclient_views
+    from omeroweb.webclient import webclient_gateway
+    from omeroweb.webgateway import marshal as webgateway_marshal
+    from omeroweb.webgateway import urls as webgateway_urls
+    from omeroweb.webgateway import views as webgateway_views
+
+    request = RequestFactory().get("/webgateway/render/7/", {"id": ["7", "8"]})
+    request.session = {"server_settings": {"browser": {"thumb_default_size": 64}}}
+
+    store_backed_image = type("StoreBackedImage", (), {"store_backed": True, "id": 7})()
+    regular_image = type("RegularImage", (), {"store_backed": False, "id": 8})()
+
+    class _Conn:
+        def getObject(self, object_type, iid):
+            return {7: store_backed_image, 8: regular_image}.get(int(iid))
+
+        def getThumbnailSet(self, ids, width):
+            return {8: b"regular-thumb"}
+
+    monkeypatch.setattr(integration, "login_required", _identity_decorator)
+    monkeypatch.setattr(
+        integration,
+        "is_store_backed_image",
+        lambda image: getattr(image, "store_backed", False),
+    )
+    monkeypatch.setattr(
+        webclient_gateway.ImageWrapper, "getChannels", lambda self, *args, **kwargs: []
+    )
+    monkeypatch.setattr(webgateway_views, "imageData_json", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        webgateway_views, "_render_thumbnail", lambda *args, **kwargs: HttpResponse()
+    )
+    monkeypatch.setattr(
+        webgateway_views, "get_thumbnails_json", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        webgateway_views,
+        "render_image",
+        lambda *args, **kwargs: HttpResponse(b"regular", content_type="image/jpeg"),
+    )
+    monkeypatch.setattr(
+        webgateway_views,
+        "render_image_region",
+        lambda *args, **kwargs: HttpResponse(
+            b"regular-region", content_type="image/jpeg"
+        ),
+    )
+    monkeypatch.setattr(webgateway_views, "jsonp", lambda func: func)
+    monkeypatch.setattr(
+        webgateway_views,
+        "get_longs",
+        lambda request, key: [7, 8],
+    )
+    monkeypatch.setattr(
+        webgateway_views, "getIntOrDefault", lambda request, key, default: default
+    )
+    monkeypatch.setattr(
+        webgateway_marshal, "imageMarshal", lambda image, key=None, request=None: {}
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_safe_image_marshal_installed",
+        False,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webgateway_marshal,
+        "_omero_web_zarr_original_image_marshal",
+        None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        webclient_views, "load_metadata_preview", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(webclient_views, "render_response", _identity_decorator)
+    monkeypatch.setattr(webgateway_urls, "urlpatterns", [])
+    monkeypatch.setattr(webclient_urls, "urlpatterns", [])
+    monkeypatch.setattr(
+        webgateway_views, "_omero_web_zarr_store_backed_overrides", False, raising=False
+    )
+    monkeypatch.setattr(
+        integration,
+        "render_store_backed_thumbnail_bytes",
+        lambda image, size=96, z=None, t=None: b"store-thumb",
+    )
+    monkeypatch.setattr(
+        integration,
+        "_store_backed_render_response",
+        lambda image, request, z=None, t=None, download=False: HttpResponse(
+            b"store-image", content_type="image/png"
+        ),
+    )
+
+    integration.install_webgateway_overrides()
+
+    thumb_response = webgateway_views._render_thumbnail(
+        request,
+        7,
+        w=None,
+        h=None,
+        conn=_Conn(),
+    )
+    thumbs_json = webgateway_views.get_thumbnails_json(request, w=64, conn=_Conn())
+    image_response = webgateway_views.render_image(request, 7, z=0, t=0, conn=_Conn())
+
+    assert thumb_response == b"store-thumb"
+    assert thumbs_json[7].startswith("data:image/jpeg;base64,")
+    assert thumbs_json[8].startswith("data:image/jpeg;base64,")
+    assert image_response.content == b"store-image"

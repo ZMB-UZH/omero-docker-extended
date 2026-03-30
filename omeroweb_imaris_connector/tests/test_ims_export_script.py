@@ -338,3 +338,148 @@ def test_convert_and_run_conversion_cover_missing_runtime_and_success_paths(
 
     missing_conn = types.SimpleNamespace(getObject=lambda kind, image_id: None)
     assert module.run_conversion(missing_conn, 8, str(tmp_path))[0] is False
+
+
+def test_run_script_sets_outputs_and_attaches_exported_file(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    export_root = tmp_path / "exports"
+    export_path = export_root / "image_7" / "demo.ims"
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text("ims", encoding="utf-8")
+
+    outputs = {}
+    group_calls = []
+    linked = []
+    file_annotation = types.SimpleNamespace(_obj=object(), getId=lambda: 21)
+    image = types.SimpleNamespace(
+        getName=lambda: "demo.ome.tif",
+        getDetails=lambda: types.SimpleNamespace(
+            getGroup=lambda: types.SimpleNamespace(getId=lambda: 9)
+        ),
+        linkAnnotation=lambda annotation: linked.append(annotation),
+    )
+    conn = types.SimpleNamespace(
+        SERVICE_OPTS=types.SimpleNamespace(
+            setOmeroGroup=lambda value: group_calls.append(value)
+        ),
+        getObject=lambda kind, image_id: image,
+        createFileAnnfromLocalFile=lambda path, mimetype, ns, desc: file_annotation,
+    )
+
+    class _Client:
+        def getInputs(self, unwrap=True):
+            assert unwrap is True
+            return {"Image_ID": 7}
+
+        def setOutput(self, key, value):
+            outputs[key] = value
+
+        def closeSession(self):
+            outputs["closed"] = True
+
+    client = _Client()
+    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(
+        module.scripts,
+        "Long",
+        lambda *args, **kwargs: ("Long", args, kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.scripts, "client", lambda *args, **kwargs: client, raising=False
+    )
+    monkeypatch.setattr(module, "BlitzGateway", lambda client_obj=None: conn)
+    monkeypatch.setattr(
+        module,
+        "run_conversion",
+        lambda current_conn, image_id, current_root: (
+            True,
+            f"Successfully exported IMS: {export_path}",
+            str(export_path),
+        ),
+    )
+    monkeypatch.setattr(
+        module.omero.rtypes, "robject", lambda value: value, raising=False
+    )
+    monkeypatch.setattr(
+        module.omero.rtypes, "rlong", lambda value: value, raising=False
+    )
+
+    module.run_script()
+
+    assert outputs["Message"] == f"Successfully exported IMS: {export_path}"
+    assert outputs["File_Annotation"] is file_annotation._obj
+    assert outputs["File_Annotation_Id"] == 21
+    assert outputs["Export_Path"] == str(export_path)
+    assert outputs["Export_Name"] == "demo.ims"
+    assert outputs["closed"] is True
+    assert group_calls == [-1, 9]
+    assert linked == [file_annotation]
+
+
+def test_run_script_survives_attachment_failure_and_reports_export_path(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script_module()
+    export_root = tmp_path / "exports"
+    export_path = export_root / "image_8" / "failed-demo.ims"
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text("ims", encoding="utf-8")
+
+    outputs = {}
+    image = types.SimpleNamespace(
+        getName=lambda: "demo.ome.tif",
+        getDetails=lambda: types.SimpleNamespace(
+            getGroup=lambda: types.SimpleNamespace(getId=lambda: 9)
+        ),
+    )
+    conn = types.SimpleNamespace(
+        SERVICE_OPTS=types.SimpleNamespace(setOmeroGroup=lambda value: None),
+        getObject=lambda kind, image_id: image,
+        createFileAnnfromLocalFile=lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("attach failed")
+        ),
+    )
+
+    class _Client:
+        def getInputs(self, unwrap=True):
+            return {"Image_ID": 8}
+
+        def setOutput(self, key, value):
+            outputs[key] = value
+
+        def closeSession(self):
+            outputs["closed"] = True
+
+    monkeypatch.setattr(module, "_get_export_root", lambda: str(export_root))
+    monkeypatch.setattr(module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(
+        module.scripts,
+        "Long",
+        lambda *args, **kwargs: ("Long", args, kwargs),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module.scripts, "client", lambda *args, **kwargs: _Client(), raising=False
+    )
+    monkeypatch.setattr(module, "BlitzGateway", lambda client_obj=None: conn)
+    monkeypatch.setattr(
+        module,
+        "run_conversion",
+        lambda current_conn, image_id, current_root: (
+            True,
+            f"Successfully exported IMS: {export_path}",
+            str(export_path),
+        ),
+    )
+    monkeypatch.setattr(module, "print", lambda *args, **kwargs: None, raising=False)
+
+    module.run_script()
+
+    assert outputs["Message"] == f"Successfully exported IMS: {export_path}"
+    assert outputs["Export_Path"] == str(export_path)
+    assert outputs["Export_Name"] == "failed-demo.ims"
+    assert outputs["closed"] is True
