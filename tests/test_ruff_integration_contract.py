@@ -25,10 +25,6 @@ class RuffIntegrationContractTests(unittest.TestCase):
         )
         self.assertLess(
             readme_text.index("[![License]("),
-            readme_text.index("[![FOSSA Status]("),
-        )
-        self.assertLess(
-            readme_text.index("[![FOSSA Status]("),
             readme_text.index("[![Tests]("),
         )
         self.assertIn(

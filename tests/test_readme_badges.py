@@ -27,10 +27,6 @@ class ReadmeBadgeGenerationTests(unittest.TestCase):
         badge_block = update_readme_badges.render_badge_block(metadata)
         self.assertLess(
             badge_block.index("[![License]("),
-            badge_block.index("[![FOSSA Status]("),
-        )
-        self.assertLess(
-            badge_block.index("[![FOSSA Status]("),
             badge_block.index("[![Tests]("),
         )
         self.assertLess(

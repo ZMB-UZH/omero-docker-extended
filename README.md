@@ -2,12 +2,10 @@
 
 <!-- BEGIN GENERATED BADGES -->
 [![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FZMB-UZH%2Fomero-docker-extended.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FZMB-UZH%2Fomero-docker-extended?ref=badge_shield)
 [![Tests](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml/badge.svg)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)
 [![Code coverage](https://codecov.io/gh/ZMB-UZH/omero-docker-extended/graph/badge.svg)](https://codecov.io/gh/ZMB-UZH/omero-docker-extended)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)
 <!-- END GENERATED BADGES -->
-<!-- [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ZMB-UZH_omero-docker-extended&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ZMB-UZH_omero-docker-extended) -->
 
 Production-grade (see [LICENSE](LICENSE) for details), security-hardened, dockerized OMERO deployment with custom OMERO.web plugins for microscopy metadata workflows, file upload/import management, direct Imaris 11 integration, administrator tools, and a full server monitoring stack.
 
