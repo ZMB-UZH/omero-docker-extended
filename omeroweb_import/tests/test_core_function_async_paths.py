@@ -912,11 +912,16 @@ def test_attach_txt_to_image_service_saves_raw_file_store_and_links_plot(
         "_open_user_owned_background_connection",
         lambda *args, **kwargs: user_conn,
     )
-    monkeypatch.setattr(
-        "omeroweb_import.services.omero.sem_edx_parser.attach_sem_edx_tables",
+    sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
+    sem_edx_parser.attach_sem_edx_tables = (
         lambda conn, image_id, source_path, persist_table=True: (
             table_calls.append((image_id, source_path, persist_table)) or 77
-        ),
+        )
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "omeroweb_import.services.omero.sem_edx_parser",
+        sem_edx_parser,
     )
 
     core_functions._attach_txt_to_image_service(
@@ -1108,9 +1113,12 @@ def test_process_import_job_handles_sem_edx_associations_and_plot_imports(
         "_resolve_staged_target_path",
         lambda root, staged_path: (root / staged_path, None),
     )
-    monkeypatch.setattr(
-        "omeroweb_import.services.omero.sem_edx_parser.create_edx_spectrum_plot",
-        lambda txt_path: plot_source,
+    sem_edx_parser = types.ModuleType("omeroweb_import.services.omero.sem_edx_parser")
+    sem_edx_parser.create_edx_spectrum_plot = lambda txt_path: plot_source
+    monkeypatch.setitem(
+        sys.modules,
+        "omeroweb_import.services.omero.sem_edx_parser",
+        sem_edx_parser,
     )
 
     attached = []

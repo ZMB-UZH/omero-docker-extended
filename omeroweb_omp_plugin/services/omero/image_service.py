@@ -101,10 +101,15 @@ def collect_images_by_selected_datasets(
     if not dataset_ids:
         return out
 
-    try:
-        wanted = {int(ds_id) for ds_id in dataset_ids}
-    except Exception:
-        wanted = set()
+    wanted = set()
+    for ds_id in dataset_ids:
+        try:
+            wanted.add(int(ds_id))
+        except Exception:
+            logger.debug(
+                "Ignoring non-numeric dataset selection %s",
+                sanitize_log_value(ds_id),
+            )
 
     if not wanted:
         return out
