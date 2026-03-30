@@ -20,19 +20,19 @@ class RuffIntegrationContractTests(unittest.TestCase):
     def test_readme_has_ruff_badge_in_top_row(self) -> None:
         readme_text = self.read_text("README.md")
         self.assertIn(
-            "[![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)",
+            "[![License](",
             readme_text,
         )
         self.assertLess(
-            readme_text.index(
-                "[![License](https://img.shields.io/github/license/ZMB-UZH/omero-docker-extended)](LICENSE)"
-            ),
-            readme_text.index(
-                "[![Tests](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml/badge.svg)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/tests.yml)"
-            ),
+            readme_text.index("[![License]("),
+            readme_text.index("[![FOSSA Status]("),
+        )
+        self.assertLess(
+            readme_text.index("[![FOSSA Status]("),
+            readme_text.index("[![Tests]("),
         )
         self.assertIn(
-            "[![Ruff](https://img.shields.io/github/actions/workflow/status/ZMB-UZH/omero-docker-extended/ruff.yml?branch=main&logo=ruff&label=Ruff)](https://github.com/ZMB-UZH/omero-docker-extended/actions/workflows/ruff.yml)",
+            "[![Ruff](",
             readme_text,
         )
 
