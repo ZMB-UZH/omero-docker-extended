@@ -29,11 +29,6 @@ class RepoMetadata:
         return f"{self.owner}/{self.repo}"
 
     @property
-    def fossa_project_locator(self) -> str:
-        locator = f"git+{self.host}/{self.owner}/{self.repo}"
-        return quote(locator, safe="")
-
-    @property
     def branch_query_value(self) -> str:
         return quote(self.branch_name, safe="")
 
@@ -147,12 +142,10 @@ def resolve_repo_metadata(repo_root: Path) -> RepoMetadata:
 
 def render_badge_block(metadata: RepoMetadata) -> str:
     github_path = metadata.github_path
-    fossa_locator = metadata.fossa_project_locator
     branch = metadata.branch_query_value
     lines = [
         BADGE_BLOCK_BEGIN,
         f"[![License](https://img.shields.io/github/license/{github_path})](LICENSE)",
-        f"[![FOSSA Status](https://app.fossa.com/api/projects/{fossa_locator}.svg?type=shield)](https://app.fossa.com/projects/{fossa_locator}?ref=badge_shield)",
         f"[![Tests](https://github.com/{github_path}/actions/workflows/tests.yml/badge.svg)](https://github.com/{github_path}/actions/workflows/tests.yml)",
         f"[![Code coverage](https://codecov.io/gh/{github_path}/graph/badge.svg)](https://codecov.io/gh/{github_path})",
         f"[![Ruff](https://img.shields.io/github/actions/workflow/status/{github_path}/ruff.yml?branch={branch}&logo=ruff&label=Ruff)](https://github.com/{github_path}/actions/workflows/ruff.yml)",

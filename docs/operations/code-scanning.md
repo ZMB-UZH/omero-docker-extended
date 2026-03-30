@@ -2,6 +2,8 @@
 
 This project enables automated security scanning via `.github/workflows/security-code-scanning.yml`. All scanners produce SARIF output uploaded to the GitHub Security tab.
 
+GitHub-native code scanning is the supported repository scanning surface here. Retired third-party scanning integrations and badge-only status surfaces are intentionally not part of the tracked workflow set.
+
 ## Active scanners
 
 | Scanner | Type | Scope | Free |
