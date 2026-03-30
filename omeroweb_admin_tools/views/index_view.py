@@ -1853,7 +1853,9 @@ def prometheus_proxy(request, subpath: str, conn=None, url=None, **kwargs):
             return response
 
     if last_response is None:
-        raise RuntimeError("No Grafana backend URLs configured; cannot proxy request.")
+        raise RuntimeError(
+            "No Prometheus backend URLs configured; cannot proxy request."
+        )
     return last_response
 
 

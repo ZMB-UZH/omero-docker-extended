@@ -1047,3 +1047,231 @@ def test_wait_for_process_timeout_and_request_bool_helpers_cover_remaining_edges
     assert imaris_service._bool_from_request("YES") is True
     assert imaris_service._bool_from_request("0") is False
     assert imaris_service._bool_from_request(None) is None
+
+
+def test_imaris_helper_fallbacks_cover_service_discovery_and_job_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    class _BrokenConn:
+        def getScriptService(self):
+            raise RuntimeError("gateway missing")
+
+        c = SimpleNamespace(
+            sf=SimpleNamespace(
+                getScriptService=lambda: (_ for _ in ()).throw(
+                    RuntimeError("raw missing")
+                )
+            )
+        )
+
+    assert imaris_service._get_script_services(_BrokenConn()) == []
+
+    class _BrokenService:
+        def getScripts(self):
+            raise RuntimeError("script listing failed")
+
+    monkeypatch.setattr(
+        imaris_service, "_get_script_services", lambda conn: [_BrokenService()]
+    )
+    assert imaris_service._find_script_id(object()) is None
+    assert (
+        imaris_service._resolve_async_result(SimpleNamespace(), "runScript", None)
+        is None
+    )
+    assert imaris_service._resolve_async_result(
+        SimpleNamespace(), "runScript", {"job": 4}
+    ) == {"job": 4}
+
+    class _StateService:
+        def getJobStatus(self, _job_id):
+            raise RuntimeError("status failed")
+
+        def getJobOutputs(self, _job_id):
+            raise RuntimeError("outputs failed")
+
+        def getJobs(self):
+            return [
+                SimpleNamespace(
+                    id=SimpleNamespace(val="bad"), status=SimpleNamespace(val="RUNNING")
+                ),
+                SimpleNamespace(
+                    id=SimpleNamespace(val=19), status=SimpleNamespace(val="RUNNING")
+                ),
+            ]
+
+    monkeypatch.setattr(
+        imaris_service, "_get_script_services", lambda conn: [_StateService()]
+    )
+    assert imaris_service._get_job_state_and_outputs(object(), 19) == ("RUNNING", None)
+
+
+def test_imaris_helper_fallbacks_cover_call_signatures_and_config_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+    monkeypatch.setattr(imaris_service, "rint", lambda value: ("rint", value))
+
+    seen_args = []
+
+    def _four_arg_method(*args):
+        seen_args.append(args)
+        if len(args) != 4:
+            raise TypeError("need four args")
+        return "ok"
+
+    assert (
+        imaris_service._call_script_method(
+            _four_arg_method,
+            "runScript",
+            7,
+            {"Image_ID": 2},
+            wait_secs=None,
+        )
+        == "ok"
+    )
+    assert seen_args[-1] == (7, {"Image_ID": 2}, None, None)
+
+    with pytest.raises(TypeError):
+        imaris_service._call_script_method(
+            lambda *_args: (_ for _ in ()).throw(TypeError("bad signature")),
+            "runScript",
+            7,
+            {"Image_ID": 2},
+            wait_secs=None,
+        )
+
+    class SecurityViolation(Exception):
+        pass
+
+    class _ConfigService:
+        def __init__(self, *, processors="2", descriptors="Processor-0", fail=None):
+            self.processors = processors
+            self.descriptors = descriptors
+            self.fail = fail
+
+        def getConfigValue(self, key):
+            if self.fail is not None:
+                raise self.fail
+            if key == "omero.scripts.processors":
+                return self.processors
+            if key == "omero.server.nodedescriptors":
+                return self.descriptors
+            raise AssertionError(f"Unexpected key: {key}")
+
+    monkeypatch.setattr(
+        imaris_service,
+        "_PROCESSOR_CONFIG_CACHE",
+        {"value": None, "checked_at": 0.0},
+    )
+    monkeypatch.setattr(imaris_service.time, "time", lambda: 100.0)
+
+    conn_none = SimpleNamespace(
+        isAdmin=lambda: True,
+        c=SimpleNamespace(sf=SimpleNamespace(getConfigService=lambda: None)),
+    )
+    assert imaris_service._get_script_processor_config(conn_none) is None
+
+    conn_security = SimpleNamespace(
+        isAdmin=lambda: True,
+        c=SimpleNamespace(
+            sf=SimpleNamespace(
+                getConfigService=lambda: _ConfigService(
+                    fail=SecurityViolation("denied")
+                )
+            )
+        ),
+    )
+    assert imaris_service._get_script_processor_config(conn_security) is None
+
+    conn_descriptors = SimpleNamespace(
+        isAdmin=lambda: True,
+        c=SimpleNamespace(
+            sf=SimpleNamespace(getConfigService=lambda: _ConfigService(descriptors=" "))
+        ),
+    )
+    assert imaris_service._get_node_descriptors_config(conn_descriptors) is None
+
+
+def test_imaris_file_and_output_helpers_cover_invalid_annotations_and_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_omero_stub()
+    imaris_service = _import_imaris_service(monkeypatch)
+
+    assert imaris_service._infer_finished_from_outputs(None) is False
+    assert (
+        imaris_service._infer_finished_from_outputs({"Export_Name": "demo.ims"}) is True
+    )
+    assert (
+        imaris_service._response_from_file_annotation(
+            SimpleNamespace(getObject=lambda *_args: None), "bad"
+        )
+        is None
+    )
+    assert (
+        imaris_service._response_from_file_annotation(
+            SimpleNamespace(getObject=lambda *_args: None),
+            "12",
+        )
+        is None
+    )
+
+    conn_missing_file = SimpleNamespace(
+        getObject=lambda kind, obj_id: SimpleNamespace(getFile=lambda: None),
+    )
+    assert (
+        imaris_service._response_from_file_annotation(conn_missing_file, "12") is None
+    )
+
+    class _BrokenStore:
+        def __init__(self):
+            self.closed = False
+
+        def read(self, _offset, _size):
+            return b""
+
+        def close(self):
+            self.closed = True
+            raise RuntimeError("close failed")
+
+    store = _BrokenStore()
+    assert (
+        list(imaris_service._raw_file_generator(store, size=None, chunk_size=2)) == []
+    )
+    assert store.closed is True
+
+    class _InvalidSizeFile:
+        def getName(self):
+            raise RuntimeError("name missing")
+
+        def getSize(self):
+            return "bad-size"
+
+        def getId(self):
+            return SimpleNamespace(val=77)
+
+    raw_store = SimpleNamespace(
+        setFileId=lambda file_id: setattr(raw_store, "file_id", file_id),
+        read=lambda _offset, _size: b"",
+        close=lambda: None,
+    )
+    file_annotation = SimpleNamespace(getFile=lambda: _InvalidSizeFile())
+    conn = SimpleNamespace(
+        getObject=lambda kind, obj_id: (
+            file_annotation if (kind, obj_id) == ("FileAnnotation", 12) else None
+        ),
+        c=SimpleNamespace(sf=SimpleNamespace(createRawFileStore=lambda: raw_store)),
+    )
+
+    response = imaris_service._response_from_file_annotation(
+        conn,
+        "12",
+        filename_fallback="fallback.ims",
+    )
+
+    assert "Content-Length" not in response
+    assert response["Content-Disposition"] == 'attachment; filename="fallback.ims"'

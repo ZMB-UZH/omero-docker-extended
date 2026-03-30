@@ -37,6 +37,30 @@ class ReadmeBadgeGenerationTests(unittest.TestCase):
             badge_block.index("[![Code coverage]("),
             badge_block.index("[![Ruff]("),
         )
+        self.assertLess(
+            badge_block.index("[![Ruff]("),
+            badge_block.index("[![GitHub commit activity]("),
+        )
+
+    def test_generated_commit_activity_badge_uses_repo_slug_and_default_branch(
+        self,
+    ) -> None:
+        metadata = update_readme_badges.RepoMetadata(
+            host="github.com",
+            owner="example-owner",
+            repo="example-repo",
+            remote_name="origin",
+            branch_name="main",
+        )
+        badge_block = update_readme_badges.render_badge_block(metadata)
+        self.assertIn(
+            "https://img.shields.io/github/commit-activity/m/example-owner/example-repo",
+            badge_block,
+        )
+        self.assertIn(
+            "https://github.com/example-owner/example-repo/commits/main",
+            badge_block,
+        )
 
     def test_remote_url_parsing_supports_public_and_private_clone_styles(self) -> None:
         cases = {

@@ -189,3 +189,280 @@ def test_user_data_views_cover_success_and_request_guards(monkeypatch) -> None:
     )
     assert missing_user.status_code == 400
     assert _payload(missing_user)["error"] == omp_errors.unable_to_determine_username()
+
+
+def test_variable_and_user_data_views_cover_store_failures_and_guard_edges(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
+    monkeypatch.setattr(
+        variable_set_view,
+        "load_request_data",
+        lambda request: request._decoded_payload,
+    )
+
+    monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
+    list_missing_user = variable_set_view.list_sets(
+        RequestFactory().get("/"), conn=None
+    )
+    assert list_missing_user.status_code == 400
+    assert (
+        _payload(list_missing_user)["error"]
+        == omp_errors.unable_to_determine_username()
+    )
+
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
+    monkeypatch.setattr(
+        variable_set_view,
+        "list_variable_sets",
+        lambda username: (_ for _ in ()).throw(
+            variable_set_view.VariableStoreError("backend")
+        ),
+    )
+    list_store_error = variable_set_view.list_sets(RequestFactory().get("/"), conn=None)
+    assert list_store_error.status_code == 500
+    assert (
+        _payload(list_store_error)["error"] == omp_errors.variable_sets_fetch_failed()
+    )
+
+    monkeypatch.setattr(
+        variable_set_view,
+        "list_variable_sets",
+        lambda username: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    list_unexpected = variable_set_view.list_sets(RequestFactory().get("/"), conn=None)
+    assert list_unexpected.status_code == 500
+    assert _payload(list_unexpected)["error"] == omp_errors.unexpected_error()
+
+    invalid_payload_request = RequestFactory().post("/omp/varsets/save/")
+    invalid_payload_request._decoded_payload = {
+        "set_name": "demo",
+        "var_names": "alpha",
+        "max_sets": "invalid",
+    }
+    invalid_payload = variable_set_view.save_set(invalid_payload_request, conn=None)
+    assert invalid_payload.status_code == 400
+    assert _payload(invalid_payload)["error"] == omp_errors.invalid_variable_payload()
+
+    blank_name_request = RequestFactory().post("/omp/varsets/save/")
+    blank_name_request._decoded_payload = {"set_name": " ", "var_names": ["alpha"]}
+    blank_name = variable_set_view.save_set(blank_name_request, conn=None)
+    assert blank_name.status_code == 400
+    assert _payload(blank_name)["error"] == omp_errors.variable_set_name_required()
+
+    save_store_error_request = RequestFactory().post("/omp/varsets/save/")
+    save_store_error_request._decoded_payload = {
+        "set_name": "demo",
+        "var_names": ["alpha"],
+    }
+    monkeypatch.setattr(variable_set_view, "list_variable_sets", lambda username: [])
+    monkeypatch.setattr(
+        variable_set_view,
+        "save_variable_set",
+        lambda username, set_name, var_names: (_ for _ in ()).throw(
+            variable_set_view.VariableStoreError("save failed")
+        ),
+    )
+    save_store_error = variable_set_view.save_set(save_store_error_request, conn=None)
+    assert save_store_error.status_code == 500
+    assert _payload(save_store_error)["error"] == omp_errors.variable_set_save_failed()
+
+    monkeypatch.setattr(
+        variable_set_view,
+        "save_variable_set",
+        lambda username, set_name, var_names: (_ for _ in ()).throw(
+            RuntimeError("save boom")
+        ),
+    )
+    save_unexpected = variable_set_view.save_set(save_store_error_request, conn=None)
+    assert save_unexpected.status_code == 500
+    assert _payload(save_unexpected)["error"] == omp_errors.unexpected_error()
+
+    monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
+    load_user_missing = variable_set_view.load_set(
+        RequestFactory().get("/omp/varsets/load/", data={"set_name": "demo"}),
+        conn=None,
+    )
+    assert load_user_missing.status_code == 400
+    assert (
+        _payload(load_user_missing)["error"]
+        == omp_errors.unable_to_determine_username()
+    )
+
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
+    monkeypatch.setattr(
+        variable_set_view,
+        "list_variable_sets",
+        lambda username: (_ for _ in ()).throw(
+            variable_set_view.VariableStoreError("load failed")
+        ),
+    )
+    load_store_error = variable_set_view.load_set(
+        RequestFactory().get("/omp/varsets/load/", data={"set_name": "demo"}),
+        conn=None,
+    )
+    assert load_store_error.status_code == 500
+    assert _payload(load_store_error)["error"] == omp_errors.variable_set_load_failed()
+
+    monkeypatch.setattr(
+        variable_set_view,
+        "list_variable_sets",
+        lambda username: ["demo"],
+    )
+    monkeypatch.setattr(
+        variable_set_view,
+        "load_variable_set",
+        lambda username, set_name: (_ for _ in ()).throw(RuntimeError("load boom")),
+    )
+    load_unexpected = variable_set_view.load_set(
+        RequestFactory().get("/omp/varsets/load/", data={"set_name": "demo"}),
+        conn=None,
+    )
+    assert load_unexpected.status_code == 500
+    assert _payload(load_unexpected)["error"] == omp_errors.unexpected_error()
+
+    delete_wrong_method = variable_set_view.delete_set(
+        RequestFactory().get("/omp/varsets/delete/"),
+        conn=None,
+    )
+    assert delete_wrong_method.status_code == 405
+
+    monkeypatch.setattr(variable_set_view, "current_username", lambda request, conn: "")
+    delete_missing_user = variable_set_view.delete_set(
+        RequestFactory().post("/omp/varsets/delete/"),
+        conn=None,
+    )
+    assert delete_missing_user.status_code == 400
+    assert (
+        _payload(delete_missing_user)["error"]
+        == omp_errors.unable_to_determine_username()
+    )
+
+    monkeypatch.setattr(
+        variable_set_view, "current_username", lambda request, conn: "alice"
+    )
+    delete_store_error_request = RequestFactory().post("/omp/varsets/delete/")
+    delete_store_error_request._decoded_payload = {"set_name": "demo"}
+    monkeypatch.setattr(
+        variable_set_view,
+        "delete_variable_set",
+        lambda username, set_name: (_ for _ in ()).throw(
+            variable_set_view.VariableStoreError("delete failed")
+        ),
+    )
+    delete_store_error = variable_set_view.delete_set(
+        delete_store_error_request,
+        conn=None,
+    )
+    assert delete_store_error.status_code == 500
+    assert (
+        _payload(delete_store_error)["error"] == omp_errors.variable_set_delete_failed()
+    )
+
+    monkeypatch.setattr(
+        variable_set_view,
+        "delete_variable_set",
+        lambda username, set_name: (_ for _ in ()).throw(RuntimeError("delete boom")),
+    )
+    delete_unexpected = variable_set_view.delete_set(
+        delete_store_error_request,
+        conn=None,
+    )
+    assert delete_unexpected.status_code == 500
+    assert _payload(delete_unexpected)["error"] == omp_errors.unexpected_error()
+
+    monkeypatch.setattr(
+        user_data_view, "current_username", lambda request, conn: "alice"
+    )
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_ai_credentials",
+        lambda username: (_ for _ in ()).throw(
+            user_data_view.AiCredentialStoreError("credentials failed")
+        ),
+    )
+    api_key_store_error = user_data_view.delete_api_keys(
+        RequestFactory().post("/omp/user-data/delete-api-keys/"),
+        conn=None,
+    )
+    assert api_key_store_error.status_code == 500
+    assert (
+        _payload(api_key_store_error)["error"]
+        == omp_errors.ai_credentials_delete_failed()
+    )
+
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_ai_credentials",
+        lambda username: (_ for _ in ()).throw(RuntimeError("credentials boom")),
+    )
+    api_key_unexpected = user_data_view.delete_api_keys(
+        RequestFactory().post("/omp/user-data/delete-api-keys/"),
+        conn=None,
+    )
+    assert api_key_unexpected.status_code == 500
+    assert _payload(api_key_unexpected)["error"] == omp_errors.unexpected_error()
+
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_variable_sets",
+        lambda username: (_ for _ in ()).throw(
+            user_data_view.VariableStoreError("sets failed")
+        ),
+    )
+    delete_sets_store_error = user_data_view.delete_variable_sets(
+        RequestFactory().post("/omp/user-data/delete-variable-sets/"),
+        conn=None,
+    )
+    assert delete_sets_store_error.status_code == 500
+    assert (
+        _payload(delete_sets_store_error)["error"]
+        == omp_errors.variable_sets_delete_failed()
+    )
+
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_variable_sets",
+        lambda username: (_ for _ in ()).throw(RuntimeError("sets boom")),
+    )
+    delete_sets_unexpected = user_data_view.delete_variable_sets(
+        RequestFactory().post("/omp/user-data/delete-variable-sets/"),
+        conn=None,
+    )
+    assert delete_sets_unexpected.status_code == 500
+    assert _payload(delete_sets_unexpected)["error"] == omp_errors.unexpected_error()
+
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_user_data",
+        lambda username: (_ for _ in ()).throw(
+            user_data_view.UserDataStoreError("all data failed")
+        ),
+    )
+    delete_all_store_error = user_data_view.delete_all_data(
+        RequestFactory().post("/omp/user-data/delete-all/"),
+        conn=None,
+    )
+    assert delete_all_store_error.status_code == 500
+    assert (
+        _payload(delete_all_store_error)["error"]
+        == omp_errors.user_data_delete_failed()
+    )
+
+    monkeypatch.setattr(
+        user_data_view,
+        "delete_all_user_data",
+        lambda username: (_ for _ in ()).throw(RuntimeError("all data boom")),
+    )
+    delete_all_unexpected = user_data_view.delete_all_data(
+        RequestFactory().post("/omp/user-data/delete-all/"),
+        conn=None,
+    )
+    assert delete_all_unexpected.status_code == 500
+    assert _payload(delete_all_unexpected)["error"] == omp_errors.unexpected_error()

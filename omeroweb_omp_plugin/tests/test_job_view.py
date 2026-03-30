@@ -89,9 +89,65 @@ def _json_payload(response):
 def test_parse_image_ids_and_regex_safety_helpers():
     assert job_view.parse_image_ids("1, 2, nope, 3") == [1, 2, 3]
     assert sorted(job_view.parse_image_ids({4, "5", "bad"})) == [4, 5]
+    assert job_view.parse_image_ids(object()) == []
     assert job_view._is_safe_separator_regex(r"[_-]+") is True
+    assert job_view._is_safe_separator_regex(123) is False
+    assert job_view._is_safe_separator_regex("") is False
+    assert job_view._is_safe_separator_regex("x" * 129) is False
     assert job_view._is_safe_separator_regex(r"(a++)") is False
     assert job_view._is_safe_separator_regex(r"(.)\1") is False
+
+
+def test_job_view_helper_guards_cover_ownership_host_resolution_and_link_save(
+    monkeypatch,
+):
+    request = RequestFactory().get("/")
+    conn = _Conn()
+
+    monkeypatch.setattr(job_view, "current_username", lambda *_args: "alice")
+    assert job_view._job_owned_by_request({}, request, conn) is True
+    assert job_view._job_owned_by_request({"username": "alice"}, request, conn) is True
+    assert job_view._job_owned_by_request({"username": "bob"}, request, conn) is False
+    assert job_view._job_owned_by_request([], request, conn) is False
+
+    conn.host = None
+    conn.port = "bad"
+    monkeypatch.setattr(settings, "OMERO_HOST", "omeroserver", raising=False)
+    monkeypatch.setattr(settings, "OMERO_PORT", "not-a-port", raising=False)
+    assert job_view._resolve_omero_host_port(conn) == ("omeroserver", None)
+
+    monkeypatch.setattr(job_view, "collect_images_in_project", lambda *_args: [])
+    monkeypatch.setattr(
+        job_view,
+        "get_id",
+        lambda obj: getattr(obj, "bad_id", None),
+    )
+    fallback_conn = _Conn()
+    fallback_conn.getObjects = lambda kind: iter(
+        [
+            SimpleNamespace(bad_id=None),
+            SimpleNamespace(bad_id=7),
+            SimpleNamespace(bad_id=7),
+            SimpleNamespace(bad_id=3),
+        ]
+    )
+    assert job_view._resolve_image_ids(fallback_conn, 5, []) == [3, 7]
+
+    assert (
+        job_view._save_annotation_link(
+            SimpleNamespace(saveAndReturnObject=lambda link: None),
+            object(),
+        )
+        is False
+    )
+    monkeypatch.setattr(job_view, "get_id", lambda obj: None)
+    assert (
+        job_view._save_annotation_link(
+            SimpleNamespace(saveAndReturnObject=lambda link: object()),
+            object(),
+        )
+        is False
+    )
 
 
 def test_validate_user_password_handles_missing_details_and_auth_failure(monkeypatch):
@@ -226,6 +282,83 @@ def test_start_acq_and_delete_jobs_apply_types_and_password_checks(monkeypatch):
     assert saved_jobs[0]["chunk_size"] == 3
     assert saved_jobs[1]["delete_mode"] == "all"
     assert saved_jobs[2]["delete_mode"] == "plugin"
+
+
+def test_start_job_variants_cover_methods_rate_limits_and_validation_errors(
+    monkeypatch,
+):
+    conn = _Conn()
+    factory = RequestFactory()
+
+    monkeypatch.setattr(job_view, "_resolve_image_ids", lambda *_args: [31])
+    monkeypatch.setattr(
+        job_view, "check_major_action_rate_limit", lambda *_args: (False, 12)
+    )
+    monkeypatch.setattr(
+        job_view, "_validate_user_password", lambda *_args: (False, "bad password")
+    )
+
+    get_response = inspect.unwrap(job_view.start_job)(factory.get("/"), conn=conn)
+    missing_project = inspect.unwrap(job_view.start_job)(
+        _json_request({"separator": "_"}),
+        conn=conn,
+    )
+    rate_limited = inspect.unwrap(job_view.start_job)(
+        _json_request({"project_id": 5, "separator_mode": "wat", "chunk_size": "bad"}),
+        conn=conn,
+    )
+    acq_get = inspect.unwrap(job_view.start_acq_job)(factory.get("/"), conn=conn)
+    acq_missing = inspect.unwrap(job_view.start_acq_job)(
+        _json_request({"chunk_size": "bad"}),
+        conn=conn,
+    )
+    acq_rate_limited = inspect.unwrap(job_view.start_acq_job)(
+        _json_request({"project_id": 5, "chunk_size": "bad"}),
+        conn=conn,
+    )
+    delete_all_forbidden = inspect.unwrap(job_view.start_delete_all_job)(
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+    delete_plugin_forbidden = inspect.unwrap(job_view.start_delete_plugin_job)(
+        _json_request({"project_id": 5, "password": TEST_AUTH_INPUT}),
+        conn=conn,
+    )
+
+    assert get_response.status_code == 400
+    assert missing_project.status_code == 400
+    assert rate_limited.status_code == 429
+    assert acq_get.status_code == 400
+    assert acq_missing.status_code == 400
+    assert acq_rate_limited.status_code == 429
+    assert delete_all_forbidden.status_code == 403
+    assert delete_plugin_forbidden.status_code == 403
+
+
+def test_start_job_variants_cover_exception_paths(monkeypatch):
+    conn = _Conn()
+    failing_request = _json_request({"project_id": 5})
+
+    monkeypatch.setattr(
+        job_view,
+        "load_request_data",
+        lambda request: (_ for _ in ()).throw(RuntimeError("bad request")),
+    )
+    start_error = inspect.unwrap(job_view.start_job)(failing_request, conn=conn)
+    acq_error = inspect.unwrap(job_view.start_acq_job)(failing_request, conn=conn)
+    delete_all_error = inspect.unwrap(job_view.start_delete_all_job)(
+        failing_request,
+        conn=conn,
+    )
+    delete_plugin_error = inspect.unwrap(job_view.start_delete_plugin_job)(
+        failing_request,
+        conn=conn,
+    )
+
+    assert start_error.status_code == 500
+    assert acq_error.status_code == 500
+    assert delete_all_error.status_code == 500
+    assert delete_plugin_error.status_code == 500
 
 
 def test_job_progress_rejects_other_users_and_reports_lock_contention(monkeypatch):
@@ -406,3 +539,344 @@ def test_job_progress_processes_filename_mapping_and_duplicate_variable_names(
         ("Channel_2", "01"),
         (job_view.HASH_KEY, "hash"),
     ]
+
+
+def test_job_progress_covers_unknown_finished_delete_paths_and_save_failures(
+    monkeypatch,
+):
+    conn = _Conn()
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            return None
+
+        def acquire(self):
+            return None
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
+
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: None)
+    unknown = inspect.unwrap(job_view.job_progress)(request, "d" * 32, conn=conn)
+    assert unknown.status_code == 404
+    assert _json_payload(unknown) == {
+        "error": job_view.error_messages.unknown_job(),
+        "finished": True,
+    }
+
+    finished_job = {
+        "job_id": "e" * 32,
+        "username": "alice",
+        "index": 2,
+        "total": 2,
+        "var_names": [],
+        "delete_mode": "keep",
+        "separator": "_",
+        "image_ids": [1, 2],
+        "started": 10.0,
+    }
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: finished_job)
+    finished = inspect.unwrap(job_view.job_progress)(request, "e" * 32, conn=conn)
+    assert _json_payload(finished)["finished"] is True
+
+    unsafe_regex_job = {
+        "job_id": "f" * 32,
+        "username": "alice",
+        "index": 0,
+        "total": 1,
+        "var_names": [],
+        "delete_mode": "keep",
+        "separator": "(a++)",
+        "separator_mode": "regex",
+        "image_ids": [1],
+        "started": 10.0,
+    }
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: unsafe_regex_job)
+    unsafe = inspect.unwrap(job_view.job_progress)(request, "f" * 32, conn=conn)
+    assert unsafe.status_code == 400
+
+    delete_all_job = {
+        "job_id": "a" * 32,
+        "username": "alice",
+        "type": "del_all",
+        "index": 0,
+        "total": 1,
+        "var_names": [],
+        "delete_mode": "all",
+        "separator": "_",
+        "image_ids": [41],
+        "started": 10.0,
+        "chunk_size": 5,
+    }
+    delete_plugin_job = {
+        "job_id": "b" * 32,
+        "username": "alice",
+        "type": "del_plugin",
+        "index": 0,
+        "total": 1,
+        "var_names": [],
+        "delete_mode": "plugin",
+        "separator": "_",
+        "image_ids": [42],
+        "started": 10.0,
+        "chunk_size": 5,
+    }
+    parse_missing_job = {
+        "job_id": "c" * 32,
+        "username": "alice",
+        "type": "parse",
+        "index": 0,
+        "total": 2,
+        "var_names": ["Channel"],
+        "delete_mode": "plugin",
+        "separator": "_",
+        "image_ids": [43, 44],
+        "started": 10.0,
+        "chunk_size": 5,
+    }
+    parse_no_values_job = {
+        "job_id": "d" * 32,
+        "username": "alice",
+        "type": "parse",
+        "index": 0,
+        "total": 1,
+        "var_names": [],
+        "delete_mode": "keep",
+        "separator": "_",
+        "image_ids": [45],
+        "started": 10.0,
+        "chunk_size": 5,
+    }
+    acq_empty_job = {
+        "job_id": "e" * 32,
+        "username": "alice",
+        "type": "acq",
+        "index": 0,
+        "total": 1,
+        "var_names": [],
+        "delete_mode": "keep",
+        "separator": "_",
+        "image_ids": [46],
+        "started": 10.0,
+        "chunk_size": 5,
+    }
+
+    current_job = {"value": delete_all_job}
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: current_job["value"])
+    monkeypatch.setattr(job_view, "save_job", lambda payload: True)
+    monkeypatch.setattr(
+        job_view,
+        "fetch_images_by_ids",
+        lambda *_args: {
+            41: _Image(41, "delete-all.ome.tif"),
+            42: _Image(42, "delete-plugin.ome.tif"),
+            45: _Image(45, "empty.ome.tif"),
+            46: _Image(46, "acq-empty.ome.tif"),
+        },
+    )
+    monkeypatch.setattr(
+        job_view,
+        "delete_existing_annotations",
+        lambda *_args: (0, 0, 0) if _args[2].id == 41 else (1, 3, 2),
+    )
+    monkeypatch.setattr(job_view.time, "time", lambda: 12.0)
+    monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
+    monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
+    monkeypatch.setattr(job_view, "rstring", lambda value: value)
+    monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
+    monkeypatch.setattr(job_view, "_save_annotation_link", lambda update, link: False)
+    monkeypatch.setattr(job_view, "parse_filename", lambda *_args: [])
+    monkeypatch.setattr(job_view, "extract_acquisition_metadata", lambda image: {})
+
+    delete_all = inspect.unwrap(job_view.job_progress)(request, "a" * 32, conn=conn)
+    assert "no key-value pairs to delete found" in _json_payload(delete_all)["last_log"]
+
+    current_job["value"] = delete_plugin_job
+    delete_plugin = inspect.unwrap(job_view.job_progress)(request, "b" * 32, conn=conn)
+    plugin_log = _json_payload(delete_plugin)["last_log"]
+    assert "deleted ONLY plugin key-value pairs" in plugin_log
+    assert "warning - only confirmed 1 of 2 deletions" in plugin_log
+
+    current_job["value"] = parse_missing_job
+    missing_image = inspect.unwrap(job_view.job_progress)(request, "c" * 32, conn=conn)
+    assert "Image 43: not found." in _json_payload(missing_image)["last_log"]
+
+    current_job["value"] = parse_no_values_job
+    no_values = inspect.unwrap(job_view.job_progress)(request, "d" * 32, conn=conn)
+    assert (
+        "Image 45 (empty.ome.tif): no variables."
+        in _json_payload(no_values)["last_log"]
+    )
+
+    current_job["value"] = acq_empty_job
+    no_acq = inspect.unwrap(job_view.job_progress)(request, "e" * 32, conn=conn)
+    assert "Image 46: no acquisition metadata." in _json_payload(no_acq)["last_log"]
+
+
+def test_job_progress_covers_error_logs_and_save_failures(monkeypatch):
+    conn = _Conn()
+    request = RequestFactory().get("/")
+    request.user = SimpleNamespace(username="alice")
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            return None
+
+        def acquire(self):
+            return None
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(job_view.portalocker, "Lock", Lock)
+    monkeypatch.setattr(job_view.time, "time", lambda: 15.0)
+    monkeypatch.setattr(job_view, "save_job", lambda payload: True)
+    monkeypatch.setattr(job_view, "MapAnnotationI", _FakeMapAnnotation)
+    monkeypatch.setattr(job_view, "ImageAnnotationLinkI", _FakeLink)
+    monkeypatch.setattr(job_view, "NamedValue", lambda key, value: (key, value))
+    monkeypatch.setattr(job_view, "rstring", lambda value: value)
+    monkeypatch.setattr(job_view, "compute_plugin_hash", lambda mapping: "hash")
+
+    jobs = {
+        "del_all": {
+            "job_id": "1" * 32,
+            "username": "alice",
+            "type": "del_all",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "all",
+            "separator": "_",
+            "image_ids": [51],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "del_plugin": {
+            "job_id": "2" * 32,
+            "username": "alice",
+            "type": "del_plugin",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "plugin",
+            "separator": "_",
+            "image_ids": [52],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "acq": {
+            "job_id": "3" * 32,
+            "username": "alice",
+            "type": "acq",
+            "index": 0,
+            "total": 1,
+            "var_names": [],
+            "delete_mode": "keep",
+            "separator": "_",
+            "image_ids": [53],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "parse": {
+            "job_id": "4" * 32,
+            "username": "alice",
+            "type": "parse",
+            "index": 0,
+            "total": 1,
+            "var_names": ["Channel", "Channel"],
+            "delete_mode": "plugin",
+            "separator": "_",
+            "image_ids": [54],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+        "parse_error": {
+            "job_id": "5" * 32,
+            "username": "alice",
+            "type": "parse",
+            "index": 0,
+            "total": 1,
+            "var_names": ["Channel"],
+            "delete_mode": "keep",
+            "separator": "_",
+            "image_ids": [55],
+            "started": 10.0,
+            "chunk_size": 5,
+        },
+    }
+    current_job = {"value": jobs["del_all"]}
+
+    monkeypatch.setattr(job_view, "load_job", lambda *_args: current_job["value"])
+    monkeypatch.setattr(
+        job_view,
+        "fetch_images_by_ids",
+        lambda *_args: {
+            51: _Image(51, "delete-all.ome.tif"),
+            52: _Image(52, "delete-plugin.ome.tif"),
+            53: _Image(53, "acq.ome.tif"),
+            54: _Image(54, "parse.ome.tif"),
+            55: _Image(55, "broken.ome.tif"),
+        },
+    )
+
+    def _delete_existing_annotations(*args):
+        image_id = args[2].id
+        if image_id == 51:
+            raise RuntimeError("delete all failed")
+        if image_id == 52:
+            return (0, 0, 2)
+        return (0, 0, 0)
+
+    monkeypatch.setattr(
+        job_view,
+        "delete_existing_annotations",
+        _delete_existing_annotations,
+    )
+    monkeypatch.setattr(
+        job_view,
+        "extract_acquisition_metadata",
+        lambda image: {"Laser": "405"} if image.id == 53 else {},
+    )
+    save_results = iter([False, False])
+    monkeypatch.setattr(
+        job_view,
+        "_save_annotation_link",
+        lambda update, link: next(save_results),
+    )
+    monkeypatch.setattr(
+        job_view,
+        "parse_filename",
+        lambda filename, pattern: (
+            (_ for _ in ()).throw(RuntimeError("parse failed"))
+            if "broken" in filename
+            else ["a", "01"]
+        ),
+    )
+
+    current_job["value"] = jobs["del_all"]
+    delete_all = inspect.unwrap(job_view.job_progress)(request, "1" * 32, conn=conn)
+    assert "ERROR deleting ALL key-value pairs" in _json_payload(delete_all)["last_log"]
+
+    current_job["value"] = jobs["del_plugin"]
+    delete_plugin = inspect.unwrap(job_view.job_progress)(request, "2" * 32, conn=conn)
+    assert (
+        "no key-value pairs deleted because deletions could not be confirmed"
+        in _json_payload(delete_plugin)["last_log"]
+    )
+
+    current_job["value"] = jobs["acq"]
+    acq = inspect.unwrap(job_view.job_progress)(request, "3" * 32, conn=conn)
+    assert "ERROR confirming acquisition save" in _json_payload(acq)["last_log"]
+
+    current_job["value"] = jobs["parse"]
+    parse = inspect.unwrap(job_view.job_progress)(request, "4" * 32, conn=conn)
+    assert "ERROR confirming variable save" in _json_payload(parse)["last_log"]
+
+    current_job["value"] = jobs["parse_error"]
+    parse_error = inspect.unwrap(job_view.job_progress)(request, "5" * 32, conn=conn)
+    assert "Image 55: ERROR processing image." in _json_payload(parse_error)["last_log"]

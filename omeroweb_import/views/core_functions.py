@@ -1405,13 +1405,25 @@ def _finalize_imported_zarr_image_metadata(
                     )
                     continue
 
-            refreshed_image = conn.getObject("Image", int(image_id))
+            try:
+                refreshed_image = conn.getObject("Image", int(image_id))
+            except Exception as exc:
+                errors_found.append(
+                    f"Image:{image_id} reload failed after native Zarr metadata finalization: {exc}"
+                )
+                continue
             if refreshed_image is None:
                 errors_found.append(
                     f"Image:{image_id} could not be reloaded after native Zarr metadata finalization."
                 )
                 continue
-            refreshed_pixels = refreshed_image.getPrimaryPixels()
+            try:
+                refreshed_pixels = refreshed_image.getPrimaryPixels()
+            except Exception as exc:
+                errors_found.append(
+                    f"Image:{image_id} primary Pixels reload failed after native Zarr metadata finalization: {exc}"
+                )
+                continue
             for axis_name, expected_length in expected_sizes.items():
                 getter = getattr(
                     refreshed_pixels, f"getPhysicalSize{axis_name.upper()}", None
@@ -5418,21 +5430,42 @@ def _import_zarr_via_cli(
         }
 
     managed_zarr = None
+    stage_message = None
     try:
-        stage_success, stage_outputs, stage_message = _run_zarr_managed_repo_script(
-            "stage",
-            host,
-            port,
-            username=username,
-            group_name=group_name,
-            source_path=shared_source,
-        )
+        try:
+            stage_success, stage_outputs, stage_message = _run_zarr_managed_repo_script(
+                "stage",
+                host,
+                port,
+                username=username,
+                group_name=group_name,
+                source_path=shared_source,
+            )
+        except Exception as exc:
+            stage_success = False
+            stage_outputs = {}
+            stage_message = str(exc) or (
+                "Failed to stage Zarr into the managed repository."
+            )
+            logger.error(
+                "Managed-repository Zarr staging failed for %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+                exc_info=sanitized_exc_info(exc),
+            )
         if stage_success:
             managed_path_raw = (stage_outputs.get("Managed_Path") or "").strip()
             if managed_path_raw:
                 managed_zarr = Path(managed_path_raw)
     finally:
-        _cleanup_shared_zarr_transfer(shared_transfer_parent)
+        try:
+            _cleanup_shared_zarr_transfer(shared_transfer_parent)
+        except Exception as exc:
+            logger.warning(
+                "Failed to clean shared Zarr transfer for %s: %s",
+                sanitize_log_value(rel_path),
+                sanitize_log_value(exc),
+            )
 
     if managed_zarr is None:
         error_msg = stage_message or "Failed to stage Zarr into the managed repository."
@@ -7275,13 +7308,26 @@ def _start_import_thread(job_id: str):
 
     job["import_thread_started"] = True
     if not _save_job(job):
+        job["import_thread_started"] = False
         logger.error(
             "Unable to persist import_thread_started for job %s.",
             sanitize_log_value(job_id),
         )
         return
-    worker = threading.Thread(target=_process_import_job, args=(job_id,), daemon=True)
-    worker.start()
+    try:
+        worker = threading.Thread(
+            target=_process_import_job, args=(job_id,), daemon=True
+        )
+        worker.start()
+    except Exception as exc:
+        job["import_thread_started"] = False
+        _save_job(job)
+        logger.error(
+            "Unable to start import thread for job %s: %s",
+            sanitize_log_value(job_id),
+            sanitize_log_value(exc),
+            exc_info=sanitized_exc_info(exc),
+        )
 
 
 # --------------------------------------------------------------------------
